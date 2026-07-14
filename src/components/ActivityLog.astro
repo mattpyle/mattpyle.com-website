@@ -1,0 +1,94 @@
+---
+interface ActivityItem {
+  date: Date;
+  verb: string;
+  label: string;
+}
+
+interface Props {
+  items: ActivityItem[];
+}
+
+const { items } = Astro.props;
+
+function formatActivityDate(date: Date): string {
+  const d = date.getUTCDate().toString().padStart(2, '0');
+  const m = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  return `${d}.${m}`;
+}
+---
+
+<aside data-module="activity-log" aria-label="Latest activity">
+  <div class="log-header">
+    <span class="log-dot" aria-hidden="true"></span>
+    <span class="log-title">LATEST ACTIVITY</span>
+  </div>
+  <ol role="list" class="log-list">
+    {items.map(item => (
+      <li class="log-item">
+        <time datetime={item.date.toISOString()} class="log-date">
+          {formatActivityDate(item.date)}
+        </time>
+        <span class="log-text">{item.verb}: {item.label}</span>
+      </li>
+    ))}
+  </ol>
+</aside>
+
+<style>
+  [data-module="activity-log"] {
+    border: 1px solid var(--color-border);
+    background: var(--color-card);
+    align-self: start;
+  }
+
+  .log-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .log-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #7a9e6f;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .log-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    color: var(--color-status-green);
+  }
+
+  .log-list {
+    list-style: none;
+    margin: 0;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .log-item {
+    display: flex;
+    gap: 10px;
+  }
+
+  .log-date {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--color-label);
+    white-space: nowrap;
+  }
+
+  .log-text {
+    font-size: 12px;
+    color: var(--color-text);
+  }
+</style>

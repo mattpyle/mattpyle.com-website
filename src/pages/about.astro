@@ -1,0 +1,18 @@
+---
+import Layout from '../layouts/Layout.astro';
+import PageHeader from '../components/PageHeader.astro';
+import AboutGrid from '../components/AboutGrid.astro';
+---
+
+<Layout
+  title="About"
+  description="Matt Pyle — Director of Growth at Temporal Technologies. Growth marketer, hobbyist builder, curious person."
+  breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'About', url: '/about' }]}
+>
+  <PageHeader
+    eyebrow="About"
+    title="Matt Pyle"
+    subtitle="Director of Growth at Temporal Technologies."
+  />
+  <AboutGrid />
+</Layout>

@@ -1,0 +1,28 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import PageHeader from '../../components/PageHeader.astro';
+import BuildsGrid from '../../components/BuildsGrid.astro';
+
+const allBuilds = await getCollection('builds');
+
+const builds = allBuilds.sort((a, b) => {
+  const order = { active: 0, 'in-progress': 1, archived: 2 };
+  const diff = order[a.data.status] - order[b.data.status];
+  return diff !== 0 ? diff : b.data.date.getTime() - a.data.date.getTime();
+});
+---
+
+<Layout
+  title="Builds"
+  description="Side projects and software experiments. Hobby builds, not a corporate portfolio."
+  breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'Builds', url: '/builds' }]}
+>
+  <PageHeader
+    eyebrow="Side projects"
+    title="Builds"
+    subtitle="Software experiments — some built on Temporal, some not. Hobby builds, not a portfolio."
+    wide
+  />
+  <BuildsGrid builds={builds} />
+</Layout>

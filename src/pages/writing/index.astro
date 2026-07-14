@@ -1,0 +1,30 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import PageHeader from '../../components/PageHeader.astro';
+import ArticleList from '../../components/ArticleList.astro';
+import { showDrafts } from '../../lib/show-drafts';
+
+const allArticles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
+
+const articles = allArticles.sort((a, b) => {
+  if (a.data.featured && !b.data.featured) return -1;
+  if (!a.data.featured && b.data.featured) return  1;
+  return b.data.date.getTime() - a.data.date.getTime();
+});
+
+const allTags = [...new Set(articles.flatMap(a => a.data.tags))].sort();
+---
+
+<Layout
+  title="Writing"
+  description="Writing on growth, marketing, AI, and building software as a non-engineer."
+  breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'Writing', url: '/writing' }]}
+>
+  <PageHeader
+    eyebrow="Writing"
+    title="Writing"
+    subtitle="Growth, marketing, AI, and building things."
+  />
+  <ArticleList articles={articles} allTags={allTags} />
+</Layout>

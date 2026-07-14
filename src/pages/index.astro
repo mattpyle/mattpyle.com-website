@@ -1,0 +1,36 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Hero from '../components/Hero.astro';
+import RecentWriting from '../components/RecentWriting.astro';
+import { getCollection } from 'astro:content';
+import { showDrafts } from '../lib/show-drafts';
+
+const recentArticles = (
+  await getCollection('writing', ({ data }) => showDrafts || !data.draft)
+)
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+  .slice(0, 2);
+
+const writingItems = (
+  await getCollection('writing', ({ data }) => showDrafts || !data.draft)
+).map(e => ({ date: e.data.date, verb: 'wrote', label: e.data.title.toLowerCase() }));
+
+const buildsItems = (await getCollection('builds', ({ data }) => data.status !== 'archived'))
+  .map(e => ({
+    date: e.data.date,
+    verb: e.data.status === 'active' ? 'shipped' : 'building',
+    label: e.data.title.toLowerCase(),
+  }));
+
+const activityItems = [...writingItems, ...buildsItems]
+  .sort((a, b) => b.date.getTime() - a.date.getTime())
+  .slice(0, 4);
+---
+
+<Layout
+  title="Matt Pyle"
+  description="Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies."
+>
+  <Hero activityItems={activityItems} />
+  <RecentWriting articles={recentArticles} />
+</Layout>

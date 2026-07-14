@@ -1,0 +1,183 @@
+---
+import FilterPills from './FilterPills.astro';
+
+interface Article {
+  slug: string;
+  body: string;
+  data: {
+    title: string;
+    date: Date;
+    tags: string[];
+    featured: boolean;
+    description: string;
+  };
+}
+
+interface Props {
+  articles: Article[];
+  allTags: string[];
+}
+
+const { articles, allTags } = Astro.props;
+
+const pills = [
+  { value: 'all', label: 'ALL' },
+  ...allTags.map(tag => ({ value: tag, label: tag.toUpperCase() })),
+];
+
+function formatDate(date: Date): string {
+  const d = date.getUTCDate().toString().padStart(2, '0');
+  const m = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  const y = date.getUTCFullYear();
+  return `${d} ${m} ${y}`;
+}
+
+function readingTime(body: string): string {
+  const words = body.trim().split(/\s+/).length;
+  return `${Math.max(1, Math.ceil(words / 200))} min read`;
+}
+---
+
+<div data-module="article-list-wrapper">
+  <FilterPills
+    pills={pills}
+    groupLabel="Filter by topic"
+    itemSelector='[data-module="article-list"] .article-item'
+    itemDataAttr="tags"
+    matchMode="list"
+    noun="article"
+    nounPlural="articles"
+    filterVerb="tagged"
+  />
+
+  <ol data-module="article-list" role="list">
+    {articles.map(article => (
+      <li class="article-item" data-tags={article.data.tags.join(',')}>
+        <article>
+          <header class="article-meta">
+            <time datetime={article.data.date.toISOString()} class="article-date">
+              {formatDate(article.data.date)}
+            </time>
+            {article.data.featured && (
+              <span class="featured-badge"><span aria-hidden="true">◆</span> FEATURED</span>
+            )}
+          </header>
+          <h2>
+            <a href={`/writing/${article.slug}`}>{article.data.title}</a>
+          </h2>
+          <p class="article-desc">{article.data.description}</p>
+          <footer class="article-footer">
+            <ul role="list" class="article-tags">
+              {article.data.tags.map(tag => (
+                <li class="tag-pill">{tag}</li>
+              ))}
+            </ul>
+            <span class="reading-time">{readingTime(article.body)}</span>
+          </footer>
+        </article>
+      </li>
+    ))}
+  </ol>
+</div>
+
+<style>
+  [data-module="article-list-wrapper"] {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 0 40px 72px;
+  }
+
+  [data-module="article-list"] {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .article-item {
+    padding: 28px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .article-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .article-date {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    color: var(--color-label);
+  }
+
+  .featured-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    color: var(--color-accent);
+  }
+
+  article h2 { margin: 0 0 8px; }
+
+  article h2 a {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: 23px;
+    color: var(--color-heading);
+    text-decoration: none;
+    transition: color .15s ease;
+  }
+
+  article h2 a:hover { color: var(--color-accent); }
+
+  .article-desc {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 15.5px;
+    color: var(--color-muted);
+    line-height: 1.6;
+    margin: 0 0 14px;
+    max-width: 640px;
+  }
+
+  .article-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .article-tags {
+    list-style: none;
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    flex-wrap: wrap;
+  }
+
+  .tag-pill {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--color-label);
+    border: 1px solid var(--color-border);
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+
+  .reading-time {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--color-label);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 600px) {
+    [data-module="article-list-wrapper"] { padding: 8px 20px 56px; }
+    .article-footer { flex-direction: column; align-items: flex-start; gap: 6px; }
+  }
+</style>

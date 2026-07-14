@@ -1,0 +1,68 @@
+// Fails the build if any draft:true writing entry leaked into dist/ — the HTML
+// page, RSS, the sitemap, or llms.txt/llms-full.txt.
+//
+// SHOW_DRAFTS=true is a local-only preview flag (see CLAUDE.md "Previewing a
+// draft") that lets a draft's HTML page render in a real production build.
+// That page check is the ONLY thing this script skips under SHOW_DRAFTS — RSS,
+// the sitemap, and llms.txt/llms-full.txt are never allowed to reference a
+// draft, in any environment, flag or no flag.
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+const writingDir = `${root}src/content/writing/`;
+const distDir = `${root}dist/`;
+
+const showDrafts = process.env.SHOW_DRAFTS === 'true';
+
+if (showDrafts) {
+  console.warn(
+    '\n⚠️  assert-no-drafts: SHOW_DRAFTS=true — this build renders draft pages and is NOT a production artifact. Do not deploy dist/ from this build.\n'
+  );
+}
+
+const draftSlugs = readdirSync(writingDir)
+  .filter((file) => file.endsWith('.md'))
+  .filter((file) => /^draft:\s*true\s*$/m.test(readFileSync(writingDir + file, 'utf-8')))
+  .map((file) => file.replace(/\.md$/, ''));
+
+if (draftSlugs.length === 0) {
+  console.log('assert-no-drafts: no draft posts in src/content/writing — nothing to check.');
+  process.exit(0);
+}
+
+const failures = [];
+
+for (const slug of draftSlugs) {
+  // The rendered page is expected to exist under SHOW_DRAFTS — that's the whole
+  // point of the flag. Never skippable in a plain production build.
+  if (!showDrafts) {
+    const pagePath = `${distDir}writing/${slug}/index.html`;
+    if (existsSync(pagePath)) {
+      failures.push(`${slug}: page rendered at dist/writing/${slug}/index.html`);
+    }
+  }
+
+  // Never skippable, in either flag state — a draft must never reach these feeds.
+  const filesToScan = ['llms.txt', 'llms-full.txt', 'sitemap-0.xml', 'sitemap-index.xml', 'rss.xml'];
+  for (const file of filesToScan) {
+    const filePath = distDir + file;
+    if (!existsSync(filePath)) continue;
+    if (readFileSync(filePath, 'utf-8').includes(`/writing/${slug}`)) {
+      failures.push(`${slug}: referenced in dist/${file}`);
+    }
+  }
+}
+
+if (failures.length > 0) {
+  console.error('assert-no-drafts: draft post(s) leaked into the build:\n');
+  for (const failure of failures) console.error(`  - ${failure}`);
+  console.error('\nA draft must never reach RSS, the sitemap, or llms.txt — in any environment.');
+  process.exit(1);
+}
+
+console.log(
+  showDrafts
+    ? `assert-no-drafts: ${draftSlugs.length} draft post(s) correctly absent from RSS/sitemap/llms.txt (page render skipped — SHOW_DRAFTS=true).`
+    : `assert-no-drafts: ${draftSlugs.length} draft post(s) correctly absent from dist/.`
+);

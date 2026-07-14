@@ -1,0 +1,21 @@
+{
+  "name": "Matt Pyle",
+  "short_name": "Matt Pyle",
+  "description": "Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f0",
+  "theme_color": "#faf7f0",
+  "icons": [
+    {
+      "src": "/favicon-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

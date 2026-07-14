@@ -1,0 +1,85 @@
+---
+const path = Astro.url.pathname;
+
+function isActive(href: string): boolean {
+  return href === '/' ? path === '/' : path.startsWith(href);
+}
+
+const NAV_LINKS = [
+  { label: 'Writing', href: '/writing' },
+  { label: 'Builds',  href: '/builds'  },
+  { label: 'About',   href: '/about'   },
+] as const;
+---
+
+<header data-module="nav">
+  <a href="/" aria-label="Matt Pyle — home" class="nav-logo">MATT PYLE</a>
+  <nav aria-label="Main navigation">
+    {NAV_LINKS.map(({ label, href }) => (
+      <a
+        href={href}
+        class:list={['nav-link', { 'is-active': isActive(href) }]}
+        aria-current={isActive(href) ? 'page' : undefined}
+      >
+        {label}
+      </a>
+    ))}
+  </nav>
+</header>
+
+<style>
+  [data-module="nav"] {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 60px;
+    border-bottom: 1px solid var(--color-border);
+    background: rgba(250, 247, 240, .92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .nav-logo {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: .08em;
+    color: var(--color-heading);
+    text-decoration: none;
+  }
+
+  .nav-logo:hover {
+    color: var(--color-heading);
+  }
+
+  nav {
+    display: flex;
+    gap: 26px;
+  }
+
+  .nav-link {
+    font-family: var(--font-system);
+    font-size: 13px;
+    color: var(--color-muted);
+    text-decoration: none;
+    transition: color .15s ease;
+  }
+
+  .nav-link:hover {
+    color: var(--color-accent);
+  }
+
+  .nav-link.is-active {
+    color: var(--color-heading);
+    border-bottom: 2px solid var(--color-accent);
+    padding-bottom: 2px;
+  }
+
+  @media (max-width: 600px) {
+    [data-module="nav"] { padding: 0 20px; }
+    nav { gap: 16px; }
+  }
+</style>

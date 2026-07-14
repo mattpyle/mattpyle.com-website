@@ -1,0 +1,193 @@
+---
+import FilterPills from './FilterPills.astro';
+
+interface Build {
+  data: {
+    title: string;
+    description: string;
+    tags: string[];
+    github?: string;
+    live?: string;
+    status: 'active' | 'in-progress' | 'archived';
+    date: Date;
+  };
+}
+
+interface Props {
+  builds: Build[];
+}
+
+const { builds } = Astro.props;
+
+function formatDate(date: Date): string {
+  const m = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  const y = date.getUTCFullYear();
+  return `${m} ${y}`;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  'active':      'ACTIVE',
+  'in-progress': 'IN PROGRESS',
+  'archived':    'ARCHIVED',
+};
+
+const pills = [
+  { value: 'all', label: 'ALL' },
+  { value: 'active', label: 'ACTIVE' },
+  { value: 'in-progress', label: 'IN PROGRESS' },
+  { value: 'archived', label: 'ARCHIVED' },
+];
+---
+
+<div data-module="builds-wrapper">
+  <FilterPills
+    pills={pills}
+    groupLabel="Filter by status"
+    itemSelector='[data-module="builds-grid"] .build-item'
+    itemDataAttr="status"
+    matchMode="exact"
+    noun="project"
+    nounPlural="projects"
+    filterVerb="with status"
+  />
+
+  <ol data-module="builds-grid" role="list">
+    {builds.map(build => (
+      <li class="build-item" data-status={build.data.status}>
+        <article class={`build-card status--${build.data.status}`}>
+          <header class="card-header">
+            <div class="card-status">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span class="status-label">{STATUS_LABELS[build.data.status]}</span>
+            </div>
+            <time datetime={build.data.date.toISOString()} class="card-date">
+              {formatDate(build.data.date)}
+            </time>
+          </header>
+          <h2>{build.data.title}</h2>
+          <p class="card-desc">{build.data.description}</p>
+          <ul role="list" class="card-tags">
+            {build.data.tags.map(tag => <li class="tag-pill">{tag}</li>)}
+          </ul>
+          <footer class="card-links">
+            {build.data.github && (
+              <a href={build.data.github} target="_blank" rel="noopener noreferrer" class="card-link">
+                GITHUB ↗
+              </a>
+            )}
+            {build.data.live && (
+              <a href={build.data.live} target="_blank" rel="noopener noreferrer" class="card-link">
+                LIVE ↗
+              </a>
+            )}
+            {!build.data.github && !build.data.live && (
+              <span class="no-link">No public link yet</span>
+            )}
+          </footer>
+        </article>
+      </li>
+    ))}
+  </ol>
+</div>
+
+<style>
+  [data-module="builds-wrapper"] {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 40px 72px;
+  }
+
+  [data-module="builds-grid"] {
+    list-style: none;
+    margin: 0;
+    padding: 24px 0 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .build-card {
+    border: 1px solid var(--color-border);
+    border-top-width: 2px;
+    background: var(--color-card);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+  }
+
+  .status--active      { border-top-color: var(--color-status-green); }
+  .status--in-progress { border-top-color: var(--color-accent); }
+  .status--archived    { border-top-color: var(--color-label); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .card-status { display: flex; align-items: center; gap: 6px; }
+
+  .status-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .status--active      .status-dot { background: var(--color-status-green); }
+  .status--in-progress .status-dot { background: var(--color-accent); }
+  .status--archived    .status-dot { background: var(--color-label); }
+
+  .status-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; }
+  .status--active      .status-label { color: var(--color-status-green); }
+  .status--in-progress .status-label { color: var(--color-accent); }
+  .status--archived    .status-label { color: var(--color-label); }
+
+  .card-date { font-family: var(--font-mono); font-size: 10px; color: var(--color-label); }
+
+  .build-card h2 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: 19px;
+    color: var(--color-heading);
+    margin: 0;
+  }
+
+  .card-desc { font-size: 13px; color: #4a4436; line-height: 1.6; margin: 0; flex: 1; }
+
+  .card-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
+
+  .tag-pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--color-label);
+    border: 1px solid var(--color-border);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .card-links {
+    display: flex;
+    gap: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .card-link {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-muted);
+    text-decoration: none;
+    transition: color .15s ease;
+  }
+
+  .card-link:hover { color: var(--color-accent); }
+
+  .no-link { font-family: var(--font-mono); font-size: 11px; color: var(--color-label); }
+
+  @media (max-width: 760px) { [data-module="builds-grid"] { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { [data-module="builds-wrapper"] { padding: 8px 20px 56px; } }
+</style>

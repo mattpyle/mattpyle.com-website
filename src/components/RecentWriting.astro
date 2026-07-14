@@ -1,0 +1,108 @@
+---
+interface Article {
+  slug: string;
+  data: { title: string; date: Date };
+}
+
+interface Props {
+  articles: Article[];
+}
+
+const { articles } = Astro.props;
+
+function formatDate(date: Date): string {
+  const d = date.getUTCDate().toString().padStart(2, '0');
+  const m = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  const y = date.getUTCFullYear();
+  return `${d} ${m} ${y}`;
+}
+---
+
+<section data-module="recent-writing">
+  <div class="section-inner">
+    <p class="section-eyebrow">Recent writing</p>
+    <ol role="list" class="article-list">
+      {articles.map(article => (
+        <li class="article-item">
+          <a href={`/writing/${article.slug}`} class="article-title">
+            {article.data.title}
+          </a>
+          <time datetime={article.data.date.toISOString()} class="article-date">
+            {formatDate(article.data.date)}
+          </time>
+        </li>
+      ))}
+    </ol>
+    <a href="/writing" class="all-link">ALL WRITING →</a>
+  </div>
+</section>
+
+<style>
+  [data-module="recent-writing"] {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 8px 40px 72px;
+  }
+
+  .section-inner {
+    border-top: 1px solid var(--color-border);
+    padding-top: 32px;
+  }
+
+  .section-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .16em;
+    color: var(--color-label);
+    margin: 0 0 20px;
+    text-transform: uppercase;
+  }
+
+  .article-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 640px;
+  }
+
+  .article-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+  }
+
+  .article-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    color: var(--color-heading);
+  }
+
+  .article-title:hover { color: var(--color-accent); }
+
+  .article-date {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-label);
+    white-space: nowrap;
+  }
+
+  .all-link {
+    display: inline-block;
+    margin-top: 22px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    color: var(--color-muted);
+  }
+
+  .all-link:hover { color: var(--color-accent); }
+
+  @media (max-width: 600px) {
+    [data-module="recent-writing"] { padding: 8px 20px 56px; }
+    .article-item { flex-direction: column; align-items: flex-start; gap: 4px; }
+  }
+</style>
