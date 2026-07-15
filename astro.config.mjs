@@ -37,10 +37,10 @@ export default defineConfig({
   build: { inlineStylesheets: 'never' },
   experimental: {
     csp: {
-      // Google Fonts stylesheet link needs to stay allowed under the auto-generated,
-      // per-page style-src hash policy — otherwise it's only allowed by vercel.json's
-      // header CSP, and a header + meta CSP pair is enforced as an *intersection*.
-      styleDirective: { resources: ["'self'", 'https://fonts.googleapis.com'] },
+      // 'self' covers the site's own external stylesheets (inlineStylesheets is
+      // 'never', so all CSS ships as files). Fonts are self-hosted as of Batch 9,
+      // so the old https://fonts.googleapis.com carve-out is gone.
+      styleDirective: { resources: ["'self'"] },
     },
   },
   integrations: [
