@@ -6,7 +6,7 @@ import { showDrafts } from '../../lib/show-drafts';
 export async function getStaticPaths() {
   const articles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
   return articles.map(article => ({
-    params: { slug: article.slug },
+    params: { slug: article.id },
     props: { article },
   }));
 }
@@ -40,7 +40,7 @@ const { title, date, updated, tags, description, featured, image } = article.dat
   breadcrumbs={[
     { name: 'Home', url: '/' },
     { name: 'Writing', url: '/writing' },
-    { name: title, url: `/writing/${article.slug}` },
+    { name: title, url: `/writing/${article.id}` },
   ]}
 >
   <article data-module="article">
@@ -56,7 +56,7 @@ const { title, date, updated, tags, description, featured, image } = article.dat
         <time datetime={date.toISOString()}>{formatDate(date)}</time>
         {featured && <span class="featured-badge"><span aria-hidden="true">◆</span> FEATURED</span>}
         <span class="meta-sep" aria-hidden="true">·</span>
-        <span class="read-time">{readingTime(article.body)}</span>
+        <span class="read-time">{readingTime(article.body ?? '')}</span>
       </div>
       <h1>{title}</h1>
       <p class="article-dek">{description}</p>

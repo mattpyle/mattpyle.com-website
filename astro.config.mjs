@@ -35,7 +35,7 @@ export default defineConfig({
   // bundles as <style> tags, which a strict style-src CSP (no 'unsafe-inline')
   // blocks outright.
   build: { inlineStylesheets: 'never' },
-  experimental: {
+  security: {
     csp: {
       // 'self' covers the site's own external stylesheets (inlineStylesheets is
       // 'never', so all CSS ships as files). Fonts are self-hosted as of Batch 9,

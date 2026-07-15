@@ -1,6 +1,6 @@
 ---
 interface Article {
-  slug: string;
+  id: string;
   data: { title: string; date: Date };
 }
 
@@ -24,7 +24,7 @@ function formatDate(date: Date): string {
     <ol role="list" class="article-list">
       {articles.map(article => (
         <li class="article-item">
-          <a href={`/writing/${article.slug}`} class="article-title">
+          <a href={`/writing/${article.id}`} class="article-title">
             {article.data.title}
           </a>
           <time datetime={article.data.date.toISOString()} class="article-date">

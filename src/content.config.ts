@@ -1,11 +1,13 @@
-import { defineCollection, z } from 'astro:content';
+import { defineCollection } from 'astro:content';
+import { glob } from 'astro/loaders';
+import { z } from 'astro/zod';
 
 const writing = defineCollection({
-  type: 'content',
+  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/writing' }),
   schema: z.object({
     title:       z.string(),
-    date:        z.date(),
-    updated:     z.date().optional(),
+    date:        z.coerce.date(),
+    updated:     z.coerce.date().optional(),
     tags:        z.array(z.string()).default([]),
     featured:    z.boolean().default(false),
     draft:       z.boolean().default(false),
@@ -15,15 +17,15 @@ const writing = defineCollection({
 });
 
 const builds = defineCollection({
-  type: 'content',
+  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/builds' }),
   schema: z.object({
     title:       z.string(),
     description: z.string(),
     tags:        z.array(z.string()).default([]),
-    github:      z.string().url().optional(),
-    live:        z.string().url().optional(),
+    github:      z.url().optional(),
+    live:        z.url().optional(),
     status:      z.enum(['active', 'in-progress', 'archived']),
-    date:        z.date(),
+    date:        z.coerce.date(),
   }),
 });
 

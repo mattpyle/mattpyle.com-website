@@ -19,6 +19,7 @@ Thumbs.db
 .idea/
 
 # Private project docs / agent tooling — not for the public repo
+/AGENTS.md
 CLAUDE.md
 backlog.md
 learnings.md

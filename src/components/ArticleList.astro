@@ -2,8 +2,8 @@
 import FilterPills from './FilterPills.astro';
 
 interface Article {
-  slug: string;
-  body: string;
+  id: string;
+  body?: string;
   data: {
     title: string;
     date: Date;
@@ -63,7 +63,7 @@ function readingTime(body: string): string {
             )}
           </header>
           <h2>
-            <a href={`/writing/${article.slug}`}>{article.data.title}</a>
+            <a href={`/writing/${article.id}`}>{article.data.title}</a>
           </h2>
           <p class="article-desc">{article.data.description}</p>
           <footer class="article-footer">
@@ -72,7 +72,7 @@ function readingTime(body: string): string {
                 <li class="tag-pill">{tag}</li>
               ))}
             </ul>
-            <span class="reading-time">{readingTime(article.body)}</span>
+            <span class="reading-time">{readingTime(article.body ?? '')}</span>
           </footer>
         </article>
       </li>

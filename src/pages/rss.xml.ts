@@ -21,7 +21,7 @@ export async function GET(context: APIContext) {
       title: article.data.title,
       description: article.data.description,
       pubDate: article.data.date,
-      link: `/writing/${article.slug}/`,
+      link: `/writing/${article.id}/`,
     })),
     xmlns: { atom: 'http://www.w3.org/2005/Atom' },
     customData: `<language>en-us</language><atom:link href="${new URL('/rss.xml', context.site)}" rel="self" type="application/rss+xml"/>`,
