@@ -71,14 +71,6 @@ const { title, date, updated, tags, description, featured, image } = article.dat
 
     <footer class="article-footer">
       <a href="/writing" class="back-link">← ALL WRITING</a>
-      <nav aria-label="Share">
-        <a
-          href="https://linkedin.com/in/matt-pyle"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="share-link"
-        >SHARE ↗</a>
-      </nav>
     </footer>
 
   </article>
@@ -308,21 +300,9 @@ const { title, date, updated, tags, description, featured, image } = article.dat
     margin-top: 48px;
     padding-top: 24px;
     border-top: 1px solid var(--color-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
   }
 
   .article-footer .back-link { margin-bottom: 0; }
-
-  .share-link {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: .1em;
-    color: var(--color-muted);
-  }
-
-  .share-link:hover { color: var(--color-accent); }
 
   @media (max-width: 600px) {
     [data-module="article"] { padding: 40px 20px 56px; }
