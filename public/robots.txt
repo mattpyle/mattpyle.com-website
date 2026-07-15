@@ -59,4 +59,4 @@ Allow: /
 User-agent: Amazonbot
 Allow: /
 
-Sitemap: https://mattpyle.com/sitemap-index.xml
+Sitemap: https://www.mattpyle.com/sitemap-index.xml

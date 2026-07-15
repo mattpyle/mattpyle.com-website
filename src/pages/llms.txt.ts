@@ -1,7 +1,11 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ site }) => {
+  // Derive the host from astro.config.mjs `site` so llms.txt can never emit a
+  // different host than the canonicals and sitemap do.
+  const base = site!.toString().replace(/\/$/, '');
+
   const articles = (await getCollection('writing', ({ data }) => !data.draft)).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
@@ -18,23 +22,23 @@ export const GET: APIRoute = async () => {
   );
   lines.push('');
   lines.push(
-    'For a fuller machine-readable rundown of the site, see [llms-full.txt](https://mattpyle.com/llms-full.txt). For guidance on citing this site, see [agents.md](https://mattpyle.com/agents.md).'
+    `For a fuller machine-readable rundown of the site, see [llms-full.txt](${base}/llms-full.txt). For guidance on citing this site, see [agents.md](${base}/agents.md).`
   );
   lines.push('');
 
   lines.push('## Pages');
   lines.push('');
-  lines.push('- [Home](https://mattpyle.com/): bio, tagline, recent activity feed.');
-  lines.push('- [Writing](https://mattpyle.com/writing): all writing.');
-  lines.push('- [Builds](https://mattpyle.com/builds): side projects.');
-  lines.push('- [About](https://mattpyle.com/about): full bio, interests, contact links.');
+  lines.push(`- [Home](${base}/): bio, tagline, recent activity feed.`);
+  lines.push(`- [Writing](${base}/writing): all writing.`);
+  lines.push(`- [Builds](${base}/builds): side projects.`);
+  lines.push(`- [About](${base}/about): full bio, interests, contact links.`);
   lines.push('');
 
   lines.push('## Writing');
   lines.push('');
   for (const article of articles) {
     lines.push(
-      `- [${article.data.title}](https://mattpyle.com/writing/${article.slug}): ${article.data.description}`
+      `- [${article.data.title}](${base}/writing/${article.slug}): ${article.data.description}`
     );
   }
   lines.push('');

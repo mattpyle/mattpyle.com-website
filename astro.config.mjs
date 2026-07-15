@@ -27,7 +27,9 @@ const draftSlugs = new Set(
 );
 
 export default defineConfig({
-  site: 'https://mattpyle.com',
+  // www is the canonical host — the apex 308s to it at the edge (Vercel). Every
+  // absolute URL (canonicals, OG, sitemap, JSON-LD, llms.txt, RSS) inherits this.
+  site: 'https://www.mattpyle.com',
   markdown: { syntaxHighlight: false },
   // 'never': keep CSS in external files. Astro's default ('auto') inlines small
   // bundles as <style> tags, which a strict style-src CSP (no 'unsafe-inline')
