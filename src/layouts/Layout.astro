@@ -11,6 +11,8 @@ interface Breadcrumb {
 
 interface Props {
   title?: string;
+  /** Used verbatim as the <title>/og:title/twitter:title, skipping the "— Matt Pyle" suffix. For pages (e.g. the homepage) whose title already is the full entity-disambiguating string. */
+  fullTitle?: string;
   description?: string;
   type?: 'website' | 'article';
   image?: string;
@@ -22,6 +24,7 @@ interface Props {
 
 const {
   title = 'Matt Pyle',
+  fullTitle,
   description = 'Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies.',
   type = 'website',
   image,
@@ -31,7 +34,7 @@ const {
   noindex = false,
 } = Astro.props;
 
-const pageTitle = title === 'Matt Pyle' ? title : `${title} — Matt Pyle`;
+const pageTitle = fullTitle ?? (title === 'Matt Pyle' ? title : `${title} — Matt Pyle`);
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 const siteURL = new URL('/', Astro.site).toString();
 const personId = `${siteURL}#person`;
