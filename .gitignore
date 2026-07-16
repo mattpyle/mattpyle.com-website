@@ -29,3 +29,6 @@ measurement.md
 .claude/
 .agents/
 skills-lock.json
+
+# Local feature worktrees
+.worktrees/
