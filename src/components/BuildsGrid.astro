@@ -8,7 +8,7 @@ interface Build {
     tags: string[];
     github?: string;
     live?: string;
-    status: 'active' | 'in-progress' | 'archived';
+    status: 'live' | 'in-progress' | 'archived';
     date: Date;
   };
 }
@@ -26,14 +26,14 @@ function formatDate(date: Date): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  'active':      'ACTIVE',
+  'live':        'LIVE',
   'in-progress': 'IN PROGRESS',
   'archived':    'ARCHIVED',
 };
 
 const pills = [
   { value: 'all', label: 'ALL' },
-  { value: 'active', label: 'ACTIVE' },
+  { value: 'live', label: 'LIVE' },
   { value: 'in-progress', label: 'IN PROGRESS' },
   { value: 'archived', label: 'ARCHIVED' },
 ];
@@ -117,7 +117,7 @@ const pills = [
     height: 100%;
   }
 
-  .status--active      { border-top-color: var(--color-status-green); }
+  .status--live        { border-top-color: var(--color-status-green); }
   .status--in-progress { border-top-color: var(--color-accent); }
   .status--archived    { border-top-color: var(--color-label); }
 
@@ -137,12 +137,12 @@ const pills = [
     flex-shrink: 0;
   }
 
-  .status--active      .status-dot { background: var(--color-status-green); }
+  .status--live        .status-dot { background: var(--color-status-green); }
   .status--in-progress .status-dot { background: var(--color-accent); }
   .status--archived    .status-dot { background: var(--color-label); }
 
   .status-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; }
-  .status--active      .status-label { color: var(--color-status-green); }
+  .status--live        .status-label { color: var(--color-status-green); }
   .status--in-progress .status-label { color: var(--color-accent); }
   .status--archived    .status-label { color: var(--color-label); }
 

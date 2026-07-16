@@ -15,7 +15,7 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/` — Homepage: short bio, a typewriter tagline, and a feed of recent writing and builds.
 - `/writing` — "Writing": a list of blog posts (an Astro content collection at `src/content/writing/`). Each post has a title, publish date, tags, and a short description. Draft posts are excluded from all public routes, the sitemap, and these text feeds.
 - `/writing/<slug>` — Individual article pages.
-- `/builds` — "Builds": a list of side projects (an Astro content collection at `src/content/builds/`), each with a status of `active`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo.
+- `/builds` — "Builds": a list of side projects (an Astro content collection at `src/content/builds/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo.
 - `/about` — Bio, areas of interest, and contact/social links.
 
 ## How to cite this site

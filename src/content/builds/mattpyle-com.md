@@ -2,7 +2,7 @@
 title: "mattpyle.com"
 description: "This site. A static Astro 7 personal site used as a live testbed for emerging web/agent standards — llms.txt, agents.md, Lighthouse's Agentic Browsing audits — with a hypothesis-first measurement approach behind it."
 tags: ["Astro", "TypeScript", "Vercel", "accessibility", "AEO"]
-status: "active"
+status: "live"
 live: "https://www.mattpyle.com"
 github: "https://github.com/mattpyle/mattpyle.com-website"
 date: 2026-01-01

@@ -27,7 +27,7 @@ const builds = defineCollection({
     tags:        z.array(z.string()).default([]),
     github:      z.url().optional(),
     live:        z.url().optional(),
-    status:      z.enum(['active', 'in-progress', 'archived']),
+    status:      z.enum(['live', 'in-progress', 'archived']),
     date:        z.coerce.date(),
   }),
 });

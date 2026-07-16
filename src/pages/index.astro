@@ -18,7 +18,7 @@ const writingItems = (
 const buildsItems = (await getCollection('builds', ({ data }) => data.status !== 'archived'))
   .map(e => ({
     date: e.data.date,
-    verb: e.data.status === 'active' ? 'shipped' : 'building',
+    verb: e.data.status === 'live' ? 'shipped' : 'building',
     label: e.data.title.toLowerCase(),
   }));
 
