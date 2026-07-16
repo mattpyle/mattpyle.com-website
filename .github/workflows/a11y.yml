@@ -1,0 +1,60 @@
+name: Accessibility (axe-core)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  axe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ubuntu-latest ships a preinstalled google-chrome-stable specifically for
+      # browser-automation workflows like this one (see actions/runner-images).
+      # DETECT_CHROMEDRIVER_VERSION makes the `chromedriver` npm package (a
+      # transitive dependency of @axe-core/cli) look up that exact binary and
+      # download a matching driver, instead of installing whatever chromedriver
+      # happens to be tagged "latest" on npm — which can silently drift out of
+      # sync with the runner's actual Chrome version.
+      - name: Install dependencies
+        env:
+          DETECT_CHROMEDRIVER_VERSION: 'true'
+        run: npm ci
+
+      - name: Print Chrome & chromedriver versions
+        run: |
+          google-chrome-stable --version
+          npx chromedriver --version
+
+      - name: Build site
+        run: npm run build
+
+      - name: Serve built site
+        run: npx serve dist -l 4321 &
+
+      - name: Wait for local server
+        run: npx wait-on http://localhost:4321 --timeout 30000
+
+      # chrome-headless is required (not plain "chrome"): GitHub's runners have
+      # no display, and axe-core/cli only takes the --exit/failure-on-violation
+      # path seriously regardless of browser mode — chrome-headless is just the
+      # mode that actually launches on a headless runner.
+      - name: Run axe-core accessibility audit
+        run: |
+          npm run --silent a11y -- \
+            --exit \
+            --browser chrome-headless \
+            http://localhost:4321/ \
+            http://localhost:4321/about \
+            http://localhost:4321/writing \
+            http://localhost:4321/builds \
+            http://localhost:4321/writing/i-turned-on-a-screen-reader/

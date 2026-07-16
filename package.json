@@ -6,7 +6,8 @@
     "dev": "astro dev",
     "build": "astro build && node scripts/assert-no-drafts.mjs",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "a11y": "axe"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
@@ -15,6 +16,9 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
-    "typescript": "^5.9.3"
+    "@axe-core/cli": "^4.12.1",
+    "serve": "^14.2.6",
+    "typescript": "^5.9.3",
+    "wait-on": "^9.0.10"
   }
 }
