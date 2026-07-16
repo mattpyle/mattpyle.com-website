@@ -58,4 +58,5 @@ jobs:
             http://localhost:4321/about \
             http://localhost:4321/writing \
             http://localhost:4321/builds \
+            http://localhost:4321/scorecard \
             http://localhost:4321/writing/i-turned-on-a-screen-reader/

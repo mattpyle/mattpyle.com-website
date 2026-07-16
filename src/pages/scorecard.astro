@@ -1,0 +1,258 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+interface Score {
+  name: string;
+  value: string;
+  maximum: string;
+  description: string;
+}
+
+const scores: Score[] = [
+  {
+    name: 'Accessibility',
+    value: '100',
+    maximum: '100',
+    description: 'Every tested page received the maximum Lighthouse accessibility score. An axe scan also found no automated WCAG violations.',
+  },
+  {
+    name: 'Performance',
+    value: '98',
+    maximum: '100',
+    description: 'The lowest Lighthouse performance score across five tested pages. The other four pages scored 100.',
+  },
+  {
+    name: 'SEO',
+    value: '100',
+    maximum: '100',
+    description: 'Every tested page received the maximum Lighthouse SEO score. The audit covered the homepage, about, writing index, builds index, and a published article.',
+  },
+  {
+    name: 'Agentic Browsing',
+    value: '3',
+    maximum: '3',
+    description: 'Every applicable Lighthouse agent check passes: accessibility tree, layout stability, and llms.txt.',
+  },
+];
+---
+
+<Layout title="Scorecard" description="This website's scores on the latest deploy.">
+  <div data-module="scorecard">
+    <header class="scorecard-header">
+      <p class="eyebrow">Public scorecard · live web</p>
+      <h1>Scorecard</h1>
+      <p class="description">This website's scores on the latest deploy.</p>
+
+      <dl class="verification">
+        <div>
+          <dt>Verified</dt>
+          <dd><time datetime="2026-07-15">15 Jul 2026</time></dd>
+        </div>
+        <div>
+          <dt>Scope</dt>
+          <dd>5 live page types</dd>
+        </div>
+        <div>
+          <dt>Tools</dt>
+          <dd>Lighthouse 13.4<br />axe-core 4.12</dd>
+        </div>
+        <div>
+          <dt>Entry</dt>
+          <dd>Manual · intentional</dd>
+        </div>
+      </dl>
+    </header>
+
+    <section class="scores" aria-label="Latest scores">
+      {scores.map(({ name, value, maximum, description }) => (
+        <article class="score-row">
+          <div class="score-label">
+            <h2>{name}</h2>
+            <span class="status">Pass</span>
+          </div>
+          <p class="score-value">
+            <span>{value}</span>
+            <small>/ {maximum}</small>
+          </p>
+          <p class="score-description">{description}</p>
+        </article>
+      ))}
+    </section>
+  </div>
+</Layout>
+
+<style>
+  [data-module='scorecard'] {
+    max-width: var(--width-content);
+    margin: 0 auto;
+    padding: 64px var(--gutter) 88px;
+  }
+
+  .scorecard-header {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .eyebrow {
+    margin: 0 0 16px;
+    color: var(--color-label);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    color: var(--color-heading);
+    font-family: var(--font-serif);
+    font-size: clamp(52px, 7vw, 64px);
+    font-weight: 600;
+    letter-spacing: -.025em;
+    line-height: .98;
+  }
+
+  .description {
+    margin: 18px 0 32px;
+    color: var(--color-muted);
+    font-family: var(--font-serif);
+    font-size: 18px;
+    line-height: 1.45;
+  }
+
+  .verification {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 24px;
+    margin: 0;
+    padding: 16px 0 32px;
+    border-top: 2px solid var(--color-heading);
+  }
+
+  .verification div {
+    min-width: 0;
+  }
+
+  .verification dt {
+    margin-bottom: 7px;
+    color: var(--color-label);
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .verification dd {
+    margin: 0;
+    color: var(--color-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+
+  .scores {
+    border-top: 1px solid var(--color-heading);
+  }
+
+  .score-row {
+    display: grid;
+    grid-template-columns: 118px 150px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+    padding: 24px 0 26px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .score-label h2 {
+    margin: 2px 0 9px;
+    color: var(--color-heading);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+
+  .status {
+    color: var(--color-status-green);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .status::before {
+    content: '✓';
+    margin-right: 5px;
+  }
+
+  .score-value {
+    margin: -4px 0 0;
+    color: var(--color-heading);
+    font-family: var(--font-serif);
+    font-size: 42px;
+    font-weight: 600;
+    letter-spacing: -.025em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .score-value small {
+    color: var(--color-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .score-description {
+    margin: 0;
+    color: var(--color-text);
+    font-family: var(--font-system);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  @media (max-width: 600px) {
+    [data-module='scorecard'] {
+      padding: 40px var(--gutter-mobile) 60px;
+    }
+
+    h1 {
+      font-size: 44px;
+    }
+
+    .description {
+      margin-bottom: 28px;
+    }
+
+    .verification {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      row-gap: 20px;
+      padding-bottom: 28px;
+    }
+
+    .score-row {
+      grid-template-columns: 1fr;
+      gap: 13px;
+      padding: 22px 0 24px;
+    }
+
+    .score-label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .score-label h2 {
+      margin: 0;
+    }
+
+    .score-value {
+      margin: 0;
+      font-size: 40px;
+    }
+  }
+</style>
