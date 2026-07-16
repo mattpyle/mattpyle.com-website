@@ -7,8 +7,8 @@ import { SCORECARD } from '../data/scorecard';
   <div data-module="scorecard">
     <header class="scorecard-header">
       <p class="eyebrow">Public scorecard · live web</p>
-      <h1>Scorecard</h1>
-      <p class="description">{SCORECARD.description}</p>
+      <h1 class="page-title">Scorecard</h1>
+      <p class="description page-intro">{SCORECARD.description}</p>
 
       <dl class="verification">
         <div>
@@ -69,22 +69,8 @@ import { SCORECARD } from '../data/scorecard';
     text-transform: uppercase;
   }
 
-  h1 {
-    margin: 0;
-    color: var(--color-heading);
-    font-family: var(--font-serif);
-    font-size: clamp(52px, 7vw, 64px);
-    font-weight: 600;
-    letter-spacing: -.025em;
-    line-height: .98;
-  }
-
   .description {
     margin: 18px 0 32px;
-    color: var(--color-muted);
-    font-family: var(--font-serif);
-    font-size: 18px;
-    line-height: 1.45;
   }
 
   .verification {
@@ -179,10 +165,6 @@ import { SCORECARD } from '../data/scorecard';
   @media (max-width: 600px) {
     [data-module='scorecard'] {
       padding: 40px var(--gutter-mobile) 60px;
-    }
-
-    h1 {
-      font-size: 44px;
     }
 
     .description {

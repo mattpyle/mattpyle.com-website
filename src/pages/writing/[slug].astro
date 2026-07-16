@@ -60,8 +60,8 @@ const { title, date, updated, tags, description, featured, image, seoTitle, seoD
         <span class="meta-sep" aria-hidden="true">·</span>
         <span class="read-time">{readingTime(article.body ?? '')}</span>
       </div>
-      <h1>{title}</h1>
-      <p class="article-dek">{description}</p>
+      <h1 class="page-title page-title--article">{title}</h1>
+      <p class="article-dek page-intro">{description}</p>
       <ul role="list" class="article-tags">
         {tags.map(tag => <li class="tag-pill">{tag}</li>)}
       </ul>
@@ -138,20 +138,10 @@ const { title, date, updated, tags, description, featured, image, seoTitle, seoD
   }
 
   h1 {
-    font-family: var(--font-serif);
-    font-weight: 600;
-    font-size: 42px;
-    line-height: 1.1;
-    color: var(--color-heading);
     margin: 0 0 18px;
   }
 
   .article-dek {
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-size: 17px;
-    line-height: 1.6;
-    color: var(--color-muted);
     margin: 0 0 20px;
   }
 
@@ -308,6 +298,5 @@ const { title, date, updated, tags, description, featured, image, seoTitle, seoD
 
   @media (max-width: 600px) {
     [data-module="article"] { padding: 40px var(--gutter-mobile) 56px; }
-    h1 { font-size: 32px; }
   }
 </style>

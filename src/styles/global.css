@@ -116,6 +116,30 @@ body {
   min-height: 100vh;
 }
 
+/* ── Shared page introductions ────────────────────────────────────────────── */
+.page-title {
+  margin: 0;
+  color: var(--color-heading);
+  font-family: var(--font-serif);
+  font-size: clamp(52px, 7vw, 64px);
+  font-weight: 600;
+  letter-spacing: -.025em;
+  line-height: .98;
+}
+
+.page-title--article {
+  font-size: clamp(36px, 5.5vw, 52px);
+  line-height: 1.05;
+}
+
+.page-intro {
+  color: var(--color-muted);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
 a {
   color: var(--color-accent);
   text-decoration: none;
