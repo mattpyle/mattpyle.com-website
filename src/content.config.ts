@@ -13,6 +13,9 @@ const writing = defineCollection({
     draft:       z.boolean().default(false),
     description: z.string(),
     image:       z.string().optional(),
+    /** Short, untruncated overrides for search engines — see CLAUDE.md "Authoring content". Leave unset unless the on-page title/description exceed SERP limits (~60/~155 chars). */
+    seoTitle:       z.string().optional(),
+    seoDescription: z.string().optional(),
   }),
 });
 

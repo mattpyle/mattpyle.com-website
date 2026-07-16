@@ -26,12 +26,14 @@ function readingTime(body: string): string {
   return `${Math.max(1, Math.ceil(words / 200))} min read`;
 }
 
-const { title, date, updated, tags, description, featured, image } = article.data;
+const { title, date, updated, tags, description, featured, image, seoTitle, seoDescription } = article.data;
 ---
 
 <Layout
   title={title}
+  seoTitle={seoTitle}
   description={description}
+  seoDescription={seoDescription}
   type="article"
   image={image}
   publishedTime={date}

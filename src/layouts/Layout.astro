@@ -13,7 +13,11 @@ interface Props {
   title?: string;
   /** Used verbatim as the <title>/og:title/twitter:title, skipping the "— Matt Pyle" suffix. For pages (e.g. the homepage) whose title already is the full entity-disambiguating string. */
   fullTitle?: string;
+  /** Short override for <title>/og:title/twitter:title only — `title` still feeds the JSON-LD headline. Use when the on-page title is too long for SERPs (~60 chars incl. " — Matt Pyle"). */
+  seoTitle?: string;
   description?: string;
+  /** Short override for <meta description>/og/twitter descriptions only — `description` still feeds the visible dek and JSON-LD. Use when the on-page description exceeds ~155 chars. */
+  seoDescription?: string;
   type?: 'website' | 'article';
   image?: string;
   publishedTime?: Date;
@@ -25,7 +29,9 @@ interface Props {
 const {
   title = 'Matt Pyle',
   fullTitle,
+  seoTitle,
   description = 'Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies.',
+  seoDescription,
   type = 'website',
   image,
   publishedTime,
@@ -34,7 +40,9 @@ const {
   noindex = false,
 } = Astro.props;
 
-const pageTitle = fullTitle ?? (title === 'Matt Pyle' ? title : `${title} — Matt Pyle`);
+const headTitleBase = seoTitle ?? title;
+const pageTitle = fullTitle ?? (headTitleBase === 'Matt Pyle' ? headTitleBase : `${headTitleBase} — Matt Pyle`);
+const metaDescription = seoDescription ?? description;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 const siteURL = new URL('/', Astro.site).toString();
 const personId = `${siteURL}#person`;
@@ -102,7 +110,7 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content={description} />
+    <meta name="description" content={metaDescription} />
     {noindex && <meta name="robots" content="noindex" />}
     <link rel="canonical" href={canonicalURL} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -116,7 +124,7 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
 
     <!-- Open Graph -->
     <meta property="og:title" content={pageTitle} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={metaDescription} />
     <meta property="og:type" content={type} />
     <meta property="og:url" content={canonicalURL} />
     <meta property="og:image" content={ogImageURL} />
@@ -131,7 +139,7 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     <!-- Twitter Card -->
     <meta name="twitter:card" content={twitterCard} />
     <meta name="twitter:title" content={pageTitle} />
-    <meta name="twitter:description" content={description} />
+    <meta name="twitter:description" content={metaDescription} />
     <meta name="twitter:image" content={ogImageURL} />
     <link rel="alternate" type="application/rss+xml" title="Matt Pyle — Writing" href={new URL('/rss.xml', Astro.site)} />
     <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
