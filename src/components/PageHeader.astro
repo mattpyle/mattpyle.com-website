@@ -3,13 +3,12 @@ interface Props {
   eyebrow: string;
   title: string;
   subtitle: string;
-  wide?: boolean;
 }
 
-const { eyebrow, title, subtitle, wide = false } = Astro.props;
+const { eyebrow, title, subtitle } = Astro.props;
 ---
 
-<header data-module="page-header" class:list={{ 'is-wide': wide }}>
+<header data-module="page-header">
   <p class="header-eyebrow">{eyebrow}</p>
   <h1>{title}</h1>
   <p class="header-subtitle">{subtitle}</p>
@@ -17,13 +16,9 @@ const { eyebrow, title, subtitle, wide = false } = Astro.props;
 
 <style>
   [data-module="page-header"] {
-    max-width: 820px;
+    max-width: var(--width-content);
     margin: 0 auto;
-    padding: 64px 40px 12px;
-  }
-
-  [data-module="page-header"].is-wide {
-    max-width: 1080px;
+    padding: 64px var(--gutter) 12px;
   }
 
   .header-eyebrow {
@@ -53,7 +48,7 @@ const { eyebrow, title, subtitle, wide = false } = Astro.props;
   }
 
   @media (max-width: 600px) {
-    [data-module="page-header"] { padding: 40px 20px 8px; }
+    [data-module="page-header"] { padding: 40px var(--gutter-mobile) 8px; }
     h1 { font-size: 34px; }
   }
 </style>

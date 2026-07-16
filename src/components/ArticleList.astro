@@ -82,9 +82,9 @@ function readingTime(body: string): string {
 
 <style>
   [data-module="article-list-wrapper"] {
-    max-width: 820px;
+    max-width: var(--width-content);
     margin: 0 auto;
-    padding: 0 40px 72px;
+    padding: 0 var(--gutter) 72px;
   }
 
   [data-module="article-list"] {
@@ -177,7 +177,7 @@ function readingTime(body: string): string {
   }
 
   @media (max-width: 600px) {
-    [data-module="article-list-wrapper"] { padding: 8px 20px 56px; }
+    [data-module="article-list-wrapper"] { padding: 8px var(--gutter-mobile) 56px; }
     .article-footer { flex-direction: column; align-items: flex-start; gap: 6px; }
   }
 </style>

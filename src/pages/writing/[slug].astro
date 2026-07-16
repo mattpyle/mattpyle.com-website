@@ -78,9 +78,9 @@ const { title, date, updated, tags, description, featured, image } = article.dat
 
 <style>
   [data-module="article"] {
-    max-width: 680px;
+    max-width: var(--width-content);
     margin: 0 auto;
-    padding: 56px 40px 80px;
+    padding: 56px var(--gutter) 80px;
   }
 
   .draft-banner {
@@ -305,7 +305,7 @@ const { title, date, updated, tags, description, featured, image } = article.dat
   .article-footer .back-link { margin-bottom: 0; }
 
   @media (max-width: 600px) {
-    [data-module="article"] { padding: 40px 20px 56px; }
+    [data-module="article"] { padding: 40px var(--gutter-mobile) 56px; }
     h1 { font-size: 32px; }
   }
 </style>

@@ -35,8 +35,8 @@ const { activityItems } = Astro.props;
     display: grid;
     grid-template-columns: 1fr 300px;
     gap: 48px;
-    padding: 72px 40px 56px;
-    max-width: 1080px;
+    padding: 72px var(--gutter) 56px;
+    max-width: var(--width-shell);
     margin: 0 auto;
   }
 
@@ -115,7 +115,7 @@ const { activityItems } = Astro.props;
   }
 
   @media (max-width: 600px) {
-    [data-module="hero"] { padding: 40px 20px 40px; }
+    [data-module="hero"] { padding: 40px var(--gutter-mobile) 40px; }
     h1 { font-size: 40px; }
   }
 </style>

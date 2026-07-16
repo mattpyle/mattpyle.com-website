@@ -92,9 +92,9 @@ const pills = [
 
 <style>
   [data-module="builds-wrapper"] {
-    max-width: 1080px;
+    max-width: var(--width-content);
     margin: 0 auto;
-    padding: 0 40px 72px;
+    padding: 0 var(--gutter) 72px;
   }
 
   [data-module="builds-grid"] {
@@ -189,5 +189,5 @@ const pills = [
   .no-link { font-family: var(--font-mono); font-size: 11px; color: var(--color-label); }
 
   @media (max-width: 760px) { [data-module="builds-grid"] { grid-template-columns: 1fr; } }
-  @media (max-width: 600px) { [data-module="builds-wrapper"] { padding: 8px 20px 56px; } }
+  @media (max-width: 600px) { [data-module="builds-wrapper"] { padding: 8px var(--gutter-mobile) 56px; } }
 </style>

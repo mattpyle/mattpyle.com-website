@@ -70,11 +70,11 @@
 <style>
   [data-module="about-grid"] {
     display: grid;
-    grid-template-columns: 260px 1fr;
-    gap: 56px;
-    max-width: 1080px;
+    grid-template-columns: 200px 1fr;
+    gap: 32px;
+    max-width: var(--width-content);
     margin: 0 auto;
-    padding: 12px 40px 80px;
+    padding: 12px var(--gutter) 80px;
   }
 
   [data-module="about-photo-col"] {
@@ -179,6 +179,6 @@
   }
 
   @media (max-width: 600px) {
-    [data-module="about-grid"] { padding: 8px 20px 56px; }
+    [data-module="about-grid"] { padding: 8px var(--gutter-mobile) 56px; }
   }
 </style>

@@ -68,6 +68,13 @@
 
 /* ── Design Tokens ───────────────────────────────────────────────────────── */
 :root {
+  /* Layout: two width tiers sharing one left edge. SHELL for structural
+     multi-column layouts (nav, footer, hero, grids); CONTENT for reading
+     columns (article prose, page headers, bio text) — see backlog.md. */
+  --width-shell:   1080px;
+  --width-content:  720px;
+  --gutter:          40px;
+  --gutter-mobile:   20px;
   --color-bg:           #faf7f0;
   --color-card:         #ffffff;
   --color-text:         #3a3428;
