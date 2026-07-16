@@ -7,7 +7,7 @@ import BuildsGrid from '../../components/BuildsGrid.astro';
 const allBuilds = await getCollection('builds');
 
 const builds = allBuilds.sort((a, b) => {
-  const order = { active: 0, 'in-progress': 1, archived: 2 };
+  const order = { live: 0, 'in-progress': 1, archived: 2 };
   const diff = order[a.data.status] - order[b.data.status];
   return diff !== 0 ? diff : b.data.date.getTime() - a.data.date.getTime();
 });
