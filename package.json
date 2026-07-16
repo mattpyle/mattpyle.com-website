@@ -4,10 +4,12 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/assert-no-drafts.mjs",
+    "build": "astro build && node scripts/assert-no-drafts.mjs && node scripts/validate-sitemap.mjs",
     "preview": "astro preview",
     "astro": "astro",
-    "a11y": "axe"
+    "a11y": "axe",
+    "test": "node --test tests/*.test.mjs",
+    "validate:sitemap": "node scripts/validate-sitemap.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
@@ -17,6 +19,8 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@axe-core/cli": "^4.12.1",
+    "fast-xml-parser": "^5.10.1",
+    "fast-xml-validator": "^1.2.0",
     "serve": "^14.2.6",
     "typescript": "^5.9.3",
     "wait-on": "^9.0.10"

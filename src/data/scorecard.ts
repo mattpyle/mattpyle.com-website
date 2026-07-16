@@ -1,3 +1,5 @@
+import { SCORECARD_VERIFIED } from './sitemap-lastmod.mjs';
+
 export type ScorecardStatus = 'Pass' | 'Partial' | 'Fail';
 
 export interface ScorecardMetric {
@@ -19,7 +21,7 @@ export interface ScorecardSnapshot {
 
 export const SCORECARD = {
   description: "This website's scores on the latest deploy.",
-  verified: { iso: '2026-07-15', label: '15 Jul 2026' },
+  verified: SCORECARD_VERIFIED,
   scope: '5 live page types',
   tools: ['Lighthouse 13.4', 'axe-core 4.12'],
   entry: 'Manual · intentional',

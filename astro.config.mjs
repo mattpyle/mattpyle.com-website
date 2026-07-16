@@ -1,30 +1,20 @@
 // @ts-check
-import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
+import { readWritingMetadata } from './scripts/lib/writing-metadata.mjs';
+import { resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
 
 const writingDir = fileURLToPath(new URL('./src/content/writing/', import.meta.url));
+const writingMetadata = readWritingMetadata(writingDir);
 
-const writingFiles = readdirSync(writingDir).filter((file) => file.endsWith('.md'));
-
-/** @type {Record<string, string>} slug -> ISO date, read from frontmatter */
-const writingDates = Object.fromEntries(
-  writingFiles
-    .map((file) => {
-      const source = readFileSync(writingDir + file, 'utf-8');
-      const match = source.match(/^date:\s*"?(\d{4}-\d{2}-\d{2})"?/m);
-      return [file.replace(/\.md$/, ''), match?.[1] ?? ''];
-    })
-    .filter(([, date]) => date !== '')
-);
-
-/** @type {Set<string>} slugs of draft: true posts — SHOW_DRAFTS must never leak these into the sitemap. */
-const draftSlugs = new Set(
-  writingFiles
-    .filter((file) => /^draft:\s*true\s*$/m.test(readFileSync(writingDir + file, 'utf-8')))
-    .map((file) => file.replace(/\.md$/, ''))
-);
+/** @param {string} url */
+function writingSlug(url) {
+  const pathname = new URL(url).pathname;
+  return pathname.startsWith('/writing/') && pathname !== '/writing/'
+    ? decodeURIComponent(pathname.slice('/writing/'.length).replace(/\/$/, ''))
+    : undefined;
+}
 
 export default defineConfig({
   // www is the canonical host — the apex 308s to it at the edge (Vercel). Every
@@ -46,13 +36,15 @@ export default defineConfig({
   integrations: [
     sitemap({
       filter: (url) => {
-        const slug = url.replace(/\/$/, '').split('/writing/')[1];
-        return !slug || !draftSlugs.has(slug);
+        const slug = writingSlug(url);
+        return !slug || !writingMetadata.get(slug)?.draft;
       },
       serialize(item) {
-        const slug = item.url.replace(/\/$/, '').split('/writing/')[1];
-        const date = slug && writingDates[slug];
-        if (date) item.lastmod = date;
+        const lastmod = resolveSitemapLastmod(new URL(item.url).pathname, writingMetadata);
+        if (!lastmod) {
+          throw new Error(`Sitemap URL ${item.url} has no lastmod policy`);
+        }
+        item.lastmod = lastmod;
         return item;
       },
     }),
