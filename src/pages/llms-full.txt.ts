@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
+import { SCORECARD } from '../data/scorecard';
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -22,10 +23,26 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('# Matt Pyle — Full Content Export');
   lines.push('');
   lines.push(
-    'Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder. This is a full plain-text export of every published article and build on mattpyle.com, generated at build time from the same content that backs the live site.'
+    'Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder. This exports every published article and build plus the current public scorecard snapshot from mattpyle.com, generated at build time from the same content that backs the live site.'
   );
   lines.push('');
   lines.push(`See ${base}/agents.md for citation guidance.`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  lines.push('## Scorecard');
+  lines.push('');
+  lines.push(`URL: ${base}/scorecard`);
+  lines.push(`Verified: ${SCORECARD.verified.iso}`);
+  lines.push(`Scope: ${SCORECARD.scope}`);
+  lines.push(`Tools: ${SCORECARD.tools.join(', ')}`);
+  lines.push('');
+  for (const metric of SCORECARD.metrics) {
+    lines.push(
+      `- ${metric.name}: ${metric.value} / ${metric.maximum} (${metric.status}) — ${metric.description}`
+    );
+  }
   lines.push('');
   lines.push('---');
   lines.push('');

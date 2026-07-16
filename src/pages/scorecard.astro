@@ -1,74 +1,41 @@
 ---
 import Layout from '../layouts/Layout.astro';
-
-interface Score {
-  name: string;
-  value: string;
-  maximum: string;
-  description: string;
-}
-
-const scores: Score[] = [
-  {
-    name: 'Accessibility',
-    value: '100',
-    maximum: '100',
-    description: 'Every tested page received the maximum Lighthouse accessibility score. An axe scan also found no automated WCAG violations.',
-  },
-  {
-    name: 'Performance',
-    value: '98',
-    maximum: '100',
-    description: 'The lowest Lighthouse performance score across five tested pages. The other four pages scored 100.',
-  },
-  {
-    name: 'SEO',
-    value: '100',
-    maximum: '100',
-    description: 'Every tested page received the maximum Lighthouse SEO score. The audit covered the homepage, about, writing index, builds index, and a published article.',
-  },
-  {
-    name: 'Agentic Browsing',
-    value: '3',
-    maximum: '3',
-    description: 'Every applicable Lighthouse agent check passes: accessibility tree, layout stability, and llms.txt.',
-  },
-];
+import { SCORECARD } from '../data/scorecard';
 ---
 
-<Layout title="Scorecard" description="This website's scores on the latest deploy.">
+<Layout title="Scorecard" description={SCORECARD.description}>
   <div data-module="scorecard">
     <header class="scorecard-header">
       <p class="eyebrow">Public scorecard · live web</p>
       <h1>Scorecard</h1>
-      <p class="description">This website's scores on the latest deploy.</p>
+      <p class="description">{SCORECARD.description}</p>
 
       <dl class="verification">
         <div>
           <dt>Verified</dt>
-          <dd><time datetime="2026-07-15">15 Jul 2026</time></dd>
+          <dd><time datetime={SCORECARD.verified.iso}>{SCORECARD.verified.label}</time></dd>
         </div>
         <div>
           <dt>Scope</dt>
-          <dd>5 live page types</dd>
+          <dd>{SCORECARD.scope}</dd>
         </div>
         <div>
           <dt>Tools</dt>
-          <dd>Lighthouse 13.4<br />axe-core 4.12</dd>
+          <dd>{SCORECARD.tools[0]}<br />{SCORECARD.tools[1]}</dd>
         </div>
         <div>
           <dt>Entry</dt>
-          <dd>Manual · intentional</dd>
+          <dd>{SCORECARD.entry}</dd>
         </div>
       </dl>
     </header>
 
     <section class="scores" aria-label="Latest scores">
-      {scores.map(({ name, value, maximum, description }) => (
+      {SCORECARD.metrics.map(({ name, value, maximum, status, description }) => (
         <article class="score-row">
           <div class="score-label">
             <h2>{name}</h2>
-            <span class="status">Pass</span>
+            <span class="status">{status}</span>
           </div>
           <p class="score-value">
             <span>{value}</span>

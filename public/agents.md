@@ -16,6 +16,7 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/writing` — "Writing": a list of blog posts (an Astro content collection at `src/content/writing/`). Each post has a title, publish date, tags, and a short description. Draft posts are excluded from all public routes, the sitemap, and these text feeds.
 - `/writing/<slug>` — Individual article pages.
 - `/builds` — "Builds": a list of side projects (an Astro content collection at `src/content/builds/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo.
+- `/scorecard` — "Scorecard": the latest manually verified accessibility, performance, SEO, and agentic-browsing results for this site.
 - `/about` — Bio, areas of interest, and contact/social links.
 
 ## How to cite this site
@@ -29,7 +30,7 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/sitemap-index.xml` — full XML sitemap (auto-generated on every build via `@astrojs/sitemap`).
 - `/robots.txt` — crawl rules; all crawlers, including AI/LLM crawlers, are explicitly allowed.
 - `/llms.txt` — concise Markdown index of key pages, per the llms.txt convention.
-- `/llms-full.txt` — full plain-text dump of all published writing and builds content, generated at build time from the same content collections that back the site.
+- `/llms-full.txt` — full plain-text dump of all published writing and builds content plus the current scorecard snapshot, generated at build time from the same content that backs the site.
 
 ## Notes for agents
 

@@ -31,6 +31,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Home](${base}/): bio, tagline, recent activity feed.`);
   lines.push(`- [Writing](${base}/writing): all writing.`);
   lines.push(`- [Builds](${base}/builds): side projects.`);
+  lines.push(`- [Scorecard](${base}/scorecard): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
   lines.push(`- [About](${base}/about): full bio, interests, contact links.`);
   lines.push('');
 
