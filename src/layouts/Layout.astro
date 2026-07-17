@@ -120,6 +120,14 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/*
+      Chrome WebMCP origin trial — bound to https://www.mattpyle.com (the canonical host; the apex
+      308s to it) and EXPIRES 2026-11-17, after which Chrome ignores it and the tools in
+      src/components/WebMCP.astro simply stop registering. That is a silent, harmless degradation —
+      the site is unaffected either way — so nothing here needs guarding. Delete this line to end the
+      trial early. Not a secret: origin-trial tokens are public by design.
+    */}
+    <meta http-equiv="origin-trial" content="Av/hVYhbhRGKIRl8KYjJftHmGKj2yeR3JjDgVDdWBIBPOSUM3H+VkG1Ad+18IHvy80DVhk8b/cMXtqL2wk4u6gsAAABQeyJvcmlnaW4iOiJodHRwczovL3d3dy5tYXR0cHlsZS5jb206NDQzIiwiZmVhdHVyZSI6IldlYk1DUCIsImV4cGlyeSI6MTc5NDg3MzYwMH0=" />
     <meta name="description" content={metaDescription} />
     {noindex && <meta name="robots" content="noindex" />}
     <link rel="canonical" href={canonicalURL} />
