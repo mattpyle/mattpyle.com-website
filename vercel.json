@@ -1,4 +1,16 @@
 {
+  "rewrites": [
+    {
+      "source": "/writing/:slug([^/.]+)",
+      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "destination": "/writing/:slug.md"
+    },
+    {
+      "source": "/writing/:slug([^/.]+)/",
+      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "destination": "/writing/:slug.md"
+    }
+  ],
   "headers": [
     {
       "source": "/fonts/(.*)",
@@ -8,6 +20,14 @@
           "value": "public, max-age=31536000, immutable"
         }
       ]
+    },
+    {
+      "source": "/writing/:slug([^/.]+)",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/writing/:slug([^/.]+)/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
     },
     {
       "source": "/(.*)",
