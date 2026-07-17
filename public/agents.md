@@ -31,6 +31,21 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/robots.txt` — crawl rules; all crawlers, including AI/LLM crawlers, are explicitly allowed.
 - `/llms.txt` — concise Markdown index of key pages, per the llms.txt convention.
 - `/llms-full.txt` — full plain-text dump of all published writing and builds content plus the current scorecard snapshot, generated at build time from the same content that backs the site.
+- `/webmcp/index.json` — the JSON index backing the WebMCP tools below. A plain static file; any agent can fetch it directly, no tool call required.
+
+## WebMCP tools (experimental)
+
+The live pages register three **read-only** WebMCP tools. They are an experiment, not a supported API, and may be withdrawn without notice.
+
+| Tool | What it does |
+|---|---|
+| `describe_site` | Returns the author entity, the site description, and the section map. Takes no input. |
+| `get_recent_writing` | Lists recent published articles, newest first. Optional `limit` (1–20, default 5) and `tag`. |
+| `search_content` | Case-insensitive search over the titles, descriptions, and tags of all published writing and builds. Requires `query`. |
+
+**Only in-browser agents can call these.** The tools are registered on `document.modelContext` (with a fallback to the deprecated `navigator.modelContext`) when a page is loaded in a browser that implements WebMCP — as of mid-2026, effectively Gemini-in-Chrome and Chrome's WebMCP DevTools extension. If you are reading this file as text rather than executing JavaScript on the live page, **you cannot invoke them** — fetch `/webmcp/index.json` instead, which returns the same data these tools read.
+
+The tools perform no mutations, require no authentication, expose no personal data beyond the public bio, and make no network requests beyond a same-origin fetch of the index.
 
 ## Notes for agents
 

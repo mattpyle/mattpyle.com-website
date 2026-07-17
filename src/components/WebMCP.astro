@@ -1,0 +1,41 @@
+---
+/**
+ * Registers a read-only WebMCP tool surface (see src/lib/webmcp-tools.mjs).
+ *
+ * Pure progressive enhancement: on any browser without the modelContext API — which as of
+ * mid-2026 is every browser but Chrome behind a flag or the origin trial — this feature-detects
+ * and returns. It writes no DOM and reads no layout, so it cannot affect rendering or CLS.
+ * Deleting this component's tag from Layout.astro removes the feature entirely.
+ *
+ * Authored as an Astro <script> so `security.csp` in astro.config.mjs hashes it into the meta
+ * CSP's script-src. A raw inline <script> would be blocked.
+ */
+---
+
+<script>
+  import { resolveModelContext, registerTools } from '../lib/webmcp-tools.mjs';
+
+  // <ClientRouter /> persists window across client-side navigations and re-runs this
+  // script on every astro:page-load, so registration has to be guarded.
+  declare global {
+    interface Window { __webmcpRegistered?: boolean }
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    const mc = resolveModelContext();
+    if (!mc) return;
+    if (window.__webmcpRegistered) return;
+    window.__webmcpRegistered = true;
+
+    // Memoized so N tool calls share one fetch. connect-src 'self' in vercel.json
+    // permits this same-origin request.
+    /** @type {Promise<any> | undefined} */
+    let pending;
+    const getIndex = () => (pending ??= fetch('/webmcp/index.json').then((r) => r.json()));
+
+    registerTools(mc, getIndex).catch((error) => {
+      window.__webmcpRegistered = false;
+      console.warn('[webmcp] tool registration failed', error);
+    });
+  });
+</script>

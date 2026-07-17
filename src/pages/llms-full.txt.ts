@@ -31,6 +31,19 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('---');
   lines.push('');
 
+  lines.push('## WebMCP tools (experimental)');
+  lines.push('');
+  lines.push(
+    'The live pages register three read-only WebMCP tools — describe_site, get_recent_writing, and search_content — on document.modelContext (falling back to the deprecated navigator.modelContext). They are callable only by in-browser agents that implement WebMCP; a doc-reading agent cannot invoke them from this file.'
+  );
+  lines.push('');
+  lines.push(
+    `They read one static JSON index, which you can fetch directly instead: ${base}/webmcp/index.json. It carries the same author entity, section map, writing list, and builds list exported below. See ${base}/agents.md for the per-tool detail.`
+  );
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
   lines.push('## Scorecard');
   lines.push('');
   lines.push(`URL: ${base}/scorecard`);
