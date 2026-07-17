@@ -43,7 +43,9 @@ The live pages register three **read-only** WebMCP tools. They are an experiment
 | `get_recent_writing` | Lists recent published articles, newest first. Optional `limit` (1–20, default 5) and `tag`. |
 | `search_content` | Case-insensitive search over the titles, descriptions, and tags of all published writing and builds. Requires `query`. |
 
-**Only in-browser agents can call these.** The tools are registered on `document.modelContext` (with a fallback to the deprecated `navigator.modelContext`) when a page is loaded in a browser that implements WebMCP — as of mid-2026, effectively Gemini-in-Chrome and Chrome's WebMCP DevTools extension. If you are reading this file as text rather than executing JavaScript on the live page, **you cannot invoke them** — fetch `/webmcp/index.json` instead, which returns the same data these tools read.
+**Only in-browser agents can call these.** The tools are registered on `document.modelContext` (identical to `navigator.modelContext` — on Chrome 150 they are the same object) when a page is loaded in a browser that implements WebMCP. As of mid-2026 that means Chrome with the WebMCP origin trial or flag, driving Gemini-in-Chrome or the WebMCP DevTools extension. If you are reading this file as text rather than executing JavaScript on the live page, **you cannot invoke them** — fetch `/webmcp/index.json` instead, which returns the same data these tools read.
+
+Calling convention, as measured on Chrome 150 (2026-07-17): `executeTool(tool, args)` takes `args` as a **JSON string**, not an object — passing an object throws `Failed to parse input arguments`. Results come back as a JSON string. Chrome does **not** enforce the declared `inputSchema`, so the tools validate their own inputs.
 
 The tools perform no mutations, require no authentication, expose no personal data beyond the public bio, and make no network requests beyond a same-origin fetch of the index.
 

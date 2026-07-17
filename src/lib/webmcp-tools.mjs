@@ -7,6 +7,16 @@
  *
  * Every tool is read-only and deterministic: the only I/O is the caller-supplied
  * getIndex(), which resolves the same-origin /webmcp/index.json payload.
+ *
+ * CHROME DOES NOT VALIDATE inputSchema. Measured on Chrome 150 against the live origin trial
+ * (2026-07-17): `search_content` was invoked with `{}` despite `query` being declared `required`,
+ * and `get_recent_writing` with `limit: 999` despite a declared `maximum` of 20. Both were passed
+ * straight through to the handler. The schema is advertising, not a contract — so the clamping in
+ * get_recent_writing and the blank-query guard in search_content are load-bearing input validation,
+ * not defensive decoration. Treat every `args` value as untrusted and validate it here.
+ *
+ * The execute contract, also measured rather than assumed: Chrome hands the handler a parsed object,
+ * and serializes whatever the handler returns into a JSON string for the caller.
  */
 
 /**
@@ -17,9 +27,12 @@
  */
 
 /**
- * Resolve the modelContext namespace. Chrome 149's origin trial exposes it on
- * `navigator`; Chrome 150+ and the spec moved it to `document` and deprecated the
- * `navigator` surface. Probe both, prefer the spec surface.
+ * Resolve the modelContext namespace.
+ *
+ * Measured on Chrome 150 against the live origin trial (2026-07-17): `document.modelContext` and
+ * `navigator.modelContext` are the *same object* — not two competing surfaces, and neither is
+ * absent. The two-surface probe is kept regardless: it costs nothing, and Chrome 149 reportedly
+ * exposed only the `navigator` one.
  *
  * @param {{ document?: any, navigator?: any }} [scope]
  * @returns {any|null}
