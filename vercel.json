@@ -1,16 +1,4 @@
 {
-  "rewrites": [
-    {
-      "source": "/writing/:slug([^/.]+)",
-      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
-      "destination": "/writing/:slug.md"
-    },
-    {
-      "source": "/writing/:slug([^/.]+)/",
-      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
-      "destination": "/writing/:slug.md"
-    }
-  ],
   "headers": [
     {
       "source": "/fonts/(.*)",
