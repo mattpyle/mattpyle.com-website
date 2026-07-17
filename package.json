@@ -19,6 +19,7 @@
     "@astrojs/vercel": "^11.0.3",
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.7.5",
+    "@vercel/speed-insights": "^2.0.0",
     "astro": "^7.0.9"
   },
   "devDependencies": {
