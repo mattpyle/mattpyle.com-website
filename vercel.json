@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/diag-md-test",
+      "destination": "/writing/i-turned-on-a-screen-reader.md"
+    }
+  ],
   "headers": [
     {
       "source": "/fonts/(.*)",
