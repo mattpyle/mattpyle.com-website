@@ -39,7 +39,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('');
   for (const article of articles) {
     lines.push(
-      `- [${article.data.title}](${base}/writing/${article.id}): ${article.data.description}`
+      `- [${article.data.title}](${base}/writing/${article.id}): ${article.data.description} ([Markdown](${base}/writing/${article.id}.md))`
     );
   }
   lines.push('');

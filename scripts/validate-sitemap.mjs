@@ -11,7 +11,10 @@ import {
 } from '../src/data/sitemap-lastmod.mjs';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const dist = join(root, 'dist');
+// The @astrojs/vercel adapter (needed for the on-demand /writing/[slug].md
+// endpoint) makes Astro write static output to dist/client/, not dist/ —
+// dist/ itself now only holds the adapter's server bundle.
+const dist = join(root, 'dist', 'client');
 const canonicalOrigin = 'https://www.mattpyle.com';
 const parser = new XMLParser({ ignoreAttributes: false });
 const failures = [];

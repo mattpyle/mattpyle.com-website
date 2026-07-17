@@ -39,6 +39,7 @@ const { title, date, updated, tags, description, featured, image, seoTitle, seoD
   publishedTime={date}
   modifiedTime={updated}
   noindex={article.data.draft}
+  markdownAlternate={`/writing/${article.id}.md`}
   breadcrumbs={[
     { name: 'Home', url: '/' },
     { name: 'Writing', url: '/writing' },
@@ -65,6 +66,7 @@ const { title, date, updated, tags, description, featured, image, seoTitle, seoD
       <ul role="list" class="article-tags">
         {tags.map(tag => <li class="tag-pill">{tag}</li>)}
       </ul>
+      <a href={`/writing/${article.id}.md`} class="markdown-link">View as Markdown</a>
     </header>
 
     <div class="prose">
@@ -162,6 +164,17 @@ const { title, date, updated, tags, description, featured, image, seoTitle, seoD
     padding: 3px 9px;
     border-radius: 999px;
   }
+
+  .markdown-link {
+    display: inline-block;
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .06em;
+    color: var(--color-muted);
+  }
+
+  .markdown-link:hover { color: var(--color-accent); }
 
   /* ── Prose body ─────────────────────────────────────────────────────────── */
 

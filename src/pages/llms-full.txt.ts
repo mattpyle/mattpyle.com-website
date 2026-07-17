@@ -53,6 +53,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push(`### ${article.data.title}`);
     lines.push('');
     lines.push(`URL: ${base}/writing/${article.id}`);
+    lines.push(`Markdown: ${base}/writing/${article.id}.md`);
     lines.push(`Date: ${formatDate(article.data.date)}`);
     lines.push(`Tags: ${article.data.tags.join(', ')}`);
     lines.push('');

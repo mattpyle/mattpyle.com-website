@@ -24,6 +24,8 @@ interface Props {
   modifiedTime?: Date;
   breadcrumbs?: Breadcrumb[];
   noindex?: boolean;
+  /** Path to this page's raw-markdown variant (e.g. `/writing/<slug>.md`) — see src/pages/writing/[slug].md.ts. */
+  markdownAlternate?: string;
 }
 
 const {
@@ -38,6 +40,7 @@ const {
   modifiedTime,
   breadcrumbs,
   noindex = false,
+  markdownAlternate,
 } = Astro.props;
 
 const headTitleBase = seoTitle ?? title;
@@ -150,6 +153,9 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     <meta name="twitter:description" content={metaDescription} />
     <meta name="twitter:image" content={twitterImageURL} />
     <link rel="alternate" type="application/rss+xml" title="Matt Pyle — Writing" href={new URL('/rss.xml', Astro.site)} />
+    {markdownAlternate && (
+      <link rel="alternate" type="text/markdown" href={new URL(markdownAlternate, Astro.site)} />
+    )}
     <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin />
     <ClientRouter />

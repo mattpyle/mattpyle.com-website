@@ -11,7 +11,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const writingDir = `${root}src/content/writing/`;
-const distDir = `${root}dist/`;
+// The @astrojs/vercel adapter (needed for the on-demand /writing/[slug].md
+// endpoint) makes Astro write static output to dist/client/, not dist/ —
+// dist/ itself now only holds the adapter's server bundle.
+const distDir = `${root}dist/client/`;
 
 const showDrafts = process.env.SHOW_DRAFTS === 'true';
 
