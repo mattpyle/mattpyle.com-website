@@ -35,7 +35,7 @@ const claudeHref = claudeUrl(canonicalUrl);
         <rect x="8" y="8" width="11" height="11"></rect>
         <path d="M5 16H3V3h13v2"></path>
       </svg>
-      <span>Copy markdown</span>
+      <span data-copy-label>Copy markdown</span>
     </button>
 
     <a class="article-action" href={chatGptHref} target="_blank" rel="noreferrer noopener">
@@ -72,6 +72,19 @@ const claudeHref = claudeUrl(canonicalUrl);
 
       button.dataset.copyReady = 'true';
       button.disabled = false;
+      const label = button.querySelector<HTMLElement>('[data-copy-label]');
+      const defaultLabel = label?.textContent ?? 'Copy markdown';
+      let resetTimer: number | undefined;
+
+      const setTemporaryLabel = (text: string) => {
+        if (!label) return;
+        if (resetTimer !== undefined) window.clearTimeout(resetTimer);
+        label.textContent = text;
+        resetTimer = window.setTimeout(() => {
+          label.textContent = defaultLabel;
+          resetTimer = undefined;
+        }, 2000);
+      };
 
       button.addEventListener('click', async () => {
         status.textContent = '';
@@ -91,8 +104,10 @@ const claudeHref = claudeUrl(canonicalUrl);
 
           const markdown = await response.text();
           await navigator.clipboard.writeText(markdown);
+          setTemporaryLabel('Markdown copied');
           status.textContent = 'Markdown copied.';
         } catch {
+          setTemporaryLabel('Copy failed');
           status.textContent = 'Couldn’t copy Markdown. Open View markdown and copy it manually.';
         }
       });
@@ -174,12 +189,15 @@ const claudeHref = claudeUrl(canonicalUrl);
   }
 
   .article-actions-status {
-    min-height: 1.4em;
-    margin: 8px 0 0;
-    color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.4;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .sr-only {
@@ -214,8 +232,5 @@ const claudeHref = claudeUrl(canonicalUrl);
       padding-inline: 8px;
     }
 
-    .article-actions-status {
-      min-height: 2.8em;
-    }
   }
 </style>
