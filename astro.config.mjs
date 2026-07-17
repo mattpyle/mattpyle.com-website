@@ -25,7 +25,9 @@ export default defineConfig({
   // as before. The adapter only exists so a handful of routes can opt into
   // on-demand rendering per-page via `export const prerender = false` (see
   // src/pages/writing/[slug].md.ts), which static output alone can't run.
-  adapter: vercel(),
+  adapter: vercel({
+    webAnalytics: { enabled: true },
+  }),
   markdown: { syntaxHighlight: false },
   // 'never': keep CSS in external files. Astro's default ('auto') inlines small
   // bundles as <style> tags, which a strict style-src CSP (no 'unsafe-inline')
