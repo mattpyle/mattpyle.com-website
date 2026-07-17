@@ -123,7 +123,7 @@ If any step fails, keep focus on the button and announce:
 Couldn’t copy Markdown. Open View markdown and copy it manually.
 ```
 
-The status region reserves one line of height so success and failure text do not move the controls or prose. The Copy button’s visible label stays “Copy markdown”; changing it to “Copied” would alter the row width and create avoidable movement.
+The status region reserves enough height for the longest failure message to wrap at 320px, so success and failure text do not move the controls or prose. The Copy button’s visible label stays “Copy markdown”; changing it to “Copied” would alter the row width and create avoidable movement.
 
 The script follows the existing Astro ClientRouter lifecycle pattern: initialize on the current document and again on `astro:page-load`, while marking initialized controls to prevent duplicate handlers.
 
@@ -226,4 +226,3 @@ Add `tests/article-actions.test.mjs` before implementation. It must verify:
 ## Documentation after implementation
 
 Add a dated `changelog.md` entry that records the pre-change hypothesis, selected implementation, verification evidence, and the undocumented status of provider-prefill URLs. Put objective reproducible results in `scoreboard.md` only if an existing conformance metric changes. Put any subjective provider/deep-link learning in `learnings.md`.
-
