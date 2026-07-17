@@ -64,6 +64,7 @@ export default function middleware(request: Request) {
   if (prefersMarkdown(accept)) {
     const target = new URL(url);
     target.pathname = `/writing/${match[1]}.md`;
+    console.log(`[middleware] rewriting to "${target.toString()}"`);
     return rewrite(target);
   }
 
