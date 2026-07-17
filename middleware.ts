@@ -1,4 +1,4 @@
-import { next, rewrite } from '@vercel/functions';
+import { next } from '@vercel/functions';
 
 // Vercel Routing Middleware — a platform-level primitive, distinct from Astro's own
 // `astro:middleware`. It runs before cache/static-file serving, which is required here:
@@ -53,7 +53,7 @@ function prefersMarkdown(acceptHeader: string | null): boolean {
   return markdownRange.q > htmlQ; // must genuinely outrank; ties favor html
 }
 
-export default function middleware(request: Request) {
+export default async function middleware(request: Request) {
   const url = new URL(request.url);
   const match = url.pathname.match(WRITING_SLUG_RE);
   if (!match) return next();
@@ -64,8 +64,15 @@ export default function middleware(request: Request) {
   if (prefersMarkdown(accept)) {
     const target = new URL(url);
     target.pathname = `/writing/${match[1]}.md`;
-    console.log(`[middleware] rewriting to "${target.toString()}"`);
-    return rewrite(target);
+    console.log(`[middleware] proxying to "${target.toString()}"`);
+    // NOT rewrite(): confirmed by direct testing that Astro's on-demand `_render`
+    // function can't resolve a route when reached via any internal routing-layer
+    // rewrite (tried both this platform's rewrite() and a plain vercel.json rewrite,
+    // both 404 identically) — it only works for the literal, original top-level
+    // request. Fetching the working URL and relaying its response sidesteps that
+    // entirely, while still keeping the browser-visible URL unchanged.
+    const upstream = await fetch(target, { headers: request.headers });
+    return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
   }
 
   return next();
