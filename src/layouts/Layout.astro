@@ -48,8 +48,8 @@ const siteURL = new URL('/', Astro.site).toString();
 const personId = `${siteURL}#person`;
 const websiteId = `${siteURL}#website`;
 
-// No per-post image yet on any article — falls back to the largest favicon asset as the share image.
-const ogImageURL = new URL(image ?? '/favicon-512x512.png', Astro.site);
+// Per-post `image` (see writing/[slug].astro) falls back to this sitewide 1200x630 share card.
+const ogImageURL = new URL(image ?? '/og-fallback.png', Astro.site);
 const twitterCard = image ? 'summary_large_image' : 'summary';
 
 // Person + WebSite ship on every page so the entity resolves the same way everywhere.
@@ -81,6 +81,7 @@ if (type === 'article' && publishedTime) {
     '@id': `${canonicalURL}#article`,
     headline: title,
     description,
+    image: ogImageURL.toString(),
     url: canonicalURL.toString(),
     datePublished: publishedTime.toISOString(),
     dateModified: (modifiedTime ?? publishedTime).toISOString(),

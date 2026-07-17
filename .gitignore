@@ -32,3 +32,9 @@ skills-lock.json
 
 # Local feature worktrees
 .worktrees/
+
+# Design handoff reference files — not production code, deleted after implementation
+/design_handoff_og_images/
+
+# Generated per-post OG images — rebuilt by scripts/generate-og-images.mjs
+/public/og/

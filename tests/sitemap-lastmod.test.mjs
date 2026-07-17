@@ -34,13 +34,24 @@ test('writing metadata uses updated over date and discovers nested MDX', { skip:
   const directory = mkdtempSync(join(tmpdir(), 'writing-metadata-'));
   try {
     mkdirSync(join(directory, 'nested'));
-    writeFileSync(join(directory, 'post.md'), '---\ndate: 2026-07-10\nupdated: 2026-07-14\ndraft: false\n---\n');
+    writeFileSync(join(directory, 'post.md'), '---\ntitle: "Post"\ndate: 2026-07-10\nupdated: 2026-07-14\ndraft: false\n---\n');
     writeFileSync(join(directory, 'nested', 'draft.mdx'), '---\ndate: "2026-07-12" # authored date\ndraft: true # keep private\n---\n');
 
     const entries = metadata.readWritingMetadata(directory);
 
-    assert.deepEqual(entries.get('post'), { draft: false, lastmod: '2026-07-14' });
-    assert.deepEqual(entries.get('nested/draft'), { draft: true, lastmod: '2026-07-12' });
+    assert.deepEqual(entries.get('post'), { draft: false, lastmod: '2026-07-14', title: 'Post', date: '2026-07-10' });
+    assert.deepEqual(entries.get('nested/draft'), { draft: true, lastmod: '2026-07-12', title: undefined, date: '2026-07-12' });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('writing metadata unescapes quoted title strings', { skip: !metadata }, () => {
+  const directory = mkdtempSync(join(tmpdir(), 'writing-metadata-'));
+  try {
+    writeFileSync(join(directory, 'quoted.md'), '---\ntitle: "She said \\"hi\\""\ndate: 2026-07-10\ndraft: false\n---\n');
+    const entries = metadata.readWritingMetadata(directory);
+    assert.equal(entries.get('quoted').title, 'She said "hi"');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
