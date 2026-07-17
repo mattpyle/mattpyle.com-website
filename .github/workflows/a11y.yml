@@ -38,8 +38,12 @@ jobs:
       - name: Build site
         run: npm run build
 
+      # The Vercel adapter (added for the on-demand /writing/<slug>.md route)
+      # puts astro build into hybrid "server" mode, which nests prerendered
+      # static output under dist/client/ instead of writing straight into
+      # dist/ — serve dist/client, not dist, or every route here 404s.
       - name: Serve built site
-        run: npx serve dist -l 4321 &
+        run: npx serve dist/client -l 4321 &
 
       - name: Wait for local server
         run: npx wait-on http://localhost:4321 --timeout 30000
