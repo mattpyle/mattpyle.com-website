@@ -6,7 +6,7 @@
     "predev": "node scripts/generate-og-images.mjs",
     "dev": "astro dev",
     "prebuild": "node scripts/generate-og-images.mjs",
-    "build": "astro build && node scripts/assert-no-drafts.mjs && node scripts/validate-sitemap.mjs",
+    "build": "astro build && node scripts/assert-no-drafts.mjs && node scripts/validate-sitemap.mjs && node scripts/validate-article-actions.mjs",
     "preview": "astro preview",
     "astro": "astro",
     "a11y": "axe",

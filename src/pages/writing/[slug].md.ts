@@ -13,11 +13,8 @@ function yamlString(value: string): string {
 }
 
 export const GET: APIRoute = async ({ params, site, request }) => {
-  // vercel.json rewrites /writing/<slug> here when Accept contains "text/markdown" —
-  // a plain substring match (Vercel's rewrite `has` regex runs on RE2, which has no
-  // lookahead), not real q-value ranking. It can't honor `;q=0` or compare priority
-  // against text/html the way a real Accept parser would; it only checks presence.
-  // Logged here to gauge real-world adoption before investing in true negotiation.
+  // middleware.ts proxies negotiated Markdown requests to this explicit endpoint.
+  // The direct /writing/<slug>.md URL also powers View and Copy in ArticleActions.
   console.log(`[writing.md] slug=${params.slug} accept="${request.headers.get('accept') ?? ''}"`);
 
   const articles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
