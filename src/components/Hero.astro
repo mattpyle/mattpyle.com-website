@@ -3,8 +3,10 @@ import ActivityLog from './ActivityLog.astro';
 
 interface ActivityItem {
   date: Date;
-  verb: string;
-  label: string;
+  href: string;
+  title: string;
+  type: 'launch' | 'feature' | 'content' | 'infra' | 'experiment';
+  significance: 'major' | 'minor' | 'patch';
 }
 
 interface Props {

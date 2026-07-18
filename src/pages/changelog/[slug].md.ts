@@ -25,13 +25,14 @@ export const GET: APIRoute = async ({ params, site, request }) => {
 
   const base = site!.toString().replace(/\/$/, '');
   const canonicalUrl = `${base}/changelog/${entry.id}/`;
-  const { title, date, summary, type, significance } = entry.data;
+  const { title, date, publishedAt, summary, type, significance } = entry.data;
 
   const frontmatter = [
     '---',
     `title: ${yamlString(title)}`,
     `author: ${yamlString(AUTHOR)}`,
-    `datePublished: ${date.toISOString()}`,
+    `datePublished: ${(publishedAt ?? date).toISOString()}`,
+    `dateShipped: ${date.toISOString()}`,
     `description: ${yamlString(summary)}`,
     `type: ${yamlString(type)}`,
     `significance: ${yamlString(significance)}`,

@@ -4,6 +4,7 @@ import { getCollection } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import ChangelogLedger from '../../components/ChangelogLedger.astro';
 import { showDrafts } from '../../lib/show-drafts';
+import { compareChangelogEntries } from '../../lib/changelog-order';
 
 export const getStaticPaths = (async ({ paginate }) => {
   // Entries per ledger page. The year grouping is the visual scaffold; this is the
@@ -15,7 +16,7 @@ export const getStaticPaths = (async ({ paginate }) => {
   // frontmatter consts.
   const PAGE_SIZE = 20;
   const entries = (await getCollection('changelog', ({ data }) => showDrafts || !data.draft))
-    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+    .sort(compareChangelogEntries);
   return paginate(entries, { pageSize: PAGE_SIZE });
 }) satisfies GetStaticPaths;
 

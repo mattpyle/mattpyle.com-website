@@ -1,8 +1,10 @@
 ---
 interface ActivityItem {
   date: Date;
-  verb: string;
-  label: string;
+  href: string;
+  title: string;
+  type: 'launch' | 'feature' | 'content' | 'infra' | 'experiment';
+  significance: 'major' | 'minor' | 'patch';
 }
 
 interface Props {
@@ -13,23 +15,43 @@ const { items } = Astro.props;
 
 function formatActivityDate(date: Date): string {
   const d = date.getUTCDate().toString().padStart(2, '0');
-  const m = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-  return `${d}.${m}`;
+  const m = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  return `${d} ${m} ${date.getUTCFullYear()}`;
+}
+
+function isoActivityDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function significanceLabel(significance: ActivityItem['significance']): string {
+  return `${significance[0].toUpperCase()}${significance.slice(1)} significance.`;
 }
 ---
 
 <aside data-module="activity-log" aria-label="Latest activity">
   <div class="log-header">
-    <span class="log-dot" aria-hidden="true"></span>
-    <span class="log-title">LATEST ACTIVITY</span>
+    <span class="log-heading">
+      <span class="index-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="log-title">LATEST ACTIVITY</span>
+    </span>
+    <a href="/changelog" class="view-all">VIEW CHANGELOG <span aria-hidden="true">→</span></a>
   </div>
   <ol role="list" class="log-list">
     {items.map(item => (
       <li class="log-item">
-        <time datetime={item.date.toISOString()} class="log-date">
-          {formatActivityDate(item.date)}
-        </time>
-        <span class="log-text">{item.verb}: {item.label}</span>
+        <a href={item.href} class="log-link">
+          <span class={`sig-dot sig-dot--${item.significance}`} aria-hidden="true"></span>
+          <span class="entry-main">
+            <span class="entry-meta">
+              <time datetime={isoActivityDate(item.date)} class="log-date">
+                {formatActivityDate(item.date)}
+              </time>
+              <span class="type-pill">{item.type}</span>
+            </span>
+            <span class="entry-title">{item.title}</span>
+            <span class="sr-only">{significanceLabel(item.significance)}</span>
+          </span>
+        </a>
       </li>
     ))}
   </ol>
@@ -43,52 +65,136 @@ function formatActivityDate(date: Date): string {
   }
 
   .log-header {
-    padding: 10px 16px;
+    min-height: 39px;
+    padding: 9px 14px 9px 16px;
     border-bottom: 1px solid var(--color-border);
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 10px;
   }
 
-  .log-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #7a9e6f;
-    display: inline-block;
-    flex-shrink: 0;
+  .log-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .index-mark {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 10px;
+    color: var(--color-label);
+  }
+
+  .index-mark i {
+    display: block;
+    width: 100%;
+    height: 1px;
+    background: currentColor;
   }
 
   .log-title {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 9.5px;
     letter-spacing: .14em;
-    color: var(--color-status-green);
+    color: var(--color-label);
+    white-space: nowrap;
+  }
+
+  .view-all {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: .08em;
+    color: var(--color-accent);
+    white-space: nowrap;
   }
 
   .log-list {
     list-style: none;
     margin: 0;
-    padding: 14px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
+    padding: 5px 0;
   }
 
-  .log-item {
-    display: flex;
+  .log-item + .log-item { border-top: 1px solid var(--color-border); }
+
+  .log-link {
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr);
     gap: 10px;
+    padding: 11px 16px 12px;
+    color: inherit;
+    transition: background-color .12s ease;
+  }
+
+  .log-link:hover { background: var(--color-accent-wash); }
+  .log-link:hover .entry-title { color: var(--color-accent); }
+
+  .sig-dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 4px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sig-dot--major { background: var(--color-sig-major); }
+  .sig-dot--minor { background: var(--color-sig-minor); }
+  .sig-dot--patch { background: var(--color-sig-patch); }
+
+  .entry-main { min-width: 0; }
+
+  .entry-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
   }
 
   .log-date {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 9.5px;
+    letter-spacing: .055em;
+    line-height: 1.3;
     color: var(--color-label);
     white-space: nowrap;
   }
 
-  .log-text {
-    font-size: 12px;
-    color: var(--color-text);
+  .type-pill {
+    border: 1px solid rgba(122, 46, 46, .25);
+    border-radius: 999px;
+    padding: 1px 6px;
+    background: var(--color-accent-tint);
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    line-height: 1.4;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .entry-title {
+    display: block;
+    color: var(--color-heading);
+    font-family: var(--font-serif);
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.28;
+    transition: color .12s ease;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 </style>

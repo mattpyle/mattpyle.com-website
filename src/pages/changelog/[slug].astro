@@ -3,10 +3,11 @@ import { getCollection, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import Layout from '../../layouts/Layout.astro';
 import { showDrafts } from '../../lib/show-drafts';
+import { compareChangelogEntries } from '../../lib/changelog-order';
 
 export async function getStaticPaths() {
   const entries = (await getCollection('changelog', ({ data }) => showDrafts || !data.draft))
-    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+    .sort(compareChangelogEntries);
 
   return entries.map((entry, index) => ({
     params: { slug: entry.id },
@@ -30,7 +31,7 @@ function formatDate(date: Date): string {
   return `${d} ${m} ${y}`;
 }
 
-const { title, summary, date, updated, tags, type, significance, hero, draft } = entry.data;
+const { title, summary, date, publishedAt, updated, tags, type, significance, hero, draft } = entry.data;
 const sigLabel = significance.toUpperCase();
 const markdownUrl = `/changelog/${entry.id}.md`;
 ---
@@ -40,7 +41,7 @@ const markdownUrl = `/changelog/${entry.id}.md`;
   description={summary}
   type="article"
   image={`/og/changelog/${entry.id}.png`}
-  publishedTime={date}
+  publishedTime={publishedAt ?? date}
   modifiedTime={updated}
   noindex={draft}
   markdownAlternate={markdownUrl}
