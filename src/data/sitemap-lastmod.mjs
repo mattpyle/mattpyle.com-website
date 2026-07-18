@@ -25,7 +25,7 @@ export const STATIC_ROUTE_LASTMOD = Object.freeze({
   '/about/': '2026-07-15',
   '/builds/': '2026-07-15',
   '/changelog/': '2026-07-17',
-  '/scorecard/': '2026-07-15',
+  '/scorecard/': '2026-07-18',
   '/writing/': '2026-07-15',
 });
 
