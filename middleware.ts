@@ -96,6 +96,9 @@ export default async function middleware(request: Request) {
   return next();
 }
 
+// Both collections expose the negotiated .md variant, so the middleware must run for
+// both path prefixes. The handler self-filters (numeric changelog slugs and .md URLs
+// fall through to next()), so matching the whole subtree is safe.
 export const config = {
-  matcher: '/writing/:path*',
+  matcher: ['/writing/:path*', '/changelog/:path*'],
 };
