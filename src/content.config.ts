@@ -39,6 +39,8 @@ const changelog = defineCollection({
     /** 1–2 sentences; shown on the /changelog index and as the entry dek. */
     summary:      z.string(),
     date:         z.coerce.date(),
+    /** Exact publication time for deterministic same-day ordering. Historical entries may omit it. */
+    publishedAt:  z.coerce.date().optional(),
     // Changelog dates describe when the change shipped; sitemap lastmod needs
     // an explicit page-content update date, even for newly authored entries.
     updated:      z.coerce.date(),

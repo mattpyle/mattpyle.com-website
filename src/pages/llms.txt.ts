@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
+import { compareChangelogEntries } from '../lib/changelog-order';
 
 export const GET: APIRoute = async ({ site }) => {
   // Derive the host from astro.config.mjs `site` so llms.txt can never emit a
@@ -13,7 +14,7 @@ export const GET: APIRoute = async ({ site }) => {
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
-    (a, b) => b.data.date.getTime() - a.data.date.getTime()
+    compareChangelogEntries
   );
 
   const lines: string[] = [];

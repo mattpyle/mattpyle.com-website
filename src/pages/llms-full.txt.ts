@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { SCORECARD } from '../data/scorecard';
+import { compareChangelogEntries } from '../lib/changelog-order';
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -18,7 +19,7 @@ export const GET: APIRoute = async ({ site }) => {
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
-    (a, b) => b.data.date.getTime() - a.data.date.getTime()
+    compareChangelogEntries
   );
 
   const lines: string[] = [];
@@ -107,6 +108,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(`URL: ${base}/changelog/${entry.id}`);
     lines.push(`Date: ${formatDate(entry.data.date)}`);
+    if (entry.data.publishedAt) lines.push(`Published: ${entry.data.publishedAt.toISOString()}`);
     lines.push(`Type: ${entry.data.type}`);
     lines.push(`Significance: ${entry.data.significance}`);
     lines.push(`Tags: ${entry.data.tags.join(', ')}`);

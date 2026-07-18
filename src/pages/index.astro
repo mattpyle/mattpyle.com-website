@@ -4,6 +4,7 @@ import Hero from '../components/Hero.astro';
 import RecentWriting from '../components/RecentWriting.astro';
 import { getCollection } from 'astro:content';
 import { showDrafts } from '../lib/show-drafts';
+import { compareChangelogEntries } from '../lib/changelog-order';
 
 const recentArticles = (
   await getCollection('writing', ({ data }) => showDrafts || !data.draft)
@@ -11,43 +12,18 @@ const recentArticles = (
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
   .slice(0, 2);
 
-const writingItems = (
-  await getCollection('writing', ({ data }) => showDrafts || !data.draft)
-).map(e => ({ date: e.data.date, verb: 'wrote', label: e.data.title.toLowerCase() }));
-
-const buildsItems = (await getCollection('builds', ({ data }) => data.status !== 'archived'))
-  .map(e => ({
-    date: e.data.date,
-    verb: e.data.status === 'live' ? 'shipped' : 'building',
-    label: e.data.title.toLowerCase(),
+const activityItems = (
+  await getCollection('changelog', ({ data }) => showDrafts || !data.draft)
+)
+  .sort(compareChangelogEntries)
+  .slice(0, 4)
+  .map(({ id, data }) => ({
+    date: data.date,
+    href: `/changelog/${id}`,
+    title: data.title,
+    type: data.type,
+    significance: data.significance,
   }));
-
-const siteItems = [
-  {
-    date: new Date('2026-07-17T00:00:00.000Z'),
-    verb: 'shipped',
-    label: 'experimental webmcp tools for in-browser agents',
-  },
-  {
-    date: new Date('2026-07-17T00:00:00.000Z'),
-    verb: 'shipped',
-    label: 'view/copy markdown + ask ChatGPT/Claude',
-  },
-  {
-    date: new Date('2026-07-15T00:00:00.000Z'),
-    verb: 'shipped',
-    label: 'public scorecard',
-  },
-  {
-    date: new Date('2026-07-16T00:00:00.000Z'),
-    verb: 'shipped',
-    label: 'markdown post variants + negotiation',
-  },
-];
-
-const activityItems = [...siteItems, ...writingItems, ...buildsItems]
-  .sort((a, b) => b.date.getTime() - a.date.getTime())
-  .slice(0, 4);
 ---
 
 <Layout

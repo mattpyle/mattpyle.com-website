@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
+import { compareChangelogEntries } from '../../lib/changelog-order';
 
 /**
  * The single data source behind the WebMCP tools (see src/components/WebMCP.astro).
@@ -21,7 +22,7 @@ export const GET: APIRoute = async ({ site }) => {
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
-    (a, b) => b.data.date.getTime() - a.data.date.getTime()
+    compareChangelogEntries
   );
 
   const index = {
@@ -84,6 +85,7 @@ export const GET: APIRoute = async ({ site }) => {
       slug: entry.id,
       url: `${base}/changelog/${entry.id}`,
       date: entry.data.date.toISOString(),
+      ...(entry.data.publishedAt ? { publishedAt: entry.data.publishedAt.toISOString() } : {}),
       ...(entry.data.updated ? { updated: entry.data.updated.toISOString() } : {}),
       type: entry.data.type,
       significance: entry.data.significance,
