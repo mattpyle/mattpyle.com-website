@@ -2,6 +2,7 @@
 title: "Rebuilt on Astro"
 summary: "Moved the site onto Astro content collections and shipped the foundational discoverability layer — sitemap, robots.txt, agents.md, and llms.txt. The foundation everything else here sits on."
 date: 2026-07-12
+updated: 2026-07-17
 type: launch
 significance: major
 tags: ["infra"]

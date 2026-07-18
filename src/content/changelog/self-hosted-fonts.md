@@ -2,6 +2,7 @@
 title: "Self-hosted fonts, Performance back to 100"
 summary: "Dropped the render-blocking cross-origin Google Fonts stylesheet for self-hosted subset woff2 files. Live Performance went from 84–87 to 97–100 on every page; first paint from ~3.3s to under a second."
 date: 2026-07-14
+updated: 2026-07-17
 type: infra
 significance: major
 tags: ["performance"]

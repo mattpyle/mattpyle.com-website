@@ -39,7 +39,9 @@ const changelog = defineCollection({
     /** 1–2 sentences; shown on the /changelog index and as the entry dek. */
     summary:      z.string(),
     date:         z.coerce.date(),
-    updated:      z.coerce.date().optional(),
+    // Changelog dates describe when the change shipped; sitemap lastmod needs
+    // an explicit page-content update date, even for newly authored entries.
+    updated:      z.coerce.date(),
     /** Topical tags (writing, infra, a11y…) — the bordered pills. */
     tags:         z.array(z.string()).default([]),
     /** The distinguished, filled accent pill. */
