@@ -89,6 +89,11 @@
   --color-accent-tint:      #f6e9e9;
   --color-surface-code:     #f0ebe0;
   --color-status-green: #5c7a53;
+  /* Changelog significance dots (see /changelog). major reuses the accent so the
+     palette stays two-hue; minor is amber, patch is a muted parchment grey. */
+  --color-sig-major: var(--color-accent);
+  --color-sig-minor: #c08a2d;
+  --color-sig-patch: #b0a68f;
   --font-mono:   'JetBrains Mono', 'JetBrains Mono Fallback', monospace;
   --font-serif:  'Source Serif 4', 'Source Serif 4 Fallback', Georgia, serif;
   --font-system: Helvetica, Arial, sans-serif;
@@ -160,4 +165,134 @@ a:focus-visible,
 .filter-pill:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/* ── Prose body ──────────────────────────────────────────────────────────────
+   Rendered-markdown styling shared by the writing article page
+   (src/pages/writing/[slug].astro) and the changelog entry page
+   (src/pages/changelog/[slug].astro). Lives in global.css — which Layout.astro
+   already loads on every page — specifically so sharing it between the two reading
+   surfaces adds NO extra render-blocking stylesheet request (the site's Performance
+   budget is sensitive to critical-CSS chain length; see changelog Batch 8). It was
+   previously a `:global()` block scoped to the writing page; the selectors were
+   already global, so this is byte-equivalent output. Edit prose treatment here. */
+.prose {
+  font-family: var(--font-serif);
+  font-size: 17.5px;
+  line-height: 1.8;
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.prose p { margin: 0; }
+
+.prose h2 {
+  font-family: var(--font-serif);
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-heading);
+  margin: 22px 0 0;
+}
+
+.prose h3 {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-heading);
+  margin: 14px 0 0;
+}
+
+.prose strong { font-weight: 600; color: var(--color-heading); }
+.prose em     { font-style: italic; }
+
+.prose a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-accent-underline);
+  transition: text-decoration-color .15s ease;
+}
+
+.prose a:hover { text-decoration-color: var(--color-accent); }
+
+.prose blockquote {
+  border-left: 2px solid var(--color-accent);
+  margin: 0;
+  padding: 4px 0 4px 20px;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.prose ul,
+.prose ol { margin: 0; padding-left: 24px; }
+.prose li { margin-bottom: 6px; }
+
+.prose code {
+  font-family: var(--font-mono);
+  font-size: .875em;
+  background: var(--color-surface-code);
+  border: 1px solid var(--color-border);
+  padding: 1px 5px;
+  color: var(--color-accent);
+}
+
+.prose pre {
+  margin: 0;
+  overflow-x: auto;
+  background: var(--color-surface-code);
+  border: 1px solid var(--color-border);
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: .875em;
+  line-height: 1.6;
+}
+
+.prose pre code { background: none; border: none; padding: 0; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 8px 0;
+}
+
+.prose figure     { margin: 0; }
+.prose img        { display: block; max-width: 100%; height: auto; }
+.prose figcaption {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--color-muted);
+  margin-top: 8px;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.prose th,
+.prose td {
+  text-align: left;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.prose thead th {
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-label);
+  font-weight: normal;
 }

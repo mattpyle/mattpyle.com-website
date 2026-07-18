@@ -17,6 +17,9 @@ export const GET: APIRoute = async ({ site }) => {
   const builds = (await getCollection('builds')).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
+  const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
+    (a, b) => b.data.date.getTime() - a.data.date.getTime()
+  );
 
   const lines: string[] = [];
 
@@ -92,6 +95,25 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push(build.data.description);
     lines.push('');
     lines.push(build.body ?? '');
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
+  lines.push('## Changelog');
+  lines.push('');
+  for (const entry of changelog) {
+    lines.push(`### ${entry.data.title}`);
+    lines.push('');
+    lines.push(`URL: ${base}/changelog/${entry.id}`);
+    lines.push(`Date: ${formatDate(entry.data.date)}`);
+    lines.push(`Type: ${entry.data.type}`);
+    lines.push(`Significance: ${entry.data.significance}`);
+    lines.push(`Tags: ${entry.data.tags.join(', ')}`);
+    lines.push('');
+    lines.push(entry.data.summary);
+    lines.push('');
+    lines.push(entry.body ?? '');
     lines.push('');
     lines.push('---');
     lines.push('');

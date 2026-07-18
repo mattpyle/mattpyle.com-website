@@ -103,34 +103,42 @@ async function main() {
 
   const markPng = readFileSync(join(root, 'public', 'favicon-512x512.png')).toString('base64');
 
-  const writingDir = join(root, 'src', 'content', 'writing');
-  const writingMetadata = readWritingMetadata(writingDir);
+  // Each content collection that needs per-entry share cards, with the eyebrow
+  // its card carries. Both render into public/og/<collection>/ (gitignored,
+  // regenerated every build).
+  const collections = [
+    { dir: join(root, 'src', 'content', 'writing'), eyebrow: 'Writing', out: 'writing' },
+    { dir: join(root, 'src', 'content', 'changelog'), eyebrow: 'Changelog', out: 'changelog' },
+  ];
 
-  const outDir = join(root, 'public', 'og', 'writing');
-  mkdirSync(outDir, { recursive: true });
+  for (const { dir, eyebrow, out } of collections) {
+    const metadata = readWritingMetadata(dir);
+    const outDir = join(root, 'public', 'og', out);
+    mkdirSync(outDir, { recursive: true });
 
-  for (const [slug, entry] of writingMetadata) {
-    if (entry.draft) continue;
-    if (!entry.title || !entry.date) {
-      throw new Error(`generate-og-images: ${slug} is missing a title or date`);
+    for (const [slug, entry] of metadata) {
+      if (entry.draft) continue;
+      if (!entry.title || !entry.date) {
+        throw new Error(`generate-og-images: ${slug} is missing a title or date`);
+      }
+
+      const svg = renderWritingCard({
+        title: entry.title,
+        date: formatDate(entry.date),
+        eyebrow,
+        monoRegular,
+        monoMedium,
+        serifSemibold,
+        markPng,
+      });
+
+      const resvg = new Resvg(svg, {
+        font: { fontBuffers: [monoTtf, serifTtf], loadSystemFonts: false },
+      });
+      const png = resvg.render().asPng();
+      writeFileSync(join(outDir, `${slug}.png`), png);
+      console.log(`generate-og-images: wrote og/${out}/${slug}.png`);
     }
-
-    const svg = renderWritingCard({
-      title: entry.title,
-      date: formatDate(entry.date),
-      eyebrow: 'Writing',
-      monoRegular,
-      monoMedium,
-      serifSemibold,
-      markPng,
-    });
-
-    const resvg = new Resvg(svg, {
-      font: { fontBuffers: [monoTtf, serifTtf], loadSystemFonts: false },
-    });
-    const png = resvg.render().asPng();
-    writeFileSync(join(outDir, `${slug}.png`), png);
-    console.log(`generate-og-images: wrote og/writing/${slug}.png`);
   }
 }
 

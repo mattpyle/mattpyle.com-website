@@ -16,6 +16,8 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/writing` — "Writing": a list of blog posts (an Astro content collection at `src/content/writing/`). Each post has a title, publish date, tags, and a short description. Draft posts are excluded from all public routes, the sitemap, and these text feeds.
 - `/writing/<slug>` — Individual article pages. Each has a raw-markdown variant at `/writing/<slug>.md` (`Content-Type: text/markdown`, YAML frontmatter with title/author/datePublished/description/canonical/source) — prefer this over scraping the HTML.
 - `/builds` — "Builds": a list of side projects (an Astro content collection at `src/content/builds/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo.
+- `/changelog` — "Changelog": a reverse-chronological, curated log of what has shipped on this site (an Astro content collection at `src/content/changelog/`). Each entry has a title, summary, date, tags, a `type` (launch/feature/content/infra/experiment), and a `significance` (major/minor/patch).
+- `/changelog/<slug>` — Individual changelog entry pages, with the full write-up. Each has a raw-markdown variant at `/changelog/<slug>.md` (same content negotiation as writing — an `Accept: text/markdown` request to the canonical URL returns markdown) — prefer this over scraping the HTML.
 - `/scorecard` — "Scorecard": the latest manually verified accessibility, performance, SEO, and agentic-browsing results for this site.
 - `/about` — Bio, areas of interest, and contact/social links.
 
@@ -41,7 +43,7 @@ The live pages register three **read-only** WebMCP tools. They are an experiment
 |---|---|
 | `describe_site` | Returns the author entity, the site description, and the section map. Takes no input. |
 | `get_recent_writing` | Lists recent published articles, newest first. Optional `limit` (1–20, default 5) and `tag`. |
-| `search_content` | Case-insensitive search over the titles, descriptions, and tags of all published writing and builds. Requires `query`. |
+| `search_content` | Case-insensitive search over the titles, descriptions, and tags of all published writing, builds, and changelog entries. Requires `query`. |
 
 **Only in-browser agents can call these.** The tools are registered on `document.modelContext` (identical to `navigator.modelContext` — on Chrome 150 they are the same object) when a page is loaded in a browser that implements WebMCP. As of mid-2026 that means Chrome with the WebMCP origin trial or flag, driving Gemini-in-Chrome or the WebMCP DevTools extension. If you are reading this file as text rather than executing JavaScript on the live page, **you cannot invoke them** — fetch `/webmcp/index.json` instead, which returns the same data these tools read.
 
