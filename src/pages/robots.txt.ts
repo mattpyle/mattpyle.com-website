@@ -1,4 +1,6 @@
-User-agent: *
+import type { APIRoute } from 'astro';
+
+const crawlerRules = `User-agent: *
 Allow: /
 
 # AI / LLM crawlers — explicitly welcomed (agent/AEO-friendly site)
@@ -58,5 +60,12 @@ Allow: /
 
 User-agent: Amazonbot
 Allow: /
+`;
 
-Sitemap: https://www.mattpyle.com/sitemap-index.xml
+export const GET: APIRoute = ({ site }) => {
+  const body = `${crawlerRules}\nSitemap: ${new URL('/sitemap-index.xml', site)}\n`;
+
+  return new Response(body, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
+};
