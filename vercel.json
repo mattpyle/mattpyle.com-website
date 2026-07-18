@@ -18,6 +18,14 @@
       "headers": [{ "key": "Vary", "value": "Accept" }]
     },
     {
+      "source": "/changelog/:slug([^/.]+)",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/changelog/:slug([^/.]+)/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {
