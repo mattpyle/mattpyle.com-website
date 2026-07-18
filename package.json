@@ -10,6 +10,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "a11y": "axe",
+    "spellcheck": "cspell --no-progress \"src/content/**/*.md\"",
     "test": "node --test tests/*.test.mjs",
     "validate:sitemap": "node scripts/validate-sitemap.mjs"
   },
@@ -26,6 +27,7 @@
     "@astrojs/check": "^0.9.9",
     "@axe-core/cli": "^4.12.1",
     "@resvg/resvg-js": "^2.6.2",
+    "cspell": "^10.0.1",
     "fast-xml-parser": "^5.10.1",
     "fast-xml-validator": "^1.2.0",
     "fontkit": "^2.0.4",
