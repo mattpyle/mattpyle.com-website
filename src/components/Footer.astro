@@ -4,6 +4,12 @@ const year = new Date().getFullYear();
 
 <footer data-module="footer">
   <nav aria-label="Social links">
+    <a href="/rss.xml" class="rss-link" aria-label="RSS feed for Writing">
+      <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M4 11a9 9 0 0 1 9 9h-2.5A6.5 6.5 0 0 0 4 13.5V11zm0 6.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM4 4a16 16 0 0 1 16 16h-2.5A13.5 13.5 0 0 0 4 6.5V4z"/>
+      </svg>
+      RSS
+    </a>
     <a href="https://github.com/mattpyle" target="_blank" rel="noopener noreferrer">GitHub</a>
     <a href="https://linkedin.com/in/matt-pyle" target="_blank" rel="noopener noreferrer">LinkedIn</a>
   </nav>
@@ -35,6 +41,12 @@ const year = new Date().getFullYear();
   }
 
   nav a:hover { color: var(--color-accent); }
+
+  .rss-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
 
   p {
     font-size: 11px;
