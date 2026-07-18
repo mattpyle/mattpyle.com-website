@@ -1,0 +1,33 @@
+name: Spell check (cspell)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  cspell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Deliberately no `astro build` and no browser here, unlike a11y.yml:
+      # this check reads the source markdown in src/content/ directly. That is
+      # the point — `draft: true` posts are stripped from the build output, so
+      # checking the built site would skip exactly the drafts that most need
+      # proofreading before they're ever published.
+      #
+      # Not wired into the `build` script: spelling is advisory, not
+      # build-blocking. This job failing marks the PR, it does not block deploys.
+      - name: Run cspell over content collections
+        run: npm run --silent spellcheck

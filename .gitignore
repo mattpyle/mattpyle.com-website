@@ -40,3 +40,6 @@ skills-lock.json
 
 # Generated per-post OG images — rebuilt by scripts/generate-og-images.mjs
 /public/og/
+
+# Working plan directory — specs and build prompts, not production code
+/steward/

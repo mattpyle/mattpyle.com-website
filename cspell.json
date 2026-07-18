@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "language": "en",
+
+  // Content collections only. Spell check runs against SOURCE markdown, never
+  // the built site, so it covers `draft: true` posts before they're published —
+  // drafts are excluded from `astro build` output entirely (scripts/assert-no-drafts.mjs).
+  "files": ["src/content/**/*.md"],
+
+  // cspell reads YAML frontmatter as ordinary text, so `title`, `description`,
+  // `seoTitle`, and `seoDescription` are all checked — verified empirically, not
+  // assumed. This matters: a typo in `description` flows into <title>, OG, and RSS.
+  "dictionaryDefinitions": [
+    {
+      "name": "project-words",
+      "path": "./project-words.txt",
+      "addWords": true
+    }
+  ],
+  "dictionaries": ["project-words"],
+
+  // Frontmatter dates/enums and markdown link targets aren't prose.
+  "ignoreRegExpList": ["/\\]\\([^)]*\\)/g"]
+}
