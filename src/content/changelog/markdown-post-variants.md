@@ -2,6 +2,7 @@
 title: "Raw-markdown post variants + content negotiation"
 summary: "Every post now has a token-efficient raw-markdown sibling at /writing/<slug>.md, and the canonical URL itself serves markdown when a request genuinely prefers it. Took three attempts to land the negotiation."
 date: 2026-07-16
+updated: 2026-07-17
 type: infra
 significance: minor
 tags: ["agents", "aeo"]

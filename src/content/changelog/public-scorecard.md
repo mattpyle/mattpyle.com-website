@@ -2,6 +2,7 @@
 title: "The public Scorecard"
 summary: "Published /scorecard as a manually verified snapshot of the site's latest Accessibility, Performance, SEO, and Agentic Browsing results — the same facts exposed to human and agent readers from one source."
 date: 2026-07-15
+updated: 2026-07-17
 type: feature
 significance: minor
 tags: ["measurement", "agents", "performance", "accessibility"]

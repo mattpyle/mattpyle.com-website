@@ -2,6 +2,7 @@
 title: "Public changelog launches"
 summary: "A reverse-chronological log of what ships on this site — launches, features, infrastructure, and experiments. Starting with this page."
 date: 2026-07-17
+updated: 2026-07-17
 type: launch
 significance: minor
 tags: ["meta", "infra"]

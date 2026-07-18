@@ -1,6 +1,7 @@
 ---
 title: "I let AI build this site. Then I turned on a screen reader."
 date: 2026-07-13
+updated: 2026-07-15
 description: "I let an AI build my site. Every automated tool gave it top marks. Then I installed a screen reader for the first time, spent an evening fumbling with it, and heard what my site actually sounds like."
 seoTitle: "A11y bugs a screen reader caught, tools missed"
 seoDescription: "I let an AI build my site and every automated tool gave it top marks. Then I used a screen reader for the first time and heard what those tools missed."

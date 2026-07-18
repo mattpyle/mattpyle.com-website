@@ -2,6 +2,7 @@
 title: "A new light theme"
 summary: "Retired the dark, amber, monospace look for a warmer, serif-led reading design — and moved the accent from a default-reading clay orange to oxblood to break the 'AI-generated design' tell."
 date: 2026-07-13
+updated: 2026-07-17
 type: feature
 significance: major
 tags: ["design"]

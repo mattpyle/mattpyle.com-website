@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { chatGptUrl, claudeUrl } from '../src/lib/article-actions.mjs';
+import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 
 const slug = 'i-turned-on-a-screen-reader';
-const canonicalUrl = `https://www.mattpyle.com/writing/${slug}/`;
+const canonicalUrl = `${SITE_ORIGIN}/writing/${slug}/`;
 const markdownUrl = `/writing/${slug}.md`;
 const articlePath = new URL(`../dist/client/writing/${slug}/index.html`, import.meta.url);
 const html = readFileSync(articlePath, 'utf8');

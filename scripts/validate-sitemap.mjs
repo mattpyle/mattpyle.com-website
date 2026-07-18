@@ -9,13 +9,14 @@ import {
   latestDate,
   resolveSitemapLastmod,
 } from '../src/data/sitemap-lastmod.mjs';
+import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 // The @astrojs/vercel adapter (needed for the on-demand /writing/[slug].md
 // endpoint) makes Astro write static output to dist/client/, not dist/ —
 // dist/ itself now only holds the adapter's server bundle.
 const dist = join(root, 'dist', 'client');
-const canonicalOrigin = 'https://www.mattpyle.com';
+const siteOrigin = SITE_ORIGIN;
 const parser = new XMLParser({ ignoreAttributes: false });
 const failures = [];
 
@@ -46,19 +47,19 @@ const changelogMetadata = readWritingMetadata(changelogDir);
 const expected = new Map();
 
 for (const pathname of Object.keys(STATIC_ROUTE_LASTMOD)) {
-  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
+  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
 }
 
 for (const [slug, entry] of writingMetadata) {
   if (entry.draft) continue;
   const pathname = `/writing/${slug}/`;
-  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
+  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
 }
 
 for (const [slug, entry] of changelogMetadata) {
   if (entry.draft) continue;
   const pathname = `/changelog/${slug}/`;
-  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
+  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
 }
 
 const child = parseXml('sitemap-0.xml');
@@ -79,8 +80,8 @@ for (const item of urls) {
   const expectedDate = expected.get(location);
   const actualDate = typeof item.lastmod === 'string' ? item.lastmod.slice(0, 10) : '';
 
-  if (!/^https:\/\/www\.mattpyle\.com\/.+|^https:\/\/www\.mattpyle\.com\/$/.test(location)) {
-    failures.push(`${location}: URL must use the canonical HTTPS www host`);
+  if (!location.startsWith(`${siteOrigin}/`)) {
+    failures.push(`${location}: URL must use the current HTTPS site origin ${siteOrigin}`);
   }
   if (!location.endsWith('/')) failures.push(`${location}: canonical page URL must have a trailing slash`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(actualDate)) failures.push(`${location}: missing or invalid lastmod`);
@@ -108,7 +109,7 @@ for (const item of urls) {
 }
 
 const indexEntries = asArray(index.sitemapindex?.sitemap);
-const expectedChildUrl = `${canonicalOrigin}/sitemap-0.xml`;
+const expectedChildUrl = `${siteOrigin}/sitemap-0.xml`;
 if (indexEntries.length !== 1 || indexEntries[0]?.loc !== expectedChildUrl) {
   failures.push(`sitemap-index.xml: expected one child at ${expectedChildUrl}`);
 }
@@ -121,7 +122,7 @@ if (indexDate !== newestExpectedDate) {
 }
 
 const robots = readFileSync(join(dist, 'robots.txt'), 'utf8');
-if (!robots.includes(`Sitemap: ${canonicalOrigin}/sitemap-index.xml`)) {
+if (!robots.includes(`Sitemap: ${siteOrigin}/sitemap-index.xml`)) {
   failures.push('robots.txt: missing canonical sitemap-index.xml reference');
 }
 
