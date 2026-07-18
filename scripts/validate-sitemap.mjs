@@ -41,16 +41,24 @@ function builtHtmlPath(pathname) {
 
 const writingDir = join(root, 'src', 'content', 'writing');
 const writingMetadata = readWritingMetadata(writingDir);
+const changelogDir = join(root, 'src', 'content', 'changelog');
+const changelogMetadata = readWritingMetadata(changelogDir);
 const expected = new Map();
 
 for (const pathname of Object.keys(STATIC_ROUTE_LASTMOD)) {
-  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata));
+  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
 }
 
 for (const [slug, entry] of writingMetadata) {
   if (entry.draft) continue;
   const pathname = `/writing/${slug}/`;
-  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata));
+  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
+}
+
+for (const [slug, entry] of changelogMetadata) {
+  if (entry.draft) continue;
+  const pathname = `/changelog/${slug}/`;
+  expected.set(`${canonicalOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
 }
 
 const child = parseXml('sitemap-0.xml');

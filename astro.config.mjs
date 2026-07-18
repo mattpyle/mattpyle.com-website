@@ -8,12 +8,17 @@ import { resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
 
 const writingDir = fileURLToPath(new URL('./src/content/writing/', import.meta.url));
 const writingMetadata = readWritingMetadata(writingDir);
+// readWritingMetadata reads any content dir's frontmatter (title/date/draft/
+// updated) — reused verbatim for the changelog collection.
+const changelogDir = fileURLToPath(new URL('./src/content/changelog/', import.meta.url));
+const changelogMetadata = readWritingMetadata(changelogDir);
 
-/** @param {string} url */
-function writingSlug(url) {
+/** @param {string} url @param {string} section */
+function collectionSlug(url, section) {
   const pathname = new URL(url).pathname;
-  return pathname.startsWith('/writing/') && pathname !== '/writing/'
-    ? decodeURIComponent(pathname.slice('/writing/'.length).replace(/\/$/, ''))
+  const prefix = `/${section}/`;
+  return pathname.startsWith(prefix) && pathname !== prefix
+    ? decodeURIComponent(pathname.slice(prefix.length).replace(/\/$/, ''))
     : undefined;
 }
 
@@ -44,11 +49,23 @@ export default defineConfig({
   integrations: [
     sitemap({
       filter: (url) => {
-        const slug = writingSlug(url);
-        return !slug || !writingMetadata.get(slug)?.draft;
+        const writingId = collectionSlug(url, 'writing');
+        if (writingId) return !writingMetadata.get(writingId)?.draft;
+        const changelogId = collectionSlug(url, 'changelog');
+        if (changelogId) {
+          // /changelog/2, /changelog/3 … are pagination index pages, not entries —
+          // keep them out of the sitemap (page 1, /changelog/, stays in).
+          if (/^\d+$/.test(changelogId)) return false;
+          return !changelogMetadata.get(changelogId)?.draft;
+        }
+        return true;
       },
       serialize(item) {
-        const lastmod = resolveSitemapLastmod(new URL(item.url).pathname, writingMetadata);
+        const lastmod = resolveSitemapLastmod(
+          new URL(item.url).pathname,
+          writingMetadata,
+          changelogMetadata,
+        );
         if (!lastmod) {
           throw new Error(`Sitemap URL ${item.url} has no lastmod policy`);
         }

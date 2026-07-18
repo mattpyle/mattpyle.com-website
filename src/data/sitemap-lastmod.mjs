@@ -24,6 +24,7 @@ export const STATIC_ROUTE_LASTMOD = Object.freeze({
   '/': '2026-07-15',
   '/about/': '2026-07-15',
   '/builds/': '2026-07-15',
+  '/changelog/': '2026-07-17',
   '/scorecard/': '2026-07-15',
   '/writing/': '2026-07-15',
 });
@@ -51,8 +52,9 @@ export function resolveStaticLastmod(pathname) {
 /**
  * @param {string} pathname
  * @param {Map<string, { draft: boolean, lastmod: string }>} writingMetadata
+ * @param {Map<string, { draft: boolean, lastmod: string }>} [changelogMetadata]
  */
-export function resolveSitemapLastmod(pathname, writingMetadata) {
+export function resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata) {
   if (pathname === '/writing/') {
     const publishedDates = [...writingMetadata.values()]
       .filter(({ draft }) => !draft)
@@ -63,6 +65,21 @@ export function resolveSitemapLastmod(pathname, writingMetadata) {
   if (pathname.startsWith('/writing/')) {
     const slug = decodeURIComponent(pathname.slice('/writing/'.length).replace(/\/$/, ''));
     const entry = writingMetadata.get(slug);
+    return entry && !entry.draft
+      ? latestDate(SITEWIDE_LASTMOD, entry.lastmod)
+      : undefined;
+  }
+
+  if (pathname === '/changelog/') {
+    const publishedDates = [...(changelogMetadata?.values() ?? [])]
+      .filter(({ draft }) => !draft)
+      .map(({ lastmod }) => lastmod);
+    return latestDate(resolveStaticLastmod(pathname), ...publishedDates);
+  }
+
+  if (pathname.startsWith('/changelog/')) {
+    const slug = decodeURIComponent(pathname.slice('/changelog/'.length).replace(/\/$/, ''));
+    const entry = changelogMetadata?.get(slug);
     return entry && !entry.draft
       ? latestDate(SITEWIDE_LASTMOD, entry.lastmod)
       : undefined;

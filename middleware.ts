@@ -4,7 +4,15 @@ import { next } from '@vercel/functions';
 // `astro:middleware`. It runs before cache/static-file serving, which is required here:
 // /writing/<slug> is a prerendered static page, and Astro's own middleware (any mode)
 // never runs against prerendered routes at all. See changelog.md for the full trail.
-const WRITING_SLUG_RE = /^\/writing\/([^/.]+)\/?$/;
+//
+// Both collections expose an on-demand `.md` sibling (writing/[slug].md.ts,
+// changelog/[slug].md.ts) that this middleware proxies to on a genuine text/markdown
+// preference. Purely-numeric changelog slugs (/changelog/2) are pagination index pages,
+// not entries — excluded so they never proxy to a non-existent /changelog/2.md.
+const NEGOTIABLE = [
+  { section: 'writing', re: /^\/writing\/([^/.]+)\/?$/ },
+  { section: 'changelog', re: /^\/changelog\/(?!\d+\/?$)([^/.]+)\/?$/ },
+];
 
 interface MediaRange {
   type: string;
@@ -55,15 +63,25 @@ function prefersMarkdown(acceptHeader: string | null): boolean {
 
 export default async function middleware(request: Request) {
   const url = new URL(request.url);
-  const match = url.pathname.match(WRITING_SLUG_RE);
-  if (!match) return next();
+
+  let section: string | undefined;
+  let slug: string | undefined;
+  for (const candidate of NEGOTIABLE) {
+    const match = url.pathname.match(candidate.re);
+    if (match) {
+      section = candidate.section;
+      slug = match[1];
+      break;
+    }
+  }
+  if (!section || !slug) return next();
 
   const accept = request.headers.get('accept');
-  console.log(`[middleware] writing slug=${match[1]} accept="${accept ?? ''}"`);
+  console.log(`[middleware] ${section} slug=${slug} accept="${accept ?? ''}"`);
 
   if (prefersMarkdown(accept)) {
     const target = new URL(url);
-    target.pathname = `/writing/${match[1]}.md`;
+    target.pathname = `/${section}/${slug}.md`;
     console.log(`[middleware] proxying to "${target.toString()}"`);
     // NOT rewrite(): confirmed by direct testing that Astro's on-demand `_render`
     // function can't resolve a route when reached via any internal routing-layer

@@ -24,6 +24,7 @@
  * @property {any} site
  * @property {any[]} writing
  * @property {any[]} builds
+ * @property {any[]} [changelog]
  */
 
 /**
@@ -117,7 +118,7 @@ export function createTools(getIndex) {
     {
       name: 'search_content',
       description:
-        'Search the titles, descriptions, and tags of every published article and build on mattpyle.com.',
+        'Search the titles, descriptions, and tags of every published article, build, and changelog entry on mattpyle.com.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -127,11 +128,11 @@ export function createTools(getIndex) {
         additionalProperties: false,
       },
       execute: async (args = {}) => {
-        const { writing, builds } = await getIndex();
+        const { writing, builds, changelog = [] } = await getIndex();
         const query = normalize(args.query).trim();
         if (!query) return { results: [] };
 
-        /** @param {any} entry @param {'writing'|'build'} type */
+        /** @param {any} entry @param {'writing'|'build'|'changelog'} type */
         const match = (entry, type) => {
           const haystack = [entry.title, entry.description, ...(entry.tags ?? [])].map(normalize);
           if (!haystack.some((field) => field.includes(query))) return null;
@@ -141,12 +142,14 @@ export function createTools(getIndex) {
             url: entry.url,
             snippet: entry.description,
             ...(entry.status ? { status: entry.status } : {}),
+            ...(entry.significance ? { significance: entry.significance } : {}),
           };
         };
 
         const results = [
           ...writing.map((entry) => match(entry, 'writing')),
           ...builds.map((entry) => match(entry, 'build')),
+          ...changelog.map((entry) => match(entry, 'changelog')),
         ].filter(Boolean);
 
         return { results };

@@ -48,6 +48,18 @@ const INDEX = {
       github: 'https://github.com/mattpyle/scorecard',
     },
   ],
+  changelog: [
+    {
+      title: 'Self-hosted fonts, Performance back to 100',
+      slug: 'self-hosted-fonts',
+      url: 'https://www.mattpyle.com/changelog/self-hosted-fonts',
+      date: '2026-07-14T00:00:00.000Z',
+      type: 'infra',
+      significance: 'major',
+      tags: ['performance'],
+      description: 'Dropped the render-blocking Google Fonts stylesheet for self-hosted woff2 files.',
+    },
+  ],
 };
 
 const getIndex = async () => INDEX;
@@ -121,7 +133,7 @@ test('get_recent_writing filters by tag, case-insensitively', async () => {
   assert.deepEqual((await tool.execute({ tag: 'nonexistent' })).posts, []);
 });
 
-test('search_content matches title, description, and tags across writing and builds', async () => {
+test('search_content matches title, description, and tags across writing, builds, and changelog', async () => {
   const tool = toolsByName().search_content;
 
   const byTitle = await tool.execute({ query: 'screen reader' });
@@ -137,7 +149,22 @@ test('search_content matches title, description, and tags across writing and bui
   const byDescription = await tool.execute({ query: 'crawlers' });
   assert.equal(byDescription.results[0].title, 'Three tools, three blind spots');
 
+  // "performance" appears in both the writing description ("performance snapshot" is a
+  // build, actually) — assert the changelog entry is found and carries its significance.
+  const changelogHit = await tool.execute({ query: 'self-hosted fonts' });
+  const clResult = changelogHit.results.find((r) => r.type === 'changelog');
+  assert.ok(clResult, 'expected a changelog result for "self-hosted fonts"');
+  assert.equal(clResult.url, 'https://www.mattpyle.com/changelog/self-hosted-fonts');
+  assert.equal(clResult.significance, 'major');
+
   assert.deepEqual((await tool.execute({ query: 'nothing matches this' })).results, []);
+});
+
+test('search_content still works when the index predates the changelog field', async () => {
+  const legacyIndex = { ...INDEX, changelog: undefined };
+  const [tool] = createTools(async () => legacyIndex).filter((t) => t.name === 'search_content');
+  const { results } = await tool.execute({ query: 'screen reader' });
+  assert.equal(results.length, 1);
 });
 
 test('search_content ignores a blank query rather than matching everything', async () => {

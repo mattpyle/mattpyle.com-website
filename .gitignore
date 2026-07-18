@@ -36,6 +36,7 @@ skills-lock.json
 
 # Design handoff reference files — not production code, deleted after implementation
 /design_handoff_og_images/
+/design_handoff_changelog/
 
 # Generated per-post OG images — rebuilt by scripts/generate-og-images.mjs
 /public/og/

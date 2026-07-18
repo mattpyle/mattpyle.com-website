@@ -12,6 +12,9 @@ export const GET: APIRoute = async ({ site }) => {
   const builds = (await getCollection('builds')).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
+  const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
+    (a, b) => b.data.date.getTime() - a.data.date.getTime()
+  );
 
   const lines: string[] = [];
 
@@ -31,6 +34,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Home](${base}/): bio, tagline, recent activity feed.`);
   lines.push(`- [Writing](${base}/writing): all writing.`);
   lines.push(`- [Builds](${base}/builds): side projects.`);
+  lines.push(`- [Changelog](${base}/changelog): reverse-chronological log of what has shipped on this site.`);
   lines.push(`- [Scorecard](${base}/scorecard): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
   lines.push(`- [About](${base}/about): full bio, interests, contact links.`);
   lines.push('');
@@ -48,6 +52,15 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('');
   for (const build of builds) {
     lines.push(`- **${build.data.title}** (${build.data.status}): ${build.data.description}`);
+  }
+  lines.push('');
+
+  lines.push('## Changelog');
+  lines.push('');
+  for (const entry of changelog) {
+    lines.push(
+      `- [${entry.data.title}](${base}/changelog/${entry.id}) (${entry.data.type}, ${entry.data.significance}): ${entry.data.summary}`
+    );
   }
   lines.push('');
 

@@ -20,6 +20,9 @@ export const GET: APIRoute = async ({ site }) => {
   const builds = (await getCollection('builds')).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
+  const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
+    (a, b) => b.data.date.getTime() - a.data.date.getTime()
+  );
 
   const index = {
     generated: new Date().toISOString(),
@@ -39,6 +42,11 @@ export const GET: APIRoute = async ({ site }) => {
         { name: 'Home', url: `${base}/`, summary: 'Bio, tagline, recent activity feed.' },
         { name: 'Writing', url: `${base}/writing`, summary: 'All writing.' },
         { name: 'Builds', url: `${base}/builds`, summary: 'Side projects.' },
+        {
+          name: 'Changelog',
+          url: `${base}/changelog`,
+          summary: 'Reverse-chronological log of what has shipped on this site.',
+        },
         {
           name: 'Scorecard',
           url: `${base}/scorecard`,
@@ -68,6 +76,19 @@ export const GET: APIRoute = async ({ site }) => {
       description: build.data.description,
       ...(build.data.github ? { github: build.data.github } : {}),
       ...(build.data.live ? { live: build.data.live } : {}),
+    })),
+    // `description` mirrors `summary` so search_content's shared matcher (which reads
+    // .title/.description/.tags) covers changelog entries with no special-casing.
+    changelog: changelog.map((entry) => ({
+      title: entry.data.title,
+      slug: entry.id,
+      url: `${base}/changelog/${entry.id}`,
+      date: entry.data.date.toISOString(),
+      ...(entry.data.updated ? { updated: entry.data.updated.toISOString() } : {}),
+      type: entry.data.type,
+      significance: entry.data.significance,
+      tags: entry.data.tags,
+      description: entry.data.summary,
     })),
   };
 

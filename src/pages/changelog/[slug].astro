@@ -1,0 +1,260 @@
+---
+import { getCollection, render } from 'astro:content';
+import { Image } from 'astro:assets';
+import Layout from '../../layouts/Layout.astro';
+import { showDrafts } from '../../lib/show-drafts';
+
+export async function getStaticPaths() {
+  const entries = (await getCollection('changelog', ({ data }) => showDrafts || !data.draft))
+    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+  return entries.map((entry, index) => ({
+    params: { slug: entry.id },
+    props: {
+      entry,
+      // "Previous" = the entry published just before this one (older). The newest
+      // entry has no newer sibling, so we only ever surface the older direction.
+      prev: entries[index + 1] ?? null,
+    },
+  }));
+}
+
+const { entry, prev } = Astro.props;
+const { Content } = await render(entry);
+
+function formatDate(date: Date): string {
+  const d = date.getUTCDate().toString().padStart(2, '0');
+  const m = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  const y = date.getUTCFullYear();
+  return `${d} ${m} ${y}`;
+}
+
+const { title, summary, date, updated, tags, type, significance, hero, draft } = entry.data;
+const sigLabel = significance.toUpperCase();
+const markdownUrl = `/changelog/${entry.id}.md`;
+---
+
+<Layout
+  title={title}
+  description={summary}
+  type="article"
+  image={`/og/changelog/${entry.id}.png`}
+  publishedTime={date}
+  modifiedTime={updated}
+  noindex={draft}
+  markdownAlternate={markdownUrl}
+  breadcrumbs={[
+    { name: 'Home', url: '/' },
+    { name: 'Changelog', url: '/changelog' },
+    { name: title, url: `/changelog/${entry.id}` },
+  ]}
+>
+  <article data-module="article">
+
+    {showDrafts && draft && (
+      <p class="draft-banner" role="status">DRAFT — not published, preview only</p>
+    )}
+
+    <a href="/changelog" class="back-link">← ALL CHANGELOG</a>
+
+    <header>
+      <div class="changelog-meta">
+        <time datetime={date.toISOString()}>{formatDate(date)}</time>
+        <span class="sig-chip">
+          <span class={`sig-dot sig-dot--${significance}`} aria-hidden="true"></span>{sigLabel}
+        </span>
+        <span class="meta-sep" aria-hidden="true">·</span>
+        <span class="type-pill">{type}</span>
+      </div>
+      <h1 class="page-title page-title--article">{title}</h1>
+      <p class="article-dek page-intro">{summary}</p>
+      <ul role="list" class="article-tags">
+        {tags.map(tag => <li class="tag-pill">{tag}</li>)}
+      </ul>
+    </header>
+
+    {hero && (
+      <figure class="hero">
+        <Image src={hero} alt="" />
+      </figure>
+    )}
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    <footer class="changelog-footer">
+      {prev && (
+        <a href={`/changelog/${prev.id}`} class="prev-entry">
+          <span class="prev-eyebrow">← PREVIOUS ENTRY</span>
+          <span class="prev-title">{prev.data.title}</span>
+        </a>
+      )}
+      <a href="/changelog" class="back-link">← ALL CHANGELOG</a>
+    </footer>
+
+  </article>
+</Layout>
+
+<style>
+  [data-module="article"] {
+    max-width: var(--width-content);
+    margin: 0 auto;
+    padding: 56px var(--gutter) 80px;
+  }
+
+  .draft-banner {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    background: var(--color-accent-tint);
+    border: 1px solid var(--color-accent);
+    padding: 8px 14px;
+    margin: 0 0 24px;
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    color: var(--color-muted);
+    margin-bottom: 28px;
+  }
+
+  .back-link:hover { color: var(--color-accent); }
+
+  header { margin-bottom: 22px; }
+
+  /* ── Changelog meta row ─────────────────────────────────────────────────── */
+  .changelog-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    row-gap: 8px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+
+  .changelog-meta time,
+  .meta-sep {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    color: var(--color-label);
+  }
+
+  .meta-sep { color: #cabfa9; }
+
+  .sig-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    color: var(--color-muted);
+  }
+
+  .sig-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+
+  .sig-dot--major { background: var(--color-sig-major); }
+  .sig-dot--minor { background: var(--color-sig-minor); }
+  .sig-dot--patch { background: var(--color-sig-patch); }
+
+  .type-pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    background: var(--color-accent-tint);
+    border: 1px solid rgba(122, 46, 46, .25);
+    padding: 2px 9px;
+    border-radius: 999px;
+  }
+
+  h1 { margin: 0 0 16px; }
+  .article-dek { margin: 0 0 20px; }
+
+  .article-tags {
+    list-style: none;
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    flex-wrap: wrap;
+  }
+
+  .tag-pill {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--color-label);
+    border: 1px solid var(--color-border);
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+
+  /* ── Optional hero ──────────────────────────────────────────────────────── */
+  .hero {
+    margin: 0 0 32px;
+  }
+
+  .hero :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--color-border);
+  }
+
+  /* ── Footer (prev entry + back) ─────────────────────────────────────────── */
+  .changelog-footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .changelog-footer .back-link { margin-bottom: 0; }
+
+  .prev-entry {
+    display: block;
+    text-decoration: none;
+  }
+
+  .prev-eyebrow {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    color: var(--color-muted);
+    margin-bottom: 4px;
+  }
+
+  .prev-title {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-heading);
+    transition: color .12s ease;
+  }
+
+  .prev-entry:hover .prev-title { color: var(--color-accent); }
+
+  @media (max-width: 600px) {
+    [data-module="article"] { padding: 40px var(--gutter-mobile) 56px; }
+  }
+</style>

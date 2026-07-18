@@ -32,4 +32,24 @@ const builds = defineCollection({
   }),
 });
 
-export const collections = { writing, builds };
+const changelog = defineCollection({
+  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/changelog' }),
+  schema: ({ image }) => z.object({
+    title:        z.string(),
+    /** 1–2 sentences; shown on the /changelog index and as the entry dek. */
+    summary:      z.string(),
+    date:         z.coerce.date(),
+    updated:      z.coerce.date().optional(),
+    /** Topical tags (writing, infra, a11y…) — the bordered pills. */
+    tags:         z.array(z.string()).default([]),
+    /** The distinguished, filled accent pill. */
+    type:         z.enum(['launch', 'feature', 'content', 'infra', 'experiment']),
+    /** Drives the coloured significance dot + legend. */
+    significance: z.enum(['major', 'minor', 'patch']),
+    /** Optional full-content-width hero on the entry page. */
+    hero:         image().optional(),
+    draft:        z.boolean().default(false),
+  }),
+});
+
+export const collections = { writing, builds, changelog };
