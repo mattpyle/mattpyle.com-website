@@ -12,14 +12,15 @@ export async function getStaticPaths() {
     params: { slug: entry.id },
     props: {
       entry,
-      // "Previous" = the entry published just before this one (older). The newest
-      // entry has no newer sibling, so we only ever surface the older direction.
+      // Entries are sorted newest-first: "previous" moves backward in the
+      // chronology (older), while "next" moves forward (newer).
       prev: entries[index + 1] ?? null,
+      next: entries[index - 1] ?? null,
     },
   }));
 }
 
-const { entry, prev } = Astro.props;
+const { entry, prev, next } = Astro.props;
 const { Content } = await render(entry);
 
 function formatDate(date: Date): string {
@@ -84,13 +85,32 @@ const markdownUrl = `/changelog/${entry.id}.md`;
     </div>
 
     <footer class="changelog-footer">
-      {prev && (
-        <a href={`/changelog/${prev.id}`} class="prev-entry">
-          <span class="prev-eyebrow">← PREVIOUS ENTRY</span>
-          <span class="prev-title">{prev.data.title}</span>
+      <nav class="entry-navigation" aria-label="Changelog entry navigation">
+        {(prev || next) && (
+          <div class="entry-links">
+            {prev && (
+              <a href={`/changelog/${prev.id}`} class="entry-link entry-link--previous">
+                <span class="entry-direction">
+                  <span aria-hidden="true">←</span> Previous entry
+                </span>
+                <span class="entry-title">{prev.data.title}</span>
+              </a>
+            )}
+            {next && (
+              <a href={`/changelog/${next.id}`} class="entry-link entry-link--next">
+                <span class="entry-direction">
+                  Next entry <span aria-hidden="true">→</span>
+                </span>
+                <span class="entry-title">{next.data.title}</span>
+              </a>
+            )}
+          </div>
+        )}
+        <a href="/changelog" class="changelog-index-link">
+          <span class="index-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          View all changelog entries
         </a>
-      )}
-      <a href="/changelog" class="back-link">← ALL CHANGELOG</a>
+      </nav>
     </footer>
 
   </article>
@@ -217,44 +237,116 @@ const markdownUrl = `/changelog/${entry.id}.md`;
     border: 1px solid var(--color-border);
   }
 
-  /* ── Footer (prev entry + back) ─────────────────────────────────────────── */
+  /* ── Footer navigation ──────────────────────────────────────────────────── */
   .changelog-footer {
     margin-top: 48px;
-    padding-top: 24px;
-    border-top: 1px solid var(--color-border);
+  }
+
+  .entry-navigation {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 18px;
   }
 
-  .changelog-footer .back-link { margin-bottom: 0; }
+  .entry-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+  }
 
-  .prev-entry {
-    display: block;
+  .entry-link {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    min-height: 112px;
+    padding: 20px 22px;
+    background: transparent;
     text-decoration: none;
+    transition: background-color .15s ease;
   }
 
-  .prev-eyebrow {
-    display: block;
+  .entry-link--previous { grid-column: 1; }
+
+  .entry-link--next {
+    grid-column: 2;
+    border-left: 1px solid var(--color-border);
+    text-align: right;
+  }
+
+  .entry-link:hover { background: var(--color-accent-wash); }
+
+  .entry-direction {
+    display: flex;
+    align-items: center;
+    gap: 7px;
     font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: .12em;
-    color: var(--color-muted);
-    margin-bottom: 4px;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--color-accent);
   }
 
-  .prev-title {
+  .entry-link--next .entry-direction { justify-content: flex-end; }
+
+  .entry-title {
     display: block;
     font-family: var(--font-serif);
     font-size: 16px;
     font-weight: 600;
+    line-height: 1.35;
     color: var(--color-heading);
     transition: color .12s ease;
   }
 
-  .prev-entry:hover .prev-title { color: var(--color-accent); }
+  .entry-link:hover .entry-title { color: var(--color-accent); }
+
+  .changelog-index-link {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    gap: 9px;
+    padding: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .changelog-index-link:hover { color: var(--color-accent); }
+
+  .index-mark {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 12px;
+  }
+
+  .index-mark i {
+    display: block;
+    width: 100%;
+    height: 1px;
+    background: currentColor;
+  }
 
   @media (max-width: 600px) {
     [data-module="article"] { padding: 40px var(--gutter-mobile) 56px; }
+  }
+
+  @media (max-width: 520px) {
+    .entry-links { grid-template-columns: 1fr; }
+
+    .entry-link--previous,
+    .entry-link--next { grid-column: 1; }
+
+    .entry-link--next { border-left: 0; }
+
+    .entry-link--previous + .entry-link--next {
+      border-top: 1px solid var(--color-border);
+    }
   }
 </style>
