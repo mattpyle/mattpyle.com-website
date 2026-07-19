@@ -40,6 +40,7 @@ const SHA = 'a'.repeat(64);
 function snapshot(overrides: Partial<DraftSnapshot> = {}): DraftSnapshot {
   return {
     slug: 'fixture-post',
+    collection: 'writing',
     file: 'src/content/writing/fixture-post.md',
     contentSha256: SHA,
     frontmatter: { draft: true, title: 't' },
@@ -103,6 +104,7 @@ function mockActivities(overrides: MockOverrides = {}) {
       passes: PassResult[];
       workflowId: string;
       runId: string;
+      mode?: 'gate' | 'audit';
     }): Promise<ReviewReport> => {
       const worst = input.passes.some((p) => p.verdict === 'block')
         ? 'block'
@@ -112,6 +114,8 @@ function mockActivities(overrides: MockOverrides = {}) {
       return {
         schemaVersion: 1,
         slug: input.snapshot.slug,
+        collection: input.snapshot.collection ?? 'writing',
+        mode: input.mode ?? 'gate',
         file: input.snapshot.file,
         contentSha256: input.snapshot.contentSha256,
         reviewedAt: '2026-07-18T00:00:00.000Z',
@@ -156,6 +160,15 @@ function start(id: string) {
     workflowId: id,
     taskQueue: QUEUE,
     args: [{ slug: 'fixture-post', collection: 'writing' as const, skipBuildAudit: true }],
+  });
+}
+
+/** An audit-mode run, optionally against another collection. */
+function startAudit(id: string, collection: 'writing' | 'changelog' = 'changelog') {
+  return env.client.workflow.start(reviewPost, {
+    workflowId: id,
+    taskQueue: QUEUE,
+    args: [{ slug: 'fixture-post', collection, mode: 'audit' as const, skipBuildAudit: true }],
   });
 }
 
@@ -591,5 +604,92 @@ test('a published post is refused outright', async () => {
         return true;
       },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Audit mode — reviewing already-published content.
+//
+// The distinguishing property is *absence*: no durable wait, no verdict, no
+// publish leg, and no path by which the Steward writes to a published file.
+// These tests assert the absences, because an audit that quietly grew a way to
+// edit live content would still pass every gate-mode test in this file.
+// ---------------------------------------------------------------------------
+
+test('audit mode: reviews published content and completes without a verdict', async () => {
+  const { activities, archived } = mockActivities({
+    // draft: false — in gate mode this is the hard refusal. Audit mode is the
+    // only thing allowed to look at it.
+    snapshotDraft: async () =>
+      snapshot({ collection: 'changelog', frontmatter: { draft: false, title: 't' } }),
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await startAudit('wf-audit-happy');
+    // No signal is sent. If audit mode parked on a verdict the way gate mode
+    // does, this would hang until the test timeout — which is the failure this
+    // assertion is really buying.
+    const report = await handle.result();
+
+    assert.equal(report.mode, 'audit');
+    assert.equal(report.collection, 'changelog');
+    // Nobody decided anything, because nobody was asked.
+    assert.equal(report.human.decision, undefined);
+    assert.equal(report.human.decidedAt, undefined);
+    // Archived exactly once: at report time. Gate mode archives a second time
+    // when the decision lands, and there is no decision here.
+    assert.equal(archived.length, 1);
+    assert.equal(archived[0].mode, 'audit');
+  });
+});
+
+test('audit mode: the gate-mode draft refusal is unchanged', async () => {
+  const { activities } = mockActivities({
+    snapshotDraft: async () => snapshot({ frontmatter: { draft: false, title: 't' } }),
+  });
+
+  await withWorker(activities, async () => {
+    // Same published file, gate mode: still refused. Audit mode must widen what
+    // the Steward will review without loosening the gate by even a little.
+    const handle = await start('wf-audit-gate-still-refuses');
+    await assert.rejects(handle.result(), (err: unknown) => {
+      // `WorkflowFailedError`'s own message is the constant "Workflow execution
+      // failed" — the same wrapping problem `describeActivityError` exists for.
+      // Asserting on it would pass against any failure at all, including the
+      // gate silently breaking in some unrelated way.
+      let current: unknown = err;
+      for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+        if (/already published/.test(current.message)) return true;
+        current = current.cause;
+      }
+      throw new Error(`expected a NotADraft refusal, got: ${String(err)}`);
+    });
+  });
+});
+
+test('audit mode: applyPatches is refused — nothing is written to published content', async () => {
+  let applyCalled = 0;
+  const { activities } = mockActivities({
+    // Hold the workflow inside the fan-out long enough to land the signal while
+    // it is mid-activity. Without this the signal races the workflow's
+    // completion and the test would pass vacuously.
+    snapshotDraft: async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      return snapshot({ collection: 'changelog', frontmatter: { draft: false, title: 't' } });
+    },
+    applyPatchesActivity: async (input) => {
+      applyCalled += 1;
+      return { applied: input.patchIds, file: input.report.file, contentSha256: 'b'.repeat(64) };
+    },
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await startAudit('wf-audit-apply-refused');
+    await handle.signal(applyPatches, ['patch-1']);
+    const report = await handle.result();
+
+    assert.equal(applyCalled, 0, 'the apply activity must never run against published content');
+    assert.equal(report.human.patchesApplied, undefined);
+    assert.equal(report.mode, 'audit');
   });
 });

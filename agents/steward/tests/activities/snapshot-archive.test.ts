@@ -53,7 +53,7 @@ test('a missing post fails with the available draft slugs listed', async () => {
     () => snapshotDraft('does-not-exist'),
     (err: Error) => {
       assert.match(err.message, /src\/content\/writing\/does-not-exist\.md/);
-      assert.match(err.message, /Available draft slugs/);
+      assert.match(err.message, /Available writing draft slugs/);
       return true;
     },
   );
@@ -67,6 +67,8 @@ function report(sha: string): ReviewReport {
   return {
     schemaVersion: 1,
     slug: 'archive-test',
+    collection: 'writing',
+    mode: 'gate',
     file: 'src/content/writing/archive-test.md',
     contentSha256: sha,
     reviewedAt: new Date().toISOString(),
@@ -85,7 +87,8 @@ test('archiveReport writes a hash-keyed file and a latest.json copy', async () =
   const sha = 'b'.repeat(64);
   const result = await archiveReport(report(sha));
 
-  const dir = path.join(REVIEWS_DIR, 'archive-test');
+  // reviews/<collection>/<slug>/ — the slug alone is not unique across collections.
+  const dir = path.join(REVIEWS_DIR, 'writing', 'archive-test');
   const hashed = path.join(dir, `${sha.slice(0, 12)}.json`);
   const latest = path.join(dir, 'latest.json');
 

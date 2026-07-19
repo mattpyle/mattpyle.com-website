@@ -12,6 +12,7 @@ import type { DraftSnapshot, PassResult } from '../../src/lib/report.js';
 
 const snapshot: DraftSnapshot = {
   slug: 'x',
+  collection: 'writing',
   file: 'posts/known-good.md',
   contentSha256: 'a'.repeat(64),
   frontmatter: { draft: true },

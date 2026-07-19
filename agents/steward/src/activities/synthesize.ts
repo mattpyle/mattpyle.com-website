@@ -5,6 +5,7 @@ import {
   type DraftSnapshot,
   type PassResult,
   type PatchProposal,
+  type ReviewMode,
   type ReviewReport,
   type Verdict,
 } from '../lib/report.js';
@@ -15,6 +16,8 @@ export interface SynthesizeInput {
   passes: PassResult[];
   workflowId: string;
   runId: string;
+  /** Defaulted so pre-audit-mode callers and fixtures keep working. */
+  mode?: ReviewMode;
 }
 
 /**
@@ -132,6 +135,8 @@ export async function synthesizeReport(input: SynthesizeInput): Promise<ReviewRe
     return {
       schemaVersion: 1,
       slug: input.snapshot.slug,
+      collection: input.snapshot.collection ?? 'writing',
+      mode: input.mode ?? 'gate',
       file: input.snapshot.file,
       contentSha256: input.snapshot.contentSha256,
       reviewedAt: new Date().toISOString(),

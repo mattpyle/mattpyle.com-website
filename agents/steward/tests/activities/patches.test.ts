@@ -34,6 +34,8 @@ function report(patches: PatchProposal[]): ReviewReport {
   return {
     schemaVersion: 1,
     slug: 'fixture',
+    collection: 'writing',
+    mode: 'gate',
     file: REL,
     contentSha256: 'a'.repeat(64),
     reviewedAt: new Date().toISOString(),

@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
-import { SITE_DIR } from '../config.js';
-import type { Finding, PassResult, Verdict } from '../lib/report.js';
+import { SITE_DIR, type Collection } from '../config.js';
+import type { Finding, PassResult, ReviewMode, Verdict } from '../lib/report.js';
 import { worstVerdict } from '../lib/report.js';
 import { timed } from '../lib/logger.js';
 
@@ -10,6 +10,52 @@ const DESCRIPTION_MIN = 20;
 const DESCRIPTION_MAX = 300;
 const SERP_DESCRIPTION = 155;
 const SERP_TITLE = 60;
+
+/**
+ * Per-collection frontmatter shape, transcribed from the **real** Zod schema in
+ * `src/content.config.ts` rather than from the spec's summary of it. The two
+ * collections are genuinely different and the differences are not cosmetic:
+ *
+ * | | `writing` | `changelog` |
+ * |---|---|---|
+ * | dek/meta field | `description` | `summary` |
+ * | SERP override | `seoDescription` / `seoTitle` | **none — no escape hatch exists** |
+ * | `updated` | optional | **required** |
+ * | extra enums | — | `type`, `significance` |
+ *
+ * The `seoDescription` row is the one with teeth. Telling a changelog author to
+ * "add a short `seoDescription`" would be advice for a field the schema does not
+ * have, and following it would fail the build.
+ */
+interface CollectionRules {
+  /** Frontmatter key that drives the dek, OG, and meta description. */
+  dekField: 'description' | 'summary';
+  /** The `seoDescription`-style override, when the schema has one. */
+  dekOverride?: string;
+  titleOverride?: string;
+  /** Zod-required enum fields — defence-in-depth only (see the Zod-overlap note). */
+  enums: { field: string; values: readonly string[] }[];
+  /** Whether `updated` is required by the schema. */
+  updatedRequired: boolean;
+}
+
+const RULES: Record<Collection, CollectionRules> = {
+  writing: {
+    dekField: 'description',
+    dekOverride: 'seoDescription',
+    titleOverride: 'seoTitle',
+    enums: [],
+    updatedRequired: false,
+  },
+  changelog: {
+    dekField: 'summary',
+    enums: [
+      { field: 'type', values: ['launch', 'feature', 'content', 'infra', 'experiment'] },
+      { field: 'significance', values: ['major', 'minor', 'patch'] },
+    ],
+    updatedRequired: true,
+  },
+};
 
 /** Markdown images, excluding those already inside an HTML tag. `![alt](src)`. */
 const IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
@@ -36,7 +82,12 @@ function lineOf(full: string, index: number): number {
  * hard build failures, so the value added here is the *editorial* layer the
  * schema cannot express — SERP lengths, alt text, heading level, image location.
  */
-export async function checkFrontmatter(file: string): Promise<PassResult> {
+export async function checkFrontmatter(
+  file: string,
+  collection: Collection = 'writing',
+  mode: ReviewMode = 'gate',
+): Promise<PassResult> {
+  const rules = RULES[collection];
   const { result, startedAt, durationMs } = await timed('checkFrontmatter', async () => {
     const abs = path.join(SITE_DIR, file);
     const raw = await fs.readFile(abs, 'utf8');
@@ -54,19 +105,30 @@ export async function checkFrontmatter(file: string): Promise<PassResult> {
       findings.push({ id: `frontmatter-${n}`, pass: 'frontmatter', severity, message, file, ...extra });
     };
 
-    // description
-    const description = typeof fm.description === 'string' ? fm.description : '';
-    if (!description) {
-      add('block', 'Missing `description`. It drives the dek, OG, and RSS, and the content schema requires it.');
-    } else if (description.length < DESCRIPTION_MIN || description.length > DESCRIPTION_MAX) {
+    // dek — `description` on writing, `summary` on changelog
+    const dek = typeof fm[rules.dekField] === 'string' ? (fm[rules.dekField] as string) : '';
+    if (!dek) {
       add(
         'block',
-        `\`description\` is ${description.length} chars; expected ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}.`,
+        `Missing \`${rules.dekField}\`. It drives the dek, OG, and the meta description, and the content schema requires it.`,
       );
-    } else if (description.length > SERP_DESCRIPTION && typeof fm.seoDescription !== 'string') {
+    } else if (dek.length < DESCRIPTION_MIN || dek.length > DESCRIPTION_MAX) {
+      add(
+        'block',
+        `\`${rules.dekField}\` is ${dek.length} chars; expected ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}.`,
+      );
+    } else if (
+      dek.length > SERP_DESCRIPTION &&
+      !(rules.dekOverride && typeof fm[rules.dekOverride] === 'string')
+    ) {
       add(
         'flag',
-        `\`description\` is ${description.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit. Add a short \`seoDescription\` override.`,
+        rules.dekOverride
+          ? `\`${rules.dekField}\` is ${dek.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit. Add a short \`${rules.dekOverride}\` override.`
+          : // No override field exists in this collection's schema, so the only
+            // remedy is shortening the field itself. Suggesting an override that
+            // the schema would reject would be worse than saying nothing.
+            `\`${rules.dekField}\` is ${dek.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit. The ${collection} schema has no override field, so shorten it here.`,
       );
     }
 
@@ -74,16 +136,31 @@ export async function checkFrontmatter(file: string): Promise<PassResult> {
     const title = typeof fm.title === 'string' ? fm.title : '';
     if (!title) {
       add('block', 'Missing `title`.');
-    } else if (title.length > SERP_TITLE && typeof fm.seoTitle !== 'string') {
+    } else if (
+      title.length > SERP_TITLE &&
+      !(rules.titleOverride && typeof fm[rules.titleOverride] === 'string')
+    ) {
       add(
         'flag',
-        `\`title\` is ${title.length} chars — over the ~${SERP_TITLE}-char SERP limit. Add a short \`seoTitle\` override.`,
+        rules.titleOverride
+          ? `\`title\` is ${title.length} chars — over the ~${SERP_TITLE}-char SERP limit. Add a short \`${rules.titleOverride}\` override.`
+          : `\`title\` is ${title.length} chars — over the ~${SERP_TITLE}-char SERP limit. The ${collection} schema has no override field, so shorten it here.`,
       );
     }
 
-    // draft
-    if (fm.draft !== true) {
-      add('block', 'Post is not `draft: true`. The Steward only reviews drafts.');
+    // draft — gate mode only. In audit mode the post is *expected* to be
+    // published; blocking on it would make every audit report open with a
+    // finding that the thing being audited is the thing we asked for.
+    if (mode === 'gate' && fm.draft !== true) {
+      add('block', 'Post is not `draft: true`. The Steward only reviews drafts in gate mode.');
+    }
+
+    // collection-specific enums (Zod-required — defence-in-depth, see above)
+    for (const { field, values } of rules.enums) {
+      const v = fm[field];
+      if (typeof v !== 'string' || !values.includes(v)) {
+        add('block', `\`${field}\` must be one of: ${values.join(', ')}.`);
+      }
     }
 
     // dates
@@ -92,9 +169,16 @@ export async function checkFrontmatter(file: string): Promise<PassResult> {
       add('block', 'Missing or invalid `date`.');
     }
     const updated = fm.updated === undefined ? null : asDate(fm.updated);
-    if (fm.updated !== undefined && !updated) {
+    if (fm.updated === undefined) {
+      if (rules.updatedRequired) {
+        add(
+          'block',
+          `Missing \`updated\`. The ${collection} schema requires it — sitemap lastmod needs an explicit page-content update date.`,
+        );
+      }
+    } else if (!updated) {
       add('block', 'Invalid `updated` date.');
-    } else if (date && updated && updated < date) {
+    } else if (date && updated < date) {
       add('block', '`updated` is earlier than `date`.');
     }
 

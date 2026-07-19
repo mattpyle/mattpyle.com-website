@@ -66,10 +66,38 @@ Web UI: <http://localhost:8233>.
 
 | Command | Behavior |
 |---|---|
-| `review <slug> [--skip-build-audit]` | Start `reviewPost`, poll until the fan-out finishes, render the report. Refuses if a review of that slug is currently **running**. |
+| `review <slug> [--skip-build-audit]` | Gate-mode review of a **writing draft**, poll until the fan-out finishes, render the report. Refuses if a review of that slug is currently **running**, or if the post is not `draft: true`. |
+| `audit <collection> <slug> [--skip-build-audit]` | **Audit-mode** review of already-published content in `writing` or `changelog`. Same fan-out, same report, archived the same way — then completes. No verdict, no publish leg, and `apply` is refused. |
 | `status <slug>` | Render current state, verdict, findings, patches, report path, Web UI deep link. |
 | `approve <slug> [--force]` | Send `approve`. Refused if the report has blocking findings (use `--force`) or if the file changed since review. |
 | `reject <slug> --reason "<text>"` | Send `reject`. Reason required. Re-archives and completes. |
+
+### Gate vs audit
+
+Two modes, and the difference is what the review is *for*:
+
+| | `review` (gate) | `audit` |
+|---|---|---|
+| Target | unpublished `draft: true` | already-published content |
+| Collections | `writing` | `writing`, `changelog` |
+| Ends at | `awaiting_verdict`, parked on a human signal | `audited`, completed |
+| `approve` / `reject` | yes | n/a — nothing to decide |
+| `apply` | yes | **refused** |
+| Patches in report | yes | yes, as suggestions only |
+
+**Audit findings are advisory.** Patches still appear in the report, because knowing the exact
+edit is useful — but the Steward will not write them. Editing published content goes through the
+normal git flow, with the report as input.
+
+**Mode and collection live in the workflow input, never in config.** Both change the workflow's
+command sequence, so they must be recorded in history; a config flip would otherwise send every
+parked review down a branch it never took. See the build log's "Changelog parity" entry.
+
+### Archives
+
+`reviews/<collection>/<slug>/<hash12>.json`, plus `latest.json`. The collection segment was added
+2026-07-19 — the slug alone is not unique across collections. Pre-existing archives were migrated
+into `reviews/writing/` in the same commit.
 
 `apply` and `rereview` are Phase 1b. The `rereview` **signal** exists and works; it has no CLI
 command yet (`temporal workflow signal --name rereview` will drive it).
@@ -144,18 +172,41 @@ files (8.8/file)** — far over the ">~5 hits per post" threshold that the spec 
 as a disable prompt — and Matt kept it anyway, deliberately. The call was made on
 *published* files, several of which are changelog entries rather than prose posts.
 
-**Trigger:** once three reviews of **real posts** have run (fixtures and smoke tests
-do not count), present the E-Prime hit counts across those three reviews and ask Matt
-to re-decide keep/disable. Do not make this call unilaterally in either direction —
-the Phase 1b checkpoint exists precisely because the assistant's instinct (disable
-E-Prime) was wrong and Matt's was right.
+**Trigger:** once three qualifying reviews have run, present the E-Prime hit counts
+across those three and ask Matt to re-decide keep/disable. Do not make this call
+unilaterally in either direction — the Phase 1b checkpoint exists precisely because
+the assistant's instinct (disable E-Prime) was wrong and Matt's was right.
 
-To count real reviews:
+**A review counts only if all three hold** (tightened 2026-07-19, when collections and
+audit mode made the original wording ambiguous):
+
+1. **`collection: writing`.** The decision being re-made is about *prose posts*.
+   Changelog entries are terse, structured, and release-note shaped; their E-Prime
+   density says nothing about whether the rule earns its place in an essay. The
+   Phase 1b tuning table was itself distorted this way — 10 of its 12 files were
+   changelog entries.
+2. **`mode: gate`.** An audit is a retrospective pass over content that already
+   shipped. The question here is whether E-Prime helps Matt *while drafting*, which
+   only a gate review answers.
+3. **Not a fixture.** `steward-smoke-test`, `phase1b-live-fixture`, and anything else
+   under `tests/fixtures/` are planted defects, not writing.
+
+**Count: 1 of 3.** (`hello-world`, Phase 1c part 2. The changelog audit run in the
+collections session does **not** increment it — it fails both 1 and 2.)
+
+To count qualifying reviews:
 
 ```powershell
-# Each reviewed slug gets a directory; exclude the fixtures.
-Get-ChildItem agents/steward/reviews -Directory |
-  Where-Object { $_.Name -notmatch 'smoke-test|fixture' }
+# Reviews are archived under reviews/<collection>/<slug>/. Only `writing` can
+# qualify, and each report records its own mode. A report written before audit
+# mode existed has no `mode` key at all and is a gate review by construction —
+# the same default the Zod schema applies on parse.
+Get-ChildItem agents/steward/reviews/writing -Directory |
+  Where-Object { $_.Name -notmatch 'smoke-test|fixture' } |
+  Where-Object {
+    $mode = (Get-Content "$($_.FullName)/latest.json" -Raw | ConvertFrom-Json).mode
+    -not $mode -or $mode -eq 'gate'
+  } | Select-Object -ExpandProperty Name
 ```
 
 E-Prime hits live in each archived report under the `vale` pass's findings.

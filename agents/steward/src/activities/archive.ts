@@ -24,7 +24,11 @@ export interface ArchiveResult {
 export async function archiveReport(report: ReviewReport): Promise<ArchiveResult> {
   const { result } = await timed('archiveReport', async () => {
     const parsed = ReviewReport.parse(report);
-    const dir = path.join(REVIEWS_DIR, parsed.slug);
+    // reviews/<collection>/<slug>/ — the slug alone is not unique across
+    // collections, and a writing post and a changelog entry sharing one would
+    // otherwise interleave their archives in a single directory and fight over
+    // `latest.json`.
+    const dir = path.join(REVIEWS_DIR, parsed.collection, parsed.slug);
     await fs.mkdir(dir, { recursive: true });
 
     const hash12 = parsed.contentSha256.slice(0, 12);
@@ -34,7 +38,16 @@ export async function archiveReport(report: ReviewReport): Promise<ArchiveResult
     await fs.writeFile(file, json, 'utf8');
     await fs.writeFile(latest, json, 'utf8');
 
-    log.info({ slug: parsed.slug, hash12, overall: parsed.overall }, 'review archived');
+    log.info(
+      {
+        slug: parsed.slug,
+        collection: parsed.collection,
+        mode: parsed.mode,
+        hash12,
+        overall: parsed.overall,
+      },
+      'review archived',
+    );
     // Anchored on REPO_ROOT, not SITE_DIR: archives live under the steward tree
     // regardless of which content root is under review, so a redirected SITE_DIR
     // must not change how these paths resolve. Readers join them back onto

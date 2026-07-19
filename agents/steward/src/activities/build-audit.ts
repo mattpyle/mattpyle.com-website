@@ -3,7 +3,14 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import { createRequire } from 'node:module';
 import { Context, CancelledFailure } from '@temporalio/activity';
-import { REPO_ROOT, STEWARD_DIR, WORKTREE_DIR, postRelPath } from '../config.js';
+import {
+  REPO_ROOT,
+  STEWARD_DIR,
+  WORKTREE_DIR,
+  postRelPath,
+  urlPathFor,
+  type Collection,
+} from '../config.js';
 import { syncWorktree, needsInstall, recordInstall } from '../lib/git.js';
 import { runCancellable, killTree } from '../lib/proc.js';
 import { serveStatic, type StaticServer } from '../lib/serve.js';
@@ -76,11 +83,14 @@ const INSTALL_STATE = path.join(STEWARD_DIR, '.cache', 'worktree-install.json');
 /** Where the Vercel adapter actually puts the static output. Not `dist/`. */
 const DOC_ROOT = path.join('dist', 'client');
 
-export async function buildAndAuditDraft(slug: string): Promise<PassResult> {
+export async function buildAndAuditDraft(
+  slug: string,
+  collection: Collection = 'writing',
+): Promise<PassResult> {
   const ctx = Context.current();
   const startedAt = new Date().toISOString();
   const started = Date.now();
-  const file = postRelPath(slug);
+  const file = postRelPath(slug, collection);
   const signal = ctx.cancellationSignal;
 
   let server: StaticServer | undefined;
@@ -149,21 +159,24 @@ export async function buildAndAuditDraft(slug: string): Promise<PassResult> {
     const buildMs = Date.now() - buildStarted;
 
     // A draft that built but emitted no page is a real finding, and a clearer
-    // one than whatever 404 the auditors would report downstream.
-    const pageDir = path.join(WORKTREE_DIR, DOC_ROOT, 'writing', slug);
+    // one than whatever 404 the auditors would report downstream. This guard is
+    // also the thing standing between a wrong per-collection URL and an audit
+    // that silently scores a 404 page — it must stay ahead of the serve step.
+    const urlPath = urlPathFor(slug, collection);
+    const pageDir = path.join(WORKTREE_DIR, DOC_ROOT, collection, slug);
     try {
       await fs.stat(path.join(pageDir, 'index.html'));
     } catch {
       throw new Error(
-        `Build succeeded but ${DOC_ROOT}/writing/${slug}/index.html was not emitted. ` +
-          `Is the post draft:true and SHOW_DRAFTS being honoured?`,
+        `Build succeeded but ${DOC_ROOT}${urlPath}index.html was not emitted. ` +
+          `Is the ${collection} entry present, and (in gate mode) draft:true with SHOW_DRAFTS honoured?`,
       );
     }
 
     // --- 4. Serve ---------------------------------------------------------
     step('starting static server');
     server = await serveStatic(path.join(WORKTREE_DIR, DOC_ROOT));
-    const url = `${server.origin}/writing/${slug}/`;
+    const url = `${server.origin}${urlPath}`;
 
     // --- 5. axe -----------------------------------------------------------
     step('running axe');

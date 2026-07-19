@@ -105,9 +105,36 @@ export const ENABLE_AI_TELLS = false;
 export const ENABLE_BUILD_AUDIT = true;
 export const ENABLE_PUBLISH_LEG = false;
 
-/** Where a writing post lives, given a slug. Repo-relative. */
-export function postRelPath(slug: string): string {
-  return `src/content/writing/${slug}.md`;
+/**
+ * The content collections the Steward reviews.
+ *
+ * `builds` is deliberately absent. It has no `draft` field in
+ * `src/content.config.ts` at all, so neither the gate-mode draft refusal nor the
+ * `SHOW_DRAFTS` build has any meaning for it — it is out of scope until someone
+ * decides what reviewing a build entry would even mean.
+ */
+export const COLLECTIONS = ['writing', 'changelog'] as const;
+export type Collection = (typeof COLLECTIONS)[number];
+
+export function isCollection(v: string): v is Collection {
+  return (COLLECTIONS as readonly string[]).includes(v);
+}
+
+/**
+ * Where a post lives, given a slug. Repo-relative.
+ *
+ * The collection name is both the content directory and the URL segment for
+ * both current collections (`src/content/writing/` → `/writing/<slug>/`), but
+ * that is a coincidence of naming rather than a guarantee, which is why
+ * `urlPathFor` exists separately instead of callers reusing this.
+ */
+export function postRelPath(slug: string, collection: Collection = 'writing'): string {
+  return `src/content/${collection}/${slug}.md`;
+}
+
+/** The site URL path a collection's entry renders at. Trailing slash included. */
+export function urlPathFor(slug: string, collection: Collection = 'writing'): string {
+  return `/${collection}/${slug}/`;
 }
 
 /**
@@ -119,6 +146,20 @@ export function resolveArchivePath(relPath: string): string {
   return path.resolve(REPO_ROOT, relPath);
 }
 
-export function workflowIdFor(slug: string): string {
-  return `steward-review-${slug}`;
+/**
+ * The workflow ID for a review.
+ *
+ * **`writing` keeps the bare `steward-review-<slug>` form on purpose.** Adding
+ * the collection unconditionally would have been tidier, and would also have
+ * orphaned every review parked under the old scheme — including the live
+ * `steward-review-hello-world` execution this session was written alongside.
+ * A workflow ID is not an implementation detail once a workflow is running under
+ * it; it is the only handle the CLI has. Non-default collections get the
+ * qualified form, so a `changelog` and a `writing` entry sharing a slug cannot
+ * collide.
+ */
+export function workflowIdFor(slug: string, collection: Collection = 'writing'): string {
+  return collection === 'writing'
+    ? `steward-review-${slug}`
+    : `steward-review-${collection}-${slug}`;
 }

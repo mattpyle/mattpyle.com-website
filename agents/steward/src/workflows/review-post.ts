@@ -17,7 +17,29 @@ const QUEUE_HEAVY = 'steward-heavy';
 
 export interface ReviewPostInput {
   slug: string;
-  collection: 'writing';
+  /**
+   * Which content collection the slug lives in. Optional so histories written
+   * before collections existed replay unchanged — `undefined` resolves to
+   * `writing`, which is what those runs actually did.
+   */
+  collection?: 'writing' | 'changelog';
+  /**
+   * `gate` (default) reviews an unpublished draft on its way to publication and
+   * parks on a human verdict. `audit` reviews already-published content: same
+   * fan-out, same report, archived the same way, then completes. No durable
+   * wait, no publish leg, and `applyPatches` is refused — editing published
+   * content goes through the human's normal git flow with the report as input.
+   *
+   * **This lives in the input, not in config, and that is now a rule rather than
+   * a preference.** `mode` and `collection` both change the workflow's command
+   * sequence: an audit emits no durable wait and may fan out against a different
+   * file. A flag that changes the sequence must be recorded in history, or
+   * flipping it would send every parked review down a branch it never took.
+   * Phase 1c part 2 proved this the cheap way — `skipBuildAudit` lived in the
+   * input, so adding the build audit to the fan-out did not break the Phase 1b
+   * fixture. Had it lived in `config.ts`, it would have broken all of them.
+   */
+  mode?: 'gate' | 'audit';
   /**
    * Skips the heavy-queue build audit (spec §8.5).
    *
@@ -147,6 +169,12 @@ type Decision =
  * (design rule 4 / spec §7.4). Timestamps go through `workflowNow()`.
  */
 export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> {
+  // Resolved once, here, from the input only. Both default to what a
+  // pre-existing history actually did, which is what makes those histories
+  // replay unchanged (see ReviewPostInput.mode).
+  const collection = input.collection ?? 'writing';
+  const mode = input.mode ?? 'gate';
+
   let state: ReviewState = 'running';
   let report: ReviewReport | undefined;
   let reportPath: string | undefined;
@@ -191,10 +219,15 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     state = 'running';
     staleReason = undefined;
 
-    const snapshot = await light.snapshot.snapshotDraft(input.slug);
-    if (snapshot.frontmatter.draft !== true) {
+    const snapshot = await light.snapshot.snapshotDraft(input.slug, collection);
+    // The gate-mode refusal is unchanged, deliberately. Audit mode is the only
+    // thing that may look at published content, and it is opt-in per review via
+    // the input — so no config change and no default can ever quietly turn the
+    // gate into something that reviews live posts.
+    if (mode === 'gate' && snapshot.frontmatter.draft !== true) {
       throw wf.ApplicationFailure.nonRetryable(
-        `${snapshot.file} is already published; the Steward only reviews drafts.`,
+        `${snapshot.file} is already published; the Steward only reviews drafts in gate mode. ` +
+          `To review published content, run an audit instead.`,
         'NotADraft',
       );
     }
@@ -211,7 +244,9 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     const passes = await Promise.all([
       guard('cspell', () => light.linters.runCspell(snapshot.file)),
       guard('vale', () => light.linters.runVale(snapshot.file)),
-      guard('frontmatter', () => light.frontmatter.checkFrontmatter(snapshot.file)),
+      guard('frontmatter', () =>
+        light.frontmatter.checkFrontmatter(snapshot.file, collection, mode),
+      ),
       guard('claims_structure', () =>
         light.editorial.editorialPass(snapshot.file, 'claims-structure'),
       ),
@@ -226,7 +261,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       // other four passes have real findings in them.
       ...(input.skipBuildAudit
         ? []
-        : [guard('build_audit', () => heavy.buildAndAuditDraft(input.slug))]),
+        : [guard('build_audit', () => heavy.buildAndAuditDraft(input.slug, collection))]),
       // Phase 2a adds the ai-tells pass behind ENABLE_AI_TELLS.
     ]);
 
@@ -240,6 +275,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     report = await light.reporting.synthesizeReport({
       snapshot,
       passes,
+      mode,
       workflowId: wf.workflowInfo().workflowId,
       runId: wf.workflowInfo().runId,
     });
@@ -255,6 +291,24 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
   }
 
   await runFanOut();
+
+  // -------------------------------------------------------------------------
+  // Audit mode stops here.
+  //
+  // There is no verdict to wait for: the content is already published, so there
+  // is nothing to gate and nothing to approve. The report is the entire
+  // deliverable, and it has just been archived. Parking would leave a workflow
+  // running forever waiting for a signal that has no meaning.
+  //
+  // Any decision signalled during the fan-out is discarded with the queue, and
+  // that includes `applyPatches` — patches still appear in the report, but the
+  // Steward does not write to published content. That edit goes through the
+  // human's normal git flow, with the report as input.
+  // -------------------------------------------------------------------------
+  if (mode === 'audit') {
+    state = 'audited';
+    return report!;
+  }
 
   // -------------------------------------------------------------------------
   // Durable wait. No timeout — this may sit for weeks, and surviving a worker
@@ -323,7 +377,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     }
 
     // Design rule 2, belt and braces: the bytes must still be the bytes we reviewed.
-    const currentHash = await light.snapshot.currentContentHash(input.slug);
+    const currentHash = await light.snapshot.currentContentHash(input.slug, collection);
     if (currentHash !== report!.contentSha256) {
       state = 'stale';
       staleReason =
