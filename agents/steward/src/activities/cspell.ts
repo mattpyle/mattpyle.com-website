@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { spellCheckDocument, readConfigFile } from 'cspell-lib';
+import { spellCheckDocument, readConfigFile, clearCachedFiles } from 'cspell-lib';
 import type { CSpellSettings } from 'cspell-lib';
 import { CSPELL_CONFIG, SITE_DIR } from '../config.js';
 import type { PassResult, Finding, PatchProposal } from '../lib/report.js';
@@ -60,6 +60,13 @@ export function pickSuggestion(
  * mode there is: it manufactures findings against correct prose.
  */
 async function loadSettings(): Promise<CSpellSettings> {
+  // cspell-lib caches config files and compiled dictionaries process-wide. The
+  // worker is long-lived, so without this the dictionary is frozen at whatever
+  // it was when the worker booted: `steward dict-add Kimi` followed by a
+  // `rereview` re-flagged `Kimi` anyway, and the only cure was restarting the
+  // worker. Found by running the round trip, not by reading the code — a stale
+  // dictionary produces a plausible finding, not an error.
+  await clearCachedFiles();
   // cspell 10's `readConfigFile` returns a *wrapper* — `{ url, settings }` — not
   // the settings object. Passing the wrapper straight through silently yields an
   // empty dictionary, which is indistinguishable from a working one until real

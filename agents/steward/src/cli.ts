@@ -12,6 +12,7 @@ import {
   type Collection,
 } from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
+import { readArchivedReport } from './lib/read-report.js';
 import {
   reviewPost,
   approve as approveSignal,
@@ -53,7 +54,7 @@ async function render(
   state: ReviewStateResult,
   collection: Collection = 'writing',
 ) {
-  const report = await readArchivedReport(slug, state);
+  const report = await readArchivedReport(state);
   const label = collection === 'writing' ? slug : `${collection}/${slug}`;
   const modeTag = report?.mode === 'audit' ? '  ·  mode: audit (advisory — nothing will be applied)' : '';
   console.log('');
@@ -101,38 +102,6 @@ async function render(
   console.log('');
 }
 
-/** The query returns a summary; the full findings live in the archived JSON. */
-async function readArchivedReport(slug: string, state: ReviewStateResult) {
-  if (!state.reportPath) return null;
-  const fs = await import('node:fs/promises');
-  const { resolveArchivePath } = await import('./config.js');
-
-  // A workflow parked before the reviews/<collection>/<slug>/ migration has the
-  // *old* path baked into its history, and history is immutable — so the
-  // recorded path points at a file that has moved. Falling back to the migrated
-  // location keeps those reviews readable.
-  //
-  // This mattered in practice, not in theory: the live `hello-world` review was
-  // parked across the migration and rendered a correct summary with a silently
-  // empty findings table, which is the worst possible failure for this function.
-  const candidates = [state.reportPath];
-  const migrated = state.reportPath.replace(
-    /^(agents\/steward\/reviews)\/(?!writing\/|changelog\/)/,
-    '$1/writing/',
-  );
-  if (migrated !== state.reportPath) candidates.push(migrated);
-
-  for (const candidate of candidates) {
-    try {
-      const raw = await fs.readFile(resolveArchivePath(candidate), 'utf8');
-      return JSON.parse(raw) as import('./lib/report.js').ReviewReport;
-    } catch {
-      // Try the next candidate.
-    }
-  }
-  return null;
-}
-
 /**
  * Finds an audit-mode review of `slug` in any collection, if one exists.
  *
@@ -146,14 +115,20 @@ async function findAuditedReport(
   slug: string,
 ): Promise<{ collection: Collection; reportPath?: string } | null> {
   for (const collection of COLLECTIONS) {
+    let state: ReviewStateResult;
     try {
       const handle = c.workflow.getHandle(workflowIdFor(slug, collection));
-      const state = await handle.query(getReviewState);
-      const report = await readArchivedReport(slug, state);
-      if (report?.mode === 'audit') return { collection, reportPath: state.reportPath };
+      state = await handle.query(getReviewState);
     } catch {
       // No workflow for this collection, or it predates the query — not an audit.
+      continue;
     }
+    // Deliberately outside the catch: per design rule 11, an unreadable report
+    // for a workflow that *does* exist is a bug, not an absence, and must not be
+    // downgraded to "not an audit" — that would let `apply` proceed against
+    // content the audit was supposed to protect.
+    const report = await readArchivedReport(state);
+    if (report?.mode === 'audit') return { collection, reportPath: state.reportPath };
   }
   return null;
 }
@@ -306,13 +281,65 @@ program
   .description('Query the current review state')
   .action(async (slug: string) => {
     const c = await client();
+    // Only the *query* may be reported as "no review found". Rendering is outside
+    // the catch on purpose (design rule 11): an unreadable archived report would
+    // otherwise be misreported as a missing review, which is the same
+    // path-bug-looks-like-absence failure the rule exists to stop.
+    let state: ReviewStateResult;
     try {
-      const { state } = await fetchReport(c, slug);
-      await render(c, slug, state);
+      ({ state } = await fetchReport(c, slug));
     } catch (err) {
       fail(`No review found for "${slug}". Start one with \`steward review ${slug}\`.\n  (${String(err)})`);
     }
+    await render(c, slug, state);
     await c.connection.close();
+  });
+
+program
+  .command('stats')
+  .description('Count archived reviews and E-Prime density (README operational rule 4)')
+  .action(async () => {
+    const { collectStats } = await import('./lib/stats.js');
+    const stats = await collectStats();
+    const qualifying = stats.filter((s) => s.qualifies);
+
+    console.log('');
+    console.log('  slug                        collection  mode   E-Prime  words  /100w  qualifies');
+    for (const s of stats) {
+      console.log(
+        `  ${s.slug.padEnd(26)}  ${s.collection.padEnd(10)}  ${s.mode.padEnd(5)}  ` +
+          `${String(s.ePrimeHits).padStart(7)}  ${String(s.words).padStart(5)}  ` +
+          `${(s.ePrimePer100 ?? '—').toString().padStart(5)}  ${s.qualifies ? 'yes' : 'no'}`,
+      );
+    }
+    console.log('');
+    console.log(`  Qualifying reviews (writing · gate · not a fixture): ${qualifying.length} of 3`);
+    if (qualifying.length >= 3) {
+      const totalHits = qualifying.reduce((n, s) => n + s.ePrimeHits, 0);
+      const totalWords = qualifying.reduce((n, s) => n + s.words, 0);
+      const density = totalWords ? ((totalHits / totalWords) * 100).toFixed(2) : '—';
+      console.log('');
+      console.log(`  → Re-decide write-good.E-Prime. Density across qualifying reviews: ${density} hits/100 words.`);
+      console.log('    Compare against PROSE baselines, not the Phase 1b 8.8/file figure — see README rule 4.');
+    }
+    console.log('');
+  });
+
+program
+  .command('dict-add')
+  .argument('<word>')
+  .description('Add a word to the Steward project dictionary (kept sorted, deduplicated)')
+  .action(async (word: string) => {
+    const { addWord } = await import('./lib/dictionary.js');
+    const result = await addWord(word);
+    console.log('');
+    console.log(
+      result.added
+        ? `  Added "${result.word}" to the Steward dictionary.`
+        : `  "${result.word}" is already in the dictionary — nothing to do.`,
+    );
+    console.log(`  ${result.configPath}`);
+    console.log('');
   });
 
 program

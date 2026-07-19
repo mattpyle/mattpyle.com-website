@@ -10,6 +10,10 @@ import {
   type Verdict,
 } from '../lib/report.js';
 import { timed } from '../lib/logger.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { SITE_DIR } from '../config.js';
+import { annotateDispositions, type DictionaryProposal } from '../lib/dispositions.js';
 
 export interface SynthesizeInput {
   snapshot: DraftSnapshot;
@@ -124,10 +128,41 @@ export function dedupePatches(passes: PassResult[]): PatchProposal[] {
   return order.map((key, i) => ({ ...byKey.get(key)!, id: `patch-${i + 1}` }));
 }
 
+/**
+ * Attaches a proposed disposition to each cspell unknown-word finding, using the
+ * editorial pass's proposals where it offered any and the deterministic rule
+ * otherwise (Prompt 3c).
+ *
+ * Reading the post here is deliberate: the fallback rule needs to see the word
+ * *in position* to tell a name from a typo, and synthesis is the first point at
+ * which both the cspell findings and the editorial proposals exist together.
+ * A post that cannot be read is not fatal — the annotation is an aid, and losing
+ * it must not cost the human their report.
+ */
+async function annotateUnknownWords(passes: PassResult[], file: string): Promise<PassResult[]> {
+  const proposals = passes.flatMap((p) => {
+    const raw = p.metrics?.dictionaryProposals;
+    return Array.isArray(raw) ? (raw as DictionaryProposal[]) : [];
+  });
+
+  let text = '';
+  try {
+    text = await fs.readFile(path.join(SITE_DIR, file), 'utf8');
+  } catch {
+    // Fall through with empty text: every unknown word then reads as `typo`,
+    // which is the conservative disposition and still asks the human to look.
+  }
+
+  return annotateDispositions(passes, text, proposals);
+}
+
 /** Spec §8.9. Mechanical assembly — rollup, ordering, template summary. */
 export async function synthesizeReport(input: SynthesizeInput): Promise<ReviewReport> {
   const { result } = await timed('synthesizeReport', async () => {
-    const passes = orderFindings(clampSeverities(input.passes));
+    const passes = await annotateUnknownWords(
+      orderFindings(clampSeverities(input.passes)),
+      input.snapshot.file,
+    );
     const overall = worstVerdict(passes.map((p) => p.verdict));
 
     const patches = dedupePatches(passes);

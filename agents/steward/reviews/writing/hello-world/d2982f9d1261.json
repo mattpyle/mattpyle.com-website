@@ -1,46 +1,30 @@
 {
   "schemaVersion": 1,
   "slug": "hello-world",
+  "collection": "writing",
+  "mode": "gate",
   "file": "src/content/writing/hello-world.md",
   "contentSha256": "d2982f9d1261a6069fb6e2e2ad544b159e35016199b1d0bb4cf6c52196b89946",
-  "reviewedAt": "2026-07-19T06:34:13.932Z",
+  "reviewedAt": "2026-07-19T22:13:00.287Z",
   "workflowId": "steward-review-hello-world",
   "runId": "019f7914-a3ce-71f2-8ab9-f7cb65972510",
   "passes": [
     {
       "pass": "cspell",
-      "verdict": "block",
+      "verdict": "flag",
       "findings": [
         {
           "id": "cspell-1",
           "pass": "cspell",
-          "severity": "block",
-          "message": "\"utilising\" — did you mean \"utilizing\"?",
-          "file": "src/content/writing/hello-world.md",
-          "line": 23,
-          "excerpt": "I've never been good at self-promotion and advocacy so I'm utilising what I do find interesting such as playing, building, tinkering, and experimenting, and using that as a forcing-function to create,"
-        },
-        {
-          "id": "cspell-2",
-          "pass": "cspell",
           "severity": "flag",
-          "message": "\"matthewpyle\" is not in the dictionary (suggestions: mattpyle). Fix it, or add it to cspell.config.yaml if it is jargon.",
+          "message": "\"matthewpyle\" is not in the dictionary (suggestions: mattpyle). Fix it, or add it to cspell.config.yaml if it is jargon. — likely typo: no evidence it is a name; defaulting to typo so a human looks before it is admitted",
           "file": "src/content/writing/hello-world.md",
           "line": 25,
           "excerpt": "*side note: Before this domain, I owned `matthewpyle.com` but the only people who call me Matthew are the government and my mum when I've done something wrong.*"
-        },
-        {
-          "id": "cspell-3",
-          "pass": "cspell",
-          "severity": "flag",
-          "message": "\"Kimi\" is not in the dictionary (suggestions: kami, kiwi, komi). Fix it, or add it to cspell.config.yaml if it is jargon.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 89,
-          "excerpt": "Using multiple LLM/AI tool stacks in collaboration is a learning experience and I soon hope to try others such as Kimi K3 and GLM 5.2."
         }
       ],
-      "startedAt": "2026-07-19T06:33:43.721Z",
-      "durationMs": 449,
+      "startedAt": "2026-07-19T22:12:18.510Z",
+      "durationMs": 31,
       "toolVersion": "cspell-lib unknown"
     },
     {
@@ -858,16 +842,16 @@
           "excerpt": "What's"
         }
       ],
-      "startedAt": "2026-07-19T06:33:43.900Z",
-      "durationMs": 367,
+      "startedAt": "2026-07-19T22:12:18.542Z",
+      "durationMs": 257,
       "toolVersion": "vale version 3.15.1"
     },
     {
       "pass": "frontmatter",
       "verdict": "pass",
       "findings": [],
-      "startedAt": "2026-07-19T06:33:43.899Z",
-      "durationMs": 50
+      "startedAt": "2026-07-19T22:12:18.512Z",
+      "durationMs": 38
     },
     {
       "pass": "claims_structure",
@@ -877,101 +861,197 @@
           "id": "claims-patch-1",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "mechanical fix: The filename is listed as 'Scoreboard-md' (missing the dot and using 'board' instead of 'card') but the linked public page is '/scorecard' and the item above is described as a scorecard, not a scoreboard. Appears to be a typo in the filename.",
+          "message": "mechanical fix: The file is described as capturing scorecard output; 'Scoreboard-md' appears to be a formatting error (missing hyphen before 'md' and likely wrong base name given the public page is called 'scorecard'). This is a mechanical naming inconsistency within the post.",
           "file": "src/content/writing/hello-world.md",
           "line": 38,
-          "excerpt": "- Scoreboard-md - This captures the output and scores from regular performance, a11y, seo, and agentic browsing checks. Now available publicly on the [scorecard](/scorecard)"
-        },
-        {
-          "id": "claims-7",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "self containment: This bullet references '/steward' as 'the reason this post exists' with no definition; a reader encountering this section in isolation has no context for what Steward is.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 39,
-          "excerpt": "- `/steward` - The reason this post exists *...more on that later*",
-          "evidence": "Steward is not defined until section line 51. Any AI answer engine extracting the 'Building in the open' section would surface an undefined forward reference as if it were meaningful content."
+          "excerpt": "Scoreboard-md"
         },
         {
           "id": "claims-8",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "buried lede: The actual purpose of the post—that it is a test artifact for the Steward editorial agent—is not stated until the fourth section, after ~28 lines of preamble about the site's existence and open-building philosophy.",
+          "message": "buried lede: The actual point — that this post is a functional test artifact for the Steward agent — does not appear until line 45, after two sentences of framing. The lede is the Steward test, not the disclaimer about the title.",
           "file": "src/content/writing/hello-world.md",
           "line": 41,
           "excerpt": "### This post is a test\n\nIgnore the title. This is not your typical \"Hello, World!\" article",
-          "evidence": "The post's real subject (Steward, Temporal workflows, agentic publishing) is introduced at line 47 at the earliest. The title and opening sections frame it as a personal-brand/hello-world post, burying the technical lede."
+          "evidence": "The real news ('my AI coding assistants have essentially forced me to write this post… to test the prototype of Steward') arrives at line 45, three sentences into a short section."
+        },
+        {
+          "id": "claims-7",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: The Steward section is reasonably self-contained, but the reference to 'draft: true' as a frontmatter flag is meaningful only to readers who understand the Astro/markdown content model; extracted alone, this would be opaque.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "Steward is an editorial agent that owns the path from a draft article (`draft: true`) to published for posts on this website",
+          "evidence": "An AI answer engine extracting only the Steward section would encounter 'draft: true' with no explanation of what system interprets it or what 'published' means in this context."
         },
         {
           "id": "claims-6",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "answer first: The 'Tech stack' section opens with a meta-comment about the author's energy level rather than its conclusion (the stack itself), violating answer-first structure.",
+          "message": "answer first: This section does lead with its thesis, which is good, but the second paragraph pivots to a different concept (the author's personal learning goals) without a subheading, making the section cover two distinct ideas.",
           "file": "src/content/writing/hello-world.md",
-          "line": 65,
-          "excerpt": "## The tech stack\n\nRight now, I am *phoning in* in the rest of this post.",
-          "evidence": "The actual content of the section—the list of technologies—does not appear until line 70. A reader or AI extracting this section gets three sentences of preamble before the point."
-        },
-        {
-          "id": "claims-4",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "unsupported: The post asserts Astro 7 as the version in use; as of the post date (2026-07-18) this version number cannot be verified from any source within the post, and the linked URL may not resolve to a real release page.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 70,
-          "excerpt": "[Astro 7](https://astro.build/blog/astro-7/) - a lightweight framework for content-driven sites",
-          "evidence": "No changelog entry, package.json excerpt, or other in-post evidence confirms Astro 7 exists or is the version deployed. Version numbers are factual claims requiring support."
+          "line": 53,
+          "excerpt": "### Why does Steward exist?\n\nThe thesis being demonstrated is:",
+          "evidence": "The section opens with a product thesis, then shifts to personal motivation ('I'm looking to learn how developers…'). These are separable concepts bundled under one heading."
         },
         {
           "id": "claims-1",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "unsupported: The linked repository (webmachinelearning/webmcp) is a W3C spec repo, not an Origin Trial program; the claim of enrollment in an 'Origin Trial' is unverified and the link does not support it.",
+          "message": "unsupported: The claim names specific model identities ('Opus' in Claude Code, 'Fable' in Claude Chat) as if these are verifiable, established model names for those products; 'Fable' in particular is not a publicly documented Claude model name.",
           "file": "src/content/writing/hello-world.md",
-          "line": 73,
-          "excerpt": "[WebMCP](https://github.com/webmachinelearning/webmcp) - This site is enrolled in the WebMCP Origin Trial",
-          "evidence": "Origin Trials are a Chrome/browser-vendor mechanism; WebMCP as linked is a W3C community group draft. No source in the post confirms an active Origin Trial enrollment for this site."
+          "line": 63,
+          "excerpt": "both Opus in Claude Code and Fable in Claude Chat told me \"You need to write more in order for us to test this properly\"",
+          "evidence": "Anthropic has not publicly released a model called 'Fable'. If this is an internal codename or a hallucinated name, presenting it as a factual model identity is an unsupported assertion. The post provides no source or screenshot."
         },
         {
           "id": "claims-2",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "unsupported: The sentence attributes spell-checking to Vale but the preceding context attributes it to CSpell; the roles of the two tools are conflated without clarification.",
+          "message": "unsupported: Astro 7 is cited as a specific released version; as of the post date (2026-07-18) this cannot be verified from within the post, and no release note or changelog is quoted to confirm this version exists.",
           "file": "src/content/writing/hello-world.md",
-          "line": 75,
-          "excerpt": "Vale does that, and is being built into Steward.",
-          "evidence": "CSpell is introduced as the spell-checker ('I'm writing this very article in VS Code which surfaced the need to check my spelling. Vale does that'), yet Vale is a prose/style linter, not a spell-checker. This is a factual misattribution of tool capability."
+          "line": 70,
+          "excerpt": "[Astro 7](https://astro.build/blog/astro-7/) - a lightweight framework for content-driven sites",
+          "evidence": "Version numbers are factual claims. The post provides no in-text evidence that Astro 7 is a real released version, and the linked URL cannot be confirmed from the post text alone."
         },
         {
           "id": "claims-3",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "contradiction: The post introduces CSpell as the spell-checking tool but then says 'Vale does that,' implying Vale is the spell-checker, contradicting the role assigned to CSpell.",
+          "message": "unsupported: The claim that WebMCP has an 'Origin Trial' is a specific factual assertion about a browser/standards program that is not sourced or evidenced anywhere in the post.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 73,
+          "excerpt": "[WebMCP](https://github.com/webmachinelearning/webmcp) - This site is enrolled in the WebMCP Origin Trial",
+          "evidence": "Origin Trials are a specific Chrome/browser mechanism. Asserting enrollment in one is a verifiable factual claim requiring a source; none is provided."
+        },
+        {
+          "id": "claims-4",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The sentence attributes spell-checking to Vale, but the paragraph opens by crediting CSpell for spell-checking; Vale is a prose/style linter, not a spell checker. This is also a factual misattribution of tool capability.",
           "file": "src/content/writing/hello-world.md",
           "line": 75,
-          "excerpt": "CSpell - Since this is all markdown, I'm writing this very article in VS Code which surfaced the need to check my spelling. Vale does that, and is being built into Steward.",
-          "evidence": "CSpell is listed as the active spell-check solution; Vale is a separate linting tool. Saying 'Vale does that' directly after describing CSpell's spell-checking role creates an internal contradiction about which tool performs which function."
+          "excerpt": "Vale does that, and is being built into Steward.",
+          "evidence": "CSpell is the spell checker named earlier in the same bullet. Vale is a style and grammar linter. Saying 'Vale does that' (referring to spelling checks) misrepresents Vale's documented function."
         },
         {
           "id": "claims-5",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "unsupported: Specific model version names 'Kimi K3' and 'GLM 5.2' are stated as if they are real, released products; no source in the post confirms these version designations exist.",
+          "message": "contradiction: The post introduces CSpell as the spelling tool, then immediately says 'Vale does that,' contradicting which tool performs spell-checking.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "CSpell - Since this is all markdown, I'm writing this very article in VS Code which surfaced the need to check my spelling. Vale does that",
+          "evidence": "Lines 75 attributes the need for spell-checking to CSpell, then the same sentence concludes that Vale performs that function. These two statements directly conflict."
+        },
+        {
+          "id": "claims-patch-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: Duplicate word 'also also' — clear mechanical typo.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "but also also allow"
+        },
+        {
+          "id": "claims-9",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: 'Kimi K3' and 'GLM 5.2' are cited as specific model version names with no source; these version designations may not correspond to publicly released models.",
           "file": "src/content/writing/hello-world.md",
           "line": 89,
           "excerpt": "I soon hope to try others such as Kimi K3 and GLM 5.2.",
-          "evidence": "Named model versions are factual claims. If these are speculative or placeholder names, they should be scoped as such; if real, a source or link is needed."
+          "evidence": "Model version numbers are factual claims. The post provides no link or reference confirming these are real released model versions rather than anticipated or misremembered names."
         }
       ],
-      "startedAt": "2026-07-19T06:33:43.899Z",
-      "durationMs": 30009,
+      "startedAt": "2026-07-19T22:12:18.544Z",
+      "durationMs": 41719,
       "rubric": {
         "path": "agents/steward/src/rubrics/claims-structure.md",
-        "sha256": "c4c7dfafce37623ea56feda50e8d2474548c5fc66097c030d8548199a6f4e45a",
+        "sha256": "3081861efdd50232655a18f6e3d14c1ccd34a44f73f053b5c814c38a9c9a8158",
         "model": "claude-sonnet-4-6"
       },
       "metrics": {
-        "validationAttempts": 1
+        "validationAttempts": 1,
+        "dictionaryProposals": [
+          {
+            "word": "Britishisms",
+            "disposition": "proper_noun",
+            "reason": "Used as a self-aware cultural label for British English idioms; not a standard dictionary word but intentional."
+          },
+          {
+            "word": "mattpyle",
+            "disposition": "proper_noun",
+            "reason": "Author's domain/brand name used throughout."
+          },
+          {
+            "word": "WebMCP",
+            "disposition": "proper_noun",
+            "reason": "Named web standard/origin trial referenced by URL."
+          },
+          {
+            "word": "Temporal",
+            "disposition": "proper_noun",
+            "reason": "Name of the workflow orchestration product (temporal.io)."
+          },
+          {
+            "word": "Steward",
+            "disposition": "proper_noun",
+            "reason": "Name of the author's custom editorial agent."
+          },
+          {
+            "word": "CSpell",
+            "disposition": "proper_noun",
+            "reason": "Name of the spell-checking tool linked in the post."
+          },
+          {
+            "word": "Codex",
+            "disposition": "proper_noun",
+            "reason": "Name of an AI coding assistant referenced alongside Claude Code."
+          },
+          {
+            "word": "Astro",
+            "disposition": "proper_noun",
+            "reason": "Name of the web framework used for the site."
+          },
+          {
+            "word": "Vercel",
+            "disposition": "proper_noun",
+            "reason": "Name of the hosting platform."
+          },
+          {
+            "word": "gitignored",
+            "disposition": "proper_noun",
+            "reason": "Derived from Git proper noun; used as a verb in developer context."
+          },
+          {
+            "word": "vibe-coders",
+            "disposition": "proper_noun",
+            "reason": "Emerging industry slang term used intentionally in quotes."
+          },
+          {
+            "word": "Fable",
+            "disposition": "typo",
+            "reason": "Claimed to be a Claude model name but does not match any publicly documented Anthropic model; likely misremembered or hallucinated — human should verify."
+          },
+          {
+            "word": "GLM",
+            "disposition": "proper_noun",
+            "reason": "Appears to be a model family name (e.g. Zhipu AI's GLM series)."
+          },
+          {
+            "word": "Kimi",
+            "disposition": "proper_noun",
+            "reason": "Appears to be a model/product name (Moonshot AI's Kimi)."
+          },
+          {
+            "word": "a11y",
+            "disposition": "proper_noun",
+            "reason": "Standard developer numeronym for 'accessibility'."
+          }
+        ]
       }
     },
     {
@@ -984,13 +1064,13 @@
           "severity": "flag",
           "message": "Lighthouse best-practices scored 96, below the site floor of 100.",
           "file": "src/content/writing/hello-world.md",
-          "evidence": "url: http://127.0.0.1:57541/writing/hello-world/\nscore: 96\nfloor: 100"
+          "evidence": "url: http://127.0.0.1:51674/writing/hello-world/\nscore: 96\nfloor: 100"
         }
       ],
-      "startedAt": "2026-07-19T06:33:43.899Z",
-      "durationMs": 15399,
+      "startedAt": "2026-07-19T22:12:18.542Z",
+      "durationMs": 11947,
       "metrics": {
-        "url": "http://127.0.0.1:57541/writing/hello-world/",
+        "url": "http://127.0.0.1:51674/writing/hello-world/",
         "scores": {
           "performance": 98,
           "accessibility": 100,
@@ -1008,10 +1088,10 @@
         ],
         "axeViolations": 0,
         "axeFiltered": 0,
-        "buildMs": 4377,
-        "axeMs": 1223,
-        "lighthouseMs": 9407,
-        "worktreeSha": "59edd8f6e11e9a849d9585e25435df6b504eedfa",
+        "buildMs": 4092,
+        "axeMs": 1215,
+        "lighthouseMs": 6509,
+        "worktreeSha": "100ea6ed26955415011fd06b971eae188d444b92",
         "npmCi": false
       }
     }
@@ -1019,31 +1099,31 @@
   "patches": [
     {
       "id": "patch-1",
-      "findingId": "cspell-1",
+      "findingId": "claims-patch-1",
       "file": "src/content/writing/hello-world.md",
-      "oldText": "utilising",
-      "newText": "utilizing",
-      "rationale": "cspell: \"utilising\" is not a word; \"utilizing\" is the unambiguous correction.",
-      "source": "mechanical",
+      "oldText": "Scoreboard-md",
+      "newText": "Scorecard.md",
+      "rationale": "The file is described as capturing scorecard output; 'Scoreboard-md' appears to be a formatting error (missing hyphen before 'md' and likely wrong base name given the public page is called 'scorecard'). This is a mechanical naming inconsistency within the post.",
+      "source": "editorial",
       "sourcePasses": [
-        "cspell"
+        "claims_structure"
       ]
     },
     {
       "id": "patch-2",
-      "findingId": "claims-patch-1",
+      "findingId": "claims-patch-2",
       "file": "src/content/writing/hello-world.md",
-      "oldText": "- Scoreboard-md - This captures the output and scores from regular performance, a11y, seo, and agentic browsing checks. Now available publicly on the [scorecard](/scorecard)",
-      "newText": "- Scorecard.md - This captures the output and scores from regular performance, a11y, seo, and agentic browsing checks. Now available publicly on the [scorecard](/scorecard)",
-      "rationale": "The filename is listed as 'Scoreboard-md' (missing the dot and using 'board' instead of 'card') but the linked public page is '/scorecard' and the item above is described as a scorecard, not a scoreboard. Appears to be a typo in the filename.",
+      "oldText": "but also also allow",
+      "newText": "but also allow",
+      "rationale": "Duplicate word 'also also' — clear mechanical typo.",
       "source": "editorial",
       "sourcePasses": [
         "claims_structure"
       ]
     }
   ],
-  "overall": "block",
-  "summary": "BLOCK — 1 blocking finding must be resolved before publish. cspell: block (3 findings); vale: flag (90 findings); frontmatter: pass (0 findings); claims_structure: flag (9 findings); build_audit: flag (1 finding). 2 patches proposed.",
+  "overall": "flag",
+  "summary": "FLAG — nothing blocks publish, but 103 findings want a human look. cspell: flag (1 finding); vale: flag (90 findings); frontmatter: pass (0 findings); claims_structure: flag (11 findings); build_audit: flag (1 finding). 2 patches proposed.",
   "human": {},
   "publish": {}
 }

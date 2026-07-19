@@ -102,6 +102,56 @@ into `reviews/writing/` in the same commit.
 `apply` and `rereview` are Phase 1b. The `rereview` **signal** exists and works; it has no CLI
 command yet (`temporal workflow signal --name rereview` will drive it).
 
+## Authoring notes: spelling
+
+The Steward's dictionary is `agents/steward/cspell.config.yaml`, deliberately
+separate from the site's own `cspell.json`. Its language is **en-GB** as of
+2026-07-19 — but see spec §8.2 before drawing conclusions from a green run:
+en-GB stops penalising British inflections, it does **not** reject US spellings.
+
+There are three ways to resolve a spelling flag, and they are not
+interchangeable.
+
+**1. Fix the typo.** The default. If cspell offers one unambiguous suggestion it
+also proposes a patch, which `steward apply` can write.
+
+**2. `steward dict-add <word>` — for a name the site will use again.**
+
+```bash
+npm run steward -- dict-add Kimi
+```
+
+Appends to the project dictionary, sorted and deduplicated within a machine-added
+section (the curated groups above it are hand-maintained, because several entries
+carry attribution comments that a global re-sort would orphan). Use it for
+products, models, people, companies — things that will recur. Unknown-word
+findings now arrive with a **proposed disposition** — "likely proper noun (suggest
+`steward dict-add X`)" or "likely typo" — from the editorial pass where it ran, or
+a deterministic capitalisation rule where it did not. **The proposal is advice; a
+human still types the verb.**
+
+**3. `<!-- cspell:ignore -->` — for a one-off intentional string.**
+
+For a token that is correct *here* and should stay flagged everywhere else. The
+worked example is real and currently in the tree, at `hello-world:25`:
+
+```markdown
+<!-- cspell:ignore matthewpyle -->
+*side note: Before this domain, I owned `matthewpyle.com` but the only people who
+call me Matthew are the government and my mum when I've done something wrong.*
+```
+
+`matthewpyle` is a domain Matt used to own. It is not a typo and it is not
+site vocabulary — it appears once, in a sentence about no longer owning it.
+Adding it to the dictionary would suppress the flag site-wide forever, so that a
+genuine future mistyping of `mattpyle` would sail through. An inline ignore is
+scoped to the file and visible to the next reader.
+
+> **That line is deliberately still flagged.** The comment above is documentation,
+> not an instruction that has been carried out — `hello-world` is Matt's unfinished
+> draft, and under the clean-room rule the Steward does not edit his prose. The
+> flag standing until he decides is the system working, not a defect.
+
 ## Operational rules
 
 Five rules that are easy to skip and expensive to skip.
@@ -172,6 +222,19 @@ files (8.8/file)** — far over the ">~5 hits per post" threshold that the spec 
 as a disable prompt — and Matt kept it anyway, deliberately. The call was made on
 *published* files, several of which are changelog entries rather than prose posts.
 
+**Present the re-decision normalised per 100 words, over writing posts only**
+(amended 2026-07-19). Two reasons, and the second is a caveat on the baseline
+itself:
+
+- **Per-file counts are not comparable.** One changelog entry produced 10 Vale
+  alerts; `hello-world` produced 90. That ~9× gap is length and genre, not
+  quality. `steward stats` reports `/100w` for exactly this reason.
+- **The 8.8 hits/file baseline is contaminated, and must not anchor the
+  re-decision.** It came from 12 files of which **10 were changelog entries**, so
+  it largely measures the house format of release notes — not Matt's prose. Cite
+  it as history, not as a threshold. The honest comparison is the per-100-word
+  density across the three *qualifying* reviews, against each other.
+
 **Trigger:** once three qualifying reviews have run, present the E-Prime hit counts
 across those three and ask Matt to re-decide keep/disable. Do not make this call
 unilaterally in either direction — the Phase 1b checkpoint exists precisely because
@@ -196,20 +259,30 @@ collections session does **not** increment it — it fails both 1 and 2.)
 
 To count qualifying reviews:
 
-```powershell
-# Reviews are archived under reviews/<collection>/<slug>/. Only `writing` can
-# qualify, and each report records its own mode. A report written before audit
-# mode existed has no `mode` key at all and is a gate review by construction —
-# the same default the Zod schema applies on parse.
-Get-ChildItem agents/steward/reviews/writing -Directory |
-  Where-Object { $_.Name -notmatch 'smoke-test|fixture' } |
-  Where-Object {
-    $mode = (Get-Content "$($_.FullName)/latest.json" -Raw | ConvertFrom-Json).mode
-    -not $mode -or $mode -eq 'gate'
-  } | Select-Object -ExpandProperty Name
+```bash
+npm run steward -- stats
 ```
 
-E-Prime hits live in each archived report under the `vale` pass's findings.
+```
+  slug                        collection  mode   E-Prime  words  /100w  qualifies
+  hello-world                 writing     gate        59   1121   5.26  yes
+  phase1b-live-fixture        writing     gate        12      0      —  no
+  steward-smoke-test          writing     gate         5     29  17.24  no
+  webmcp-tools                changelog   audit        7    199   3.52  no
+
+  Qualifying reviews (writing · gate · not a fixture): 1 of 3
+```
+
+**This replaced a documented PowerShell one-liner, which was wrong in two ways at
+once** (2026-07-19) — and both were found by *running* it, not by reading it. It
+pointed at the pre-migration archive layout, and it filtered on `mode -eq 'gate'`,
+which returned **nothing**, because reports written before audit mode existed have
+no `mode` key in their raw JSON at all. Only Zod parsing supplies the default. A
+shell filter has to reimplement that default by hand or silently return an empty
+set, and a documented command that quietly returns nothing is exactly as bad as
+one that returns a wrong number. `steward stats` parses through the real
+`ReviewReport` schema, so the schema stays the only place that defines what a
+missing `mode` means.
 
 ---
 

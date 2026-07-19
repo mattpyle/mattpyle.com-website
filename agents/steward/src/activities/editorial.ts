@@ -35,11 +35,31 @@ export const ClaimsPatch = z.object({
   rationale: z.string(),
 });
 
+/**
+ * Proposed dispositions for words the dictionary does not know (Prompt 3c).
+ *
+ * The editorial pass produces these because it is the only pass that has read
+ * the whole post: "Kimi" is obviously a model name in context and obviously
+ * nothing in isolation. It cannot be told *which* words cspell flagged — the two
+ * passes run in parallel in the fan-out — so it is asked instead to list tokens
+ * it believes are names. `annotateDispositions` matches them against cspell's
+ * actual unknown-word findings afterwards, and anything unmatched falls back to
+ * the deterministic rule.
+ */
+export const DictionaryProposal = z.object({
+  word: z.string(),
+  disposition: z.enum(['proper_noun', 'typo']),
+  reason: z.string(),
+});
+
 export const ClaimsStructureResponse = z.object({
   findings: z.array(ClaimsFinding),
   // The rubric says empty arrays are valid and correct; defaulting them means a
   // model that omits a key entirely is not punished for being right.
   patches: z.array(ClaimsPatch).default([]),
+  // Defaulted for the same reason, and additionally so that every report written
+  // before this field existed still parses.
+  dictionaryProposals: z.array(DictionaryProposal).default([]),
 });
 export type ClaimsStructureResponse = z.infer<typeof ClaimsStructureResponse>;
 
@@ -289,7 +309,12 @@ export async function editorialPass(
       send: options.send,
     });
 
-    return { ...mapClaimsResponse(data, file), rubric, attempts };
+    return {
+      ...mapClaimsResponse(data, file),
+      dictionaryProposals: data.dictionaryProposals,
+      rubric,
+      attempts,
+    };
   });
 
   return {
@@ -304,6 +329,12 @@ export async function editorialPass(
       sha256: result.rubric.sha256,
       model: LLM_SETTINGS.model,
     },
-    metrics: { validationAttempts: result.attempts },
+    metrics: {
+      validationAttempts: result.attempts,
+      // Carried on the pass so `synthesizeReport` can match them against
+      // cspell's unknown-word findings. They are not findings themselves —
+      // proposing a disposition is not the same as reporting a defect.
+      dictionaryProposals: result.dictionaryProposals,
+    },
   };
 }
