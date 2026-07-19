@@ -8,6 +8,15 @@
   // drafts are excluded from `astro build` output entirely (scripts/assert-no-drafts.mjs).
   "files": ["src/content/**/*.md"],
 
+  // The Steward's smoke-test fixture carries deliberate misspellings — they are
+  // the assertion, not a defect. It stays committed (the agent's activity tests
+  // read it), but the SITE-level spellcheck must stay clean or its signal is
+  // permanently three-issues-of-noise and stops being read.
+  //
+  // The Steward's own cspell config (agents/steward/cspell.config.yaml) must
+  // NOT ignore this path: the fixture only does its job there.
+  "ignorePaths": ["src/content/writing/steward-smoke-test.md"],
+
   // cspell reads YAML frontmatter as ordinary text, so `title`, `description`,
   // `seoTitle`, and `seoDescription` are all checked — verified empirically, not
   // assumed. This matters: a typo in `description` flows into <title>, OG, and RSS.

@@ -74,10 +74,55 @@ Web UI: <http://localhost:8233>.
 `apply` and `rereview` are Phase 1b. The `rereview` **signal** exists and works; it has no CLI
 command yet (`temporal workflow signal --name rereview` will drive it).
 
+## Operational rules
+
+Three rules that are easy to skip and expensive to skip.
+
+**1. Before changing workflow code, clear the open reviews.**
+
+```
+temporal workflow list
+```
+
+A review parks on a human signal and can sit there for weeks — that is the
+feature, not a bug. But a parked workflow resumes by *replaying its history against
+whatever the workflow code says now*. Change `reviewPost` while a review is parked
+and that review can fail to replay with a non-determinism error: it cannot be
+resumed, and a verdict the human already sent is stranded. Complete, reject, or
+terminate open reviews first. At this stage they are only smoke-test artifacts, so
+terminating is fine; once real drafts are in flight, it will not be.
+
+**2. The replay regression test is the tripwire for rule 1.**
+
+`tests/workflows/replay.test.ts` replays a committed real history
+(`tests/fixtures/histories/phase1a-smoke-test.json` — the Phase 1a durability run)
+against current workflow code. It runs in CI and with `npm test`.
+
+If it goes red after a workflow change, that is not a broken test. It is the change
+telling you it would have stranded every parked review. Either make the change
+replay-safe (see the skill's versioning reference: `patched()` / worker versioning)
+or accept the break deliberately — and if you re-export a fresh history as the
+fixture, record *why* in the build log rather than swapping it silently.
+
+Verified to actually fail: injecting a `wf.sleep()` before the first activity
+produces `TMPRL1100 Nondeterminism error: Timer machine does not handle this event`.
+
+**3. `archiveReport` writes; it does not commit.**
+
+Reviews land in `agents/steward/reviews/` as ordinary untracked files, and the human
+commits them with their normal flow. This is a deliberate decision, not an oversight:
+committing to the human's working branch from inside an activity — while they may be
+mid-edit in the same checkout — buys nothing and can surprise. It will be revisited
+when the publish leg lands, which is the point where the Steward touches git anyway.
+The trade-off to know about: an uncommitted archive is one `git clean` away from
+gone.
+
+---
+
 ## Tests
 
 ```
-npm test --workspace=@mattpyle/steward     # 36 tests, no network
+npm test --workspace=@mattpyle/steward     # no network
 ```
 
 Activity tests are plain function calls against the fixtures in `tests/fixtures/posts/`.

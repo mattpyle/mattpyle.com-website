@@ -3,9 +3,9 @@
   "slug": "steward-smoke-test",
   "file": "src/content/writing/steward-smoke-test.md",
   "contentSha256": "04e04c09d8e2a41d5ecc7f25e875ecfd73cada2c442b2789fa6822732543eada",
-  "reviewedAt": "2026-07-19T00:00:56.355Z",
+  "reviewedAt": "2026-07-19T01:05:15.684Z",
   "workflowId": "steward-review-steward-smoke-test",
-  "runId": "019f77ad-0643-73ef-82fc-aa665f9f085b",
+  "runId": "019f77e7-eaff-7e96-8263-79a6ebb80210",
   "passes": [
     {
       "pass": "cspell",
@@ -39,8 +39,8 @@
           "excerpt": "A refacrtor of the review pipeline was the damanging part; the accessibiltiy work"
         }
       ],
-      "startedAt": "2026-07-19T00:00:55.933Z",
-      "durationMs": 401,
+      "startedAt": "2026-07-19T01:05:15.572Z",
+      "durationMs": 90,
       "toolVersion": "cspell-lib unknown"
     },
     {
@@ -103,7 +103,7 @@
           "excerpt": "![A chart showing nothing in particular](/images/from-public.png)"
         }
       ],
-      "startedAt": "2026-07-19T00:00:55.931Z",
+      "startedAt": "2026-07-19T01:05:15.663Z",
       "durationMs": 1
     }
   ],
@@ -139,9 +139,8 @@
   "overall": "block",
   "summary": "BLOCK — 6 blocking findings must be resolved before publish. cspell: block (3 findings); frontmatter: block (7 findings). 3 patches proposed.",
   "human": {
-    "decision": "rejected",
-    "reason": "Fixture post — kept permanently as the Steward's smoke-test target, never for publication.",
-    "decidedAt": "2026-07-19T00:01:55.096Z"
+    "decision": "approved_force",
+    "decidedAt": "2026-07-19T01:05:17.857Z"
   },
   "publish": {}
 }

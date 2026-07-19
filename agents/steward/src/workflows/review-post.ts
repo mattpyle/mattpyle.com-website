@@ -125,7 +125,18 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
   let report: ReviewReport | undefined;
   let reportPath: string | undefined;
   let staleReason: string | undefined;
-  let pending: Decision | undefined;
+
+  /**
+   * Decisions awaiting processing, oldest first.
+   *
+   * This is a FIFO queue rather than a single slot because signal handlers run
+   * to completion as they arrive, but the main loop only drains between awaits.
+   * Two signals delivered in quick succession — or any signal arriving while
+   * `runFanOut()` is mid-flight during a rereview — landed on the same variable,
+   * and the first was silently overwritten and never processed. Handlers push;
+   * the loop shifts.
+   */
+  const pending: Decision[] = [];
 
   wf.setHandler(getReviewState, (): ReviewStateResult => ({
     state,
@@ -137,16 +148,16 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
   }));
 
   wf.setHandler(approve, (force?: boolean) => {
-    pending = { kind: 'approve', force: force === true };
+    pending.push({ kind: 'approve', force: force === true });
   });
   wf.setHandler(reject, (reason: string) => {
-    pending = { kind: 'reject', reason };
+    pending.push({ kind: 'reject', reason });
   });
   wf.setHandler(applyPatches, (ids: string[]) => {
-    pending = { kind: 'applyPatches', ids };
+    pending.push({ kind: 'applyPatches', ids });
   });
   wf.setHandler(rereview, () => {
-    pending = { kind: 'rereview' };
+    pending.push({ kind: 'rereview' });
   });
 
   /** Steps 1–3: snapshot, fan out, synthesize, archive. */
@@ -198,9 +209,8 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
   // restart while parked here is the whole demonstration.
   // -------------------------------------------------------------------------
   for (;;) {
-    await wf.condition(() => pending !== undefined);
-    const decision = pending!;
-    pending = undefined;
+    await wf.condition(() => pending.length > 0);
+    const decision = pending.shift()!;
 
     if (decision.kind === 'rereview') {
       await runFanOut();

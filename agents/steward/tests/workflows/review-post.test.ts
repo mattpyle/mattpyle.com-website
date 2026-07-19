@@ -10,6 +10,7 @@ import {
   approve,
   reject,
   rereview,
+  applyPatches,
   getReviewState,
 } from '../../src/workflows/review-post.js';
 
@@ -274,6 +275,56 @@ test('a failing check flags rather than failing the workflow or passing silently
     assert.equal(failed!.verdict, 'flag');
     assert.match(failed!.findings[0].message, /cspell exploded/);
   });
+});
+
+test('two signals in quick succession are both processed, in order', async () => {
+  // The regression this guards: `pending` used to be a single slot that every
+  // handler assigned to, so a signal arriving before the loop drained the
+  // previous one was silently overwritten and never processed.
+  //
+  // Delivery is made deterministic by holding the workflow inside the fan-out
+  // (a slow `snapshotDraft`) while both signals arrive. Both handlers therefore
+  // run before the decision loop gets a turn, which is exactly the condition
+  // that lost a signal.
+  //
+  // Note on direction: `applyPatches`-then-`approve` does NOT distinguish the
+  // two implementations — a dropped non-terminal signal leaves no trace once
+  // the terminal one lands, so both versions finish `approved`. The order that
+  // proves the fix is `approve`-then-`applyPatches`: under the old code the
+  // approve was overwritten and the workflow parked forever. Both orders are
+  // asserted below.
+  const slowSnapshot = (ms: number) => async () => {
+    await new Promise((r) => setTimeout(r, ms));
+    return snapshot();
+  };
+
+  // Direction A — the first signal must not be dropped by the second.
+  {
+    const { activities } = mockActivities({ snapshotDraft: slowSnapshot(1500) });
+    await withWorker(activities, async () => {
+      const handle = await start('wf-fifo-first-wins');
+      await handle.signal(approve, false);
+      await handle.signal(applyPatches, ['p1']);
+
+      // Old code: the approve is overwritten, this never resolves.
+      const report = await handle.result();
+      assert.equal(report.human.decision, 'approved', 'the first signal must survive the second');
+    });
+  }
+
+  // Direction B — the second signal must not be dropped either, and the
+  // non-terminal first one must be processed before it.
+  {
+    const { activities } = mockActivities({ snapshotDraft: slowSnapshot(1500) });
+    await withWorker(activities, async () => {
+      const handle = await start('wf-fifo-both-drain');
+      await handle.signal(applyPatches, ['p1']);
+      await handle.signal(approve, false);
+
+      const report = await handle.result();
+      assert.equal(report.human.decision, 'approved', 'the queued approve must still be processed');
+    });
+  }
 });
 
 test('a published post is refused outright', async () => {
