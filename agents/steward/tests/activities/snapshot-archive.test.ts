@@ -103,3 +103,32 @@ test.after(async () => {
   await fs.rm(path.join(fixtures, 'src'), { recursive: true, force: true });
   await fs.rm(path.join(os.tmpdir(), 'steward-noop'), { recursive: true, force: true });
 });
+
+// --- Phase 1c: archive paths survive a redirected SITE_DIR -------------------
+// Regression for the Phase 1b coupling bug: `reportPath` was relativised against
+// the real checkout but read back by joining onto SITE_DIR. With SITE_DIR
+// redirected (as it is throughout this file, and as every Stage 3 live run does)
+// the CLI silently found no file and rendered an empty findings table. Silent,
+// because readArchivedReport swallows the error and returns null.
+test('an archived report is readable back under a redirected SITE_DIR', async () => {
+  const { resolveArchivePath, SITE_DIR, REPO_ROOT } = await import('../../src/config.js');
+
+  // Guard the premise: if these ever coincide, this test proves nothing.
+  assert.notEqual(SITE_DIR, REPO_ROOT, 'SITE_DIR must be redirected for this test to bite');
+
+  const sha = 'd'.repeat(64);
+  const result = await archiveReport(report(sha));
+
+  const raw = await fs.readFile(resolveArchivePath(result.reportPath), 'utf8');
+  assert.equal(JSON.parse(raw).contentSha256, sha, 'the round-trip finds the real report');
+
+  // And the naive join that shipped in 1b must be the thing that is wrong,
+  // not merely a second path that happens to work.
+  await assert.rejects(
+    () => fs.readFile(path.join(SITE_DIR, result.reportPath), 'utf8'),
+    'joining onto SITE_DIR is the bug, and stays broken by construction',
+  );
+
+  const latest = await fs.readFile(resolveArchivePath(result.latestPath), 'utf8');
+  assert.equal(JSON.parse(latest).contentSha256, sha);
+});

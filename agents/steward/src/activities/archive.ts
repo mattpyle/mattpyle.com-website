@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { REVIEWS_DIR } from '../config.js';
+import { REPO_ROOT, REVIEWS_DIR } from '../config.js';
 import { ReviewReport } from '../lib/report.js';
 import { log, timed } from '../lib/logger.js';
 
@@ -35,10 +35,12 @@ export async function archiveReport(report: ReviewReport): Promise<ArchiveResult
     await fs.writeFile(latest, json, 'utf8');
 
     log.info({ slug: parsed.slug, hash12, overall: parsed.overall }, 'review archived');
-    return {
-      reportPath: path.relative(path.resolve(REVIEWS_DIR, '..', '..', '..'), file).split(path.sep).join('/'),
-      latestPath: path.relative(path.resolve(REVIEWS_DIR, '..', '..', '..'), latest).split(path.sep).join('/'),
-    };
+    // Anchored on REPO_ROOT, not SITE_DIR: archives live under the steward tree
+    // regardless of which content root is under review, so a redirected SITE_DIR
+    // must not change how these paths resolve. Readers join them back onto
+    // REPO_ROOT (see `resolveArchivePath`).
+    const rel = (p: string) => path.relative(REPO_ROOT, p).split(path.sep).join('/');
+    return { reportPath: rel(file), latestPath: rel(latest) };
   });
   return result;
 }

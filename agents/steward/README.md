@@ -76,7 +76,7 @@ command yet (`temporal workflow signal --name rereview` will drive it).
 
 ## Operational rules
 
-Four rules that are easy to skip and expensive to skip.
+Five rules that are easy to skip and expensive to skip.
 
 **0. Before running anything, check for orphaned workers.**
 
@@ -136,6 +136,53 @@ mid-edit in the same checkout — buys nothing and can surprise. It will be revi
 when the publish leg lands, which is the point where the Steward touches git anyway.
 The trade-off to know about: an uncommitted archive is one `git clean` away from
 gone.
+
+**4. Re-decide `write-good.E-Prime` after three real reviews.**
+
+At the Phase 1b tuning checkpoint, `write-good.E-Prime` fired **106 times across 12
+files (8.8/file)** — far over the ">~5 hits per post" threshold that the spec offers
+as a disable prompt — and Matt kept it anyway, deliberately. The call was made on
+*published* files, several of which are changelog entries rather than prose posts.
+
+**Trigger:** once three reviews of **real posts** have run (fixtures and smoke tests
+do not count), present the E-Prime hit counts across those three reviews and ask Matt
+to re-decide keep/disable. Do not make this call unilaterally in either direction —
+the Phase 1b checkpoint exists precisely because the assistant's instinct (disable
+E-Prime) was wrong and Matt's was right.
+
+To count real reviews:
+
+```powershell
+# Each reviewed slug gets a directory; exclude the fixtures.
+Get-ChildItem agents/steward/reviews -Directory |
+  Where-Object { $_.Name -notmatch 'smoke-test|fixture' }
+```
+
+E-Prime hits live in each archived report under the `vale` pass's findings.
+
+---
+
+## Debugging notes
+
+Hard-won, all of them from real lost time.
+
+**Use `npx tsx src/cli.ts <args>` from `agents/steward`, not `npm run steward -- …`.**
+The npm lifecycle wrapper swallows the CLI's own error output behind its script noise,
+so a real stack trace reads as a silent failure. The npm form is fine when it works;
+the `npx` form is the one to reach for the moment it doesn't.
+
+**Redirect `node --test` output to a file before grepping it.**
+
+```
+npm test > /tmp/test.txt 2>&1; grep -E "^. (tests|pass|fail)" /tmp/test.txt
+```
+
+Piping `node --test` straight through `grep` on this setup buffers hard enough that a
+10-minute run produced a zero-byte file — indistinguishable from a hang, and it cost a
+wasted 400-second timeout in Phase 1a.
+
+**Before believing "activity not registered", count the workers.** See rule 0. This
+error has never once been a code bug in this project; it has twice been a stale worker.
 
 ---
 

@@ -55,6 +55,13 @@ export const PatchProposal = z.object({
   newText: z.string(),
   rationale: z.string(),
   source: z.enum(['mechanical', 'editorial']),
+  /**
+   * Every pass that independently proposed this exact edit. Populated by
+   * `dedupePatches`; length > 1 means two checks agreed, which is a stronger
+   * signal for the human than either one alone. Optional so a pass may emit a
+   * patch without knowing its own provenance.
+   */
+  sourcePasses: z.array(PassKind).optional(),
 });
 export type PatchProposal = z.infer<typeof PatchProposal>;
 

@@ -49,10 +49,23 @@ function loadDotEnv(): void {
 
 loadDotEnv();
 
-/** The primary checkout. Overridable so tests/CI can point elsewhere. */
+/**
+ * The real checkout containing `agents/steward`, derived from this file's own
+ * location and therefore **never** affected by `STEWARD_SITE_DIR`.
+ *
+ * The Steward's own artifacts — `reviews/`, caches, the Vale binary — always live
+ * under `STEWARD_DIR`, no matter which content tree is being reviewed. Anchoring
+ * their paths here rather than on `SITE_DIR` is what keeps them findable when the
+ * site root is redirected (Phase 1b shipped a `readArchivedReport` that joined an
+ * archive path onto `SITE_DIR` and silently rendered no findings under
+ * redirection — that coupling is the bug this constant exists to prevent).
+ */
+export const REPO_ROOT = path.resolve(STEWARD_DIR, '..', '..');
+
+/** The content tree under review. Overridable so tests/CI can point elsewhere. */
 export const SITE_DIR = process.env.STEWARD_SITE_DIR
   ? path.resolve(process.env.STEWARD_SITE_DIR)
-  : path.resolve(STEWARD_DIR, '..', '..');
+  : REPO_ROOT;
 
 export const WORKTREE_DIR =
   process.env.STEWARD_WORKTREE_DIR ??
@@ -87,6 +100,15 @@ export const ENABLE_PUBLISH_LEG = false;
 /** Where a writing post lives, given a slug. Repo-relative. */
 export function postRelPath(slug: string): string {
   return `src/content/writing/${slug}.md`;
+}
+
+/**
+ * Resolves a `reportPath`/`latestPath` from an archive result back to an absolute
+ * path. The counterpart to the relativisation in `archiveReport` — both anchor on
+ * `REPO_ROOT` so archives stay readable under a redirected `SITE_DIR`.
+ */
+export function resolveArchivePath(relPath: string): string {
+  return path.resolve(REPO_ROOT, relPath);
 }
 
 export function workflowIdFor(slug: string): string {

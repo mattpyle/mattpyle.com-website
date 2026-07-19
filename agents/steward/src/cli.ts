@@ -78,10 +78,9 @@ async function render(c: Client, slug: string, state: ReviewStateResult) {
 async function readArchivedReport(slug: string, state: ReviewStateResult) {
   if (!state.reportPath) return null;
   const fs = await import('node:fs/promises');
-  const path = await import('node:path');
-  const { SITE_DIR } = await import('./config.js');
+  const { resolveArchivePath } = await import('./config.js');
   try {
-    const raw = await fs.readFile(path.join(SITE_DIR, state.reportPath), 'utf8');
+    const raw = await fs.readFile(resolveArchivePath(state.reportPath), 'utf8');
     return JSON.parse(raw) as import('./lib/report.js').ReviewReport;
   } catch {
     return null;

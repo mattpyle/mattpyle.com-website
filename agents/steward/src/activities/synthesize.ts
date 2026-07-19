@@ -78,20 +78,56 @@ function orderFindings(passes: PassResult[]): PassResult[] {
   }));
 }
 
+/**
+ * Collapses byte-identical patch proposals and re-keys the survivors so IDs are
+ * unique across passes.
+ *
+ * **Why only byte-identical ones.** cspell and the editorial pass routinely reach
+ * the same conclusion about the same typo — Phase 1b offered `accessibiltiy` as
+ * both `patch-1` (mechanical) and `patch-2` (editorial). Two patches that are one
+ * patch is noise, and with a third finding source in the fan-out it gets worse.
+ *
+ * **Overlapping-but-different patches are deliberately NOT merged.** Two passes
+ * proposing different rewrites of the same span is a genuine disagreement, and
+ * picking a winner would mean the Steward making an editorial choice on the
+ * human's behalf (design rule 1). Both survive as separate patches; selecting
+ * both fails safely, because `applyPatchesActivity`'s all-or-nothing exact-match
+ * guard finds 0 matches for the second and writes nothing.
+ *
+ * Identity is `(file, oldText, newText)`. `source` and `rationale` deliberately do
+ * not participate: the same edit proposed for two different stated reasons is
+ * still the same edit. The survivor keeps the first pass's identity and records
+ * every pass that proposed it in `sourcePasses`, so the human can see that two
+ * independent checks agreed rather than losing that signal to the dedupe.
+ */
+export function dedupePatches(passes: PassResult[]): PatchProposal[] {
+  const byKey = new Map<string, PatchProposal>();
+  const order: string[] = [];
+
+  for (const p of passes) {
+    for (const patch of p.patches ?? []) {
+      const key = JSON.stringify([patch.file, patch.oldText, patch.newText]);
+      const seen = byKey.get(key);
+      if (seen) {
+        // Same edit, second proposer. Record the agreement, keep one patch.
+        if (!seen.sourcePasses!.includes(p.pass)) seen.sourcePasses!.push(p.pass);
+        continue;
+      }
+      byKey.set(key, { ...patch, sourcePasses: [p.pass] });
+      order.push(key);
+    }
+  }
+
+  return order.map((key, i) => ({ ...byKey.get(key)!, id: `patch-${i + 1}` }));
+}
+
 /** Spec §8.9. Mechanical assembly — rollup, ordering, template summary. */
 export async function synthesizeReport(input: SynthesizeInput): Promise<ReviewReport> {
   const { result } = await timed('synthesizeReport', async () => {
     const passes = orderFindings(clampSeverities(input.passes));
     const overall = worstVerdict(passes.map((p) => p.verdict));
 
-    // Re-key patches globally so IDs are unique across passes, and drop any whose
-    // finding was clamped out of existence.
-    const patches: PatchProposal[] = [];
-    for (const p of passes) {
-      for (const patch of p.patches ?? []) {
-        patches.push({ ...patch, id: `patch-${patches.length + 1}` });
-      }
-    }
+    const patches = dedupePatches(passes);
 
     return {
       schemaVersion: 1,

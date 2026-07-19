@@ -175,3 +175,72 @@ test('the summary pluralizes "patch" correctly', async () => {
   const one = await synthesizeReport({ ...base, passes: [pass({ patches: [patch('a')] })] });
   assert.match(one.summary, /1 patch proposed/);
 });
+
+// --- Phase 1c: patch deduplication -----------------------------------------
+// cspell and the editorial pass reach the same conclusion about the same typo
+// often enough that Phase 1b shipped `accessibiltiy` as two patches. Identical
+// edits collapse; genuinely different edits over the same span do not.
+
+function patch(over: Partial<import('../../src/lib/report.js').PatchProposal> = {}) {
+  return {
+    id: 'patch-x',
+    findingId: 'f-1',
+    file: 'posts/known-good.md',
+    oldText: 'accessibiltiy',
+    newText: 'accessibility',
+    rationale: 'typo',
+    source: 'mechanical' as const,
+    ...over,
+  };
+}
+
+test('byte-identical patches from two passes collapse into one', async () => {
+  const report = await synthesizeReport({
+    ...base,
+    passes: [
+      pass({ pass: 'cspell', patches: [patch({ source: 'mechanical' })] }),
+      pass({
+        pass: 'claims_structure',
+        patches: [patch({ findingId: 'f-9', rationale: 'spelling', source: 'editorial' })],
+      }),
+    ],
+  });
+
+  assert.equal(report.patches.length, 1, 'one edit, one patch');
+  assert.equal(report.patches[0].id, 'patch-1');
+  // Differing rationale/source/findingId must not defeat the collapse — the same
+  // edit proposed for two stated reasons is still the same edit.
+  assert.deepEqual(
+    report.patches[0].sourcePasses,
+    ['cspell', 'claims_structure'],
+    'the agreement between passes survives the dedupe',
+  );
+  assert.doesNotThrow(() => ReviewReport.parse(report));
+});
+
+test('overlapping but non-identical patches both survive', async () => {
+  const report = await synthesizeReport({
+    ...base,
+    passes: [
+      pass({ pass: 'cspell', patches: [patch({ newText: 'accessibility' })] }),
+      pass({ pass: 'claims_structure', patches: [patch({ newText: 'a11y' })] }),
+    ],
+  });
+
+  // A genuine disagreement about the same span. Picking a winner would be the
+  // Steward making an editorial choice for the human (design rule 1); the
+  // all-or-nothing apply guard handles the conflict if both are selected.
+  assert.equal(report.patches.length, 2, 'disagreement is preserved, not merged');
+  assert.deepEqual(report.patches.map((p) => p.id), ['patch-1', 'patch-2']);
+  assert.deepEqual(report.patches.map((p) => p.newText), ['accessibility', 'a11y']);
+});
+
+test('patches differing only by file are not collapsed', async () => {
+  const report = await synthesizeReport({
+    ...base,
+    passes: [
+      pass({ pass: 'cspell', patches: [patch({ file: 'a.md' }), patch({ file: 'b.md' })] }),
+    ],
+  });
+  assert.equal(report.patches.length, 2);
+});
