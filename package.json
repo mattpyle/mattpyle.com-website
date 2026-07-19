@@ -2,6 +2,7 @@
   "name": "mattpyle-com",
   "type": "module",
   "version": "0.0.1",
+  "workspaces": ["agents/steward"],
   "scripts": {
     "predev": "node scripts/generate-og-images.mjs",
     "dev": "astro dev",

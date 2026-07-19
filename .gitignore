@@ -43,3 +43,9 @@ skills-lock.json
 
 # Working plan directory — specs and build prompts, not production code
 /steward/
+
+# Steward (agents/steward) — local state only. `agents/steward/reviews/` is
+# COMMITTED on purpose: the review archive is a dataset.
+agents/steward/.temporal/
+agents/steward/.env
+agents/steward/bin/
