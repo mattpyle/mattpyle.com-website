@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url';
 const fixtures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 process.env.STEWARD_SITE_DIR = fixtures;
 
+// `reviews/` is a dataset. Tests that archive must never write into the real one —
+// test artifacts in it are contamination, not clutter. Set before importing config.
+const tmpReviews = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-reviews-'));
+process.env.STEWARD_REVIEWS_DIR = tmpReviews;
+
 const { snapshotDraft, currentContentHash, sha256 } = await import('../../src/activities/snapshot.js');
 const { archiveReport } = await import('../../src/activities/archive.js');
 const { REVIEWS_DIR } = await import('../../src/config.js');
@@ -88,7 +93,11 @@ test('archiveReport writes a hash-keyed file and a latest.json copy', async () =
   // Windows: a real copy, never a symlink (design rule 8).
   assert.equal((await fs.lstat(latest)).isSymbolicLink(), false);
   assert.equal(await fs.readFile(hashed, 'utf8'), await fs.readFile(latest, 'utf8'));
-  assert.equal(result.reportPath, `agents/steward/reviews/archive-test/${sha.slice(0, 12)}.json`);
+  // The archive dir is redirected to a temp dir here, so the repo-relative path is
+  // a `../`-form. What matters is the shape and that it round-trips back to the file.
+  const { resolveArchivePath } = await import('../../src/config.js');
+  assert.match(result.reportPath, /archive-test\/[0-9a-f]{12}\.json$/);
+  assert.equal(path.resolve(resolveArchivePath(result.reportPath)), path.resolve(hashed));
 
   await fs.rm(dir, { recursive: true, force: true });
 });
@@ -102,6 +111,7 @@ test('archiveReport refuses a report that violates the schema', async () => {
 test.after(async () => {
   await fs.rm(path.join(fixtures, 'src'), { recursive: true, force: true });
   await fs.rm(path.join(os.tmpdir(), 'steward-noop'), { recursive: true, force: true });
+  await fs.rm(tmpReviews, { recursive: true, force: true });
 });
 
 // --- Phase 1c: archive paths survive a redirected SITE_DIR -------------------

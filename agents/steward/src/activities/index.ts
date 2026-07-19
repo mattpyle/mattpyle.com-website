@@ -12,5 +12,6 @@ export { runVale } from './vale.js';
 export { checkFrontmatter } from './frontmatter.js';
 export { editorialPass } from './editorial.js';
 export { applyPatchesActivity } from './patches.js';
+export { buildAndAuditDraft } from './build-audit.js';
 export { synthesizeReport } from './synthesize.js';
 export { archiveReport } from './archive.js';

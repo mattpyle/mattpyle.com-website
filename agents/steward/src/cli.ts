@@ -1,6 +1,13 @@
 import { Client, Connection, WorkflowNotFoundError } from '@temporalio/client';
 import { Command } from 'commander';
-import { NAMESPACE, QUEUE_LIGHT, TEMPORAL_ADDRESS, WEB_UI, workflowIdFor } from './config.js';
+import {
+  ENABLE_BUILD_AUDIT,
+  NAMESPACE,
+  QUEUE_LIGHT,
+  TEMPORAL_ADDRESS,
+  WEB_UI,
+  workflowIdFor,
+} from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
 import {
   reviewPost,
@@ -122,7 +129,7 @@ program.name('steward').description('Editorial agent for mattpyle.com').version(
 program
   .command('review')
   .argument('<slug>')
-  .option('--skip-build-audit', 'skip the heavy build+audit pass (Phase 1c; currently always skipped)')
+  .option('--skip-build-audit', 'skip the heavy build+audit pass (SHOW_DRAFTS build, axe, Lighthouse)')
   .description('Start a review and render the report when the fan-out finishes')
   .action(async (slug: string, opts: { skipBuildAudit?: boolean }) => {
     const c = await client();
@@ -155,7 +162,16 @@ program
       // allow it — ALLOW_DUPLICATE_FAILED_ONLY would permanently lock out any
       // slug whose review completed.
       workflowIdReusePolicy: 'ALLOW_DUPLICATE',
-      args: [{ slug, collection: 'writing', skipBuildAudit: opts.skipBuildAudit ?? true }],
+      // Both gates collapse to one boolean here, because the workflow sandbox
+      // cannot read config: the phase gate turns the pass on at all, and the
+      // flag lets a human skip it for a fast mechanical-only review.
+      args: [
+        {
+          slug,
+          collection: 'writing',
+          skipBuildAudit: opts.skipBuildAudit === true || !ENABLE_BUILD_AUDIT,
+        },
+      ],
     });
 
     console.log(`  started ${workflowId}`);

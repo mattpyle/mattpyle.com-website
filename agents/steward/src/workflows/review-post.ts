@@ -18,7 +18,16 @@ const QUEUE_HEAVY = 'steward-heavy';
 export interface ReviewPostInput {
   slug: string;
   collection: 'writing';
-  /** Phase 1a escape hatch while §8.5 is unbuilt. Currently always effectively true. */
+  /**
+   * Skips the heavy-queue build audit (spec §8.5).
+   *
+   * Resolved by the *caller*, not here: the workflow sandbox cannot import
+   * `config.ts` (it touches `node:path` and `process.env`), so the
+   * `ENABLE_BUILD_AUDIT` phase gate and the `--skip-build-audit` CLI flag are
+   * both collapsed into this boolean before the workflow starts. Keeping the
+   * decision in the input also keeps it *in the history* — a replayed run audits
+   * or skips exactly as the original did, regardless of what the flag says now.
+   */
   skipBuildAudit?: boolean;
 }
 
@@ -73,14 +82,18 @@ const light = {
   }),
 };
 
-// Declared now so the heavy queue is exercised (and visibly wired) from Phase 1a
-// even though buildAndAuditDraft itself lands in Phase 1c.
 export const HEAVY_ACTIVITY_OPTIONS = {
   taskQueue: QUEUE_HEAVY,
   startToCloseTimeout: '15 minutes',
+  // The activity runs a background heartbeat pump every 5s precisely so this
+  // can stay tight through a multi-minute `npm ci` / build.
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 2 },
 } as const;
+
+const heavy = wf.proxyActivities<Pick<typeof activities, 'buildAndAuditDraft'>>(
+  HEAVY_ACTIVITY_OPTIONS,
+);
 
 // ---------------------------------------------------------------------------
 
@@ -202,8 +215,19 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       guard('claims_structure', () =>
         light.editorial.editorialPass(snapshot.file, 'claims-structure'),
       ),
-      // Phase 1c adds buildAndAuditDraft on the heavy queue, gated on
-      // `skipBuildAudit`; Phase 2a adds the ai-tells pass behind ENABLE_AI_TELLS.
+      // The build audit runs on the heavy queue alongside the light passes
+      // rather than after them: it is by far the longest pass (a full `npm ci`
+      // plus an Astro production build plus two browser runs), so serialising it
+      // would add its whole duration to every review for no benefit.
+      //
+      // `guard` applies here too, and matters more than elsewhere: a broken
+      // build environment — a failed `npm ci`, a missing Chrome — must degrade
+      // to a visible tool-failure flag on one pass, not take down a review whose
+      // other four passes have real findings in them.
+      ...(input.skipBuildAudit
+        ? []
+        : [guard('build_audit', () => heavy.buildAndAuditDraft(input.slug))]),
+      // Phase 2a adds the ai-tells pass behind ENABLE_AI_TELLS.
     ]);
 
     // Carried across a rereview deliberately. The spec says rereview "replaces

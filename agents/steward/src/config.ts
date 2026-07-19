@@ -83,7 +83,15 @@ export const NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
 export const QUEUE_LIGHT = 'steward-light';
 export const QUEUE_HEAVY = 'steward-heavy';
 
-export const REVIEWS_DIR = path.join(STEWARD_DIR, 'reviews');
+/**
+ * The review archive — a dataset, not a scratch directory. Overridable so tests
+ * that archive reports write into a temp dir instead of contaminating the real
+ * one (Phase 1c: `reviews/archive-test/` was showing up as untracked junk in the
+ * dataset after every test run). Production never sets this.
+ */
+export const REVIEWS_DIR = process.env.STEWARD_REVIEWS_DIR
+  ? path.resolve(process.env.STEWARD_REVIEWS_DIR)
+  : path.join(STEWARD_DIR, 'reviews');
 export const CSPELL_CONFIG = path.join(STEWARD_DIR, 'cspell.config.yaml');
 export const RUBRICS_DIR = path.join(STEWARD_DIR, 'src', 'rubrics');
 
@@ -94,7 +102,7 @@ export const WEB_UI = 'http://localhost:8233';
  * in a working state rather than a half-wired one.
  */
 export const ENABLE_AI_TELLS = false;
-export const ENABLE_BUILD_AUDIT = false;
+export const ENABLE_BUILD_AUDIT = true;
 export const ENABLE_PUBLISH_LEG = false;
 
 /** Where a writing post lives, given a slug. Repo-relative. */

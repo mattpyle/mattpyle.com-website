@@ -47,5 +47,8 @@ skills-lock.json
 # Steward (agents/steward) — local state only. `agents/steward/reviews/` is
 # COMMITTED on purpose: the review archive is a dataset.
 agents/steward/.temporal/
+# Build-audit scratch: the Temporal dev-server DB, the worktree npm-ci lockfile
+# hash, and Chrome user-data dirs. Regenerated on demand; none of it is data.
+agents/steward/.cache/
 agents/steward/.env
 agents/steward/bin/
