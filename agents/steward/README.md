@@ -76,7 +76,22 @@ command yet (`temporal workflow signal --name rereview` will drive it).
 
 ## Operational rules
 
-Three rules that are easy to skip and expensive to skip.
+Four rules that are easy to skip and expensive to skip.
+
+**0. Before running anything, check for orphaned workers.**
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+  Where-Object { $_.CommandLine -like '*worker.ts*' }
+```
+
+A worker left over from an earlier session keeps polling `steward-light` and will
+claim tasks for activities it does not have, failing with
+`Activity function <name> is not registered on this Worker`. That error reads
+exactly like a code bug and is not one — in Phase 1b it appeared while a *newer*
+worker had just run the whole fan-out successfully, because the two were competing
+for the same queue. `tsx` spawns a child process, so expect two or three PIDs per
+worker, not one.
 
 **1. Before changing workflow code, clear the open reviews.**
 
@@ -95,8 +110,13 @@ terminating is fine; once real drafts are in flight, it will not be.
 **2. The replay regression test is the tripwire for rule 1.**
 
 `tests/workflows/replay.test.ts` replays a committed real history
-(`tests/fixtures/histories/phase1a-smoke-test.json` — the Phase 1a durability run)
-against current workflow code. It runs in CI and with `npm test`.
+(`tests/fixtures/histories/phase1b-smoke-test.json` — a 113-event Phase 1b run
+covering fan-out → apply → rereview → approve) against current workflow code. It
+runs in CI and with `npm test`.
+
+**Expect this to break in any phase that adds an activity to the fan-out.** Phase 1b
+added `runVale` and `editorialPass`, which changed the command sequence and retired
+the Phase 1a fixture. That is a versioning fact, not a regression.
 
 If it goes red after a workflow change, that is not a broken test. It is the change
 telling you it would have stranded every parked review. Either make the change

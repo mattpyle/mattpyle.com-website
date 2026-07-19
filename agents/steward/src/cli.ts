@@ -6,6 +6,8 @@ import {
   reviewPost,
   approve as approveSignal,
   reject as rejectSignal,
+  applyPatches as applyPatchesSignal,
+  rereview as rereviewSignal,
   getReviewState,
 } from './workflows/review-post.js';
 
@@ -212,6 +214,62 @@ program
     await handle.signal(rejectSignal, opts.reason);
     console.log('  reject signal sent');
     const state = await pollUntil(c, slug, (s) => TERMINAL.includes(s.state), 1000, 60 * 1000);
+    await render(c, slug, state);
+    await c.connection.close();
+  });
+
+program
+  .command('apply')
+  .argument('<slug>')
+  .requiredOption('--patches <ids>', 'comma-separated patch IDs, e.g. patch-1,patch-3')
+  .description('Apply selected patches to the post in the primary checkout')
+  .action(async (slug: string, opts: { patches: string }) => {
+    const ids = opts.patches
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (ids.length === 0) fail('No patch IDs given. Example: --patches patch-1,patch-3');
+
+    const c = await client();
+    const handle = c.workflow.getHandle(workflowIdFor(slug));
+    await handle.signal(applyPatchesSignal, ids);
+    console.log(`  applyPatches signal sent (${ids.join(', ')})`);
+
+    // The apply lands in one of two terminal-for-this-signal states: `stale` on
+    // success, or back to `awaiting_verdict` with a staleReason if the patch
+    // refused to apply. Both set staleReason, so wait for either.
+    const state = await pollUntil(
+      c,
+      slug,
+      (s) => s.state === 'stale' || s.staleReason !== undefined,
+      1000,
+      2 * 60 * 1000,
+    );
+    await render(c, slug, state);
+
+    if (state.state === 'stale') {
+      console.log(`  Next: run \`steward rereview ${slug}\` to re-check the edited file.\n`);
+    } else {
+      process.exitCode = 1;
+    }
+    await c.connection.close();
+  });
+
+program
+  .command('rereview')
+  .argument('<slug>')
+  .description('Re-run the checks against the current file and render the new report')
+  .action(async (slug: string) => {
+    const c = await client();
+    const handle = c.workflow.getHandle(workflowIdFor(slug));
+    await handle.signal(rereviewSignal);
+    console.log('  rereview signal sent');
+
+    // The fan-out passes through `running`; wait for it to start before waiting
+    // for it to finish, otherwise a fast query can catch the pre-signal
+    // `awaiting_verdict` and return the *old* report as if it were the new one.
+    await pollUntil(c, slug, (s) => s.state === 'running', 250, 60 * 1000).catch(() => undefined);
+    const state = await pollUntil(c, slug, (s) => s.state !== 'running');
     await render(c, slug, state);
     await c.connection.close();
   });

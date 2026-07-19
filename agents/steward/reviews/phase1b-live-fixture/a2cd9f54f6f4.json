@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "slug": "phase1b-live-fixture",
+  "file": "src/content/writing/phase1b-live-fixture.md",
+  "contentSha256": "a2cd9f54f6f4a54ec2143d5d8bb58bc00d2346d866890444241dd1cd620c5962",
+  "reviewedAt": "2026-07-19T03:33:21.373Z",
+  "workflowId": "steward-review-phase1b-live-fixture",
+  "runId": "019f786f-5bc2-7b4b-b26f-f08bd7d324f9",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "block",
+      "findings": [
+        {
+          "id": "cspell-2",
+          "pass": "cspell",
+          "severity": "block",
+          "message": "\"accessibiltiy\" — did you mean \"accessibility\"?",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 26,
+          "excerpt": "the experiment was cheap enough that the accessibiltiy of the result is its own reward: the raw"
+        },
+        {
+          "id": "cspell-1",
+          "pass": "cspell",
+          "severity": "flag",
+          "message": "\"overclaim\" is not in the dictionary (suggestions: overlaid, overlain, overarm). Fix it, or add it to cspell.config.yaml if it is jargon.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 4,
+          "excerpt": "description: \"A throwaway fixture for the Phase 1b live verification run. Contains one deliberate overclaim and one deliberate typo.\""
+        }
+      ],
+      "startedAt": "2026-07-19T03:33:11.867Z",
+      "durationMs": 385,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 10,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'was built' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 12,
+          "excerpt": "was built"
+        },
+        {
+          "id": "vale-6",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 12,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-7",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 14,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is set' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 15,
+          "excerpt": "is\nset"
+        },
+        {
+          "id": "vale-8",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 15,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'was measured' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 18,
+          "excerpt": "was measured"
+        },
+        {
+          "id": "vale-9",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 18,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'been done' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 20,
+          "excerpt": "been done"
+        },
+        {
+          "id": "vale-10",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 20,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-11",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 20,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-12",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 23,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-13",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 25,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-14",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 26,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-15",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 26,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-16",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 27,
+          "excerpt": "is"
+        }
+      ],
+      "startedAt": "2026-07-19T03:33:11.862Z",
+      "durationMs": 397,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-07-19T03:33:11.868Z",
+      "durationMs": 1
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "claims-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "overclaiming: The post explicitly states nothing has been measured yet, so no proof of agent preference exists anywhere in the post.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 10,
+          "excerpt": "this proves agents prefer markdown over HTML",
+          "evidence": "Lines 20-21 confirm 'no log analysis has been done' and whether any agent has requested a markdown variant 'remains open.' The word 'proves' is directly contradicted by the post's own admission of zero data."
+        },
+        {
+          "id": "claims-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "buried lede: The actual point of the post — that this is an unanalyzed, low-cost infrastructure experiment with no results yet — does not appear until lines 20-21 and 23-27.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 10,
+          "excerpt": "Serving `.md` variants of every post is cheap, and this proves agents prefer markdown over HTML.",
+          "evidence": "The opening sentence makes a strong causal claim that the rest of the post immediately undercuts. The real lede (cheap experiment, no data yet, raw addressability as standalone value) is buried across the final two sections."
+        },
+        {
+          "id": "claims-3",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "contradiction: This claim directly contradicts lines 20-21, which state no measurement has been done and whether any agent has ever requested a markdown variant is unknown.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 10,
+          "excerpt": "this proves agents prefer markdown over HTML",
+          "evidence": "A proof requires evidence; the post confirms no evidence has been collected, making the opening sentence internally inconsistent with the 'What was measured' section."
+        },
+        {
+          "id": "claims-patch-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: Typo: transposed letters in 'accessibility'.",
+          "file": "src/content/writing/phase1b-live-fixture.md",
+          "line": 26,
+          "excerpt": "accessibiltiy"
+        }
+      ],
+      "startedAt": "2026-07-19T03:33:11.839Z",
+      "durationMs": 9510,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "c4c7dfafce37623ea56feda50e8d2474548c5fc66097c030d8548199a6f4e45a",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1
+      }
+    }
+  ],
+  "patches": [
+    {
+      "id": "patch-1",
+      "findingId": "cspell-2",
+      "file": "src/content/writing/phase1b-live-fixture.md",
+      "oldText": "accessibiltiy",
+      "newText": "accessibility",
+      "rationale": "cspell: \"accessibiltiy\" is not a word; \"accessibility\" is the unambiguous correction.",
+      "source": "mechanical"
+    },
+    {
+      "id": "patch-2",
+      "findingId": "claims-patch-1",
+      "file": "src/content/writing/phase1b-live-fixture.md",
+      "oldText": "accessibiltiy",
+      "newText": "accessibility",
+      "rationale": "Typo: transposed letters in 'accessibility'.",
+      "source": "editorial"
+    }
+  ],
+  "overall": "block",
+  "summary": "BLOCK — 1 blocking finding must be resolved before publish. cspell: block (2 findings); vale: flag (16 findings); frontmatter: pass (0 findings); claims_structure: flag (4 findings). 2 patches proposed.",
+  "human": {},
+  "publish": {}
+}

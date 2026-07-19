@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -5,6 +6,48 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** agents/steward */
 export const STEWARD_DIR = path.resolve(here, '..');
+
+/**
+ * Loads `agents/steward/.env` into `process.env`.
+ *
+ * Hand-rolled rather than pulling in `dotenv`: the file holds a handful of
+ * `KEY=value` lines and the parsing rules that matter here fit in ten lines.
+ *
+ * **Already-set variables always win.** An explicit `ANTHROPIC_API_KEY=... npm
+ * run …` or a CI secret must not be silently overridden by a stale local file —
+ * that failure mode is invisible and sends requests under the wrong credential.
+ *
+ * Values are never logged. The file is gitignored (`.gitignore`), and nothing in
+ * the Steward puts a secret into a workflow input or result, where Temporal
+ * would persist it in history (spec §13).
+ */
+function loadDotEnv(): void {
+  const envPath = path.join(STEWARD_DIR, '.env');
+  let raw: string;
+  try {
+    raw = fs.readFileSync(envPath, 'utf8');
+  } catch {
+    return; // No .env is fine — the real environment may already carry the vars.
+  }
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    if (!key || process.env[key] !== undefined) continue;
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+loadDotEnv();
 
 /** The primary checkout. Overridable so tests/CI can point elsewhere. */
 export const SITE_DIR = process.env.STEWARD_SITE_DIR

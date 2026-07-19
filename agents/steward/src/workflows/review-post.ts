@@ -48,7 +48,7 @@ const light = {
     startToCloseTimeout: '30 seconds',
     retry: { maximumAttempts: 3 },
   }),
-  linters: wf.proxyActivities<Pick<typeof activities, 'runCspell'>>({
+  linters: wf.proxyActivities<Pick<typeof activities, 'runCspell' | 'runVale'>>({
     taskQueue: QUEUE_LIGHT,
     startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 3 },
@@ -57,6 +57,19 @@ const light = {
     taskQueue: QUEUE_LIGHT,
     startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 3 },
+  }),
+  editorial: wf.proxyActivities<Pick<typeof activities, 'editorialPass'>>({
+    taskQueue: QUEUE_LIGHT,
+    startToCloseTimeout: '3 minutes',
+    retry: { maximumAttempts: 3, backoffCoefficient: 2 },
+  }),
+  // 1 attempt, deliberately (spec §7.4): edits are not idempotent. A retried
+  // apply would either fail the uniqueness check on already-replaced text or,
+  // worse, re-apply a patch whose `oldText` still matches elsewhere.
+  patching: wf.proxyActivities<Pick<typeof activities, 'applyPatchesActivity'>>({
+    taskQueue: QUEUE_LIGHT,
+    startToCloseTimeout: '1 minute',
+    retry: { maximumAttempts: 1 },
   }),
 };
 
@@ -184,10 +197,21 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
 
     const passes = await Promise.all([
       guard('cspell', () => light.linters.runCspell(snapshot.file)),
+      guard('vale', () => light.linters.runVale(snapshot.file)),
       guard('frontmatter', () => light.frontmatter.checkFrontmatter(snapshot.file)),
-      // Phase 1b adds runVale + editorialPass here; Phase 1c adds
-      // buildAndAuditDraft on the heavy queue, gated on `skipBuildAudit`.
+      guard('claims_structure', () =>
+        light.editorial.editorialPass(snapshot.file, 'claims-structure'),
+      ),
+      // Phase 1c adds buildAndAuditDraft on the heavy queue, gated on
+      // `skipBuildAudit`; Phase 2a adds the ai-tells pass behind ENABLE_AI_TELLS.
     ]);
+
+    // Carried across a rereview deliberately. The spec says rereview "replaces
+    // the working report", and it does — but `patchesApplied` is a record of
+    // what the Steward wrote to the human's file, and losing it on the very
+    // signal the apply cycle requires would erase the only in-report evidence
+    // that the edits happened at all.
+    const patchesApplied = report?.human.patchesApplied;
 
     report = await light.reporting.synthesizeReport({
       snapshot,
@@ -195,6 +219,10 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       workflowId: wf.workflowInfo().workflowId,
       runId: wf.workflowInfo().runId,
     });
+
+    if (patchesApplied?.length) {
+      report.human = { ...report.human, patchesApplied };
+    }
 
     // Archived at verdict time, not only after publish: rejected reviews are
     // data too (spec §7.3 step 3).
@@ -218,13 +246,42 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     }
 
     if (decision.kind === 'applyPatches') {
-      // Phase 1b. Refuse explicitly rather than silently ignoring the signal.
-      staleReason = 'applyPatches is not implemented until Phase 1b. Edit the file by hand, then send `rereview`.';
+      state = 'applying_patches';
+      // Clear any reason left by an earlier decision before starting this one.
+      // Without this, a CLI polling for "state moved or a reason appeared"
+      // returns instantly on the *previous* signal's message and reports a
+      // stale outcome for a signal that is still in flight.
+      staleReason = undefined;
+      try {
+        const applied = await light.patching.applyPatchesActivity({
+          report: report!,
+          patchIds: decision.ids,
+        });
+
+        report!.human = { ...report!.human, patchesApplied: applied.applied };
+
+        // Applying a patch necessarily changes the bytes, so the review is now
+        // pinned to content that no longer exists on disk (design rule 2). The
+        // workflow says so itself rather than waiting for the approve-time hash
+        // check to discover it — the human needs to know a `rereview` is owed
+        // the moment the edit lands, not when their approve gets refused.
+        state = 'stale';
+        staleReason = `Applied ${applied.applied.join(', ')} to ${applied.file}. The file has changed, so this review is stale — send \`rereview\` to re-run the checks against the new bytes.`;
+      } catch (err) {
+        // A failed apply is not a failed workflow: the uniqueness guard refusing
+        // to guess is a *correct* outcome the human needs to read and act on.
+        // Park back on the verdict with the reason rather than dying.
+        state = 'awaiting_verdict';
+        staleReason = `Patch application failed and nothing was written: ${describeActivityError(err)}`;
+      }
       continue;
     }
 
     if (decision.kind === 'reject') {
+      // Spread, don't replace: `patchesApplied` may already be recorded here,
+      // and a decision must not erase the record of what was written to disk.
       report!.human = {
+        ...report!.human,
         decision: 'rejected',
         reason: decision.reason,
         decidedAt: workflowNow(),
@@ -253,6 +310,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     }
 
     report!.human = {
+      ...report!.human,
       decision: decision.force ? 'approved_force' : 'approved',
       decidedAt: workflowNow(),
     };
