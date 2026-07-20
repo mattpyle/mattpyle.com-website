@@ -6,6 +6,7 @@ import { LLM_SETTINGS, callRubric, loadRubric, withLineNumbers, type RubricSend 
 import type { Finding, PassKind, PassResult, PatchProposal, Verdict } from '../lib/report.js';
 import { worstVerdict } from '../lib/report.js';
 import { timed } from '../lib/logger.js';
+import { TellCategory, TELL_CATEGORIES } from '../lib/tells.js';
 
 // ---------------------------------------------------------------------------
 // The claims-structure response schema (spec §9.1).
@@ -124,6 +125,120 @@ export function judgePatchSize(oldText: string, newText: string): PatchSizeVerdi
     };
   }
   return { accepted: true, tokenDelta, lengthDelta };
+}
+
+// ---------------------------------------------------------------------------
+// The ai-tells response schema (spec §9.2).
+// ---------------------------------------------------------------------------
+
+// The tell taxonomy lives in `lib/tells.ts` so `steward stats` can count these
+// categories without importing this module, and with it the API client. A
+// command that makes no network calls should not need an API key to run.
+// Re-exported here because callers of the pass look for them beside it.
+export {
+  TellCategory,
+  TELL_CATEGORIES,
+  FORMAT_DRIVEN_TELLS,
+  VOICE_DRIVEN_TELLS,
+  UNCLASSIFIED_TELLS,
+} from '../lib/tells.js';
+
+export const AiTellFinding = z.object({
+  category: TellCategory,
+  line: z.number(),
+  excerpt: z.string(),
+  message: z.string(),
+  evidence: z.string(),
+});
+
+export const AiTellsResponse = z.object({
+  // Clamped on the way out rather than rejected here: a model returning 105 has
+  // understood the task and failed at arithmetic, and discarding the whole
+  // response (and its findings) over that would lose more than it protects.
+  aiLikenessScore: z.number(),
+  findings: z.array(AiTellFinding),
+  /**
+   * The rubric ends "No patches. Style is the author's call." — and this field
+   * exists anyway, because Phase 1b established that the model's failure mode is
+   * not inventing findings but *over-eagerness to convert a judgment into a
+   * patch*. It emitted patches for judgment-class findings when explicitly told
+   * not to. Accepting the key and dropping its contents is strictly better than
+   * a validation error that throws away a good set of findings alongside the
+   * unwanted patches.
+   */
+  patches: z.array(z.unknown()).default([]),
+});
+export type AiTellsResponse = z.infer<typeof AiTellsResponse>;
+
+export interface AiTellsMapped {
+  findings: Finding[];
+  patches: PatchProposal[];
+  aiLikenessScore: number;
+  tellCounts: Record<TellCategory, number>;
+  droppedPatches: number;
+}
+
+/**
+ * Maps an ai-tells response onto findings, applying the same three clamps as
+ * `mapClaimsResponse`.
+ *
+ * **Clamp 3 does all the work here, and it does it totally.** Every one of the
+ * eight tells is a statement about *style*, and style is the author's call
+ * (design rule 1) — so by the same test that rejects a patch touching an
+ * `overclaiming` finding, every ai-tells category is judgment-class and no patch
+ * from this pass can ever be accepted. That makes "this pass proposes no
+ * patches" a consequence of the existing clamp rather than a separate rule, and
+ * the count of what was dropped is surfaced rather than silently discarded, so
+ * a model that starts emitting patches is visible instead of invisible.
+ */
+export function mapAiTellsResponse(response: AiTellsResponse, file: string): AiTellsMapped {
+  const findings: Finding[] = [];
+
+  // Seeded with every category at zero. A tell that did not fire is a real
+  // measurement of zero, not a missing key — and the study compares per-category
+  // totals across pieces, where an absent key and a zero are very different
+  // things to anything doing arithmetic downstream.
+  const tellCounts = Object.fromEntries(TELL_CATEGORIES.map((c) => [c, 0])) as Record<
+    TellCategory,
+    number
+  >;
+
+  response.findings.forEach((f, i) => {
+    tellCounts[f.category] += 1;
+    findings.push({
+      id: `ai-tells-${i + 1}`,
+      pass: 'ai_tells',
+      // Clamp 1. Applied explicitly at the mapping site, same as the claims
+      // pass: a model must never be able to block a publish on a stylistic
+      // opinion. This pass in particular is pure taste.
+      severity: clampSeverity('flag'),
+      message: `${f.category}: ${f.message}`,
+      file,
+      line: f.line,
+      excerpt: f.excerpt.slice(0, 200),
+      evidence: f.evidence,
+    });
+  });
+
+  return {
+    findings,
+    // Clamp 3, absolute for this pass — see the doc comment.
+    patches: [],
+    aiLikenessScore: clampScore(response.aiLikenessScore),
+    tellCounts,
+    droppedPatches: response.patches.length,
+  };
+}
+
+/**
+ * The score is a 0-100 composite by definition, so a response outside that range
+ * is clamped rather than trusted. Non-finite values become 0 — treating a NaN as
+ * a low score is safe (this pass can only ever flag), whereas letting it into
+ * the metrics would poison every aggregate computed from it downstream.
+ */
+export function clampScore(score: number): number {
+  if (!Number.isFinite(score)) return 0;
+  return Math.min(100, Math.max(0, score));
 }
 
 // ---------------------------------------------------------------------------
@@ -284,8 +399,8 @@ export function mapClaimsResponse(
 /**
  * Spec §8.6. One LLM editorial pass over one post.
  *
- * Phase 1b implements `claims-structure` only; `ai-tells` is Phase 2a and gated
- * by `ENABLE_AI_TELLS`.
+ * Two rubrics: `claims-structure` (Phase 1b) and `ai-tells` (Phase 2a, reached
+ * only when the caller sets `enableAiTells` on the workflow input).
  */
 export async function editorialPass(
   file: string,
@@ -294,9 +409,8 @@ export async function editorialPass(
 ): Promise<PassResult> {
   const pass = RUBRIC_TO_PASS[rubricName];
   if (!pass) throw new Error(`Unknown rubric "${rubricName}".`);
-  if (rubricName !== 'claims-structure') {
-    throw new Error(`The "${rubricName}" rubric is not implemented until a later phase.`);
-  }
+
+  if (rubricName === 'ai-tells') return aiTellsPass(file, options);
 
   const { result, startedAt, durationMs } = await timed('editorialPass', async () => {
     const rubric = await loadRubric(rubricName);
@@ -335,6 +449,65 @@ export async function editorialPass(
       // cspell's unknown-word findings. They are not findings themselves —
       // proposing a disposition is not the same as reporting a defect.
       dictionaryProposals: result.dictionaryProposals,
+    },
+  };
+}
+
+/**
+ * The `ai-tells` pass (spec §8.6, §9.2).
+ *
+ * Structurally the claims pass with a different rubric and a different response
+ * shape, kept as a separate function rather than a branch inside the other one
+ * because the two differ in what they *return*, not merely in what they ask:
+ * this one carries `aiLikenessScore` and a per-category breakdown in `metrics`
+ * and can never carry patches.
+ *
+ * **The per-category breakdown is not decoration.** The composite score alone
+ * cannot distinguish "this reads as AI" from "this is a changelog entry", since
+ * three of the eight tells are the changelog's house format. Reporting the
+ * breakdown per piece is what lets the analysis re-rank on the voice-driven
+ * tells alone — testing whether the scorer measures provenance or genre —
+ * without retuning the rubric between runs, which the study design forbids.
+ */
+async function aiTellsPass(file: string, options: EditorialPassOptions): Promise<PassResult> {
+  const { result, startedAt, durationMs } = await timed('editorialPass', async () => {
+    const rubric = await loadRubric('ai-tells');
+    const text = await fs.readFile(path.join(SITE_DIR, file), 'utf8');
+
+    const { data, attempts } = await callRubric({
+      rubric,
+      userContent: withLineNumbers(text),
+      schema: AiTellsResponse,
+      send: options.send,
+    });
+
+    return { mapped: mapAiTellsResponse(data, file), rubric, attempts };
+  });
+
+  return {
+    pass: 'ai_tells',
+    verdict: worstVerdict(result.mapped.findings.map((f) => f.severity)),
+    findings: result.mapped.findings,
+    patches: result.mapped.patches,
+    startedAt,
+    durationMs,
+    rubric: {
+      path: result.rubric.path,
+      sha256: result.rubric.sha256,
+      model: LLM_SETTINGS.model,
+    },
+    metrics: {
+      validationAttempts: result.attempts,
+      // Spec §8.6: the composite is a *metric*, not a finding. Nothing about a
+      // score of 70 is a defect the author must answer for — design rule 1 —
+      // and putting it in `metrics` keeps it out of the findings table while
+      // still archiving it for the study.
+      aiLikenessScore: result.mapped.aiLikenessScore,
+      tellCounts: result.mapped.tellCounts,
+      // Surfaced so that a model which starts proposing patches despite the
+      // rubric is visible in the archive rather than silently clamped. Expected
+      // to be 0; a non-zero value is itself a finding about the model.
+      droppedPatches: result.mapped.droppedPatches,
     },
   };
 }

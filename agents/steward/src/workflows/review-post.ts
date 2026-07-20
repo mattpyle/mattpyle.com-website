@@ -51,6 +51,26 @@ export interface ReviewPostInput {
    * or skips exactly as the original did, regardless of what the flag says now.
    */
   skipBuildAudit?: boolean;
+  /**
+   * Adds the `ai-tells` editorial pass to the fan-out (spec §8.6, §9.2).
+   *
+   * In the input for exactly the reason above, and this is the case that makes
+   * the rule concrete rather than theoretical. When this was added there was a
+   * real `hello-world` review that had been parked in `awaiting_verdict` for 21
+   * hours across four structural changes, and two committed replay fixtures.
+   * Adding an activity to a `Promise.all` fan-out changes the command sequence,
+   * so had this been read from `ENABLE_AI_TELLS` in `config.ts`, flipping that
+   * flag to `true` would have sent the parked review — and both fixtures — down
+   * a branch their histories never took, breaking all three at once.
+   *
+   * Because it is an *optional input field*, every history that predates it
+   * deserialises it as `undefined` -> `false` and replays down the identical
+   * branch. The parked review therefore keeps its 257-event history and stays
+   * publishable; the study's new audit runs pass `true` explicitly.
+   *
+   * Resolved by the caller from `ENABLE_AI_TELLS`, same as `skipBuildAudit`.
+   */
+  enableAiTells?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +359,13 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       ...(input.skipBuildAudit
         ? []
         : [guard('build_audit', () => heavy.buildAndAuditDraft(input.slug, collection))]),
-      // Phase 2a adds the ai-tells pass behind ENABLE_AI_TELLS.
+      // The ai-tells pass (spec §8.6/§9.2). Appended LAST in the array on
+      // purpose: the fan-out's command order is the replay contract, so a new
+      // activity added at the end is the least disruptive position, and every
+      // history that predates the flag simply has no such command.
+      ...(input.enableAiTells
+        ? [guard('ai_tells', () => light.editorial.editorialPass(snapshot.file, 'ai-tells'))]
+        : []),
     ]);
 
     // Carried across a rereview deliberately. The spec says rereview "replaces

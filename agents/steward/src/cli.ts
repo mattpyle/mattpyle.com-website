@@ -1,6 +1,7 @@
 import { Client, Connection, WorkflowNotFoundError } from '@temporalio/client';
 import { Command } from 'commander';
 import {
+  ENABLE_AI_TELLS,
   ENABLE_BUILD_AUDIT,
   ENABLE_PUBLISH_LEG,
   NAMESPACE,
@@ -179,8 +180,9 @@ program
   .command('review')
   .argument('<slug>')
   .option('--skip-build-audit', 'skip the heavy build+audit pass (SHOW_DRAFTS build, axe, Lighthouse)')
+  .option('--ai-tells', 'add the ai-tells pass (unvalidated — see spec §9.2)')
   .description('Start a review and render the report when the fan-out finishes')
-  .action(async (slug: string, opts: { skipBuildAudit?: boolean }) => {
+  .action(async (slug: string, opts: { skipBuildAudit?: boolean; aiTells?: boolean }) => {
     const c = await client();
     const workflowId = workflowIdFor(slug);
 
@@ -220,6 +222,11 @@ program
           collection: 'writing',
           mode: 'gate',
           skipBuildAudit: opts.skipBuildAudit === true || !ENABLE_BUILD_AUDIT,
+          // Resolved here, never read in the workflow — design rule 10. The
+          // flag turns the pass on at all; the CLI option turns it on for one
+          // run without a config change, which is what the validation study
+          // needs (it must not flip a global while a review sits parked).
+          enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
         },
       ],
     });
@@ -235,8 +242,9 @@ program
   .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
   .argument('<slug>')
   .option('--skip-build-audit', 'skip the heavy build+audit pass (build, axe, Lighthouse)')
+  .option('--ai-tells', 'add the ai-tells pass (unvalidated — see spec §9.2)')
   .description('Review already-published content. Advisory only — no verdict, no patches applied.')
-  .action(async (collectionArg: string, slug: string, opts: { skipBuildAudit?: boolean }) => {
+  .action(async (collectionArg: string, slug: string, opts: { skipBuildAudit?: boolean; aiTells?: boolean }) => {
     const collection = parseCollection(collectionArg);
     const c = await client();
     const workflowId = workflowIdFor(slug, collection);
@@ -262,6 +270,7 @@ program
           collection,
           mode: 'audit',
           skipBuildAudit: opts.skipBuildAudit === true || !ENABLE_BUILD_AUDIT,
+          enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
         },
       ],
     });
@@ -299,10 +308,52 @@ program
 program
   .command('stats')
   .description('Count archived reviews and E-Prime density (README operational rule 4)')
-  .action(async () => {
+  .option('--tells', 'show ai-tells scores and per-100-word tell densities instead')
+  .action(async (opts: { tells?: boolean }) => {
     const { collectStats } = await import('./lib/stats.js');
     const stats = await collectStats();
     const qualifying = stats.filter((s) => s.qualifies);
+
+    if (opts.tells) {
+      const { TELL_CATEGORIES } = await import('./lib/tells.js');
+      const scored = stats.filter((s) => s.tellCounts !== null);
+
+      console.log('');
+      if (scored.length === 0) {
+        console.log('  No archived review carries an ai_tells pass yet.');
+        console.log('  Run a review or audit with --ai-tells to produce one.\n');
+        return;
+      }
+
+      // Composite + the two aggregates, sorted by composite descending. RANK is
+      // the unit of comparison across collections, never the raw score gap.
+      console.log('  slug                        collection  words  score  all/100w  voice/100w  fmt/100w');
+      for (const s of [...scored].sort((a, b) => (b.aiLikenessScore ?? 0) - (a.aiLikenessScore ?? 0))) {
+        console.log(
+          `  ${s.slug.padEnd(26)}  ${s.collection.padEnd(10)}  ${String(s.words).padStart(5)}  ` +
+            `${String(s.aiLikenessScore ?? '—').padStart(5)}  ` +
+            `${String(s.tellTotalPer100 ?? '—').padStart(8)}  ` +
+            `${String(s.voiceTellsPer100 ?? '—').padStart(10)}  ` +
+            `${String(s.formatTellsPer100 ?? '—').padStart(8)}`,
+        );
+      }
+
+      console.log('');
+      console.log('  Per-category findings per 100 words:');
+      console.log(`  ${'slug'.padEnd(26)}  ${TELL_CATEGORIES.map((c) => c.slice(0, 9).padStart(9)).join(' ')}`);
+      for (const s of scored) {
+        console.log(
+          `  ${s.slug.padEnd(26)}  ` +
+            TELL_CATEGORIES.map((c) => String(s.tellsPer100?.[c] ?? '—').padStart(9)).join(' '),
+        );
+      }
+
+      console.log('');
+      console.log('  Raw counts are deliberately NOT shown across collections: the corpus has a ~9x');
+      console.log('  genre gap in length, so a per-file total measures length first. Compare by RANK.');
+      console.log('');
+      return;
+    }
 
     console.log('');
     console.log('  slug                        collection  mode   E-Prime  words  /100w  qualifies');

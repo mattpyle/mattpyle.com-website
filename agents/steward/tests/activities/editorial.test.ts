@@ -12,6 +12,11 @@ const {
   judgePatchSize,
   mapClaimsResponse,
   editorialPass,
+  clampScore,
+  TELL_CATEGORIES,
+  FORMAT_DRIVEN_TELLS,
+  VOICE_DRIVEN_TELLS,
+  UNCLASSIFIED_TELLS,
 } = await import('../../src/activities/editorial.js');
 const { callRubric, stripFences, withLineNumbers, loadRubric } = await import('../../src/lib/llm.js');
 
@@ -392,9 +397,130 @@ test('a clean post yields a pass verdict and no findings', async () => {
   assert.deepEqual(result.patches, []);
 });
 
-test('the ai-tells rubric is refused until its phase lands', async () => {
+// ---------------------------------------------------------------------------
+// The ai-tells pass (spec §8.6, §9.2).
+//
+// The predecessor of this block asserted that the rubric was *refused* until its
+// phase landed. It has landed, so that test was replaced rather than deleted —
+// what it guarded (nothing reaches this rubric by accident) is now guarded by
+// the workflow input flag, and these tests guard the behaviour instead.
+// ---------------------------------------------------------------------------
+
+const AI_TELLS_VALID = JSON.stringify({
+  aiLikenessScore: 62,
+  findings: [
+    {
+      category: 'NOT_X_BUT_Y',
+      line: 12,
+      excerpt: "it's not about the tooling, it's about the taste",
+      message: 'Contrast construction used as a rhetorical beat.',
+      evidence: 'Classic AI cadence; the sentence carries no information the previous one lacked.',
+    },
+    {
+      category: 'RULE_OF_THREE',
+      line: 20,
+      excerpt: 'faster, cleaner, and more honest',
+      message: 'Triadic list used rhythmically.',
+      evidence: 'The third item adds nothing; the triple exists for cadence.',
+    },
+    {
+      category: 'NOT_X_BUT_Y',
+      line: 31,
+      excerpt: 'this is not a benchmark — it is a habit',
+      message: 'Second contrast construction.',
+      evidence: 'Same shape as line 12.',
+    },
+  ],
+});
+
+test('ai-tells reports the composite score and a per-category breakdown', async () => {
+  const result = await editorialPass('posts/known-good.md', 'ai-tells', {
+    send: async () => AI_TELLS_VALID,
+  });
+
+  assert.equal(result.pass, 'ai_tells');
+  assert.equal(result.metrics?.aiLikenessScore, 62);
+  assert.equal(result.findings.length, 3);
+
+  // The breakdown is what lets the study separate format-driven tells from
+  // voice-driven ones without retuning the rubric, so it is asserted directly.
+  const counts = result.metrics?.tellCounts as Record<string, number>;
+  assert.equal(counts.NOT_X_BUT_Y, 2);
+  assert.equal(counts.RULE_OF_THREE, 1);
+
+  // Every category is present even at zero. An absent key and a zero are very
+  // different things to anything doing arithmetic across pieces.
+  assert.equal(Object.keys(counts).length, TELL_CATEGORIES.length);
+  for (const c of TELL_CATEGORIES) assert.equal(typeof counts[c], 'number');
+  assert.equal(counts.STOCK_TRANSITIONS, 0);
+});
+
+test('ai-tells findings are clamped to flag and never block (clamp 1)', async () => {
+  const result = await editorialPass('posts/known-good.md', 'ai-tells', {
+    send: async () => AI_TELLS_VALID,
+  });
+  assert.equal(result.verdict, 'flag');
+  for (const f of result.findings) assert.equal(f.severity, 'flag');
+});
+
+test('ai-tells never yields a patch, even when the model proposes one (clamp 3)', async () => {
+  // The rubric says "No patches. Style is the author's call." Phase 1b
+  // established that saying so is not sufficient: the model proposed patches for
+  // judgment-class findings when explicitly told not to. Every ai-tells category
+  // IS judgment-class, so clamp 3 rejects all of them — and the count is
+  // surfaced rather than silently swallowed.
+  const withPatches = JSON.stringify({
+    ...JSON.parse(AI_TELLS_VALID),
+    patches: [
+      { line: 12, oldText: "it's not about the tooling", newText: 'the tooling matters less' },
+      { line: 20, oldText: 'faster, cleaner, and more honest', newText: 'faster and cleaner' },
+    ],
+  });
+
+  const result = await editorialPass('posts/known-good.md', 'ai-tells', {
+    send: async () => withPatches,
+  });
+
+  assert.deepEqual(result.patches, []);
+  assert.equal(result.metrics?.droppedPatches, 2);
+  // The findings survive: dropping the patches must not cost us the analysis.
+  assert.equal(result.findings.length, 3);
+});
+
+test('an out-of-range aiLikenessScore is clamped rather than discarded', () => {
+  assert.equal(clampScore(105), 100);
+  assert.equal(clampScore(-4), 0);
+  assert.equal(clampScore(62), 62);
+  // A NaN reaching a study aggregate would poison every number computed from
+  // it, so it becomes 0 — safe, because this pass can only ever flag.
+  assert.equal(clampScore(Number.NaN), 0);
+});
+
+test('an unrecognised tell category fails validation rather than going uncounted', async () => {
+  // The enum is the guard. A silently-uncounted finding would understate a
+  // score in a study whose whole output is a ranking.
+  const bogus = JSON.stringify({
+    aiLikenessScore: 10,
+    findings: [
+      {
+        category: 'VIBES',
+        line: 1,
+        excerpt: 'x',
+        message: 'y',
+        evidence: 'z',
+      },
+    ],
+  });
   await assert.rejects(
-    editorialPass('posts/known-good.md', 'ai-tells', { send: async () => VALID }),
-    /not implemented until a later phase/,
+    editorialPass('posts/known-good.md', 'ai-tells', { send: async () => bogus }),
   );
+});
+
+test('the format/voice split partitions the tells without overlap or omission', () => {
+  // The study's honest read depends on this split, and a tell silently in both
+  // lists (or in neither, unnoticed) would quietly corrupt the re-ranked
+  // analysis. EM_DASH_DENSITY is deliberately unclassified — see the source.
+  const all = [...FORMAT_DRIVEN_TELLS, ...VOICE_DRIVEN_TELLS, ...UNCLASSIFIED_TELLS];
+  assert.equal(new Set(all).size, all.length, 'a tell appears in more than one bucket');
+  assert.deepEqual([...all].sort(), [...TELL_CATEGORIES].sort(), 'a tell is unbucketed');
 });
