@@ -18,3 +18,4 @@ export { synthesizeReport } from './synthesize.js';
 export { archiveReport } from './archive.js';
 export { publishPost } from './publish.js';
 export { verifyDeploy } from './verify-deploy.js';
+export { checkPrChecks } from './publish.js';

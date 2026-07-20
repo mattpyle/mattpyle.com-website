@@ -178,7 +178,7 @@ const light = {
   // 1 attempt, because the *workflow* owns the retry (spec §7.4). An activity
   // retry policy would burn its attempts in seconds against a deploy that takes
   // minutes; the sleep/retry loop below is the thing that actually waits.
-  verifying: wf.proxyActivities<Pick<typeof activities, 'verifyDeploy'>>({
+  verifying: wf.proxyActivities<Pick<typeof activities, 'verifyDeploy' | 'checkPrChecks'>>({
     taskQueue: QUEUE_LIGHT,
     startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 1 },
@@ -427,6 +427,31 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
         reportPath = (await light.reporting.archiveReport(report!)).reportPath;
         state = 'published';
         return true;
+      }
+
+      // Before sleeping another 90 seconds, ask whether waiting can ever work.
+      //
+      // `verifyDeploy` polls PRODUCTION, which only goes green after a human
+      // merges — and nobody merges a PR whose CI is red. So a failing check
+      // makes all ten attempts certain to fail, and the operator sees a silent
+      // fifteen-minute wait instead of the broken build GitHub already knows
+      // about. Observed on the first real publish, and the reason this exists:
+      // a slow success and a guaranteed failure must not look identical.
+      //
+      // Parked, never failed. A red check is operator-fixable and then perfectly
+      // resumable — failing the workflow here would destroy the durable state
+      // over something a two-minute fix resolves.
+      const checks = await light.verifying.checkPrChecks(publishInfo!.branch);
+      if (checks.state === 'failing') {
+        state = 'publishing';
+        staleReason =
+          `PR CI is FAILING — merge is blocked, so waiting cannot succeed. ` +
+          `Failing: ${checks.failing.join(', ')}. ` +
+          `PR: ${publishInfo!.prUrl}. ` +
+          `Fix the cause, then send \`approve\` again to resume verification. ` +
+          `(Stopped after attempt ${attempt} of ${VERIFY_MAX_ATTEMPTS} rather than polling production for nothing.)`;
+        reportPath = (await light.reporting.archiveReport(report!)).reportPath;
+        return false;
       }
 
       if (attempt < VERIFY_MAX_ATTEMPTS) await wf.sleep(VERIFY_INTERVAL);

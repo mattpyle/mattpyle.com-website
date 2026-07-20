@@ -81,6 +81,11 @@ interface MockOverrides {
   publishPost?: (input: {
     report: ReviewReport;
   }) => Promise<{ branch: string; prUrl: string; title: string; committed: boolean }>;
+  checkPrChecks?: (branch: string) => Promise<{
+    state: 'passing' | 'pending' | 'failing';
+    failing: string[];
+    pending: string[];
+  }>;
   verifyDeploy?: (input: {
     slug: string;
     collection?: string;
@@ -125,6 +130,12 @@ function mockActivities(overrides: MockOverrides = {}) {
         calls.push('verifyDeploy');
         return { deployVerified: true, verification: OK_ROWS };
       }),
+    // Defaults to "no red checks", so the existing wait/park tests exercise the
+    // path they were written for. A test that wants the fast-fail path overrides
+    // this with `state: 'failing'`.
+    checkPrChecks:
+      overrides.checkPrChecks ??
+      (async () => ({ state: 'pending' as const, failing: [], pending: [] })),
     snapshotDraft: overrides.snapshotDraft ?? (async () => snapshot()),
     currentContentHash: overrides.currentContentHash ?? (async () => SHA),
     runCspell: overrides.runCspell ?? (async () => passResult()),
@@ -953,5 +964,40 @@ test('a stale file refuses approve before anything is published', async () => {
 
     assert.match(state.staleReason ?? '', /changed since it was reviewed/i);
     assert.equal(publishCalls, 0, 'nothing may be published from a stale review');
+  });
+});
+
+test('a failing PR check parks immediately instead of polling production for 15 minutes', async () => {
+  // Regression for the first real publish. A corrupted frontmatter flip broke
+  // the Vercel build, and because `verifyDeploy` polls PRODUCTION — which only
+  // goes green after a human merges, and nobody merges a red PR — the operator
+  // got a silent fifteen-minute wait instead of the failure GitHub already knew
+  // about twenty seconds in. A slow success and a guaranteed failure must not
+  // look identical.
+  const { activities, calls } = mockActivities({
+    verifyDeploy: async () => ({ deployVerified: false, verification: FAIL_ROWS }),
+    checkPrChecks: async () => ({ state: 'failing', failing: ['Vercel', 'axe'], pending: [] }),
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-ci-red');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, false, true);
+
+    const state = await waitForStateSkipping(handle, 'publishing');
+
+    assert.match(state.staleReason ?? '', /CI is FAILING/);
+    // The cause is NAMED. "Verification did not pass" was true during the real
+    // incident and told the operator nothing.
+    assert.match(state.staleReason ?? '', /Vercel/);
+    assert.match(state.staleReason ?? '', /axe/);
+
+    // Parked, not failed: a red check is operator-fixable and then resumable.
+    const desc = await handle.describe();
+    assert.equal(desc.status.name, 'RUNNING', 'a red check must park, not fail');
+
+    // And it stopped early rather than burning all ten attempts.
+    const verifyCalls = calls.filter((c) => c === 'verifyDeploy').length;
+    assert.ok(verifyCalls < 10, `expected an early stop, got ${verifyCalls} verifyDeploy calls`);
   });
 });

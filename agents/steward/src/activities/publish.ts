@@ -383,3 +383,67 @@ export async function publishPost(input: PublishPostInput): Promise<PublishPostR
 
   return { branch, prUrl, title: flipped.title, committed };
 }
+
+// ---------------------------------------------------------------------------
+// PR check status (Phase 2 Part A).
+// ---------------------------------------------------------------------------
+
+export type PrChecksState = 'passing' | 'pending' | 'failing';
+
+export interface PrChecksResult {
+  state: PrChecksState;
+  /** Names of check runs that concluded in a failure. */
+  failing: string[];
+  /** Names still running or queued. */
+  pending: string[];
+}
+
+/**
+ * Reads the CI check runs on the publish branch's head commit.
+ *
+ * **Why this exists.** `verifyDeploy` polls *production* for the published URL,
+ * which only becomes true after a human merges. If the PR's own CI is red the
+ * merge will not happen, so every one of the ten 90-second attempts is
+ * guaranteed to fail — the workflow spends fifteen minutes discovering something
+ * GitHub knew in twenty seconds, and presents it as "waiting for merge" rather
+ * than "your build is broken".
+ *
+ * That is exactly what happened on the first real publish: a corrupted
+ * frontmatter flip failed the Vercel build, and the operator's experience was a
+ * silent fifteen-minute wait with no indication anything was wrong. A slow
+ * success and a fast failure must not look the same.
+ *
+ * Reports rather than throws, for the same reason `verifyDeploy` does: the
+ * workflow decides what a red check means, and a GitHub API hiccup must not
+ * fail a publish that has already committed and pushed.
+ */
+export async function checkPrChecks(branch: string): Promise<PrChecksResult> {
+  try {
+    const ref = await gh(`/repos/${GITHUB_REPO}/commits/${encodeURIComponent(branch)}`);
+    const sha = ref?.sha;
+    if (!sha) return { state: 'pending', failing: [], pending: [] };
+
+    const runs = await gh(`/repos/${GITHUB_REPO}/commits/${sha}/check-runs?per_page=100`);
+    const list: Array<{ name: string; status: string; conclusion: string | null }> =
+      runs?.check_runs ?? [];
+
+    // No check runs yet is `pending`, not `passing`: a branch pushed seconds ago
+    // has not had time to report, and treating "no news" as good news would let
+    // the loop sail past a failure that had not registered yet.
+    if (list.length === 0) return { state: 'pending', failing: [], pending: [] };
+
+    // `neutral` and `skipped` are deliberately NOT failures — a skipped job is a
+    // configuration statement, not a defect.
+    const FAIL = new Set(['failure', 'timed_out', 'cancelled', 'action_required']);
+    const failing = list.filter((r) => r.conclusion && FAIL.has(r.conclusion)).map((r) => r.name);
+    const pending = list.filter((r) => r.status !== 'completed').map((r) => r.name);
+
+    if (failing.length > 0) return { state: 'failing', failing, pending };
+    if (pending.length > 0) return { state: 'pending', failing: [], pending };
+    return { state: 'passing', failing: [], pending: [] };
+  } catch (err) {
+    // Unknown, not broken. Never let an observability call break the publish.
+    log.warn({ activity: 'checkPrChecks', err: String(err) }, 'could not read PR checks');
+    return { state: 'pending', failing: [], pending: [] };
+  }
+}
