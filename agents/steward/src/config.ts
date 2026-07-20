@@ -103,7 +103,14 @@ export const WEB_UI = 'http://localhost:8233';
  */
 export const ENABLE_AI_TELLS = false;
 export const ENABLE_BUILD_AUDIT = true;
-export const ENABLE_PUBLISH_LEG = false;
+/**
+ * Phase 2. Resolved by the CLI into the `approve` **signal payload**, not into
+ * the workflow input — the publish decision is consumed after the durable wait,
+ * so for an already-parked review the input is immutable and the decision has
+ * not yet been made. See the `approve` signal's docblock in
+ * `workflows/review-post.ts` for the full reasoning.
+ */
+export const ENABLE_PUBLISH_LEG = true;
 
 /**
  * The content collections the Steward reviews.

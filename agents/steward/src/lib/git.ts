@@ -20,7 +20,15 @@ import { run } from './proc.js';
 /** Absolute path to a git binary. `git` is resolved from PATH by execFile. */
 const GIT = 'git';
 
-async function git(cwd: string, args: string[]): Promise<string> {
+/**
+ * Runs git in `cwd` and returns trimmed stdout, throwing on a non-zero exit with
+ * git's own stderr attached.
+ *
+ * Exported so the publish leg (§8.7) drives branches, commits, and pushes
+ * through the same wrapper the build audit uses, rather than growing a second
+ * spawn path with its own error handling.
+ */
+export async function git(cwd: string, args: string[]): Promise<string> {
   const res = await run(GIT, args, { cwd });
   if (res.exitCode !== 0) {
     throw new Error(`git ${args.join(' ')} failed (exit ${res.exitCode}): ${res.stderr.trim()}`);

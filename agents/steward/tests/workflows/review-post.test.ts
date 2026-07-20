@@ -78,12 +78,53 @@ interface MockOverrides {
   ) => Promise<{ applied: string[]; file: string; contentSha256: string }>;
   /** Lets a test see the report the workflow handed to the apply activity. */
   synthesizePatches?: () => ReviewReport['patches'];
+  publishPost?: (input: {
+    report: ReviewReport;
+  }) => Promise<{ branch: string; prUrl: string; title: string; committed: boolean }>;
+  verifyDeploy?: (input: {
+    slug: string;
+    collection?: string;
+    title: string;
+  }) => Promise<{ deployVerified: boolean; verification: VerificationRow[] }>;
 }
+
+interface VerificationRow {
+  check: string;
+  url: string;
+  ok: boolean;
+  detail: string;
+}
+
+const OK_ROWS: VerificationRow[] = [
+  { check: 'html', url: 'https://example/writing/fixture-post/', ok: true, detail: '200' },
+];
+const FAIL_ROWS: VerificationRow[] = [
+  { check: 'html', url: 'https://example/writing/fixture-post/', ok: false, detail: '404' },
+];
 
 /** Real synthesize/archive would touch disk, so both are mocked too. */
 function mockActivities(overrides: MockOverrides = {}) {
   const archived: ReviewReport[] = [];
+  /** Every call the workflow made, so tests can assert idempotent-resume. */
+  const calls: string[] = [];
   const activities = {
+    publishPost:
+      overrides.publishPost ??
+      (async () => {
+        calls.push('publishPost');
+        return {
+          branch: 'steward/publish-fixture-post',
+          prUrl: 'https://github.com/o/r/pull/1',
+          title: 'Fixture Post',
+          committed: true,
+        };
+      }),
+    verifyDeploy:
+      overrides.verifyDeploy ??
+      (async () => {
+        calls.push('verifyDeploy');
+        return { deployVerified: true, verification: OK_ROWS };
+      }),
     snapshotDraft: overrides.snapshotDraft ?? (async () => snapshot()),
     currentContentHash: overrides.currentContentHash ?? (async () => SHA),
     runCspell: overrides.runCspell ?? (async () => passResult()),
@@ -137,7 +178,7 @@ function mockActivities(overrides: MockOverrides = {}) {
       };
     },
   };
-  return { activities, archived };
+  return { activities, archived, calls };
 }
 
 async function withWorker<T>(
@@ -176,13 +217,55 @@ function startAudit(id: string, collection: 'writing' | 'changelog' = 'changelog
 async function waitForState(
   handle: { query: typeof getReviewState extends never ? never : any },
   wanted: string,
+  // The publish leg's park needs a far larger budget than the fan-out states:
+  // reaching it means ten real verifyDeploy activity round-trips separated by
+  // nine 90-second sleeps. Time-skipping collapses the *sleeps* to nothing, but
+  // the activity invocations and the workflow-task turnarounds between them are
+  // real work against the test server.
+  attempts = 200,
 ) {
-  for (let i = 0; i < 200; i++) {
+  let last = '';
+  for (let i = 0; i < attempts; i++) {
     const state = await handle.query(getReviewState);
+    last = state.state;
     if (state.state === wanted) return state;
     await new Promise((r) => setTimeout(r, 25));
   }
-  throw new Error(`never reached ${wanted}`);
+  throw new Error(`never reached ${wanted} (last seen: ${last})`);
+}
+
+/**
+ * Waits for a state that lies on the far side of the publish leg's sleep/retry
+ * loop, advancing the test clock explicitly between checks.
+ *
+ * **`waitForState` cannot be used here, and the reason is worth recording.**
+ * Time-skipping only advances the clock when the environment is *idle*, and a
+ * query is itself a workflow task. Polling every 25ms therefore keeps the
+ * environment permanently busy and the clock permanently still — so the nine
+ * 90-second sleeps in the verification loop elapse in **real time**. The symptom
+ * is not a fast failure but a test that hangs for its full wall-clock duration
+ * (observed: 128 seconds, then a timeout) and looks for all the world like a
+ * deadlock in the workflow.
+ *
+ * The tell that it was the harness rather than the workflow: the deploy-wait
+ * test passes in ~1s with three of the same sleeps, because it stops querying
+ * once the workflow completes and lets the environment go idle.
+ */
+async function waitForStateSkipping(
+  handle: { query: (q: typeof getReviewState) => Promise<any> },
+  wanted: string,
+  rounds = 30,
+) {
+  let last = '';
+  for (let i = 0; i < rounds; i++) {
+    const state = await handle.query(getReviewState);
+    last = state.state;
+    if (state.state === wanted) return state;
+    // Advance past one interval of the verification loop. Between calls the
+    // environment goes idle, which is what lets the skip actually happen.
+    await env.sleep(90_000);
+  }
+  throw new Error(`never reached ${wanted} (last seen: ${last})`);
 }
 
 test('happy path: clean passes → awaiting_verdict → approve → approved', async () => {
@@ -691,5 +774,184 @@ test('audit mode: applyPatches is refused — nothing is written to published co
     assert.equal(applyCalled, 0, 'the apply activity must never run against published content');
     assert.equal(report.human.patchesApplied, undefined);
     assert.equal(report.mode, 'audit');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 2 — the publish leg.
+// ---------------------------------------------------------------------------
+
+test('approve without a publish payload records the decision and completes (pre-Phase-2 behaviour)', async () => {
+  const { activities, calls } = mockActivities();
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-off');
+    await waitForState(handle, 'awaiting_verdict');
+    // One argument only — exactly the shape every history written before Phase 2
+    // recorded, and the shape the Phase 1b replay fixture carries.
+    await handle.signal(approve, false);
+    const report = await handle.result();
+
+    assert.equal(report.human.decision, 'approved');
+    assert.equal(report.publish.prUrl, undefined);
+    assert.deepEqual(calls, [], 'no publish activity may run without an explicit publish payload');
+  });
+});
+
+test('test 6 — deploy-wait: verifyDeploy fails 3 times then succeeds → published', async () => {
+  let attempts = 0;
+  const { activities, archived } = mockActivities({
+    verifyDeploy: async () => {
+      attempts += 1;
+      return attempts <= 3
+        ? { deployVerified: false, verification: FAIL_ROWS }
+        : { deployVerified: true, verification: OK_ROWS };
+    },
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-deploy-wait');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, false, true);
+    const report = await handle.result();
+
+    assert.equal(attempts, 4, 'must retry until production agrees, not give up on the first miss');
+    assert.equal(report.publish.deployVerified, true);
+    assert.equal(report.publish.prUrl, 'https://github.com/o/r/pull/1');
+    assert.equal(report.publish.branch, 'steward/publish-fixture-post');
+    assert.deepEqual(report.publish.verification, OK_ROWS);
+    // The PR URL is archived as soon as the PR exists, before verification —
+    // so a park does not leave it only in workflow memory.
+    assert.ok(
+      archived.some((r) => r.publish.prUrl && r.publish.deployVerified === undefined),
+      'the report must be archived once with a PR URL and no verdict yet',
+    );
+  });
+});
+
+test('verification exhausting parks on the open PR rather than failing the workflow', async () => {
+  const { activities } = mockActivities({
+    verifyDeploy: async () => ({ deployVerified: false, verification: FAIL_ROWS }),
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-park');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, false, true);
+
+    // Back to `publishing` — the PR is open and the publish is genuinely
+    // incomplete. Crucially the workflow is still RUNNING and still signalable.
+    const state = await waitForStateSkipping(handle, 'publishing');
+    assert.match(state.staleReason ?? '', /awaiting merge/i);
+    assert.match(state.staleReason ?? '', /pull\/1/);
+    assert.match(state.staleReason ?? '', /never merges/i);
+
+    const desc = await handle.describe();
+    assert.equal(desc.status.name, 'RUNNING', 'a park must not be a failure');
+  });
+});
+
+test('a repeat approve after a park is an idempotent resume: it re-verifies and never re-publishes', async () => {
+  let verifyCalls = 0;
+  let publishCalls = 0;
+  const { activities, calls } = mockActivities({
+    publishPost: async () => {
+      publishCalls += 1;
+      return {
+        branch: 'steward/publish-fixture-post',
+        prUrl: 'https://github.com/o/r/pull/1',
+        title: 'Fixture Post',
+        committed: true,
+      };
+    },
+    verifyDeploy: async () => {
+      verifyCalls += 1;
+      // Fail every attempt of the first pass; succeed on the resume.
+      return verifyCalls > 10
+        ? { deployVerified: true, verification: OK_ROWS }
+        : { deployVerified: false, verification: FAIL_ROWS };
+    },
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-resume');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, false, true);
+    await waitForStateSkipping(handle, 'publishing');
+
+    assert.equal(publishCalls, 1);
+    assert.equal(verifyCalls, 10, 'the first pass must exhaust its ten attempts');
+
+    // The human merged the PR and re-approves. The payload deliberately says
+    // `publish: false` — a resume must NOT read that as "un-publish". That
+    // decision was consumed once, at the first approve, and is already in
+    // history; there is no un-publish operation and the commit is on the
+    // default branch.
+    await handle.signal(approve, false, false);
+    const report = await handle.result();
+
+    assert.equal(report.publish.deployVerified, true);
+    assert.equal(publishCalls, 1, 'a resume must never open a second PR');
+    assert.equal(verifyCalls, 11);
+    assert.equal(calls.length, 0);
+  });
+});
+
+test('a blocked report still refuses approve even with the publish leg on', async () => {
+  const { activities } = mockActivities({
+    runCspell: async () => passResult({ verdict: 'block' }),
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-block');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, false, true);
+
+    for (let i = 0; i < 100; i++) {
+      const s = await handle.query(getReviewState);
+      if (s.staleReason) {
+        assert.match(s.staleReason, /blocking findings/i);
+        assert.equal(s.state, 'awaiting_verdict', 'a refused approve must not enter publishing');
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error('approve was never refused');
+  });
+});
+
+test('approve --force with the publish leg on publishes and records approved_force', async () => {
+  const { activities } = mockActivities({
+    runCspell: async () => passResult({ verdict: 'block' }),
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-force');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, true, true);
+    const report = await handle.result();
+
+    assert.equal(report.human.decision, 'approved_force');
+    assert.equal(report.publish.deployVerified, true);
+  });
+});
+
+test('a stale file refuses approve before anything is published', async () => {
+  let publishCalls = 0;
+  const { activities } = mockActivities({
+    currentContentHash: async () => 'c'.repeat(64),
+    publishPost: async () => {
+      publishCalls += 1;
+      return { branch: 'b', prUrl: 'u', title: 't', committed: true };
+    },
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-stale');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, false, true);
+    const state = await waitForState(handle, 'stale');
+
+    assert.match(state.staleReason ?? '', /changed since it was reviewed/i);
+    assert.equal(publishCalls, 0, 'nothing may be published from a stale review');
   });
 });

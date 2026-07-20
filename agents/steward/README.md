@@ -1,16 +1,24 @@
-# The Steward — Phase 1a
+# The Steward — Phase 2
 
-An editorial agent for mattpyle.com, implemented as Temporal workflows. It reviews a
-`draft: true` writing post with mechanical checks, synthesizes a report, then **waits
-durably** for a human `approve` or `reject`.
+An editorial agent for mattpyle.com, implemented as Temporal workflows. It reviews content with
+mechanical checks, prose linting, and LLM editorial passes; builds and audits the unpublished page
+with axe and Lighthouse; synthesizes a report; **waits durably** for a human `approve` or `reject`;
+and then opens a publish PR and verifies the result against the live origin.
 
 It is a sidecar. The site builds, deploys, and serves identically with this entire
 directory deleted. Nothing in the site's runtime, build, or Vercel deployment depends on it.
 
-**Phase 1a scope:** `snapshotDraft`, `runCspell`, `checkFrontmatter`, `synthesizeReport`
-(template summary, no LLM), `archiveReport`, the durable wait, and the `review` / `status` /
-`approve` / `reject` CLI. Vale, the LLM editorial passes, the build-and-audit pass, patch
-application, and the publish leg are later phases, gated off in `src/config.ts`.
+**Built:** `snapshotDraft`, `runCspell`, `runVale`, `checkFrontmatter`, `editorialPass`
+(claims-structure), `buildAndAuditDraft`, `synthesizeReport`, `archiveReport`,
+`applyPatchesActivity`, the durable wait, gate and audit modes across `writing` and `changelog`,
+and — as of Phase 2 — `publishPost` and `verifyDeploy`.
+
+**Not built:** the `ai-tells` editorial pass, still gated off behind `ENABLE_AI_TELLS` in
+`src/config.ts` pending its validation study.
+
+**Two things the Steward will never do**, both deliberate and both enforced in code rather than in
+a prompt: it does not rewrite prose on the author's behalf (design rule 1), and **it does not merge
+its own PR** (§8.7). Merging is what triggers the production deploy, and it stays a human act.
 
 ---
 
@@ -19,11 +27,28 @@ application, and the publish leg are later phases, gated off in `src/config.ts`.
 1. **Temporal CLI** on PATH. Verify: `temporal --version` (built against server 1.29.1).
 2. **Node 22+** (the site requires ≥22.12.0; built and tested here on Node 24.12.0).
 3. `npm install` from the **repo root** — this is an npm workspace, not a standalone package.
-4. `.env` is **not required for Phase 1a.** No activity makes a network or LLM call yet, and
-   the defaults in `src/config.ts` are correct for this machine. Copy `.env.example` to
-   `.env` when Phase 1b lands.
+4. `.env` with `ANTHROPIC_API_KEY` (the editorial passes) and — **as of Phase 2** —
+   `GITHUB_TOKEN` (the publish leg).
+5. **Chrome** and the **Vale binary** (`npm run setup:vale`) for the build audit and prose lint.
 
-Not needed yet: Chrome, the Vale binary, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`.
+### `GITHUB_TOKEN` — required for the publish leg, and `gh auth token` will not do
+
+The publish leg opens a PR from **inside the worker**, which reads `process.env.GITHUB_TOKEN`.
+A `gh` CLI login does **not** satisfy this: `gh` keeps its token in the OS keyring, where the
+worker cannot see it. The Phase 2 dry-run was run by exporting `GITHUB_TOKEN="$(gh auth token)"`
+into a one-off shell, which is fine for a supervised dry-run and **not** fine for the real thing —
+the whole point of the publish leg is that it runs unattended after an approve that may have been
+sent hours earlier.
+
+Create a fine-grained PAT scoped to this repository only, with **contents: read/write** and
+**pull requests: read/write**, and put it in `agents/steward/.env`:
+
+```
+GITHUB_TOKEN=github_pat_...
+```
+
+`config.ts` loads `.env` and already-set environment variables always win, so a CI secret or an
+explicit inline value is never silently overridden by a stale local file.
 
 ---
 
@@ -31,7 +56,7 @@ Not needed yet: Chrome, the Vale binary, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`.
 
 ```
 # 1 — Temporal server
-temporal server start-dev --db-filename agents/steward/.temporal/steward.db
+temporal server start-dev --db-filename agents/steward/.cache/temporal-dev.db
 
 # 2 — worker
 cd agents/steward && npm run worker        # tsx src/worker.ts
@@ -46,6 +71,22 @@ npm run steward -- approve steward-smoke-test
 Run the server command **from the repo root** — `--db-filename` is relative to the working
 directory, and the whole point of the flag is that history survives reboots. The dev server's
 default is in-memory.
+
+> **There is exactly one database, and it is `agents/steward/.cache/temporal-dev.db`.**
+> This runbook previously named `agents/steward/.temporal/steward.db`, and the two diverged:
+> sessions from Phase 3b onward ran against `.cache/`, while the documentation kept pointing at
+> `.temporal/`. The observed failure mode is the worst kind — **a long-parked review appears to
+> have vanished**, because `temporal workflow list` against the documented database is a
+> perfectly successful command that returns a truthful answer about the wrong file.
+>
+> Reconciled 2026-07-19: `.cache/temporal-dev.db` **wins**, because it is the one holding the
+> parked `hello-world` review. `.temporal/steward.db` was inspected on a throwaway server and
+> contained only three *terminal* `phase1b-live-fixture` runs — the Phase 1b replay-fixture
+> export source, already committed as a fixture. Nothing live was in it. **It has deliberately
+> not been deleted**; that is Matt's call to make, not a cleanup to perform silently.
+>
+> `--db-filename` pointing at a non-existent file is not an error — the dev server creates an
+> empty database and starts happily. A typo in this path can never fail loudly.
 
 Web UI: <http://localhost:8233>.
 
@@ -69,7 +110,7 @@ Web UI: <http://localhost:8233>.
 | `review <slug> [--skip-build-audit]` | Gate-mode review of a **writing draft**, poll until the fan-out finishes, render the report. Refuses if a review of that slug is currently **running**, or if the post is not `draft: true`. |
 | `audit <collection> <slug> [--skip-build-audit]` | **Audit-mode** review of already-published content in `writing` or `changelog`. Same fan-out, same report, archived the same way — then completes. No verdict, no publish leg, and `apply` is refused. |
 | `status <slug>` | Render current state, verdict, findings, patches, report path, Web UI deep link. |
-| `approve <slug> [--force]` | Send `approve`. Refused if the report has blocking findings (use `--force`) or if the file changed since review. |
+| `approve <slug> [--force]` | Send `approve`. Refused if the report has blocking findings (use `--force`) or if the file changed since review. With the publish leg on, this opens the PR and then verifies against production. **Send it a second time after you merge** — see below. |
 | `reject <slug> --reason "<text>"` | Send `reject`. Reason required. Re-archives and completes. |
 
 ### Gate vs audit
@@ -92,6 +133,38 @@ normal git flow, with the report as input.
 **Mode and collection live in the workflow input, never in config.** Both change the workflow's
 command sequence, so they must be recorded in history; a config flip would otherwise send every
 parked review down a branch it never took. See the build log's "Changelog parity" entry.
+
+### The publish leg — what `approve` actually does
+
+`approve` starts a sequence that **pauses for you in the middle**, and knowing that in advance is
+the difference between "it's stuck" and "it's waiting".
+
+```
+approve  →  publishing        publishPost: branch, commit, push, open PR
+         →  verifying_deploy  the curl matrix against www.mattpyle.com, every 90s
+         →  publishing        ← PARKED HERE if you haven't merged yet
+              ... you merge the PR ...
+         →  approve again     idempotent resume: re-verifies, never re-publishes
+         →  published
+```
+
+**The Steward opens the PR; you merge it.** Merging triggers the Vercel production deploy, and
+that stays a human act. Until you merge, verification fails for a perfectly good reason — so after
+ten attempts (~15 minutes) the workflow parks back in `publishing` with a message naming the PR,
+rather than failing. It stays RUNNING and signalable indefinitely.
+
+**After merging, send `approve` again.** This is an *idempotent resume*: it re-enters verification
+and does not re-run `publishPost`. It also ignores its own publish flag — a resume cannot
+un-publish something, and re-deciding at resume time is exactly the bug design rule 10 prevents.
+
+**What ends up in the PR:** exactly one file — the post, with `draft: false` — branched from
+`origin/master`. The body carries the report summary, per-pass finding counts, the content hash the
+review was pinned to, and the archived report's path. If the branch already has an open PR, its
+body is updated rather than a second PR opened.
+
+**The date rule:** `draft: false` always; `date:` is refreshed to today only if it is absent or more
+than 30 days stale (a recent date may have been set deliberately); `updated:` is never touched on
+first publish, because the post has not been updated, it has been published.
 
 ### Archives
 
@@ -347,35 +420,53 @@ per-change record.
    no benefit in Phase 1a, when the human is watching the terminal anyway. Revisit when the
    publish leg lands and commits become the point.
 
-4. **cspell runs in-process via `cspell-lib`, not the CLI (spec §8.2).** No process spawn to
+4. **`octokit` was not adopted (spec §4, §8.7).** The publish leg makes three GitHub REST calls
+   with a bearer token, and `fetch` does that natively. Same reasoning that retired `execa` in
+   Phase 1b: a dependency earns its place by providing a guarantee the platform does not already
+   give. Error classification is explicit instead — 401/403/404/422 are
+   `ApplicationFailure.nonRetryable`, everything else retries.
+
+5. **`publishPost` commits from the worktree, not the primary checkout (spec §8.7 steps 1–5).**
+   The spec's wording implies the primary checkout, since that is where the uncommitted draft
+   lives. The first implementation did exactly that and it was wrong: `git checkout -B` in the
+   primary checkout switches the branch **under the human**, who may be mid-edit, and the publish
+   leg runs unattended. The draft's bytes are copied into the worktree instead — the same overlay
+   `syncWorktree` performs for the build audit. Caught before it ever ran.
+
+6. **`approve` gained a second argument rather than the publish gate living in config or input
+   (spec §7.2, design rule 10).** See the spec's design rule 10 for the full reasoning; briefly,
+   config would have broken the Phase 1b replay fixture and an input field would have made the
+   live parked review unpublishable without restarting it.
+
+7. **cspell runs in-process via `cspell-lib`, not the CLI (spec §8.2).** No process spawn to
    make Windows-safe, and the issue objects carry the suggestion metadata (`isPreferred`,
    ranked alternatives) that the JSON reporter flattens away — which is what the
    unambiguous-suggestion rule needs.
 
-5. **"Unambiguous suggestion" is defined by edit distance (spec §8.2).** The spec says patch
+8. **"Unambiguous suggestion" is defined by edit distance (spec §8.2).** The spec says patch
    when cspell offers "a single unambiguous suggestion" without defining it. cspell's own
    `isPreferred` flag is too narrow: `refacrtor` gets no preferred suggestion even though
    `refactor` is distance 1 and the runner-up is distance 2. Rule implemented: a preferred
    suggestion always wins; otherwise patch only when exactly one suggestion sits at the
    minimum edit distance and that distance is ≤ 2. Everything else flags without a patch.
 
-6. **Phase 1a dependencies only.** `@anthropic-ai/sdk`, `execa`, `octokit`, `lighthouse`,
+9. **Phase 1a dependencies only.** `@anthropic-ai/sdk`, `execa`, `octokit`, `lighthouse`,
    `chrome-launcher`, and `@axe-core/cli` are listed in spec §4 but are not installed. Nothing
    in Phase 1a spawns a process, calls an LLM, or touches GitHub. They land with the phases
    that use them, rather than sitting in the lockfile unused. `src/lib/proc.ts` (the execa
    wrapper) likewise arrives with the first activity that spawns anything.
 
-7. **`checkFrontmatter`'s "missing description → block" check cannot fire in practice
+10. **`checkFrontmatter`'s "missing description → block" check cannot fire in practice
    (spec §8.4).** `src/content.config.ts` already makes `description` required, so a post
    without one fails `astro build` — and, as it turns out, fails to load in the content
    collection at all. The check is implemented and unit-tested against a fixture, but no post
    that reaches the Steward can trigger it. See the build log; this is a finding about the
    spec's model of where validation lives, not a bug.
 
-8. **Task-queue routing exists but the heavy queue has no work yet.** The worker registers
+11. **Task-queue routing exists but the heavy queue has no work yet.** The worker registers
    both queues and the workflow declares `HEAVY_ACTIVITY_OPTIONS`, but every Phase 1a activity
    routes to `steward-light`. The split is wired so Phase 1c is a config change, per spec §3.
 
-9. **No `applyPatches` implementation.** The signal is defined and handled; it responds with an
+12. **No `applyPatches` implementation.** The signal is defined and handled; it responds with an
    explicit "not implemented until Phase 1b" message rather than silently ignoring the signal.
    Patches *are* proposed and rendered — they are just applied by hand for now.

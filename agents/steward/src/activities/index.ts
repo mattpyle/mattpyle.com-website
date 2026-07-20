@@ -4,7 +4,8 @@
  * workflow calls, not which functions exist where.
  *
  * Phase 1a implemented the light set; Phase 1b adds `vale`, `editorial`, and
- * `patches`. `build-audit`, `publish`, and `verify-deploy` land in later phases.
+ * `patches`; Phase 1c adds `build-audit`; Phase 2 adds `publish` and
+ * `verify-deploy`.
  */
 export { snapshotDraft, currentContentHash } from './snapshot.js';
 export { runCspell } from './cspell.js';
@@ -15,3 +16,5 @@ export { applyPatchesActivity } from './patches.js';
 export { buildAndAuditDraft } from './build-audit.js';
 export { synthesizeReport } from './synthesize.js';
 export { archiveReport } from './archive.js';
+export { publishPost } from './publish.js';
+export { verifyDeploy } from './verify-deploy.js';

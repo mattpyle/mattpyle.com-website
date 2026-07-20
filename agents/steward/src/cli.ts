@@ -2,6 +2,7 @@ import { Client, Connection, WorkflowNotFoundError } from '@temporalio/client';
 import { Command } from 'commander';
 import {
   ENABLE_BUILD_AUDIT,
+  ENABLE_PUBLISH_LEG,
   NAMESPACE,
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
@@ -350,15 +351,28 @@ program
   .action(async (slug: string, opts: { force?: boolean }) => {
     const c = await client();
     const handle = c.workflow.getHandle(workflowIdFor(slug));
-    await handle.signal(approveSignal, opts.force === true);
+    // The phase gate is resolved HERE, by the caller, and travels in the signal
+    // payload — the same pattern as `skipBuildAudit` in the input, and for the
+    // same reason: the decision ends up in history, so a replay reproduces what
+    // was actually decided rather than what the flag happens to say today. See
+    // the `approve` signal's own docblock for why this one rides on the signal
+    // rather than the input.
+    await handle.signal(approveSignal, opts.force === true, ENABLE_PUBLISH_LEG);
     console.log(`  approve signal sent${opts.force ? ' (--force)' : ''}`);
+    if (!ENABLE_PUBLISH_LEG) {
+      console.log('  (publish leg disabled — the decision is recorded and the review completes)');
+    }
 
     const state = await pollUntil(
       c,
       slug,
       (s) => TERMINAL.includes(s.state) || s.staleReason !== undefined,
       1000,
-      2 * 60 * 1000,
+      // The publish leg's verification loop sleeps 90s between attempts and may
+      // legitimately run for ~15 minutes before parking, so the approve poll
+      // cannot use the two-minute budget that sufficed when approve was a
+      // record-and-complete.
+      ENABLE_PUBLISH_LEG ? 20 * 60 * 1000 : 2 * 60 * 1000,
     );
     await render(c, slug, state);
     if (!TERMINAL.includes(state.state)) process.exitCode = 1;

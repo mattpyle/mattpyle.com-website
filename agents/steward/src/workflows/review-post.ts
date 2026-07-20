@@ -57,7 +57,40 @@ export interface ReviewPostInput {
 // Signals and queries (spec §7.2)
 // ---------------------------------------------------------------------------
 
-export const approve = wf.defineSignal<[boolean?]>('approve');
+/**
+ * `approve(force?, publish?)`.
+ *
+ * **`publish` rides on the signal rather than the workflow input, and that is a
+ * deliberate refinement of design rule 10 rather than a violation of it.**
+ *
+ * The rule's point is that a sequence-changing decision must be *recorded in
+ * history*, so replay reproduces the decision actually made. Rule 10 says "in
+ * the workflow input" because every earlier such flag (`skipBuildAudit`,
+ * `collection`, `mode`) is consumed during the fan-out, before any signal
+ * exists. The publish gate is different: it is consumed **after the durable
+ * wait**, which means for a workflow that is already parked the input is
+ * immutable and the decision has not yet been made. Signal payloads are in
+ * history too.
+ *
+ * This is what lets both of the things that pull in opposite directions survive:
+ *
+ * - The **Phase 1b replay fixture** ends `approve` → `approved_force` →
+ *   `WorkflowExecutionCompleted`. Its recorded signal carries one payload, so
+ *   `publish` deserialises as `undefined` → `false` → the workflow completes,
+ *   matching history exactly. No re-export.
+ * - The **live parked `hello-world` review**, started before this field existed
+ *   and unable to change its own input, gets a future `approve` carrying
+ *   `publish: true` and publishes normally.
+ *
+ * Had this been a `config.ts` flag, flipping it would have sent the 1b fixture's
+ * replay down the publish branch and broken it. Had it been an input field, the
+ * parked review could never have published without being restarted — destroying
+ * the twenty-hour parked history that is the whole durability demonstration.
+ *
+ * The CLI resolves `ENABLE_PUBLISH_LEG` into the payload, exactly as it already
+ * resolves `ENABLE_BUILD_AUDIT` into the input.
+ */
+export const approve = wf.defineSignal<[boolean?, boolean?]>('approve');
 export const reject = wf.defineSignal<[string]>('reject');
 export const applyPatches = wf.defineSignal<[string[]]>('applyPatches');
 export const rereview = wf.defineSignal<[]>('rereview');
@@ -102,7 +135,45 @@ const light = {
     startToCloseTimeout: '1 minute',
     retry: { maximumAttempts: 1 },
   }),
+  // 1 attempt + idempotency enforced inside the activity (spec §7.4/§8.7).
+  // `nonRetryableErrorTypes` is belt and braces on top of the activity throwing
+  // `ApplicationFailure.nonRetryable` directly: a hash mismatch or a rejected
+  // credential will never come good by trying again, and retrying a publish is
+  // how duplicate PRs get opened.
+  publishing: wf.proxyActivities<Pick<typeof activities, 'publishPost'>>({
+    taskQueue: QUEUE_LIGHT,
+    startToCloseTimeout: '5 minutes',
+    retry: {
+      maximumAttempts: 1,
+      nonRetryableErrorTypes: [
+        'ContentHashMismatch',
+        'AuthError',
+        'NotFound',
+        'MalformedPost',
+        'PostMissing',
+        'UnprocessableRequest',
+      ],
+    },
+  }),
+  // 1 attempt, because the *workflow* owns the retry (spec §7.4). An activity
+  // retry policy would burn its attempts in seconds against a deploy that takes
+  // minutes; the sleep/retry loop below is the thing that actually waits.
+  verifying: wf.proxyActivities<Pick<typeof activities, 'verifyDeploy'>>({
+    taskQueue: QUEUE_LIGHT,
+    startToCloseTimeout: '2 minutes',
+    retry: { maximumAttempts: 1 },
+  }),
 };
+
+/**
+ * How many times the workflow re-checks the live origin before parking, and how
+ * long it waits between attempts. Ten attempts at 90s spans ~15 minutes, which
+ * comfortably covers a Vercel production deploy (usually 1–3 minutes) plus the
+ * human noticing the PR and merging it — without spinning forever if they went
+ * to lunch instead.
+ */
+const VERIFY_MAX_ATTEMPTS = 10;
+const VERIFY_INTERVAL = '90 seconds';
 
 export const HEAVY_ACTIVITY_OPTIONS = {
   taskQueue: QUEUE_HEAVY,
@@ -153,7 +224,7 @@ function describeActivityError(err: unknown): string {
 }
 
 type Decision =
-  | { kind: 'approve'; force: boolean }
+  | { kind: 'approve'; force: boolean; publish: boolean }
   | { kind: 'reject'; reason: string }
   | { kind: 'applyPatches'; ids: string[] }
   | { kind: 'rereview' };
@@ -179,6 +250,12 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
   let report: ReviewReport | undefined;
   let reportPath: string | undefined;
   let staleReason: string | undefined;
+  /**
+   * Set once the PR is open. Its presence is what distinguishes "approve means
+   * publish this" from "approve means resume the verification of something
+   * already published" — see the resume branch below.
+   */
+  let publishInfo: { branch: string; prUrl: string; title: string } | undefined;
 
   /**
    * Decisions awaiting processing, oldest first.
@@ -201,8 +278,8 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     pendingPatches: report?.patches.map((p) => ({ id: p.id, rationale: p.rationale })),
   }));
 
-  wf.setHandler(approve, (force?: boolean) => {
-    pending.push({ kind: 'approve', force: force === true });
+  wf.setHandler(approve, (force?: boolean, publish?: boolean) => {
+    pending.push({ kind: 'approve', force: force === true, publish: publish === true });
   });
   wf.setHandler(reject, (reason: string) => {
     pending.push({ kind: 'reject', reason });
@@ -290,6 +367,60 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     state = 'awaiting_verdict';
   }
 
+  /**
+   * The deploy-verification loop (spec §7.3 step 5).
+   *
+   * Returns `true` when production agrees the post is live — the only thing
+   * allowed to declare a publish complete (design rule 7). Returns `false` when
+   * attempts are exhausted, having parked the workflow back on the durable wait
+   * with an explanatory message.
+   *
+   * **Exhaustion is the expected outcome, not the error case.** The Steward does
+   * not merge; a human does. Until they do, every attempt fails for a perfectly
+   * good reason, and the workflow's job is to say so clearly and wait rather
+   * than to fail.
+   */
+  async function runVerification(): Promise<boolean> {
+    state = 'verifying_deploy';
+    staleReason = undefined;
+
+    for (let attempt = 1; attempt <= VERIFY_MAX_ATTEMPTS; attempt++) {
+      const result = await light.verifying.verifyDeploy({
+        slug: input.slug,
+        collection,
+        title: publishInfo!.title,
+      });
+
+      report!.publish = {
+        ...report!.publish,
+        deployVerified: result.deployVerified,
+        verification: result.verification,
+      };
+
+      if (result.deployVerified) {
+        reportPath = (await light.reporting.archiveReport(report!)).reportPath;
+        state = 'published';
+        return true;
+      }
+
+      if (attempt < VERIFY_MAX_ATTEMPTS) await wf.sleep(VERIFY_INTERVAL);
+    }
+
+    // Parked, not failed. State goes back to `publishing` — the PR is open and
+    // the publish is genuinely incomplete, and calling it `awaiting_verdict`
+    // would suggest the verdict is still owed when it was given long ago.
+    const failed = report!.publish.verification?.filter((v) => !v.ok).map((v) => v.check) ?? [];
+    state = 'publishing';
+    staleReason =
+      `PR open, awaiting merge: ${publishInfo!.prUrl}. ` +
+      `Verification against production did not pass after ${VERIFY_MAX_ATTEMPTS} attempts ` +
+      `(still failing: ${failed.join(', ') || 'none recorded'}). ` +
+      `This is the expected state until the PR is merged — the Steward never merges. ` +
+      `Merge it, then send \`approve\` again to resume verification.`;
+    reportPath = (await light.reporting.archiveReport(report!)).reportPath;
+    return false;
+  }
+
   await runFanOut();
 
   // -------------------------------------------------------------------------
@@ -369,7 +500,36 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       return report!;
     }
 
-    // approve
+    // ---- approve --------------------------------------------------------
+    //
+    // **Resume, not re-publish.** If a PR is already open, a repeat `approve` is
+    // the documented way to say "I have merged it, carry on" (§8.7's
+    // park-on-unmerged-PR behaviour). It is an *idempotent resume*: the workflow
+    // goes straight back to verifying the live origin.
+    //
+    // Two things it deliberately does NOT do:
+    //
+    // 1. **It does not re-run `publishPost`.** After a merge, resetting the
+    //    branch to base finds nothing to commit and the merged PR is closed, so
+    //    a re-publish would try to open a second PR and get a 422 for its
+    //    trouble — turning a successful publish into a hard failure at the last
+    //    step.
+    // 2. **It ignores the signal's `publish` payload entirely.** That decision
+    //    was consumed once, at the first approve, and is already in history. A
+    //    resume signal carrying `publish: false` must not be read as
+    //    "un-publish" — there is no such operation, the commit is on the default
+    //    branch, and the only honest thing to do is keep verifying. Re-evaluating
+    //    the payload here would also make the outcome depend on which flag
+    //    happened to be set at resume time, which is the exact class of bug
+    //    design rule 10 exists to prevent.
+    //
+    // The block/force and content-hash gates are skipped for the same reason:
+    // they guard the transition *into* publishing, which already happened.
+    if (publishInfo) {
+      if (await runVerification()) return report!;
+      continue;
+    }
+
     if (report!.overall === 'block' && !decision.force) {
       staleReason =
         'Approve refused: the report has blocking findings. Fix them and send `rereview`, or approve with --force.';
@@ -394,10 +554,30 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     };
     staleReason = undefined;
 
-    // Publish leg is Phase 2b (config ENABLE_PUBLISH_LEG). Phase 1a records the
-    // decision, re-archives, and completes.
+    // Without the publish leg, an approve records the decision and completes.
+    // This is the branch every history written before Phase 2 took, and the
+    // branch the Phase 1b replay fixture still takes (its recorded `approve`
+    // carries no `publish` payload).
+    if (!decision.publish) {
+      reportPath = (await light.reporting.archiveReport(report!)).reportPath;
+      state = 'approved';
+      return report!;
+    }
+
+    // ---- Publish leg (spec §7.3 step 5, §8.7, §8.8) ----------------------
+    state = 'publishing';
+    const published = await light.publishing.publishPost({ report: report! });
+    publishInfo = published;
+    report!.publish = {
+      ...report!.publish,
+      branch: published.branch,
+      prUrl: published.prUrl,
+    };
+    // Archive as soon as the PR exists. If verification then parks for a week,
+    // the PR URL is already durable on disk rather than only in workflow memory.
     reportPath = (await light.reporting.archiveReport(report!)).reportPath;
-    state = 'approved';
-    return report!;
+
+    if (await runVerification()) return report!;
+    continue;
   }
 }
