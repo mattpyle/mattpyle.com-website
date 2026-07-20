@@ -230,3 +230,80 @@ test('a dry-run PR body is unmistakably marked', () => {
   assert.match(body, /DRY RUN/);
   assert.match(body, /do not merge/i);
 });
+
+// ---------------------------------------------------------------------------
+// CRLF. Added after a real publish PR shipped a corrupted file.
+//
+// Every test above builds its fixture with `\n`, so the whole suite was
+// structurally incapable of catching a line-ending bug — and the author's
+// checkout is CRLF, so the bug was live on every real post while the suite
+// stayed green. The dry run missed it too: it used a fixture that happened to
+// be LF. This block exists so "green tests" and "works on the real machine"
+// stop being different claims.
+// ---------------------------------------------------------------------------
+
+import matter from 'gray-matter';
+
+function postCRLF(fm: string, body = '\r\n## A heading\r\n\r\nSome prose.\r\n'): string {
+  return `---\r\n${fm.replace(/\n/g, '\r\n')}\r\n---${body}`;
+}
+
+test('CRLF: the flipped frontmatter is still parseable YAML', () => {
+  const raw = postCRLF(`title: "A Post"\ndate: 2026-07-18\ndraft: true`);
+  const result = flipDraftFrontmatter(raw, TODAY);
+
+  // The strongest available assertion: the thing the site build actually does.
+  // The shipped bug welded the opening `---` onto the `title:` line, which made
+  // `date` read as undefined and failed the build with "published writing
+  // requires a date field" — a symptom two steps removed from its cause.
+  const parsed = matter(result.content);
+  assert.equal(parsed.data.title, 'A Post');
+  assert.equal(parsed.data.draft, false);
+  assert.ok(parsed.data.date, '`date` must survive the flip');
+});
+
+test('CRLF: draft becomes exactly "false", not "falsee"', () => {
+  const raw = postCRLF(`title: "A Post"\ndate: 2026-07-18\ndraft: true`);
+  const result = flipDraftFrontmatter(raw, TODAY);
+
+  // The off-by-one re-appended the final `e` of `true` to the replacement.
+  assert.match(result.content, /^draft: false\r?$/m);
+  assert.doesNotMatch(result.content, /falsee/);
+});
+
+test('CRLF: the opening fence keeps its own line', () => {
+  const raw = postCRLF(`title: "A Post"\ndate: 2026-07-18\ndraft: true`);
+  const result = flipDraftFrontmatter(raw, TODAY);
+
+  assert.ok(result.content.startsWith('---\r\n'), 'opening fence must be followed by its newline');
+  assert.doesNotMatch(result.content, /---\rtitle/, 'fence must not be welded onto the title line');
+});
+
+test('CRLF: the body is byte-identical and line endings are preserved', () => {
+  const body = '\r\nSome prose with an em dash — and a $dollar.\r\n';
+  const raw = postCRLF(`title: "A Post"\ndate: 2026-07-18\ndraft: true`, body);
+  const result = flipDraftFrontmatter(raw, TODAY);
+
+  assert.ok(result.content.endsWith(body), 'the body must not be touched at all');
+  // A file that went in CRLF must not come out half-converted.
+  assert.equal((result.content.match(/(?<!\r)\n/g) ?? []).length, 0, 'a bare LF appeared in a CRLF file');
+});
+
+test('CRLF: a missing date is inserted with CRLF, not LF', () => {
+  const raw = postCRLF(`title: "A Post"\ndraft: true`);
+  const result = flipDraftFrontmatter(raw, TODAY);
+
+  assert.equal(result.dateAction, 'added');
+  assert.equal((result.content.match(/(?<!\r)\n/g) ?? []).length, 0, 'inserted line used a bare LF');
+  assert.ok(matter(result.content).data.date, 'inserted date must parse');
+});
+
+test('LF files are still handled correctly', () => {
+  // The fix must not trade one line-ending bug for its mirror image.
+  const raw = post(`title: "A Post"\ndate: 2026-07-18\ndraft: true`);
+  const result = flipDraftFrontmatter(raw, TODAY);
+
+  assert.doesNotMatch(result.content, /\r/, 'a CR appeared in an LF file');
+  assert.equal(matter(result.content).data.draft, false);
+  assert.ok(matter(result.content).data.date);
+});

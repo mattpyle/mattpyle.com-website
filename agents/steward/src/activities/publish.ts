@@ -58,7 +58,12 @@ export interface FlipResult {
  * `modifiedTime` into the freshness signals CLAUDE.md cares about.
  */
 export function flipDraftFrontmatter(raw: string, todayIso: string): FlipResult {
-  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  // The opening and closing fences are CAPTURED, not assumed. The first version
+  // of this reconstructed the file with `raw.slice(0, fmMatch.index + 4)`, i.e.
+  // a hardcoded length for `---\n` — which is 5 characters on a CRLF checkout,
+  // and every file on the author's Windows machine is CRLF. See the comment on
+  // the reconstruction below for what that actually produced.
+  const fmMatch = raw.match(/^(---\r?\n)([\s\S]*?)(\r?\n---)/);
   if (!fmMatch) {
     throw ApplicationFailure.nonRetryable(
       'The post has no YAML frontmatter block; refusing to guess at its structure.',
@@ -75,33 +80,61 @@ export function flipDraftFrontmatter(raw: string, todayIso: string): FlipResult 
     );
   }
 
-  let block = fmMatch[1];
+  const openFence = fmMatch[1];
+  const closeFence = fmMatch[3];
+  let block = fmMatch[2];
   const original = block;
 
   // draft: true -> false. If it already says false, this is a no-op, which is
   // what makes a repeated publish safe.
-  block = block.replace(/^(\s*draft\s*:\s*)true\s*$/m, '$1false');
+  //
+  // `(\r?)$` rather than `\s*$`: `\s` matches `\r`, so the original pattern
+  // CONSUMED the carriage return on a CRLF file and the replacement never put
+  // it back — silently converting one line of a CRLF file to LF and corrupting
+  // the byte offsets everything after it depended on.
+  block = block.replace(/^([ \t]*draft[ \t]*:[ \t]*)true[ \t]*(\r?)$/m, '$1false$2');
 
   // date: refreshed only when clearly stale. A date the human set deliberately
   // (say, a post dated for an event) must survive — so the rule is deliberately
   // conservative: only a date more than 30 days in the past gets moved.
   let dateAction: FlipResult['dateAction'] = 'left';
-  const dateMatch = block.match(/^(\s*date\s*:\s*)(.+?)\s*$/m);
+  // Same `(\r?)$` treatment as the draft flip, for the same reason.
+  const DATE_RE = /^([ \t]*date[ \t]*:[ \t]*)(.+?)[ \t]*(\r?)$/m;
+  const dateMatch = block.match(DATE_RE);
   if (!dateMatch) {
-    block = `date: ${todayIso}\n${block}`;
+    // Match the file's own line ending rather than assuming LF — an inserted
+    // `\n` into an otherwise-CRLF frontmatter block is the same class of bug.
+    const eol = openFence.includes('\r\n') ? '\r\n' : '\n';
+    block = `date: ${todayIso}${eol}${block}`;
     dateAction = 'added';
   } else {
     const existing = new Date(dateMatch[2].replace(/^['"]|['"]$/g, ''));
     const today = new Date(todayIso);
     const ageDays = (today.getTime() - existing.getTime()) / 86_400_000;
     if (Number.isNaN(existing.getTime()) || ageDays > 30) {
-      block = block.replace(/^(\s*date\s*:\s*)(.+?)\s*$/m, `$1${todayIso}`);
+      block = block.replace(DATE_RE, `$1${todayIso}$3`);
       dateAction = 'refreshed';
     }
   }
 
+  // Reconstructed from the CAPTURED fences, so the arithmetic cannot drift from
+  // the pattern that produced it.
+  //
+  // What the previous hardcoded-`4` version produced on a CRLF file, verified in
+  // a real publish PR: `slice(0, index + 4)` kept the `\r` and dropped the `\n`,
+  // welding the opening `---` onto the `title:` line and making the YAML
+  // unparseable — so `date` read as undefined and the Vercel build failed with
+  // "published writing requires a date field". The tail slice was short by the
+  // same one byte, re-appending the final `e` of `true` to give `draft: falsee`.
+  // One off-by-one, two unrelated-looking symptoms, neither caught by any test.
   const content =
-    block === original ? raw : raw.slice(0, fmMatch.index! + 4) + block + raw.slice(fmMatch.index! + 4 + original.length);
+    block === original
+      ? raw
+      : raw.slice(0, fmMatch.index!) +
+        openFence +
+        block +
+        closeFence +
+        raw.slice(fmMatch.index! + fmMatch[0].length);
 
   return { content, title, changed: content !== raw, dateAction };
 }
