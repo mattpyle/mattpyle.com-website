@@ -13,7 +13,7 @@ function unknownFinding(word: string): Finding {
     id: 'cspell-1',
     pass: 'cspell',
     severity: 'flag',
-    message: `"${word}" is not in the dictionary (suggestions: x, y). Fix it, or add it to cspell.config.yaml if it is jargon.`,
+    message: `"${word}" is not in the dictionary (suggestions: x, y). Fix it, or add it to cspell.shared.yaml (\`steward dict-add\`) if it is jargon.`,
     file: 'src/content/writing/post.md',
     line: 1,
   } as Finding;

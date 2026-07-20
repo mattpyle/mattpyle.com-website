@@ -2,10 +2,17 @@ import fs from 'node:fs/promises';
 import { CSPELL_CONFIG } from '../config.js';
 
 /**
- * Appends a word to the Steward's project dictionary.
+ * Appends a word to the shared project dictionary (`cspell.shared.yaml` at the
+ * repo root).
+ *
+ * Since Phase 2 Part A this is the dictionary the site's `npm run spellcheck`
+ * uses too, so a `dict-add` now teaches both consumers at once. That is the
+ * point: the previous arrangement let the Steward accept a word the site's CI
+ * still flagged, which meant the Steward could publish a post that turned the
+ * repo red.
  *
  * **Scope of the sort.** "Kept sorted and deduplicated" is applied *within a
- * dedicated section*, not across the whole file. `cspell.config.yaml` groups its
+ * dedicated section*, not across the whole file. The shared dictionary groups its
  * words under comment headings (standards, tools, proper nouns, en-GB
  * collateral) and several entries carry per-word attribution comments recording
  * why they were admitted. A global sort would scatter those groups and orphan

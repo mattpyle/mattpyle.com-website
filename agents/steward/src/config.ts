@@ -92,7 +92,21 @@ export const QUEUE_HEAVY = 'steward-heavy';
 export const REVIEWS_DIR = process.env.STEWARD_REVIEWS_DIR
   ? path.resolve(process.env.STEWARD_REVIEWS_DIR)
   : path.join(STEWARD_DIR, 'reviews');
-export const CSPELL_CONFIG = path.join(STEWARD_DIR, 'cspell.config.yaml');
+/**
+ * The shared spelling dictionary, at the REPO ROOT — not under `agents/steward`.
+ *
+ * One file, two consumers: this activity and the site's `npm run spellcheck`
+ * (which reaches it via `import` in `cspell.json`). It moved out of the Steward
+ * workspace in Phase 2 Part A, when the publish leg made a divergence between
+ * the two dictionaries able to publish a post the site's own CI marks red.
+ *
+ * **Read directly, not via `import:`.** `readConfigFile` does NOT resolve
+ * cspell's `import` key — a config that imports its wordlist comes back with
+ * `words: undefined`. Pointing this at a thin config that imports the shared
+ * file would empty the Steward's dictionary. Verified empirically; it is why
+ * the shared file holds the words inline and this constant names it directly.
+ */
+export const CSPELL_CONFIG = path.join(REPO_ROOT, 'cspell.shared.yaml');
 export const RUBRICS_DIR = path.join(STEWARD_DIR, 'src', 'rubrics');
 
 export const WEB_UI = 'http://localhost:8233';

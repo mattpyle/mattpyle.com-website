@@ -20,7 +20,7 @@ import matter from 'gray-matter';
  * this filter excludes it without needing to name it.
  *
  * When this fails, the fix is almost always to add the flagged term to
- * `agents/steward/cspell.config.yaml` — but read it first. A real typo in a
+ * `cspell.shared.yaml` — but read it first. A real typo in a
  * published post is exactly what this check is also capable of catching.
  */
 
@@ -82,6 +82,6 @@ test('every published post is spelling-clean (the dictionary has not gone stale)
     offenders,
     [],
     `cspell flagged published prose. Either the dictionary is stale (add the term to ` +
-      `agents/steward/cspell.config.yaml) or these are real typos:\n  ${offenders.join('\n  ')}`,
+      `cspell.shared.yaml) or these are real typos:\n  ${offenders.join('\n  ')}`,
   );
 });

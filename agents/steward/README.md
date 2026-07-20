@@ -177,10 +177,23 @@ command yet (`temporal workflow signal --name rereview` will drive it).
 
 ## Authoring notes: spelling
 
-The Steward's dictionary is `agents/steward/cspell.config.yaml`, deliberately
-separate from the site's own `cspell.json`. Its language is **en-GB** as of
-2026-07-19 — but see spec §8.2 before drawing conclusions from a green run:
-en-GB stops penalising British inflections, it does **not** reject US spellings.
+The dictionary is `cspell.shared.yaml` **at the repo root**, and it is shared
+with the site's own `npm run spellcheck` (which reaches it via `import` in
+`cspell.json`). It moved there in Phase 2 Part A and is no longer the Steward's
+alone: the two configs had drifted, and once the Steward could open publish PRs
+that drift meant it could approve a post the site's CI then marked red.
+
+Consequences worth knowing:
+
+- **A `dict-add` now teaches both.** That is the point, not a side effect.
+- **The Steward reads the file directly, not via `import:`.** cspell's
+  `readConfigFile` does not resolve `import`, so the words must stay inline.
+  A wordlist moved behind an import loads as empty — the loader refuses to run
+  rather than emitting `block` findings against correct prose, but the cause is
+  not obvious from the message unless you know this.
+- Its language is **en-GB** as of 2026-07-19 — but see spec §8.2 before drawing
+  conclusions from a green run: en-GB stops penalising British inflections, it
+  does **not** reject US spellings.
 
 There are three ways to resolve a spelling flag, and they are not
 interchangeable.
