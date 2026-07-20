@@ -1,0 +1,45 @@
+{
+  "collection": "writing",
+  "slug": "hello-world",
+  "provenance": "mixed",
+  "draft": true,
+  "words": 1121,
+  "runs": [
+    {
+      "run": 1,
+      "aiLikenessScore": 18,
+      "tellCounts": {
+        "NOT_X_BUT_Y": 0,
+        "ZINGER_BOLDING": 1,
+        "RULE_OF_THREE": 1,
+        "EM_DASH_DENSITY": 0,
+        "UNIFORM_RHYTHM": 0,
+        "HEDGED_SYMMETRY": 0,
+        "STOCK_TRANSITIONS": 0,
+        "LIST_INFLATION": 1
+      },
+      "durationMs": 9181,
+      "rubricSha256": "4ed89adce6bd023a8c021a46c52ceea95be1b4364343b17a362061b6a05e84fb",
+      "model": "claude-sonnet-4-6",
+      "at": "2026-07-20T04:43:00.233Z"
+    },
+    {
+      "run": 2,
+      "aiLikenessScore": 18,
+      "tellCounts": {
+        "NOT_X_BUT_Y": 0,
+        "ZINGER_BOLDING": 1,
+        "RULE_OF_THREE": 2,
+        "EM_DASH_DENSITY": 0,
+        "UNIFORM_RHYTHM": 0,
+        "HEDGED_SYMMETRY": 0,
+        "STOCK_TRANSITIONS": 0,
+        "LIST_INFLATION": 0
+      },
+      "durationMs": 8262,
+      "rubricSha256": "4ed89adce6bd023a8c021a46c52ceea95be1b4364343b17a362061b6a05e84fb",
+      "model": "claude-sonnet-4-6",
+      "at": "2026-07-20T04:43:08.495Z"
+    }
+  ]
+}

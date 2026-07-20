@@ -4,8 +4,8 @@
   "collection": "writing",
   "mode": "gate",
   "file": "src/content/writing/hello-world.md",
-  "contentSha256": "71dbf316eef8638ed20680ef328de4d70da7b966a02ec32f08f75a2bd39791c8",
-  "reviewedAt": "2026-07-20T04:53:01.291Z",
+  "contentSha256": "176fc4e5abf11ade623bd5b6715a73d6aa4e0692bae91d0947b5dc75dc1efbdb",
+  "reviewedAt": "2026-07-20T04:48:37.018Z",
   "workflowId": "steward-review-hello-world",
   "runId": "019f7914-a3ce-71f2-8ab9-f7cb65972510",
   "passes": [
@@ -17,14 +17,14 @@
           "id": "cspell-1",
           "pass": "cspell",
           "severity": "flag",
-          "message": "\"matthewpyle\" is not in the dictionary (suggestions: mattpyle). Fix it, or add it to cspell.shared.yaml (`steward dict-add`) if it is jargon. — likely typo: no evidence it is a name; defaulting to typo so a human looks before it is admitted",
+          "message": "\"matthewpyle\" is not in the dictionary (suggestions: mattpyle). Fix it, or add it to cspell.shared.yaml (`steward dict-add`) if it is jargon. — likely proper noun (suggest `steward dict-add matthewpyle`): author's former domain name used as a proper noun",
           "file": "src/content/writing/hello-world.md",
           "line": 25,
           "excerpt": "*side note: Before this domain, I owned `matthewpyle.com` but the only people who call me Matthew are the government and my mum when I've done something wrong.*"
         }
       ],
-      "startedAt": "2026-07-20T04:52:25.115Z",
-      "durationMs": 48,
+      "startedAt": "2026-07-20T04:47:51.199Z",
+      "durationMs": 389,
       "toolVersion": "cspell-lib unknown"
     },
     {
@@ -32,7 +32,7 @@
       "verdict": "flag",
       "findings": [
         {
-          "id": "vale-30",
+          "id": "vale-32",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -41,7 +41,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-31",
+          "id": "vale-33",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -50,7 +50,7 @@
           "excerpt": "are"
         },
         {
-          "id": "vale-32",
+          "id": "vale-34",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -59,7 +59,7 @@
           "excerpt": "are"
         },
         {
-          "id": "vale-33",
+          "id": "vale-35",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'there's'.",
@@ -68,7 +68,7 @@
           "excerpt": "there's"
         },
         {
-          "id": "vale-34",
+          "id": "vale-36",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -77,7 +77,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-35",
+          "id": "vale-37",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -86,7 +86,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-4",
+          "id": "vale-5",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Weasel (warning): 'very' is a weasel word!",
@@ -95,7 +95,7 @@
           "excerpt": "very"
         },
         {
-          "id": "vale-36",
+          "id": "vale-38",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
@@ -104,7 +104,7 @@
           "excerpt": "been"
         },
         {
-          "id": "vale-37",
+          "id": "vale-39",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -113,7 +113,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-38",
+          "id": "vale-40",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -122,7 +122,7 @@
           "excerpt": "are"
         },
         {
-          "id": "vale-5",
+          "id": "vale-6",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'are published' may be passive voice. Use active voice if you can.",
@@ -131,7 +131,7 @@
           "excerpt": "are published"
         },
         {
-          "id": "vale-6",
+          "id": "vale-7",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'are shared' may be passive voice. Use active voice if you can.",
@@ -140,7 +140,7 @@
           "excerpt": "are shared"
         },
         {
-          "id": "vale-39",
+          "id": "vale-41",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -149,7 +149,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-40",
+          "id": "vale-42",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
@@ -158,7 +158,7 @@
           "excerpt": "be"
         },
         {
-          "id": "vale-41",
+          "id": "vale-43",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -167,7 +167,7 @@
           "excerpt": "are"
         },
         {
-          "id": "vale-42",
+          "id": "vale-44",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'there's'.",
@@ -176,7 +176,7 @@
           "excerpt": "there's"
         },
         {
-          "id": "vale-7",
+          "id": "vale-8",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'be read' may be passive voice. Use active voice if you can.",
@@ -185,7 +185,7 @@
           "excerpt": "be read"
         },
         {
-          "id": "vale-8",
+          "id": "vale-9",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'been added' may be passive voice. Use active voice if you can.",
@@ -194,7 +194,7 @@
           "excerpt": "been added"
         },
         {
-          "id": "vale-9",
+          "id": "vale-10",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'be written' may be passive voice. Use active voice if you can.",
@@ -203,7 +203,7 @@
           "excerpt": "be written"
         },
         {
-          "id": "vale-43",
+          "id": "vale-45",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -212,7 +212,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-44",
+          "id": "vale-46",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
@@ -221,7 +221,7 @@
           "excerpt": "be"
         },
         {
-          "id": "vale-45",
+          "id": "vale-47",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
@@ -230,7 +230,7 @@
           "excerpt": "been"
         },
         {
-          "id": "vale-46",
+          "id": "vale-48",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -239,7 +239,7 @@
           "excerpt": "are"
         },
         {
-          "id": "vale-47",
+          "id": "vale-49",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
@@ -248,7 +248,7 @@
           "excerpt": "be"
         },
         {
-          "id": "vale-48",
+          "id": "vale-50",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -266,7 +266,7 @@
           "excerpt": "There are"
         },
         {
-          "id": "vale-49",
+          "id": "vale-51",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -275,7 +275,7 @@
           "excerpt": "are"
         },
         {
-          "id": "vale-50",
+          "id": "vale-52",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
@@ -284,7 +284,7 @@
           "excerpt": "be"
         },
         {
-          "id": "vale-51",
+          "id": "vale-53",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -293,7 +293,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-52",
+          "id": "vale-54",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -302,7 +302,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-53",
+          "id": "vale-55",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -311,7 +311,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-10",
+          "id": "vale-11",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Weasel (warning): 'very' is a weasel word!",
@@ -320,7 +320,7 @@
           "excerpt": "very"
         },
         {
-          "id": "vale-54",
+          "id": "vale-56",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -329,7 +329,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-55",
+          "id": "vale-57",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
@@ -338,7 +338,7 @@
           "excerpt": "being"
         },
         {
-          "id": "vale-11",
+          "id": "vale-12",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.TooWordy (warning): 'in order to' is too wordy.",
@@ -347,7 +347,7 @@
           "excerpt": "in order to"
         },
         {
-          "id": "vale-56",
+          "id": "vale-58",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -356,48 +356,12 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-57",
-          "pass": "vale",
-          "severity": "flag",
-          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 45,
-          "excerpt": "is"
-        },
-        {
-          "id": "vale-58",
-          "pass": "vale",
-          "severity": "flag",
-          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 49,
-          "excerpt": "is"
-        },
-        {
-          "id": "vale-12",
-          "pass": "vale",
-          "severity": "flag",
-          "message": "write-good.TooWordy (warning): 'It is' is too wordy.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 51,
-          "excerpt": "It is"
-        },
-        {
-          "id": "vale-13",
-          "pass": "vale",
-          "severity": "flag",
-          "message": "write-good.Passive (warning): 'is implemented' may be passive voice. Use active voice if you can.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 51,
-          "excerpt": "is implemented"
-        },
-        {
           "id": "vale-59",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
           "file": "src/content/writing/hello-world.md",
-          "line": 51,
+          "line": 45,
           "excerpt": "is"
         },
         {
@@ -406,11 +370,47 @@
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
           "file": "src/content/writing/hello-world.md",
+          "line": 49,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-13",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'It is' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "It is"
+        },
+        {
+          "id": "vale-14",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is implemented' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "is implemented"
+        },
+        {
+          "id": "vale-61",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
           "line": 51,
           "excerpt": "is"
         },
         {
-          "id": "vale-14",
+          "id": "vale-62",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-15",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'being demonstrated' may be passive voice. Use active voice if you can.",
@@ -419,7 +419,7 @@
           "excerpt": "being demonstrated"
         },
         {
-          "id": "vale-61",
+          "id": "vale-63",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
@@ -428,7 +428,7 @@
           "excerpt": "being"
         },
         {
-          "id": "vale-62",
+          "id": "vale-64",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -437,7 +437,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-63",
+          "id": "vale-65",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -446,7 +446,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-15",
+          "id": "vale-16",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.TooWordy (warning): 'However' is too wordy.",
@@ -455,7 +455,7 @@
           "excerpt": "However"
         },
         {
-          "id": "vale-16",
+          "id": "vale-17",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'are launched' may be passive voice. Use active voice if you can.",
@@ -464,7 +464,7 @@
           "excerpt": "are launched"
         },
         {
-          "id": "vale-64",
+          "id": "vale-66",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -473,7 +473,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-65",
+          "id": "vale-67",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -491,7 +491,7 @@
           "excerpt": "So "
         },
         {
-          "id": "vale-66",
+          "id": "vale-68",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -509,7 +509,7 @@
           "excerpt": "in in"
         },
         {
-          "id": "vale-17",
+          "id": "vale-18",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Illusions (warning): 'in' is repeated!",
@@ -518,7 +518,7 @@
           "excerpt": "in in"
         },
         {
-          "id": "vale-18",
+          "id": "vale-19",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'be assured' may be passive voice. Use active voice if you can.",
@@ -527,7 +527,7 @@
           "excerpt": "be assured"
         },
         {
-          "id": "vale-67",
+          "id": "vale-69",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'am'.",
@@ -536,7 +536,7 @@
           "excerpt": "am"
         },
         {
-          "id": "vale-68",
+          "id": "vale-70",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -545,7 +545,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-69",
+          "id": "vale-71",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
@@ -554,7 +554,7 @@
           "excerpt": "be"
         },
         {
-          "id": "vale-70",
+          "id": "vale-72",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
@@ -563,7 +563,7 @@
           "excerpt": "be"
         },
         {
-          "id": "vale-19",
+          "id": "vale-20",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.TooWordy (warning): 'However' is too wordy.",
@@ -572,7 +572,7 @@
           "excerpt": "However"
         },
         {
-          "id": "vale-71",
+          "id": "vale-73",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -581,7 +581,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-72",
+          "id": "vale-74",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -590,7 +590,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-20",
+          "id": "vale-21",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'is enrolled' may be passive voice. Use active voice if you can.",
@@ -599,7 +599,7 @@
           "excerpt": "is enrolled"
         },
         {
-          "id": "vale-73",
+          "id": "vale-75",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -608,7 +608,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-21",
+          "id": "vale-22",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Weasel (warning): 'very' is a weasel word!",
@@ -617,7 +617,7 @@
           "excerpt": "very"
         },
         {
-          "id": "vale-22",
+          "id": "vale-23",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'being built' may be passive voice. Use active voice if you can.",
@@ -626,7 +626,7 @@
           "excerpt": "being built"
         },
         {
-          "id": "vale-74",
+          "id": "vale-76",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -635,7 +635,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-75",
+          "id": "vale-77",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -644,7 +644,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-76",
+          "id": "vale-78",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
@@ -653,7 +653,7 @@
           "excerpt": "being"
         },
         {
-          "id": "vale-23",
+          "id": "vale-24",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'being used' may be passive voice. Use active voice if you can.",
@@ -662,7 +662,7 @@
           "excerpt": "being used"
         },
         {
-          "id": "vale-77",
+          "id": "vale-79",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -671,7 +671,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-78",
+          "id": "vale-80",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
@@ -680,7 +680,16 @@
           "excerpt": "being"
         },
         {
-          "id": "vale-24",
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "Vale.Repetition (error): 'also' is repeated!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "also also"
+        },
+        {
+          "id": "vale-25",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'been diagnosed' may be passive voice. Use active voice if you can.",
@@ -689,7 +698,7 @@
           "excerpt": "been diagnosed"
         },
         {
-          "id": "vale-25",
+          "id": "vale-26",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.TooWordy (warning): 'it is' is too wordy.",
@@ -698,7 +707,7 @@
           "excerpt": "it is"
         },
         {
-          "id": "vale-26",
+          "id": "vale-27",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'is captured' may be passive voice. Use active voice if you can.",
@@ -707,7 +716,16 @@
           "excerpt": "is captured"
         },
         {
-          "id": "vale-79",
+          "id": "vale-28",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Illusions (warning): 'also' is repeated!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "also also"
+        },
+        {
+          "id": "vale-81",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'It's'.",
@@ -716,7 +734,7 @@
           "excerpt": "It's"
         },
         {
-          "id": "vale-80",
+          "id": "vale-82",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -725,7 +743,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-81",
+          "id": "vale-83",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
@@ -734,7 +752,7 @@
           "excerpt": "been"
         },
         {
-          "id": "vale-27",
+          "id": "vale-29",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.Passive (warning): 'is built' may be passive voice. Use active voice if you can.",
@@ -743,7 +761,7 @@
           "excerpt": "is built"
         },
         {
-          "id": "vale-82",
+          "id": "vale-84",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -752,7 +770,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-83",
+          "id": "vale-85",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
@@ -761,7 +779,7 @@
           "excerpt": "I'm"
         },
         {
-          "id": "vale-84",
+          "id": "vale-86",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'It's'.",
@@ -770,7 +788,7 @@
           "excerpt": "It's"
         },
         {
-          "id": "vale-28",
+          "id": "vale-30",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.TooWordy (warning): 'However' is too wordy.",
@@ -779,7 +797,7 @@
           "excerpt": "However"
         },
         {
-          "id": "vale-85",
+          "id": "vale-87",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -788,7 +806,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-86",
+          "id": "vale-88",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
@@ -797,7 +815,7 @@
           "excerpt": "are"
         },
         {
-          "id": "vale-29",
+          "id": "vale-31",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.TooWordy (warning): 'multiple' is too wordy.",
@@ -806,7 +824,7 @@
           "excerpt": "multiple"
         },
         {
-          "id": "vale-87",
+          "id": "vale-89",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
@@ -815,7 +833,7 @@
           "excerpt": "is"
         },
         {
-          "id": "vale-88",
+          "id": "vale-90",
           "pass": "vale",
           "severity": "flag",
           "message": "write-good.E-Prime (suggestion): Try to avoid using 'What's'.",
@@ -824,114 +842,151 @@
           "excerpt": "What's"
         }
       ],
-      "startedAt": "2026-07-20T04:52:25.163Z",
-      "durationMs": 263,
+      "startedAt": "2026-07-20T04:47:51.380Z",
+      "durationMs": 299,
       "toolVersion": "vale version 3.15.1"
     },
     {
       "pass": "frontmatter",
       "verdict": "pass",
       "findings": [],
-      "startedAt": "2026-07-20T04:52:25.109Z",
-      "durationMs": 1
+      "startedAt": "2026-07-20T04:47:51.200Z",
+      "durationMs": 2
     },
     {
       "pass": "claims_structure",
       "verdict": "flag",
       "findings": [
         {
-          "id": "claims-6",
+          "id": "claims-7",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "buried lede: The actual point of the post — that it is a live test artifact for the Steward editorial agent — is not stated until line 45, after two full sections of site-purpose and build-in-public framing.",
+          "message": "buried lede: The section lists two stated purposes before revealing the real motivation (personal brand building under a named domain) only in the third paragraph.",
           "file": "src/content/writing/hello-world.md",
-          "line": 41,
-          "excerpt": "### This post is a test\n\nIgnore the title. This is not your typical \"Hello, World!\" article",
-          "evidence": "The title signals the post is a lie/test, but the mechanism (Steward forcing the author to write) only appears at line 45. A reader extracting the post's purpose would have to read past ~32 lines of preamble."
+          "line": 15,
+          "excerpt": "## Why this site exists\n\nThis website has two primary purposes:",
+          "evidence": "The actual lede — 'I'm looking to improve my personal brand' and the domain history — does not appear until line 21, after two paragraphs of preamble about writing and experimentation."
+        },
+        {
+          "id": "claims-patch-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: All other entries in this list use the format 'Filename.md'; 'Scoreboard-md' appears to be a formatting error where the dot was replaced with a hyphen.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 38,
+          "excerpt": "- Scoreboard-md - This captures"
         },
         {
           "id": "claims-8",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "self containment: This section is reasonably self-contained on its own, but the `/steward` path mentioned at line 39 is described only as \"the reason this post exists\" with no further resolution in the post, leaving any extracted section about Steward incomplete.",
+          "message": "self containment: The section adequately defines Steward in isolation, but the reference to 'draft: true' as a frontmatter convention is unexplained and would be opaque to a reader encountering this section without the surrounding post context.",
           "file": "src/content/writing/hello-world.md",
           "line": 51,
           "excerpt": "Steward is an editorial agent that owns the path from a draft article (`draft: true`) to published for posts on this website",
-          "evidence": "A reader encountering the Steward section in isolation would not know what the `/steward` path contains or why it is gitignored, which is referenced as load-bearing context earlier in the post."
+          "evidence": "An AI answer engine extracting only the 'What is Steward?' section would surface the backtick-quoted 'draft: true' with no explanation of what system or schema it belongs to, making the section partially unintelligible in isolation."
         },
         {
-          "id": "claims-7",
+          "id": "claims-6",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "answer first: This section opens by re-stating what was already said rather than leading with its actual new information (the local dev server setup and $0.08 API cost figure).",
+          "message": "answer first: This section opens with a backward reference ('As I alluded to') rather than its conclusion, and then mixes two distinct concepts: the current implementation state of Steward and the cost of API usage.",
           "file": "src/content/writing/hello-world.md",
           "line": 59,
           "excerpt": "### Testing Temporal and agents\n\nAs I alluded to, this post is a test.",
-          "evidence": "The section's substantive content — the Typescript SDK, the Temporal Developer skill, and the API spend — does not appear until the second and third sentences. The opening sentence adds no new conclusion."
+          "evidence": "The section's actual informational payload — that a local Temporal dev server is running with the TypeScript SDK and has cost $0.08 — is buried after wind-up. The section also conflates implementation status with a quoted AI instruction, which are separate concepts."
         },
         {
           "id": "claims-1",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "unsupported: \"Opus\" and \"Fable\" are presented as named model identifiers for Claude Code and Claude Chat respectively, but neither is attributed or verified in the post. \"Fable\" in particular is not a publicly documented Anthropic model name as of the post date.",
+          "message": "unsupported: The claim attributes specific named model identities ('Opus' in Claude Code, 'Fable' in Claude Chat) to these tools; 'Fable' is not a publicly documented Claude model name and may be incorrect or fabricated.",
           "file": "src/content/writing/hello-world.md",
           "line": 63,
           "excerpt": "both Opus in Claude Code and Fable in Claude Chat told me \"You need to write more in order for us to test this properly\"",
-          "evidence": "The post provides no source or screenshot for these model names. If these are internal or speculative names, presenting them as the models actually used is an unsupported factual claim about a named tool behavior."
-        },
-        {
-          "id": "claims-2",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "unsupported: \"Astro 7\" is cited as the version in use, but no release notes or changelog entry in the post confirms this version exists or is the one deployed.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 70,
-          "excerpt": "[Astro 7](https://astro.build/blog/astro-7/) - a lightweight framework for content-driven sites",
-          "evidence": "Version numbers are factual claims. The post provides no corroborating evidence (e.g., package.json excerpt, scorecard) that Astro 7 is the version running on the site at publish time."
-        },
-        {
-          "id": "claims-3",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "unsupported: The claim that the site is enrolled in a WebMCP Origin Trial is a specific factual assertion with no supporting evidence in the post.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 73,
-          "excerpt": "[WebMCP](https://github.com/webmachinelearning/webmcp) - This site is enrolled in the WebMCP Origin Trial",
-          "evidence": "Origin Trial enrollment is verifiable but no token, link to enrollment confirmation, or changelog entry is cited here to substantiate it."
-        },
-        {
-          "id": "claims-4",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "unsupported: The sentence attributes spell-checking to Vale, but the preceding sentence attributes it to CSpell. This is also an unsupported claim about Vale's current integration status.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 75,
-          "excerpt": "Vale does that, and is being built into Steward.",
-          "evidence": "CSpell is introduced as the spelling tool, then Vale is said to do that same job. The post does not clarify whether Vale is already integrated or only planned, making this a factual ambiguity about a named tool's behavior."
-        },
-        {
-          "id": "claims-5",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "contradiction: CSpell is introduced as the spelling checker in use, but the very next sentence says Vale does the spelling checking. The post does not resolve which tool currently performs this function.",
-          "file": "src/content/writing/hello-world.md",
-          "line": 75,
-          "excerpt": "CSpell - Since this is all markdown, I'm writing this very article in VS Code which surfaced the need to check my spelling. Vale does that",
-          "evidence": "Line 75 names CSpell as the active tool; the immediately following clause reassigns that role to Vale without explanation, creating a direct contradiction about which tool is operative."
+          "evidence": "Anthropic's publicly known Claude model tiers are named Haiku, Sonnet, and Opus. 'Fable' does not correspond to any publicly documented Anthropic model as of the post date, making this an unsupported factual claim about a named tool behavior."
         },
         {
           "id": "claims-9",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "unsupported: \"Kimi K3\" and \"GLM 5.2\" are cited as specific named models the author intends to try, but no source confirms these version designations are accurate or publicly released.",
+          "message": "self containment: This section opens with a self-deprecating disclaimer that is meaningless without the surrounding narrative context, making it misleading if extracted alone.",
           "file": "src/content/writing/hello-world.md",
-          "line": 89,
-          "excerpt": "I soon hope to try others such as Kimi K3 and GLM 5.2.",
-          "evidence": "Model version numbers are factual claims. Neither model is linked or attributed, and if either name is incorrect or speculative, the post makes a false factual assertion about a named AI product."
+          "line": 65,
+          "excerpt": "## The tech stack\n\nRight now, I am *phoning in* in the rest of this post.",
+          "evidence": "An AI answer engine pulling the tech stack section would lead with 'I am phoning in the rest of this post,' which provides no useful information and undermines the credibility of the factual list that follows."
+        },
+        {
+          "id": "claims-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: Astro 7 is cited as a specific version number with a linked release post; if that version does not exist or the link is dead, this is an unsupported factual claim about a named tool.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 70,
+          "excerpt": "[Astro 7](https://astro.build/blog/astro-7/) - a lightweight framework for content-driven sites",
+          "evidence": "As of the post date of 2026-07-18 this may be plausible, but the version number is a concrete factual claim about a named product that cannot be verified from within the post itself and warrants sourcing confirmation."
+        },
+        {
+          "id": "claims-3",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The claim that the site is enrolled in a 'WebMCP Origin Trial' is a specific factual assertion about a program status that is not evidenced anywhere in the post.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 73,
+          "excerpt": "[WebMCP](https://github.com/webmachinelearning/webmcp) - This site is enrolled in the WebMCP Origin Trial",
+          "evidence": "Origin Trial enrollment is a verifiable external status; the post asserts it as fact with no supporting link to a trial registry or confirmation page, making it an unsupported assertion."
+        },
+        {
+          "id": "claims-4",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The bullet point conflates CSpell (described as the active spelling tool) with Vale (described as doing the same job), then attributes the Vale claim to CSpell's description line, creating an unsupported assertion about which tool is actually active.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "Vale does that, and is being built into Steward.",
+          "evidence": "The CSpell bullet says 'Vale does that' but the surrounding context makes clear Vale is not yet active (line 79 lists it as a future aspiration), so the present-tense claim is unsupported by the post's own evidence."
+        },
+        {
+          "id": "claims-5",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "contradiction: The CSpell bullet says 'Vale does that' (present tense, implying Vale is the active spell checker), but line 79 lists Vale as a future aspiration ('I hope to say: Vale is being used').",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "CSpell - Since this is all markdown, I'm writing this very article in VS Code which surfaced the need to check my spelling. Vale does that, and is being built into Steward.",
+          "evidence": "Line 75 implies Vale is currently performing spell checking; line 79 places Vale in a future wishlist, directly contradicting the present-tense claim on line 75."
+        },
+        {
+          "id": "claims-patch-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: Duplicate word 'also also'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "but also also allow"
+        },
+        {
+          "id": "claims-patch-3",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: Minor: dash used where em-dash is consistent with the post's own style elsewhere, but this is mechanical punctuation not prose style — flagging only because it is a single-character substitution.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 85,
+          "excerpt": "I'm currently using both Claude and ChatGPT to build this website. It's a mix of all their offerings - Design, CLI, Codex, Desktop apps."
+        },
+        {
+          "id": "claims-10",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "overclaiming: The claim that competition is creating a healthy environment for end-users is a broad market assertion stated as established fact, not as the author's opinion.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 87,
+          "excerpt": "competition is creating a healthy environment for the end-users right now and frequent usage resets, increased limits, and promotional offers are allowing me to try different things.",
+          "evidence": "No evidence or qualification is offered for this competitive-dynamics claim; it is presented as an objective observation rather than the author's personal assessment."
         }
       ],
-      "startedAt": "2026-07-20T04:52:25.102Z",
-      "durationMs": 36142,
+      "startedAt": "2026-07-20T04:47:51.385Z",
+      "durationMs": 45594,
       "rubric": {
         "path": "agents/steward/src/rubrics/claims-structure.md",
         "sha256": "3081861efdd50232655a18f6e3d14c1ccd34a44f73f053b5c814c38a9c9a8158",
@@ -943,67 +998,92 @@
           {
             "word": "Britishisms",
             "disposition": "proper_noun",
-            "reason": "used as a self-aware cultural label, not a misspelling"
+            "reason": "used as a self-referential cultural label, not a standard dictionary word"
           },
           {
             "word": "mattpyle",
             "disposition": "proper_noun",
-            "reason": "author's domain/brand name used throughout"
+            "reason": "author's domain/username used as a proper noun throughout"
           },
           {
             "word": "WebMCP",
             "disposition": "proper_noun",
-            "reason": "named web standard/origin trial referenced by its official designation"
+            "reason": "named web platform technology referenced with a GitHub link"
           },
           {
             "word": "Temporal",
             "disposition": "proper_noun",
-            "reason": "name of the workflow orchestration product central to the post"
+            "reason": "named workflow orchestration product with a linked domain"
           },
           {
             "word": "Steward",
             "disposition": "proper_noun",
-            "reason": "name of the author's custom editorial agent system"
+            "reason": "author's named internal tool, used as a proper noun throughout"
           },
           {
             "word": "Codex",
             "disposition": "proper_noun",
-            "reason": "named AI coding tool referenced alongside Claude Code"
+            "reason": "named AI coding product referenced alongside Claude Code"
+          },
+          {
+            "word": "Astro",
+            "disposition": "proper_noun",
+            "reason": "named web framework referenced with a release link"
+          },
+          {
+            "word": "Vercel",
+            "disposition": "proper_noun",
+            "reason": "named hosting platform"
           },
           {
             "word": "CSpell",
             "disposition": "proper_noun",
-            "reason": "name of the spell-checking tool used in the repo"
+            "reason": "named spell-checking tool with a linked domain"
           },
           {
-            "word": "gitignored",
+            "word": "Vale",
             "disposition": "proper_noun",
-            "reason": "git-derived verb used as a technical term; not a standard dictionary word"
-          },
-          {
-            "word": "Fable",
-            "disposition": "typo",
-            "reason": "presented as a Claude model name but not a publicly documented Anthropic model designation; may be incorrect"
+            "reason": "named prose linting tool with a linked domain"
           },
           {
             "word": "vibe-coders",
             "disposition": "proper_noun",
-            "reason": "emerging industry slang used intentionally in context"
+            "reason": "emerging community term used as a label, unlikely to be in standard dictionaries"
           },
           {
-            "word": "a11y",
+            "word": "gitignored",
             "disposition": "proper_noun",
-            "reason": "standard accessibility numeronym used as a technical term"
-          },
-          {
-            "word": "GLM",
-            "disposition": "proper_noun",
-            "reason": "name of an AI model family referenced as a future tool to try"
+            "reason": "derived from the Git proper noun 'gitignore', used as a verb"
           },
           {
             "word": "Kimi",
             "disposition": "proper_noun",
-            "reason": "name of an AI model referenced as a future tool to try"
+            "reason": "named AI model referenced as a future tool to try"
+          },
+          {
+            "word": "GLM",
+            "disposition": "proper_noun",
+            "reason": "named AI model series referenced as a future tool to try"
+          },
+          {
+            "word": "Fable",
+            "disposition": "proper_noun",
+            "reason": "used as a named Claude model variant; may be a product name or may be erroneous — flagged for human review"
+          },
+          {
+            "word": "matthewpyle",
+            "disposition": "proper_noun",
+            "reason": "author's former domain name used as a proper noun"
+          },
+          {
+            "word": "a11y",
+            "disposition": "proper_noun",
+            "reason": "industry numeronym for accessibility, not a standard dictionary word"
+          },
+          {
+            "word": "utilising",
+            "disposition": "proper_noun",
+            "reason": "British English spelling, correct in context — flagging so spell checker does not reject it"
           }
         ]
       }
@@ -1018,13 +1098,13 @@
           "severity": "flag",
           "message": "Lighthouse best-practices scored 96, below the site floor of 100.",
           "file": "src/content/writing/hello-world.md",
-          "evidence": "url: http://127.0.0.1:52278/writing/hello-world/\nscore: 96\nfloor: 100"
+          "evidence": "url: http://127.0.0.1:59383/writing/hello-world/\nscore: 96\nfloor: 100"
         }
       ],
-      "startedAt": "2026-07-20T04:52:25.106Z",
-      "durationMs": 12025,
+      "startedAt": "2026-07-20T04:47:51.194Z",
+      "durationMs": 14555,
       "metrics": {
-        "url": "http://127.0.0.1:52278/writing/hello-world/",
+        "url": "http://127.0.0.1:59383/writing/hello-world/",
         "scores": {
           "performance": 98,
           "accessibility": 100,
@@ -1042,23 +1122,54 @@
         ],
         "axeViolations": 0,
         "axeFiltered": 0,
-        "buildMs": 4352,
-        "axeMs": 1157,
-        "lighthouseMs": 6323,
+        "buildMs": 4511,
+        "axeMs": 1235,
+        "lighthouseMs": 8325,
         "worktreeSha": "96e48028a802cfa1e8c716b4bad2f656169fd2aa",
         "npmCi": false
       }
     }
   ],
-  "patches": [],
+  "patches": [
+    {
+      "id": "patch-1",
+      "findingId": "claims-patch-1",
+      "file": "src/content/writing/hello-world.md",
+      "oldText": "- Scoreboard-md - This captures",
+      "newText": "- Scoreboard.md - This captures",
+      "rationale": "All other entries in this list use the format 'Filename.md'; 'Scoreboard-md' appears to be a formatting error where the dot was replaced with a hyphen.",
+      "source": "editorial",
+      "sourcePasses": [
+        "claims_structure"
+      ]
+    },
+    {
+      "id": "patch-2",
+      "findingId": "claims-patch-2",
+      "file": "src/content/writing/hello-world.md",
+      "oldText": "but also also allow",
+      "newText": "but also allow",
+      "rationale": "Duplicate word 'also also'.",
+      "source": "editorial",
+      "sourcePasses": [
+        "claims_structure"
+      ]
+    },
+    {
+      "id": "patch-3",
+      "findingId": "claims-patch-3",
+      "file": "src/content/writing/hello-world.md",
+      "oldText": "I'm currently using both Claude and ChatGPT to build this website. It's a mix of all their offerings - Design, CLI, Codex, Desktop apps.",
+      "newText": "I'm currently using both Claude and ChatGPT to build this website. It's a mix of all their offerings — Design, CLI, Codex, Desktop apps.",
+      "rationale": "Minor: dash used where em-dash is consistent with the post's own style elsewhere, but this is mechanical punctuation not prose style — flagging only because it is a single-character substitution.",
+      "source": "editorial",
+      "sourcePasses": [
+        "claims_structure"
+      ]
+    }
+  ],
   "overall": "flag",
-  "summary": "FLAG — nothing blocks publish, but 99 findings want a human look. cspell: flag (1 finding); vale: flag (88 findings); frontmatter: pass (0 findings); claims_structure: flag (9 findings); build_audit: flag (1 finding). No patches proposed.",
-  "human": {
-    "patchesApplied": [
-      "patch-1",
-      "patch-2",
-      "patch-3"
-    ]
-  },
+  "summary": "FLAG — nothing blocks publish, but 105 findings want a human look. cspell: flag (1 finding); vale: flag (90 findings); frontmatter: pass (0 findings); claims_structure: flag (13 findings); build_audit: flag (1 finding). 3 patches proposed.",
+  "human": {},
   "publish": {}
 }

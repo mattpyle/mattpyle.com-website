@@ -378,6 +378,146 @@ program
   });
 
 program
+  .command('score')
+  .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
+  .argument('<slug>')
+  .option('--runs <n>', 'how many times to score the piece', '2')
+  .option('--provenance <label>', 'ai | human | mixed — recorded, never inferred', 'unknown')
+  .description('Score one piece with the ai-tells rubric (validation study). No workflow, no verdict.')
+  .action(async (collectionArg: string, slug: string, opts: { runs: string; provenance: string }) => {
+    const collection = parseCollection(collectionArg);
+    const runs = Number(opts.runs);
+    if (!Number.isInteger(runs) || runs < 1) fail(`--runs must be a positive integer, got "${opts.runs}"`);
+
+    const { editorialPass } = await import('./activities/editorial.js');
+    const { readPieceMeta, savePiece } = await import('./lib/study.js');
+    const { postRelPath } = await import('./config.js');
+
+    const file = postRelPath(slug, collection);
+    // Read from the file, not from a previous study record: `draft` is a fact
+    // about the post, and taking it from the saved record made it silently
+    // always false on a first run.
+    const { words, draft } = await readPieceMeta(collection, slug);
+
+    console.log(`\n  scoring ${collection}/${slug} — ${words} words, ${runs} run(s)\n`);
+
+    const collected: import('./lib/study.js').StudyRun[] = [];
+    for (let i = 1; i <= runs; i += 1) {
+      const result = await editorialPass(file, 'ai-tells');
+      const score = result.metrics?.aiLikenessScore as number;
+      const tellCounts = result.metrics?.tellCounts as Record<string, number>;
+      const dropped = result.metrics?.droppedPatches as number;
+
+      collected.push({
+        run: i,
+        aiLikenessScore: score,
+        tellCounts,
+        durationMs: result.durationMs,
+        rubricSha256: result.rubric?.sha256 ?? '',
+        model: result.rubric?.model ?? '',
+        at: new Date().toISOString(),
+      });
+
+      const fired = Object.entries(tellCounts)
+        .filter(([, n]) => n > 0)
+        .map(([c, n]) => `${c}:${n}`)
+        .join(' ');
+      console.log(`  run ${i}: score ${String(score).padStart(3)}  ${result.findings.length} findings  ${result.durationMs}ms`);
+      console.log(`          ${fired || '(no tells fired)'}`);
+      // The rubric forbids patches; a non-zero count is a finding about the
+      // model, not about the post, and must not pass silently.
+      if (dropped > 0) console.log(`          ! ${dropped} patch(es) proposed and dropped (clamp 3)`);
+    }
+
+    const saved = await savePiece({
+      collection,
+      slug,
+      provenance: opts.provenance,
+      draft,
+      words,
+      runs: collected,
+    });
+
+    const scores = collected.map((r) => r.aiLikenessScore);
+    const spread = Math.max(...scores) - Math.min(...scores);
+    console.log(`\n  scores: ${scores.join(', ')}   spread: ${spread}${spread > 10 ? '  ← EXCEEDS the +/-10 stability bound' : ''}`);
+    console.log(`  ${saved}\n`);
+  });
+
+program
+  .command('study')
+  .description('Aggregate the ai-tells validation study and test it against the pre-registered hypothesis')
+  .action(async () => {
+    const { loadAll, analysePiece, rankBy, STABILITY_BOUND } = await import('./lib/study.js');
+    const { TELL_CATEGORIES } = await import('./lib/tells.js');
+
+    const pieces = await loadAll();
+    if (pieces.length === 0) {
+      console.log('\n  No pieces scored yet. Run `steward score <collection> <slug>`.\n');
+      return;
+    }
+
+    const rows = pieces.map(analysePiece).sort((a, b) => b.meanScore - a.meanScore);
+
+    console.log('\n  === Per-piece results ===\n');
+    console.log('  piece                                 coll       prov   words  run1  run2  spread  mean  stable');
+    for (const r of rows) {
+      const [r1, r2] = [r.scores[0], r.scores[1]];
+      console.log(
+        `  ${r.piece.slug.slice(0, 35).padEnd(35)}  ${r.piece.collection.padEnd(9)}  ${r.piece.provenance.padEnd(5)}  ` +
+          `${String(r.piece.words).padStart(5)}  ${String(r1 ?? '—').padStart(4)}  ${String(r2 ?? '—').padStart(4)}  ` +
+          `${String(r.spread).padStart(6)}  ${String(r.meanScore).padStart(4)}  ${r.stable ? 'yes' : 'NO'}`,
+      );
+    }
+
+    console.log('\n  === Per-category totals (mean findings per run) ===\n');
+    console.log(`  ${'piece'.padEnd(35)}  ${TELL_CATEGORIES.map((c) => c.slice(0, 8).padStart(8)).join(' ')}`);
+    for (const r of rows) {
+      console.log(
+        `  ${r.piece.slug.slice(0, 35).padEnd(35)}  ` +
+          TELL_CATEGORIES.map((c) => r.meanTellCounts[c].toFixed(1).padStart(8)).join(' '),
+      );
+    }
+
+    // --- The pre-registered hypothesis ------------------------------------
+    console.log('\n  === Against the pre-registered hypothesis ===\n');
+
+    const unstable = rows.filter((r) => !r.stable);
+    console.log(`  (a) STABILITY — both runs within +/-${STABILITY_BOUND}:`);
+    console.log(`      ${rows.length - unstable.length} of ${rows.length} pieces stable.` +
+      (unstable.length ? `  UNSTABLE: ${unstable.map((r) => r.piece.slug).join(', ')}` : '  (a) HOLDS.'));
+
+    // (a') binding: unstable pieces are not rankable.
+    const rankable = rows.filter((r) => r.stable);
+    if (unstable.length) {
+      console.log(`      (a') binding: ${unstable.length} piece(s) reported UNINTERPRETABLE and excluded from (b)/(c).`);
+    }
+
+    const humans = rankable.filter((r) => r.piece.provenance === 'human');
+    const changelogs = rankable.filter((r) => r.piece.collection === 'changelog');
+
+    const report = (label: string, score: (r: (typeof rankable)[number]) => number) => {
+      const ranks = rankBy(rankable, score);
+      console.log(`\n  ${label}`);
+      for (const h of humans) {
+        const below = changelogs.filter((c) => score(c) > score(h)).length;
+        const verdict = below > changelogs.length / 2 ? 'HOLDS' : 'FAILS';
+        console.log(
+          `      "${h.piece.slug}" ranks ${ranks.get(h)} of ${rankable.length}; ` +
+            `${below} of ${changelogs.length} changelog entries score HIGHER -> ${verdict}`,
+        );
+      }
+      if (humans.length === 0) console.log('      no piece labelled provenance=human — cannot evaluate.');
+    };
+
+    report('(b) SEPARATION — composite aiLikenessScore:', (r) => r.meanScore);
+    report('(c) PROVENANCE NOT GENRE — voice-driven tells per 100 words only:', (r) => r.density.voiceTellsPer100 ?? 0);
+
+    console.log('\n  Reminder: (b) rests on n=1 human-edited piece. Directional, not inferential.');
+    console.log('  Raw counts are never compared across collections; ranks and per-100w densities only.\n');
+  });
+
+program
   .command('dict-add')
   .argument('<word>')
   .description('Add a word to the Steward project dictionary (kept sorted, deduplicated)')

@@ -2,9 +2,9 @@
 title: "Hello, World! Or, this post is a lie."
 date: 2026-07-18
 updated: 2026-07-18
-description: "Testing Temporal workflows, deterministic standard, and agentic AI to build an editor for my website"
+description: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
 seoTitle: "Hello, World! Or, this post is a lie."
-seoDescription: "Testing Temporal workflows, deterministic standard, and agentic AI to build an editor for my website"
+seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
 tags: ["agents", "Temporal", "tech"]
 featured: false
 draft: true
@@ -35,7 +35,7 @@ There are a few things currently .gitignored. Aside from environment variables, 
 - AGENTS.md - *for Codex*
 - Backlog.md - An evolving set of ideas for website features, builds, and content
 - Learnings.md - A quick file to capture learnings from building. *note to self: this is actually looking outdated*
-- Scoreboard-md - This captures the output and scores from regular performance, a11y, seo, and agentic browsing checks. Now available publicly on the [scorecard](/scorecard)
+- Scoreboard.md - This captures the output and scores from regular performance, a11y, seo, and agentic browsing checks. Now available publicly on the [scorecard](/scorecard)
 - `/steward` - The reason this post exists *...more on that later*
 
 ### This post is a test
@@ -78,11 +78,11 @@ By the time this post goes live, I hope to say:
 - Temporal server, workers, and workflows
 - [Vale](https://vale.sh/) is being used to check the quality of my writing mechanically and deterministically.
 
-It's important to note one thing about Vale, CSpell, and other deterministic checks on this website. One part of Steward is to create a learning loop. Where the Editor agent finds issues that could have been diagnosed mechanically, it is captured as a learning and implemented against. This will both save costs and resources, but also also allow the agent to focus on what it will do best.
+It's important to note one thing about Vale, CSpell, and other deterministic checks on this website. One part of Steward is to create a learning loop. Where the Editor agent finds issues that could have been diagnosed mechanically, it is captured as a learning and implemented against. This will both save costs and resources, but also allow the agent to focus on what it will do best.
 
 ## How this site is built
 
-I'm currently using both Claude and ChatGPT to build this website. It's a mix of all their offerings - Design, CLI, Codex, Desktop apps.
+I'm currently using both Claude and ChatGPT to build this website. It's a mix of all their offerings — Design, CLI, Codex, Desktop apps.
 
 I tend to lean towards designing a plan with the higher-intelligence (and higher-cost) frontier models, implementing incrementally with lower-effort and lower-priced models, and continuously re-reviewing with the planners. However, competition is creating a healthy environment for the end-users right now and frequent usage resets, increased limits, and promotional offers are allowing me to try different things.
 
