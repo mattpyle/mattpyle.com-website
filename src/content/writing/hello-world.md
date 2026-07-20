@@ -7,7 +7,7 @@ seoTitle: "Hello, World! Or, this post is a lie."
 seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
 tags: ["agents", "Temporal", "tech"]
 featured: false
-draft: true
+draft: false
 ---
 
 I think I committed a cardinal sin. A "Hello, World!" post as the second published entry feels...off yet, here we are.

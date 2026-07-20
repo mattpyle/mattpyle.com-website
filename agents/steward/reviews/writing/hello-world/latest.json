@@ -1019,6 +1019,51 @@
   },
   "publish": {
     "branch": "steward/publish-hello-world",
-    "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/13"
+    "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/13",
+    "deployVerified": true,
+    "verification": [
+      {
+        "check": "html",
+        "url": "https://www.mattpyle.com/writing/hello-world/",
+        "ok": true,
+        "detail": "200 text/html, title present"
+      },
+      {
+        "check": "markdown-negotiated",
+        "url": "https://www.mattpyle.com/writing/hello-world/",
+        "ok": true,
+        "detail": "200, Vary: Accept present, frontmatter body"
+      },
+      {
+        "check": "markdown-direct",
+        "url": "https://www.mattpyle.com/writing/hello-world.md",
+        "ok": true,
+        "detail": "200, frontmatter body"
+      },
+      {
+        "check": "llms.txt",
+        "url": "https://www.mattpyle.com/llms.txt",
+        "ok": true,
+        "detail": "slug present"
+      },
+      {
+        "check": "sitemap",
+        "url": "https://www.mattpyle.com/sitemap-index.xml",
+        "ok": true,
+        "detail": "canonical URL present in https://www.mattpyle.com/sitemap-0.xml"
+      },
+      {
+        "check": "og-image",
+        "url": "https://www.mattpyle.com/og/writing/hello-world.png",
+        "ok": true,
+        "detail": "200 image/png"
+      },
+      {
+        "check": "rss",
+        "url": "https://www.mattpyle.com/rss.xml",
+        "ok": true,
+        "detail": "slug present"
+      }
+    ]
   }
 }
