@@ -41,7 +41,10 @@ function metrics(instance, fontSize) {
   return {
     ascent: instance.ascent * scale,
     descent: Math.abs(instance.descent) * scale,
-    widthOf: (text) => instance.layout(text).advanceWidth * scale,
+    widthOf: (text, letterSpacing = 0) => {
+      const run = instance.layout(text);
+      return run.advanceWidth * scale + Math.max(0, run.glyphs.length - 1) * letterSpacing;
+    },
   };
 }
 
@@ -58,7 +61,7 @@ function naturalLineHeight(instance, fontSize, lineHeightMultiplier) {
 }
 
 /** Greedy word-wrap using real glyph advances so lines never exceed maxWidth. */
-function wrapText(instance, text, fontSize, maxWidth) {
+function wrapText(instance, text, fontSize, maxWidth, letterSpacing = 0) {
   const { widthOf } = metrics(instance, fontSize);
   const words = text.split(/\s+/);
   const lines = [];
@@ -66,7 +69,7 @@ function wrapText(instance, text, fontSize, maxWidth) {
 
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word;
-    if (current && widthOf(candidate) > maxWidth) {
+    if (current && widthOf(candidate, letterSpacing) > maxWidth) {
       lines.push(current);
       current = word;
     } else {
@@ -75,6 +78,31 @@ function wrapText(instance, text, fontSize, maxWidth) {
   }
   if (current) lines.push(current);
   return lines;
+}
+
+/**
+ * Convert shaped glyphs to SVG paths using the same font instance used for
+ * measurement. Native resvg does not support the WASM-only `fontBuffers`
+ * option, so leaving text as `<text>` makes it silently use a platform font.
+ */
+function renderTextPath(instance, text, { x, baseline, fontSize, fill, letterSpacing = 0, role }) {
+  const run = instance.layout(text);
+  const scale = fontSize / instance.unitsPerEm;
+  const letterSpacingUnits = letterSpacing / scale;
+  let penX = 0;
+
+  const paths = run.glyphs.map((glyph, index) => {
+    const position = run.positions[index];
+    const glyphX = penX + position.xOffset;
+    const glyphY = position.yOffset;
+    penX += position.xAdvance + (index < run.glyphs.length - 1 ? letterSpacingUnits : 0);
+    return `<path d="${glyph.path.toSVG()}" transform="translate(${glyphX.toFixed(3)} ${glyphY.toFixed(3)})" />`;
+  }).join('\n      ');
+
+  const roleAttribute = role ? ` data-role="${role}"` : '';
+  return `<g${roleAttribute} data-text="${escapeXml(text)}" transform="translate(${x.toFixed(3)} ${baseline.toFixed(3)}) scale(${scale.toFixed(6)} ${(-scale).toFixed(6)})" fill="${fill}">
+      ${paths}
+    </g>`;
 }
 
 function escapeXml(text) {
@@ -100,8 +128,6 @@ async function main() {
   const monoRegular = monoFont.getVariation({ wght: 400 });
   const monoMedium = monoFont.getVariation({ wght: 500 });
   const serifSemibold = serifFont.getVariation({ wght: 600 });
-
-  const markPng = readFileSync(join(root, 'public', 'favicon-512x512.png')).toString('base64');
 
   // Each content collection that needs per-entry share cards, with the eyebrow
   // its card carries. Both render into public/og/<collection>/ (gitignored,
@@ -129,12 +155,11 @@ async function main() {
         monoRegular,
         monoMedium,
         serifSemibold,
-        markPng,
       });
 
-      const resvg = new Resvg(svg, {
-        font: { fontBuffers: [monoTtf, serifTtf], loadSystemFonts: false },
-      });
+      // All text is converted to paths above, so rasterisation has no platform
+      // font fallback and is deterministic between local Windows and Vercel.
+      const resvg = new Resvg(svg, { font: { loadSystemFonts: false } });
       const png = resvg.render().asPng();
       writeFileSync(join(outDir, `${slug}.png`), png);
       console.log(`generate-og-images: wrote og/${out}/${slug}.png`);
@@ -142,7 +167,7 @@ async function main() {
   }
 }
 
-function renderWritingCard({ title, date, eyebrow, monoRegular, monoMedium, serifSemibold, markPng }) {
+function renderWritingCard({ title, date, eyebrow, monoRegular, monoMedium, serifSemibold }) {
   const contentTop = PADDING;
   const contentBottom = CANVAS_HEIGHT - PADDING;
   const availableHeight = contentBottom - contentTop;
@@ -151,6 +176,9 @@ function renderWritingCard({ title, date, eyebrow, monoRegular, monoMedium, seri
   const eyebrowLineHeight = naturalLineHeight(monoMedium, eyebrowFontSize, 1.2);
 
   const fontSize = titleFontSize(title);
+  const titleLetterSpacing = fontSize * -0.02;
+  // Wrap against the untracked advance width. The rendered negative tracking
+  // only makes the result narrower, preserving a conservative right margin.
   const titleLines = wrapText(serifSemibold, title, fontSize, TITLE_MAX_WIDTH);
   const titleLineHeight = fontSize * 1.06;
   const titleBlockHeight = titleLines.length * titleLineHeight;
@@ -169,14 +197,24 @@ function renderWritingCard({ title, date, eyebrow, monoRegular, monoMedium, seri
     const { ascent } = metrics(serifSemibold, fontSize);
     const halfLeading = (titleLineHeight - (ascent + metrics(serifSemibold, fontSize).descent)) / 2;
     const baseline = titleTop + i * titleLineHeight + halfLeading + ascent;
-    const letterSpacing = (fontSize * -0.02).toFixed(2);
-    return `<text x="${PADDING}" y="${baseline.toFixed(1)}" font-family="Source Serif 4" font-weight="600" font-size="${fontSize}" letter-spacing="${letterSpacing}" fill="${COLORS.heading}">${escapeXml(line)}</text>`;
+    return renderTextPath(serifSemibold, line, {
+      x: PADDING,
+      baseline,
+      fontSize,
+      fill: COLORS.heading,
+      letterSpacing: titleLetterSpacing,
+      role: 'title-line',
+    });
   }).join('\n    ');
 
   const markSize = 40;
   const markX = PADDING;
   const markY = bottomRowTop;
   const markRadius = markSize * 0.22;
+  const markFontSize = 27;
+  const markText = 'mp';
+  const markTextX = markX + (markSize - metrics(serifSemibold, markFontSize).widthOf(markText)) / 2;
+  const markTextBaseline = centeredBaseline(markY, markSize, serifSemibold, markFontSize);
 
   const dividerX = markX + markSize + 20;
   const dividerHeight = 28;
@@ -192,25 +230,25 @@ function renderWritingCard({ title, date, eyebrow, monoRegular, monoMedium, seri
   const dateBaseline = centeredBaseline(bottomRowTop, bottomRowHeight, monoRegular, dateFontSize);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}">
-  <defs>
-    <clipPath id="mark-clip">
-      <rect x="${markX}" y="${markY}" width="${markSize}" height="${markSize}" rx="${markRadius}" ry="${markRadius}" />
-    </clipPath>
-  </defs>
   <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${COLORS.bg}" />
-  <text x="${PADDING}" y="${eyebrowBaseline.toFixed(1)}" font-family="JetBrains Mono" font-weight="500" font-size="${eyebrowFontSize}" letter-spacing="3.2" fill="${COLORS.label}">${escapeXml(eyebrow.toUpperCase())}</text>
+  ${renderTextPath(monoMedium, eyebrow.toUpperCase(), { x: PADDING, baseline: eyebrowBaseline, fontSize: eyebrowFontSize, fill: COLORS.label, letterSpacing: 3.2, role: 'eyebrow' })}
   ${titleLineSvg}
-  <image href="data:image/png;base64,${markPng}" x="${markX}" y="${markY}" width="${markSize}" height="${markSize}" clip-path="url(#mark-clip)" />
+  <rect x="${markX}" y="${markY}" width="${markSize}" height="${markSize}" rx="${markRadius}" ry="${markRadius}" fill="${COLORS.heading}" />
+  ${renderTextPath(serifSemibold, markText, { x: markTextX, baseline: markTextBaseline, fontSize: markFontSize, fill: COLORS.bg, role: 'mark' })}
   <rect x="${dividerX}" y="${dividerY.toFixed(1)}" width="1" height="${dividerHeight}" fill="${COLORS.border}" />
-  <text x="${nameX}" y="${nameBaseline.toFixed(1)}" font-family="JetBrains Mono" font-weight="400" font-size="${nameFontSize}" fill="${COLORS.text}">Matt Pyle </text>
-  <text x="${(nameX + nameWidth).toFixed(1)}" y="${nameBaseline.toFixed(1)}" font-family="JetBrains Mono" font-weight="400" font-size="${nameFontSize}" fill="${COLORS.muted}">&#8212; mattpyle.com</text>
-  <text x="${dateX}" y="${dateBaseline.toFixed(1)}" font-family="JetBrains Mono" font-weight="400" font-size="${dateFontSize}" letter-spacing="0.96" fill="${COLORS.label}" text-anchor="end">${escapeXml(date)}</text>
+  ${renderTextPath(monoRegular, 'Matt Pyle ', { x: nameX, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.text, role: 'author' })}
+  ${renderTextPath(monoRegular, '— mattpyle.com', { x: nameX + nameWidth, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.muted, role: 'domain' })}
+  ${renderTextPath(monoRegular, date, { x: dateX - metrics(monoRegular, dateFontSize).widthOf(date, 0.96), baseline: dateBaseline, fontSize: dateFontSize, fill: COLORS.label, letterSpacing: 0.96, role: 'date' })}
   <rect x="0" y="${CANVAS_HEIGHT - 10}" width="${CANVAS_WIDTH}" height="10" fill="${COLORS.accent}" />
 </svg>`;
 }
 
-main().catch((error) => {
-  console.error('generate-og-images: failed');
-  console.error(error);
-  process.exit(1);
-});
+export { loadVariableFont, main, renderTextPath, renderWritingCard, wrapText };
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error('generate-og-images: failed');
+    console.error(error);
+    process.exit(1);
+  });
+}
