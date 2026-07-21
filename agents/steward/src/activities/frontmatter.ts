@@ -26,6 +26,11 @@ const SERP_TITLE = 60;
  * The `seoDescription` row is the one with teeth. Telling a changelog author to
  * "add a short `seoDescription`" would be advice for a field the schema does not
  * have, and following it would fail the build.
+ *
+ * Nothing keeps this transcription in sync with the schema automatically — if
+ * `src/content.config.ts` changes a collection's fields, enums, or required
+ * flags, update RULES below in the same commit, or the Steward will false-block
+ * on (or silently allow) a value the schema's own rules have since changed.
  */
 interface CollectionRules {
   /** Frontmatter key that drives the dek, OG, and meta description. */
