@@ -191,3 +191,23 @@ export function workflowIdFor(slug: string, collection: Collection = 'writing'):
     ? `steward-review-${slug}`
     : `steward-review-${collection}-${slug}`;
 }
+
+/**
+ * Inverse of `workflowIdFor`. Only for read-only tooling that *discovers*
+ * workflow IDs from Temporal's visibility store (`steward inbox`, which lists
+ * open workflows rather than being told a slug directly) — everywhere else in
+ * the CLI goes slug -> id via `workflowIdFor`, never the other way.
+ *
+ * Assumes no slug for the default `writing` collection begins with another
+ * collection's `<collection>-` prefix; true today with `COLLECTIONS =
+ * ['writing', 'changelog']` and cheap to revisit if that stops holding.
+ */
+export function parseWorkflowId(workflowId: string): { slug: string; collection: Collection } {
+  const rest = workflowId.replace(/^steward-review-/, '');
+  for (const collection of COLLECTIONS) {
+    if (collection === 'writing') continue;
+    const prefix = `${collection}-`;
+    if (rest.startsWith(prefix)) return { slug: rest.slice(prefix.length), collection };
+  }
+  return { slug: rest, collection: 'writing' };
+}

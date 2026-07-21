@@ -1,4 +1,4 @@
-import { Client, Connection, WorkflowNotFoundError } from '@temporalio/client';
+import { Client, Connection, WorkflowNotFoundError, type WorkflowExecutionInfo } from '@temporalio/client';
 import { Command } from 'commander';
 import {
   ENABLE_AI_TELLS,
@@ -9,12 +9,14 @@ import {
   TEMPORAL_ADDRESS,
   WEB_UI,
   workflowIdFor,
+  parseWorkflowId,
   isCollection,
   COLLECTIONS,
   type Collection,
 } from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
 import { readArchivedReport } from './lib/read-report.js';
+import { deriveInboxHint } from './lib/inbox.js';
 import {
   reviewPost,
   approve as approveSignal,
@@ -302,6 +304,161 @@ program
       fail(`No review found for "${slug}". Start one with \`steward review ${slug}\`.\n  (${String(err)})`);
     }
     await render(c, slug, state);
+    await c.connection.close();
+  });
+
+/**
+ * Every RUNNING `reviewPost` execution — the "OPEN reviews" `inbox` lists by
+ * default.
+ *
+ * `WorkflowType='reviewPost' AND ExecutionStatus='Running'` is confirmed
+ * reliable against this project's dev server (verified live, alongside a
+ * `WorkflowId STARTS_WITH 'steward-review-'` variant that also works — see
+ * the build log). The fallback below exists for a visibility store that
+ * doesn't support `WorkflowType` in a custom query at all: list everything
+ * running and filter by type in code rather than trust an untested query on
+ * whatever server this actually runs against.
+ */
+async function listOpenReviews(c: Client): Promise<WorkflowExecutionInfo[]> {
+  const results: WorkflowExecutionInfo[] = [];
+  try {
+    for await (const info of c.workflow.list({
+      query: "WorkflowType='reviewPost' AND ExecutionStatus='Running'",
+    })) {
+      results.push(info);
+    }
+    return results;
+  } catch {
+    for await (const info of c.workflow.list({ query: "ExecutionStatus='Running'" })) {
+      if (info.type === 'reviewPost') results.push(info);
+    }
+    return results;
+  }
+}
+
+/** Same shape, most-recently-closed first, capped — `--all`'s second section. */
+async function listClosedReviews(c: Client, limit: number): Promise<WorkflowExecutionInfo[]> {
+  const results: WorkflowExecutionInfo[] = [];
+  try {
+    for await (const info of c.workflow.list({
+      query: "WorkflowType='reviewPost' AND ExecutionStatus!='Running'",
+    })) {
+      results.push(info);
+      if (results.length >= limit) break;
+    }
+  } catch {
+    for await (const info of c.workflow.list({ query: "ExecutionStatus!='Running'" })) {
+      if (info.type !== 'reviewPost') continue;
+      results.push(info);
+      if (results.length >= limit) break;
+    }
+  }
+  return results;
+}
+
+interface InboxRow {
+  label: string;
+  state: string;
+  overall?: Verdict;
+  hint: string;
+  yourTurn: boolean;
+  deepLink: string;
+  /** True when the worker was unreachable and this row is server-truth-only. */
+  degraded: boolean;
+}
+
+/**
+ * Resolves one row. `getReviewState` is worker-executed (queries always are),
+ * so a down worker fails it — caught here and degraded to `describe()`,
+ * server-side truth that needs no worker at all (rule 5 of the brief; mirrors
+ * how `status`'s README troubleshooting entry already treats this).
+ */
+async function inboxRow(c: Client, info: WorkflowExecutionInfo): Promise<InboxRow> {
+  const { slug, collection } = parseWorkflowId(info.workflowId);
+  const label = collection === 'writing' ? slug : `${collection}/${slug}`;
+  const link = deepLink(slug, collection);
+  const handle = c.workflow.getHandle(info.workflowId, info.runId);
+
+  let state: ReviewStateResult;
+  try {
+    state = await handle.query(getReviewState);
+  } catch {
+    const description = await handle.describe();
+    return {
+      label,
+      state: description.status.name,
+      hint: '(worker not running — start it for the verdict, hint, and findings)',
+      yourTurn: false,
+      deepLink: link,
+      degraded: true,
+    };
+  }
+
+  // Only the parked-mid-publish shape needs the PR URL, and it comes from the
+  // archived report, not from parsing `staleReason` text — the report schema
+  // is the stable source, free text is not. Design rule 11: this must not be
+  // swallowed into a blank hint on failure, so it is not wrapped in a catch —
+  // a broken archive read here is a real bug and should crash the command.
+  const prUrl =
+    state.state === 'publishing' && state.staleReason
+      ? (await readArchivedReport(state))?.publish.prUrl
+      : undefined;
+
+  const { yourTurn, hint } = deriveInboxHint({ state: state.state, staleReason: state.staleReason, prUrl });
+
+  return { label, state: state.state, overall: state.overall, hint, yourTurn, deepLink: link, degraded: false };
+}
+
+program
+  .command('inbox')
+  .option('--all', 'also list recently-closed reviews below the open table')
+  .description('One row per open review across every slug — what is waiting on you, sorted to the top')
+  .action(async (opts: { all?: boolean }) => {
+    const c = await client();
+    const openInfos = await listOpenReviews(c);
+
+    if (openInfos.length === 0) {
+      console.log('\n  No open reviews.\n');
+    } else {
+      const rows = await Promise.all(openInfos.map((info) => inboxRow(c, info)));
+      rows.sort((a, b) => Number(b.yourTurn) - Number(a.yourTurn) || a.label.localeCompare(b.label));
+
+      const yourTurnCount = rows.filter((r) => r.yourTurn).length;
+      const anyDegraded = rows.some((r) => r.degraded);
+
+      console.log(
+        `\n  ${rows.length} review${rows.length === 1 ? '' : 's'} open  ·  ${yourTurnCount} waiting on you\n`,
+      );
+      const slugW = Math.max(...rows.map((r) => r.label.length), 4);
+      const stateW = Math.max(...rows.map((r) => r.state.length), 5);
+      const overallW = 7;
+      for (const r of rows) {
+        console.log(
+          `  ${r.label.padEnd(slugW)}  ${r.state.padEnd(stateW)}  ${(r.overall ?? '—').padEnd(overallW)}  ${r.hint}`,
+        );
+        console.log(`  ${' '.repeat(slugW)}  ${r.deepLink}`);
+      }
+      console.log('');
+      if (anyDegraded) {
+        console.log('  ! Worker not running for one or more reviews — start it (`steward up`) for full detail.\n');
+      }
+    }
+
+    if (opts.all) {
+      const closed = await listClosedReviews(c, 20);
+      console.log(`  --- recently closed (up to 20) ---\n`);
+      if (closed.length === 0) {
+        console.log('  None.\n');
+      } else {
+        for (const info of closed) {
+          const { slug, collection } = parseWorkflowId(info.workflowId);
+          const label = collection === 'writing' ? slug : `${collection}/${slug}`;
+          console.log(`  ${label.padEnd(30)}  ${info.status.name.padEnd(10)}  ${info.closeTime?.toISOString() ?? '—'}`);
+        }
+        console.log('');
+      }
+    }
+
     await c.connection.close();
   });
 

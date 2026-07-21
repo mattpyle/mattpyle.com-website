@@ -135,6 +135,7 @@ Web UI: <http://localhost:8233>.
 |---|---|
 | `up` | Starts the Temporal dev server + worker together in one foreground terminal, health-gated (see Runbook). Ctrl+C tears both down. |
 | `down` | Force-cleans any stray worker/server matching the operational-rule-0 signature and frees 7233/8233. |
+| `inbox [--all]` | One row per **open** (RUNNING) review across every slug and collection — what's waiting on you, sorted to the top, with counts. `--all` adds a second section listing up to 20 recently-closed reviews. Degrades to server-side `describe()` status (no verdict, no hint) per review if the worker is down. |
 | `review <slug> [--skip-build-audit]` | Gate-mode review of a **writing draft**, poll until the fan-out finishes, render the report. Refuses if a review of that slug is currently **running**, or if the post is not `draft: true`. |
 | `audit <collection> <slug> [--skip-build-audit]` | **Audit-mode** review of already-published content in `writing` or `changelog`. Same fan-out, same report, archived the same way — then completes. No verdict, no publish leg, and `apply` is refused. |
 | `status <slug>` | Render current state, verdict, findings, patches, report path, Web UI deep link. |
@@ -180,6 +181,10 @@ approve  →  publishing        publishPost: branch, commit, push, open PR
 that stays a human act. Until you merge, verification fails for a perfectly good reason — so after
 ten attempts (~15 minutes) the workflow parks back in `publishing` with a message naming the PR,
 rather than failing. It stays RUNNING and signalable indefinitely.
+
+`steward inbox` surfaces this parked state itself — the row literally says "merge PR #N,
+then re-approve" (or "PR CI is failing — fix it, then approve again") rather than requiring you to
+remember which slug is waiting and why.
 
 **After merging, send `approve` again.** This is an *idempotent resume*: it re-enters verification
 and does not re-run `publishPost`. It also ignores its own publish flag — a resume cannot
