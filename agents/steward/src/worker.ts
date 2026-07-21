@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import * as activities from './activities/index.js';
-import { NAMESPACE, QUEUE_HEAVY, QUEUE_LIGHT, TEMPORAL_ADDRESS, SITE_DIR } from './config.js';
+import { NAMESPACE, QUEUE_HEAVY, QUEUE_LIGHT, TEMPORAL_ADDRESS, SITE_DIR, WORKER_READY_LOG } from './config.js';
 import { log } from './lib/logger.js';
 
 const workflowsPath = fileURLToPath(new URL('./workflows/index.ts', import.meta.url));
@@ -23,7 +23,7 @@ async function main() {
 
   log.info(
     { queues: [QUEUE_LIGHT, QUEUE_HEAVY], namespace: NAMESPACE, address: TEMPORAL_ADDRESS, siteDir: SITE_DIR },
-    'steward worker polling',
+    WORKER_READY_LOG,
   );
 
   await Promise.all(workers.map((w) => w.run()));

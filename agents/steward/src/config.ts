@@ -84,6 +84,13 @@ export const QUEUE_LIGHT = 'steward-light';
 export const QUEUE_HEAVY = 'steward-heavy';
 
 /**
+ * The exact line the worker logs once both queues are polling. `steward up`
+ * health-gates on this string (lib/stack.ts), so the worker and the stack share
+ * this one constant — a reworded log line can no longer silently break startup.
+ */
+export const WORKER_READY_LOG = 'steward worker polling';
+
+/**
  * The review archive — a dataset, not a scratch directory. Overridable so tests
  * that archive reports write into a temp dir instead of contaminating the real
  * one (Phase 1c: `reviews/archive-test/` was showing up as untracked junk in the

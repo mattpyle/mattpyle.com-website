@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Connection } from '@temporalio/client';
-import { REPO_ROOT, TEMPORAL_ADDRESS, WEB_UI } from '../config.js';
+import { REPO_ROOT, TEMPORAL_ADDRESS, WEB_UI, WORKER_READY_LOG } from '../config.js';
 import { killTree } from './proc.js';
 
 const execFileAsync = promisify(execFile);
@@ -137,10 +137,10 @@ async function waitForWorker(worker: ChildProcess, timeoutMs = 30_000): Promise<
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error(`Worker did not report "steward worker polling" within ${timeoutMs}ms`));
+      reject(new Error(`Worker did not report "${WORKER_READY_LOG}" within ${timeoutMs}ms`));
     }, timeoutMs);
     const onData = (chunk: Buffer) => {
-      if (chunk.toString().includes('steward worker polling')) {
+      if (chunk.toString().includes(WORKER_READY_LOG)) {
         cleanup();
         resolve();
       }
