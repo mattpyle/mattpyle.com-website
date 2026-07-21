@@ -659,6 +659,52 @@ program
     await c.connection.close();
   });
 
+program
+  .command('up')
+  .description('Start the Temporal dev server + worker together, health-gated, one foreground terminal')
+  .action(async () => {
+    const { startStack, printReadyBanner, teardownStack } = await import('./lib/stack.js');
+    const stack = await startStack();
+    printReadyBanner(stack);
+
+    let tearingDown = false;
+    const onSignal = () => {
+      if (tearingDown) return;
+      tearingDown = true;
+      teardownStack(stack);
+      process.exit(0);
+    };
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
+
+    // Either child dying on its own takes the other down with it — a lone
+    // worker with no server, or a server with no worker polling it, is not a
+    // stack worth staying up for.
+    stack.server.once('exit', (code) => {
+      if (tearingDown) return;
+      tearingDown = true;
+      console.error(`\n  server exited unexpectedly (code ${code})`);
+      teardownStack(stack);
+      process.exitCode = 1;
+    });
+    stack.worker.once('exit', (code) => {
+      if (tearingDown) return;
+      tearingDown = true;
+      console.error(`\n  worker exited unexpectedly (code ${code})`);
+      teardownStack(stack);
+      process.exitCode = 1;
+    });
+  });
+
+program
+  .command('down')
+  .description('Force-clean any stray steward worker/server processes and free 7233/8233')
+  .action(async () => {
+    const { killOrphans } = await import('./lib/stack.js');
+    const n = await killOrphans();
+    console.log(n === 0 ? '\n  Nothing to clean up.\n' : `\n  Killed ${n} process tree(s).\n`);
+  });
+
 program.parseAsync(process.argv).catch((err) => {
   console.error(`\n  ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);

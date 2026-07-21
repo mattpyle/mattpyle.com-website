@@ -52,7 +52,32 @@ explicit inline value is never silently overridden by a stale local file.
 
 ---
 
-## Runbook (three terminals)
+## Runbook
+
+**`steward up`** replaces the three-terminal dance for the common case: one foreground terminal
+starts the Temporal dev server and the worker together, refuses to run if a stray server/worker
+from an earlier session is already bound to the queue or the port, and does not print "ready" until
+the server answers and the worker has actually registered on both queues.
+
+```
+cd agents/steward
+npx tsx src/cli.ts up
+```
+
+Ctrl+C tears down both process trees. From another terminal, run reviews as usual:
+
+```
+cd agents/steward
+npm run steward -- review steward-smoke-test
+npm run steward -- status steward-smoke-test
+npm run steward -- approve steward-smoke-test
+```
+
+If `up`'s terminal is gone or the stack needs a hard reset, `npx tsx src/cli.ts down` force-cleans
+any stray worker/server process it can find and frees 7233/8233 — the same signature `up`'s
+preflight check refuses to start on top of.
+
+### The original three terminals — still works, and `up` doesn't replace it for every case
 
 ```
 # 1 — Temporal server
@@ -64,13 +89,14 @@ cd agents/steward && npm run worker        # tsx src/worker.ts
 # 3 — reviews
 cd agents/steward
 npm run steward -- review steward-smoke-test
-npm run steward -- status steward-smoke-test
-npm run steward -- approve steward-smoke-test
 ```
 
-Run the server command **from the repo root** — `--db-filename` is relative to the working
-directory, and the whole point of the flag is that history survives reboots. The dev server's
-default is in-memory.
+Useful when you want the server and worker logs in separate windows, or want to restart the worker
+alone without bouncing the server (and its history). Run the server command **from the repo root**
+if you start it this way — `--db-filename` is relative to the working directory, and the whole
+point of the flag is that history survives reboots. The dev server's default is in-memory. `steward
+up` resolves the same path **absolutely** from `REPO_ROOT` regardless of current directory, so this
+particular footgun does not apply there.
 
 > **There is exactly one database, and it is `agents/steward/.cache/temporal-dev.db`.**
 > This runbook previously named `agents/steward/.temporal/steward.db`, and the two diverged:
@@ -107,6 +133,8 @@ Web UI: <http://localhost:8233>.
 
 | Command | Behavior |
 |---|---|
+| `up` | Starts the Temporal dev server + worker together in one foreground terminal, health-gated (see Runbook). Ctrl+C tears both down. |
+| `down` | Force-cleans any stray worker/server matching the operational-rule-0 signature and frees 7233/8233. |
 | `review <slug> [--skip-build-audit]` | Gate-mode review of a **writing draft**, poll until the fan-out finishes, render the report. Refuses if a review of that slug is currently **running**, or if the post is not `draft: true`. |
 | `audit <collection> <slug> [--skip-build-audit]` | **Audit-mode** review of already-published content in `writing` or `changelog`. Same fan-out, same report, archived the same way — then completes. No verdict, no publish leg, and `apply` is refused. |
 | `status <slug>` | Render current state, verdict, findings, patches, report path, Web UI deep link. |
@@ -256,6 +284,11 @@ exactly like a code bug and is not one — in Phase 1b it appeared while a *newe
 worker had just run the whole fan-out successfully, because the two were competing
 for the same queue. `tsx` spawns a child process, so expect two or three PIDs per
 worker, not one.
+
+`steward up` runs exactly this check before starting anything, and refuses (naming
+the offending PIDs and the `taskkill` command) rather than starting a second stack
+on top of a live one. `steward down` runs the same detection and kills what it
+finds.
 
 **1. Before changing workflow code, clear the open reviews.**
 
