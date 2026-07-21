@@ -3,6 +3,9 @@
   "type": "module",
   "version": "0.0.1",
   "workspaces": ["agents/steward"],
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "predev": "node scripts/generate-og-images.mjs",
     "dev": "astro dev",
