@@ -124,7 +124,7 @@ export const ENABLE_BUILD_AUDIT = true;
  * not yet been made. See the `approve` signal's docblock in
  * `workflows/review-post.ts` for the full reasoning.
  */
-export const ENABLE_PUBLISH_LEG = true;
+export const ENABLE_PUBLISH_LEG = process.env.STEWARD_ENABLE_PUBLISH_LEG === 'false' ? false : true;
 
 /**
  * The content collections the Steward reviews.
