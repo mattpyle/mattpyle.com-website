@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "slug": "webmcp-tools",
+  "collection": "changelog",
+  "mode": "audit",
+  "file": "src/content/changelog/webmcp-tools.md",
+  "contentSha256": "fb2e5f45d17eda59f1582568771df5fcb1cc1374ffdd6a579b7cfcf2751ced16",
+  "reviewedAt": "2026-07-19T09:31:03.040Z",
+  "workflowId": "steward-review-changelog-webmcp-tools",
+  "runId": "019f79b6-74dc-70c9-8080-2e1e7b2c1e0b",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-07-19T09:30:29.312Z",
+      "durationMs": 371,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'They're'.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 12,
+          "excerpt": "They're"
+        },
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'validate' is too wordy.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 16,
+          "excerpt": "validate"
+        },
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 16,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-6",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'were'.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 16,
+          "excerpt": "were"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'validate' is too wordy.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 18,
+          "excerpt": "validate"
+        },
+        {
+          "id": "vale-7",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 18,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-8",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 18,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'were driven' may be passive voice. Use active voice if you can.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 22,
+          "excerpt": "were driven"
+        },
+        {
+          "id": "vale-9",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'were'.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 22,
+          "excerpt": "were"
+        },
+        {
+          "id": "vale-10",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 22,
+          "excerpt": "is"
+        }
+      ],
+      "startedAt": "2026-07-19T09:30:28.541Z",
+      "durationMs": 1148,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "frontmatter-1",
+          "pass": "frontmatter",
+          "severity": "flag",
+          "message": "`summary` is 178 chars — over the ~155-char SERP limit. The changelog schema has no override field, so shorten it here.",
+          "file": "src/content/changelog/webmcp-tools.md"
+        }
+      ],
+      "startedAt": "2026-07-19T09:30:29.309Z",
+      "durationMs": 6
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "claims-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: Chrome 150 has not been released as of the post date (2026-07-17); current stable Chrome versions are in the 130s. This version number appears to be speculative or erroneous.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "line": 16,
+          "excerpt": "Measured against Chrome 150 on the live origin trial",
+          "evidence": "The post states a specific Chrome version number as the measurement environment, but Chrome 150 would not exist at the stated post date, making this an unsupported or incorrect factual claim about the tool used."
+        }
+      ],
+      "startedAt": "2026-07-19T09:30:29.311Z",
+      "durationMs": 7113,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "c4c7dfafce37623ea56feda50e8d2474548c5fc66097c030d8548199a6f4e45a",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1
+      }
+    },
+    {
+      "pass": "build_audit",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "build_audit.lighthouse.best-practices",
+          "pass": "build_audit",
+          "severity": "flag",
+          "message": "Lighthouse best-practices scored 96, below the site floor of 100.",
+          "file": "src/content/changelog/webmcp-tools.md",
+          "evidence": "url: http://127.0.0.1:59220/changelog/webmcp-tools/\nscore: 96\nfloor: 100"
+        }
+      ],
+      "startedAt": "2026-07-19T09:30:29.310Z",
+      "durationMs": 33519,
+      "metrics": {
+        "url": "http://127.0.0.1:59220/changelog/webmcp-tools/",
+        "scores": {
+          "performance": 98,
+          "accessibility": 100,
+          "best-practices": 96,
+          "seo": 100,
+          "agentic-browsing": 100
+        },
+        "failedAudits": [
+          "cache-insight",
+          "errors-in-console",
+          "forced-reflow-insight",
+          "network-dependency-tree-insight",
+          "render-blocking-insight"
+        ],
+        "axeViolations": 0,
+        "axeFiltered": 0,
+        "buildMs": 5906,
+        "axeMs": 1638,
+        "lighthouseMs": 9888,
+        "worktreeSha": "63b66da096b864367e231a91e3cd895fb8716760",
+        "npmCi": true
+      }
+    }
+  ],
+  "patches": [],
+  "overall": "flag",
+  "summary": "FLAG — nothing blocks publish, but 13 findings want a human look. cspell: pass (0 findings); vale: flag (10 findings); frontmatter: flag (1 finding); claims_structure: flag (1 finding); build_audit: flag (1 finding). No patches proposed.",
+  "human": {},
+  "publish": {}
+}

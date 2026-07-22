@@ -1,7 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
   "version": "0.2",
-  "language": "en",
+
+  // `language` and `words` are NOT declared here. They come from
+  // `cspell.shared.yaml`, which is the single dictionary both this advisory
+  // check and the Steward's block-emitting `runCspell` activity consume.
+  //
+  // Do not add a `language` or `words` key to this file, and do not reintroduce
+  // `project-words.txt`. A word that belongs to the site belongs to the Steward
+  // too — the Steward is what opens publish PRs, and a dictionary it does not
+  // share is a dictionary that lets it approve a post this job marks red.
+  // Add words to `cspell.shared.yaml`, or run `steward dict-add <word>`.
+  "import": ["./cspell.shared.yaml"],
 
   // Content collections only. Spell check runs against SOURCE markdown, never
   // the built site, so it covers `draft: true` posts before they're published —
@@ -13,22 +23,15 @@
   // read it), but the SITE-level spellcheck must stay clean or its signal is
   // permanently three-issues-of-noise and stops being read.
   //
-  // The Steward's own cspell config (agents/steward/cspell.config.yaml) must
-  // NOT ignore this path: the fixture only does its job there.
+  // This ignore is deliberately declared HERE and not in the shared dictionary:
+  // the Steward must still scan the fixture, since catching its planted typos is
+  // exactly what the fixture is for. Sharing the dictionary does not mean sharing
+  // the file selection — `files`/`ignorePaths` stay per-consumer.
   "ignorePaths": ["src/content/writing/steward-smoke-test.md"],
 
   // cspell reads YAML frontmatter as ordinary text, so `title`, `description`,
   // `seoTitle`, and `seoDescription` are all checked — verified empirically, not
   // assumed. This matters: a typo in `description` flows into <title>, OG, and RSS.
-  "dictionaryDefinitions": [
-    {
-      "name": "project-words",
-      "path": "./project-words.txt",
-      "addWords": true
-    }
-  ],
-  "dictionaries": ["project-words"],
-
   // Frontmatter dates/enums and markdown link targets aren't prose.
   "ignoreRegExpList": ["/\\]\\([^)]*\\)/g"]
 }

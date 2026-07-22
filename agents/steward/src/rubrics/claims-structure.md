@@ -38,7 +38,22 @@ Respond with ONLY this JSON, no markdown fences:
   ],
   "patches": [
     { "line": <number>, "oldText": "...", "newText": "...", "rationale": "..." }
+  ],
+  "dictionaryProposals": [
+    { "word": "<verbatim token from the post>",
+      "disposition": "proper_noun|typo",
+      "reason": "<why, one short clause>" }
   ]
 }
 Empty arrays are valid and correct when the post is clean. Do not manufacture
 findings to appear thorough.
+
+`dictionaryProposals` is not a findings list and nothing in it is a defect. A
+separate spell checker flags words it does not recognise; you are being asked,
+because you have read the whole post and it has not, to say which unusual tokens
+are **names** — products, models, people, companies, domains, file names — and
+which look like genuine misspellings. List only tokens that are unusual enough
+that a dictionary might not hold them. Judge from context: a token used as the
+subject of a sentence about an AI model is a model name, whatever it looks like.
+When you are unsure, say `typo` — that asks a human to look, which is the safe
+outcome. Never propose a disposition for a word you cannot see in the post.

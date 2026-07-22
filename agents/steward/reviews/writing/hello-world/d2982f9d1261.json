@@ -1,0 +1,1129 @@
+{
+  "schemaVersion": 1,
+  "slug": "hello-world",
+  "collection": "writing",
+  "mode": "gate",
+  "file": "src/content/writing/hello-world.md",
+  "contentSha256": "d2982f9d1261a6069fb6e2e2ad544b159e35016199b1d0bb4cf6c52196b89946",
+  "reviewedAt": "2026-07-19T22:13:00.287Z",
+  "workflowId": "steward-review-hello-world",
+  "runId": "019f7914-a3ce-71f2-8ab9-f7cb65972510",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "cspell-1",
+          "pass": "cspell",
+          "severity": "flag",
+          "message": "\"matthewpyle\" is not in the dictionary (suggestions: mattpyle). Fix it, or add it to cspell.config.yaml if it is jargon. — likely typo: no evidence it is a name; defaulting to typo so a human looks before it is admitted",
+          "file": "src/content/writing/hello-world.md",
+          "line": 25,
+          "excerpt": "*side note: Before this domain, I owned `matthewpyle.com` but the only people who call me Matthew are the government and my mum when I've done something wrong.*"
+        }
+      ],
+      "startedAt": "2026-07-19T22:12:18.510Z",
+      "durationMs": 31,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-32",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 2,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-33",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 13,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-34",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 21,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-35",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'there's'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 21,
+          "excerpt": "there's"
+        },
+        {
+          "id": "vale-36",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 21,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-37",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 21,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'very' is a weasel word!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 23,
+          "excerpt": "very"
+        },
+        {
+          "id": "vale-38",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 23,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-39",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 23,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-40",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 25,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-6",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'are published' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 29,
+          "excerpt": "are published"
+        },
+        {
+          "id": "vale-7",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'are shared' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 29,
+          "excerpt": "are shared"
+        },
+        {
+          "id": "vale-41",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 29,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-42",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 29,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-43",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 29,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-44",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'there's'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 29,
+          "excerpt": "there's"
+        },
+        {
+          "id": "vale-8",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'be read' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "be read"
+        },
+        {
+          "id": "vale-9",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'been added' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "been added"
+        },
+        {
+          "id": "vale-10",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'be written' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "be written"
+        },
+        {
+          "id": "vale-45",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-46",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-47",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-48",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-49",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-50",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 31,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.ThereIs (error): Don't start a sentence with 'There are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 33,
+          "excerpt": "There are"
+        },
+        {
+          "id": "vale-51",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 33,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-52",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 33,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-53",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 33,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-54",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 37,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-55",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 41,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-11",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'very' is a weasel word!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 43,
+          "excerpt": "very"
+        },
+        {
+          "id": "vale-56",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 43,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-57",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 43,
+          "excerpt": "being"
+        },
+        {
+          "id": "vale-12",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'in order to' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 45,
+          "excerpt": "in order to"
+        },
+        {
+          "id": "vale-58",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 45,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-59",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 45,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-60",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 49,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-13",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'It is' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "It is"
+        },
+        {
+          "id": "vale-14",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is implemented' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "is implemented"
+        },
+        {
+          "id": "vale-61",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-62",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-15",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'being demonstrated' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 55,
+          "excerpt": "being demonstrated"
+        },
+        {
+          "id": "vale-63",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 55,
+          "excerpt": "being"
+        },
+        {
+          "id": "vale-64",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 55,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-65",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 55,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-16",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'However' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 57,
+          "excerpt": "However"
+        },
+        {
+          "id": "vale-17",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'are launched' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 57,
+          "excerpt": "are launched"
+        },
+        {
+          "id": "vale-66",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 57,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-67",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 57,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.So (error): Don't start a sentence with 'So '.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 61,
+          "excerpt": "So "
+        },
+        {
+          "id": "vale-68",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 61,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "Vale.Repetition (error): 'in' is repeated!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 67,
+          "excerpt": "in in"
+        },
+        {
+          "id": "vale-18",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Illusions (warning): 'in' is repeated!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 67,
+          "excerpt": "in in"
+        },
+        {
+          "id": "vale-19",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'be assured' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 67,
+          "excerpt": "be assured"
+        },
+        {
+          "id": "vale-69",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'am'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 67,
+          "excerpt": "am"
+        },
+        {
+          "id": "vale-70",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 67,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-71",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 67,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-72",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 67,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-20",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'However' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 69,
+          "excerpt": "However"
+        },
+        {
+          "id": "vale-73",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 69,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-74",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 71,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-21",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is enrolled' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 73,
+          "excerpt": "is enrolled"
+        },
+        {
+          "id": "vale-75",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 73,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-22",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'very' is a weasel word!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "very"
+        },
+        {
+          "id": "vale-23",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'being built' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "being built"
+        },
+        {
+          "id": "vale-76",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-77",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-78",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "being"
+        },
+        {
+          "id": "vale-24",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'being used' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 79,
+          "excerpt": "being used"
+        },
+        {
+          "id": "vale-79",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 79,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-80",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 79,
+          "excerpt": "being"
+        },
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "Vale.Repetition (error): 'also' is repeated!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "also also"
+        },
+        {
+          "id": "vale-25",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'been diagnosed' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "been diagnosed"
+        },
+        {
+          "id": "vale-26",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'it is' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "it is"
+        },
+        {
+          "id": "vale-27",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is captured' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "is captured"
+        },
+        {
+          "id": "vale-28",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Illusions (warning): 'also' is repeated!",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "also also"
+        },
+        {
+          "id": "vale-81",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'It's'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "It's"
+        },
+        {
+          "id": "vale-82",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-83",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-29",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is built' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 83,
+          "excerpt": "is built"
+        },
+        {
+          "id": "vale-84",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 83,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-85",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'I'm'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 85,
+          "excerpt": "I'm"
+        },
+        {
+          "id": "vale-86",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'It's'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 85,
+          "excerpt": "It's"
+        },
+        {
+          "id": "vale-30",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'However' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 87,
+          "excerpt": "However"
+        },
+        {
+          "id": "vale-87",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 87,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-88",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 87,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-31",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'multiple' is too wordy.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 89,
+          "excerpt": "multiple"
+        },
+        {
+          "id": "vale-89",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 89,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-90",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'What's'.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 91,
+          "excerpt": "What's"
+        }
+      ],
+      "startedAt": "2026-07-19T22:12:18.542Z",
+      "durationMs": 257,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-07-19T22:12:18.512Z",
+      "durationMs": 38
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "claims-patch-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: The file is described as capturing scorecard output; 'Scoreboard-md' appears to be a formatting error (missing hyphen before 'md' and likely wrong base name given the public page is called 'scorecard'). This is a mechanical naming inconsistency within the post.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 38,
+          "excerpt": "Scoreboard-md"
+        },
+        {
+          "id": "claims-8",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "buried lede: The actual point — that this post is a functional test artifact for the Steward agent — does not appear until line 45, after two sentences of framing. The lede is the Steward test, not the disclaimer about the title.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 41,
+          "excerpt": "### This post is a test\n\nIgnore the title. This is not your typical \"Hello, World!\" article",
+          "evidence": "The real news ('my AI coding assistants have essentially forced me to write this post… to test the prototype of Steward') arrives at line 45, three sentences into a short section."
+        },
+        {
+          "id": "claims-7",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: The Steward section is reasonably self-contained, but the reference to 'draft: true' as a frontmatter flag is meaningful only to readers who understand the Astro/markdown content model; extracted alone, this would be opaque.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 51,
+          "excerpt": "Steward is an editorial agent that owns the path from a draft article (`draft: true`) to published for posts on this website",
+          "evidence": "An AI answer engine extracting only the Steward section would encounter 'draft: true' with no explanation of what system interprets it or what 'published' means in this context."
+        },
+        {
+          "id": "claims-6",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: This section does lead with its thesis, which is good, but the second paragraph pivots to a different concept (the author's personal learning goals) without a subheading, making the section cover two distinct ideas.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 53,
+          "excerpt": "### Why does Steward exist?\n\nThe thesis being demonstrated is:",
+          "evidence": "The section opens with a product thesis, then shifts to personal motivation ('I'm looking to learn how developers…'). These are separable concepts bundled under one heading."
+        },
+        {
+          "id": "claims-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The claim names specific model identities ('Opus' in Claude Code, 'Fable' in Claude Chat) as if these are verifiable, established model names for those products; 'Fable' in particular is not a publicly documented Claude model name.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 63,
+          "excerpt": "both Opus in Claude Code and Fable in Claude Chat told me \"You need to write more in order for us to test this properly\"",
+          "evidence": "Anthropic has not publicly released a model called 'Fable'. If this is an internal codename or a hallucinated name, presenting it as a factual model identity is an unsupported assertion. The post provides no source or screenshot."
+        },
+        {
+          "id": "claims-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: Astro 7 is cited as a specific released version; as of the post date (2026-07-18) this cannot be verified from within the post, and no release note or changelog is quoted to confirm this version exists.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 70,
+          "excerpt": "[Astro 7](https://astro.build/blog/astro-7/) - a lightweight framework for content-driven sites",
+          "evidence": "Version numbers are factual claims. The post provides no in-text evidence that Astro 7 is a real released version, and the linked URL cannot be confirmed from the post text alone."
+        },
+        {
+          "id": "claims-3",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The claim that WebMCP has an 'Origin Trial' is a specific factual assertion about a browser/standards program that is not sourced or evidenced anywhere in the post.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 73,
+          "excerpt": "[WebMCP](https://github.com/webmachinelearning/webmcp) - This site is enrolled in the WebMCP Origin Trial",
+          "evidence": "Origin Trials are a specific Chrome/browser mechanism. Asserting enrollment in one is a verifiable factual claim requiring a source; none is provided."
+        },
+        {
+          "id": "claims-4",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The sentence attributes spell-checking to Vale, but the paragraph opens by crediting CSpell for spell-checking; Vale is a prose/style linter, not a spell checker. This is also a factual misattribution of tool capability.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "Vale does that, and is being built into Steward.",
+          "evidence": "CSpell is the spell checker named earlier in the same bullet. Vale is a style and grammar linter. Saying 'Vale does that' (referring to spelling checks) misrepresents Vale's documented function."
+        },
+        {
+          "id": "claims-5",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "contradiction: The post introduces CSpell as the spelling tool, then immediately says 'Vale does that,' contradicting which tool performs spell-checking.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 75,
+          "excerpt": "CSpell - Since this is all markdown, I'm writing this very article in VS Code which surfaced the need to check my spelling. Vale does that",
+          "evidence": "Lines 75 attributes the need for spell-checking to CSpell, then the same sentence concludes that Vale performs that function. These two statements directly conflict."
+        },
+        {
+          "id": "claims-patch-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: Duplicate word 'also also' — clear mechanical typo.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 81,
+          "excerpt": "but also also allow"
+        },
+        {
+          "id": "claims-9",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: 'Kimi K3' and 'GLM 5.2' are cited as specific model version names with no source; these version designations may not correspond to publicly released models.",
+          "file": "src/content/writing/hello-world.md",
+          "line": 89,
+          "excerpt": "I soon hope to try others such as Kimi K3 and GLM 5.2.",
+          "evidence": "Model version numbers are factual claims. The post provides no link or reference confirming these are real released model versions rather than anticipated or misremembered names."
+        }
+      ],
+      "startedAt": "2026-07-19T22:12:18.544Z",
+      "durationMs": 41719,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "3081861efdd50232655a18f6e3d14c1ccd34a44f73f053b5c814c38a9c9a8158",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "dictionaryProposals": [
+          {
+            "word": "Britishisms",
+            "disposition": "proper_noun",
+            "reason": "Used as a self-aware cultural label for British English idioms; not a standard dictionary word but intentional."
+          },
+          {
+            "word": "mattpyle",
+            "disposition": "proper_noun",
+            "reason": "Author's domain/brand name used throughout."
+          },
+          {
+            "word": "WebMCP",
+            "disposition": "proper_noun",
+            "reason": "Named web standard/origin trial referenced by URL."
+          },
+          {
+            "word": "Temporal",
+            "disposition": "proper_noun",
+            "reason": "Name of the workflow orchestration product (temporal.io)."
+          },
+          {
+            "word": "Steward",
+            "disposition": "proper_noun",
+            "reason": "Name of the author's custom editorial agent."
+          },
+          {
+            "word": "CSpell",
+            "disposition": "proper_noun",
+            "reason": "Name of the spell-checking tool linked in the post."
+          },
+          {
+            "word": "Codex",
+            "disposition": "proper_noun",
+            "reason": "Name of an AI coding assistant referenced alongside Claude Code."
+          },
+          {
+            "word": "Astro",
+            "disposition": "proper_noun",
+            "reason": "Name of the web framework used for the site."
+          },
+          {
+            "word": "Vercel",
+            "disposition": "proper_noun",
+            "reason": "Name of the hosting platform."
+          },
+          {
+            "word": "gitignored",
+            "disposition": "proper_noun",
+            "reason": "Derived from Git proper noun; used as a verb in developer context."
+          },
+          {
+            "word": "vibe-coders",
+            "disposition": "proper_noun",
+            "reason": "Emerging industry slang term used intentionally in quotes."
+          },
+          {
+            "word": "Fable",
+            "disposition": "typo",
+            "reason": "Claimed to be a Claude model name but does not match any publicly documented Anthropic model; likely misremembered or hallucinated — human should verify."
+          },
+          {
+            "word": "GLM",
+            "disposition": "proper_noun",
+            "reason": "Appears to be a model family name (e.g. Zhipu AI's GLM series)."
+          },
+          {
+            "word": "Kimi",
+            "disposition": "proper_noun",
+            "reason": "Appears to be a model/product name (Moonshot AI's Kimi)."
+          },
+          {
+            "word": "a11y",
+            "disposition": "proper_noun",
+            "reason": "Standard developer numeronym for 'accessibility'."
+          }
+        ]
+      }
+    },
+    {
+      "pass": "build_audit",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "build_audit.lighthouse.best-practices",
+          "pass": "build_audit",
+          "severity": "flag",
+          "message": "Lighthouse best-practices scored 96, below the site floor of 100.",
+          "file": "src/content/writing/hello-world.md",
+          "evidence": "url: http://127.0.0.1:51674/writing/hello-world/\nscore: 96\nfloor: 100"
+        }
+      ],
+      "startedAt": "2026-07-19T22:12:18.542Z",
+      "durationMs": 11947,
+      "metrics": {
+        "url": "http://127.0.0.1:51674/writing/hello-world/",
+        "scores": {
+          "performance": 98,
+          "accessibility": 100,
+          "best-practices": 96,
+          "seo": 66,
+          "agentic-browsing": 100
+        },
+        "failedAudits": [
+          "cache-insight",
+          "errors-in-console",
+          "forced-reflow-insight",
+          "is-crawlable",
+          "network-dependency-tree-insight",
+          "render-blocking-insight"
+        ],
+        "axeViolations": 0,
+        "axeFiltered": 0,
+        "buildMs": 4092,
+        "axeMs": 1215,
+        "lighthouseMs": 6509,
+        "worktreeSha": "100ea6ed26955415011fd06b971eae188d444b92",
+        "npmCi": false
+      }
+    }
+  ],
+  "patches": [
+    {
+      "id": "patch-1",
+      "findingId": "claims-patch-1",
+      "file": "src/content/writing/hello-world.md",
+      "oldText": "Scoreboard-md",
+      "newText": "Scorecard.md",
+      "rationale": "The file is described as capturing scorecard output; 'Scoreboard-md' appears to be a formatting error (missing hyphen before 'md' and likely wrong base name given the public page is called 'scorecard'). This is a mechanical naming inconsistency within the post.",
+      "source": "editorial",
+      "sourcePasses": [
+        "claims_structure"
+      ]
+    },
+    {
+      "id": "patch-2",
+      "findingId": "claims-patch-2",
+      "file": "src/content/writing/hello-world.md",
+      "oldText": "but also also allow",
+      "newText": "but also allow",
+      "rationale": "Duplicate word 'also also' — clear mechanical typo.",
+      "source": "editorial",
+      "sourcePasses": [
+        "claims_structure"
+      ]
+    }
+  ],
+  "overall": "flag",
+  "summary": "FLAG — nothing blocks publish, but 103 findings want a human look. cspell: flag (1 finding); vale: flag (90 findings); frontmatter: pass (0 findings); claims_structure: flag (11 findings); build_audit: flag (1 finding). 2 patches proposed.",
+  "human": {},
+  "publish": {}
+}

@@ -56,12 +56,12 @@ cached and redistributed by other people's readers.
 | File | Role |
 | :--- | :--- |
 | `cspell.json` | Config (JSONC — comments allowed) |
-| `project-words.txt` | Project dictionary |
+| `cspell.shared.yaml` | Project dictionary + `language: en-GB`. Shared with the Steward — see CLAUDE.md |
 | `.github/workflows/spellcheck.yml` | CI on push to `master` and on PRs |
 
-**Adding a word:** one bare word per line in `project-words.txt`. Keep comments on their *own* line —
-cspell splits wordlist lines on whitespace, so a trailing comment quietly adds its words to the
-dictionary. Add words only for genuine jargon or proper nouns, never to paper over a real typo. Common
+**Adding a word:** add it to `words:` in `cspell.shared.yaml`, or run `npm run steward -- dict-add
+<word>`. That file is the *only* dictionary — the Steward's review agent reads it too, so a word added
+here is known to both. Add words only for genuine jargon or proper nouns, never to paper over a real typo. Common
 tooling terms (`Astro`, `Vercel`, `a11y`, `Lighthouse`) are already in cspell's bundled dictionaries.
 
 **This check is advisory.** It is intentionally not part of `npm run build`. CI will mark a pull request

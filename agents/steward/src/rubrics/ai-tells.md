@@ -7,21 +7,16 @@ Score these tells, each with cited line numbers:
 - NOT_X_BUT_Y: "it's not X, it's Y" / "this isn't about X — it's about Y"
   contrast constructions.
 - ZINGER_BOLDING: short bolded aphorism sentences used as applause lines.
-- RULE_OF_THREE: triadic lists used rhythmically rather than informatively,
-  especially in consecutive sentences.
-- EM_DASH_DENSITY: em-dash count per 100 words; flag > 1.5.
-- UNIFORM_RHYTHM: runs of 3+ paragraphs with near-identical length and
-  sentence-count structure.
 - HEDGED_SYMMETRY: reflexive both-sides framing ("while X, it's also true
   that Y") where the post doesn't actually need balance.
-- STOCK_TRANSITIONS: "Moreover", "Furthermore", "In today's landscape",
-  "Let's dive in", "The result?" and similar.
-- LIST_INFLATION: bulleted lists whose items are full sentences that should
-  be prose, or lists restating the preceding paragraph.
 
-Compute aiLikenessScore 0-100: 0 = no tells, 100 = saturated. Weight by
-frequency and prominence (a tell in the opening paragraph counts double).
-Report the score even when low.
+Do NOT score RULE_OF_THREE, EM_DASH_DENSITY, UNIFORM_RHYTHM,
+STOCK_TRANSITIONS, or LIST_INFLATION. Those five are computed mechanically in
+code, not judged by you — a finding tagged with one of them is discarded.
+
+Compute aiLikenessScore 0-100 from the three tells above only: 0 = no tells,
+100 = saturated. Weight by frequency and prominence (a tell in the opening
+paragraph counts double). Report the score even when low.
 
 Respond with ONLY this JSON, no markdown fences:
 {

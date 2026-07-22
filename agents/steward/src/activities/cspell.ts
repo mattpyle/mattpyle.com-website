@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { spellCheckDocument, readConfigFile } from 'cspell-lib';
+import { spellCheckDocument, readConfigFile, clearCachedFiles } from 'cspell-lib';
 import type { CSpellSettings } from 'cspell-lib';
 import { CSPELL_CONFIG, SITE_DIR } from '../config.js';
 import type { PassResult, Finding, PatchProposal } from '../lib/report.js';
@@ -50,8 +50,9 @@ export function pickSuggestion(
 }
 
 /**
- * Loads `cspell.config.yaml` through cspell's own config loader rather than
- * parsing the YAML by hand.
+ * Loads `cspell.shared.yaml` — the dictionary shared with the site's own
+ * `npm run spellcheck` — through cspell's own config loader rather than parsing
+ * the YAML by hand.
  *
  * A hand-rolled `words:` scanner was the first attempt and it silently dropped
  * every word that followed a comment line inside the list — the dictionary
@@ -60,6 +61,13 @@ export function pickSuggestion(
  * mode there is: it manufactures findings against correct prose.
  */
 async function loadSettings(): Promise<CSpellSettings> {
+  // cspell-lib caches config files and compiled dictionaries process-wide. The
+  // worker is long-lived, so without this the dictionary is frozen at whatever
+  // it was when the worker booted: `steward dict-add Kimi` followed by a
+  // `rereview` re-flagged `Kimi` anyway, and the only cure was restarting the
+  // worker. Found by running the round trip, not by reading the code — a stale
+  // dictionary produces a plausible finding, not an error.
+  await clearCachedFiles();
   // cspell 10's `readConfigFile` returns a *wrapper* — `{ url, settings }` — not
   // the settings object. Passing the wrapper straight through silently yields an
   // empty dictionary, which is indistinguishable from a working one until real
@@ -68,7 +76,8 @@ async function loadSettings(): Promise<CSpellSettings> {
   const settings = (loaded as { settings?: CSpellSettings }).settings ?? (loaded as CSpellSettings);
   if (!settings.words?.length) {
     throw new Error(
-      `cspell.config.yaml loaded with an empty dictionary (${CSPELL_CONFIG}). Refusing to run: an empty dictionary manufactures block findings against correct prose.`,
+      `The shared dictionary loaded with no words (${CSPELL_CONFIG}). Refusing to run: an empty dictionary manufactures block findings against correct prose. ` +
+        `Note that cspell's \`import:\` key is NOT resolved by readConfigFile — if this file was changed to import its wordlist instead of declaring it inline, that is the cause.`,
     );
   }
   return settings;
@@ -114,7 +123,7 @@ export async function runCspell(file: string): Promise<PassResult> {
           ? `"${issue.text}" — did you mean "${pick}"?`
           : `"${issue.text}" is not in the dictionary${
               suggestions.length ? ` (suggestions: ${suggestions.slice(0, 3).map((s) => s.word).join(', ')})` : ''
-            }. Fix it, or add it to cspell.config.yaml if it is jargon.`,
+            }. Fix it, or add it to cspell.shared.yaml (\`steward dict-add\`) if it is jargon.`,
         file,
         line,
         excerpt: (issue.line?.text ?? issue.text).trim().slice(0, 200),

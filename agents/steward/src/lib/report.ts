@@ -24,6 +24,13 @@ export const ReviewState = z.enum([
    * Deviation from spec §6.1 — see README.
    */
   'approved',
+  /**
+   * Audit-mode terminal state: the fan-out ran against already-published
+   * content, the report was archived, and the workflow completed. Distinct from
+   * `approved` because nothing was approved — no human decision was asked for or
+   * recorded.
+   */
+  'audited',
   'publishing',
   'verifying_deploy',
   'published',
@@ -55,6 +62,13 @@ export const PatchProposal = z.object({
   newText: z.string(),
   rationale: z.string(),
   source: z.enum(['mechanical', 'editorial']),
+  /**
+   * Every pass that independently proposed this exact edit. Populated by
+   * `dedupePatches`; length > 1 means two checks agreed, which is a stronger
+   * signal for the human than either one alone. Optional so a pass may emit a
+   * patch without knowing its own provenance.
+   */
+  sourcePasses: z.array(PassKind).optional(),
 });
 export type PatchProposal = z.infer<typeof PatchProposal>;
 
@@ -74,9 +88,39 @@ export const PassResult = z.object({
 });
 export type PassResult = z.infer<typeof PassResult>;
 
+export const Collection = z.enum(['writing', 'changelog']);
+export type Collection = z.infer<typeof Collection>;
+
+/**
+ * What a review is *for*.
+ *
+ * `gate` — the original job: an unpublished draft, reviewed on its way to
+ * publication. Refuses anything that is not `draft: true`, and parks on a human
+ * verdict.
+ *
+ * `audit` — retrospective review of already-published content. Same fan-out,
+ * same report, no verdict and no publish leg. Findings are advisory; edits go
+ * through the human's normal git flow with the report as input.
+ *
+ * Recorded on the report so a later analytics layer can separate the two
+ * populations. A gate review's findings are defects caught before anyone saw
+ * them; an audit's are defects that shipped. Averaging them together would
+ * describe neither.
+ */
+export const ReviewMode = z.enum(['gate', 'audit']);
+export type ReviewMode = z.infer<typeof ReviewMode>;
+
 export const ReviewReport = z.object({
   schemaVersion: z.literal(1),
   slug: z.string(),
+  /**
+   * Defaulted rather than required so archives written before collections
+   * existed still parse. Every such archive is a writing review by construction
+   * — it is the only collection the Steward could review at the time.
+   */
+  collection: Collection.default('writing'),
+  /** Defaulted for the same reason: every pre-audit-mode review was a gate. */
+  mode: ReviewMode.default('gate'),
   file: z.string(),
   contentSha256: z.string(),
   reviewedAt: z.iso.datetime(),
@@ -112,6 +156,7 @@ export type ReviewReport = z.infer<typeof ReviewReport>;
 
 export interface DraftSnapshot {
   slug: string;
+  collection: Collection;
   /** Repo-relative path. */
   file: string;
   contentSha256: string;

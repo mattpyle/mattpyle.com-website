@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "slug": "steward-smoke-test",
+  "collection": "writing",
+  "mode": "gate",
+  "file": "src/content/writing/steward-smoke-test.md",
+  "contentSha256": "ae64e4ff006ed60cc591d1bdddcee457aee8634bfa0ea66f02b591483712cca1",
+  "reviewedAt": "2026-07-21T06:56:27.495Z",
+  "workflowId": "steward-review-steward-smoke-test",
+  "runId": "019f8376-0a01-7987-850f-812fc04b8edd",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "block",
+      "findings": [
+        {
+          "id": "cspell-1",
+          "pass": "cspell",
+          "severity": "block",
+          "message": "\"refacrtor\" — did you mean \"refactor\"?",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 12,
+          "excerpt": "A refacrtor of the review pipeline was the damanging part; the accessibiltiy work"
+        },
+        {
+          "id": "cspell-2",
+          "pass": "cspell",
+          "severity": "block",
+          "message": "\"damanging\" — did you mean \"damaging\"?",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 12,
+          "excerpt": "A refacrtor of the review pipeline was the damanging part; the accessibiltiy work"
+        },
+        {
+          "id": "cspell-3",
+          "pass": "cspell",
+          "severity": "block",
+          "message": "\"accessibiltiy\" — did you mean \"accessibility\"?",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 12,
+          "excerpt": "A refacrtor of the review pipeline was the damanging part; the accessibiltiy work"
+        }
+      ],
+      "startedAt": "2026-07-21T06:56:19.060Z",
+      "durationMs": 442,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is supposed' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 2,
+          "excerpt": "is supposed"
+        },
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 2,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'It is' is too wordy.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 5,
+          "excerpt": "It is"
+        },
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'it is' is too wordy.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 5,
+          "excerpt": "it is"
+        },
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 5,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-6",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 10,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-7",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 12,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-8",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 13,
+          "excerpt": "was"
+        }
+      ],
+      "startedAt": "2026-07-21T06:56:19.061Z",
+      "durationMs": 447,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "block",
+      "findings": [
+        {
+          "id": "frontmatter-3",
+          "pass": "frontmatter",
+          "severity": "block",
+          "message": "`updated` is earlier than `date`.",
+          "file": "src/content/writing/steward-smoke-test.md"
+        },
+        {
+          "id": "frontmatter-5",
+          "pass": "frontmatter",
+          "severity": "block",
+          "message": "Body contains an `# h1`. The page template emits the h1 from `title`; body headings start at `h2`.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 10,
+          "excerpt": "# This heading should not be here\r"
+        },
+        {
+          "id": "frontmatter-6",
+          "pass": "frontmatter",
+          "severity": "block",
+          "message": "Image `../../assets/a11y-bot-form.png` has empty alt text. Alt text conveys the information in the image, not the filename.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 15,
+          "excerpt": "![](../../assets/a11y-bot-form.png)"
+        },
+        {
+          "id": "frontmatter-1",
+          "pass": "frontmatter",
+          "severity": "flag",
+          "message": "`description` is 165 chars — over the ~155-char SERP limit. Add a short `seoDescription` override.",
+          "file": "src/content/writing/steward-smoke-test.md"
+        },
+        {
+          "id": "frontmatter-2",
+          "pass": "frontmatter",
+          "severity": "flag",
+          "message": "`title` is 89 chars — over the ~60-char SERP limit. Add a short `seoTitle` override.",
+          "file": "src/content/writing/steward-smoke-test.md"
+        },
+        {
+          "id": "frontmatter-4",
+          "pass": "frontmatter",
+          "severity": "flag",
+          "message": "No `tags`. Tags feed the writing index and topical grouping.",
+          "file": "src/content/writing/steward-smoke-test.md"
+        },
+        {
+          "id": "frontmatter-7",
+          "pass": "frontmatter",
+          "severity": "flag",
+          "message": "Image `/images/from-public.png` is not a relative `src/assets/` reference. Images in `public/` get no optimisation and no intrinsic dimensions, which costs CLS.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 17,
+          "excerpt": "![A chart showing nothing in particular](/images/from-public.png)"
+        }
+      ],
+      "startedAt": "2026-07-21T06:56:19.061Z",
+      "durationMs": 7
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "claims-patch-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: The updated date (2026-07-01) precedes the published date (2026-07-18), which is logically impossible for an 'updated' field.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 4,
+          "excerpt": "updated: 2026-07-01"
+        },
+        {
+          "id": "claims-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "buried lede: The post has no discernible lede at all — there is no opening statement of what the post is about or what the reader should take away.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 12,
+          "excerpt": "A refacrtor of the review pipeline was the damanging part; the accessibiltiy work\nwas fine.",
+          "evidence": "The only body text is a single sentence fragment with no context, no subject introduction, and no conclusion. There is nothing for a reader to orient around."
+        },
+        {
+          "id": "claims-judgment-patch-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "Suggested edit was refused because it rewrites prose the model itself flagged as an editorial judgment, not a mechanical defect. Three clear misspellings: 'refacrtor' → 'refactor', 'damanging' → 'damaging', 'accessibiltiy' → 'accessibility'.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 12,
+          "excerpt": "A refacrtor of the review pipeline was the damanging part; the accessibiltiy work",
+          "evidence": "The model proposed replacing this with: \"A refactor of the review pipeline was the damaging part; the accessibility work\". Rewriting a claim the model flagged as overclaiming, unsupported, or contradictory is an editorial act, and the Steward never makes those automatically (design rule 1) — however small the edit. Decide this one yourself."
+        },
+        {
+          "id": "claims-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: This image has no alt text, making it unintelligible when extracted or consumed by an AI answer engine.",
+          "file": "src/content/writing/steward-smoke-test.md",
+          "line": 15,
+          "excerpt": "![](../../assets/a11y-bot-form.png)",
+          "evidence": "An empty alt attribute provides no semantic content; any system reading this section in isolation gets no information about what the image depicts."
+        }
+      ],
+      "startedAt": "2026-07-21T06:56:19.044Z",
+      "durationMs": 8428,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "e684e8d44b3d4c998178bd2e7ff67d8ce5b62d47fd63f5ae4132e949dcacd3d7",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "dictionaryProposals": []
+      }
+    }
+  ],
+  "patches": [
+    {
+      "id": "patch-1",
+      "findingId": "cspell-1",
+      "file": "src/content/writing/steward-smoke-test.md",
+      "oldText": "refacrtor",
+      "newText": "refactor",
+      "rationale": "cspell: \"refacrtor\" is not a word; \"refactor\" is the unambiguous correction.",
+      "source": "mechanical",
+      "sourcePasses": [
+        "cspell"
+      ]
+    },
+    {
+      "id": "patch-2",
+      "findingId": "cspell-2",
+      "file": "src/content/writing/steward-smoke-test.md",
+      "oldText": "damanging",
+      "newText": "damaging",
+      "rationale": "cspell: \"damanging\" is not a word; \"damaging\" is the unambiguous correction.",
+      "source": "mechanical",
+      "sourcePasses": [
+        "cspell"
+      ]
+    },
+    {
+      "id": "patch-3",
+      "findingId": "cspell-3",
+      "file": "src/content/writing/steward-smoke-test.md",
+      "oldText": "accessibiltiy",
+      "newText": "accessibility",
+      "rationale": "cspell: \"accessibiltiy\" is not a word; \"accessibility\" is the unambiguous correction.",
+      "source": "mechanical",
+      "sourcePasses": [
+        "cspell"
+      ]
+    },
+    {
+      "id": "patch-4",
+      "findingId": "claims-patch-1",
+      "file": "src/content/writing/steward-smoke-test.md",
+      "oldText": "updated: 2026-07-01",
+      "newText": "updated: 2026-07-18",
+      "rationale": "The updated date (2026-07-01) precedes the published date (2026-07-18), which is logically impossible for an 'updated' field.",
+      "source": "editorial",
+      "sourcePasses": [
+        "claims_structure"
+      ]
+    }
+  ],
+  "overall": "block",
+  "summary": "BLOCK — 6 blocking findings must be resolved before publish. cspell: block (3 findings); vale: flag (8 findings); frontmatter: block (7 findings); claims_structure: flag (4 findings). 4 patches proposed.",
+  "human": {
+    "decision": "rejected",
+    "reason": "cleanup after steward-inbox verification",
+    "decidedAt": "2026-07-21T07:04:00.430Z"
+  },
+  "publish": {}
+}

@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url';
 const fixtures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 process.env.STEWARD_SITE_DIR = fixtures;
 
+// `reviews/` is a dataset. Tests that archive must never write into the real one —
+// test artifacts in it are contamination, not clutter. Set before importing config.
+const tmpReviews = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-reviews-'));
+process.env.STEWARD_REVIEWS_DIR = tmpReviews;
+
 const { snapshotDraft, currentContentHash, sha256 } = await import('../../src/activities/snapshot.js');
 const { archiveReport } = await import('../../src/activities/archive.js');
 const { REVIEWS_DIR } = await import('../../src/config.js');
@@ -48,7 +53,7 @@ test('a missing post fails with the available draft slugs listed', async () => {
     () => snapshotDraft('does-not-exist'),
     (err: Error) => {
       assert.match(err.message, /src\/content\/writing\/does-not-exist\.md/);
-      assert.match(err.message, /Available draft slugs/);
+      assert.match(err.message, /Available writing draft slugs/);
       return true;
     },
   );
@@ -62,6 +67,8 @@ function report(sha: string): ReviewReport {
   return {
     schemaVersion: 1,
     slug: 'archive-test',
+    collection: 'writing',
+    mode: 'gate',
     file: 'src/content/writing/archive-test.md',
     contentSha256: sha,
     reviewedAt: new Date().toISOString(),
@@ -80,7 +87,8 @@ test('archiveReport writes a hash-keyed file and a latest.json copy', async () =
   const sha = 'b'.repeat(64);
   const result = await archiveReport(report(sha));
 
-  const dir = path.join(REVIEWS_DIR, 'archive-test');
+  // reviews/<collection>/<slug>/ — the slug alone is not unique across collections.
+  const dir = path.join(REVIEWS_DIR, 'writing', 'archive-test');
   const hashed = path.join(dir, `${sha.slice(0, 12)}.json`);
   const latest = path.join(dir, 'latest.json');
 
@@ -88,7 +96,11 @@ test('archiveReport writes a hash-keyed file and a latest.json copy', async () =
   // Windows: a real copy, never a symlink (design rule 8).
   assert.equal((await fs.lstat(latest)).isSymbolicLink(), false);
   assert.equal(await fs.readFile(hashed, 'utf8'), await fs.readFile(latest, 'utf8'));
-  assert.equal(result.reportPath, `agents/steward/reviews/archive-test/${sha.slice(0, 12)}.json`);
+  // The archive dir is redirected to a temp dir here, so the repo-relative path is
+  // a `../`-form. What matters is the shape and that it round-trips back to the file.
+  const { resolveArchivePath } = await import('../../src/config.js');
+  assert.match(result.reportPath, /archive-test\/[0-9a-f]{12}\.json$/);
+  assert.equal(path.resolve(resolveArchivePath(result.reportPath)), path.resolve(hashed));
 
   await fs.rm(dir, { recursive: true, force: true });
 });
@@ -102,4 +114,34 @@ test('archiveReport refuses a report that violates the schema', async () => {
 test.after(async () => {
   await fs.rm(path.join(fixtures, 'src'), { recursive: true, force: true });
   await fs.rm(path.join(os.tmpdir(), 'steward-noop'), { recursive: true, force: true });
+  await fs.rm(tmpReviews, { recursive: true, force: true });
+});
+
+// --- Phase 1c: archive paths survive a redirected SITE_DIR -------------------
+// Regression for the Phase 1b coupling bug: `reportPath` was relativised against
+// the real checkout but read back by joining onto SITE_DIR. With SITE_DIR
+// redirected (as it is throughout this file, and as every Stage 3 live run does)
+// the CLI silently found no file and rendered an empty findings table. Silent,
+// because readArchivedReport swallows the error and returns null.
+test('an archived report is readable back under a redirected SITE_DIR', async () => {
+  const { resolveArchivePath, SITE_DIR, REPO_ROOT } = await import('../../src/config.js');
+
+  // Guard the premise: if these ever coincide, this test proves nothing.
+  assert.notEqual(SITE_DIR, REPO_ROOT, 'SITE_DIR must be redirected for this test to bite');
+
+  const sha = 'd'.repeat(64);
+  const result = await archiveReport(report(sha));
+
+  const raw = await fs.readFile(resolveArchivePath(result.reportPath), 'utf8');
+  assert.equal(JSON.parse(raw).contentSha256, sha, 'the round-trip finds the real report');
+
+  // And the naive join that shipped in 1b must be the thing that is wrong,
+  // not merely a second path that happens to work.
+  await assert.rejects(
+    () => fs.readFile(path.join(SITE_DIR, result.reportPath), 'utf8'),
+    'joining onto SITE_DIR is the bug, and stays broken by construction',
+  );
+
+  const latest = await fs.readFile(resolveArchivePath(result.latestPath), 'utf8');
+  assert.equal(JSON.parse(latest).contentSha256, sha);
 });

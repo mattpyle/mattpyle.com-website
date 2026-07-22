@@ -20,7 +20,7 @@ import matter from 'gray-matter';
  * this filter excludes it without needing to name it.
  *
  * When this fails, the fix is almost always to add the flagged term to
- * `agents/steward/cspell.config.yaml` — but read it first. A real typo in a
+ * `cspell.shared.yaml` — but read it first. A real typo in a
  * published post is exactly what this check is also capable of catching.
  */
 
@@ -32,16 +32,21 @@ process.env.STEWARD_SITE_DIR = SITE_DIR;
 
 const { runCspell } = await import('../../src/activities/cspell.js');
 
-const WRITING_DIR = path.join(SITE_DIR, 'src', 'content', 'writing');
+// Both collections, as of Prompt 3c. The en-GB switch is what forced this: it
+// cost two ordinary words (`testbed`, `anymore`) that `language: en` carried,
+// and one of them was only ever going to surface in a changelog entry. A
+// regression that watched `writing` alone would have called that switch clean.
+const COLLECTIONS = ['writing', 'changelog'] as const;
 
-async function publishedPosts(): Promise<string[]> {
-  const entries = await fs.readdir(WRITING_DIR);
+async function publishedPosts(collection: string): Promise<string[]> {
+  const dir = path.join(SITE_DIR, 'src', 'content', collection);
+  const entries = await fs.readdir(dir);
   const published: string[] = [];
   for (const name of entries) {
     if (!name.endsWith('.md')) continue;
-    const raw = await fs.readFile(path.join(WRITING_DIR, name), 'utf8');
+    const raw = await fs.readFile(path.join(dir, name), 'utf8');
     if (matter(raw).data.draft === true) continue;
-    published.push(`src/content/writing/${name}`);
+    published.push(`src/content/${collection}/${name}`);
   }
   return published;
 }
@@ -61,14 +66,15 @@ test('the Steward still flags the smoke-test fixture the SITE spellcheck ignores
 });
 
 test('every published post is spelling-clean (the dictionary has not gone stale)', async () => {
-  const posts = await publishedPosts();
-  assert.ok(posts.length > 0, `found no published posts under ${WRITING_DIR}`);
-
   const offenders: string[] = [];
-  for (const file of posts) {
-    const result = await runCspell(file);
-    for (const f of result.findings) {
-      offenders.push(`${f.file}:${f.line} ${f.message}`);
+  for (const collection of COLLECTIONS) {
+    const posts = await publishedPosts(collection);
+    assert.ok(posts.length > 0, `found no published posts in the ${collection} collection`);
+    for (const file of posts) {
+      const result = await runCspell(file);
+      for (const f of result.findings) {
+        offenders.push(`${f.file}:${f.line} ${f.message}`);
+      }
     }
   }
 
@@ -76,6 +82,6 @@ test('every published post is spelling-clean (the dictionary has not gone stale)
     offenders,
     [],
     `cspell flagged published prose. Either the dictionary is stale (add the term to ` +
-      `agents/steward/cspell.config.yaml) or these are real typos:\n  ${offenders.join('\n  ')}`,
+      `cspell.shared.yaml) or these are real typos:\n  ${offenders.join('\n  ')}`,
   );
 });

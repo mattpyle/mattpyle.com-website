@@ -1,0 +1,45 @@
+{
+  "collection": "writing",
+  "slug": "i-turned-on-a-screen-reader",
+  "provenance": "mixed",
+  "draft": false,
+  "words": 1625,
+  "runs": [
+    {
+      "run": 1,
+      "aiLikenessScore": 22,
+      "tellCounts": {
+        "NOT_X_BUT_Y": 1,
+        "ZINGER_BOLDING": 2,
+        "RULE_OF_THREE": 2,
+        "EM_DASH_DENSITY": 0,
+        "UNIFORM_RHYTHM": 0,
+        "HEDGED_SYMMETRY": 0,
+        "STOCK_TRANSITIONS": 1,
+        "LIST_INFLATION": 0
+      },
+      "durationMs": 15189,
+      "rubricSha256": "4ed89adce6bd023a8c021a46c52ceea95be1b4364343b17a362061b6a05e84fb",
+      "model": "claude-sonnet-4-6",
+      "at": "2026-07-20T04:42:34.484Z"
+    },
+    {
+      "run": 2,
+      "aiLikenessScore": 22,
+      "tellCounts": {
+        "NOT_X_BUT_Y": 1,
+        "ZINGER_BOLDING": 2,
+        "RULE_OF_THREE": 2,
+        "EM_DASH_DENSITY": 0,
+        "UNIFORM_RHYTHM": 0,
+        "HEDGED_SYMMETRY": 0,
+        "STOCK_TRANSITIONS": 1,
+        "LIST_INFLATION": 0
+      },
+      "durationMs": 15185,
+      "rubricSha256": "4ed89adce6bd023a8c021a46c52ceea95be1b4364343b17a362061b6a05e84fb",
+      "model": "claude-sonnet-4-6",
+      "at": "2026-07-20T04:42:49.669Z"
+    }
+  ]
+}

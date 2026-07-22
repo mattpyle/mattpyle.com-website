@@ -1,0 +1,45 @@
+{
+  "collection": "changelog",
+  "slug": "site-live",
+  "provenance": "ai",
+  "draft": false,
+  "words": 164,
+  "runs": [
+    {
+      "run": 1,
+      "aiLikenessScore": 8,
+      "tellCounts": {
+        "NOT_X_BUT_Y": 1,
+        "ZINGER_BOLDING": 0,
+        "RULE_OF_THREE": 0,
+        "EM_DASH_DENSITY": 0,
+        "UNIFORM_RHYTHM": 0,
+        "HEDGED_SYMMETRY": 0,
+        "STOCK_TRANSITIONS": 0,
+        "LIST_INFLATION": 0
+      },
+      "durationMs": 4028,
+      "rubricSha256": "4ed89adce6bd023a8c021a46c52ceea95be1b4364343b17a362061b6a05e84fb",
+      "model": "claude-sonnet-4-6",
+      "at": "2026-07-20T04:41:51.966Z"
+    },
+    {
+      "run": 2,
+      "aiLikenessScore": 8,
+      "tellCounts": {
+        "NOT_X_BUT_Y": 1,
+        "ZINGER_BOLDING": 0,
+        "RULE_OF_THREE": 0,
+        "EM_DASH_DENSITY": 0,
+        "UNIFORM_RHYTHM": 0,
+        "HEDGED_SYMMETRY": 0,
+        "STOCK_TRANSITIONS": 0,
+        "LIST_INFLATION": 0
+      },
+      "durationMs": 3680,
+      "rubricSha256": "4ed89adce6bd023a8c021a46c52ceea95be1b4364343b17a362061b6a05e84fb",
+      "model": "claude-sonnet-4-6",
+      "at": "2026-07-20T04:41:55.646Z"
+    }
+  ]
+}

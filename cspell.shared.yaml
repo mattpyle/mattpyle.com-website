@@ -1,0 +1,119 @@
+# THE shared spelling dictionary — spec §8.2. One file, two consumers.
+#
+#   1. `npm run spellcheck` (the site's advisory CI check) — via `import` in `cspell.json`
+#   2. The Steward's `runCspell` activity — reads this file directly as CSPELL_CONFIG
+#
+# **This file owns `language` and `words` for both. Neither consumer may declare
+# its own.** Everything else (which files to scan, which paths to ignore) stays
+# consumer-specific and lives in the consumer's own config.
+#
+# --- Why this was unified (Phase 2 Part A, 2026-07-19) -------------------------
+# This file previously lived at `agents/steward/cspell.config.yaml` and argued,
+# in this very comment block, that being separate from the site's dictionary was
+# a FEATURE: "widening the Steward's dictionary can never quietly weaken the
+# site's own spellcheck, and a drift between the two is itself a signal worth
+# noticing."
+#
+# That reasoning was wrong, and the publish leg is what proved it. Once the
+# Steward became the thing that opens publish PRs, the two dictionaries gave
+# opposite answers about the same file: `npm run spellcheck` flagged `utilising`
+# and `Kimi` in `hello-world.md` while the Steward accepted both — meaning the
+# Steward could approve and publish a post the repo's own CI job then marks red.
+# A drift is only "a signal worth noticing" if somebody notices it. Nobody did,
+# for two phases, and the divergence was found by reading configs rather than by
+# anything failing.
+#
+# The fix is structural rather than corrective: there is now no second dictionary
+# to drift FROM. `project-words.txt` was retired in the same change — it was a
+# strict subset (25 words, all 25 already present here), so nothing was lost.
+#
+# Seeded by running cspell across `src/content/writing/*.md` (one published post
+# at the time of Phase 1a) plus the site's then-existing `project-words.txt`.
+# That run found ZERO issues — there are no unfixed typos in published posts.
+#
+# Zero-false-positive is the goal (§8.2): if a run is noisy, widen this list
+# rather than downgrading severity. Never add a word to silence a real typo.
+#
+# --- en-GB (Prompt 3c, 2026-07-19) ---------------------------------------------
+# `language: en-GB` replaces the previous `en` (which resolves to en-US). This is
+# the site's declared spelling convention — see spec §8.2. Vale.Spelling stays
+# DISABLED (Matt's Phase 1b call); en-GB is a cspell-only change and re-enabling
+# Vale's spelling rule is not the way to "fix spelling" here.
+#
+# Correction to the note that used to sit here: it warned that US spellings
+# (`utilize`, `optimize`, `color`) would become findings under en-GB. They do
+# NOT. cspell's `en_GB` dictionary ACCEPTS US spellings — verified directly
+# against the corpus in Prompt 3c. en-GB removes a penalty on British
+# inflections; it does not add one on American ones. What the switch actually
+# cost was two ordinary words en_US carried and en_GB does not, both admitted
+# under the "en-GB collateral" heading below.
+#
+# As of the unification this applies to `npm run spellcheck` too, which was
+# previously `language: en`. That is the whole point: one declared convention.
+version: "0.2"
+language: en-GB
+
+words:
+  # --- Standards, protocols, acronyms ---
+  - a11y
+  - AEO
+  - AX
+  - AXIS
+  - GEO
+  - PLG
+  - WebMCP
+  - webmcp
+  - llms
+  - NVDA
+  - WCAG
+  - aria
+  - aria-current
+  - aria-pressed
+  - frontmatter
+  - MCP
+
+  # --- Tools and platforms ---
+  - Astro
+  - axe
+  - axe-core
+  - cspell
+  - Lighthouse
+  - Vercel
+  - Temporal
+  - Temporalio
+  - Octokit
+  - Zod
+  - execa
+  - pino
+  - tsx
+  - Vale
+
+  # --- Proper nouns ---
+  - mattpyle
+  - Milhouse
+  - Biilmann
+
+  # --- Terms of art verified in existing content ---
+  - Contentful
+  - preconnects
+
+  # --- en-GB collateral (2026-07-19, Prompt 3c) ---
+  # NOT jargon. Both are ordinary words that `language: en` accepted and the
+  # en_GB wordlist does not carry. Recorded separately from the lists above so a
+  # future reader can tell "we chose this word" from "the dictionary swap cost
+  # us this word", and can re-test them if the en_GB dictionary is ever updated.
+  #
+  # testbed — an en_GB gap, and core site vocabulary besides: CLAUDE.md opens by
+  # calling mattpyle.com an experimental testbed. Flagged as a `block` with the
+  # suggestion "tested", which would have silently corrupted the sentence.
+  - testbed
+  #
+  # anymore — a deliberate allowance of the American one-word form. British usage
+  # is the two-word "any more"; Matt's published prose uses "anymore" and that
+  # stands. Admitted knowingly, not because the distinction was missed.
+  - anymore
+
+  # --- Added via `steward dict-add` ---
+  # Machine-appended, human-approved. Kept sorted within this section; the
+  # curated groups above are hand-maintained and deliberately not re-sorted.
+  - Kimi
