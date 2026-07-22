@@ -20,19 +20,23 @@ function formatDate(date: Date): string {
 
 <section data-module="recent-writing">
   <div class="section-inner">
-    <p class="section-eyebrow">Recent writing</p>
-    <ol role="list" class="article-list">
-      {articles.map(article => (
-        <li class="article-item">
-          <a href={`/writing/${article.id}`} class="article-title">
-            {article.data.title}
-          </a>
-          <time datetime={article.data.date.toISOString()} class="article-date">
-            {formatDate(article.data.date)}
-          </time>
-        </li>
-      ))}
-    </ol>
+    <h2 class="section-eyebrow">Recent writing</h2>
+    {articles.length > 0 ? (
+      <ol role="list" class="article-list">
+        {articles.map(article => (
+          <li class="article-item">
+            <a href={`/writing/${article.id}`} class="article-title">
+              {article.data.title}
+            </a>
+            <time datetime={article.data.date.toISOString()} class="article-date">
+              {formatDate(article.data.date)}
+            </time>
+          </li>
+        ))}
+      </ol>
+    ) : (
+      <p class="empty-state">More writing coming soon.</p>
+    )}
     <a href="/writing" class="all-link">ALL WRITING →</a>
   </div>
 </section>
@@ -50,12 +54,11 @@ function formatDate(date: Date): string {
   }
 
   .section-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    letter-spacing: .16em;
-    color: var(--color-label);
+    font-family: var(--font-serif);
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--color-heading);
     margin: 0 0 20px;
-    text-transform: uppercase;
   }
 
   .article-list {
@@ -66,6 +69,14 @@ function formatDate(date: Date): string {
     flex-direction: column;
     gap: 18px;
     max-width: 640px;
+  }
+
+  .empty-state {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--color-muted);
+    margin: 0;
   }
 
   .article-item {
