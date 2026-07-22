@@ -406,6 +406,13 @@ test('a clean post yields a pass verdict and no findings', async () => {
 // the workflow input flag, and these tests guard the behaviour instead.
 // ---------------------------------------------------------------------------
 
+// `posts/known-good.md` (see the fixture's own comment) is meant to be clean
+// for every *mechanical* pass, but it is not tell-free: line 13 has a real em
+// dash ("... the fixture needs updating — decide which..."), which is exactly
+// the deliberate, long-standing habit `UNCLASSIFIED_TELLS` describes. Since
+// EM_DASH_DENSITY is now computed in code from the file itself (never asked
+// of the model), that one finding is present in every ai-tells result below
+// regardless of what the LLM stub returns.
 const AI_TELLS_VALID = JSON.stringify({
   aiLikenessScore: 62,
   findings: [
@@ -417,11 +424,11 @@ const AI_TELLS_VALID = JSON.stringify({
       evidence: 'Classic AI cadence; the sentence carries no information the previous one lacked.',
     },
     {
-      category: 'RULE_OF_THREE',
+      category: 'ZINGER_BOLDING',
       line: 20,
-      excerpt: 'faster, cleaner, and more honest',
-      message: 'Triadic list used rhythmically.',
-      evidence: 'The third item adds nothing; the triple exists for cadence.',
+      excerpt: '**This is the whole point.**',
+      message: 'Bolded aphorism used as an applause line.',
+      evidence: 'Reads as a mic-drop sentence rather than information.',
     },
     {
       category: 'NOT_X_BUT_Y',
@@ -429,6 +436,16 @@ const AI_TELLS_VALID = JSON.stringify({
       excerpt: 'this is not a benchmark — it is a habit',
       message: 'Second contrast construction.',
       evidence: 'Same shape as line 12.',
+    },
+    {
+      // RULE_OF_THREE is now computed deterministically (lib/tells.ts), not
+      // judged by the LLM — the rubric no longer asks about it. A finding
+      // tagged with it from the model is dropped rather than double-counted.
+      category: 'RULE_OF_THREE',
+      line: 25,
+      excerpt: 'faster, cleaner, and more honest',
+      message: 'Triadic list used rhythmically.',
+      evidence: 'The third item adds nothing; the triple exists for cadence.',
     },
   ],
 });
@@ -440,13 +457,21 @@ test('ai-tells reports the composite score and a per-category breakdown', async 
 
   assert.equal(result.pass, 'ai_tells');
   assert.equal(result.metrics?.aiLikenessScore, 62);
-  assert.equal(result.findings.length, 3);
+  // 2 NOT_X_BUT_Y + 1 ZINGER_BOLDING from the LLM, + 1 EM_DASH_DENSITY
+  // computed deterministically from the fixture's own em dash. The model's
+  // RULE_OF_THREE finding is dropped (see the fixture comment above), not
+  // counted as a fifth.
+  assert.equal(result.findings.length, 4);
 
   // The breakdown is what lets the study separate format-driven tells from
   // voice-driven ones without retuning the rubric, so it is asserted directly.
   const counts = result.metrics?.tellCounts as Record<string, number>;
   assert.equal(counts.NOT_X_BUT_Y, 2);
-  assert.equal(counts.RULE_OF_THREE, 1);
+  assert.equal(counts.ZINGER_BOLDING, 1);
+  assert.equal(counts.EM_DASH_DENSITY, 1);
+  // Dropped, not counted: RULE_OF_THREE is deterministic-only now, and the
+  // fixture's prose contains no explicit triad of its own.
+  assert.equal(counts.RULE_OF_THREE, 0);
 
   // Every category is present even at zero. An absent key and a zero are very
   // different things to anything doing arithmetic across pieces.
@@ -484,7 +509,7 @@ test('ai-tells never yields a patch, even when the model proposes one (clamp 3)'
   assert.deepEqual(result.patches, []);
   assert.equal(result.metrics?.droppedPatches, 2);
   // The findings survive: dropping the patches must not cost us the analysis.
-  assert.equal(result.findings.length, 3);
+  assert.equal(result.findings.length, 4);
 });
 
 test('an out-of-range aiLikenessScore is clamped rather than discarded', () => {

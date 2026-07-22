@@ -141,7 +141,10 @@ export {
   FORMAT_DRIVEN_TELLS,
   VOICE_DRIVEN_TELLS,
   UNCLASSIFIED_TELLS,
+  DETERMINISTIC_TELLS,
+  LLM_JUDGED_TELLS,
 } from '../lib/tells.js';
+import { computeDeterministicTells, LLM_JUDGED_TELLS } from '../lib/tells.js';
 
 export const AiTellFinding = z.object({
   category: TellCategory,
@@ -191,7 +194,16 @@ export interface AiTellsMapped {
  * the count of what was dropped is surfaced rather than silently discarded, so
  * a model that starts emitting patches is visible instead of invisible.
  */
-export function mapAiTellsResponse(response: AiTellsResponse, file: string): AiTellsMapped {
+/**
+ * `text` is the raw file content the deterministic counters scan — the same
+ * text the LLM half of this pass reads (before `withLineNumbers` prefixes it),
+ * so a `line` cited by either half points at the same file.
+ */
+export function mapAiTellsResponse(
+  response: AiTellsResponse,
+  file: string,
+  text: string,
+): AiTellsMapped {
   const findings: Finding[] = [];
 
   // Seeded with every category at zero. A tell that did not fire is a real
@@ -203,14 +215,13 @@ export function mapAiTellsResponse(response: AiTellsResponse, file: string): AiT
     number
   >;
 
-  response.findings.forEach((f, i) => {
+  // Five of the eight tells are computed here, in code, never asked of the
+  // model (spec §9.2 amendment, design rule 9). See lib/tells.ts.
+  computeDeterministicTells(text).forEach((f, i) => {
     tellCounts[f.category] += 1;
     findings.push({
-      id: `ai-tells-${i + 1}`,
+      id: `ai-tells-det-${i + 1}`,
       pass: 'ai_tells',
-      // Clamp 1. Applied explicitly at the mapping site, same as the claims
-      // pass: a model must never be able to block a publish on a stylistic
-      // opinion. This pass in particular is pure taste.
       severity: clampSeverity('flag'),
       message: `${f.category}: ${f.message}`,
       file,
@@ -219,6 +230,30 @@ export function mapAiTellsResponse(response: AiTellsResponse, file: string): AiT
       evidence: f.evidence,
     });
   });
+
+  // The remaining three tells stay LLM judgment calls. Anything the model
+  // returns outside that set is dropped rather than double-counted against
+  // the deterministic pass above — the rubric no longer asks about mechanical
+  // categories, so a finding tagged with one is the model ignoring its
+  // instructions, not a second measurement to add in.
+  response.findings
+    .filter((f) => (LLM_JUDGED_TELLS as readonly string[]).includes(f.category))
+    .forEach((f, i) => {
+      tellCounts[f.category] += 1;
+      findings.push({
+        id: `ai-tells-llm-${i + 1}`,
+        pass: 'ai_tells',
+        // Clamp 1. Applied explicitly at the mapping site, same as the claims
+        // pass: a model must never be able to block a publish on a stylistic
+        // opinion. This pass in particular is pure taste.
+        severity: clampSeverity('flag'),
+        message: `${f.category}: ${f.message}`,
+        file,
+        line: f.line,
+        excerpt: f.excerpt.slice(0, 200),
+        evidence: f.evidence,
+      });
+    });
 
   return {
     findings,
@@ -481,7 +516,7 @@ async function aiTellsPass(file: string, options: EditorialPassOptions): Promise
       send: options.send,
     });
 
-    return { mapped: mapAiTellsResponse(data, file), rubric, attempts };
+    return { mapped: mapAiTellsResponse(data, file, text), rubric, attempts };
   });
 
   return {
