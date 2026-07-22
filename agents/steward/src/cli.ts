@@ -604,7 +604,30 @@ program
 program
   .command('study')
   .description('Aggregate the ai-tells validation study and test it against the pre-registered hypothesis')
-  .action(async () => {
+  .option(
+    '--deterministic',
+    'skip the archived LLM study entirely; scan the corpus fresh with the 5 deterministic tells (zero API calls)',
+  )
+  .action(async (opts: { deterministic?: boolean }) => {
+    if (opts.deterministic) {
+      // A dedicated early return, not a branch buried in the LLM-study output
+      // below: that path imports `lib/llm.js` (for `loadRubric`) purely to
+      // print the rubric text, and reads `reviews/_study/*.json`, which is
+      // archived LLM output. Neither belongs anywhere near a path whose whole
+      // point is "this makes zero API calls" — keeping it a separate function
+      // (`scanCorpusDeterministic`, `lib/corpus-scan.ts`) makes that a
+      // property of the import graph, not just a comment.
+      const { scanCorpusDeterministic, renderCorpusScan } = await import('./lib/corpus-scan.js');
+      const rows = await scanCorpusDeterministic();
+      if (rows.length === 0) {
+        console.log('\n  No writing or changelog content found under src/content/.\n');
+        return;
+      }
+      console.log(renderCorpusScan(rows));
+      console.log(`\n  ${rows.length} piece(s) scanned. Zero Anthropic API calls made.\n`);
+      return;
+    }
+
     const { loadAll, analysePiece, rankBy, STABILITY_BOUND, buildComparisonRows, renderComparison } =
       await import('./lib/study.js');
     const { TELL_CATEGORIES } = await import('./lib/tells.js');
