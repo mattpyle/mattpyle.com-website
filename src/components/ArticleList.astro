@@ -1,5 +1,6 @@
 ---
 import FilterPills from './FilterPills.astro';
+import { readingTimeLabel } from '../lib/reading-time';
 
 interface Article {
   id: string;
@@ -32,10 +33,6 @@ function formatDate(date: Date): string {
   return `${d} ${m} ${y}`;
 }
 
-function readingTime(body: string): string {
-  const words = body.trim().split(/\s+/).length;
-  return `${Math.max(1, Math.ceil(words / 200))} min read`;
-}
 ---
 
 <div data-module="article-list-wrapper">
@@ -48,6 +45,7 @@ function readingTime(body: string): string {
     noun="article"
     nounPlural="articles"
     filterVerb="tagged"
+    syncUrlParam="tag"
   />
 
   <ol data-module="article-list" role="list">
@@ -72,7 +70,7 @@ function readingTime(body: string): string {
                 <li class="tag-pill">{tag}</li>
               ))}
             </ul>
-            <span class="reading-time">{readingTime(article.body ?? '')}</span>
+            <span class="reading-time">{readingTimeLabel(article.body ?? '')}</span>
           </footer>
         </article>
       </li>

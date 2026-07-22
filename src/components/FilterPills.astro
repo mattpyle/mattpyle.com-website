@@ -17,14 +17,17 @@ interface Props {
   nounPlural: string;
   /** Connective phrase for the live-region sentence, e.g. "tagged" or "with status". */
   filterVerb: string;
+  /** When set, the active pill is synced to and restored from this URL query-string param
+   * (e.g. "tag"), so a filtered view survives reload and can be shared or deep-linked. */
+  syncUrlParam?: string;
 }
 
-const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlural, filterVerb } = Astro.props;
+const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlural, filterVerb, syncUrlParam } = Astro.props;
 ---
 
 <div
   class="filter-pills"
-  role="group"
+  role="radiogroup"
   aria-label={groupLabel}
   data-item-selector={itemSelector}
   data-item-attr={itemDataAttr}
@@ -32,9 +35,18 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
   data-noun={noun}
   data-noun-plural={nounPlural}
   data-filter-verb={filterVerb}
+  data-sync-url-param={syncUrlParam}
 >
   {pills.map((pill, i) => (
-    <button class="filter-pill" class:list={{ 'is-active': i === 0 }} data-value={pill.value} aria-current={i === 0 ? 'true' : undefined}>
+    <button
+      type="button"
+      class="filter-pill"
+      class:list={{ 'is-active': i === 0 }}
+      role="radio"
+      aria-checked={i === 0 ? 'true' : 'false'}
+      tabindex={i === 0 ? 0 : -1}
+      data-value={pill.value}
+    >
       {pill.label}
     </button>
   ))}
@@ -44,7 +56,7 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
 <script>
   document.addEventListener('astro:page-load', () => {
     document.querySelectorAll<HTMLElement>('.filter-pills').forEach(group => {
-      const buttons = group.querySelectorAll<HTMLButtonElement>('.filter-pill');
+      const buttons = Array.from(group.querySelectorAll<HTMLButtonElement>('.filter-pill'));
       const status = group.nextElementSibling as HTMLElement | null;
       const itemSelector = group.dataset.itemSelector!;
       const itemAttr = group.dataset.itemAttr!;
@@ -52,38 +64,88 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
       const noun = group.dataset.noun!;
       const nounPlural = group.dataset.nounPlural!;
       const filterVerb = group.dataset.filterVerb!;
+      const syncUrlParam = group.dataset.syncUrlParam || null;
       const items = document.querySelectorAll<HTMLElement>(itemSelector);
       if (!buttons.length || !status) return;
 
-      buttons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          const value = btn.dataset.value!;
-          buttons.forEach(b => {
-            b.classList.remove('is-active');
-            b.removeAttribute('aria-current');
-          });
-          btn.classList.add('is-active');
-          btn.setAttribute('aria-current', 'true');
+      function applyFilter(value: string, activeButton: HTMLButtonElement) {
+        buttons.forEach(b => {
+          const active = b === activeButton;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-checked', active ? 'true' : 'false');
+          b.tabIndex = active ? 0 : -1;
+        });
 
-          let visible = 0;
-          items.forEach(item => {
-            const raw = item.dataset[itemAttr] ?? '';
-            const matches = value === 'all' || (matchMode === 'list' ? raw.split(',').includes(value) : raw === value);
-            item.hidden = !matches;
-            if (matches) visible++;
-          });
+        let visible = 0;
+        items.forEach(item => {
+          const raw = item.dataset[itemAttr] ?? '';
+          const matches = value === 'all' || (matchMode === 'list' ? raw.split(',').includes(value) : raw === value);
+          item.hidden = !matches;
+          if (matches) visible++;
+        });
 
-          const label = btn.textContent ?? '';
-          const nounFor = (n: number) => (n === 1 ? noun : nounPlural);
-          if (visible === 0) {
-            status.textContent = `No ${nounPlural} ${filterVerb} ${label} yet.`;
-          } else if (value === 'all') {
-            status.textContent = `Showing all ${visible} ${nounFor(visible)}.`;
+        const label = activeButton.textContent ?? '';
+        const nounFor = (n: number) => (n === 1 ? noun : nounPlural);
+        if (visible === 0) {
+          status!.textContent = `No ${nounPlural} ${filterVerb} ${label} yet.`;
+        } else if (value === 'all') {
+          status!.textContent = `Showing all ${visible} ${nounFor(visible)}.`;
+        } else {
+          status!.textContent = `Showing ${visible} ${nounFor(visible)} ${filterVerb} ${label}.`;
+        }
+
+        if (syncUrlParam) {
+          const url = new URL(window.location.href);
+          if (value === 'all') {
+            url.searchParams.delete(syncUrlParam);
           } else {
-            status.textContent = `Showing ${visible} ${nounFor(visible)} ${filterVerb} ${label}.`;
+            url.searchParams.set(syncUrlParam, value);
           }
+          window.history.replaceState(window.history.state, '', url);
+        }
+      }
+
+      function select(button: HTMLButtonElement, { focus = true } = {}) {
+        applyFilter(button.dataset.value!, button);
+        if (focus) button.focus();
+      }
+
+      buttons.forEach(btn => {
+        btn.addEventListener('click', () => select(btn, { focus: false }));
+
+        btn.addEventListener('keydown', e => {
+          const currentIndex = buttons.indexOf(btn);
+          let nextIndex: number | null = null;
+          switch (e.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+              nextIndex = (currentIndex + 1) % buttons.length;
+              break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+              nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+              break;
+            case 'Home':
+              nextIndex = 0;
+              break;
+            case 'End':
+              nextIndex = buttons.length - 1;
+              break;
+            default:
+              return;
+          }
+          e.preventDefault();
+          select(buttons[nextIndex]);
         });
       });
+
+      // Initialize: restore the filter from the URL if this group opts in and the
+      // param matches a real pill, otherwise fall back to the default (first/"all") pill.
+      // Either way this also populates the initial visible status line on load.
+      const params = syncUrlParam ? new URLSearchParams(window.location.search) : null;
+      const restoredValue = params?.get(syncUrlParam!);
+      const restored = restoredValue ? buttons.find(b => b.dataset.value === restoredValue) : undefined;
+      select(restored ?? buttons[0], { focus: false });
     });
   });
 </script>
@@ -114,14 +176,9 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
   .filter-pill.is-active { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
 
   .filter-status {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-label);
+    margin: 12px 0 0;
   }
 </style>

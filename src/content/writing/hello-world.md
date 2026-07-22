@@ -5,7 +5,7 @@ updated: 2026-07-18
 description: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
 seoTitle: "Hello, World! Or, this post is a lie."
 seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
-tags: ["agents", "Temporal", "tech"]
+tags: ["agents", "temporal", "tech"]
 featured: false
 draft: false
 ---

@@ -28,6 +28,8 @@ interface Props {
   noindex?: boolean;
   /** Path to this page's raw-markdown variant (e.g. `/writing/<slug>.md`) — see src/pages/writing/[slug].md.ts. */
   markdownAlternate?: string;
+  /** ISO 8601 duration (e.g. "PT6M") for the BlogPosting `timeRequired` field — see src/lib/reading-time.ts. Article pages only. */
+  readingTimeISO8601?: string;
 }
 
 const {
@@ -43,6 +45,7 @@ const {
   breadcrumbs,
   noindex = false,
   markdownAlternate,
+  readingTimeISO8601,
 } = Astro.props;
 
 const headTitleBase = seoTitle ?? title;
@@ -97,6 +100,7 @@ if (type === 'article' && publishedTime) {
     author: { '@id': personId },
     publisher: { '@id': personId },
     mainEntityOfPage: canonicalURL.toString(),
+    ...(readingTimeISO8601 ? { timeRequired: readingTimeISO8601 } : {}),
   });
 }
 
