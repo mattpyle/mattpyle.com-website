@@ -3,6 +3,7 @@ import { getCollection, render } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import ArticleActions from '../../components/ArticleActions.astro';
 import { showDrafts } from '../../lib/show-drafts';
+import { readingTimeLabel, readingTimeISO8601 } from '../../lib/reading-time';
 
 export async function getStaticPaths() {
   const articles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
@@ -22,14 +23,10 @@ function formatDate(date: Date): string {
   return `${d} ${m} ${y}`;
 }
 
-function readingTime(body: string): string {
-  const words = body.trim().split(/\s+/).length;
-  return `${Math.max(1, Math.ceil(words / 200))} min read`;
-}
-
 const { title, date, updated, tags, description, featured, image, seoTitle, seoDescription } = article.data;
 const markdownUrl = `/writing/${article.id}.md`;
 const canonicalUrl = new URL(`/writing/${article.id}/`, Astro.site).toString();
+const articleBody = article.body ?? '';
 ---
 
 <Layout
@@ -41,6 +38,7 @@ const canonicalUrl = new URL(`/writing/${article.id}/`, Astro.site).toString();
   image={image ?? `/og/writing/${article.id}.png`}
   publishedTime={date}
   modifiedTime={updated}
+  readingTimeISO8601={readingTimeISO8601(articleBody)}
   noindex={article.data.draft}
   markdownAlternate={markdownUrl}
   breadcrumbs={[
@@ -62,7 +60,7 @@ const canonicalUrl = new URL(`/writing/${article.id}/`, Astro.site).toString();
         <time datetime={date.toISOString()}>{formatDate(date)}</time>
         {featured && <span class="featured-badge"><span aria-hidden="true">◆</span> FEATURED</span>}
         <span class="meta-sep" aria-hidden="true">·</span>
-        <span class="read-time">{readingTime(article.body ?? '')}</span>
+        <span class="read-time">{readingTimeLabel(articleBody)}</span>
       </div>
       <h1 class="page-title page-title--article">{title}</h1>
       <p class="article-dek page-intro">{description}</p>

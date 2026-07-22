@@ -49,6 +49,20 @@ export const GET: APIRoute = async ({ site }) => {
   }
   lines.push('');
 
+  // The /writing page's tag filter mirrors its selection into a `?tag=` URL param
+  // (see FilterPills.astro), so a filtered view is a real, linkable URL — list it
+  // here rather than only describing the filter as an on-page interaction.
+  const writingTags = [...new Set(articles.flatMap(a => a.data.tags))].sort();
+  if (writingTags.length > 0) {
+    lines.push('### Writing by tag');
+    lines.push('');
+    for (const tag of writingTags) {
+      const count = articles.filter(a => a.data.tags.includes(tag)).length;
+      lines.push(`- [${tag}](${base}/writing?tag=${encodeURIComponent(tag)}): ${count} post${count === 1 ? '' : 's'}`);
+    }
+    lines.push('');
+  }
+
   lines.push('## Builds');
   lines.push('');
   for (const build of builds) {
