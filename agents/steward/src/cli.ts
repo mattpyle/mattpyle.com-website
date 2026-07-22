@@ -16,7 +16,7 @@ import {
 } from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
 import { readArchivedReport, readLatestReport } from './lib/read-report.js';
-import { renderReport } from './lib/render-report.js';
+import { DIM, paint, renderReport } from './lib/render-report.js';
 import { deriveInboxHint } from './lib/inbox.js';
 import {
   reviewPost,
@@ -605,7 +605,8 @@ program
   .command('study')
   .description('Aggregate the ai-tells validation study and test it against the pre-registered hypothesis')
   .action(async () => {
-    const { loadAll, analysePiece, rankBy, STABILITY_BOUND } = await import('./lib/study.js');
+    const { loadAll, analysePiece, rankBy, STABILITY_BOUND, buildComparisonRows, renderComparison } =
+      await import('./lib/study.js');
     const { TELL_CATEGORIES } = await import('./lib/tells.js');
 
     const pieces = await loadAll();
@@ -671,7 +672,38 @@ program
     report('(c) PROVENANCE NOT GENRE — voice-driven tells per 100 words only:', (r) => r.density.voiceTellsPer100 ?? 0);
 
     console.log('\n  Reminder: (b) rests on n=1 human-edited piece. Directional, not inferential.');
-    console.log('  Raw counts are never compared across collections; ranks and per-100w densities only.\n');
+    console.log('  Raw counts are never compared across collections; ranks and per-100w densities only.');
+
+    // --- The readable comparison -------------------------------------------
+    // Answers a different, narrower question than (a)/(b)/(c) above: does any
+    // SINGLE tell category separate the provenance groups, visible by eye,
+    // without collapsing everything into one composite score. Built entirely
+    // from the already-archived StudyPiece records above — no LLM call.
+    console.log(renderComparison(buildComparisonRows(pieces)));
+    console.log(
+      '\n  Note: findings are stored as per-category COUNTS only, not per-finding text or line',
+    );
+    console.log(
+      '  numbers — this table cannot show whether a tell fired on the AI-drafted or the human-edited',
+    );
+    console.log(
+      '  part of a mixed-provenance piece. Answering that needs `steward score` re-run with the',
+    );
+    console.log('  findings inspected directly (a fresh, disclosed API call), not this archive.\n');
+
+    // --- The lever: the actual rubric sent to the model ---------------------
+    const { loadRubric } = await import('./lib/llm.js');
+    const rubric = await loadRubric('ai-tells');
+    console.log(paint('  === RUBRIC — src/rubrics/ai-tells.md (the actual instructions sent to the LLM) ===', DIM));
+    console.log(`  path: ${rubric.path}`);
+    console.log(`  sha256: ${rubric.sha256}`);
+    console.log(
+      '  Versioned + hash-tracked (design rule 6): every archived run records this hash, so a verdict',
+    );
+    console.log('  can always be traced to the exact text that produced it. UNVALIDATED — spec §9.2: the');
+    console.log('  composite score is substantially a length measurement (r = 0.813 vs word count).\n');
+    console.log(rubric.content.split('\n').map((l) => `  ${l}`).join('\n'));
+    console.log('');
   });
 
 program

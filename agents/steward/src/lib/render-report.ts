@@ -10,19 +10,21 @@ import type { PassResult, ReviewReport, Verdict } from './report.js';
  * the result. Terminal-only; no TUI framework, matching spec §10.
  */
 
-const RESET = '\x1b[0m';
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
-const RED = '\x1b[31m';
-const AMBER = '\x1b[33m';
-const GREEN = '\x1b[32m';
+/** Exported so other renderers (e.g. `steward study`'s comparison table) share one palette. */
+export const RESET = '\x1b[0m';
+export const BOLD = '\x1b[1m';
+export const DIM = '\x1b[2m';
+export const RED = '\x1b[31m';
+export const AMBER = '\x1b[33m';
+export const GREEN = '\x1b[32m';
+export const CYAN = '\x1b[36m';
 
 const VERDICT_COLOR: Record<Verdict, string> = { pass: GREEN, flag: AMBER, block: RED };
 /** Same bracket shape the CLI's `render()` already used for `status`/`review` — kept, just colourised. */
 const BADGE_TEXT: Record<Verdict, string> = { pass: '[ PASS]', flag: '[ FLAG]', block: '[BLOCK]' };
 const RANK: Record<Verdict, number> = { block: 2, flag: 1, pass: 0 };
 
-function paint(text: string, color: string): string {
+export function paint(text: string, color: string): string {
   return `${color}${text}${RESET}`;
 }
 
