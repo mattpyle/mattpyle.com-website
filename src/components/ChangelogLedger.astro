@@ -37,35 +37,63 @@ for (const entry of entries) {
 ---
 
 <div data-module="changelog-ledger">
-  {groups.map(group => (
-    <>
-      <div class="year-rule">
-        <span class="year-label">{group.year}</span>
-        <span class="year-line" aria-hidden="true"></span>
-      </div>
-      {group.items.map(entry => (
-        <a href={`/changelog/${entry.id}`} class="lg-row">
-          <div class="lg-when">
-            <span class={`sig-dot sig-dot--${entry.data.significance}`} aria-hidden="true"></span>
-            <span class="lg-date">{formatDate(entry.data.date)}</span>
-          </div>
-          <div class="lg-main">
-            <div class="lg-title">{entry.data.title}</div>
-            <p class="lg-summary">{entry.data.summary}</p>
-            <div class="lg-tags lg-tags--mobile">
+  {groups.length === 0 ? (
+    <p class="empty-state">No changelog entries yet.</p>
+  ) : (
+    groups.map(group => (
+      <>
+        <div class="year-rule">
+          <span class="year-label">{group.year}</span>
+          <span class="year-line" aria-hidden="true"></span>
+        </div>
+        {group.items.map(entry => (
+          <a href={`/changelog/${entry.id}`} class="lg-row" data-type={entry.data.type}>
+            <div class="lg-when">
+              <span class={`sig-dot sig-dot--${entry.data.significance}`} aria-hidden="true"></span>
+              <span class="lg-date">{formatDate(entry.data.date)}</span>
+            </div>
+            <div class="lg-main">
+              <h2 class="lg-title">{entry.data.title}</h2>
+              <p class="lg-summary">{entry.data.summary}</p>
+              <div class="lg-tags lg-tags--mobile">
+                <span class="type-pill">{entry.data.type}</span>
+                {entry.data.tags.map(tag => <span class="tag-pill">{tag}</span>)}
+              </div>
+            </div>
+            <div class="lg-tags lg-tags--desktop">
               <span class="type-pill">{entry.data.type}</span>
               {entry.data.tags.map(tag => <span class="tag-pill">{tag}</span>)}
             </div>
-          </div>
-          <div class="lg-tags lg-tags--desktop">
-            <span class="type-pill">{entry.data.type}</span>
-            {entry.data.tags.map(tag => <span class="tag-pill">{tag}</span>)}
-          </div>
-        </a>
-      ))}
-    </>
-  ))}
+          </a>
+        ))}
+      </>
+    ))
+  )}
 </div>
+
+<script>
+  // Filtering the type FilterPills on the changelog page hides individual .lg-row
+  // entries; without this, a year whose entries are all filtered out would leave a
+  // bare year-rule divider with nothing under it. Listens generically for the event
+  // FilterPills.astro dispatches rather than FilterPills knowing about year groups.
+  document.addEventListener('astro:page-load', () => {
+    const ledger = document.querySelector('[data-module="changelog-ledger"]');
+    if (!ledger) return;
+
+    document.addEventListener('filterchange', ((e: CustomEvent<{ itemSelector: string }>) => {
+      if (e.detail.itemSelector !== '[data-module="changelog-ledger"] .lg-row') return;
+      ledger.querySelectorAll<HTMLElement>('.year-rule').forEach(rule => {
+        let node = rule.nextElementSibling;
+        let hasVisibleRow = false;
+        while (node && !node.classList.contains('year-rule')) {
+          if (node.classList.contains('lg-row') && !(node as HTMLElement).hidden) hasVisibleRow = true;
+          node = node.nextElementSibling;
+        }
+        rule.hidden = !hasVisibleRow;
+      });
+    }) as EventListener);
+  });
+</script>
 
 <style>
   /* ── Year rule ──────────────────────────────────────────────────────────── */
@@ -101,6 +129,14 @@ for (const entry of entries) {
     border-radius: 6px;
     text-decoration: none;
     transition: background .12s ease;
+  }
+
+  /* The explicit `display: grid` above otherwise beats the browser's [hidden]
+     UA rule at equal specificity, since author styles always win over UA
+     styles — without this, FilterPills setting .hidden on a row wouldn't
+     actually hide it. */
+  .lg-row[hidden] {
+    display: none;
   }
 
   .lg-row:hover { background: var(--color-accent-wash); }
@@ -142,6 +178,16 @@ for (const entry of entries) {
     line-height: 1.3;
     color: var(--color-heading);
     transition: color .12s ease;
+    margin: 0;
+  }
+
+  .empty-state {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--color-muted);
+    margin: 0;
+    padding: 24px 0;
   }
 
   .lg-summary {

@@ -2,6 +2,8 @@
 interface Pill {
   value: string;
   label: string;
+  /** Optional native-tooltip hint, e.g. a one-line definition for a jargon value. */
+  title?: string;
 }
 
 interface Props {
@@ -46,6 +48,7 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
       aria-checked={i === 0 ? 'true' : 'false'}
       tabindex={i === 0 ? 0 : -1}
       data-value={pill.value}
+      title={pill.title}
     >
       {pill.label}
     </button>
@@ -103,6 +106,14 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
           }
           window.history.replaceState(window.history.state, '', url);
         }
+
+        // Generic hook for consumers that need to react to a filter change beyond
+        // show/hide (e.g. hiding a now-empty group header). Decoupled on purpose —
+        // FilterPills stays agnostic of any particular page's extra structure.
+        group.dispatchEvent(new CustomEvent('filterchange', {
+          bubbles: true,
+          detail: { itemSelector, value, visible },
+        }));
       }
 
       function select(button: HTMLButtonElement, { focus = true } = {}) {
