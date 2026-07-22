@@ -11,7 +11,8 @@ directory deleted. Nothing in the site's runtime, build, or Vercel deployment de
 **Built:** `snapshotDraft`, `runCspell`, `runVale`, `checkFrontmatter`, `editorialPass`
 (claims-structure), `buildAndAuditDraft`, `synthesizeReport`, `archiveReport`,
 `applyPatchesActivity`, the durable wait, gate and audit modes across `writing` and `changelog`,
-and — as of Phase 2 — `publishPost` and `verifyDeploy`.
+`publishPost` and `verifyDeploy` (Phase 2), and — as of 2026-07-21 — a human-readable report
+renderer (`steward report <slug>`, and the same render on `review`'s completion).
 
 **Not built:** the `ai-tells` editorial pass, still gated off behind `ENABLE_AI_TELLS` in
 `src/config.ts` pending its validation study.
@@ -160,6 +161,7 @@ Run as `steward <command>` (after `npm link`, from any directory — see the Run
 | `review <slug> [--skip-build-audit]` | Gate-mode review of a **writing draft**, poll until the fan-out finishes, render the report. Refuses if a review of that slug is currently **running**, or if the post is not `draft: true`. |
 | `audit <collection> <slug> [--skip-build-audit]` | **Audit-mode** review of already-published content in `writing` or `changelog`. Same fan-out, same report, archived the same way — then completes. No verdict, no publish leg, and `apply` is refused. |
 | `status <slug>` | Render current state, verdict, findings, patches, report path, Web UI deep link. |
+| `report <slug> [--collection <name>]` | Pretty-print the **latest archived report** for a slug, straight off disk — no live workflow needed. Same renderer `review`'s completion tail uses (`lib/render-report.ts`). `--collection` defaults to `writing`. |
 | `approve <slug> [--force]` | Send `approve`. Refused if the report has blocking findings (use `--force`) or if the file changed since review. With the publish leg on, this opens the PR and then verifies against production. **Send it a second time after you merge** — see below. |
 | `reject <slug> --reason "<text>"` | Send `reject`. Reason required. Re-archives and completes. |
 

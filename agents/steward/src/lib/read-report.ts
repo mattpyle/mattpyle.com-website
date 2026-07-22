@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { resolveArchivePath } from '../config.js';
-import type { ReviewReport, ReviewStateResult } from './report.js';
+import path from 'node:path';
+import { REVIEWS_DIR, resolveArchivePath, type Collection } from '../config.js';
+import { ReviewReport as ReviewReportSchema, type ReviewReport, type ReviewStateResult } from './report.js';
 
 /**
  * Reads the full archived report for a review. The workflow query returns only a
@@ -65,4 +66,37 @@ export async function readArchivedReport(
     'The review records an archived report, but no file was found. Tried:\n' +
       attempted.map((p) => `  - ${p}`).join('\n'),
   );
+}
+
+/**
+ * Reads the LATEST archived report for a slug directly off disk —
+ * `reviews/<collection>/<slug>/latest.json` — with no live workflow involved.
+ *
+ * This is `steward report`'s path, distinct from `readArchivedReport` above:
+ * that function starts from a workflow's `ReviewStateResult` (a live query),
+ * which `report` deliberately does not need — the archive is the dataset, and
+ * a slug that was reviewed once and then closed (approved, published,
+ * rejected — the workflow long gone) must still be reportable. Same
+ * design-rule-11 contract: absence is a legitimate `null`, a broken or
+ * unparsable archive is not.
+ */
+export async function readLatestReport(
+  collection: Collection,
+  slug: string,
+): Promise<ReviewReport | null> {
+  const resolved = path.join(REVIEWS_DIR, collection, slug, 'latest.json');
+  let raw: string;
+  try {
+    raw = await readFile(resolved, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new Error(`Could not read the archived report at ${resolved}: ${(err as Error).message}`);
+  }
+  try {
+    return ReviewReportSchema.parse(JSON.parse(raw));
+  } catch (err) {
+    throw new Error(
+      `The archived report at ${resolved} exists but is not valid JSON, or fails the ReviewReport schema: ${(err as Error).message}`,
+    );
+  }
 }

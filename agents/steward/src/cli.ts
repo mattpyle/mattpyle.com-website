@@ -15,7 +15,8 @@ import {
   type Collection,
 } from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
-import { readArchivedReport } from './lib/read-report.js';
+import { readArchivedReport, readLatestReport } from './lib/read-report.js';
+import { renderReport } from './lib/render-report.js';
 import { deriveInboxHint } from './lib/inbox.js';
 import {
   reviewPost,
@@ -43,15 +44,22 @@ function parseCollection(value: string): Collection {
   return value;
 }
 
-const BADGE: Record<Verdict, string> = { pass: '[ PASS]', flag: '[ FLAG]', block: '[BLOCK]' };
-
 async function fetchReport(c: Client, slug: string, collection: Collection = 'writing') {
   const handle = c.workflow.getHandle(workflowIdFor(slug, collection));
   const state = await handle.query(getReviewState);
   return { handle, state };
 }
 
-/** Spec §10 rendering: plain text, no TUI framework. */
+/**
+ * Spec §10 rendering: plain text, no TUI framework.
+ *
+ * The report itself (header, findings, patches, build audit, next hint) is
+ * `renderReport` — the same pure renderer `steward report` calls — so this
+ * function only adds the workflow-state framing that isn't part of the
+ * archived report: the live state name, the deep link, a stale reason, and the
+ * report's path. When no report has been archived yet (mid fan-out), it falls
+ * back to the workflow query's own `summary`.
+ */
 async function render(
   c: Client,
   slug: string,
@@ -60,39 +68,16 @@ async function render(
 ) {
   const report = await readArchivedReport(state);
   const label = collection === 'writing' ? slug : `${collection}/${slug}`;
-  const modeTag = report?.mode === 'audit' ? '  ·  mode: audit (advisory — nothing will be applied)' : '';
   console.log('');
-  console.log(
-    `  ${label}  —  state: ${state.state}${state.overall ? `  ·  overall: ${state.overall}` : ''}${modeTag}`,
-  );
+  console.log(`  ${label}  —  workflow state: ${state.state}`);
   console.log(`  ${deepLink(slug, collection)}`);
-  console.log('');
-  if (state.summary) console.log(`  ${state.summary}`);
-  console.log('');
 
   if (report) {
-    for (const pass of report.passes) {
-      const counts = pass.findings.length;
-      console.log(`  ${pass.pass} — ${pass.verdict} (${counts} finding${counts === 1 ? '' : 's'}, ${pass.durationMs}ms)`);
-    }
+    console.log(renderReport(report));
+  } else {
     console.log('');
-    const findings = report.passes.flatMap((p) => p.findings);
-    if (findings.length === 0) {
-      console.log('  No findings.');
-    }
-    for (const f of findings) {
-      const patch = report.patches.find((p) => p.findingId === f.id);
-      const where = f.file ? ` ${f.file}${f.line ? `:${f.line}` : ''}` : '';
-      console.log(`  ${BADGE[f.severity]} ${f.pass}${where} ${f.message}${patch ? ` (${patch.id})` : ''}`);
-      if (f.excerpt) console.log(`          ${f.excerpt}`);
-    }
-    if (report.patches.length) {
-      console.log('');
-      console.log('  Proposed patches:');
-      for (const p of report.patches) {
-        console.log(`    ${p.id}  "${p.oldText}" → "${p.newText}"  — ${p.rationale}`);
-      }
-    }
+    if (state.summary) console.log(`  ${state.summary}`);
+    console.log('');
   }
 
   if (state.staleReason) {
@@ -305,6 +290,21 @@ program
     }
     await render(c, slug, state);
     await c.connection.close();
+  });
+
+program
+  .command('report')
+  .argument('<slug>')
+  .option('--collection <name>', `one of: ${COLLECTIONS.join(', ')}`, 'writing')
+  .description('Pretty-print the latest archived report for a slug — no live workflow needed')
+  .action(async (slug: string, opts: { collection: string }) => {
+    const collection = parseCollection(opts.collection);
+    const report = await readLatestReport(collection, slug);
+    if (!report) {
+      const label = collection === 'writing' ? slug : `${collection}/${slug}`;
+      fail(`No report found for ${label} — run \`steward review ${slug}\` first.`);
+    }
+    console.log(renderReport(report));
   });
 
 /**
