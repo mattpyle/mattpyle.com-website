@@ -28,33 +28,37 @@ function significanceLabel(significance: ActivityItem['significance']): string {
 }
 ---
 
-<aside data-module="activity-log" aria-label="Latest activity">
+<aside data-module="activity-log" aria-labelledby="activity-log-heading">
   <div class="log-header">
     <span class="log-heading">
       <span class="index-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span class="log-title">LATEST ACTIVITY</span>
+      <h2 id="activity-log-heading" class="log-title">Latest activity</h2>
     </span>
     <a href="/changelog" class="view-all">VIEW CHANGELOG <span aria-hidden="true">→</span></a>
   </div>
-  <ol role="list" class="log-list">
-    {items.map(item => (
-      <li class="log-item">
-        <a href={item.href} class="log-link">
-          <span class={`sig-dot sig-dot--${item.significance}`} aria-hidden="true"></span>
-          <span class="entry-main">
-            <span class="entry-meta">
-              <time datetime={isoActivityDate(item.date)} class="log-date">
-                {formatActivityDate(item.date)}
-              </time>
-              <span class="type-pill">{item.type}</span>
+  {items.length > 0 ? (
+    <ol role="list" class="log-list">
+      {items.map(item => (
+        <li class="log-item">
+          <a href={item.href} class="log-link">
+            <span class={`sig-dot sig-dot--${item.significance}`} aria-hidden="true"></span>
+            <span class="entry-main">
+              <span class="entry-meta">
+                <time datetime={isoActivityDate(item.date)} class="log-date">
+                  {formatActivityDate(item.date)}
+                </time>
+                <span class="type-pill">{item.type}</span>
+              </span>
+              <span class="entry-title">{item.title}</span>
+              <span class="sr-only">{significanceLabel(item.significance)}</span>
             </span>
-            <span class="entry-title">{item.title}</span>
-            <span class="sr-only">{significanceLabel(item.significance)}</span>
-          </span>
-        </a>
-      </li>
-    ))}
-  </ol>
+          </a>
+        </li>
+      ))}
+    </ol>
+  ) : (
+    <p class="empty-state">No recent activity yet.</p>
+  )}
 </aside>
 
 <style>
@@ -65,7 +69,7 @@ function significanceLabel(significance: ActivityItem['significance']): string {
   }
 
   .log-header {
-    min-height: 39px;
+    min-height: 44px;
     padding: 9px 14px 9px 16px;
     border-bottom: 1px solid var(--color-border);
     display: flex;
@@ -97,17 +101,18 @@ function significanceLabel(significance: ActivityItem['significance']): string {
   }
 
   .log-title {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    letter-spacing: .14em;
-    color: var(--color-label);
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-heading);
     white-space: nowrap;
+    margin: 0;
   }
 
   .view-all {
     font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: .08em;
+    font-size: 10.5px;
+    letter-spacing: .06em;
     color: var(--color-accent);
     white-space: nowrap;
   }
@@ -116,6 +121,15 @@ function significanceLabel(significance: ActivityItem['significance']): string {
     list-style: none;
     margin: 0;
     padding: 5px 0;
+  }
+
+  .empty-state {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 13.5px;
+    color: var(--color-muted);
+    margin: 0;
+    padding: 16px;
   }
 
   .log-item + .log-item { border-top: 1px solid var(--color-border); }
@@ -170,9 +184,9 @@ function significanceLabel(significance: ActivityItem['significance']): string {
     background: var(--color-accent-tint);
     color: var(--color-accent);
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: 10px;
     line-height: 1.4;
-    letter-spacing: .06em;
+    letter-spacing: .04em;
     text-transform: uppercase;
   }
 
