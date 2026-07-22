@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { STEWARD_DIR } from '../config.js';
+import { REPO_ROOT, STEWARD_DIR } from '../config.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -104,6 +104,22 @@ export function killTree(pid: number | undefined): void {
   } catch {
     /* already gone */
   }
+}
+
+/**
+ * tsx's own JS entrypoint under the current Node binary, skipping the `.cmd`
+ * shim (`spawn('tsx.cmd', …, { shell: false })` is a Windows EINVAL trap, the
+ * fix for CVE-2024-27980). `scriptRelPath` is resolved by the caller's own
+ * `cwd`, matching how `tsx <script>` behaves from a shell.
+ *
+ * Shared by `lib/stack.ts` (spawning the worker) and `scripts/steward.mjs`
+ * (the `steward` CLI shim) — the shim can't import this directly, since it runs
+ * under plain `node` before tsx exists in the process; it duplicates just the
+ * path resolution, not the reasoning.
+ */
+export function tsxCommand(scriptRelPath: string): { binary: string; args: string[] } {
+  const tsxCli = path.join(REPO_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  return { binary: process.execPath, args: [tsxCli, scriptRelPath] };
 }
 
 /** Absolute path to the Vale binary installed by `npm run setup:vale`. */

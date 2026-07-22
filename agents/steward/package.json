@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "steward": "./scripts/steward.mjs"
+  },
   "scripts": {
     "worker": "tsx src/worker.ts",
     "steward": "tsx src/cli.ts",

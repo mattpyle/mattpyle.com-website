@@ -4,7 +4,7 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Connection } from '@temporalio/client';
 import { REPO_ROOT, TEMPORAL_ADDRESS, WEB_UI, WORKER_READY_LOG } from '../config.js';
-import { killTree } from './proc.js';
+import { killTree, tsxCommand } from './proc.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -99,14 +99,6 @@ export async function killOrphans(): Promise<number> {
   for (const p of scan.ports) pids.add(p.owningProcess);
   for (const pid of pids) killTree(pid);
   return pids.size;
-}
-
-/** tsx's own JS entrypoint under the current Node binary — see build-audit.ts's `npmCommand` for
- * why `spawn('tsx.cmd', …, { shell: false })` is a trap (EINVAL, CVE-2024-27980 fix). Same fix
- * here: skip the `.cmd` shim entirely. */
-function tsxCommand(scriptRelPath: string): { binary: string; args: string[] } {
-  const tsxCli = path.join(REPO_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
-  return { binary: process.execPath, args: [tsxCli, scriptRelPath] };
 }
 
 function prefixLines(prefix: string, chunk: Buffer, sink: (line: string) => void): void {

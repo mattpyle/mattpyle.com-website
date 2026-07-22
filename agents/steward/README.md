@@ -30,6 +30,9 @@ its own PR** (§8.7). Merging is what triggers the production deploy, and it sta
 4. `.env` with `ANTHROPIC_API_KEY` (the editorial passes) and — **as of Phase 2** —
    `GITHUB_TOKEN` (the publish leg).
 5. **Chrome** and the **Vale binary** (`npm run setup:vale`) for the build audit and prose lint.
+6. **Optional: `steward` as a one-word command.** `cd agents/steward && npm link` once (a fresh
+   clone needs this once; reversible with `npm unlink -g steward`). After that, `steward <verb>`
+   runs from any directory — see "The CLI form" below.
 
 ### `GITHUB_TOKEN` — required for the publish leg, and `gh auth token` will not do
 
@@ -54,28 +57,43 @@ explicit inline value is never silently overridden by a stale local file.
 
 ## Runbook
 
+### The CLI form: `steward <verb>`, from anywhere
+
+After a one-time `npm link` (see Prerequisites #6), `steward` is a real command on PATH — it does
+not need `cd agents/steward` first, or `--` to pass through npm's argument parsing:
+
+```
+steward up
+steward review steward-smoke-test
+steward status steward-smoke-test
+steward approve steward-smoke-test
+```
+
+`package.json`'s `bin` field points at `scripts/steward.mjs`, a thin shim that resolves the
+package root from **its own file location** (`import.meta.url`), never `process.cwd()` — that's
+what makes `steward inbox` from the repo root, or any other directory, resolve the same
+`agents/steward/.cache/temporal-dev.db` and the same repo-root `cspell.shared.yaml` that running
+from inside `agents/steward` does. It spawns tsx's own JS entrypoint directly (the same
+`.cmd`-avoiding pattern `src/lib/proc.ts`'s `tsxCommand` uses for the worker) rather than
+`tsx.cmd`, which is a Windows EINVAL trap.
+
+**Fallbacks, in case `steward` isn't linked or isn't found:**
+
+```
+cd agents/steward
+npm run steward -- up            # npm-wrapped form
+npx tsx src/cli.ts up            # direct form — see "Debugging notes" for why this one matters
+```
+
 **`steward up`** replaces the three-terminal dance for the common case: one foreground terminal
 starts the Temporal dev server and the worker together, refuses to run if a stray server/worker
 from an earlier session is already bound to the queue or the port, and does not print "ready" until
-the server answers and the worker has actually registered on both queues.
+the server answers and the worker has actually registered on both queues. Ctrl+C tears down both
+process trees.
 
-```
-cd agents/steward
-npx tsx src/cli.ts up
-```
-
-Ctrl+C tears down both process trees. From another terminal, run reviews as usual:
-
-```
-cd agents/steward
-npm run steward -- review steward-smoke-test
-npm run steward -- status steward-smoke-test
-npm run steward -- approve steward-smoke-test
-```
-
-If `up`'s terminal is gone or the stack needs a hard reset, `npx tsx src/cli.ts down` force-cleans
-any stray worker/server process it can find and frees 7233/8233 — the same signature `up`'s
-preflight check refuses to start on top of.
+If `up`'s terminal is gone or the stack needs a hard reset, `steward down` force-cleans any stray
+worker/server process it can find and frees 7233/8233 — the same signature `up`'s preflight check
+refuses to start on top of.
 
 ### The original three terminals — still works, and `up` doesn't replace it for every case
 
@@ -130,6 +148,9 @@ Web UI: <http://localhost:8233>.
 ---
 
 ## Commands
+
+Run as `steward <command>` (after `npm link`, from any directory — see the Runbook), or
+`npm run steward -- <command>` / `npx tsx src/cli.ts <command>` from `agents/steward` as fallbacks.
 
 | Command | Behavior |
 |---|---|
@@ -414,10 +435,12 @@ missing `mode` means.
 
 Hard-won, all of them from real lost time.
 
-**Use `npx tsx src/cli.ts <args>` from `agents/steward`, not `npm run steward -- …`.**
-The npm lifecycle wrapper swallows the CLI's own error output behind its script noise,
-so a real stack trace reads as a silent failure. The npm form is fine when it works;
-the `npx` form is the one to reach for the moment it doesn't.
+**Use `npx tsx src/cli.ts <args>` from `agents/steward` (not `npm run steward -- …` or the
+`steward` shim) when you need to see a real error.** The npm lifecycle wrapper — and the
+`steward` shim, which spawns tsx the same way `npm run` does — both swallow the CLI's own error
+output behind script/process noise, so a real stack trace can read as a silent failure. Either
+form is fine when it works; the direct `npx tsx` form is the one to reach for the moment it
+doesn't.
 
 **Redirect `node --test` output to a file before grepping it.**
 
