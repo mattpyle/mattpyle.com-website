@@ -1,19 +1,41 @@
+import scorecardRuns from './scorecard-runs.json' with { type: 'json' };
+
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Last significant shared change: the Scorecard navigation link shipped site-wide. */
 export const SITEWIDE_LASTMOD = '2026-07-15';
 
-const SCORECARD_VERIFIED_ISO = '2026-07-15';
+/**
+ * The run-log is the source of truth for the "verified" date (scorecard-audit-spec.md
+ * §5.1) — imported directly rather than via `scorecard.ts`, which would create a
+ * cycle (`scorecard.ts` itself imports `SCORECARD_VERIFIED` from this file).
+ *
+ * A real ESM import, not `fs.readFileSync`, because this module is loaded both
+ * directly by Node (`astro.config.mjs`) and bundled through Vite during
+ * prerendering — the latter inlines JSON imports into the chunk rather than
+ * copying the file alongside it, so a runtime file read 404s post-bundle.
+ */
 
-/** Shared with the public Scorecard snapshot so its machine and visible dates cannot drift. */
-export const SCORECARD_VERIFIED = Object.freeze({
-  iso: SCORECARD_VERIFIED_ISO,
-  label: new Intl.DateTimeFormat('en-GB', {
+/** @param {string} iso */
+export function formatVerifiedLabel(iso) {
+  return new Intl.DateTimeFormat('en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     timeZone: 'UTC',
-  }).format(new Date(`${SCORECARD_VERIFIED_ISO}T00:00:00.000Z`)),
+  }).format(new Date(`${iso}T00:00:00.000Z`));
+}
+
+const SCORECARD_VERIFIED_ISO = scorecardRuns[0].iso;
+
+/**
+ * Shared with the public Scorecard snapshot so its machine and visible dates
+ * cannot drift. Derived from the newest run in `scorecard-runs.json` — the
+ * date can no longer silently lag the last real audit (scorecard-audit-spec.md §5.1).
+ */
+export const SCORECARD_VERIFIED = Object.freeze({
+  iso: SCORECARD_VERIFIED_ISO,
+  label: formatVerifiedLabel(SCORECARD_VERIFIED_ISO),
 });
 
 /**
