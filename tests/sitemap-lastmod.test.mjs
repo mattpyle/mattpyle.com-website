@@ -6,6 +6,10 @@ import test from 'node:test';
 
 const policy = await import('../src/data/sitemap-lastmod.mjs').catch(() => null);
 const metadata = await import('../scripts/lib/writing-metadata.mjs').catch(() => null);
+const scorecardRuns = await import('../src/data/scorecard-runs.json', { with: { type: 'json' } })
+  .then((m) => m.default)
+  .catch(() => null);
+const scorecardData = await import('../src/data/scorecard.ts').catch(() => null);
 
 test('sitemap policy modules are available', () => {
   assert.ok(policy, 'expected src/data/sitemap-lastmod.mjs to exist');
@@ -29,6 +33,32 @@ test('scorecard verification label is derived from the shared ISO date', { skip:
     label: '15 Jul 2026',
   });
 });
+
+test(
+  'SCORECARD and SCORECARD_HISTORY are pure derivations of scorecard-runs.json',
+  { skip: !scorecardRuns || !scorecardData },
+  () => {
+    const [latest, ...history] = scorecardRuns;
+
+    // SCORECARD === runs[0] (spec §5.1) — same scope/tools/entry/metrics, and
+    // the same verified.iso the sitemap policy above already asserts.
+    assert.equal(scorecardData.SCORECARD.scope, latest.scope);
+    assert.deepEqual(scorecardData.SCORECARD.tools, latest.tools);
+    assert.equal(scorecardData.SCORECARD.entry, latest.entry);
+    assert.deepEqual(scorecardData.SCORECARD.metrics, latest.metrics);
+    assert.equal(scorecardData.SCORECARD.verified.iso, latest.iso);
+
+    // SCORECARD_HISTORY === runs.slice(1), newest-first, verification derived
+    // per entry rather than copied from a hand-maintained object.
+    assert.equal(scorecardData.SCORECARD_HISTORY.length, history.length);
+    scorecardData.SCORECARD_HISTORY.forEach((run, i) => {
+      assert.equal(run.id, history[i].id);
+      assert.equal(run.verified.iso, history[i].iso);
+      assert.equal(run.commentary, history[i].commentary);
+      assert.deepEqual(run.metrics, history[i].metrics);
+    });
+  },
+);
 
 test('writing metadata uses updated over date and discovers nested MDX', { skip: !metadata }, () => {
   const directory = mkdtempSync(join(tmpdir(), 'writing-metadata-'));
