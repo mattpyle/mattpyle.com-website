@@ -1,7 +1,5 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import os from 'node:os';
-import { createRequire } from 'node:module';
 import { Context, CancelledFailure } from '@temporalio/activity';
 import {
   REPO_ROOT,
@@ -12,16 +10,14 @@ import {
   type Collection,
 } from '../config.js';
 import { syncWorktree, needsInstall, recordInstall } from '../lib/git.js';
-import { runCancellable, killTree } from '../lib/proc.js';
+import { runCancellable } from '../lib/proc.js';
 import { serveStatic, type StaticServer } from '../lib/serve.js';
+import { auditUrl } from '../lib/audit-engine.js';
 import {
   axeFindings,
   lighthouseFindings,
-  lighthouseMetrics,
   overallVerdict,
   isExpectedDraftSeoPenalty,
-  type AxeViolation,
-  type LighthouseLike,
 } from '../lib/audit-map.js';
 import type { Finding, PassResult } from '../lib/report.js';
 import { log } from '../lib/logger.js';
@@ -94,8 +90,6 @@ export async function buildAndAuditDraft(
   const signal = ctx.cancellationSignal;
 
   let server: StaticServer | undefined;
-  let chrome: { kill(): void | Promise<void>; pid?: number; port: number } | undefined;
-  let userDataDir: string | undefined;
 
   /**
    * Heartbeating between steps is not enough here.
@@ -178,47 +172,18 @@ export async function buildAndAuditDraft(
     server = await serveStatic(path.join(WORKTREE_DIR, DOC_ROOT));
     const url = `${server.origin}${urlPath}`;
 
-    // --- 5. axe -----------------------------------------------------------
-    step('running axe');
-    const axeStarted = Date.now();
-    const { violations, raw: axeRaw } = await runAxe(url, signal);
-    const axeMs = Date.now() - axeStarted;
-
-    // --- 6. Lighthouse ----------------------------------------------------
-    step('running Lighthouse');
-    const lhStarted = Date.now();
-    const { launch } = await import('chrome-launcher');
-    // An explicit `userDataDir`, because chrome-launcher's own default fails here.
-    // Left to itself it mints `%TEMP%\lighthouse.NNNNNNNN` and then trips
-    // `EPERM, Permission denied` on it — a Windows-specific fight between its
-    // temp-dir handling and a Chrome process still holding the directory open.
-    // Owning the directory ourselves sidesteps it and, more usefully, means a
-    // killed worker leaves its debris somewhere we already clean.
-    userDataDir = path.join(CACHE_DIR, `chrome-${process.pid}-${Date.now()}`);
-    await fs.mkdir(userDataDir, { recursive: true });
-    const launched = await launch({
-      chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu'],
-      userDataDir,
-    });
-    chrome = launched;
-    const { default: lighthouse } = await import('lighthouse');
-    const runnerResult = await lighthouse(url, {
-      port: launched.port,
-      output: 'json',
-      logLevel: 'error',
-    });
-    const lhr = (runnerResult?.lhr ?? {}) as LighthouseLike;
-    const lhMs = Date.now() - lhStarted;
+    // --- 5+6. axe + Lighthouse, via the shared engine (spec §4.1) ---------
+    step('running axe + Lighthouse');
+    const raw = await auditUrl(url, signal);
 
     // --- 7. Map to findings ----------------------------------------------
     step('mapping results');
     const findings: Finding[] = [
-      ...axeFindings(violations, file, url),
-      ...lighthouseFindings(lighthouseMetrics(lhr, url).scores, file, url, {
-        suppressSeo: isExpectedDraftSeoPenalty(lhr),
+      ...axeFindings(raw.axeViolations, file, url),
+      ...lighthouseFindings(raw.scores, file, url, {
+        suppressSeo: isExpectedDraftSeoPenalty(raw.lhr),
       }),
     ];
-    const lhMetrics = lighthouseMetrics(lhr, url);
 
     return {
       pass: 'build_audit',
@@ -227,12 +192,15 @@ export async function buildAndAuditDraft(
       startedAt,
       durationMs: Date.now() - started,
       metrics: {
-        ...lhMetrics,
-        axeViolations: violations.length,
-        axeFiltered: axeRaw.length - violations.length,
+        url: raw.url,
+        scores: raw.scores,
+        agenticBrowsing: raw.agenticBrowsing,
+        failedAudits: raw.failedAudits,
+        axeViolations: raw.axeViolations.length,
+        axeFiltered: raw.axeFiltered,
         buildMs,
-        axeMs,
-        lighthouseMs: lhMs,
+        axeMs: raw.durations.axeMs,
+        lighthouseMs: raw.durations.lighthouseMs,
         worktreeSha: sync.sha,
         npmCi: install.needed,
       },
@@ -244,14 +212,10 @@ export async function buildAndAuditDraft(
     throw err;
   } finally {
     // Guaranteed cleanup (spec §8.5 step 7). Never let a teardown failure mask
-    // the real error that got us here.
+    // the real error that got us here. Chrome/Lighthouse teardown now lives
+    // inside `runLighthouse` (audit-engine.ts) itself, in its own `finally` —
+    // the static server is the only resource this activity still owns directly.
     await server?.close().catch(() => {});
-    if (chrome) {
-      await Promise.resolve(chrome.kill()).catch(() => {});
-      killTree(chrome.pid);
-    }
-    // After Chrome is down, not before — the profile dir is locked while it runs.
-    if (userDataDir) await fs.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -277,58 +241,4 @@ async function sweepStaleProfiles(): Promise<void> {
       .filter((name) => name.startsWith('chrome-'))
       .map((name) => fs.rm(path.join(CACHE_DIR, name), { recursive: true, force: true }).catch(() => {})),
   );
-}
-
-/**
- * Runs `@axe-core/cli` against the served page.
- *
- * Deliberately the same runner the site's own audit uses (per CLAUDE.md) rather
- * than an in-process axe wrapper: the block-on-violations rule is only meaningful
- * if a draft's result is method-matched to the site's existing 0-violation
- * record. A different runner would produce numbers that cannot be compared to it.
- */
-async function runAxe(
-  url: string,
-  signal: AbortSignal,
-): Promise<{ violations: AxeViolation[]; raw: AxeViolation[] }> {
-  // `--save` is resolved relative to axe's cwd, and it *joins* rather than
-  // honouring an absolute path — passing one produced the nonsense path
-  // `agents\steward\C:\Users\...\steward-axe.json` and a silent ENOENT that
-  // surfaced only as "axe produced no result file". So: bare filename, and run
-  // axe with its cwd set to the temp dir.
-  const outDir = os.tmpdir();
-  const outName = `steward-axe-${process.pid}-${Date.now()}.json`;
-  const outFile = path.join(outDir, outName);
-
-  // Resolved, not path-joined. `agents/steward` is an npm *workspace*, so its
-  // dependencies hoist to the repo-root `node_modules` and there is no
-  // `agents/steward/node_modules/.bin/axe` to point at. Resolution also survives
-  // the layout changing later.
-  //
-  // Run through `node` rather than the `.bin` shim for the same reason as npm:
-  // spawning `axe.cmd` with `shell: false` is an `EINVAL` on Windows.
-  const require = createRequire(import.meta.url);
-  const axeCli = require.resolve('@axe-core/cli/dist/src/bin/cli.js');
-
-  const res = await runCancellable(
-    process.execPath,
-    [axeCli, url, '--exit', '--save', outName, '--chrome-options', 'headless,no-sandbox,disable-gpu'],
-    { signal, cwd: outDir },
-  );
-
-  let parsed: Array<{ violations?: AxeViolation[] }> = [];
-  try {
-    parsed = JSON.parse(await fs.readFile(outFile, 'utf8')) as Array<{ violations?: AxeViolation[] }>;
-  } catch {
-    // No result file at all means axe could not run — distinct from "axe ran and
-    // found violations", which exits non-zero *with* a file. Fail the activity so
-    // it retries rather than reporting a false clean.
-    throw new Error(`axe produced no result file (exit ${res.exitCode}):\n${res.stderr.slice(-2000)}`);
-  } finally {
-    await fs.rm(outFile, { force: true }).catch(() => {});
-  }
-
-  const raw = parsed.flatMap((r) => r.violations ?? []);
-  const { isExpectedDraftNonFinding } = await import('../lib/audit-map.js');
-  return { violations: raw.filter((v) => !isExpectedDraftNonFinding(v)), raw };
 }
