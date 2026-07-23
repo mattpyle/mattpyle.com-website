@@ -28,9 +28,9 @@ const INDEX = {
       description: 'What VoiceOver taught me about the accessibility tree.',
     },
     {
-      title: 'Three tools, three blind spots',
-      slug: 'three-tools-three-blind-spots',
-      url: 'https://www.mattpyle.com/writing/three-tools-three-blind-spots',
+      title: 'Fixture post two',
+      slug: 'fixture-post-two',
+      url: 'https://www.mattpyle.com/writing/fixture-post-two',
       date: '2026-07-05T00:00:00.000Z',
       tags: ['agents'],
       description: 'Auditing the same page with three different crawlers.',
@@ -147,7 +147,7 @@ test('search_content matches title, description, and tags across writing, builds
   assert.equal(byTag.results[0].status, 'live');
 
   const byDescription = await tool.execute({ query: 'crawlers' });
-  assert.equal(byDescription.results[0].title, 'Three tools, three blind spots');
+  assert.equal(byDescription.results[0].title, 'Fixture post two');
 
   // "performance" appears in both the writing description ("performance snapshot" is a
   // build, actually) — assert the changelog entry is found and carries its significance.
