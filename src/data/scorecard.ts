@@ -1,4 +1,5 @@
-import { SCORECARD_VERIFIED } from './sitemap-lastmod.mjs';
+import { SCORECARD_VERIFIED, formatVerifiedLabel } from './sitemap-lastmod.mjs';
+import scorecardRunsJson from './scorecard-runs.json' with { type: 'json' };
 
 export type ScorecardStatus = 'Pass' | 'Partial' | 'Fail';
 export type IsoTimestamp = `${number}-${number}-${number}T${number}:${number}:${number}${
@@ -40,136 +41,61 @@ export interface ScorecardHistoryRun {
   metrics: readonly ScorecardMetric[];
 }
 
+/**
+ * The public run-log, as committed (scorecard-audit-spec.md §5.1) — newest
+ * run first. `src/data/scorecard-runs.json` is the source of truth;
+ * `SCORECARD` and `SCORECARD_HISTORY` below are pure derivations of it, kept
+ * only because the rendered page (`scorecard.astro`) and `llms-full.txt.ts`
+ * already consume these two exported shapes.
+ */
+export interface ScorecardRunRecord {
+  id: string;
+  iso: string;
+  /** Full ISO 8601 audit time, when available. */
+  timestamp?: IsoTimestamp;
+  scope: string;
+  tools: string[];
+  entry: string;
+  commentary: string;
+  metrics: ScorecardMetric[];
+}
+
+const RUNS = scorecardRunsJson as ScorecardRunRecord[];
+
+function toVerification(run: ScorecardRunRecord): ScorecardVerification {
+  return {
+    iso: run.iso,
+    label: formatVerifiedLabel(run.iso),
+    timestamp: run.timestamp,
+  };
+}
+
+const [latest, ...history] = RUNS;
+
+/**
+ * This website's scores on the latest deploy — derived from `RUNS[0]`.
+ *
+ * `verified` deliberately reuses `SCORECARD_VERIFIED` from `sitemap-lastmod.mjs`
+ * rather than recomputing it here: that module is the one place the sitemap's
+ * `/scorecard/` lastmod and this page's visible date are guaranteed to agree,
+ * and both now read the same `RUNS[0].iso`.
+ */
 export const SCORECARD: ScorecardSnapshot = {
   description: "This website's scores on the latest deploy.",
   verified: SCORECARD_VERIFIED,
-  scope: '5 live page types',
-  tools: ['Lighthouse 13.4', 'axe-core 4.12'],
-  entry: 'Manual · intentional',
-  metrics: [
-    {
-      name: 'Accessibility',
-      value: '100',
-      maximum: '100',
-      status: 'Pass',
-      description:
-        'Every tested page received the maximum Lighthouse accessibility score. An axe scan also found no automated WCAG violations.',
-    },
-    {
-      name: 'Performance',
-      value: '98',
-      maximum: '100',
-      status: 'Pass',
-      description:
-        'The lowest Lighthouse performance score across five tested pages. The other four pages scored 100.',
-    },
-    {
-      name: 'SEO',
-      value: '100',
-      maximum: '100',
-      status: 'Pass',
-      description:
-        'Every tested page received the maximum Lighthouse SEO score. The audit covered the homepage, about, writing index, builds index, and a published article.',
-    },
-    {
-      name: 'Agentic Browsing',
-      value: '3',
-      maximum: '3',
-      status: 'Pass',
-      description:
-        'Every applicable Lighthouse agent check passes: accessibility tree, layout stability, and llms.txt.',
-    },
-  ],
+  scope: latest.scope,
+  tools: latest.tools,
+  entry: latest.entry,
+  metrics: latest.metrics,
 };
 
-/**
- * The two historical runs below are the public live-network baselines already
- * recorded in the changelog. Their exact times were not captured, so their
- * optional ISO timestamps are omitted rather than reconstructed.
- */
-export const SCORECARD_HISTORY: readonly ScorecardHistoryRun[] = [
-  {
-    id: '2026-07-14-self-hosted-fonts',
-    verified: {
-      iso: '2026-07-14',
-      label: '14 Jul 2026',
-    },
-    scope: '5 live page types',
-    tools: ['Lighthouse 13.4', 'axe-core 4.12'],
-    entry: 'Manual · after self-hosting fonts',
-    commentary:
-      'Self-hosting the site fonts removed the render-blocking cross-origin request. The lowest Performance result returned to the passing range.',
-    metrics: [
-      {
-        name: 'Accessibility',
-        value: '100',
-        maximum: '100',
-        status: 'Pass',
-        description: 'Maximum Lighthouse Accessibility score across the tested pages.',
-      },
-      {
-        name: 'Performance',
-        value: '97',
-        maximum: '100',
-        status: 'Pass',
-        description: 'Lowest Lighthouse Performance score across the tested pages.',
-      },
-      {
-        name: 'SEO',
-        value: '100',
-        maximum: '100',
-        status: 'Pass',
-        description: 'Maximum Lighthouse SEO score across the tested pages.',
-      },
-      {
-        name: 'Agentic Browsing',
-        value: '3',
-        maximum: '3',
-        status: 'Pass',
-        description: 'All applicable Lighthouse Agentic Browsing checks passed.',
-      },
-    ],
-  },
-  {
-    id: '2026-07-14-first-live-baseline',
-    verified: {
-      iso: '2026-07-14',
-      label: '14 Jul 2026',
-    },
-    scope: '5 live page types',
-    tools: ['Lighthouse 13.4', 'axe-core 4.12'],
-    entry: 'Manual · first live-network baseline',
-    commentary:
-      'The first live-network baseline exposed a Performance regression hidden by localhost testing: a cross-origin font stylesheet held first paint to roughly 3.2–3.5 seconds.',
-    metrics: [
-      {
-        name: 'Accessibility',
-        value: '100',
-        maximum: '100',
-        status: 'Pass',
-        description: 'Maximum Lighthouse Accessibility score across the tested pages.',
-      },
-      {
-        name: 'Performance',
-        value: '84',
-        maximum: '100',
-        status: 'Fail',
-        description: 'Lowest Lighthouse Performance score across the tested pages.',
-      },
-      {
-        name: 'SEO',
-        value: '100',
-        maximum: '100',
-        status: 'Pass',
-        description: 'Maximum Lighthouse SEO score across the tested pages.',
-      },
-      {
-        name: 'Agentic Browsing',
-        value: '3',
-        maximum: '3',
-        status: 'Pass',
-        description: 'All applicable Lighthouse Agentic Browsing checks passed.',
-      },
-    ],
-  },
-];
+/** Every run older than the latest, newest first — derived from `RUNS.slice(1)`. */
+export const SCORECARD_HISTORY: readonly ScorecardHistoryRun[] = history.map((run) => ({
+  id: run.id,
+  verified: toVerification(run),
+  scope: run.scope,
+  tools: run.tools,
+  entry: run.entry,
+  commentary: run.commentary,
+  metrics: run.metrics,
+}));

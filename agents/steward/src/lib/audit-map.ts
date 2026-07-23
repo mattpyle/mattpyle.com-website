@@ -84,38 +84,17 @@ export function axeFindings(violations: AxeViolation[], file: string, url: strin
 // --- Lighthouse ------------------------------------------------------------
 
 export interface LighthouseLike {
-  categories?: Record<string, { title?: string; score?: number | null }>;
-  audits?: Record<string, { score?: number | null; title?: string }>;
+  categories?: Record<
+    string,
+    { title?: string; score?: number | null; auditRefs?: Array<{ id: string; weight?: number }> }
+  >;
+  audits?: Record<string, { score?: number | null; title?: string; scoreDisplayMode?: string }>;
 }
-
-/**
- * Agentic Browsing, as a fallback only.
- *
- * The spec assumed it was an audit *group* with no score of its own, needing a
- * hand-computed pass ratio. In the Lighthouse version pinned here it is a fully
- * scored **category** — the first live audit returned
- * `categories['agentic-browsing'].score = 1`, and this ratio computed nothing
- * because no audit carries these ids. The category path is therefore the real
- * one and it flows through `scores` like any other.
- *
- * This is kept because it costs nothing and the category is new enough to move
- * again: if a future Lighthouse demotes it back to a group, the ratio resumes
- * working rather than the metric silently vanishing.
- */
-export const AGENTIC_AUDITS = [
-  'agentic-cls',
-  'agentic-content-visibility',
-  'agentic-structured-data',
-  'agentic-semantic-html',
-];
 
 export interface AuditMetrics {
   url: string;
   scores: Record<string, number>;
-  agenticBrowsing?: { passed: number; total: number; ratio: number; audits: Record<string, number | null> };
   failedAudits?: string[];
-  axeViolations: number;
-  axeFiltered: number;
 }
 
 export function lighthouseMetrics(lhr: LighthouseLike, url: string): Omit<AuditMetrics, 'axeViolations' | 'axeFiltered'> {
@@ -125,18 +104,6 @@ export function lighthouseMetrics(lhr: LighthouseLike, url: string): Omit<AuditM
   }
 
   const audits = lhr.audits ?? {};
-  const present = AGENTIC_AUDITS.filter((id) => id in audits);
-  let agenticBrowsing: AuditMetrics['agenticBrowsing'];
-  if (present.length > 0) {
-    const detail: Record<string, number | null> = {};
-    let passed = 0;
-    for (const id of present) {
-      const s = audits[id]?.score ?? null;
-      detail[id] = s;
-      if (s === 1) passed++;
-    }
-    agenticBrowsing = { passed, total: present.length, ratio: passed / present.length, audits: detail };
-  }
 
   // Which audits actually failed. A bare "seo scored 66" is not debuggable six
   // months later; the audit ids are what turn a score into a diagnosis.
@@ -145,7 +112,59 @@ export function lighthouseMetrics(lhr: LighthouseLike, url: string): Omit<AuditM
     .map(([id]) => id)
     .sort();
 
-  return { url, scores, agenticBrowsing, failedAudits };
+  return { url, scores, failedAudits };
+}
+
+// --- Agentic Browsing checks -------------------------------------------------
+
+/**
+ * One Agentic Browsing check, as actually reported for a page.
+ *
+ * `applicable` mirrors Lighthouse's own `scoreDisplayMode`/`score === null`
+ * convention: a check that did not run for this page (e.g. WebMCP schema
+ * validity where the page registers no tools) is `applicable: false`, never a
+ * silent pass or fail. `passed` is only meaningful when `applicable` is true.
+ */
+export interface AgenticCheck {
+  id: string;
+  title: string;
+  applicable: boolean;
+  passed: boolean;
+}
+
+/**
+ * The real, scored Agentic Browsing checks for one page — replaces the old
+ * `AGENTIC_AUDITS` guess, which named ids (`agentic-cls`,
+ * `agentic-content-visibility`, ...) that this pinned Lighthouse version has
+ * never actually returned. The real ids and shape were captured from a live
+ * run against production (`lhr.categories['agentic-browsing'].auditRefs`):
+ * `agent-accessibility-tree`, `webmcp-schema-validity`,
+ * `cumulative-layout-shift`, and `llms-txt`, each `weight: 1` with
+ * `scoreDisplayMode: 'binary'` or `'numeric'`.
+ *
+ * The category also lists `webmcp-form-coverage` and `webmcp-registered-tools`
+ * — both permanently `weight: 0` in the category definition, and
+ * `scoreDisplayMode: 'informative'`/`'notApplicable'` rather than a pass/fail
+ * grade (the latter lists the registered tools; it is not a check anyone can
+ * fail). Filtering to `weight > 0` is what keeps those two out of the checks
+ * set — they are real Lighthouse output, just not gradeable ones.
+ */
+export function agenticChecks(lhr: LighthouseLike): AgenticCheck[] {
+  const refs = lhr.categories?.['agentic-browsing']?.auditRefs ?? [];
+  const audits = lhr.audits ?? {};
+  return refs
+    .filter((ref) => (ref.weight ?? 0) > 0)
+    .map((ref) => {
+      const audit = audits[ref.id];
+      const score = audit?.score;
+      const applicable = typeof score === 'number';
+      return {
+        id: ref.id,
+        title: audit?.title ?? ref.id,
+        applicable,
+        passed: applicable && score === 1,
+      };
+    });
 }
 
 /**

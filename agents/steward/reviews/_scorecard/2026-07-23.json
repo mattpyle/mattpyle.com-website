@@ -1,0 +1,243 @@
+{
+  "iso": "2026-07-23",
+  "scope": "18 live pages",
+  "tools": [
+    "Lighthouse 13.4",
+    "axe-core 4.12"
+  ],
+  "entry": "Manual · intentional",
+  "commentary": "Every tested page passed all four public metrics.",
+  "metrics": [
+    {
+      "name": "Accessibility",
+      "value": "100",
+      "maximum": "100",
+      "status": "Pass",
+      "description": "The lowest Lighthouse accessibility score across 18 tested pages. No automated WCAG violations."
+    },
+    {
+      "name": "Performance",
+      "value": "99",
+      "maximum": "100",
+      "status": "Pass",
+      "description": "The lowest Lighthouse performance score across 18 tested pages."
+    },
+    {
+      "name": "SEO",
+      "value": "100",
+      "maximum": "100",
+      "status": "Pass",
+      "description": "The lowest Lighthouse SEO score across 18 tested pages."
+    },
+    {
+      "name": "Agentic Browsing",
+      "value": "4",
+      "maximum": "4",
+      "status": "Pass",
+      "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
+    }
+  ],
+  "id": "2026-07-23",
+  "perPage": [
+    {
+      "url": "https://www.mattpyle.com/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/about/",
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/builds/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/light-theme/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/markdown-post-variants/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/public-changelog/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/public-scorecard/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/scorecard-run-history/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/self-hosted-fonts/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/site-live/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/webmcp-tools/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/scorecard/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/hello-world/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/i-turned-on-a-screen-reader/",
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0
+    }
+  ],
+  "decision": "open-pr",
+  "reason": "Agentic Browsing 3/3→4/4"
+}

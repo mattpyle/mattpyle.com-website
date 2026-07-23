@@ -5,6 +5,7 @@ import {
   axeFindings,
   lighthouseFindings,
   lighthouseMetrics,
+  agenticChecks,
   isExpectedDraftNonFinding,
   isExpectedDraftSeoPenalty,
   overallVerdict,
@@ -108,6 +109,36 @@ const lhr = {
   },
 };
 
+/**
+ * Shaped after a real live capture (2026-07-22, `lhr.categories['agentic-browsing']`
+ * against production) — see scorecard-build-log.md's Phase 1.5 entry. Includes
+ * both weight:1 real checks and the two weight:0 informative/notApplicable
+ * audits Lighthouse also returns, so the weight filter is exercised.
+ */
+const agenticLhr = {
+  categories: {
+    'agentic-browsing': {
+      score: 1,
+      auditRefs: [
+        { id: 'agent-accessibility-tree', weight: 1 },
+        { id: 'webmcp-form-coverage', weight: 0 },
+        { id: 'webmcp-registered-tools', weight: 0 },
+        { id: 'webmcp-schema-validity', weight: 1 },
+        { id: 'cumulative-layout-shift', weight: 1 },
+        { id: 'llms-txt', weight: 1 },
+      ],
+    },
+  },
+  audits: {
+    'agent-accessibility-tree': { title: 'Accessibility tree is well-formed', score: 1, scoreDisplayMode: 'binary' },
+    'webmcp-form-coverage': { title: 'WebMCP form coverage', score: null, scoreDisplayMode: 'notApplicable' },
+    'webmcp-registered-tools': { title: 'WebMCP tools registered', score: 1, scoreDisplayMode: 'informative' },
+    'webmcp-schema-validity': { title: 'WebMCP schemas are valid', score: 1, scoreDisplayMode: 'binary' },
+    'cumulative-layout-shift': { title: 'Cumulative Layout Shift', score: 1, scoreDisplayMode: 'numeric' },
+    'llms-txt': { title: 'llms.txt follows recommendations', score: 0, scoreDisplayMode: 'binary' },
+  },
+};
+
 test('category scores are recorded as integers out of 100', () => {
   const m = lighthouseMetrics(lhr, URL);
   assert.deepEqual(m.scores, {
@@ -119,17 +150,39 @@ test('category scores are recorded as integers out of 100', () => {
   assert.equal(m.url, URL);
 });
 
-test('Agentic Browsing is reported as a ratio, since it is a group not a category', () => {
-  const m = lighthouseMetrics(lhr, URL);
-  assert.deepEqual(m.agenticBrowsing?.passed, 3);
-  assert.deepEqual(m.agenticBrowsing?.total, 4);
-  assert.equal(m.agenticBrowsing?.ratio, 0.75);
-  assert.equal(m.agenticBrowsing?.audits['agentic-structured-data'], 0);
+// --- Agentic Browsing checks -------------------------------------------------
+
+test('agenticChecks returns only the weight>0 checks, dropping the weight:0 informative/notApplicable audits', () => {
+  const checks = agenticChecks(agenticLhr);
+  assert.deepEqual(
+    checks.map((c) => c.id).sort(),
+    ['agent-accessibility-tree', 'cumulative-layout-shift', 'llms-txt', 'webmcp-schema-validity'],
+  );
 });
 
-test('Agentic Browsing is omitted when Lighthouse did not run those audits', () => {
-  const m = lighthouseMetrics({ categories: {}, audits: {} }, URL);
-  assert.equal(m.agenticBrowsing, undefined);
+test('score === 1 means pass; a real live run shows 3 of 4 passing here (llms-txt scored 0)', () => {
+  const checks = agenticChecks(agenticLhr);
+  const byId = Object.fromEntries(checks.map((c) => [c.id, c]));
+  assert.equal(byId['agent-accessibility-tree'].passed, true);
+  assert.equal(byId['webmcp-schema-validity'].passed, true);
+  assert.equal(byId['cumulative-layout-shift'].passed, true);
+  assert.equal(byId['llms-txt'].passed, false);
+  for (const c of checks) assert.equal(c.applicable, true, `${c.id} expected applicable`);
+});
+
+test('a null score (scoreDisplayMode notApplicable) is applicable: false, not a silent pass or fail', () => {
+  const notApplicable = {
+    ...agenticLhr,
+    audits: { ...agenticLhr.audits, 'webmcp-schema-validity': { title: 'WebMCP schemas are valid', score: null, scoreDisplayMode: 'notApplicable' } },
+  };
+  const checks = agenticChecks(notApplicable);
+  const webmcp = checks.find((c) => c.id === 'webmcp-schema-validity')!;
+  assert.equal(webmcp.applicable, false);
+  assert.equal(webmcp.passed, false);
+});
+
+test('agenticChecks is empty when Lighthouse returned no agentic-browsing category', () => {
+  assert.deepEqual(agenticChecks({ categories: {}, audits: {} }), []);
 });
 
 test('below-floor scores flag and never block — lab variance is real', () => {

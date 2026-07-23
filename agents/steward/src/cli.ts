@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Client, Connection, WorkflowNotFoundError, type WorkflowExecutionInfo } from '@temporalio/client';
 import { Command } from 'commander';
 import {
@@ -8,6 +10,10 @@ import {
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
   WEB_UI,
+  SITEMAP_URL,
+  SCORECARD_MAX_AGE_DAYS_DEFAULT,
+  SCORECARD_RUNS_PATH,
+  SITE_DIR,
   workflowIdFor,
   parseWorkflowId,
   isCollection,
@@ -26,6 +32,8 @@ import {
   rereview as rereviewSignal,
   getReviewState,
 } from './workflows/review-post.js';
+import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
+import type { ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 
 async function client(): Promise<Client> {
   const connection = await Connection.connect({ address: TEMPORAL_ADDRESS });
@@ -915,6 +923,85 @@ program
     const { killOrphans } = await import('./lib/stack.js');
     const n = await killOrphans();
     console.log(n === 0 ? '\n  Nothing to clean up.\n' : `\n  Killed ${n} process tree(s).\n`);
+  });
+
+program
+  .command('scorecard')
+  .option('--dry-run', 'audit and archive only — never opens or updates a PR (spec §4.2 step 4)')
+  .option('--urls <csv>', 'comma-separated URL override; skips the live sitemap fetch')
+  .option('--max-age-days <n>', 'staleness threshold for the publish gate', String(SCORECARD_MAX_AGE_DAYS_DEFAULT))
+  .description('Audit the live site (scorecard-audit-spec.md) and open a PR on change or staleness')
+  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string }) => {
+    const maxAgeDays = Number(opts.maxAgeDays);
+    if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
+      fail(`--max-age-days must be a positive number, got "${opts.maxAgeDays}"`);
+    }
+    const urls = opts.urls
+      ? opts.urls.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
+    const c = await client();
+    // Timestamped, not slug-keyed: unlike a review, a scorecard run has no
+    // natural single-instance identity to collide on, and each run is its own
+    // execution rather than something resumed via signal.
+    const workflowId = `steward-scorecard-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+
+    console.log(`\n  starting scorecard audit${opts.dryRun ? ' (dry run — will not publish)' : ''}...`);
+    if (urls) console.log(`  URL override: ${urls.join(', ')}`);
+    console.log('');
+
+    const result = await c.workflow.execute(scorecardAuditWorkflow, {
+      workflowId,
+      taskQueue: QUEUE_LIGHT,
+      // Decisions resolved HERE, by the CLI, and frozen into the workflow
+      // input (design rule 3) — the sitemap URL, publish mode, and staleness
+      // threshold are never re-read from config once the workflow starts.
+      args: [
+        {
+          urls,
+          sitemapUrl: SITEMAP_URL,
+          publishMode: opts.dryRun ? ('dry-run' as const) : ('pr' as const),
+          maxAgeDays,
+          triggeredBy: 'manual' as const,
+        },
+      ],
+    });
+
+    console.log(`  decision: ${result.decision}`);
+    console.log(`  reason:   ${result.reason}`);
+    if (result.prUrl) console.log(`  PR:       ${result.prUrl}`);
+    console.log(`  pages audited: ${result.perPage.length}\n`);
+    for (const m of result.record.metrics) {
+      console.log(`  ${m.name.padEnd(20)} ${`${m.value}/${m.maximum}`.padEnd(10)} ${m.status}`);
+    }
+    console.log('');
+    await c.connection.close();
+  });
+
+program
+  .command('scorecard-history')
+  .option('--limit <n>', 'how many runs to show, newest first', '20')
+  .description('Pretty-print the Scorecard run-log from disk — no live workflow needed')
+  .action(async (opts: { limit: string }) => {
+    const limit = Number(opts.limit);
+    const runsPath = path.join(SITE_DIR, SCORECARD_RUNS_PATH);
+
+    let runs: ScorecardRunRecord[];
+    try {
+      runs = JSON.parse(await fs.readFile(runsPath, 'utf8'));
+    } catch (err) {
+      fail(`Could not read ${runsPath}: ${String(err)}`);
+    }
+
+    const shown = runs.slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20);
+    console.log('');
+    for (const run of shown) {
+      const passing = run.metrics.filter((m) => m.status === 'Pass').length;
+      console.log(
+        `  ${run.id.padEnd(28)} ${run.iso}  ${passing}/${run.metrics.length} passing  ${run.entry}`,
+      );
+    }
+    console.log(`\n  showing ${shown.length} of ${runs.length} run(s) total.\n`);
   });
 
 program.parseAsync(process.argv).catch((err) => {

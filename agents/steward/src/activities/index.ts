@@ -19,3 +19,10 @@ export { archiveReport } from './archive.js';
 export { publishPost } from './publish.js';
 export { verifyDeploy } from './verify-deploy.js';
 export { checkPrChecks } from './publish.js';
+export {
+  resolveAuditUrls,
+  auditLiveUrl,
+  readPublishedScorecard,
+  publishScorecardRun,
+  archiveScorecardRun,
+} from './scorecard.js';
