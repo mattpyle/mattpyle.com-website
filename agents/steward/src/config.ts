@@ -73,6 +73,36 @@ export const WORKTREE_DIR =
 
 export const PROD_ORIGIN = process.env.STEWARD_PROD_ORIGIN ?? 'https://www.mattpyle.com';
 
+/**
+ * The sitemap URL `resolveAuditUrls` fetches at run time (scorecard-audit-spec.md
+ * §5.4). **Not** a canonical page list — the sitemap itself is the source of
+ * truth for "what pages are live". This constant is a CLI-resolved default,
+ * consumed by the workflow only via the input (design rule 3): a decision the
+ * workflow re-read from here at replay would rewrite the past for any run
+ * still in flight.
+ */
+export const SITEMAP_URL = `${PROD_ORIGIN}/sitemap-index.xml`;
+
+/**
+ * Used only for `--urls` overrides and offline tests — never a fallback the
+ * workflow reaches for on its own. The live audit set always comes from the
+ * sitemap; this exists so a manual run or a test can skip the network fetch.
+ */
+export const SCORECARD_URLS_FALLBACK = [
+  '/',
+  '/about',
+  '/writing',
+  '/builds',
+  '/changelog',
+  '/scorecard',
+] as const;
+
+/** Default staleness threshold for the publish gate (spec §6), CLI-overridable via `--max-age-days`. */
+export const SCORECARD_MAX_AGE_DAYS_DEFAULT = 7;
+
+/** Repo-relative path to the public run-log (spec §5.1). */
+export const SCORECARD_RUNS_PATH = 'src/data/scorecard-runs.json';
+
 export const GITHUB_REPO = process.env.STEWARD_GITHUB_REPO ?? 'mattpyle/mattpyle.com-website';
 
 export const MODEL = process.env.STEWARD_MODEL ?? 'claude-sonnet-4-6';
@@ -99,6 +129,14 @@ export const WORKER_READY_LOG = 'steward worker polling';
 export const REVIEWS_DIR = process.env.STEWARD_REVIEWS_DIR
   ? path.resolve(process.env.STEWARD_REVIEWS_DIR)
   : path.join(STEWARD_DIR, 'reviews');
+
+/**
+ * Where full per-run Scorecard records (including per-page raw scores) are
+ * archived (spec §5.2) — a sibling of the review archive, same dataset
+ * convention: committed on purpose, not scratch (spec §11).
+ */
+export const SCORECARD_ARCHIVE_DIR = path.join(REVIEWS_DIR, '_scorecard');
+
 /**
  * The shared spelling dictionary, at the REPO ROOT — not under `agents/steward`.
  *

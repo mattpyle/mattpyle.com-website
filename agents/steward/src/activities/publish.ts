@@ -8,6 +8,7 @@ import matter from 'gray-matter';
 import { log } from '../lib/logger.js';
 import { GITHUB_REPO, SITE_DIR, WORKTREE_DIR, postRelPath, type Collection } from '../config.js';
 import { git, worktreeExists } from '../lib/git.js';
+import { gh } from '../lib/github.js';
 import type { ReviewReport } from '../lib/report.js';
 
 export interface PublishPostInput {
@@ -179,69 +180,9 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
 }
 
 // ---------------------------------------------------------------------------
-// GitHub REST, over plain fetch.
-//
-// `octokit` is named in spec §4 and was not adopted, on the same reasoning that
-// retired `execa` in Phase 1b: this leg makes three REST calls with a bearer
-// token, and `fetch` does that natively. A dependency tree earns its place by
-// providing a guarantee the platform does not already give.
-// ---------------------------------------------------------------------------
-
-function githubToken(): string {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) {
-    throw ApplicationFailure.nonRetryable(
-      'GITHUB_TOKEN is not set. The publish leg cannot open a PR without it.',
-      'AuthError',
-    );
-  }
-  return token;
-}
-
-async function gh(pathname: string, init?: RequestInit): Promise<any> {
-  const res = await fetch(`https://api.github.com${pathname}`, {
-    ...init,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${githubToken()}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  const text = await res.text();
-  const body = text ? JSON.parse(text) : {};
-
-  if (res.ok) return body;
-
-  // Permanent vs transient, per the error-handling contract. Getting this
-  // backwards is expensive in both directions: a retried auth failure burns ten
-  // attempts against a credential that will never work, and a non-retried 502
-  // fails a publish that would have succeeded a second later.
-  if (res.status === 401 || res.status === 403) {
-    throw ApplicationFailure.nonRetryable(
-      `GitHub rejected the credential (${res.status}): ${body.message ?? text}. Check GITHUB_TOKEN's scopes (contents RW, pull requests RW).`,
-      'AuthError',
-    );
-  }
-  if (res.status === 404) {
-    throw ApplicationFailure.nonRetryable(
-      `GitHub returned 404 for ${pathname}. Either ${GITHUB_REPO} is wrong or the token cannot see it.`,
-      'NotFound',
-    );
-  }
-  if (res.status === 422) {
-    throw ApplicationFailure.nonRetryable(
-      `GitHub rejected the request as unprocessable (422): ${body.message ?? text}. ${JSON.stringify(body.errors ?? [])}`,
-      'UnprocessableRequest',
-    );
-  }
-  // Everything else — 5xx, rate limits, transport hiccups — is retryable, and
-  // deliberately a plain Error so the default retry policy applies.
-  throw new Error(`GitHub ${res.status} for ${pathname}: ${body.message ?? text}`);
-}
-
+// GitHub REST — `gh()` and `githubToken()` moved to `lib/github.ts` (Scorecard
+// Phase 1) so `activities/scorecard.ts`'s `publishScorecardRun` shares the
+// identical client instead of duplicating it.
 // ---------------------------------------------------------------------------
 
 /**

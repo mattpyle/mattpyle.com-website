@@ -192,6 +192,22 @@ export interface PublishableRun {
   metrics: ScorecardMetric[];
 }
 
+/**
+ * The public run-log record shape (scorecard-audit-spec.md §5.1) — one entry
+ * in `src/data/scorecard-runs.json`. Defined here, alongside the pure
+ * aggregation it is built from, so both `activities/scorecard.ts` and
+ * `workflows/scorecard-audit.ts` import the identical contract.
+ */
+export interface ScorecardRunRecord extends PublishableRun {
+  id: string;
+  /** Full ISO 8601 audit time, when available. */
+  timestamp?: string;
+  scope: string;
+  tools: string[];
+  entry: string;
+  commentary: string;
+}
+
 export interface PublishDecision {
   decision: 'open-pr' | 'no-op';
   reason: string;
