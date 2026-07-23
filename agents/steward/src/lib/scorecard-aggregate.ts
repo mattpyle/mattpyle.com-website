@@ -10,6 +10,8 @@
  * never be allowed to converge by accident.
  */
 
+import type { AgenticCheck } from './audit-map.js';
+
 export type ScorecardStatus = 'Pass' | 'Partial' | 'Fail';
 
 export interface ScorecardMetric {
@@ -31,8 +33,8 @@ export type PageAuditOutcome =
       url: string;
       ok: true;
       scores: Record<string, number>;
-      /** Present only when Lighthouse still returns Agentic Browsing as an audit *group* (see audit-map.ts's comment on `AGENTIC_AUDITS`) rather than a scored category. */
-      agenticBrowsing?: { passed: number; total: number };
+      /** The four real Agentic Browsing checks for this page (audit-map.ts's `agenticChecks`) — accessibility tree, layout stability, llms.txt, WebMCP schema validity. */
+      agenticChecks: AgenticCheck[];
       axeViolations: number;
     }
   | {
@@ -42,42 +44,29 @@ export type PageAuditOutcome =
       error: string;
     };
 
-/**
- * The current fallback framing when no page returns the Agentic Browsing
- * audit *group* — i.e. the normal case on the Lighthouse version pinned here,
- * where it is a scored *category* instead (audit-map.ts's `AGENTIC_AUDITS`
- * comment: "the first live audit returned `categories['agentic-browsing'].score
- * = 1`... The category path is therefore the real one"). Matches the
- * currently-published card's "3 of 3" framing (spec §5.3: "reported as a
- * ratio, matching the current card") without pretending to know which three
- * checks a future audit-group revival would actually name.
- */
-const AGENTIC_CATEGORY_FALLBACK_MAXIMUM = 3;
-
 interface NormalizedPage {
   scores: Record<string, number>;
-  agenticBrowsing?: { passed: number; total: number };
   axeViolations: number;
 }
 
 /**
- * A failed tool-run becomes the worst possible result for every category
- * (rule 4) — scores of 0, a violation on the books, an agentic ratio of
- * 0-of-fallback — rather than a special case threaded through every
- * threshold below. `min`-across-pages then does the blocking on its own: a
- * page that could not be audited can never let the Scorecard show green.
+ * A failed tool-run becomes the worst possible result for every numeric
+ * category (rule 4) — scores of 0, a violation on the books — rather than a
+ * special case threaded through every threshold below. `min`-across-pages
+ * then does the blocking on its own: a page that could not be audited can
+ * never let the Scorecard show green. Agentic Browsing is handled separately
+ * by `aggregateAgentic`, which needs the `ok` flag itself (a failed page
+ * fails every applicable check, not a synthesized ratio).
  */
 function normalize(page: PageAuditOutcome): NormalizedPage {
   if (!page.ok) {
     return {
-      scores: { performance: 0, accessibility: 0, seo: 0, 'agentic-browsing': 0 },
-      agenticBrowsing: { passed: 0, total: AGENTIC_CATEGORY_FALLBACK_MAXIMUM },
+      scores: { performance: 0, accessibility: 0, seo: 0 },
       axeViolations: 1,
     };
   }
   return {
     scores: page.scores,
-    agenticBrowsing: page.agenticBrowsing,
     axeViolations: page.axeViolations,
   };
 }
@@ -132,54 +121,80 @@ export function aggregate(perPage: PageAuditOutcome[]): ScorecardMetric[] {
     description: `The lowest Lighthouse SEO score across ${pageCount} tested page${pageCount === 1 ? '' : 's'}.`,
   };
 
-  // --- Agentic Browsing: a ratio, pooled worst-case across pages ----------
-  const agentic = aggregateAgentic(pages, pageCount);
+  // --- Agentic Browsing: K of J checks pass, worst-across-pages -----------
+  const agentic = aggregateAgentic(perPage);
 
   return [accessibility, performance, seo, agentic];
 }
 
-/**
- * Agentic Browsing as a ratio (spec §5.3). Two source shapes, handled
- * separately because they answer different questions:
- *
- * - **The audit-group ratio** (`page.agenticBrowsing`), when Lighthouse
- *   returns individual named audits. Pooled per audit id, worst-case
- *   across pages (rule 5's "lowest across pages" generalised to pass/fail):
- *   an audit only counts as passed overall if it passed on every page it
- *   applied to.
- * - **The category score** (`page.scores['agentic-browsing']`), the shape
- *   the pinned Lighthouse version actually returns. Reported as "how many of
- *   the N tested pages scored the maximum", which is a ratio in the same
- *   spirit without inventing per-audit detail that was never computed.
- */
-function aggregateAgentic(pages: NormalizedPage[], pageCount: number): ScorecardMetric {
-  const withGroupRatio = pages.filter((p) => p.agenticBrowsing !== undefined);
+/** Short, human labels for the known checks. Falls back to the Lighthouse audit title (or id) for any check this map hasn't caught up with yet — a future Lighthouse addition/removal to the category must never make the description blank. */
+const AGENTIC_CHECK_LABELS: Record<string, string> = {
+  'agent-accessibility-tree': 'accessibility tree',
+  'cumulative-layout-shift': 'layout stability',
+  'llms-txt': 'llms.txt',
+  'webmcp-schema-validity': 'WebMCP',
+};
 
-  if (withGroupRatio.length > 0) {
-    // Pool every page's agentic ratio into "N of M page-audits passed".
-    // (Per-audit-id union pooling would need the audit ids themselves, which
-    // `PageAuditOutcome` does not carry — the group shape only ever appears
-    // in tests/fixtures today, so this stays a coarse, honest pass count
-    // rather than a precision this codebase cannot currently back up.)
-    const passed = withGroupRatio.reduce((n, p) => n + (p.agenticBrowsing!.passed === p.agenticBrowsing!.total ? 1 : 0), 0);
-    const total = withGroupRatio.length;
-    return {
-      name: 'Agentic Browsing',
-      value: String(passed),
-      maximum: String(total),
-      status: passed === total ? 'Pass' : passed === 0 ? 'Fail' : 'Partial',
-      description: `${passed} of ${total} tested pages passed every applicable Lighthouse Agentic Browsing audit.`,
-    };
+/**
+ * Agentic Browsing as "K of J checks pass" (spec §5.3), aggregated
+ * worst-across-pages (design rule 5) over the real per-page checks
+ * (audit-map.ts's `agenticChecks`) rather than a page-count proxy.
+ *
+ * - **J (the applicable set)** — every check id that was `applicable` on at
+ *   least one successfully-audited page. A check applicable on only a subset
+ *   of pages (e.g. WebMCP schema validity, which only applies where a page
+ *   actually registers tools) is still counted in J from that subset alone —
+ *   it is graded only over the pages it applied to, so a page where it does
+ *   not apply can neither help nor hurt it. This is what keeps "4/4" honest
+ *   when applicability differs page to page, per the spec's requirement to
+ *   decide and document that rule.
+ * - **A check passes overall** iff it passed on every page where it was
+ *   applicable — the same "worst case across pages" the numeric metrics use,
+ *   generalised to pass/fail.
+ * - **A page that failed to audit (rule 4) fails every check in J** — a
+ *   crashed or unreachable page must never let a check quietly sit out of
+ *   the count instead of dragging it down.
+ */
+function aggregateAgentic(perPage: PageAuditOutcome[]): ScorecardMetric {
+  const anyPageFailed = perPage.some((p) => !p.ok);
+  const okPages = perPage.filter((p): p is Extract<PageAuditOutcome, { ok: true }> => p.ok);
+
+  const byId = new Map<string, { title: string; applicableOnAnyPage: boolean; passedEverywhereApplicable: boolean }>();
+  for (const page of okPages) {
+    for (const check of page.agenticChecks) {
+      const entry = byId.get(check.id) ?? {
+        title: AGENTIC_CHECK_LABELS[check.id] ?? check.title ?? check.id,
+        applicableOnAnyPage: false,
+        passedEverywhereApplicable: true,
+      };
+      if (check.applicable) {
+        entry.applicableOnAnyPage = true;
+        if (!check.passed) entry.passedEverywhereApplicable = false;
+      }
+      byId.set(check.id, entry);
+    }
   }
 
-  // Category-score fallback (the normal live case).
-  const perfectPages = pages.filter((p) => (p.scores['agentic-browsing'] ?? 0) === 100).length;
+  const applicable = [...byId.values()].filter((v) => v.applicableOnAnyPage);
+  const J = applicable.length;
+  const passing = anyPageFailed ? [] : applicable.filter((v) => v.passedEverywhereApplicable);
+  const K = passing.length;
+
+  const status: ScorecardStatus = anyPageFailed || K === 0 ? 'Fail' : K === J ? 'Pass' : 'Partial';
+  const names = applicable.map((v) => v.title);
+  const description =
+    J === 0
+      ? 'No Agentic Browsing checks were applicable on any successfully audited page.'
+      : anyPageFailed
+        ? `${K} of ${J} agent checks pass: ${names.join(', ')} — at least one page failed to audit, which fails every check by design.`
+        : `${K} of ${J} agent checks pass: ${names.join(', ')}.`;
+
   return {
     name: 'Agentic Browsing',
-    value: String(perfectPages),
-    maximum: String(pageCount || AGENTIC_CATEGORY_FALLBACK_MAXIMUM),
-    status: perfectPages === pageCount ? 'Pass' : perfectPages === 0 ? 'Fail' : 'Partial',
-    description: `${perfectPages} of ${pageCount} tested pages scored the maximum Lighthouse Agentic Browsing category score.`,
+    value: String(K),
+    maximum: String(J),
+    status,
+    description,
   };
 }
 

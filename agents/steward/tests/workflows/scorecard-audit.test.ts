@@ -30,7 +30,13 @@ after(async () => {
 const GREEN_PAGE: PageAuditOutcome = {
   url: 'https://www.mattpyle.com/',
   ok: true,
-  scores: { performance: 98, accessibility: 100, seo: 100, 'agentic-browsing': 100 },
+  scores: { performance: 98, accessibility: 100, seo: 100 },
+  agenticChecks: [
+    { id: 'agent-accessibility-tree', title: 'Accessibility tree is well-formed', applicable: true, passed: true },
+    { id: 'webmcp-schema-validity', title: 'WebMCP schemas are valid', applicable: true, passed: true },
+    { id: 'cumulative-layout-shift', title: 'Cumulative Layout Shift', applicable: true, passed: true },
+    { id: 'llms-txt', title: 'llms.txt follows recommendations', applicable: true, passed: true },
+  ],
   axeViolations: 0,
 };
 
@@ -114,7 +120,7 @@ test('unchanged and fresh: no-op, publishScorecardRun is never called', async ()
       { name: 'Accessibility', value: '100', maximum: '100', status: 'Pass', description: '' },
       { name: 'Performance', value: '98', maximum: '100', status: 'Pass', description: '' },
       { name: 'SEO', value: '100', maximum: '100', status: 'Pass', description: '' },
-      { name: 'Agentic Browsing', value: '1', maximum: '1', status: 'Pass', description: '' },
+      { name: 'Agentic Browsing', value: '4', maximum: '4', status: 'Pass', description: '' },
     ],
   };
   const { activities, calls } = mockActivities({ readPublishedScorecard: async () => published });

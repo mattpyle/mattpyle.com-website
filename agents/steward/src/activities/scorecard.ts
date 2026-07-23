@@ -89,7 +89,7 @@ export async function auditLiveUrl(url: string): Promise<PageAuditOutcome> {
       url,
       ok: true,
       scores: raw.scores,
-      agenticBrowsing: raw.agenticBrowsing,
+      agenticChecks: raw.agenticChecks,
       axeViolations: raw.axeViolations.length,
     };
   } finally {

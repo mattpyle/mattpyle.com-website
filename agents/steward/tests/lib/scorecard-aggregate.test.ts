@@ -15,11 +15,19 @@ import {
  * violation, and a tool-failure marker.
  */
 
+const ALL_CHECKS_PASS = [
+  { id: 'agent-accessibility-tree', title: 'Accessibility tree is well-formed', applicable: true, passed: true },
+  { id: 'webmcp-schema-validity', title: 'WebMCP schemas are valid', applicable: true, passed: true },
+  { id: 'cumulative-layout-shift', title: 'Cumulative Layout Shift', applicable: true, passed: true },
+  { id: 'llms-txt', title: 'llms.txt follows recommendations', applicable: true, passed: true },
+];
+
 function page(overrides: Partial<Extract<PageAuditOutcome, { ok: true }>> = {}): PageAuditOutcome {
   return {
     url: 'https://www.mattpyle.com/',
     ok: true,
-    scores: { performance: 100, accessibility: 100, seo: 100, 'agentic-browsing': 100 },
+    scores: { performance: 100, accessibility: 100, seo: 100 },
+    agenticChecks: ALL_CHECKS_PASS,
     axeViolations: 0,
     ...overrides,
   };
@@ -33,8 +41,9 @@ test('all-green: every metric passes', () => {
   const perf = metrics.find((m) => m.name === 'Performance')!;
   assert.equal(perf.value, '100');
   const agentic = metrics.find((m) => m.name === 'Agentic Browsing')!;
-  assert.equal(agentic.value, '2');
-  assert.equal(agentic.maximum, '2');
+  assert.equal(agentic.value, '4');
+  assert.equal(agentic.maximum, '4');
+  assert.match(agentic.description, /4 of 4 agent checks pass/);
 });
 
 // --- one-page-perf-92 ---------------------------------------------------
@@ -71,19 +80,63 @@ test('a tool-failure marker blocks a green publish rather than being dropped', (
   for (const m of metrics) assert.equal(m.status, 'Fail', `${m.name} expected Fail on a tool failure`);
 });
 
-test('agentic-browsing audit-group ratio path is used when any page reports it', () => {
-  const grouped: PageAuditOutcome = {
-    url: 'https://www.mattpyle.com/writing/',
-    ok: true,
-    scores: { performance: 100, accessibility: 100, seo: 100 },
-    agenticBrowsing: { passed: 3, total: 4 },
-    axeViolations: 0,
-  };
-  const metrics = aggregate([grouped]);
+test('one check failing on one page: that check fails overall, others still pass (Partial)', () => {
+  const flaky = page({
+    agenticChecks: [
+      { id: 'agent-accessibility-tree', title: 'Accessibility tree is well-formed', applicable: true, passed: false },
+      { id: 'webmcp-schema-validity', title: 'WebMCP schemas are valid', applicable: true, passed: true },
+      { id: 'cumulative-layout-shift', title: 'Cumulative Layout Shift', applicable: true, passed: true },
+      { id: 'llms-txt', title: 'llms.txt follows recommendations', applicable: true, passed: true },
+    ],
+  });
+  const metrics = aggregate([page(), flaky]);
   const agentic = metrics.find((m) => m.name === 'Agentic Browsing')!;
-  // One page, group ratio not perfect -> 0 of 1 pages fully passed.
+  assert.equal(agentic.value, '3');
+  assert.equal(agentic.maximum, '4');
+  assert.equal(agentic.status, 'Partial');
+});
+
+test('a check applicable on only a subset of pages is graded only over that subset', () => {
+  const noWebmcp = page({
+    agenticChecks: [
+      { id: 'agent-accessibility-tree', title: 'Accessibility tree is well-formed', applicable: true, passed: true },
+      { id: 'webmcp-schema-validity', title: 'WebMCP schemas are valid', applicable: false, passed: false },
+      { id: 'cumulative-layout-shift', title: 'Cumulative Layout Shift', applicable: true, passed: true },
+      { id: 'llms-txt', title: 'llms.txt follows recommendations', applicable: true, passed: true },
+    ],
+  });
+  // WebMCP is applicable (and passing) on the other page, so it is still in J
+  // and still counts as passed overall — the page where it doesn't apply
+  // neither helps nor hurts it.
+  const metrics = aggregate([page(), noWebmcp]);
+  const agentic = metrics.find((m) => m.name === 'Agentic Browsing')!;
+  assert.equal(agentic.value, '4');
+  assert.equal(agentic.maximum, '4');
+  assert.equal(agentic.status, 'Pass');
+});
+
+test('a check applicable nowhere is excluded from J entirely', () => {
+  const neverApplicable = page({
+    agenticChecks: [
+      { id: 'agent-accessibility-tree', title: 'Accessibility tree is well-formed', applicable: true, passed: true },
+      { id: 'webmcp-schema-validity', title: 'WebMCP schemas are valid', applicable: false, passed: false },
+      { id: 'cumulative-layout-shift', title: 'Cumulative Layout Shift', applicable: true, passed: true },
+      { id: 'llms-txt', title: 'llms.txt follows recommendations', applicable: true, passed: true },
+    ],
+  });
+  const metrics = aggregate([neverApplicable]);
+  const agentic = metrics.find((m) => m.name === 'Agentic Browsing')!;
+  assert.equal(agentic.value, '3');
+  assert.equal(agentic.maximum, '3');
+  assert.equal(agentic.status, 'Pass');
+});
+
+test('a page that failed to audit fails every applicable check, status Fail', () => {
+  const failed: PageAuditOutcome = { url: 'https://www.mattpyle.com/broken/', ok: false, error: 'Lighthouse timed out' };
+  const metrics = aggregate([page(), failed]);
+  const agentic = metrics.find((m) => m.name === 'Agentic Browsing')!;
   assert.equal(agentic.value, '0');
-  assert.equal(agentic.maximum, '1');
+  assert.equal(agentic.maximum, '4');
   assert.equal(agentic.status, 'Fail');
 });
 

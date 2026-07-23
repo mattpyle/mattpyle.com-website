@@ -6,10 +6,11 @@ import { STEWARD_DIR } from '../config.js';
 import { runCancellable, killTree } from './proc.js';
 import {
   lighthouseMetrics,
+  agenticChecks,
   isExpectedDraftNonFinding,
   type AxeViolation,
   type LighthouseLike,
-  type AuditMetrics,
+  type AgenticCheck,
 } from './audit-map.js';
 
 /**
@@ -125,10 +126,11 @@ export async function runLighthouse(url: string, _signal: AbortSignal): Promise<
 /** The raw output of auditing one URL — both tools, mapped, undecorated by any threshold policy. */
 export interface RawAudit {
   url: string;
-  /** The full raw Lighthouse result. Callers needing a specific audit id (e.g. `is-crawlable`) read it directly rather than this module growing a new accessor per caller. */
+  /** The full raw Lighthouse result. Callers needing a specific audit id (e.g. `is-crawlable`) read it directly rather than this module growing a new accessor per caller. Never leaves the activity (large-data rule) — see `agenticChecks` below for the compact summary that does. */
   lhr: LighthouseLike;
   scores: Record<string, number>;
-  agenticBrowsing?: AuditMetrics['agenticBrowsing'];
+  /** The four real Agentic Browsing checks (audit-map.ts's `agenticChecks`), compact enough to flow through the workflow — unlike `lhr`, this does. */
+  agenticChecks: AgenticCheck[];
   failedAudits: string[];
   /** Already filtered (`isExpectedDraftNonFinding` removed). */
   axeViolations: AxeViolation[];
@@ -160,7 +162,7 @@ export async function auditUrl(url: string, signal: AbortSignal): Promise<RawAud
     url,
     lhr,
     scores: metrics.scores,
-    agenticBrowsing: metrics.agenticBrowsing,
+    agenticChecks: agenticChecks(lhr),
     failedAudits: metrics.failedAudits ?? [],
     axeViolations: violations,
     axeFiltered: axeRaw.length - violations.length,

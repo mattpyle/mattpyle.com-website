@@ -194,7 +194,7 @@ export async function buildAndAuditDraft(
       metrics: {
         url: raw.url,
         scores: raw.scores,
-        agenticBrowsing: raw.agenticBrowsing,
+        agenticChecks: raw.agenticChecks,
         failedAudits: raw.failedAudits,
         axeViolations: raw.axeViolations.length,
         axeFiltered: raw.axeFiltered,
