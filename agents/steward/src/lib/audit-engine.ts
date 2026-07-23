@@ -93,10 +93,32 @@ export async function runLighthouse(url: string, _signal: AbortSignal): Promise<
     });
     return (runnerResult?.lhr ?? {}) as LighthouseLike;
   } finally {
-    await Promise.resolve(launched.kill()).catch(() => {});
-    killTree(launched.pid);
+    // `try/await/catch`, not `Promise.resolve(fn()).catch()` — the latter
+    // does NOT catch a *synchronous* throw from `kill()`, because the
+    // exception fires while evaluating the argument, before `Promise.resolve`
+    // is even reached. Found live running the Scorecard's concurrent fan-out
+    // (4 Chrome instances launched at once, vs. build-audit's one-at-a-time):
+    // a Chrome that died mid-gather made `kill()` throw synchronously trying
+    // to read a debug log chrome-launcher expected but Chrome never wrote,
+    // and the unhandled throw took down the entire worker process — not just
+    // this one activity. `killTree`/`fs.rm` below get the same treatment for
+    // the same reason.
+    try {
+      await launched.kill();
+    } catch {
+      /* best-effort — see above */
+    }
+    try {
+      killTree(launched.pid);
+    } catch {
+      /* best-effort */
+    }
     // After Chrome is down, not before — the profile dir is locked while it runs.
-    await fs.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
+    try {
+      await fs.rm(userDataDir, { recursive: true, force: true });
+    } catch {
+      /* best-effort */
+    }
   }
 }
 

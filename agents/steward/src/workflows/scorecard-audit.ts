@@ -77,8 +77,17 @@ const heavy = wf.proxyActivities<Pick<typeof activities, 'auditLiveUrl'>>({
   retry: { maximumAttempts: 2 },
 });
 
-/** How many pages are audited concurrently. A flat cap, not a queue — deterministic and replay-safe. */
-const AUDIT_CONCURRENCY = 4;
+/**
+ * How many pages are audited concurrently. A flat cap, not a queue —
+ * deterministic and replay-safe. Kept low deliberately: the live smoke test
+ * (spec §9.6) found 4 concurrent headless Chrome launches unstable on the
+ * local dev box this runs on today (Phase 1's local-worker limit, spec §7) —
+ * one died mid-gather and its `kill()` call threw synchronously, which is
+ * what `audit-engine.ts`'s `runLighthouse` cleanup now defends against, but
+ * there is no reason to court that failure mode routinely when 2 is plenty
+ * for a nightly job with no real latency budget.
+ */
+const AUDIT_CONCURRENCY = 2;
 
 /** Digs the real error out of a failed activity — same helper `reviewPost` uses. */
 function describeActivityError(err: unknown): string {
