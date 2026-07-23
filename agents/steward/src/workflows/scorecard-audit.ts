@@ -79,15 +79,21 @@ const heavy = wf.proxyActivities<Pick<typeof activities, 'auditLiveUrl'>>({
 
 /**
  * How many pages are audited concurrently. A flat cap, not a queue —
- * deterministic and replay-safe. Kept low deliberately: the live smoke test
- * (spec §9.6) found 4 concurrent headless Chrome launches unstable on the
- * local dev box this runs on today (Phase 1's local-worker limit, spec §7) —
- * one died mid-gather and its `kill()` call threw synchronously, which is
- * what `audit-engine.ts`'s `runLighthouse` cleanup now defends against, but
- * there is no reason to court that failure mode routinely when 2 is plenty
- * for a nightly job with no real latency budget.
+ * deterministic and replay-safe. Fixed at 1 (serial) because Lighthouse is
+ * not safe to run concurrently in a single Node process: `marky` (the timing
+ * library `lighthouse-logger` uses) keys its marks off Node's *global*
+ * `performance.mark`/`measure` namespace, not per-invocation. Two concurrent
+ * Lighthouse runs in this worker corrupt each other's timing marks, which
+ * failed 100% of `auditLiveUrl` activities at `= 2` with `DOMException: The
+ * "start lh:runner:gather" performance mark has not been set` /
+ * `LanternError: Could not find any top level events` (Phase 1.5/1.6,
+ * scorecard-build-log.md). This is a correctness constraint, not a stability
+ * tune — do not raise it without isolating Lighthouse per worker
+ * thread/process first (a Phase 3 lever, spec §5.4's runtime note). At ~18
+ * pages × ~40s serially, a full run is ~10-12 minutes, which is fine for a
+ * nightly job.
  */
-const AUDIT_CONCURRENCY = 2;
+const AUDIT_CONCURRENCY = 1;
 
 /** Digs the real error out of a failed activity — same helper `reviewPost` uses. */
 function describeActivityError(err: unknown): string {
