@@ -92,14 +92,6 @@ const breadcrumbUrl = isFirst ? '/changelog' : `/changelog/${page.currentPage}`;
         filterVerb="of type"
         syncUrlParam="type"
       />
-      <dl class="type-key">
-        {typeDefinitions.map(({ type, description }) => (
-          <div class="type-key-item">
-            <dt>{type}</dt>
-            <dd>{description}</dd>
-          </div>
-        ))}
-      </dl>
     </div>
 
     <ChangelogLedger entries={page.data} />
@@ -182,34 +174,6 @@ const breadcrumbUrl = isFirst ? '/changelog' : `/changelog/${page.currentPage}`;
   /* ── Type filter + key ──────────────────────────────────────────────────── */
   .type-filter {
     margin-bottom: 12px;
-  }
-
-  .type-key {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 18px;
-    margin: 10px 0 0;
-    font-size: 11.5px;
-    line-height: 1.5;
-    color: var(--color-muted);
-  }
-
-  .type-key-item {
-    display: inline-flex;
-    gap: 5px;
-  }
-
-  .type-key dt {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    color: var(--color-label);
-  }
-
-  .type-key dd {
-    margin: 0;
-    font-family: var(--font-system);
   }
 
   /* ── Footer: pagination + count ─────────────────────────────────────────── */
