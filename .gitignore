@@ -34,6 +34,9 @@ skills-lock.json
 # Local feature worktrees
 .worktrees/
 
+# Impeccable skill local state — not production code
+.impeccable/
+
 # Design handoff reference files — not production code, deleted after implementation
 /design_handoff_og_images/
 /design_handoff_changelog/
