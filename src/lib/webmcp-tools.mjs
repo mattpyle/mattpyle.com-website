@@ -5,8 +5,11 @@
  * handlers without a browser or the origin trial (see tests/webmcp.test.mjs) — same
  * split as src/lib/article-actions.mjs.
  *
- * Every tool is read-only and deterministic: the only I/O is the caller-supplied
- * getIndex(), which resolves the same-origin /webmcp/index.json payload.
+ * The read tools (describe_site, get_recent_writing, search_content) are read-only
+ * and deterministic: their only I/O is the caller-supplied getIndex(), which resolves
+ * the same-origin /webmcp/index.json payload. set_appearance is the exception — a write
+ * tool that flips the client-local appearance (localStorage + the <html data-appearance>
+ * attribute) via src/lib/appearance.mjs, touching no server and no other visitor's view.
  *
  * CHROME DOES NOT VALIDATE inputSchema. Measured on Chrome 150 against the live origin trial
  * (2026-07-17): `search_content` was invoked with `{}` despite `query` being declared `required`,

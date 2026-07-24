@@ -3,7 +3,7 @@
    re-skin, not a re-layout: no selector here restructures the DOM, moves
    real content, or changes reading order. It changes color, type, borders,
    backgrounds, and reveals decorative furniture that already exists in the
-   DOM in both modes (see src/components/RetroFurniture.astro).
+   DOM in both modes (see src/components/RetroHomeFurniture.astro).
 
    Tokens lifted verbatim from docs/webmcp-retro/design-brief.md so modern
    and retro share nothing by accident. */
@@ -129,7 +129,7 @@ html[data-appearance='retro'] .nav-link.is-active {
 
 /* ── Mode banner (bulletproof exit #1) ──────────────────────────────────
    Present in the DOM on every page in both modes; hidden by default,
-   revealed here. See src/components/RetroFurniture.astro. */
+   revealed here. See src/components/AppearanceBanner.astro. */
 
 html:not([data-appearance='retro']) .retro-mode-banner {
   display: none;
