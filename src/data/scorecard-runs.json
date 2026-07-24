@@ -1,9 +1,54 @@
 [
   {
+    "iso": "2026-07-23",
+    "timestamp": "2026-07-23T19:49:47-07:00",
+    "scope": "18 live pages",
+    "tools": [
+      "Lighthouse 13.4",
+      "axe-core 4.12"
+    ],
+    "entry": "Manual · intentional",
+    "commentary": "Agentic Browsing rose from 3/3 to 4/4; all 18 pages passed all four public metrics.",
+    "metrics": [
+      {
+        "name": "Accessibility",
+        "value": "100",
+        "maximum": "100",
+        "status": "Pass",
+        "description": "The lowest Lighthouse accessibility score across 18 tested pages. No automated WCAG violations."
+      },
+      {
+        "name": "Performance",
+        "value": "99",
+        "maximum": "100",
+        "status": "Pass",
+        "description": "The lowest Lighthouse performance score across 18 tested pages."
+      },
+      {
+        "name": "SEO",
+        "value": "100",
+        "maximum": "100",
+        "status": "Pass",
+        "description": "The lowest Lighthouse SEO score across 18 tested pages."
+      },
+      {
+        "name": "Agentic Browsing",
+        "value": "4",
+        "maximum": "4",
+        "status": "Pass",
+        "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
+      }
+    ],
+    "id": "2026-07-23"
+  },
+  {
     "id": "2026-07-15",
     "iso": "2026-07-15",
     "scope": "5 live page types",
-    "tools": ["Lighthouse 13.4", "axe-core 4.12"],
+    "tools": [
+      "Lighthouse 13.4",
+      "axe-core 4.12"
+    ],
     "entry": "Manual · intentional",
     "commentary": "Five live page types audited; all four public metrics passed.",
     "metrics": [
@@ -41,7 +86,10 @@
     "id": "2026-07-14-self-hosted-fonts",
     "iso": "2026-07-14",
     "scope": "5 live page types",
-    "tools": ["Lighthouse 13.4", "axe-core 4.12"],
+    "tools": [
+      "Lighthouse 13.4",
+      "axe-core 4.12"
+    ],
     "entry": "Manual · after self-hosting fonts",
     "commentary": "Self-hosting the site fonts removed the render-blocking cross-origin request. The lowest Performance result returned to the passing range.",
     "metrics": [
@@ -79,7 +127,10 @@
     "id": "2026-07-14-first-live-baseline",
     "iso": "2026-07-14",
     "scope": "5 live page types",
-    "tools": ["Lighthouse 13.4", "axe-core 4.12"],
+    "tools": [
+      "Lighthouse 13.4",
+      "axe-core 4.12"
+    ],
     "entry": "Manual · first live-network baseline",
     "commentary": "The first live-network baseline exposed a Performance regression hidden by localhost testing: a cross-origin font stylesheet held first paint to roughly 3.2–3.5 seconds.",
     "metrics": [
