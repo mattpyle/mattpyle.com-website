@@ -96,14 +96,36 @@ html[data-appearance='retro'] .prose a:visited {
 
 html[data-appearance='retro'] [data-module='nav'] {
   background: var(--retro-forest);
-  background-image:
-    radial-gradient(1px 1px at 20% 30%, #cfe9c0, transparent),
-    radial-gradient(1px 1px at 70% 60%, #fff, transparent),
-    radial-gradient(1.5px 1.5px at 40% 80%, var(--retro-gold), transparent),
-    radial-gradient(1px 1px at 85% 25%, #cfe9c0, transparent);
   border-bottom: 4px solid var(--retro-maroon);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* Text-art flourish replacing the starfield dots (which read as stray pixels
+   at nav height, not decoration). Same &cedil;/&oslash;/&curren;/&ordm;/&deg;
+   motif as the homepage divider (RetroHomeFurniture.astro), scaled down for
+   the nav strip. Static — no animation, nothing for prefers-reduced-motion to
+   disable. Hidden by default so the element is inert in modern regardless of
+   load order; hidden again below 760px so it never wraps or crowds the links. */
+html:not([data-appearance='retro']) .nav-flourish {
+  display: none;
+}
+
+html[data-appearance='retro'] .nav-flourish {
+  display: inline-block;
+  font-family: var(--retro-font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--retro-gold);
+  opacity: .75;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  html[data-appearance='retro'] .nav-flourish {
+    display: none;
+  }
 }
 
 html[data-appearance='retro'] .nav-logo {
@@ -504,6 +526,30 @@ html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
   color: #5a4a30;
 }
 
+/* Significance dots + legend: map the modern --color-sig-* tokens onto the
+   retro palette while keeping the three-way distinction (maroon / gold /
+   muted brown). Dots stay aria-hidden; only the legend labels get type. */
+html[data-appearance='retro'] .sig-dot--major {
+  background: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .sig-dot--minor {
+  background: var(--retro-gold);
+}
+
+html[data-appearance='retro'] .sig-dot--patch {
+  background: #8a5a2b;
+}
+
+html[data-appearance='retro'] .legend-label,
+html[data-appearance='retro'] .legend-item {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .legend-label {
+  color: var(--retro-maroon);
+}
+
 /* ── /scorecard ───────────────────────────────────────────────────────── */
 
 html[data-appearance='retro'] .latest-run {
@@ -552,13 +598,51 @@ html[data-appearance='retro'] .history-run {
   border-bottom-color: var(--retro-frame-border);
 }
 
+html[data-appearance='retro'] .history-run summary {
+  background: var(--retro-frame-bg);
+  font-family: var(--retro-font-ui);
+}
+
 html[data-appearance='retro'] .history-run summary:hover {
   background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] .history-detail {
+  background: var(--retro-frame-bg);
+  border-top-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .history-toggle {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+}
+
+/* Chevron borders used var(--color-label), a pale gray invisible on parchment. */
+html[data-appearance='retro'] .chevron {
+  border-right-color: var(--retro-maroon);
+  border-bottom-color: var(--retro-maroon);
 }
 
 html[data-appearance='retro'] .page-number {
   border: 2px outset var(--retro-frame-border);
   background: var(--retro-frame-bg);
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+}
+
+/* .page-link--disabled used var(--color-border), a near-invisible pale token on
+   parchment. #5a4a30 is the same muted-ink brown already used for tag-pill text
+   elsewhere in this file — dark enough to read as present-but-inactive (~6.3:1
+   on parchment) rather than gone. */
+html[data-appearance='retro'] .page-link {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] .page-link--disabled {
+  color: #5a4a30;
+  text-decoration: none;
 }
 
 /* ── /about ───────────────────────────────────────────────────────────── */
