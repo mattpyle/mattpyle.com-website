@@ -1,6 +1,12 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
-import { aggregate, decidePublish, type PageAuditOutcome, type ScorecardRunRecord } from '../lib/scorecard-aggregate.js';
+import {
+  aggregate,
+  decidePublish,
+  type PageAuditOutcome,
+  type PublishDecision,
+  type ScorecardRunRecord,
+} from '../lib/scorecard-aggregate.js';
 
 /**
  * `scorecardAuditWorkflow` (scorecard-audit-spec.md §4.2) — audits the live
@@ -29,6 +35,16 @@ export interface ScorecardAuditInput {
   /** Freshness threshold for the staleness rule (spec §6). */
   maxAgeDays: number;
   triggeredBy: 'schedule' | 'manual';
+  /** IANA timezone `resolveRunStamp` computes the run's calendar date in — resolved by the CLI from `config.ts` (design rule 3), never read here directly. */
+  timeZone: string;
+  /**
+   * `--date` override (spec §5.1's timezone amendment): pins the run's `iso`
+   * to a specific `YYYY-MM-DD`, for backfilling a run to the day the audit
+   * actually happened rather than the day the workflow executed. The
+   * `timestamp` field still carries the real audit instant — only the
+   * calendar-day label is overridden.
+   */
+  date?: string;
 }
 
 export interface ScorecardAuditResult {
@@ -40,7 +56,7 @@ export interface ScorecardAuditResult {
 }
 
 const light = {
-  resolving: wf.proxyActivities<Pick<typeof activities, 'resolveAuditUrls'>>({
+  resolving: wf.proxyActivities<Pick<typeof activities, 'resolveAuditUrls' | 'resolveRunStamp'>>({
     taskQueue: QUEUE_LIGHT,
     startToCloseTimeout: '1 minute',
     retry: { maximumAttempts: 3 },
@@ -132,13 +148,6 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
   return results;
 }
 
-function workflowNowIso(): string {
-  // `new Date()` is patched to the replay-safe workflow clock in the TS SDK
-  // sandbox (see review-post.ts's `workflowNow` for the full explanation of
-  // why this isn't `wf.now()`, which doesn't exist in this SDK).
-  return new Date().toISOString().slice(0, 10);
-}
-
 export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promise<ScorecardAuditResult> {
   // --- Step 0: resolve the audit set --------------------------------------
   const urls = input.urls && input.urls.length > 0
@@ -150,25 +159,40 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
 
   // --- Step 2: aggregate (pure, deterministic) ---------------------------
   const metrics = aggregate(perPage);
-  const iso = workflowNowIso();
+  // `resolveRunStamp` runs as an activity (not the sandboxed `Date`) because
+  // converting an instant to a calendar day in a named timezone depends on
+  // the host's tz database — see the activity's own doc comment. `--date`
+  // only overrides the calendar-day label; `timestamp` still carries the
+  // real audit instant.
+  const stamp = await light.resolving.resolveRunStamp(input.timeZone);
+  const iso = input.date ?? stamp.iso;
+  const timestamp = stamp.timestamp;
   const perPageSummary = perPage.map((p) =>
     p.ok
       ? { url: p.url, scores: p.scores, axeViolations: p.axeViolations }
       : { url: p.url, scores: {}, axeViolations: 0 },
   );
 
+  // --- Step 3: read the published run, decide -----------------------------
+  //
+  // Read and decide *before* building the candidate record so the commentary
+  // (below) can fold in the change delta `decidePublish` already computed —
+  // never re-derive it separately. This does not change the activity-call
+  // order (readPublishedScorecard still fires after every auditLiveUrl and
+  // before publishScorecardRun/archiveScorecardRun); it only moves where the
+  // in-workflow object is assembled, which is not an activity call.
+  const published = await light.reading.readPublishedScorecard();
+  const decision = decidePublish({ iso, metrics }, published, input.maxAgeDays);
+
   const candidate: Omit<ScorecardRunRecord, 'id'> = {
     iso,
+    timestamp,
     scope: `${urls.length} live page${urls.length === 1 ? '' : 's'}`,
     tools: ['Lighthouse 13.4', 'axe-core 4.12'],
     entry: input.triggeredBy === 'schedule' ? 'Nightly · automated' : 'Manual · intentional',
-    commentary: buildCommentary(perPage, metrics),
+    commentary: buildCommentary(perPage, metrics, decision),
     metrics,
   };
-
-  // --- Step 3: read the published run, decide -----------------------------
-  const published = await light.reading.readPublishedScorecard();
-  const decision = decidePublish({ iso, metrics }, published, input.maxAgeDays);
 
   // --- Step 4: publish, unless dry-run -------------------------------------
   //
@@ -199,15 +223,74 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
   return { decision: decision.decision, reason: decision.reason, prUrl, record, perPage: perPageSummary };
 }
 
-/** A machine first-draft `commentary` (rule 7) — human-editable in the PR before merge. */
-function buildCommentary(perPage: PageAuditOutcome[], metrics: ScorecardRunRecord['metrics']): string {
+/**
+ * Describes a metric-level delta `decidePublish` already found, in words that
+ * read correctly forever (spec §5.1 rule 7) — never the staleness reason
+ * ("published run is Nd old") or the "no published run exists yet" reason,
+ * both of which describe the run's position in the list rather than a fact
+ * about this run, and so must never leak into the commentary.
+ */
+function describeChangeDelta(decision: PublishDecision): string | undefined {
+  const { reason } = decision;
+
+  const statusFlip = reason.match(/^(.+) (Pass|Partial|Fail)→(Pass|Partial|Fail)$/);
+  if (statusFlip) {
+    const [, name, from, to] = statusFlip;
+    return `${name} moved from ${from} to ${to}`;
+  }
+
+  const performanceMove = reason.match(/^Performance (\d+(?:\.\d+)?)→(\d+(?:\.\d+)?)$/);
+  if (performanceMove) {
+    const [, from, to] = performanceMove;
+    const verb = Number(to) > Number(from) ? 'rose' : Number(to) < Number(from) ? 'fell' : 'held';
+    return `Performance ${verb} from ${from} to ${to}`;
+  }
+
+  const ratioMove = reason.match(/^(.+) (\d+)\/(\d+)→(\d+)\/(\d+)$/);
+  if (ratioMove) {
+    const [, name, prevValue, prevMax, nextValue, nextMax] = ratioMove;
+    // Compare the numerator (checks/points passing), not the fraction — a
+    // metric whose denominator also grew (e.g. a new applicable check) still
+    // reads as a rise when what passes went up, even if K/J stayed maxed out.
+    const verb = Number(nextValue) > Number(prevValue) ? 'rose' : Number(nextValue) < Number(prevValue) ? 'fell' : 'held';
+    return `${name} ${verb} from ${prevValue}/${prevMax} to ${nextValue}/${nextMax}`;
+  }
+
+  const newMetric = reason.match(/^(.+) is a new metric$/);
+  if (newMetric) {
+    return `${newMetric[1]} is a new metric this run`;
+  }
+
+  return undefined;
+}
+
+/**
+ * A machine first-draft `commentary` (rule 7) — human-editable in the PR
+ * before merge. States, factually, what *this run* measured: the delta (if
+ * `decidePublish` found one worth surfacing) plus the pass summary. Never a
+ * present-relative word ("currently," "latest," "now," "baseline," "today")
+ * — those describe the run's position in the list, which is exactly what
+ * rule 7 forbids, and `validateCommentary`/`assertTimelessCommentary` block
+ * a violation before it can publish.
+ */
+function buildCommentary(
+  perPage: PageAuditOutcome[],
+  metrics: ScorecardRunRecord['metrics'],
+  decision: PublishDecision,
+): string {
   const failedPages = perPage.filter((p) => !p.ok);
   if (failedPages.length > 0) {
     return `${failedPages.length} of ${perPage.length} page(s) could not be audited (${failedPages.map((p) => p.url).join(', ')}), which blocks a green Scorecard by design.`;
   }
+
   const worst = metrics.filter((m) => m.status !== 'Pass');
-  if (worst.length === 0) {
-    return `Every tested page passed all four public metrics.`;
-  }
-  return worst.map((m) => `${m.name}: ${m.value}/${m.maximum} (${m.status})`).join('; ');
+  const pageCount = perPage.length;
+  const summary =
+    worst.length === 0
+      ? `all ${pageCount} page${pageCount === 1 ? '' : 's'} passed all four public metrics`
+      : worst.map((m) => `${m.name}: ${m.value}/${m.maximum} (${m.status})`).join('; ');
+
+  const delta = describeChangeDelta(decision);
+  const combined = delta ? `${delta}; ${summary}` : summary;
+  return `${combined.charAt(0).toUpperCase()}${combined.slice(1)}.`;
 }

@@ -261,6 +261,60 @@ function hasChanged(candidate: ScorecardMetric[], published: ScorecardMetric[]):
   return undefined;
 }
 
+// ---------------------------------------------------------------------------
+// Commentary validation (spec §5.1 rule 7): a run's commentary must read
+// correctly forever, not just at the moment it was published.
+// ---------------------------------------------------------------------------
+
+/**
+ * Words that describe the commentary's position in the run list ("currently
+ * the latest," "as of now") rather than a fact about the run itself.
+ * Case-insensitive, whole-word — flags "Currently" but not
+ * "current-ly-published-scorecard.tsx". Tunable: add a word here if a new
+ * present-relative phrasing slips through, never remove one to let a
+ * specific commentary pass.
+ *
+ * **"baseline" is deliberately not a bare word here.** A run can factually
+ * describe itself as "the first live-network baseline" forever — that is a
+ * permanent fact about *that run*, not a claim about what's currently
+ * published. What must never appear is "baseline" doing duty for "the
+ * currently-published one" (`current baseline`, `published baseline`),
+ * which `PRESENT_RELATIVE_PHRASES` below catches without flagging the
+ * legitimate historical label. ("Currently published Scorecard baseline," the
+ * stale line this guard exists to catch, is still caught by "currently"
+ * alone.)
+ */
+const PRESENT_RELATIVE_WORDS = ['currently', 'latest', 'now', 'today', 'at present'];
+
+/** Multi-word phrasings that mean "the one currently in effect" without using any single word above. */
+const PRESENT_RELATIVE_PHRASES = ['current baseline', 'published baseline', 'existing baseline'];
+
+const PRESENT_RELATIVE_PATTERN = new RegExp(
+  `\\b(${[...PRESENT_RELATIVE_WORDS, ...PRESENT_RELATIVE_PHRASES]
+    .map((w) => w.replace(/\s+/g, '\\s+'))
+    .join('|')})\\b`,
+  'i',
+);
+
+export interface CommentaryValidation {
+  ok: boolean;
+  /** The present-relative words found, lowercased, in the order they appear. */
+  matches: string[];
+}
+
+/**
+ * Flags a commentary (or per-metric `description`) string that reads as
+ * relative to *when it was written* rather than stating what the run
+ * measured. Not a grammar check — a commentary can still be wrong in other
+ * ways this does not catch; it only catches the specific failure mode rule 7
+ * exists to prevent (scorecard-build-log.md's 15-Jul "Currently published...
+ * baseline" line).
+ */
+export function validateCommentary(text: string): CommentaryValidation {
+  const matches = [...text.matchAll(new RegExp(PRESENT_RELATIVE_PATTERN, 'gi'))].map((m) => m[0].toLowerCase());
+  return { ok: matches.length === 0, matches };
+}
+
 function daysBetween(fromIso: string, toIso: string): number {
   const from = new Date(`${fromIso}T00:00:00.000Z`).getTime();
   const to = new Date(`${toIso}T00:00:00.000Z`).getTime();

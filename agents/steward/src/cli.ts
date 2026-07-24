@@ -13,6 +13,7 @@ import {
   SITEMAP_URL,
   SCORECARD_MAX_AGE_DAYS_DEFAULT,
   SCORECARD_RUNS_PATH,
+  STEWARD_TIMEZONE,
   SITE_DIR,
   workflowIdFor,
   parseWorkflowId,
@@ -930,11 +931,15 @@ program
   .option('--dry-run', 'audit and archive only — never opens or updates a PR (spec §4.2 step 4)')
   .option('--urls <csv>', 'comma-separated URL override; skips the live sitemap fetch')
   .option('--max-age-days <n>', 'staleness threshold for the publish gate', String(SCORECARD_MAX_AGE_DAYS_DEFAULT))
+  .option('--date <yyyy-mm-dd>', 'pin the run\'s date instead of using today in STEWARD_TIMEZONE — for backfilling a run to when the audit actually happened')
   .description('Audit the live site (scorecard-audit-spec.md) and open a PR on change or staleness')
-  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string }) => {
+  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string; date?: string }) => {
     const maxAgeDays = Number(opts.maxAgeDays);
     if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
       fail(`--max-age-days must be a positive number, got "${opts.maxAgeDays}"`);
+    }
+    if (opts.date && !/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
+      fail(`--date must be YYYY-MM-DD, got "${opts.date}"`);
     }
     const urls = opts.urls
       ? opts.urls.split(',').map((s) => s.trim()).filter(Boolean)
@@ -963,6 +968,8 @@ program
           publishMode: opts.dryRun ? ('dry-run' as const) : ('pr' as const),
           maxAgeDays,
           triggeredBy: 'manual' as const,
+          timeZone: STEWARD_TIMEZONE,
+          date: opts.date,
         },
       ],
     });

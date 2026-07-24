@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   aggregate,
   decidePublish,
+  validateCommentary,
   type PageAuditOutcome,
   type ScorecardMetric,
   type PublishableRun,
@@ -197,4 +201,72 @@ test('any pinned-metric move opens a PR, even without a status flip', () => {
   const decision = decidePublish(run('2026-07-16', moved), run('2026-07-15', GREEN), 7);
   assert.equal(decision.decision, 'open-pr');
   assert.match(decision.reason, /Agentic Browsing/);
+});
+
+// --- validateCommentary (spec §5.1 rule 7) --------------------------------
+
+test('validateCommentary passes a timeless, factual line', () => {
+  const result = validateCommentary('Five live page types audited; all four public metrics passed.');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.matches, []);
+});
+
+test('validateCommentary flags "currently"', () => {
+  const result = validateCommentary(
+    'Currently published Scorecard baseline: five live page types audited, all four public metrics passing.',
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.matches.includes('currently'));
+});
+
+test('validateCommentary flags "published baseline" / "current baseline" even without "currently"', () => {
+  for (const phrase of ['the published baseline', 'the current baseline', 'the existing baseline']) {
+    const result = validateCommentary(`This run replaces ${phrase}.`);
+    assert.equal(result.ok, false, `expected "${phrase}" to be flagged`);
+  }
+});
+
+test('validateCommentary does not flag a bare, historically-factual "baseline"', () => {
+  const result = validateCommentary(
+    'The first live-network baseline exposed a Performance regression hidden by localhost testing.',
+  );
+  assert.equal(result.ok, true);
+});
+
+test('validateCommentary flags "latest", "now", "today", and "at present"', () => {
+  for (const word of ['latest', 'now', 'today', 'at present']) {
+    const result = validateCommentary(`The ${word} run passed every metric.`);
+    assert.equal(result.ok, false, `expected "${word}" to be flagged`);
+  }
+});
+
+test('validateCommentary does not flag "now" or "baseline" as substrings of other words', () => {
+  const result = validateCommentary('Nowhere on the baselined pipeline did a check regress.');
+  assert.equal(result.ok, true);
+});
+
+test('every committed run-log commentary and metric description is timeless', async () => {
+  const jsonPath = fileURLToPath(
+    new URL('../../../../src/data/scorecard-runs.json', import.meta.url),
+  );
+  const runs = JSON.parse(await fs.readFile(jsonPath, 'utf8')) as Array<{
+    id: string;
+    commentary: string;
+    metrics: ScorecardMetric[];
+  }>;
+  assert.ok(runs.length > 0, 'expected at least one run in scorecard-runs.json');
+  for (const run of runs) {
+    const commentaryResult = validateCommentary(run.commentary);
+    assert.ok(
+      commentaryResult.ok,
+      `run ${run.id} commentary reads as present-relative (found: ${commentaryResult.matches.join(', ')}): "${run.commentary}"`,
+    );
+    for (const m of run.metrics) {
+      const descriptionResult = validateCommentary(m.description);
+      assert.ok(
+        descriptionResult.ok,
+        `run ${run.id} ${m.name} description reads as present-relative (found: ${descriptionResult.matches.join(', ')}): "${m.description}"`,
+      );
+    }
+  }
 });

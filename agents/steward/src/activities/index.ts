@@ -21,6 +21,7 @@ export { verifyDeploy } from './verify-deploy.js';
 export { checkPrChecks } from './publish.js';
 export {
   resolveAuditUrls,
+  resolveRunStamp,
   auditLiveUrl,
   readPublishedScorecard,
   publishScorecardRun,

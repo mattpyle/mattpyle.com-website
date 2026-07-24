@@ -13,6 +13,7 @@ import { git, worktreeExists } from '../lib/git.js';
 import { gh } from '../lib/github.js';
 import { auditUrl } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
+import { validateCommentary } from '../lib/scorecard-aggregate.js';
 import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRecord } from '../lib/scorecard-aggregate.js';
 
 /**
@@ -59,6 +60,68 @@ export async function resolveAuditUrls(sitemapUrl: string): Promise<string[]> {
   const list = [...urls].sort();
   log.info({ activity: 'resolveAuditUrls', sitemapUrl, count: list.length }, 'resolved live audit URL set');
   return list;
+}
+
+// ---------------------------------------------------------------------------
+// resolveRunStamp — light queue
+// ---------------------------------------------------------------------------
+
+export interface RunStamp {
+  /** `YYYY-MM-DD` in the given IANA timezone — the run's calendar date (spec §5.1). */
+  iso: string;
+  /** Full ISO 8601 instant, carrying that timezone's actual offset (never `Z`). */
+  timestamp: string;
+}
+
+/**
+ * Resolves "what day is it" in a given IANA timezone (spec §5.1's timezone
+ * amendment). Runs as an **activity**, not inline in the workflow, so the
+ * result is captured in workflow history and replay-safe — the workflow
+ * sandbox's patched `Date` gives a replay-safe *instant*, but converting that
+ * instant to a calendar day in a named timezone depends on the host's ICU
+ * timezone database, which the spec's determinism rules don't guarantee is
+ * available or consistent inside the sandbox.
+ *
+ * DST is handled for free: the tz database (not a fixed UTC offset) decides
+ * both the calendar day and the offset written into `timestamp`.
+ */
+export async function resolveRunStamp(timeZone: string): Promise<RunStamp> {
+  const now = new Date();
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const map: Record<string, string> = {};
+  for (const part of dtf.formatToParts(now)) {
+    if (part.type !== 'literal') map[part.type] = part.value;
+  }
+
+  // The classic offset trick: reinterpret the timezone's local wall-clock
+  // digits as if they were UTC, then diff against the real UTC instant.
+  const asUTC = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second),
+  );
+  const offsetMinutes = Math.round((asUTC - now.getTime()) / 60_000);
+  const sign = offsetMinutes < 0 ? '-' : '+';
+  const abs = Math.abs(offsetMinutes);
+  const offsetH = String(Math.floor(abs / 60)).padStart(2, '0');
+  const offsetM = String(abs % 60).padStart(2, '0');
+
+  return {
+    iso: `${map.year}-${map.month}-${map.day}`,
+    timestamp: `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}${sign}${offsetH}:${offsetM}`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +267,29 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
  * this function itself does not gate on `dryRun` beyond labelling the PR, so
  * that guarantee lives in the workflow, not here.
  */
+/**
+ * Blocks a present-relative commentary or metric description before it ever
+ * reaches disk (spec §5.1 rule 7) — near-zero false positive rate here, so
+ * this is a hard block, not a flag. Checks the run's own `commentary` plus
+ * every metric's `description`, since the standard applies to both.
+ */
+function assertTimelessCommentary(record: Omit<ScorecardRunRecord, 'id'>): void {
+  const checks: Array<{ label: string; text: string }> = [
+    { label: 'commentary', text: record.commentary },
+    ...record.metrics.map((m) => ({ label: `${m.name} description`, text: m.description })),
+  ];
+  for (const { label, text } of checks) {
+    const result = validateCommentary(text);
+    if (!result.ok) {
+      throw new Error(
+        `scorecard ${label} reads as present-relative, not timeless (found: ${result.matches.join(', ')}): "${text}"`,
+      );
+    }
+  }
+}
+
 export async function publishScorecardRun(input: PublishScorecardRunInput): Promise<PublishScorecardRunResult> {
+  assertTimelessCommentary(input.record);
   const branch = `steward/scorecard-${input.record.iso}`;
 
   const repoInfo = await gh(`/repos/${GITHUB_REPO}`);

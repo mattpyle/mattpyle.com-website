@@ -100,6 +100,16 @@ export const SCORECARD_URLS_FALLBACK = [
 /** Default staleness threshold for the publish gate (spec §6), CLI-overridable via `--max-age-days`. */
 export const SCORECARD_MAX_AGE_DAYS_DEFAULT = 7;
 
+/**
+ * The IANA timezone a scorecard run's calendar date (`iso`) is computed in
+ * (spec §5.1). Matt is based in the Pacific timezone, so a run kicked off
+ * after ~5pm Pacific dates itself the *next* UTC calendar day if left to
+ * `new Date().toISOString()` — this is the fix for that. Resolved once, in
+ * `resolveRunStamp`, an activity (not read inline in the workflow) so the
+ * result is durable in history and replay-safe.
+ */
+export const STEWARD_TIMEZONE = process.env.STEWARD_TIMEZONE ?? 'America/Vancouver';
+
 /** Repo-relative path to the public run-log (spec §5.1). */
 export const SCORECARD_RUNS_PATH = 'src/data/scorecard-runs.json';
 

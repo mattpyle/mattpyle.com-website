@@ -5,6 +5,11 @@ import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
 const currentPasses = SCORECARD.metrics.filter(metric => metric.status === 'Pass').length;
 const historyPageSize = 20;
 
+const DEFAULT_CURRENT_COMMENTARY =
+  'The lowest result across the tested pages is shown for each category. A pass means the ' +
+  'category met its existing scorecard rule, not that the site is free of defects.';
+const currentCommentary = SCORECARD.commentary?.trim() || DEFAULT_CURRENT_COMMENTARY;
+
 function shortMetricName(name: string): string {
   if (name === 'Accessibility') return 'A11y';
   if (name === 'Agentic Browsing') return 'Agents';
@@ -73,10 +78,7 @@ function shortMetricName(name: string): string {
             <dd>{SCORECARD.entry}</dd>
           </div>
         </dl>
-        <p class="current-commentary">
-          The lowest result across the tested pages is shown for each category. A pass means the
-          category met its existing scorecard rule, not that the site is free of defects.
-        </p>
+        <p class="current-commentary">{currentCommentary}</p>
       </div>
     </section>
 

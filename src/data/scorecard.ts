@@ -28,6 +28,8 @@ export interface ScorecardSnapshot {
   scope: string;
   tools: readonly string[];
   entry: string;
+  /** The latest run's machine-authored, human-editable commentary (scorecard-audit-spec.md rule 7). Empty when the run has none — the page falls back to a fixed default caption. */
+  commentary: string;
   metrics: readonly ScorecardMetric[];
 }
 
@@ -86,6 +88,7 @@ export const SCORECARD: ScorecardSnapshot = {
   scope: latest.scope,
   tools: latest.tools,
   entry: latest.entry,
+  commentary: latest.commentary,
   metrics: latest.metrics,
 };
 
