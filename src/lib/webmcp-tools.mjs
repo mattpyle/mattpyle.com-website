@@ -19,6 +19,8 @@
  * and serializes whatever the handler returns into a JSON string for the caller.
  */
 
+import { APPEARANCES, setAppearance } from './appearance.mjs';
+
 /**
  * @typedef {object} WebmcpIndex
  * @property {any} site
@@ -153,6 +155,37 @@ export function createTools(getIndex) {
         ].filter(Boolean);
 
         return { results };
+      },
+    },
+
+    {
+      name: 'set_appearance',
+      description:
+        "Switch mattpyle.com between its modern appearance and a retro, GeoCities-era skin. This changes only the calling browser's own view (stored in that browser's localStorage) — it never affects the site for other visitors. Pass mode: 'retro' or 'modern'.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: [...APPEARANCES],
+            description: "The appearance to switch to: 'modern' or 'retro'.",
+          },
+        },
+        required: ['mode'],
+        additionalProperties: false,
+      },
+      execute: async (args = {}) => {
+        // The runtime does not validate inputSchema (see the module doc comment
+        // above) — setAppearance() itself falls back to 'modern' for anything
+        // outside APPEARANCES, so an invalid mode is a no-op, not an error.
+        const resolved = setAppearance(args.mode);
+        return {
+          mode: resolved,
+          message:
+            resolved === 'retro'
+              ? 'Retro mode is now on for this browser.'
+              : 'Modern mode is now on for this browser.',
+        };
       },
     },
   ];
