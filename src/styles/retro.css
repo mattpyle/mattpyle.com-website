@@ -251,6 +251,17 @@ html[data-appearance='retro'] [data-module='footer'] nav a {
   color: var(--retro-cream-soft);
 }
 
+html[data-appearance='retro'] .appearance-toggle {
+  color: var(--retro-cream);
+  border-color: var(--retro-cream-soft);
+}
+
+html[data-appearance='retro'] .appearance-toggle:hover,
+html[data-appearance='retro'] .appearance-toggle[aria-pressed='true'] {
+  color: var(--retro-gold);
+  border-color: var(--retro-gold);
+}
+
 html[data-appearance='retro'] [data-module='footer'] nav a:hover {
   color: var(--retro-gold);
 }
