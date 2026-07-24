@@ -56,6 +56,34 @@ const siteURL = new URL('/', Astro.site).toString();
 const personId = `${siteURL}#person`;
 const websiteId = `${siteURL}#website`;
 
+// Route-derived default so every new section page (and any subdirectory under it)
+// gets a correct BreadcrumbList for free — no per-page wiring required. Detail
+// pages that need a human title instead of a raw slug (e.g. /writing/[slug]) pass
+// an explicit `breadcrumbs` prop, which overrides this entirely. The homepage
+// (empty path) intentionally gets no trail — it's the root, not a hierarchy leaf.
+function humanizeSegment(segment: string): string {
+  return segment
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function defaultBreadcrumbs(pathname: string): Breadcrumb[] | undefined {
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length === 0) return undefined;
+
+  const crumbs: Breadcrumb[] = [{ name: 'Home', url: '/' }];
+  let path = '';
+  for (const segment of segments) {
+    path += `/${segment}`;
+    crumbs.push({ name: humanizeSegment(segment), url: path });
+  }
+  return crumbs;
+}
+
+const resolvedBreadcrumbs = breadcrumbs ?? defaultBreadcrumbs(Astro.url.pathname);
+
 // Per-post `image` (see writing/[slug].astro) falls back to this sitewide 1200x630 share card.
 const ogImageURL = new URL(image ?? '/og-fallback.png', Astro.site);
 // Twitter's own crop (1200x675, 16:9) — only the sitewide default needs a distinct asset;
@@ -104,10 +132,10 @@ if (type === 'article' && publishedTime) {
   });
 }
 
-if (breadcrumbs && breadcrumbs.length > 0) {
+if (resolvedBreadcrumbs && resolvedBreadcrumbs.length > 0) {
   jsonLdGraph.push({
     '@type': 'BreadcrumbList',
-    itemListElement: breadcrumbs.map((crumb, index) => ({
+    itemListElement: resolvedBreadcrumbs.map((crumb, index) => ({
       '@type': 'ListItem',
       position: index + 1,
       name: crumb.name,
