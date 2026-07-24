@@ -5,7 +5,7 @@
     "scope": "5 live page types",
     "tools": ["Lighthouse 13.4", "axe-core 4.12"],
     "entry": "Manual · intentional",
-    "commentary": "Currently published Scorecard baseline: five live page types audited, all four public metrics passing.",
+    "commentary": "Five live page types audited; all four public metrics passed.",
     "metrics": [
       {
         "name": "Accessibility",

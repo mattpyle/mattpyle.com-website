@@ -239,5 +239,6 @@
     }
   ],
   "decision": "open-pr",
-  "reason": "Agentic Browsing 3/3→4/4"
+  "reason": "Agentic Browsing 3/3→4/4",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/23"
 }

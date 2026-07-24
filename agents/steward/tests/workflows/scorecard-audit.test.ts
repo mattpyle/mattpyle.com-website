@@ -42,6 +42,7 @@ const GREEN_PAGE: PageAuditOutcome = {
 
 interface MockOverrides {
   resolveAuditUrls?: () => Promise<string[]>;
+  resolveRunStamp?: () => Promise<{ iso: string; timestamp: string }>;
   auditLiveUrl?: (url: string) => Promise<PageAuditOutcome>;
   readPublishedScorecard?: () => Promise<PublishableRun | undefined>;
   publishScorecardRun?: (input: unknown) => Promise<{ branch: string; prUrl: string; id: string }>;
@@ -53,6 +54,9 @@ function mockActivities(overrides: MockOverrides = {}) {
   const archived: unknown[] = [];
   const activities = {
     resolveAuditUrls: overrides.resolveAuditUrls ?? (async () => ['https://www.mattpyle.com/']),
+    resolveRunStamp:
+      overrides.resolveRunStamp ??
+      (async () => ({ iso: '2026-07-22', timestamp: '2026-07-22T09:00:00-07:00' })),
     auditLiveUrl:
       overrides.auditLiveUrl ??
       (async (url: string) => {
@@ -90,6 +94,7 @@ function baseInput(overrides: Partial<ScorecardAuditInput> = {}): ScorecardAudit
     publishMode: 'pr',
     maxAgeDays: 7,
     triggeredBy: 'manual',
+    timeZone: 'America/Vancouver',
     ...overrides,
   };
 }
@@ -169,6 +174,83 @@ test('a tool failure on one page blocks a green decision and is archived, not dr
   for (const m of result.record.metrics) assert.equal(m.status, 'Fail');
   const archivedRecord = archived[0] as { perPage: unknown[] };
   assert.equal(archivedRecord.perPage.length, 2);
+});
+
+test('commentary folds in the change delta decidePublish found, worded as a timeless fact', async () => {
+  const published: PublishableRun = {
+    iso: '2000-01-01',
+    metrics: [
+      { name: 'Accessibility', value: '100', maximum: '100', status: 'Pass', description: '' },
+      { name: 'Performance', value: '98', maximum: '100', status: 'Pass', description: '' },
+      { name: 'SEO', value: '100', maximum: '100', status: 'Pass', description: '' },
+      { name: 'Agentic Browsing', value: '3', maximum: '3', status: 'Pass', description: '' },
+    ],
+  };
+  const { activities } = mockActivities({ readPublishedScorecard: async () => published });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-6',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000 })],
+    }),
+  );
+  assert.equal(result.decision, 'open-pr');
+  assert.match(result.record.commentary, /Agentic Browsing rose from 3\/3 to 4\/4/);
+  assert.doesNotMatch(result.record.commentary, /\b(currently|latest|now|baseline|today)\b/i);
+});
+
+test('commentary states the plain pass fact, with no delta language, when nothing changed', async () => {
+  const published: PublishableRun = {
+    iso: '2000-01-01',
+    metrics: [
+      { name: 'Accessibility', value: '100', maximum: '100', status: 'Pass', description: '' },
+      { name: 'Performance', value: '98', maximum: '100', status: 'Pass', description: '' },
+      { name: 'SEO', value: '100', maximum: '100', status: 'Pass', description: '' },
+      { name: 'Agentic Browsing', value: '4', maximum: '4', status: 'Pass', description: '' },
+    ],
+  };
+  const { activities } = mockActivities({ readPublishedScorecard: async () => published });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-7',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000 })],
+    }),
+  );
+  assert.equal(result.decision, 'no-op');
+  assert.match(result.record.commentary, /^All \d+ pages? passed all four public metrics\.$/);
+});
+
+test('the run date comes from resolveRunStamp, not a hardcoded workflow clock read', async () => {
+  const { activities } = mockActivities({
+    readPublishedScorecard: async () => undefined,
+    resolveRunStamp: async () => ({ iso: '2099-01-05', timestamp: '2099-01-05T03:00:00-08:00' }),
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-8',
+      taskQueue: QUEUE,
+      args: [baseInput()],
+    }),
+  );
+  assert.equal(result.record.iso, '2099-01-05');
+  assert.equal(result.record.timestamp, '2099-01-05T03:00:00-08:00');
+});
+
+test('--date pins the run\'s iso but leaves the real audit timestamp alone', async () => {
+  const { activities } = mockActivities({
+    readPublishedScorecard: async () => undefined,
+    resolveRunStamp: async () => ({ iso: '2026-07-23', timestamp: '2026-07-23T10:00:00-07:00' }),
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-9',
+      taskQueue: QUEUE,
+      args: [baseInput({ date: '2026-07-22' })],
+    }),
+  );
+  assert.equal(result.record.iso, '2026-07-22');
+  assert.equal(result.record.timestamp, '2026-07-23T10:00:00-07:00');
 });
 
 test('an explicit --urls override skips resolveAuditUrls entirely', async () => {
