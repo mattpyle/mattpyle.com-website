@@ -1,0 +1,76 @@
+---
+/**
+ * Wires the human-facing appearance controls to src/lib/appearance.mjs:
+ * the footer toggle button, the mode banner's "back to modern" button, and
+ * the aria-live toast. All three ultimately call setAppearance() — no
+ * second implementation of the toggle logic lives here.
+ *
+ * Astro <script> so security.csp in astro.config.mjs hashes it; registers
+ * on astro:page-load like WebMCP.astro so it survives ClientRouter soft nav.
+ */
+---
+
+<script>
+  import { getAppearance, setAppearance, APPEARANCE_CHANGE_EVENT } from '../lib/appearance.mjs';
+
+  declare global {
+    interface Window { __appearanceUIWired?: boolean }
+  }
+
+  function syncToggles() {
+    const mode = getAppearance();
+    const isRetro = mode === 'retro';
+    document.querySelectorAll<HTMLButtonElement>('[data-appearance-toggle]').forEach((btn) => {
+      btn.setAttribute('aria-pressed', String(isRetro));
+    });
+  }
+
+  function showToast(message: string) {
+    const toast = document.getElementById('appearance-toast');
+    const messageEl = document.getElementById('appearance-toast-message');
+    if (!toast || !messageEl) return;
+    messageEl.textContent = message;
+    toast.hidden = false;
+    window.clearTimeout((toast as any).__hideTimer);
+    (toast as any).__hideTimer = window.setTimeout(() => {
+      toast.hidden = true;
+    }, 6000);
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    syncToggles();
+
+    if (window.__appearanceUIWired) return;
+    window.__appearanceUIWired = true;
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+
+      const toggle = target.closest<HTMLElement>('[data-appearance-toggle]');
+      if (toggle) {
+        const next = getAppearance() === 'retro' ? 'modern' : 'retro';
+        setAppearance(next);
+        return;
+      }
+
+      if (target.closest('#appearance-exit')) {
+        setAppearance('modern');
+        return;
+      }
+
+      if (target.closest('#appearance-toast-dismiss')) {
+        const toast = document.getElementById('appearance-toast');
+        if (toast) toast.hidden = true;
+      }
+    });
+
+    document.addEventListener(APPEARANCE_CHANGE_EVENT, ((event: CustomEvent<{ mode: string }>) => {
+      syncToggles();
+      showToast(
+        event.detail.mode === 'retro'
+          ? 'Retro mode on — back to modern'
+          : 'Retro mode off — back to normal'
+      );
+    }) as EventListener);
+  });
+</script>
