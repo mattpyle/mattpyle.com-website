@@ -5,8 +5,11 @@
  * handlers without a browser or the origin trial (see tests/webmcp.test.mjs) — same
  * split as src/lib/article-actions.mjs.
  *
- * Every tool is read-only and deterministic: the only I/O is the caller-supplied
- * getIndex(), which resolves the same-origin /webmcp/index.json payload.
+ * The read tools (describe_site, get_recent_writing, search_content) are read-only
+ * and deterministic: their only I/O is the caller-supplied getIndex(), which resolves
+ * the same-origin /webmcp/index.json payload. set_appearance is the exception — a write
+ * tool that flips the client-local appearance (localStorage + the <html data-appearance>
+ * attribute) via src/lib/appearance.mjs, touching no server and no other visitor's view.
  *
  * CHROME DOES NOT VALIDATE inputSchema. Measured on Chrome 150 against the live origin trial
  * (2026-07-17): `search_content` was invoked with `{}` despite `query` being declared `required`,
@@ -18,6 +21,8 @@
  * The execute contract, also measured rather than assumed: Chrome hands the handler a parsed object,
  * and serializes whatever the handler returns into a JSON string for the caller.
  */
+
+import { APPEARANCES, setAppearance } from './appearance.mjs';
 
 /**
  * @typedef {object} WebmcpIndex
@@ -153,6 +158,37 @@ export function createTools(getIndex) {
         ].filter(Boolean);
 
         return { results };
+      },
+    },
+
+    {
+      name: 'set_appearance',
+      description:
+        "Switch mattpyle.com between its modern appearance and a retro, GeoCities-era skin. This changes only the calling browser's own view (stored in that browser's localStorage) — it never affects the site for other visitors. Pass mode: 'retro' or 'modern'.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: [...APPEARANCES],
+            description: "The appearance to switch to: 'modern' or 'retro'.",
+          },
+        },
+        required: ['mode'],
+        additionalProperties: false,
+      },
+      execute: async (args = {}) => {
+        // The runtime does not validate inputSchema (see the module doc comment
+        // above) — setAppearance() itself falls back to 'modern' for anything
+        // outside APPEARANCES, so an invalid mode is a no-op, not an error.
+        const resolved = setAppearance(args.mode);
+        return {
+          mode: resolved,
+          message:
+            resolved === 'retro'
+              ? 'Retro mode is now on for this browser.'
+              : 'Modern mode is now on for this browser.',
+        };
       },
     },
   ];

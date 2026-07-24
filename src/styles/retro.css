@@ -1,0 +1,768 @@
+/* ── Retro mode — the re-skin ─────────────────────────────────────────────
+   Every rule below is scoped under html[data-appearance="retro"]. This is a
+   re-skin, not a re-layout: no selector here restructures the DOM, moves
+   real content, or changes reading order. It changes color, type, borders,
+   backgrounds, and reveals decorative furniture that already exists in the
+   DOM in both modes (see src/components/RetroHomeFurniture.astro).
+
+   Tokens lifted verbatim from docs/webmcp-retro/design-brief.md so modern
+   and retro share nothing by accident. */
+
+html[data-appearance='retro'] {
+  --retro-parchment: #e8dcc0;
+  --retro-parchment-light: #efe6d0;
+  --retro-parchment-dark: #e0d2b0;
+  --retro-frame-bg: #fffdf5;
+  --retro-frame-border: #8a5a2b;
+  --retro-ink: #33291a;
+  --retro-forest: #234327;
+  --retro-forest-hover: #2f5a34;
+  --retro-maroon: #7a1f1f;
+  --retro-cream: #fff8e6;
+  --retro-cream-soft: #dcecd0;
+  --retro-gold: #ffd27f;
+  --retro-link: #1f5aa8;
+  --retro-link-visited: #6b3fa0;
+  --retro-sidebar-bg: #f3ead2;
+  --retro-navbar-bg: #efe2c4;
+  --retro-construction-bg: #3a2c10;
+  --retro-construction-stripe: #e8c34a;
+  --retro-divider: #b8860b;
+  --retro-font-body: Georgia, 'Times New Roman', serif;
+  --retro-font-display: 'Comic Sans MS', cursive, sans-serif;
+  --retro-font-ui: Verdana, sans-serif;
+  --retro-font-mono: 'Courier New', monospace;
+}
+
+/* ── Base surface + type ─────────────────────────────────────────────── */
+
+html[data-appearance='retro'] body {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+  background-color: var(--retro-parchment);
+  background-image:
+    repeating-linear-gradient(0deg, rgba(120, 90, 50, .05), rgba(120, 90, 50, .05) 1px, transparent 1px, transparent 4px),
+    radial-gradient(circle at 30% 20%, var(--retro-parchment-light), var(--retro-parchment-dark));
+}
+
+html[data-appearance='retro'] a:focus-visible,
+html[data-appearance='retro'] button:focus-visible {
+  outline: 3px solid var(--retro-link);
+  outline-offset: 2px;
+}
+
+html[data-appearance='retro'] .prose h2,
+html[data-appearance='retro'] .prose h3,
+html[data-appearance='retro'] h1,
+html[data-appearance='retro'] .hero-eyebrow,
+html[data-appearance='retro'] .section-eyebrow,
+html[data-appearance='retro'] .log-title {
+  font-family: var(--retro-font-display);
+}
+
+html[data-appearance='retro'] .prose h2 {
+  color: var(--retro-maroon);
+  border-bottom: 2px dotted var(--retro-frame-border);
+  padding-bottom: 4px;
+}
+
+/* Period-correct glossy "ball bullet" GIFs, drawn in CSS — no emoji, they're
+   anachronistic (post-2010) for a ~1997 skin. Decorative only. */
+html[data-appearance='retro'] .prose h2::before,
+html[data-appearance='retro'] .section-eyebrow::before,
+html[data-appearance='retro'] .log-title::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: baseline;
+  background: radial-gradient(circle at 35% 30%, #fff, #e85d5d 45%, var(--retro-maroon));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+}
+
+html[data-appearance='retro'] .prose a,
+html[data-appearance='retro'] .article-title,
+html[data-appearance='retro'] .entry-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] .prose a:visited {
+  color: var(--retro-link-visited);
+}
+
+/* ── Header / nav ─────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] [data-module='nav'] {
+  background: var(--retro-forest);
+  border-bottom: 4px solid var(--retro-maroon);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Text-art flourish replacing the starfield dots (which read as stray pixels
+   at nav height, not decoration). Same &cedil;/&oslash;/&curren;/&ordm;/&deg;
+   motif as the homepage divider (RetroHomeFurniture.astro), scaled to match
+   the marquee/divider type and given the same rainbow hue-cycle as the
+   divider so it reads as the intended sparkle rather than a weak, static
+   speck. Hidden by default so the element is inert in modern regardless of
+   load order; hidden again below 760px so it never wraps or crowds the links. */
+html:not([data-appearance='retro']) .nav-flourish {
+  display: none;
+}
+
+html[data-appearance='retro'] .nav-flourish {
+  display: inline-block;
+  flex: 0 0 auto;
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--retro-gold);
+  white-space: nowrap;
+  animation: retro-hue 8s linear infinite;
+}
+
+@media (max-width: 760px) {
+  html[data-appearance='retro'] .nav-flourish {
+    display: none;
+  }
+}
+
+html[data-appearance='retro'] .nav-logo {
+  font-family: var(--retro-font-display);
+  color: var(--retro-gold);
+  font-size: 16px;
+}
+
+html[data-appearance='retro'] .nav-logo:hover {
+  color: var(--retro-cream);
+}
+
+html[data-appearance='retro'] .nav-link {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-cream-soft);
+}
+
+html[data-appearance='retro'] .nav-link:hover,
+html[data-appearance='retro'] .nav-link.is-active {
+  color: var(--retro-gold);
+  border-bottom-color: var(--retro-gold);
+}
+
+/* ── Mode banner (bulletproof exit #1) ──────────────────────────────────
+   Present in the DOM on every page in both modes; hidden by default,
+   revealed here. See src/components/AppearanceBanner.astro. */
+
+html:not([data-appearance='retro']) .retro-mode-banner {
+  display: none;
+}
+
+html[data-appearance='retro'] .retro-mode-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--retro-forest);
+  color: var(--retro-cream);
+  text-align: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--retro-font-ui);
+  border-bottom: 3px double var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .retro-mode-banner button {
+  background: none;
+  border: none;
+  color: var(--retro-gold);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: bold;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ── Homepage furniture: marquee, construction banner, dividers ────────
+   Decorative, behavior-free, aria-hidden. Furniture concentrates on the
+   homepage per design-brief.md §2 — other pages get typographic skin only. */
+
+html:not([data-appearance='retro']) .retro-furniture {
+  display: none;
+}
+
+html[data-appearance='retro'] .retro-furniture {
+  display: block;
+}
+
+/* Native <marquee> scrolling is not a CSS animation, so prefers-reduced-motion
+   can't stop it — deviation from the mockup (which used <marquee>): built as a
+   CSS-animated strip instead, so reduced motion genuinely freezes it. */
+html[data-appearance='retro'] .retro-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--retro-gold);
+  font-size: 15px;
+  padding: 8px 0;
+  font-family: var(--retro-font-ui);
+  background: var(--retro-forest);
+}
+
+html[data-appearance='retro'] .retro-marquee span {
+  display: inline-block;
+  padding-left: 100%;
+  animation: retro-marquee 18s linear infinite;
+}
+
+@keyframes retro-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+html[data-appearance='retro'] .retro-divider {
+  text-align: center;
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--retro-divider);
+  margin: 16px 0;
+  font-family: var(--retro-font-mono);
+  animation: retro-hue 8s linear infinite;
+}
+
+@keyframes retro-hue {
+  to { filter: hue-rotate(360deg); }
+}
+
+html[data-appearance='retro'] .retro-construction {
+  text-align: center;
+  margin: 16px 0;
+  font-family: var(--retro-font-ui);
+  font-size: 13px;
+  letter-spacing: .5px;
+  background: var(--retro-construction-bg);
+  color: #ffe9b0;
+  padding: 11px 8px;
+  border-top: 9px solid var(--retro-construction-bg);
+  border-bottom: 9px solid var(--retro-construction-bg);
+  border-image: repeating-linear-gradient(45deg, var(--retro-construction-stripe) 0 12px, var(--retro-construction-bg) 12px 24px) 9;
+}
+
+html[data-appearance='retro'] .retro-construction b {
+  color: #fff;
+  letter-spacing: 1px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] [data-module='footer'] {
+  background: var(--retro-forest);
+  color: var(--retro-cream-soft);
+  border-top: 4px solid var(--retro-maroon);
+  font-family: var(--retro-font-ui);
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+
+html[data-appearance='retro'] .retro-footer-badges {
+  justify-content: center;
+}
+
+html[data-appearance='retro'] [data-module='footer'] nav a {
+  color: var(--retro-cream-soft);
+}
+
+html[data-appearance='retro'] .appearance-toggle {
+  color: var(--retro-cream);
+  border-color: var(--retro-cream-soft);
+}
+
+html[data-appearance='retro'] .appearance-toggle:hover {
+  color: var(--retro-gold);
+  border-color: var(--retro-gold);
+}
+
+html[data-appearance='retro'] [data-module='footer'] nav a:hover {
+  color: var(--retro-gold);
+}
+
+html[data-appearance='retro'] [data-module='footer'] p {
+  color: var(--retro-cream-soft);
+}
+
+html[data-appearance='retro'] .retro-footer-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+html:not([data-appearance='retro']) .retro-footer-badges {
+  display: none;
+}
+
+html[data-appearance='retro'] .retro-footer-badges span {
+  display: inline-block;
+  background: var(--retro-frame-bg);
+  border: 1px solid var(--retro-frame-border);
+  color: #5a4a30;
+  font-family: var(--retro-font-mono);
+  font-size: 10px;
+  padding: 2px 5px;
+}
+
+/* ── Appearance toggle button ───────────────────────────────────────── */
+
+html[data-appearance='retro'] .appearance-toggle {
+  font-family: var(--retro-font-ui);
+}
+
+/* ── Nav links: push further period than the base treatment above ──── */
+
+html[data-appearance='retro'] .nav-link {
+  font-weight: bold;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+html[data-appearance='retro'] .nav-link.is-active {
+  border-bottom-color: var(--retro-gold);
+}
+
+/* ── Hero: CTA buttons get the beveled period treatment ─────────────── */
+
+html[data-appearance='retro'] .cta-primary,
+html[data-appearance='retro'] .cta-secondary {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  border-radius: 0;
+  background: var(--retro-frame-bg);
+  border: 3px outset var(--retro-frame-border);
+  color: var(--retro-maroon);
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] .cta-primary {
+  background: var(--retro-forest);
+  color: var(--retro-cream);
+  border-color: var(--retro-forest-hover);
+}
+
+html[data-appearance='retro'] .cta-primary:hover,
+html[data-appearance='retro'] .cta-secondary:hover {
+  color: var(--retro-gold);
+  background: var(--retro-forest);
+}
+
+html[data-appearance='retro'] .cta-primary:active,
+html[data-appearance='retro'] .cta-secondary:active {
+  border-style: inset;
+}
+
+/* ── Activity log (homepage widget) ──────────────────────────────────── */
+
+html[data-appearance='retro'] [data-module='activity-log'] {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] .log-header {
+  background: var(--retro-sidebar-bg);
+  border-bottom: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .log-title {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .view-all {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] .log-item + .log-item {
+  border-top: 1px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .log-date {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] .type-pill {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-gold);
+  color: var(--retro-ink);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] .entry-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] .log-link:hover .entry-title {
+  color: var(--retro-maroon);
+}
+
+/* ── /writing list ────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .article-item {
+  border-bottom: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .article-item h2 a {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .article-item h2 a:hover {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] .article-date,
+html[data-appearance='retro'] .featured-badge,
+html[data-appearance='retro'] .reading-time {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .featured-badge {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .article-desc {
+  font-family: var(--retro-font-body);
+}
+
+html[data-appearance='retro'] .tag-pill {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-sidebar-bg);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+  color: #5a4a30;
+}
+
+/* ── /builds grid ─────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .build-card {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  border-top-width: 3px;
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+}
+
+html[data-appearance='retro'] .build-card h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+  font-size: 17px;
+}
+
+html[data-appearance='retro'] .card-desc {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] .status-label,
+html[data-appearance='retro'] .card-date,
+html[data-appearance='retro'] .card-link,
+html[data-appearance='retro'] .no-link {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .card-link {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] .card-links {
+  border-top: 1px dotted var(--retro-frame-border);
+}
+
+/* ── /changelog ledger ────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .year-label {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .year-line {
+  background: repeating-linear-gradient(90deg, var(--retro-frame-border) 0 4px, transparent 4px 8px);
+}
+
+html[data-appearance='retro'] .lg-row:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] .lg-title {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+  font-size: 16px;
+}
+
+html[data-appearance='retro'] .lg-row:hover .lg-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] .lg-summary {
+  font-family: var(--retro-font-body);
+}
+
+html[data-appearance='retro'] .lg-date {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .type-pill,
+html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
+  font-family: var(--retro-font-mono);
+  border-radius: 0;
+  border: 1px solid var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
+  background: var(--retro-sidebar-bg);
+  color: #5a4a30;
+}
+
+/* Significance dots + legend: map the modern --color-sig-* tokens onto the
+   retro palette while keeping the three-way distinction (maroon / gold /
+   muted brown). Dots stay aria-hidden; only the legend labels get type. */
+html[data-appearance='retro'] .sig-dot--major {
+  background: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .sig-dot--minor {
+  background: var(--retro-gold);
+}
+
+html[data-appearance='retro'] .sig-dot--patch {
+  background: #8a5a2b;
+}
+
+html[data-appearance='retro'] .legend-label,
+html[data-appearance='retro'] .legend-item {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .legend-label {
+  color: var(--retro-maroon);
+}
+
+/* ── /scorecard ───────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .latest-run {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  border-top: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] .run-header h2,
+html[data-appearance='retro'] .history-header h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .current-score {
+  border-right-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .current-scores,
+html[data-appearance='retro'] .run-header {
+  border-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .score-value {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .score-heading h3,
+html[data-appearance='retro'] .status,
+html[data-appearance='retro'] .history-status,
+html[data-appearance='retro'] .verification dt,
+html[data-appearance='retro'] .history-detail dt,
+html[data-appearance='retro'] .verification dd,
+html[data-appearance='retro'] .history-detail dd,
+html[data-appearance='retro'] .history-date time,
+html[data-appearance='retro'] .history-number,
+html[data-appearance='retro'] .history-result,
+html[data-appearance='retro'] .history-timestamp,
+html[data-appearance='retro'] .section-label {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .history-run {
+  border-bottom-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .history-run summary {
+  background: var(--retro-frame-bg);
+  font-family: var(--retro-font-ui);
+}
+
+html[data-appearance='retro'] .history-run summary:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] .history-detail {
+  background: var(--retro-frame-bg);
+  border-top-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .history-toggle {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+}
+
+/* Swap the CSS-drawn caret for a period [+]/[-] text indicator — a rotating
+   chevron reads as a modern accordion. Decorative only; the chevron was
+   already aria-hidden, and <details>/<summary> semantics still carry the
+   open/closed state for assistive tech. Markup and JS are untouched. */
+html[data-appearance='retro'] .chevron {
+  display: none;
+}
+
+html[data-appearance='retro'] .history-toggle::after {
+  content: '[ + ]';
+  font-family: var(--retro-font-mono);
+  font-weight: bold;
+  color: var(--retro-maroon);
+  white-space: nowrap;
+}
+
+html[data-appearance='retro'] .history-run[open] .history-toggle::after {
+  content: '[ \2212 ]';
+}
+
+/* The [+ ]/[- ] text needs more room than the 42px column the icon-only
+   chevron fit in — same grid, last track widened so the indicator doesn't
+   wrap or overflow into the metric columns. */
+html[data-appearance='retro'] .history-columns,
+html[data-appearance='retro'] .history-run summary {
+  grid-template-columns: minmax(150px, 1.25fr) repeat(4, minmax(92px, 1fr)) 56px;
+}
+
+@media (max-width: 820px) {
+  html[data-appearance='retro'] .history-columns,
+  html[data-appearance='retro'] .history-run summary {
+    grid-template-columns: minmax(132px, 1.25fr) repeat(4, minmax(70px, 1fr)) 48px;
+  }
+}
+
+html[data-appearance='retro'] .page-number {
+  border: 2px outset var(--retro-frame-border);
+  background: var(--retro-frame-bg);
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+}
+
+/* .page-link--disabled used var(--color-border), a near-invisible pale token on
+   parchment. #5a4a30 is the same muted-ink brown already used for tag-pill text
+   elsewhere in this file — dark enough to read as present-but-inactive (~6.3:1
+   on parchment) rather than gone. */
+html[data-appearance='retro'] .page-link {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] .page-link--disabled {
+  color: #5a4a30;
+  text-decoration: none;
+}
+
+/* ── /about ───────────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .headshot {
+  border: 4px ridge var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .identity-card {
+  background: var(--retro-frame-bg);
+  border: 2px solid var(--retro-frame-border);
+  border-left: 4px solid var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .id-name {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='about-grid'] section h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+  border-bottom: 2px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='topics-grid'] li {
+  font-family: var(--retro-font-body);
+}
+
+html[data-appearance='retro'] .bullet {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .connect-links a {
+  background: var(--retro-frame-bg);
+  border: 2px outset var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .connect-links a:hover {
+  background: var(--retro-sidebar-bg);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .connect-label,
+html[data-appearance='retro'] .connect-handle {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .connect-label {
+  color: var(--retro-maroon);
+}
+
+/* ── Filter pills (shared: writing, builds, changelog) ──────────────── */
+
+html[data-appearance='retro'] .filter-pill {
+  font-family: var(--retro-font-mono);
+  border-radius: 0;
+  border: 2px outset var(--retro-frame-border);
+  background: var(--retro-frame-bg);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] .filter-pill:hover {
+  color: var(--retro-maroon);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .filter-pill.is-active {
+  background: var(--retro-maroon);
+  color: var(--retro-cream);
+  border-color: var(--retro-maroon);
+  border-style: inset;
+}
+
+/* ── Motion: prefers-reduced-motion disables all of it ──────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-appearance='retro'] .retro-divider,
+  html[data-appearance='retro'] .nav-flourish {
+    animation: none;
+  }
+
+  html[data-appearance='retro'] .retro-marquee {
+    overflow: visible;
+    white-space: normal;
+  }
+
+  html[data-appearance='retro'] .retro-marquee span {
+    display: inline;
+    padding-left: 0;
+    animation: none;
+  }
+}

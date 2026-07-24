@@ -51,6 +51,9 @@ skills-lock.json
 # Superpowers skill working docs — plans/specs for in-progress features, not production code
 /docs/superpowers/
 
+# WebMCP retro-mode working docs — specs, mockups, handoffs; not production code
+/docs/webmcp-retro/
+
 # Steward (agents/steward) — local state only. `agents/steward/reviews/` is
 # COMMITTED on purpose: the review archive is a dataset.
 agents/steward/.temporal/
