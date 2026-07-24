@@ -256,8 +256,7 @@ html[data-appearance='retro'] .appearance-toggle {
   border-color: var(--retro-cream-soft);
 }
 
-html[data-appearance='retro'] .appearance-toggle:hover,
-html[data-appearance='retro'] .appearance-toggle[aria-pressed='true'] {
+html[data-appearance='retro'] .appearance-toggle:hover {
   color: var(--retro-gold);
   border-color: var(--retro-gold);
 }
@@ -297,13 +296,341 @@ html[data-appearance='retro'] .appearance-toggle {
   font-family: var(--retro-font-ui);
 }
 
-/* ── Toast ───────────────────────────────────────────────────────────── */
+/* ── Nav links: push further period than the base treatment above ──── */
 
-html[data-appearance='retro'] .appearance-toast {
+html[data-appearance='retro'] .nav-link {
+  font-weight: bold;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+html[data-appearance='retro'] .nav-link.is-active {
+  border-bottom-color: var(--retro-gold);
+}
+
+/* ── Hero: CTA buttons get the beveled period treatment ─────────────── */
+
+html[data-appearance='retro'] .cta-primary,
+html[data-appearance='retro'] .cta-secondary {
   font-family: var(--retro-font-ui);
+  font-weight: bold;
+  border-radius: 0;
+  background: var(--retro-frame-bg);
+  border: 3px outset var(--retro-frame-border);
+  color: var(--retro-maroon);
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] .cta-primary {
   background: var(--retro-forest);
   color: var(--retro-cream);
-  border: 2px outset var(--retro-forest-hover);
+  border-color: var(--retro-forest-hover);
+}
+
+html[data-appearance='retro'] .cta-primary:hover,
+html[data-appearance='retro'] .cta-secondary:hover {
+  color: var(--retro-gold);
+  background: var(--retro-forest);
+}
+
+html[data-appearance='retro'] .cta-primary:active,
+html[data-appearance='retro'] .cta-secondary:active {
+  border-style: inset;
+}
+
+/* ── Activity log (homepage widget) ──────────────────────────────────── */
+
+html[data-appearance='retro'] [data-module='activity-log'] {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] .log-header {
+  background: var(--retro-sidebar-bg);
+  border-bottom: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .log-title {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .view-all {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] .log-item + .log-item {
+  border-top: 1px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .log-date {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] .type-pill {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-gold);
+  color: var(--retro-ink);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] .entry-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] .log-link:hover .entry-title {
+  color: var(--retro-maroon);
+}
+
+/* ── /writing list ────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .article-item {
+  border-bottom: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .article-item h2 a {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .article-item h2 a:hover {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] .article-date,
+html[data-appearance='retro'] .featured-badge,
+html[data-appearance='retro'] .reading-time {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .featured-badge {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .article-desc {
+  font-family: var(--retro-font-body);
+}
+
+html[data-appearance='retro'] .tag-pill {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-sidebar-bg);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+  color: #5a4a30;
+}
+
+/* ── /builds grid ─────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .build-card {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  border-top-width: 3px;
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+}
+
+html[data-appearance='retro'] .build-card h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+  font-size: 17px;
+}
+
+html[data-appearance='retro'] .card-desc {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] .status-label,
+html[data-appearance='retro'] .card-date,
+html[data-appearance='retro'] .card-link,
+html[data-appearance='retro'] .no-link {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .card-link {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] .card-links {
+  border-top: 1px dotted var(--retro-frame-border);
+}
+
+/* ── /changelog ledger ────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .year-label {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .year-line {
+  background: repeating-linear-gradient(90deg, var(--retro-frame-border) 0 4px, transparent 4px 8px);
+}
+
+html[data-appearance='retro'] .lg-row:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] .lg-title {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+  font-size: 16px;
+}
+
+html[data-appearance='retro'] .lg-row:hover .lg-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] .lg-summary {
+  font-family: var(--retro-font-body);
+}
+
+html[data-appearance='retro'] .lg-date {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .type-pill,
+html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
+  font-family: var(--retro-font-mono);
+  border-radius: 0;
+  border: 1px solid var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
+  background: var(--retro-sidebar-bg);
+  color: #5a4a30;
+}
+
+/* ── /scorecard ───────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .latest-run {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  border-top: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] .run-header h2,
+html[data-appearance='retro'] .history-header h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .current-score {
+  border-right-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .current-scores,
+html[data-appearance='retro'] .run-header {
+  border-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .score-value {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .score-heading h3,
+html[data-appearance='retro'] .status,
+html[data-appearance='retro'] .history-status,
+html[data-appearance='retro'] .verification dt,
+html[data-appearance='retro'] .history-detail dt,
+html[data-appearance='retro'] .verification dd,
+html[data-appearance='retro'] .history-detail dd,
+html[data-appearance='retro'] .history-date time,
+html[data-appearance='retro'] .history-number,
+html[data-appearance='retro'] .history-result,
+html[data-appearance='retro'] .history-timestamp,
+html[data-appearance='retro'] .section-label {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .history-run {
+  border-bottom-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .history-run summary:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] .page-number {
+  border: 2px outset var(--retro-frame-border);
+  background: var(--retro-frame-bg);
+}
+
+/* ── /about ───────────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] .headshot {
+  border: 4px ridge var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .identity-card {
+  background: var(--retro-frame-bg);
+  border: 2px solid var(--retro-frame-border);
+  border-left: 4px solid var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .id-name {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='about-grid'] section h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+  border-bottom: 2px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='topics-grid'] li {
+  font-family: var(--retro-font-body);
+}
+
+html[data-appearance='retro'] .bullet {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .connect-links a {
+  background: var(--retro-frame-bg);
+  border: 2px outset var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] .connect-links a:hover {
+  background: var(--retro-sidebar-bg);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .connect-label,
+html[data-appearance='retro'] .connect-handle {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] .connect-label {
+  color: var(--retro-maroon);
+}
+
+/* ── Filter pills (shared: writing, builds, changelog) ──────────────── */
+
+html[data-appearance='retro'] .filter-pill {
+  font-family: var(--retro-font-mono);
+  border-radius: 0;
+  border: 2px outset var(--retro-frame-border);
+  background: var(--retro-frame-bg);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] .filter-pill:hover {
+  color: var(--retro-maroon);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .filter-pill.is-active {
+  background: var(--retro-maroon);
+  color: var(--retro-cream);
+  border-color: var(--retro-maroon);
+  border-style: inset;
 }
 
 /* ── Motion: prefers-reduced-motion disables all of it ──────────────── */

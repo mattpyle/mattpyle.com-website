@@ -12,7 +12,7 @@ const year = new Date().getFullYear();
     </a>
     <a href="https://github.com/mattpyle" target="_blank" rel="noopener noreferrer">GitHub</a>
     <a href="https://linkedin.com/in/matt-pyle" target="_blank" rel="noopener noreferrer">LinkedIn</a>
-    <button type="button" class="appearance-toggle" data-appearance-toggle aria-pressed="false">
+    <button type="button" class="appearance-toggle" data-appearance-toggle aria-label="Switch to retro mode">
       Retro mode
     </button>
   </nav>
@@ -38,6 +38,7 @@ const year = new Date().getFullYear();
 
   nav {
     display: flex;
+    align-items: center;
     gap: 18px;
   }
 
@@ -68,8 +69,7 @@ const year = new Date().getFullYear();
     transition: color .15s ease, border-color .15s ease;
   }
 
-  .appearance-toggle:hover,
-  .appearance-toggle[aria-pressed="true"] {
+  .appearance-toggle:hover {
     color: var(--color-accent);
     border-color: var(--color-accent);
   }

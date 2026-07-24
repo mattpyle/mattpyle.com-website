@@ -7,7 +7,6 @@ import Footer from '../components/Footer.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 import WebMCP from '../components/WebMCP.astro';
 import AppearanceBanner from '../components/AppearanceBanner.astro';
-import AppearanceToast from '../components/AppearanceToast.astro';
 import AppearanceUI from '../components/AppearanceUI.astro';
 
 interface Breadcrumb {
@@ -239,7 +238,6 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
       <slot />
     </main>
     <Footer />
-    <AppearanceToast />
     <AppearanceUI />
     {/*
       MUST stay in <body>. This renders a <vercel-speed-insights> custom element, and a custom

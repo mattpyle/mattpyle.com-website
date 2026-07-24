@@ -2,13 +2,30 @@
 /**
  * Wires the human-facing appearance controls to src/lib/appearance.mjs:
  * the footer toggle button, the mode banner's "back to modern" button, and
- * the aria-live toast. All three ultimately call setAppearance() — no
- * second implementation of the toggle logic lives here.
+ * a visually-hidden aria-live region that announces the change to screen
+ * readers. All three ultimately call setAppearance() — no second
+ * implementation of the toggle logic lives here.
  *
  * Astro <script> so security.csp in astro.config.mjs hashes it; registers
  * on astro:page-load like WebMCP.astro so it survives ClientRouter soft nav.
  */
 ---
+
+<div id="appearance-announcer" class="sr-only" role="status" aria-live="polite"></div>
+
+<style>
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
 
 <script>
   import { getAppearance, setAppearance, APPEARANCE_CHANGE_EVENT } from '../lib/appearance.mjs';
@@ -20,21 +37,17 @@
   function syncToggles() {
     const mode = getAppearance();
     const isRetro = mode === 'retro';
+    const label = isRetro ? 'Modern mode' : 'Retro mode';
+    const action = isRetro ? 'Switch to modern mode' : 'Switch to retro mode';
     document.querySelectorAll<HTMLButtonElement>('[data-appearance-toggle]').forEach((btn) => {
-      btn.setAttribute('aria-pressed', String(isRetro));
+      btn.textContent = label;
+      btn.setAttribute('aria-label', action);
     });
   }
 
-  function showToast(message: string) {
-    const toast = document.getElementById('appearance-toast');
-    const messageEl = document.getElementById('appearance-toast-message');
-    if (!toast || !messageEl) return;
-    messageEl.textContent = message;
-    toast.hidden = false;
-    window.clearTimeout((toast as any).__hideTimer);
-    (toast as any).__hideTimer = window.setTimeout(() => {
-      toast.hidden = true;
-    }, 6000);
+  function announce(message: string) {
+    const region = document.getElementById('appearance-announcer');
+    if (region) region.textContent = message;
   }
 
   document.addEventListener('astro:page-load', () => {
@@ -55,22 +68,12 @@
 
       if (target.closest('#appearance-exit')) {
         setAppearance('modern');
-        return;
-      }
-
-      if (target.closest('#appearance-toast-dismiss')) {
-        const toast = document.getElementById('appearance-toast');
-        if (toast) toast.hidden = true;
       }
     });
 
     document.addEventListener(APPEARANCE_CHANGE_EVENT, ((event: CustomEvent<{ mode: string }>) => {
       syncToggles();
-      showToast(
-        event.detail.mode === 'retro'
-          ? 'Retro mode on — back to modern'
-          : 'Retro mode off — back to normal'
-      );
+      announce(event.detail.mode === 'retro' ? 'Retro mode on' : 'Modern mode on');
     }) as EventListener);
   });
 </script>
