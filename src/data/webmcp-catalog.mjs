@@ -13,14 +13,19 @@
  */
 
 /**
- * When the tool behaviour below was last measured against the live origin trial — the date and
- * Chrome version in the doc comment at the top of src/lib/webmcp-tools.mjs.
+ * When the tool behaviour below was last measured against the live origin trial.
+ *
+ * 2026-07-24 raised this from handler-level to PROTOCOL-level: the tools were driven through
+ * `document.modelContext.executeTool` on the deployed site rather than by calling the handlers
+ * directly, which is what established the real `executeTool` signature (see
+ * src/lib/webmcp-snippet.mjs) and reconfirmed that Chrome ignores `inputSchema`. Still page-side —
+ * an agent driving these from outside the page remains unverified.
  *
  * NOT a build date. It feeds the visible "verified" line on /webmcp, that page's JSON-LD
  * `dateModified`, and the `/webmcp/` sitemap lastmod, mirroring how SCORECARD_VERIFIED works.
  * Advance it only when the behaviour is re-measured.
  */
-export const WEBMCP_VERIFIED = Object.freeze({ iso: '2026-07-17', chrome: '150' });
+export const WEBMCP_VERIFIED = Object.freeze({ iso: '2026-07-24', chrome: '150.0.7871.182' });
 
 /**
  * When this origin's WebMCP origin-trial token expires — after which Chrome ignores it and the
