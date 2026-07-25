@@ -1070,9 +1070,22 @@ html[data-appearance='retro'] [data-module='webmcp'] .snippet-frame:has(.snippet
   outline-offset: 2px;
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .json-key { color: var(--retro-gold); }
+/* Same five-way split as modern, held to the phosphor palette: gold keys, bright digit strings, and
+   dim green for everything structural. Keywords take the weight rather than a fourth colour — a
+   four-hue LCD stops reading as a terminal, which is the whole point of this panel. */
+html[data-appearance='retro'] [data-module='webmcp'] .json-key {
+  color: var(--retro-gold);
+  font-weight: bold;
+}
+
 html[data-appearance='retro'] [data-module='webmcp'] .json-string { color: var(--retro-lcd-digit); }
-html[data-appearance='retro'] [data-module='webmcp'] .json-literal,
+
+html[data-appearance='retro'] [data-module='webmcp'] .json-keyword {
+  color: var(--retro-lcd-dim);
+  font-weight: bold;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .json-number,
 html[data-appearance='retro'] [data-module='webmcp'] .json-punctuation,
 html[data-appearance='retro'] [data-module='webmcp'] .json-dim,
 html[data-appearance='retro'] [data-module='webmcp'] .output-cursor { color: var(--retro-lcd-dim); }

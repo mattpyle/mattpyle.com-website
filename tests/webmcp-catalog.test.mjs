@@ -132,20 +132,27 @@ test('agents.md marks the write tool as a write and states its client-local scop
   assert.match(agentsMd, /localStorage/);
 });
 
-test('formatJson tokenizes keys, strings, literals, and punctuation', () => {
+test('formatJson tokenizes keys, strings, numbers, keywords, and punctuation', () => {
   const tokens = formatJson({ mode: 'retro', limit: 5, ok: true, missing: null });
   const kinds = new Set(tokens.map((token) => token.kind));
 
-  assert.ok(kinds.has('key'));
-  assert.ok(kinds.has('string'));
-  assert.ok(kinds.has('literal'));
-  assert.ok(kinds.has('punctuation'));
+  for (const kind of ['key', 'string', 'number', 'keyword', 'punctuation']) {
+    assert.ok(kinds.has(kind), `expected a ${kind} token`);
+  }
 
   const keys = tokens.filter((token) => token.kind === 'key').map((token) => token.text);
   assert.deepEqual(keys, ['"mode"', '"limit"', '"ok"', '"missing"']);
 
-  const literals = tokens.filter((token) => token.kind === 'literal').map((token) => token.text);
-  assert.deepEqual(literals, ['5', 'true', 'null']);
+  // true/false/null are keywords, not numbers — the split that stops `null` reading as a value.
+  assert.deepEqual(tokens.filter((t) => t.kind === 'number').map((t) => t.text), ['5']);
+  assert.deepEqual(tokens.filter((t) => t.kind === 'keyword').map((t) => t.text), ['true', 'null']);
+});
+
+test('formatJson does not mistake a string containing "null" for a keyword', () => {
+  const tokens = formatJson({ note: 'null', flag: false, count: -12.5 });
+  assert.deepEqual(tokens.filter((t) => t.kind === 'string').map((t) => t.text), ['"null"']);
+  assert.deepEqual(tokens.filter((t) => t.kind === 'keyword').map((t) => t.text), ['false']);
+  assert.deepEqual(tokens.filter((t) => t.kind === 'number').map((t) => t.text), ['-12.5']);
 });
 
 test('formatJson round-trips: concatenating every token reproduces the source exactly', () => {

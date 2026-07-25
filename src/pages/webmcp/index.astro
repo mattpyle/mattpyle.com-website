@@ -401,9 +401,9 @@ const breadcrumbs = [
         entirely in the page you already have open.
       </p>
       <p>
-        Arguments go over as a <strong>JSON string</strong>, not an object. That is measured, not
-        assumed: passing an object throws <code>Failed to parse input arguments</code>. Results come
-        back as a JSON string too. The snippet in each card above is the exact call.
+        Arguments go over as a <strong>JSON string</strong>, not an object — passing an object throws
+        <code>Failed to parse input arguments</code>. Results come back as a JSON string too. The
+        snippet in each card above is the exact call.
       </p>
       <p>
         Because Chrome does not enforce the declared <code>inputSchema</code>, every handler
@@ -424,11 +424,6 @@ const breadcrumbs = [
         the calls — the Model Context Tool Inspector extension is the straightforward option.
         Chrome's <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">WebMCP
         documentation</a> is the current reference for both.
-      </p>
-      <p>
-        Results as they land go in the <a href="/scorecard">scorecard</a> and the
-        <a href="/changelog/webmcp-tools">changelog entry for these tools</a>; this and the rest of
-        the site's experiments are listed under <a href="/builds">builds</a>.
       </p>
     </section>
 
@@ -1143,11 +1138,17 @@ const breadcrumbs = [
 
   .snippet-body code { font-family: inherit; }
 
-  /* Highlighting is emphasis, not information — the JSON reads identically in monochrome. */
-  .json-key { color: var(--color-accent); }
+  /* Highlighting is emphasis, not information — the JSON reads identically in monochrome.
+     The conventional five-way split (key / string / number / keyword / punctuation) on a palette
+     that offers only three AA-passing hues at 12.5px on this ground: --color-status-green is 4.05:1
+     and was rejected. Hue separates key, string and number; weight separates the keywords
+     (true/false/null) from numbers; punctuation sits at the lightest passing value so structure
+     recedes and the values read first. */
+  .json-key { color: var(--color-accent); font-weight: 600; }
   .json-string { color: var(--color-text); }
-  .json-literal,
+  .json-number,
   .json-dim { color: var(--color-label); }
+  .json-keyword { color: var(--color-label); font-weight: 600; }
   .json-punctuation { color: var(--color-muted); }
   .output-frame[data-state='error'] .json-dim { color: var(--color-danger); }
 

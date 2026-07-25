@@ -13,7 +13,14 @@
  * breach never-convey-meaning-by-colour-alone.
  */
 
-/** @typedef {{ text: string, kind: 'key' | 'string' | 'literal' | 'punctuation' | 'plain' }} JsonToken */
+/**
+ * Five categories, which is the split every editor theme makes: the key you scan for, the string
+ * that holds the data, numbers, the `true`/`false`/`null` keywords, and the punctuation that should
+ * recede. Numbers and keywords were one class until they were separated here — a `null` reading as
+ * a number is exactly the confusion the colouring exists to prevent.
+ *
+ * @typedef {{ text: string, kind: 'key' | 'string' | 'number' | 'keyword' | 'punctuation' | 'plain' }} JsonToken
+ */
 
 // One pass, four alternatives: a quoted string (with an optional trailing colon, which makes it an
 // object key rather than a string value), a number, a bare literal, or a structural character.
@@ -53,9 +60,10 @@ export function tokenizeJson(source) {
       }
     } else if (raw.length === 1 && '{}[],:'.includes(raw)) {
       push(raw, 'punctuation');
+    } else if (raw === 'true' || raw === 'false' || raw === 'null') {
+      push(raw, 'keyword');
     } else {
-      // numbers, true, false, null — one visual class, per the contrast table on /webmcp
-      push(raw, 'literal');
+      push(raw, 'number');
     }
   }
 
