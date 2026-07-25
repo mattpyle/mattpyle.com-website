@@ -89,6 +89,12 @@
   --color-accent-tint:      #f6e9e9;
   --color-surface-code:     #f0ebe0;
   --color-status-green: #5c7a53;
+  /* Failure only (the /webmcp console's error state). Deliberately NOT --color-accent: the
+     oxblood is the site's link/active/CTA colour, so painting failures in it would make an error
+     look like ordinary UI — and it can't distinguish a danger border from an accent border on the
+     same panel. Same hue family, hotter and darker: 6.1:1 on --color-bg, 5.6:1 on
+     --color-surface-code. Not for decoration. */
+  --color-danger:       #b3261e;
   /* Changelog significance dots (see /changelog). major reuses the accent so the
      palette stays two-hue; minor is amber, patch is a muted parchment grey. */
   --color-sig-major: var(--color-accent);
@@ -160,9 +166,17 @@ a:hover {
   color: var(--color-bg);
 }
 
-/* ── Focus visibility ────────────────────────────────────────────────────── */
+/* ── Focus visibility ──────────────────────────────────────────────────────
+   SITE-WIDE. This list previously reached only `a` and `.filter-pill`, which meant every other
+   focusable element — buttons, inputs, anything with a tabindex — fell back to the UA ring or, on
+   elements whose own styles reset the outline, to nothing. Extended when /webmcp shipped the
+   site's first form inputs and focusable panels. */
 a:focus-visible,
-.filter-pill:focus-visible {
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
@@ -295,4 +309,20 @@ a:focus-visible,
   text-transform: uppercase;
   color: var(--color-label);
   font-weight: normal;
+}
+
+/* ── Motion ────────────────────────────────────────────────────────────────
+   SITE-WIDE, and new: global.css had no prefers-reduced-motion block at all, so modern mode
+   honoured the preference only where an individual component happened to opt in (/scorecard did;
+   most did not). retro.css has always carried its equivalent. Kept broad rather than enumerated
+   because the alternative is a list that silently goes stale every time a transition is added. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

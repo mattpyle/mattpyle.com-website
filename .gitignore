@@ -41,6 +41,7 @@ skills-lock.json
 # Design handoff reference files — not production code, deleted after implementation
 /design_handoff_og_images/
 /design_handoff_changelog/
+/design_handoff_webmcp/
 
 # Generated per-post OG images — rebuilt by scripts/generate-og-images.mjs
 /public/og/
@@ -48,11 +49,13 @@ skills-lock.json
 # Working plan directory — specs and build prompts, not production code
 /steward/
 
-# Superpowers skill working docs — plans/specs for in-progress features, not production code
-/docs/superpowers/
+# The whole private project vault — work items, themes, specs, build-logs, mockups, handoffs.
+# Ignored wholesale rather than folder-by-folder: enumerating meant every new subfolder was public
+# by default until someone remembered to add it. Nothing in docs/ has ever been public.
+/docs/
 
-# WebMCP retro-mode working docs — specs, mockups, handoffs; not production code
-/docs/webmcp-retro/
+# Obsidian workspace state — the vault root is docs/
+.obsidian/
 
 # Steward (agents/steward) — local state only. `agents/steward/reviews/` is
 # COMMITTED on purpose: the review archive is a dataset.

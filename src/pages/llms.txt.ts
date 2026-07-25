@@ -38,6 +38,15 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Changelog](${base}/changelog): reverse-chronological log of what has shipped on this site.`);
   lines.push(`- [Scorecard](${base}/scorecard): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
   lines.push(`- [About](${base}/about): full bio, interests, contact links.`);
+  lines.push(`- [WebMCP](${base}/webmcp): the WebMCP tools this site registers for in-browser AI agents, what they return, and how to test them.`);
+  lines.push('');
+
+  lines.push('## Machine-readable resources');
+  lines.push('');
+  lines.push(`- [WebMCP tool manifest](${base}/webmcp/tools.json): names, descriptions, and input schemas for the tools above, generated from the live tool objects.`);
+  lines.push(`- [WebMCP content index](${base}/webmcp/index.json): the JSON index those tools read — author entity, section map, and every published article, build, and changelog entry.`);
+  lines.push(`- [llms-full.txt](${base}/llms-full.txt): the full plain-text content export.`);
+  lines.push(`- [agents.md](${base}/agents.md): how to read and cite this site.`);
   lines.push('');
 
   lines.push('## Writing');

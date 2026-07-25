@@ -1,4 +1,5 @@
 import scorecardRuns from './scorecard-runs.json' with { type: 'json' };
+import { WEBMCP_VERIFIED } from './webmcp-catalog.mjs';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -48,6 +49,7 @@ export const STATIC_ROUTE_LASTMOD = Object.freeze({
   '/builds/': '2026-07-15',
   '/changelog/': '2026-07-17',
   '/scorecard/': '2026-07-18',
+  '/webmcp/': '2026-07-24',
   '/writing/': '2026-07-15',
 });
 
@@ -109,6 +111,12 @@ export function resolveSitemapLastmod(pathname, writingMetadata, changelogMetada
 
   if (pathname === '/scorecard/') {
     return latestDate(resolveStaticLastmod(pathname), SCORECARD_VERIFIED.iso);
+  }
+
+  // Same shape as /scorecard/: the page's content is a measurement, so its lastmod tracks the
+  // measurement date as well as the authored route date. Whichever is newer wins.
+  if (pathname === '/webmcp/') {
+    return latestDate(resolveStaticLastmod(pathname), WEBMCP_VERIFIED.iso);
   }
 
   return resolveStaticLastmod(pathname);
