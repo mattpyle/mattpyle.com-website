@@ -15,6 +15,7 @@ import PageHeader from '../../components/PageHeader.astro';
 import { createTools } from '../../lib/webmcp-tools.mjs';
 import { WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED, ORIGIN_TRIAL_EXPIRY } from '../../data/webmcp-catalog.mjs';
 import { formatVerifiedLabel } from '../../data/sitemap-lastmod.mjs';
+import { buildToolSnippet } from '../../lib/webmcp-snippet.mjs';
 
 // createTools only touches getIndex inside a handler's execute(), so building the definitions at
 // build time never fetches anything. Throw rather than stub a value, so that stops being true loudly.
@@ -82,9 +83,20 @@ const catalog = tools.map((tool: any) => {
     kind: notes.kind,
     returns: notes.returns,
     fields,
-    // Measured, not guessed: the method is executeTool and args arrive as a JSON STRING. Passing an
-    // object throws "Failed to parse input arguments" (Chrome 150, 2026-07-17).
-    snippet: `await document.modelContext.executeTool('${tool.name}', '${JSON.stringify(notes.example)}')`,
+    // The initial snippet. The client script rewrites it from the live control values, so what the
+    // panel shows is always the call the Run button would make — see src/lib/webmcp-snippet.mjs for
+    // the (measured) calling convention.
+    snippet: buildToolSnippet(
+      tool.name,
+      // Mirror what the controls actually ship with: pill groups render their schema default rather
+      // than the example, so a snippet built from the example alone would contradict the pills.
+      Object.fromEntries(
+        fields.filter(field => field.value !== '').map(field => [
+          field.name,
+          field.control === 'number' ? Number(field.value) : field.value,
+        ])
+      )
+    ),
   };
 });
 
@@ -101,9 +113,7 @@ const description =
 
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const personId = `${new URL('/', Astro.site).toString()}#person`;
-const verifiedLabel = formatVerifiedLabel(WEBMCP_VERIFIED.iso);
 const expiryLabel = formatVerifiedLabel(ORIGIN_TRIAL_EXPIRY);
-const ecosystemChecked = formatVerifiedLabel('2026-07-24');
 
 const extraJsonLd = [
   {
@@ -173,40 +183,31 @@ const breadcrumbs = [
           <dt>Spec status</dt>
           <dd>
             A <a href="https://webmachinelearning.github.io/webmcp/" rel="noopener">Draft Community
-            Group Report</a> of the W3C Web Machine Learning Community Group — explicitly not on the
-            standards track. Early, not settled.
+            Group Report</a> of the W3C Web Machine Learning Community Group.
           </dd>
         </div>
         <div>
           <dt>Browser support</dt>
           <dd>
             An <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">origin trial in
-            Chrome</a>, available from Chrome 149. No other engine implements it. Chrome's
-            documentation gives no end version for the trial, so this page asserts none.
+            Chrome</a>, available from Chrome 149. No other engine implements it currently.
           </dd>
         </div>
         <div>
           <dt>This site's token</dt>
           <dd>
             The origin-trial token embedded in these pages expires <time datetime={ORIGIN_TRIAL_EXPIRY}>{expiryLabel}</time>.
-            After that Chrome ignores it and the tools simply stop registering — silently, and with
-            no effect on anything else here.
+            After that Chrome ignores it and the tools simply stop registering.
           </dd>
         </div>
         <div>
           <dt>Discovery</dt>
           <dd>
-            There is no WebMCP discovery path, well-known file, or manifest convention. Registration
-            is purely the JavaScript API, so this page and <code>/webmcp/tools.json</code> are this
-            site's own invention rather than a convention anyone follows.
+            Registration is purely the JavaScript API, so this page and <code>/webmcp/tools.json</code> are this
+            site's own implementation. Discovery paths and standards are evolving.
           </dd>
         </div>
       </dl>
-      <p class="sop-verified">
-        Tool behaviour measured here on Chrome {WEBMCP_VERIFIED.chrome},
-        <time datetime={WEBMCP_VERIFIED.iso}>{verifiedLabel}</time>. Ecosystem claims above checked
-        <time datetime="2026-07-24">{ecosystemChecked}</time>.
-      </p>
     </section>
 
     <section class="prose" aria-labelledby="what-is-webmcp">
@@ -224,8 +225,7 @@ const breadcrumbs = [
         Registration is feature-detected and additive: on every browser that has no
         <code>modelContext</code> — which is currently every browser except Chrome behind a flag or
         the origin trial — the code returns immediately, writes no DOM, and reads no layout. Remove
-        the tools and the site is byte-for-byte what it was. That is the only basis on which an
-        unfinished standard belongs on a real site.
+        the tools and the site is byte-for-byte what it was.
       </p>
     </section>
 
@@ -234,7 +234,7 @@ const breadcrumbs = [
       <p class="catalog-dek">
         {catalog.length} tools: {readCount} that read published content, {writeCount} that writes —
         and what it writes is a preference in your own browser. Definitions below are read from the
-        live tool objects at build time, so they cannot drift from what an agent receives.
+        live tool objects at build time, so they stay in sync with what an agent receives.
       </p>
 
       <div class="tool-catalog">
@@ -408,8 +408,7 @@ const breadcrumbs = [
       <p>
         Because Chrome does not enforce the declared <code>inputSchema</code>, every handler
         validates its own inputs — clamping <code>limit</code>, rejecting a blank <code>query</code>,
-        falling back to modern for an unknown <code>mode</code>. Treat the schema on this page as
-        advertising, not as a guarantee anything upstream is checking.
+        falling back to modern for an unknown <code>mode</code>.
       </p>
     </section>
 
@@ -426,41 +425,8 @@ const breadcrumbs = [
         Chrome's <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">WebMCP
         documentation</a> is the current reference for both.
       </p>
-    </section>
-
-    <section class="prose" aria-labelledby="what-was-measured">
-      <h2 id="what-was-measured">What was measured here?</h2>
       <p>
-        Everything below was observed first-hand against the live origin trial on Chrome
-        {WEBMCP_VERIFIED.chrome}, on <time datetime={WEBMCP_VERIFIED.iso}>{verifiedLabel}</time>.
-      </p>
-      <ul>
-        <li>
-          <code>document.modelContext</code> and <code>navigator.modelContext</code> are the
-          <strong>same object</strong> — not two competing surfaces, and neither is deprecated.
-        </li>
-        <li>
-          Chrome does <strong>not validate <code>inputSchema</code></strong>.
-          <code>search_content</code> was invoked with no arguments at all despite
-          <code>query</code> being declared required, and <code>get_recent_writing</code> with
-          <code>limit: 999</code> against a declared maximum of 20. Both went straight to the
-          handler.
-        </li>
-        <li>
-          <code>executeTool</code> takes its arguments as a <strong>JSON string</strong>; an object
-          throws.
-        </li>
-        <li>
-          <code>set_appearance</code> — the one write tool — changes only the calling browser's own
-          view, through <code>localStorage</code>. There is no server state to change and no other
-          visitor to affect.
-        </li>
-      </ul>
-      <p>
-        What has <em>not</em> been verified here is whether a page can invoke its own registered
-        tools through the protocol from its own console, which is why the snippet panels above are
-        labelled as how an agent calls a tool rather than as something to paste locally. Results as
-        they land go in the <a href="/scorecard">scorecard</a> and the
+        Results as they land go in the <a href="/scorecard">scorecard</a> and the
         <a href="/changelog/webmcp-tools">changelog entry for these tools</a>; this and the rest of
         the site's experiments are listed under <a href="/builds">builds</a>.
       </p>
@@ -510,6 +476,10 @@ const breadcrumbs = [
   import { createTools } from '../../lib/webmcp-tools.mjs';
   import { getAppearance, APPEARANCE_CHANGE_EVENT } from '../../lib/appearance.mjs';
   import { formatJson } from '../../lib/format-json.mjs';
+  import { buildToolSnippet } from '../../lib/webmcp-snippet.mjs';
+
+  /** Fired by a radiogroup when its selection changes; the console listens to re-sync the snippet. */
+  const FIELD_CHANGE_EVENT = 'webmcp:fieldchange';
 
   // Memoized so N tool runs share one fetch, exactly as in WebMCP.astro.
   // connect-src 'self' permits this same-origin request.
@@ -565,6 +535,11 @@ const breadcrumbs = [
     const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('.field-input'));
     const groups = Array.from(root.querySelectorAll<HTMLElement>('.mode-pills'));
 
+    // The snippet panel lives outside the console, in the same card.
+    const card = root.closest('.tool-card');
+    const snippetCode = card?.querySelector('.snippet-body code') ?? null;
+    const copyButton = card?.querySelector<HTMLButtonElement>('.copy-button') ?? null;
+
     // Idle state. The status word is only made a live region AFTER this swap, so the
     // Unavailable -> Ready transition on load isn't announced four times over.
     inputs.forEach((input) => (input.disabled = false));
@@ -591,7 +566,15 @@ const breadcrumbs = [
       for (const input of inputs) {
         const value = input.value.trim();
         if (!value) continue;
-        args[input.dataset.field!] = input.dataset.kind === 'number' ? Number(value) : value;
+        if (input.dataset.kind === 'number') {
+          const parsed = Number(value);
+          // Skip rather than pass NaN: JSON.stringify would render it `null` in the snippet, which
+          // is not a call anyone could paste.
+          if (!Number.isFinite(parsed)) continue;
+          args[input.dataset.field!] = parsed;
+        } else {
+          args[input.dataset.field!] = value;
+        }
       }
       for (const group of groups) {
         const active = group.querySelector<HTMLButtonElement>('.filter-pill[aria-checked="true"]');
@@ -599,6 +582,20 @@ const breadcrumbs = [
       }
       return args;
     }
+
+    // Keep the snippet honest: it shows the call the Run button would actually make right now, not
+    // a frozen example. Without this the write tool's snippet still said mode "modern" after you
+    // picked "retro" — the one card where the mismatch is most obvious, since the pills also
+    // display the live appearance.
+    function syncSnippet() {
+      const snippet = buildToolSnippet(tool.name, readArgs());
+      if (snippetCode) snippetCode.textContent = snippet;
+      if (copyButton) copyButton.dataset.copy = snippet;
+    }
+
+    syncSnippet();
+    inputs.forEach((input) => input.addEventListener('input', syncSnippet));
+    root.addEventListener(FIELD_CHANGE_EVENT, syncSnippet);
 
     runButton.addEventListener('click', async () => {
       runButton.disabled = true;
@@ -645,6 +642,9 @@ const breadcrumbs = [
         candidate.tabIndex = active ? 0 : -1;
       });
       if (focus) pill.focus();
+      // Bubbles to the console root, which rebuilds the snippet. Covers all three ways the
+      // selection moves: a click, an arrow key, and an appearance change from somewhere else.
+      group.dispatchEvent(new CustomEvent(FIELD_CHANGE_EVENT, { bubbles: true }));
     }
 
     pills.forEach((pill) => {
@@ -809,16 +809,6 @@ const breadcrumbs = [
     border: 1px solid var(--color-border);
     padding: 1px 5px;
     color: var(--color-accent);
-  }
-
-  .sop-verified {
-    margin: 20px 0 0;
-    padding-top: 16px;
-    border-top: 1px solid var(--color-border);
-    color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.6;
   }
 
   /* ── Catalog ───────────────────────────────────────────────────────────── */
@@ -1144,7 +1134,11 @@ const breadcrumbs = [
   .snippet-body {
     padding: 13px 16px;
     background: var(--color-surface-code);
-    overflow-x: auto;
+    /* `scroll`, not the `auto` the rest of the site uses for code blocks: the snippet is rewritten
+       live from the controls, so with `auto` the scrollbar appears and disappears as you type and
+       the whole card jogs ~15px. Reserving the track keeps the panel a constant height. Costs
+       nothing on platforms with overlay scrollbars, where it never took space to begin with. */
+    overflow-x: scroll;
   }
 
   .snippet-body code { font-family: inherit; }

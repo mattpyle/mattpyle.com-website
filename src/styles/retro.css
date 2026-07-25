@@ -853,12 +853,6 @@ html[data-appearance='retro'] [data-module='webmcp'] .inputs-table code {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .sop-verified {
-  font-family: var(--retro-font-mono);
-  color: #5a4a30;
-  border-top-color: var(--retro-frame-border);
-}
-
 html[data-appearance='retro'] [data-module='webmcp'] .catalog-title {
   font-family: var(--retro-font-display);
   color: var(--retro-maroon);

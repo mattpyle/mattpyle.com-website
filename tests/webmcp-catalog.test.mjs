@@ -7,6 +7,7 @@ import { createTools } from '../src/lib/webmcp-tools.mjs';
 import { WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED, ORIGIN_TRIAL_EXPIRY } from '../src/data/webmcp-catalog.mjs';
 import { buildToolsPayload } from '../src/pages/webmcp/tools.json.ts';
 import { formatJson, tokenizeJson } from '../src/lib/format-json.mjs';
+import { buildToolSnippet } from '../src/lib/webmcp-snippet.mjs';
 
 /**
  * The join between the real tools and their editorial layer is the whole reason /webmcp and
@@ -166,6 +167,41 @@ test('formatJson does not mistake a colon inside a string for a key separator', 
 
 test('formatJson prints something rather than crashing on an undefined return', () => {
   assert.deepEqual(formatJson(undefined), [{ text: 'undefined', kind: 'plain' }]);
+});
+
+test('buildToolSnippet uses executeTool with a JSON-string argument', () => {
+  assert.equal(
+    buildToolSnippet('get_recent_writing', { limit: 5 }),
+    `await document.modelContext.executeTool('get_recent_writing', '{"limit":5}')`
+  );
+  // No args at all still sends a string, not nothing — `executeTool(name)` is not the convention.
+  assert.equal(
+    buildToolSnippet('describe_site'),
+    `await document.modelContext.executeTool('describe_site', '{}')`
+  );
+});
+
+test('buildToolSnippet escapes payloads that would break the single-quoted literal', () => {
+  // An apostrophe in a live input would otherwise close the string early and ship a snippet that
+  // does not parse — the copy button hands this to a real console.
+  const snippet = buildToolSnippet('search_content', { query: "it's" });
+  assert.ok(snippet.includes("\\'"), 'expected the apostrophe to be escaped');
+  assert.equal(snippet, `await document.modelContext.executeTool('search_content', '{"query":"it\\'s"}')`);
+
+  // A backslash must survive both JSON encoding and the literal escaping.
+  const withBackslash = buildToolSnippet('search_content', { query: 'a\\b' });
+  assert.equal(withBackslash, `await document.modelContext.executeTool('search_content', '{"query":"a\\\\\\\\b"}')`);
+});
+
+test('every catalog example produces a snippet whose argument round-trips as JSON', () => {
+  for (const tool of tools) {
+    const example = WEBMCP_TOOL_NOTES[tool.name].example;
+    const snippet = buildToolSnippet(tool.name, example);
+    const payload = snippet.match(/, '(.*)'\)$/)[1]
+      .replace(/\\'/g, "'")
+      .replace(/\\\\/g, '\\');
+    assert.deepEqual(JSON.parse(payload), example, `${tool.name}: snippet argument must parse back`);
+  }
 });
 
 test('tokenizeJson is reusable across calls (no sticky-regex state leak)', () => {
