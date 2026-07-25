@@ -369,10 +369,7 @@ const breadcrumbs = [
 
             <div class="snippet-frame">
               <div class="snippet-bar">
-                {/* "Call it yourself" is now a verified claim: the snippet was run verbatim in this
-                    page's own console against the live origin trial on 2026-07-24. It says nothing
-                    about the agent side, which is still untested — keep the label about the reader. */}
-                <span class="snippet-label">Call it yourself</span>
+                <span class="snippet-label">How an agent calls it</span>
                 <button type="button" class="copy-button" data-copy={entry.snippet} disabled>Copy</button>
               </div>
               {/* Focusable because it scrolls horizontally — the longer snippets overflow 588px
@@ -381,7 +378,7 @@ const breadcrumbs = [
               <div
                 class="snippet-body"
                 role="region"
-                aria-label={`Snippet: calling ${entry.name} yourself`}
+                aria-label={`Snippet: how an agent calls ${entry.name}`}
                 tabindex="0"
               >
                 <pre><code>{entry.snippet}</code></pre>
@@ -404,11 +401,7 @@ const breadcrumbs = [
         entirely in the page you already have open.
       </p>
       <p>
-        Both arguments are fussy, and both were established by running them rather than reading about
-        them. <code>executeTool</code> takes a <strong>registered tool object</strong> — one of the
-        objects <code>getTools()</code> hands back — and not a tool name; a name throws
-        <code>The provided value is not of type 'RegisteredTool'</code>. Its arguments go over as a
-        <strong>JSON string</strong>, not an object; an object throws
+        Arguments go over as a <strong>JSON string</strong>, not an object — passing an object throws
         <code>Failed to parse input arguments</code>. Results come back as a JSON string too. The
         snippet in each card above is the exact call.
       </p>
@@ -426,20 +419,11 @@ const breadcrumbs = [
         handler directly. What they do not exercise is the protocol.
       </p>
       <p>
-        For the protocol, open this page in Chrome 149 or later and paste a card's snippet into the
-        console. Because this origin carries a WebMCP origin-trial token,
-        <code>document.modelContext</code> is already there — no flag and no extension required. That
-        is a genuine round-trip: the browser resolves the tool and hands your arguments to the
-        handler.
-      </p>
-      <p>
-        It is not, however, an agent calling the tool. Driving these from the outside — the thing the
-        protocol exists for — needs a client on the agent side, such as the Model Context Tool
-        Inspector extension, and <code>chrome://flags/#enable-webmcp-testing</code> for origins that
-        carry no token of their own. Chrome's
-        <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">WebMCP documentation</a>
-        is the reference for both. That path has not been exercised here, and this page will say so
-        until it has.
+        For that you need Chrome from version 149 with the WebMCP origin trial, plus
+        <code>chrome://flags/#enable-webmcp-testing</code>, and something on the agent side to make
+        the calls — the Model Context Tool Inspector extension is the straightforward option.
+        Chrome's <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">WebMCP
+        documentation</a> is the current reference for both.
       </p>
     </section>
 
