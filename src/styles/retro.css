@@ -102,18 +102,36 @@ html[data-appearance='retro'] [data-module='nav'] {
 }
 
 /* Text-art flourish replacing the starfield dots (which read as stray pixels
-   at nav height, not decoration). Same &cedil;/&oslash;/&curren;/&ordm;/&deg;
-   motif as the homepage divider (RetroHomeFurniture.astro), scaled to match
-   the marquee/divider type and given the same rainbow hue-cycle as the
-   divider so it reads as the intended sparkle rather than a weak, static
-   speck. Hidden by default so the element is inert in modern regardless of
-   load order; hidden again below 760px so it never wraps or crowds the links. */
+   at nav height, not decoration). This is the *same complete construction* as
+   the homepage divider (RetroHomeFurniture.astro `.retro-divider`) —
+   arm + centred word + arm — rather than a lone half-cluster, which read as
+   lopsided and unfinished next to the divider it is meant to echo. Same
+   &cedil;/&oslash;/&curren;/&ordm;/&deg; motif, same type treatment, same
+   rainbow hue-cycle, so the two read as one motif.
+
+   Three width bands, because this shares a 60px row with the logo and five
+   links and must never wrap or crowd them. Measured against a production
+   build: logo 101px + links 396px + 80px gutters = 577px of fixed cost, so
+   the full form (342px) needs 919px and the arms-only pair (268px) needs
+   845px just to fit flush. The thresholds add slack on top of that:
+     >= 1040px    full "arm welcome arm"      (>= 53px clear of its neighbours)
+     940-1039px   arms only - still symmetric and complete, just narrower
+     <= 939px     hidden entirely
+   The hide threshold moved up from 760px because below ~845px even the
+   arms-only pair overflows the row, and below ~940px it sits closer to the
+   links than the links sit to each other (26px). The alternative was falling
+   back to the lone half-cluster in that band, which is the exact
+   lopsidedness this change exists to remove.
+   Hidden by default so the element is inert in modern regardless of load
+   order; the nested spans inherit that. */
 html:not([data-appearance='retro']) .nav-flourish {
   display: none;
 }
 
 html[data-appearance='retro'] .nav-flourish {
-  display: inline-block;
+  display: inline-flex;
+  align-items: baseline;
+  gap: .55em;
   flex: 0 0 auto;
   font-family: var(--retro-font-mono);
   font-size: 15px;
@@ -123,7 +141,18 @@ html[data-appearance='retro'] .nav-flourish {
   animation: retro-hue 8s linear infinite;
 }
 
-@media (max-width: 760px) {
+html[data-appearance='retro'] .nav-flourish-word {
+  font-size: 13px;
+  letter-spacing: 1.5px;
+}
+
+@media (max-width: 1039px) {
+  html[data-appearance='retro'] .nav-flourish-word {
+    display: none;
+  }
+}
+
+@media (max-width: 939px) {
   html[data-appearance='retro'] .nav-flourish {
     display: none;
   }
