@@ -33,6 +33,12 @@ interface Props {
   markdownAlternate?: string;
   /** ISO 8601 duration (e.g. "PT6M") for the BlogPosting `timeRequired` field — see src/lib/reading-time.ts. Article pages only. */
   readingTimeISO8601?: string;
+  /**
+   * Page-specific JSON-LD nodes merged into this layout's existing `@graph` — one `ld+json`
+   * script for the whole document rather than a second tag, so there is no new CSP surface and
+   * the nodes can reference `#person` / `#website` by `@id`. Give every node a unique `@id`.
+   */
+  extraJsonLd?: Record<string, unknown>[];
 }
 
 const {
@@ -49,6 +55,7 @@ const {
   noindex = false,
   markdownAlternate,
   readingTimeISO8601,
+  extraJsonLd,
 } = Astro.props;
 
 const headTitleBase = seoTitle ?? title;
@@ -133,6 +140,10 @@ if (type === 'article' && publishedTime) {
     mainEntityOfPage: canonicalURL.toString(),
     ...(readingTimeISO8601 ? { timeRequired: readingTimeISO8601 } : {}),
   });
+}
+
+if (extraJsonLd) {
+  jsonLdGraph.push(...extraJsonLd);
 }
 
 if (resolvedBreadcrumbs && resolvedBreadcrumbs.length > 0) {

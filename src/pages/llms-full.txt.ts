@@ -38,11 +38,15 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('## WebMCP tools (experimental)');
   lines.push('');
   lines.push(
-    'The live pages register three read-only WebMCP tools — describe_site, get_recent_writing, and search_content — on document.modelContext (falling back to the deprecated navigator.modelContext). They are callable only by in-browser agents that implement WebMCP; a doc-reading agent cannot invoke them from this file.'
+    'The live pages register four WebMCP tools on document.modelContext. Three are read-only — describe_site, get_recent_writing, and search_content. One is a write tool: set_appearance, which switches this site between its modern and retro appearances. Its write is client-local, storing a preference in the calling browser\'s own localStorage; it changes no server state and affects no other visitor. (navigator.modelContext is the same object as document.modelContext, not a deprecated fallback — measured on Chrome 150, 2026-07-17.)'
   );
   lines.push('');
   lines.push(
-    `They read one static JSON index, which you can fetch directly instead: ${base}/webmcp/index.json. It carries the same author entity, section map, writing list, and builds list exported below. See ${base}/agents.md for the per-tool detail.`
+    'They are callable only by in-browser agents that implement WebMCP; a doc-reading agent cannot invoke them from this file.'
+  );
+  lines.push('');
+  lines.push(
+    `Machine-readable: ${base}/webmcp/tools.json is the tool manifest (names, descriptions, input schemas, example calls), generated from the live tool objects. ${base}/webmcp/index.json is the static content index the tools read — the same author entity, section map, writing list, and builds list exported below — and you can fetch it directly. ${base}/webmcp is the human-facing page, with the per-tool detail and the current state of the standard.`
   );
   lines.push('');
   lines.push('---');

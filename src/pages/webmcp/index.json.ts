@@ -27,6 +27,12 @@ export const GET: APIRoute = async ({ site }) => {
 
   const index = {
     generated: new Date().toISOString(),
+    // Reciprocal pointers. This file is the *content* index the tools read, not a WebMCP
+    // manifest — and it is the more guessable of the two URLs under /webmcp/. Point at the
+    // manifest and the human page so an agent that lands here first doesn't mistake it for
+    // the tool surface. (The name stays: live tools fetch this URL and it is published.)
+    docs: `${base}/webmcp`,
+    tools: `${base}/webmcp/tools.json`,
     site: {
       name: 'Matt Pyle',
       url: `${base}/`,

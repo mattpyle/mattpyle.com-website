@@ -10,6 +10,14 @@
 
 html[data-appearance='retro'] {
   --retro-parchment: #e8dcc0;
+  /* LCD console tokens (the /webmcp output panel). Contrast measured against the ground:
+     digit 14.6:1, dim 8.9:1, danger 7.1:1 — the dim green carries real content (idle and
+     no-JS copy), so it has to read as text, not as decoration. The design brief's #1f8f0f
+     glow appears only in box-shadow/text-shadow, never as a text colour. */
+  --retro-lcd-ground: #0a0a0a;
+  --retro-lcd-digit: #39ff14;
+  --retro-lcd-dim: #63c25a;
+  --retro-lcd-danger: #ff6b5e;
   --retro-parchment-light: #efe6d0;
   --retro-parchment-dark: #e0d2b0;
   --retro-frame-bg: #fffdf5;
@@ -45,8 +53,15 @@ html[data-appearance='retro'] body {
     radial-gradient(circle at 30% 20%, var(--retro-parchment-light), var(--retro-parchment-dark));
 }
 
+/* Kept ahead of every component block below on purpose: `[tabindex]:focus-visible` ties on
+   specificity with any single-class override, so a later block (the /webmcp output panel, which
+   moves its ring onto the frame) can only win if this one comes first. */
 html[data-appearance='retro'] a:focus-visible,
-html[data-appearance='retro'] button:focus-visible {
+html[data-appearance='retro'] button:focus-visible,
+html[data-appearance='retro'] input:focus-visible,
+html[data-appearance='retro'] select:focus-visible,
+html[data-appearance='retro'] textarea:focus-visible,
+html[data-appearance='retro'] [tabindex]:focus-visible {
   outline: 3px solid var(--retro-link);
   outline-offset: 2px;
 }
@@ -90,6 +105,30 @@ html[data-appearance='retro'] .entry-title {
 
 html[data-appearance='retro'] .prose a:visited {
   color: var(--retro-link-visited);
+}
+
+/* Code in prose. This file had NO .prose pre / .prose code rules until /webmcp — nothing had
+   exposed the gap, because no existing page is code-heavy, so inline code kept the modern
+   parchment-grey chip and the accent oxblood inside a retro article. Global rather than
+   /webmcp-scoped: it improves retro on every writing and changelog post too. */
+html[data-appearance='retro'] .prose code {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-cream);
+  border: 1px solid var(--retro-frame-border);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .prose pre {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-cream);
+  border: 2px inset var(--retro-frame-border);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] .prose pre code {
+  background: none;
+  border: none;
+  color: var(--retro-ink);
 }
 
 /* ── Header / nav ─────────────────────────────────────────────────────── */
@@ -774,6 +813,334 @@ html[data-appearance='retro'] .filter-pill.is-active {
   color: var(--retro-cream);
   border-color: var(--retro-maroon);
   border-style: inset;
+}
+
+/* ── /webmcp ──────────────────────────────────────────────────────────────
+   Colour / type / border / background only — same DOM as modern, same reading order.
+   The console's output body is the one deliberate exception to the parchment palette: a
+   neon LCD. It is unmistakably machine output inside a paper page, so the one region on
+   the site that prints raw JSON never gets read as prose. */
+
+html[data-appearance='retro'] [data-module='webmcp'] .state-of-play {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .state-of-play h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .sop-list dt {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .sop-list dd {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .sop-list a { color: var(--retro-link); }
+
+html[data-appearance='retro'] [data-module='webmcp'] .sop-list code,
+html[data-appearance='retro'] [data-module='webmcp'] .catalog-dek code,
+html[data-appearance='retro'] [data-module='webmcp'] .inputs-table code {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-cream);
+  border: 1px solid var(--retro-frame-border);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .catalog-title {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .catalog-dek { font-family: var(--retro-font-body); }
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-card {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-card--write {
+  border-top: 5px solid var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-index {
+  font-family: var(--retro-font-mono);
+  color: #5a4a30;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-name {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+}
+
+/* Badges stay FLAT in retro — no bevel — so shape alone still separates the label you
+   cannot press from the beveled things you can. */
+html[data-appearance='retro'] [data-module='webmcp'] .tool-badge {
+  font-family: var(--retro-font-mono);
+  box-shadow: none;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-badge--read {
+  color: #5a4a30;
+  border-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-badge--write {
+  color: var(--retro-maroon);
+  background: var(--retro-gold);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-desc { font-family: var(--retro-font-body); }
+
+html[data-appearance='retro'] [data-module='webmcp'] .tool-block--console { border-top-color: var(--retro-frame-border); }
+
+html[data-appearance='retro'] [data-module='webmcp'] .panel-label {
+  font-family: var(--retro-font-mono);
+  font-weight: bold;
+  color: var(--retro-maroon);
+}
+
+/* The dashed rule already used by .year-line on /changelog. */
+html[data-appearance='retro'] [data-module='webmcp'] .panel-rule {
+  background: repeating-linear-gradient(90deg, var(--retro-frame-border) 0 4px, transparent 4px 8px);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .value-line {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .inputs-table {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .inputs-table th {
+  color: var(--retro-maroon);
+  border-bottom: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .inputs-table td,
+html[data-appearance='retro'] [data-module='webmcp'] .inputs-table tr {
+  border-bottom-color: var(--retro-frame-border);
+  border-bottom-style: dashed;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .cell-label { color: var(--retro-maroon); }
+
+/* The Win95/IE4 sunken field: the exact inverse of the outset bevel retro buttons use. */
+html[data-appearance='retro'] [data-module='webmcp'] .field-label {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .field-input {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink);
+  background: var(--retro-cream);
+  border: 2px inset var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .field-input:disabled { border-style: dashed; }
+
+html[data-appearance='retro'] [data-module='webmcp'] .field-hint {
+  font-family: var(--retro-font-ui);
+  color: #5a4a30;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .run-button {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  border-radius: 0;
+  background: var(--retro-forest);
+  color: var(--retro-cream);
+  border: 3px outset var(--retro-forest-hover);
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .run-button:hover:not(:disabled) {
+  background: var(--retro-forest);
+  color: var(--retro-gold);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .run-button:active,
+html[data-appearance='retro'] [data-module='webmcp'] .run-button[data-running] {
+  border-style: inset;
+  box-shadow: none;
+  transform: translate(1px, 1px);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .run-button:disabled:not([data-running]) {
+  background: transparent;
+  color: #5a4a30;
+  border: 2px dashed var(--retro-frame-border);
+  box-shadow: none;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .action-note {
+  font-family: var(--retro-font-ui);
+  color: #5a4a30;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .filter-pill:disabled {
+  color: #5a4a30;
+  border-style: dashed;
+}
+
+/* The ACTIVE pill keeps its maroon fill even when disabled, so the muted brown above would
+   leave its label at 1.2:1 — invisible. axe never catches this (disabled controls are exempt
+   from the contrast rule), but it is the pill that shows the current mode in the no-JS state,
+   so its label is the one that most needs reading. Dashed border still carries "disabled". */
+html[data-appearance='retro'] [data-module='webmcp'] .filter-pill.is-active:disabled {
+  color: var(--retro-cream);
+  border: 2px dashed var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame,
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-frame {
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='error'] {
+  border-top: 3px solid var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-bar,
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-bar {
+  background: var(--retro-navbar-bg);
+  border-bottom: 2px dashed var(--retro-frame-border);
+  padding: 6px 10px;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-label,
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-label,
+html[data-appearance='retro'] [data-module='webmcp'] .output-status {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-label,
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-label { color: var(--retro-maroon); }
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-status { color: #5a4a30; }
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='running'] .output-status { color: var(--retro-maroon); }
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='success'] .output-status { color: var(--retro-forest); }
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='error'] .output-status { color: var(--retro-maroon); }
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-body {
+  background: var(--retro-lcd-ground);
+  box-shadow: inset 0 0 24px rgba(31, 143, 15, .28);
+}
+
+/* The panel with JS off keeps its ground but loses the glow — unpowered, not broken. */
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame:not([data-state]) .output-body {
+  box-shadow: none;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-pre,
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-body pre {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-pre { color: var(--retro-lcd-digit); }
+
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-body {
+  background: var(--retro-cream);
+  color: var(--retro-ink);
+}
+
+/* The focus ring goes on the FRAME, never on the black body: --retro-link on the LCD ground
+   is 2.4:1. Out here it lands on parchment. Overrides the [tabindex] rule below. */
+html[data-appearance='retro'] [data-module='webmcp'] .output-body:focus-visible,
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-body:focus-visible { outline: none; }
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame:has(.output-body:focus-visible),
+html[data-appearance='retro'] [data-module='webmcp'] .snippet-frame:has(.snippet-body:focus-visible) {
+  outline: 3px solid var(--retro-link);
+  outline-offset: 2px;
+}
+
+/* JSON colours: re-point the --json-* tokens rather than re-declare the rules. The page's scoped
+   CSS already reads these variables, so nothing here competes with an Astro-scoped selector — this
+   is the one override in the file immune to the cid specificity trap.
+
+   VS Code's Dark+ assignment, unmodified: it is designed for a near-black ground and every colour
+   clears AA on the LCD by a wide margin (key 13.3:1, string 7.5:1, number 11.7:1, keyword 6.7:1,
+   brackets 14.1 / 6.9 / 7.0). A colourful syntax panel on a dark ground is also more period-correct
+   than the monochrome phosphor it replaces — this is the Borland/Turbo IDE look, not a CRT terminal. */
+html[data-appearance='retro'] [data-module='webmcp'] {
+  --json-key: #9cdcfe;
+  --json-string: #ce9178;
+  --json-number: #b5cea8;
+  --json-keyword: #569cd6;
+  --json-punctuation: var(--retro-lcd-dim);
+  --json-bracket-0: #ffd700;
+  --json-bracket-1: #da70d6;
+  --json-bracket-2: #179fff;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .json-dim,
+html[data-appearance='retro'] [data-module='webmcp'] .output-cursor { color: var(--retro-lcd-dim); }
+
+/* Phosphor bloom, per token rather than a fixed green: the panel used to be monochrome, so a
+   hardcoded rgba(57,255,20,.45) was the text's own colour. Now that each token has its own hue,
+   currentColor is what keeps the glow underneath the glyph instead of smearing green across it. */
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='success'] .output-pre {
+  text-shadow: 0 0 6px color-mix(in srgb, currentColor 45%, transparent);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='error'] .json-dim,
+html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='error'] .output-pre {
+  color: var(--retro-lcd-danger);
+}
+
+/* Beveled = pressable, and retro badges are deliberately flat, so there is no collision here
+   the way there was with the modern bordered chip. */
+html[data-appearance='retro'] [data-module='webmcp'] .copy-button {
+  font-family: var(--retro-font-mono);
+  font-weight: bold;
+  padding: 4px 10px;
+  color: var(--retro-maroon);
+  background: var(--retro-frame-bg);
+  border: 2px outset var(--retro-frame-border);
+  text-decoration: none;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .copy-button:hover:not(:disabled) {
+  background: var(--retro-sidebar-bg);
+  color: var(--retro-maroon);
+  border-color: var(--retro-maroon);
+  text-decoration: none;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .copy-button[data-state='copied'] {
+  border-style: inset;
+  color: var(--retro-forest);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .copy-button[data-state='failed'] {
+  border-style: inset;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .copy-button:disabled {
+  color: #5a4a30;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+@media (max-width: 600px) {
+  html[data-appearance='retro'] [data-module='webmcp'] .copy-button { padding: 7px 10px; }
 }
 
 /* ── Motion: prefers-reduced-motion disables all of it ──────────────── */

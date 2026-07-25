@@ -89,6 +89,33 @@
   --color-accent-tint:      #f6e9e9;
   --color-surface-code:     #f0ebe0;
   --color-status-green: #5c7a53;
+  /* Failure only (the /webmcp console's error state). Deliberately NOT --color-accent: the
+     oxblood is the site's link/active/CTA colour, so painting failures in it would make an error
+     look like ordinary UI — and it can't distinguish a danger border from an accent border on the
+     same panel. Same hue family, hotter and darker: 6.1:1 on --color-bg, 5.6:1 on
+     --color-surface-code. Not for decoration. */
+  --color-danger:       #b3261e;
+  /* ── JSON syntax colours (the /webmcp output panel) ────────────────────────
+     A code panel is the one place on this site where editor conventions beat the house palette:
+     people read JSON faster when it is coloured the way their editor colours it. This follows
+     VS Code's Light+ assignment — blue keys, red strings, green numbers, purple keywords, and a
+     three-step bracket ramp cycling by nesting depth (its bracket pair colorization).
+
+     Shifted where it had to be: VS Code's greens (#098658, #319331) are 3.9:1 and 3.3:1 on
+     --color-surface-code and fail AA at 12.5px, so both are darkened. Strings reuse the site's own
+     --color-accent rather than VS Code's #A31515 — same hue family, and it keeps one thread back to
+     the palette. Every value below is >= 4.9:1 on --color-surface-code.
+
+     Retro redefines these same variables (retro.css) instead of re-declaring the rules, which is
+     also how it dodges the Astro scoped-selector specificity trap. */
+  --json-key:        #0451a5;
+  --json-string:     var(--color-accent);
+  --json-number:     #0b6e3f;
+  --json-keyword:    #5b2d9e;
+  --json-punctuation: var(--color-muted);
+  --json-bracket-0:  #7b3814;
+  --json-bracket-1:  #7d2a6b;
+  --json-bracket-2:  #0431fa;
   /* Changelog significance dots (see /changelog). major reuses the accent so the
      palette stays two-hue; minor is amber, patch is a muted parchment grey. */
   --color-sig-major: var(--color-accent);
@@ -160,9 +187,17 @@ a:hover {
   color: var(--color-bg);
 }
 
-/* ── Focus visibility ────────────────────────────────────────────────────── */
+/* ── Focus visibility ──────────────────────────────────────────────────────
+   SITE-WIDE. This list previously reached only `a` and `.filter-pill`, which meant every other
+   focusable element — buttons, inputs, anything with a tabindex — fell back to the UA ring or, on
+   elements whose own styles reset the outline, to nothing. Extended when /webmcp shipped the
+   site's first form inputs and focusable panels. */
 a:focus-visible,
-.filter-pill:focus-visible {
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
@@ -295,4 +330,20 @@ a:focus-visible,
   text-transform: uppercase;
   color: var(--color-label);
   font-weight: normal;
+}
+
+/* ── Motion ────────────────────────────────────────────────────────────────
+   SITE-WIDE, and new: global.css had no prefers-reduced-motion block at all, so modern mode
+   honoured the preference only where an individual component happened to opt in (/scorecard did;
+   most did not). retro.css has always carried its equivalent. Kept broad rather than enumerated
+   because the alternative is a list that silently goes stale every time a transition is added. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

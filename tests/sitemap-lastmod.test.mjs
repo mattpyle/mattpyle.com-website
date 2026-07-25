@@ -110,3 +110,11 @@ test('sitemap resolver covers static, index, published, draft, and unknown route
   assert.equal(policy.resolveSitemapLastmod('/writing/draft/', writing), undefined);
   assert.equal(policy.resolveSitemapLastmod('/new-page/', writing), undefined);
 });
+
+test('/webmcp/ resolves against the tool-measurement date, not just its route date', { skip: !policy }, async () => {
+  const { WEBMCP_VERIFIED } = await import('../src/data/webmcp-catalog.mjs');
+
+  const resolved = policy.resolveSitemapLastmod('/webmcp/', new Map());
+  assert.ok(resolved, '/webmcp/ must have a lastmod policy — astro.config.mjs throws without one');
+  assert.equal(resolved, policy.latestDate(policy.resolveStaticLastmod('/webmcp/'), WEBMCP_VERIFIED.iso));
+});
