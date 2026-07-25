@@ -1070,28 +1070,33 @@ html[data-appearance='retro'] [data-module='webmcp'] .snippet-frame:has(.snippet
   outline-offset: 2px;
 }
 
-/* Same five-way split as modern, held to the phosphor palette: gold keys, bright digit strings, and
-   dim green for everything structural. Keywords take the weight rather than a fourth colour — a
-   four-hue LCD stops reading as a terminal, which is the whole point of this panel. */
-html[data-appearance='retro'] [data-module='webmcp'] .json-key {
-  color: var(--retro-gold);
-  font-weight: bold;
+/* JSON colours: re-point the --json-* tokens rather than re-declare the rules. The page's scoped
+   CSS already reads these variables, so nothing here competes with an Astro-scoped selector — this
+   is the one override in the file immune to the cid specificity trap.
+
+   VS Code's Dark+ assignment, unmodified: it is designed for a near-black ground and every colour
+   clears AA on the LCD by a wide margin (key 13.3:1, string 7.5:1, number 11.7:1, keyword 6.7:1,
+   brackets 14.1 / 6.9 / 7.0). A colourful syntax panel on a dark ground is also more period-correct
+   than the monochrome phosphor it replaces — this is the Borland/Turbo IDE look, not a CRT terminal. */
+html[data-appearance='retro'] [data-module='webmcp'] {
+  --json-key: #9cdcfe;
+  --json-string: #ce9178;
+  --json-number: #b5cea8;
+  --json-keyword: #569cd6;
+  --json-punctuation: var(--retro-lcd-dim);
+  --json-bracket-0: #ffd700;
+  --json-bracket-1: #da70d6;
+  --json-bracket-2: #179fff;
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .json-string { color: var(--retro-lcd-digit); }
-
-html[data-appearance='retro'] [data-module='webmcp'] .json-keyword {
-  color: var(--retro-lcd-dim);
-  font-weight: bold;
-}
-
-html[data-appearance='retro'] [data-module='webmcp'] .json-number,
-html[data-appearance='retro'] [data-module='webmcp'] .json-punctuation,
 html[data-appearance='retro'] [data-module='webmcp'] .json-dim,
 html[data-appearance='retro'] [data-module='webmcp'] .output-cursor { color: var(--retro-lcd-dim); }
 
+/* Phosphor bloom, per token rather than a fixed green: the panel used to be monochrome, so a
+   hardcoded rgba(57,255,20,.45) was the text's own colour. Now that each token has its own hue,
+   currentColor is what keeps the glow underneath the glyph instead of smearing green across it. */
 html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='success'] .output-pre {
-  text-shadow: 0 0 6px rgba(57, 255, 20, .45);
+  text-shadow: 0 0 6px color-mix(in srgb, currentColor 45%, transparent);
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='error'] .json-dim,

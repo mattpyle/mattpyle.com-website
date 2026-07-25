@@ -14,13 +14,19 @@
  */
 
 /**
- * Five categories, which is the split every editor theme makes: the key you scan for, the string
- * that holds the data, numbers, the `true`/`false`/`null` keywords, and the punctuation that should
- * recede. Numbers and keywords were one class until they were separated here — a `null` reading as
- * a number is exactly the confusion the colouring exists to prevent.
+ * The categories every editor theme separates: the key you scan for, the string that holds the
+ * data, numbers, the `true`/`false`/`null` keywords, the brackets that carry structure, and the
+ * commas and colons that should recede.
  *
- * @typedef {{ text: string, kind: 'key' | 'string' | 'number' | 'keyword' | 'punctuation' | 'plain' }} JsonToken
+ * `bracket` tokens carry a `depth`, cycling 0/1/2 by nesting level — VS Code's bracket pair
+ * colorization, which is what makes a deep result readable at a glance. `depth` is the nesting
+ * level of the pair itself, so an opening brace and its matching closer always share a colour.
+ *
+ * @typedef {{ text: string, kind: 'key' | 'string' | 'number' | 'keyword' | 'bracket' | 'punctuation' | 'plain', depth?: number }} JsonToken
  */
+
+/** How many colours the bracket ramp cycles through before repeating. Matches VS Code's three. */
+export const BRACKET_DEPTH_COLOURS = 3;
 
 // One pass, four alternatives: a quoted string (with an optional trailing colon, which makes it an
 // object key rather than a string value), a number, a bare literal, or a structural character.
@@ -36,12 +42,13 @@ const TOKEN_PATTERN = /"(?:\\.|[^"\\])*"(\s*:)?|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?
 export function tokenizeJson(source) {
   /** @type {JsonToken[]} */
   const tokens = [];
-  const push = (text, kind) => {
-    if (text) tokens.push({ text, kind });
+  const push = (text, kind, depth) => {
+    if (text) tokens.push(depth === undefined ? { text, kind } : { text, kind, depth });
   };
 
   let lastIndex = 0;
   let match;
+  let nesting = 0;
   TOKEN_PATTERN.lastIndex = 0;
 
   while ((match = TOKEN_PATTERN.exec(source)) !== null) {
@@ -58,7 +65,16 @@ export function tokenizeJson(source) {
         push(raw.slice(0, raw.length - colon.length), 'key');
         push(colon, 'punctuation');
       }
-    } else if (raw.length === 1 && '{}[],:'.includes(raw)) {
+    } else if (raw === '{' || raw === '[') {
+      // Colour the opener at the depth it opens, then descend — so a pair matches.
+      push(raw, 'bracket', nesting % BRACKET_DEPTH_COLOURS);
+      nesting += 1;
+    } else if (raw === '}' || raw === ']') {
+      // Ascend first, for the same reason. Math.max guards malformed input rather than
+      // producing a negative index that would land on no CSS class at all.
+      nesting = Math.max(0, nesting - 1);
+      push(raw, 'bracket', nesting % BRACKET_DEPTH_COLOURS);
+    } else if (raw === ',' || raw === ':') {
       push(raw, 'punctuation');
     } else if (raw === 'true' || raw === 'false' || raw === 'null') {
       push(raw, 'keyword');

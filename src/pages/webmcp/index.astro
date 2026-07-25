@@ -513,7 +513,9 @@ const breadcrumbs = [
         continue;
       }
       const span = document.createElement('span');
-      span.className = `json-${token.kind}`;
+      // Brackets carry their nesting depth so opener and closer land on the same colour.
+      span.className =
+        token.kind === 'bracket' ? `json-bracket json-bracket-${token.depth}` : `json-${token.kind}`;
       // textContent, never innerHTML — a string inside a result can't inject markup this way.
       span.textContent = token.text;
       pre.append(span);
@@ -1117,7 +1119,13 @@ const breadcrumbs = [
     background: var(--color-surface-code);
   }
 
-  .output-pre,
+  /* THE OUTPUT PANEL'S CONTENTS ARE BUILT BY THE SCRIPT, so they never carry Astro's scoping
+     attribute and a plain scoped selector cannot reach them — every rule below that styles a
+     runtime-created element has to be :global(). Without it this panel silently fell back to the
+     UA's default monospace at 13px/normal instead of JetBrains Mono at 12.5px/1.6; retro looked
+     correct throughout only because retro.css is a plain global stylesheet. The snippet <pre> is
+     server-rendered and keeps normal scoping. */
+  :global(.output-pre),
   .snippet-body pre {
     margin: 0;
     font-family: var(--font-mono);
@@ -1138,21 +1146,25 @@ const breadcrumbs = [
 
   .snippet-body code { font-family: inherit; }
 
-  /* Highlighting is emphasis, not information — the JSON reads identically in monochrome.
-     The conventional five-way split (key / string / number / keyword / punctuation) on a palette
-     that offers only three AA-passing hues at 12.5px on this ground: --color-status-green is 4.05:1
-     and was rejected. Hue separates key, string and number; weight separates the keywords
-     (true/false/null) from numbers; punctuation sits at the lightest passing value so structure
-     recedes and the values read first. */
-  .json-key { color: var(--color-accent); font-weight: 600; }
-  .json-string { color: var(--color-text); }
-  .json-number,
-  .json-dim { color: var(--color-label); }
-  .json-keyword { color: var(--color-label); font-weight: 600; }
-  .json-punctuation { color: var(--color-muted); }
-  .output-frame[data-state='error'] .json-dim { color: var(--color-danger); }
+  /* Editor-conventional JSON colouring. Every colour is a --json-* token (see global.css for the
+     assignment and its contrast working); retro re-points the same tokens, so there is not a single
+     mode-specific rule here. Highlighting stays emphasis, not information: indentation and the
+     brackets themselves already carry the structure, so the JSON reads fine in monochrome. */
+  :global(.json-key) { color: var(--json-key); }
+  :global(.json-string) { color: var(--json-string); }
+  :global(.json-number) { color: var(--json-number); }
+  :global(.json-keyword) { color: var(--json-keyword); }
+  :global(.json-punctuation) { color: var(--json-punctuation); }
+  :global(.json-dim) { color: var(--color-label); }
 
-  .output-cursor {
+  /* Bracket pair colorization: openers and their matching closers share a colour, cycling every
+     three levels of nesting. This is what makes a nested result scannable. */
+  :global(.json-bracket-0) { color: var(--json-bracket-0); }
+  :global(.json-bracket-1) { color: var(--json-bracket-1); }
+  :global(.json-bracket-2) { color: var(--json-bracket-2); }
+  .output-frame[data-state='error'] :global(.json-dim) { color: var(--color-danger); }
+
+  :global(.output-cursor) {
     color: var(--color-label);
     animation: webmcp-blink 1s step-end infinite;
   }
@@ -1199,7 +1211,7 @@ const breadcrumbs = [
     .action-note { text-align: center; }
 
     .output-body { height: 168px; padding: 12px; }
-    .output-pre,
+    :global(.output-pre),
     .snippet-body pre { font-size: 11.5px; }
     .copy-button { padding: 7px 0 7px 10px; }
 
@@ -1222,6 +1234,6 @@ const breadcrumbs = [
     .filter-pill,
     .copy-button { transition: none; }
     /* The block sits solid rather than blinking; nothing is lost, the other three cues are static. */
-    .output-cursor { animation: none; }
+    :global(.output-cursor) { animation: none; }
   }
 </style>

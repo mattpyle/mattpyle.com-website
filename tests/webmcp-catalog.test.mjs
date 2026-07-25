@@ -6,7 +6,7 @@ import './helpers/dom-stub.mjs';
 import { createTools } from '../src/lib/webmcp-tools.mjs';
 import { WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED, ORIGIN_TRIAL_EXPIRY } from '../src/data/webmcp-catalog.mjs';
 import { buildToolsPayload } from '../src/pages/webmcp/tools.json.ts';
-import { formatJson, tokenizeJson } from '../src/lib/format-json.mjs';
+import { formatJson, tokenizeJson, BRACKET_DEPTH_COLOURS } from '../src/lib/format-json.mjs';
 import { buildToolSnippet } from '../src/lib/webmcp-snippet.mjs';
 
 /**
@@ -132,11 +132,11 @@ test('agents.md marks the write tool as a write and states its client-local scop
   assert.match(agentsMd, /localStorage/);
 });
 
-test('formatJson tokenizes keys, strings, numbers, keywords, and punctuation', () => {
+test('formatJson tokenizes keys, strings, numbers, keywords, brackets, and punctuation', () => {
   const tokens = formatJson({ mode: 'retro', limit: 5, ok: true, missing: null });
   const kinds = new Set(tokens.map((token) => token.kind));
 
-  for (const kind of ['key', 'string', 'number', 'keyword', 'punctuation']) {
+  for (const kind of ['key', 'string', 'number', 'keyword', 'bracket', 'punctuation']) {
     assert.ok(kinds.has(kind), `expected a ${kind} token`);
   }
 
@@ -146,6 +146,31 @@ test('formatJson tokenizes keys, strings, numbers, keywords, and punctuation', (
   // true/false/null are keywords, not numbers — the split that stops `null` reading as a value.
   assert.deepEqual(tokens.filter((t) => t.kind === 'number').map((t) => t.text), ['5']);
   assert.deepEqual(tokens.filter((t) => t.kind === 'keyword').map((t) => t.text), ['true', 'null']);
+});
+
+test('bracket pairs share a depth colour, and depth cycles every three levels', () => {
+  const tokens = formatJson({ a: { b: { c: { d: [1] } } } });
+  const brackets = tokens.filter((token) => token.kind === 'bracket');
+
+  // Openers descend 0,1,2,0,1 …; each closer matches its own opener, so the sequence mirrors.
+  const openers = brackets.filter((b) => b.text === '{' || b.text === '[').map((b) => b.depth);
+  const closers = brackets.filter((b) => b.text === '}' || b.text === ']').map((b) => b.depth);
+  assert.deepEqual(openers, [0, 1, 2, 0, 1]);
+  assert.deepEqual(closers, [...openers].reverse(), 'each closer must match its opener');
+
+  // Every depth is a valid index into the three-colour ramp.
+  for (const bracket of brackets) {
+    assert.ok(
+      Number.isInteger(bracket.depth) && bracket.depth >= 0 && bracket.depth < BRACKET_DEPTH_COLOURS,
+      `depth ${bracket.depth} is outside the ramp`
+    );
+  }
+});
+
+test('commas and colons stay punctuation, not brackets', () => {
+  const tokens = formatJson({ a: 1, b: 2 });
+  const punctuation = tokens.filter((t) => t.kind === 'punctuation').map((t) => t.text);
+  assert.deepEqual(punctuation, [':', ',', ':']);
 });
 
 test('formatJson does not mistake a string containing "null" for a keyword', () => {
