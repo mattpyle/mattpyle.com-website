@@ -12,7 +12,15 @@ const year = new Date().getFullYear();
     </a>
     <a href="https://github.com/mattpyle" target="_blank" rel="noopener noreferrer">GitHub</a>
     <a href="https://linkedin.com/in/matt-pyle" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+    <button type="button" class="appearance-toggle" data-appearance-toggle aria-label="Switch to retro mode">
+      Retro mode
+    </button>
   </nav>
+  <p class="retro-footer-badges" aria-hidden="true">
+    <span>[ Handcrafted ]</span>
+    <span>[ No framework ]</span>
+    <span>[ Human + agent readable ]</span>
+  </p>
   <p>© {year} Matt Pyle</p>
 </footer>
 
@@ -30,6 +38,7 @@ const year = new Date().getFullYear();
 
   nav {
     display: flex;
+    align-items: center;
     gap: 18px;
   }
 
@@ -46,6 +55,23 @@ const year = new Date().getFullYear();
     display: inline-flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .appearance-toggle {
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--color-muted);
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+  }
+
+  .appearance-toggle:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
   }
 
   p {

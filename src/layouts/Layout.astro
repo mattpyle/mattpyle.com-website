@@ -1,10 +1,13 @@
 ---
 import '../styles/global.css';
+import '../styles/retro.css';
 import { ClientRouter } from 'astro:transitions';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 import WebMCP from '../components/WebMCP.astro';
+import AppearanceBanner from '../components/AppearanceBanner.astro';
+import AppearanceUI from '../components/AppearanceUI.astro';
 
 interface Breadcrumb {
   name: string;
@@ -153,6 +156,30 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     {/*
+      Pre-paint appearance apply — a genuine inline (not module, not deferred)
+      script so it runs synchronously, before the render-blocking stylesheets
+      below are applied, and before first paint. This is what stops a returning
+      retro visitor from seeing a flash of modern. is:inline keeps it literally
+      inline (not bundled to an external file); security.csp in astro.config.mjs
+      still SHA-256 hashes its content into the meta CSP automatically, so it's
+      not an unhashed inline script.
+
+      Duplicates the storage-key read from src/lib/appearance.mjs rather than
+      importing it: a classic inline script can't use ES import, and a type=module
+      script is deferred until after parsing — too late to beat first paint. Keep
+      the key ('mattpyle:appearance') and the allowed value ('retro') in sync with
+      appearance.mjs by hand; there is no way to share the constant here.
+    */}
+    <script is:inline>
+      (function () {
+        try {
+          if (localStorage.getItem('mattpyle:appearance') === 'retro') {
+            document.documentElement.dataset.appearance = 'retro';
+          }
+        } catch (e) {}
+      })();
+    </script>
+    {/*
       Chrome WebMCP origin trial — bound to https://www.mattpyle.com (the canonical host; the apex
       308s to it) and EXPIRES 2026-11-17, after which Chrome ignores it and the tools in
       src/components/WebMCP.astro simply stop registering. That is a silent, harmless degradation —
@@ -205,11 +232,13 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
   </head>
   <body>
     <a href="#main" class="skip-link">Skip to content</a>
+    <AppearanceBanner />
     <Nav />
     <main class="site-main" id="main">
       <slot />
     </main>
     <Footer />
+    <AppearanceUI />
     {/*
       MUST stay in <body>. This renders a <vercel-speed-insights> custom element, and a custom
       element inside <head> makes the HTML parser close the head early — which pushed Astro's

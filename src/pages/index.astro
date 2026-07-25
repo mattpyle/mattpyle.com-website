@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import Hero from '../components/Hero.astro';
 import RecentWriting from '../components/RecentWriting.astro';
+import RetroHomeFurniture from '../components/RetroHomeFurniture.astro';
 import { getCollection } from 'astro:content';
 import { showDrafts } from '../lib/show-drafts';
 import { compareChangelogEntries } from '../lib/changelog-order';
@@ -32,5 +33,6 @@ const activityItems = (
   description="Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies."
 >
   <Hero activityItems={activityItems} />
+  <RetroHomeFurniture />
   <RecentWriting articles={recentArticles} />
 </Layout>

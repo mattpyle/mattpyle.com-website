@@ -1,0 +1,79 @@
+---
+/**
+ * Wires the human-facing appearance controls to src/lib/appearance.mjs:
+ * the footer toggle button, the mode banner's "back to modern" button, and
+ * a visually-hidden aria-live region that announces the change to screen
+ * readers. All three ultimately call setAppearance() — no second
+ * implementation of the toggle logic lives here.
+ *
+ * Astro <script> so security.csp in astro.config.mjs hashes it; registers
+ * on astro:page-load like WebMCP.astro so it survives ClientRouter soft nav.
+ */
+---
+
+<div id="appearance-announcer" class="sr-only" role="status" aria-live="polite"></div>
+
+<style>
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+
+<script>
+  import { getAppearance, setAppearance, APPEARANCE_CHANGE_EVENT } from '../lib/appearance.mjs';
+
+  declare global {
+    interface Window { __appearanceUIWired?: boolean }
+  }
+
+  function syncToggles() {
+    const mode = getAppearance();
+    const isRetro = mode === 'retro';
+    const label = isRetro ? 'Modern mode' : 'Retro mode';
+    const action = isRetro ? 'Switch to modern mode' : 'Switch to retro mode';
+    document.querySelectorAll<HTMLButtonElement>('[data-appearance-toggle]').forEach((btn) => {
+      btn.textContent = label;
+      btn.setAttribute('aria-label', action);
+    });
+  }
+
+  function announce(message: string) {
+    const region = document.getElementById('appearance-announcer');
+    if (region) region.textContent = message;
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    syncToggles();
+
+    if (window.__appearanceUIWired) return;
+    window.__appearanceUIWired = true;
+
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+
+      const toggle = target.closest<HTMLElement>('[data-appearance-toggle]');
+      if (toggle) {
+        const next = getAppearance() === 'retro' ? 'modern' : 'retro';
+        setAppearance(next);
+        return;
+      }
+
+      if (target.closest('#appearance-exit')) {
+        setAppearance('modern');
+      }
+    });
+
+    document.addEventListener(APPEARANCE_CHANGE_EVENT, ((event: CustomEvent<{ mode: string }>) => {
+      syncToggles();
+      announce(event.detail.mode === 'retro' ? 'Retro mode on' : 'Modern mode on');
+    }) as EventListener);
+  });
+</script>

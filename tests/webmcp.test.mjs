@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import './helpers/dom-stub.mjs';
 import { createTools, registerTools, resolveModelContext } from '../src/lib/webmcp-tools.mjs';
+import { STORAGE_KEY } from '../src/lib/appearance.mjs';
 
 const INDEX = {
   generated: '2026-07-17T00:00:00.000Z',
@@ -65,7 +67,7 @@ const INDEX = {
 const getIndex = async () => INDEX;
 const toolsByName = () => Object.fromEntries(createTools(getIndex).map((t) => [t.name, t]));
 
-test('registers exactly the three read-only tools', async () => {
+test('registers the three read-only tools plus the set_appearance write tool', async () => {
   const registered = [];
   const mc = { registerTool: async (tool) => registered.push(tool) };
 
@@ -73,7 +75,7 @@ test('registers exactly the three read-only tools', async () => {
 
   assert.deepEqual(
     registered.map((t) => t.name),
-    ['describe_site', 'get_recent_writing', 'search_content']
+    ['describe_site', 'get_recent_writing', 'search_content', 'set_appearance']
   );
 });
 
@@ -86,10 +88,11 @@ test('every tool declares an object inputSchema and an execute handler', () => {
   }
 });
 
-test('search_content requires query; the others take no required input', () => {
+test('search_content and set_appearance require input; the read-only tools do not', () => {
   const tools = toolsByName();
 
   assert.deepEqual(tools.search_content.inputSchema.required, ['query']);
+  assert.deepEqual(tools.set_appearance.inputSchema.required, ['mode']);
   assert.equal(tools.describe_site.inputSchema.required, undefined);
   assert.equal(tools.get_recent_writing.inputSchema.required, undefined);
 });
@@ -169,6 +172,27 @@ test('search_content still works when the index predates the changelog field', a
 
 test('search_content ignores a blank query rather than matching everything', async () => {
   assert.deepEqual((await toolsByName().search_content.execute({ query: '   ' })).results, []);
+});
+
+test('set_appearance enumerates the allowed modes and switches the appearance', async () => {
+  const tool = toolsByName().set_appearance;
+
+  assert.deepEqual(tool.inputSchema.properties.mode.enum, ['modern', 'retro']);
+
+  const result = await tool.execute({ mode: 'retro' });
+  assert.equal(result.mode, 'retro');
+  assert.match(result.message, /retro/i);
+  assert.equal(document.documentElement.dataset.appearance, 'retro');
+  assert.equal(localStorage.getItem(STORAGE_KEY), 'retro');
+});
+
+test('set_appearance falls back to modern for an invalid mode rather than erroring', async () => {
+  const tool = toolsByName().set_appearance;
+
+  const result = await tool.execute({ mode: 'chaos' });
+  assert.equal(result.mode, 'modern');
+  assert.match(result.message, /modern/i);
+  assert.equal(document.documentElement.dataset.appearance, undefined);
 });
 
 test('resolveModelContext prefers document, falls back to navigator, else null', () => {

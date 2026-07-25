@@ -1,0 +1,25 @@
+---
+/**
+ * Decorative, behavior-free retro furniture for the homepage only (design-brief.md
+ * §2: furniture concentrates on the homepage hero/sidebar and the global footer,
+ * not the reading column). Exists in the DOM in both modes; hidden by default via
+ * the .retro-furniture rule in src/styles/retro.css and revealed only in retro.
+ *
+ * Everything here is aria-hidden: it's period flavor, not information — hiding it
+ * from modern-mode assistive tech (where it's invisible anyway) and from retro-mode
+ * assistive tech (where the real page content already says the same things) loses
+ * nothing.
+ */
+---
+
+<div class="retro-furniture retro-marquee" aria-hidden="true">
+  <span>An experimental testbed for the agentic web &mdash; AEO, GEO &amp; AX. Come on in and have a look around.</span>
+</div>
+
+<div class="retro-furniture retro-divider" aria-hidden="true">
+  &cedil;,&oslash;&curren;&ordm;&deg;`&deg;&ordm;&curren;&oslash;,&cedil; welcome &cedil;,&oslash;&curren;&ordm;&deg;`&deg;&ordm;&curren;&oslash;,&cedil;
+</div>
+
+<div class="retro-furniture retro-construction" aria-hidden="true">
+  <b>Under Construction</b> &mdash; always tinkering
+</div>
