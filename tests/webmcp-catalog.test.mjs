@@ -201,16 +201,32 @@ test('formatJson prints something rather than crashing on an undefined return', 
   assert.deepEqual(formatJson(undefined), [{ text: 'undefined', kind: 'plain' }]);
 });
 
-test('buildToolSnippet uses executeTool with a JSON-string argument', () => {
+test('buildToolSnippet resolves a tool object first, then calls executeTool with a JSON string', () => {
+  // Both halves are load-bearing and were established by running them (see webmcp-snippet.mjs):
+  // executeTool takes a RegisteredTool from getTools(), never a name, and a JSON string, never an object.
   assert.equal(
     buildToolSnippet('get_recent_writing', { limit: 5 }),
-    `await document.modelContext.executeTool('get_recent_writing', '{"limit":5}')`
+    "const tool = (await document.modelContext.getTools()).find(t => t.name === 'get_recent_writing');\n" +
+      `await document.modelContext.executeTool(tool, '{"limit":5}');`
   );
-  // No args at all still sends a string, not nothing — `executeTool(name)` is not the convention.
   assert.equal(
     buildToolSnippet('describe_site'),
-    `await document.modelContext.executeTool('describe_site', '{}')`
+    "const tool = (await document.modelContext.getTools()).find(t => t.name === 'describe_site');\n" +
+      "await document.modelContext.executeTool(tool, '{}');"
   );
+});
+
+test('no snippet passes a bare tool name to executeTool', () => {
+  // The exact regression that shipped to production: executeTool('name', …) throws
+  // "The provided value is not of type 'RegisteredTool'".
+  for (const tool of tools) {
+    const snippet = buildToolSnippet(tool.name, WEBMCP_TOOL_NOTES[tool.name].example);
+    assert.ok(
+      !snippet.includes(`executeTool('`),
+      `${tool.name}: executeTool must receive a tool object, not a name string`
+    );
+    assert.ok(snippet.includes('getTools()'), `${tool.name}: snippet must resolve the tool first`);
+  }
 });
 
 test('buildToolSnippet escapes payloads that would break the single-quoted literal', () => {
@@ -218,18 +234,24 @@ test('buildToolSnippet escapes payloads that would break the single-quoted liter
   // does not parse — the copy button hands this to a real console.
   const snippet = buildToolSnippet('search_content', { query: "it's" });
   assert.ok(snippet.includes("\\'"), 'expected the apostrophe to be escaped');
-  assert.equal(snippet, `await document.modelContext.executeTool('search_content', '{"query":"it\\'s"}')`);
+  assert.ok(
+    snippet.endsWith(`await document.modelContext.executeTool(tool, '{"query":"it\\'s"}');`),
+    `unexpected call line: ${snippet}`
+  );
 
   // A backslash must survive both JSON encoding and the literal escaping.
   const withBackslash = buildToolSnippet('search_content', { query: 'a\\b' });
-  assert.equal(withBackslash, `await document.modelContext.executeTool('search_content', '{"query":"a\\\\\\\\b"}')`);
+  assert.ok(
+    withBackslash.endsWith(`await document.modelContext.executeTool(tool, '{"query":"a\\\\\\\\b"}');`),
+    `unexpected call line: ${withBackslash}`
+  );
 });
 
 test('every catalog example produces a snippet whose argument round-trips as JSON', () => {
   for (const tool of tools) {
     const example = WEBMCP_TOOL_NOTES[tool.name].example;
     const snippet = buildToolSnippet(tool.name, example);
-    const payload = snippet.match(/, '(.*)'\)$/)[1]
+    const payload = snippet.match(/executeTool\(tool, '(.*)'\);$/)[1]
       .replace(/\\'/g, "'")
       .replace(/\\\\/g, '\\');
     assert.deepEqual(JSON.parse(payload), example, `${tool.name}: snippet argument must parse back`);

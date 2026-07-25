@@ -52,7 +52,18 @@ The live pages register four WebMCP tools: three that read published content, an
 
 **Only in-browser agents can call these.** The tools are registered on `document.modelContext` (identical to `navigator.modelContext` — on Chrome 150 they are the same object) when a page is loaded in a browser that implements WebMCP. As of mid-2026 that means Chrome with the WebMCP origin trial or the `enable-webmcp-testing` flag, driving an agent or the Model Context Tool Inspector extension. If you are reading this file as text rather than executing JavaScript on the live page, **you cannot invoke them** — fetch `/webmcp/tools.json` for the definitions and `/webmcp/index.json` for the same data these tools read.
 
-Calling convention, as measured on Chrome 150 (2026-07-17): `executeTool(tool, args)` takes `args` as a **JSON string**, not an object — passing an object throws `Failed to parse input arguments`. Results come back as a JSON string. Chrome does **not** enforce the declared `inputSchema`, so the tools validate their own inputs.
+Calling convention, as measured on Chrome 150.0.7871.182 (2026-07-24) by running it against the live origin trial:
+
+```js
+const tool = (await document.modelContext.getTools()).find(t => t.name === 'describe_site');
+const result = await document.modelContext.executeTool(tool, '{}');  // result is a JSON string
+```
+
+- `document.modelContext.getTools()` returns the registered tools as objects (`name`, `description`, `inputSchema`, `title`, `origin`, `window`).
+- `executeTool` takes a **registered tool object**, not a tool name — a name throws `TypeError: The provided value is not of type 'RegisteredTool'`.
+- Its second argument is a **JSON string**, not an object — an object throws `Failed to parse input arguments`. Both arguments are required.
+- Results come back as a **JSON string**.
+- Chrome does **not** enforce the declared `inputSchema` — `required`, `maximum`, and `enum` were each ignored and the value passed straight to the handler — so the tools validate their own inputs.
 
 The tools require no authentication, expose no personal data beyond the public bio, and make no network requests beyond a same-origin fetch of the index.
 
