@@ -932,8 +932,9 @@ program
   .option('--urls <csv>', 'comma-separated URL override; skips the live sitemap fetch')
   .option('--max-age-days <n>', 'staleness threshold for the publish gate', String(SCORECARD_MAX_AGE_DAYS_DEFAULT))
   .option('--date <yyyy-mm-dd>', 'pin the run\'s date instead of using today in STEWARD_TIMEZONE — for backfilling a run to when the audit actually happened')
+  .option('--allow-shrink', 'accept an audit set smaller than the previous published run — for when pages were genuinely unpublished')
   .description('Audit the live site (scorecard-audit-spec.md) and open a PR on change or staleness')
-  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string; date?: string }) => {
+  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string; date?: string; allowShrink?: boolean }) => {
     const maxAgeDays = Number(opts.maxAgeDays);
     if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
       fail(`--max-age-days must be a positive number, got "${opts.maxAgeDays}"`);
@@ -953,6 +954,7 @@ program
 
     console.log(`\n  starting scorecard audit${opts.dryRun ? ' (dry run — will not publish)' : ''}...`);
     if (urls) console.log(`  URL override: ${urls.join(', ')}`);
+    if (opts.allowShrink) console.log('  --allow-shrink: a smaller audit set than the last published run is accepted');
     console.log('');
 
     const result = await c.workflow.execute(scorecardAuditWorkflow, {
@@ -970,6 +972,7 @@ program
           triggeredBy: 'manual' as const,
           timeZone: STEWARD_TIMEZONE,
           date: opts.date,
+          allowShrink: opts.allowShrink === true,
         },
       ],
     });
@@ -1011,7 +1014,24 @@ program
     console.log(`\n  showing ${shown.length} of ${runs.length} run(s) total.\n`);
   });
 
+/**
+ * A failed workflow reaches the CLI as `WorkflowFailedError: Workflow
+ * execution failed` with the real reason buried on `.cause` — which told the
+ * operator nothing at all. Walk the chain and print the innermost message that
+ * says something specific, so a guard that fires actually explains itself.
+ */
+function describeCliError(err: unknown): string {
+  const GENERIC = ['Workflow execution failed', 'Activity task failed'];
+  let current: unknown = err;
+  let best = '';
+  for (let depth = 0; current instanceof Error && depth < 6; depth++) {
+    if (current.message && !GENERIC.includes(current.message)) best = current.message;
+    current = (current as Error).cause;
+  }
+  return best || (err instanceof Error ? err.message : String(err));
+}
+
 program.parseAsync(process.argv).catch((err) => {
-  console.error(`\n  ${err instanceof Error ? err.message : String(err)}\n`);
+  console.error(`\n  ${describeCliError(err)}\n`);
   process.exit(1);
 });

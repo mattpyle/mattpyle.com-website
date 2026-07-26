@@ -5,6 +5,7 @@ import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js';
 import type { PageAuditOutcome, PublishableRun } from '../../src/lib/scorecard-aggregate.js';
+import type { PublishedScorecard } from '../../src/activities/scorecard.js';
 
 /**
  * Workflow-level tests (spec §9.4): every activity mocked, asserting the
@@ -44,7 +45,7 @@ interface MockOverrides {
   resolveAuditUrls?: () => Promise<string[]>;
   resolveRunStamp?: () => Promise<{ iso: string; timestamp: string }>;
   auditLiveUrl?: (url: string) => Promise<PageAuditOutcome>;
-  readPublishedScorecard?: () => Promise<PublishableRun | undefined>;
+  readPublishedScorecard?: () => Promise<PublishedScorecard | undefined>;
   publishScorecardRun?: (input: unknown) => Promise<{ branch: string; prUrl: string; id: string }>;
   archiveScorecardRun?: (record: unknown) => Promise<{ archivePath: string }>;
 }
@@ -269,4 +270,149 @@ test('an explicit --urls override skips resolveAuditUrls entirely', async () => 
   assert.equal(result.perPage.length, 1);
   assert.equal(result.perPage[0].url, 'https://www.mattpyle.com/about/');
   assert.ok(calls.includes('auditLiveUrl:https://www.mattpyle.com/about/'));
+});
+
+// ---------------------------------------------------------------------------
+// The audit-set guard, end to end through the workflow (spec §5.4). The
+// comparison itself is unit-tested in `lib/scorecard-aggregate.test.ts`; what
+// these assert is that the workflow *fails* on a bad set and never reaches the
+// fan-out — the whole point being to lose seconds rather than 12 minutes of
+// Chrome launches before finding out.
+// ---------------------------------------------------------------------------
+
+const PUBLISHED_18: PublishedScorecard = {
+  iso: '2000-01-01',
+  pageCount: 18,
+  metrics: [
+    { name: 'Accessibility', value: '100', maximum: '100', status: 'Pass', description: '' },
+    { name: 'Performance', value: '98', maximum: '100', status: 'Pass', description: '' },
+    { name: 'SEO', value: '100', maximum: '100', status: 'Pass', description: '' },
+    { name: 'Agentic Browsing', value: '4', maximum: '4', status: 'Pass', description: '' },
+  ],
+};
+
+function urlsOfLength(n: number): string[] {
+  return Array.from({ length: n }, (_, i) => `https://www.mattpyle.com/p${i}/`);
+}
+
+/**
+ * A workflow failure surfaces as `WorkflowFailedError: Workflow execution
+ * failed` with the real reason on `.cause` — asserting on the outer message
+ * would pass for *any* failure, which is exactly the kind of test that goes
+ * green while the guard is broken.
+ */
+async function assertWorkflowFails(run: () => Promise<unknown>, expected: RegExp): Promise<void> {
+  try {
+    await run();
+  } catch (err) {
+    const cause = (err as { cause?: unknown }).cause;
+    const message = cause instanceof Error ? cause.message : String(cause);
+    assert.match(message, expected);
+    return;
+  }
+  assert.fail(`expected the workflow to fail with ${expected}`);
+}
+
+test('a shrunken audit set fails the run before a single page is audited', async () => {
+  const { activities, calls } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(3),
+    readPublishedScorecard: async () => PUBLISHED_18,
+  });
+  await assertWorkflowFails(
+    () =>
+      withWorker(activities, () =>
+        env.client.workflow.execute(scorecardAuditWorkflow, {
+          workflowId: 'sc-guard-1',
+          taskQueue: QUEUE,
+          args: [baseInput({ maxAgeDays: 100_000 })],
+        }),
+      ),
+    /shrank: 3 URL\(s\) vs 18/,
+  );
+  assert.equal(calls.filter((c) => c.startsWith('auditLiveUrl')).length, 0);
+  assert.ok(!calls.includes('archiveScorecardRun'));
+});
+
+test('--allow-shrink lets the same shrunken set through', async () => {
+  const { activities, calls } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(3),
+    readPublishedScorecard: async () => PUBLISHED_18,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-guard-2',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000, allowShrink: true })],
+    }),
+  );
+  assert.equal(result.perPage.length, 3);
+  assert.equal(calls.filter((c) => c.startsWith('auditLiveUrl')).length, 3);
+});
+
+test('an empty audit set fails the run', async () => {
+  const { activities } = mockActivities({
+    resolveAuditUrls: async () => [],
+    readPublishedScorecard: async () => PUBLISHED_18,
+  });
+  await assertWorkflowFails(
+    () =>
+      withWorker(activities, () =>
+        env.client.workflow.execute(scorecardAuditWorkflow, {
+          workflowId: 'sc-guard-3',
+          taskQueue: QUEUE,
+          args: [baseInput({ maxAgeDays: 100_000, allowShrink: true })],
+        }),
+      ),
+    /resolved audit set is empty/,
+  );
+});
+
+test('a grown audit set passes the guard untouched', async () => {
+  const { activities, calls } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(19),
+    readPublishedScorecard: async () => PUBLISHED_18,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-guard-4',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000 })],
+    }),
+  );
+  assert.equal(result.perPage.length, 19);
+  assert.equal(calls.filter((c) => c.startsWith('auditLiveUrl')).length, 19);
+});
+
+test('--urls skips the shrink check, so a deliberate one-page run is allowed', async () => {
+  const { activities } = mockActivities({ readPublishedScorecard: async () => PUBLISHED_18 });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-guard-5',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000, urls: ['https://www.mattpyle.com/about/'] })],
+    }),
+  );
+  assert.equal(result.perPage.length, 1);
+});
+
+test('the audited set is sorted, whatever order the sitemap returned it in', async () => {
+  const { activities } = mockActivities({
+    resolveAuditUrls: async () => [
+      'https://www.mattpyle.com/writing/',
+      'https://www.mattpyle.com/about/',
+      'https://www.mattpyle.com/',
+    ],
+    readPublishedScorecard: async () => undefined,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-guard-6',
+      taskQueue: QUEUE,
+      args: [baseInput()],
+    }),
+  );
+  assert.deepEqual(
+    result.perPage.map((p) => p.url),
+    ['https://www.mattpyle.com/', 'https://www.mattpyle.com/about/', 'https://www.mattpyle.com/writing/'],
+  );
 });

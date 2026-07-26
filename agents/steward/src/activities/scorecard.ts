@@ -13,7 +13,7 @@ import { git, worktreeExists } from '../lib/git.js';
 import { gh } from '../lib/github.js';
 import { auditUrl } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
-import { validateCommentary } from '../lib/scorecard-aggregate.js';
+import { parsePageCount, validateCommentary } from '../lib/scorecard-aggregate.js';
 import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRecord } from '../lib/scorecard-aggregate.js';
 
 /**
@@ -57,8 +57,14 @@ export async function resolveAuditUrls(sitemapUrl: string): Promise<string[]> {
     for (const url of extractLocs(await res.text())) urls.add(url);
   }
 
+  // The list itself is logged, not just its count: the audited set and the
+  // sitemap are identical by construction, so the only way to diff a suspect
+  // run after the fact is to have written down what it actually audited.
   const list = [...urls].sort();
-  log.info({ activity: 'resolveAuditUrls', sitemapUrl, count: list.length }, 'resolved live audit URL set');
+  log.info(
+    { activity: 'resolveAuditUrls', sitemapUrl, count: list.length, urls: list },
+    'resolved live audit URL set',
+  );
   return list;
 }
 
@@ -164,13 +170,23 @@ export async function auditLiveUrl(url: string): Promise<PageAuditOutcome> {
 // readPublishedScorecard — light queue
 // ---------------------------------------------------------------------------
 
+export interface PublishedScorecard extends PublishableRun {
+  /**
+   * How many pages the published run audited, parsed from its `scope` string
+   * — the audit-set guard's comparison baseline (spec §5.4). `undefined` when
+   * the scope is missing or unparseable, which the guard treats as "nothing to
+   * compare against" rather than guessing a number.
+   */
+  pageCount?: number;
+}
+
 /**
  * Reads the currently-published run-log from the primary checkout
  * (`SITE_DIR`, not the worktree — this is a read of what's actually live on
  * `master`, before any publish work has started). `undefined` only if the
  * file is missing or empty, which should never happen once Phase 1 seeds it.
  */
-export async function readPublishedScorecard(): Promise<PublishableRun | undefined> {
+export async function readPublishedScorecard(): Promise<PublishedScorecard | undefined> {
   const absPath = path.join(SITE_DIR, SCORECARD_RUNS_PATH);
   let raw: string;
   try {
@@ -180,7 +196,7 @@ export async function readPublishedScorecard(): Promise<PublishableRun | undefin
   }
   const runs = JSON.parse(raw) as ScorecardRunRecord[];
   if (runs.length === 0) return undefined;
-  return { iso: runs[0].iso, metrics: runs[0].metrics };
+  return { iso: runs[0].iso, metrics: runs[0].metrics, pageCount: parsePageCount(runs[0].scope) };
 }
 
 // ---------------------------------------------------------------------------

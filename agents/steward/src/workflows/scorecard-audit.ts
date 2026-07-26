@@ -2,6 +2,7 @@ import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 import {
   aggregate,
+  checkAuditSet,
   decidePublish,
   type PageAuditOutcome,
   type PublishDecision,
@@ -45,6 +46,12 @@ export interface ScorecardAuditInput {
    * calendar-day label is overridden.
    */
   date?: string;
+  /**
+   * `--allow-shrink`: accept an audit set smaller than the previous published
+   * run's page count (spec §5.4's guard). A decision, so it rides in the input
+   * and is frozen into history (design rule 3) — never read from config.
+   */
+  allowShrink?: boolean;
 }
 
 export interface ScorecardAuditResult {
@@ -150,9 +157,39 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
 
 export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promise<ScorecardAuditResult> {
   // --- Step 0: resolve the audit set --------------------------------------
-  const urls = input.urls && input.urls.length > 0
-    ? input.urls
+  const overridden = Boolean(input.urls && input.urls.length > 0);
+  const resolved = overridden
+    ? (input.urls as string[])
     : await light.resolving.resolveAuditUrls(input.sitemapUrl);
+  const urls = [...resolved].sort();
+
+  // --- Step 0.5: guard the audit set ---------------------------------------
+  //
+  // Read the published run *before* the fan-out, not at step 3 where the
+  // publish decision needs it, so a broken audit set fails in seconds instead
+  // of after ~12 minutes of Chrome launches. The same activity result is
+  // reused for `decidePublish` below — one call, one history event.
+  const published = await light.reading.readPublishedScorecard();
+  const guard = checkAuditSet({
+    resolvedCount: urls.length,
+    previousCount: published?.pageCount,
+    overridden,
+    allowShrink: input.allowShrink === true,
+  });
+  // Logged at info, sorted, every run: the audited set and the sitemap are
+  // identical by construction, so this list is the only artifact that makes an
+  // after-the-fact "what did that run actually cover" diff possible.
+  wf.log.info('scorecard audit set resolved', {
+    count: urls.length,
+    previousCount: published?.pageCount,
+    overridden,
+    allowShrink: input.allowShrink === true,
+    guard: guard.reason,
+    urls,
+  });
+  if (!guard.ok) {
+    throw wf.ApplicationFailure.nonRetryable(guard.reason, 'AuditSetGuard');
+  }
 
   // --- Step 1: fan out --------------------------------------------------
   const perPage = await auditAll(urls);
@@ -173,15 +210,13 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
       : { url: p.url, scores: {}, axeViolations: 0 },
   );
 
-  // --- Step 3: read the published run, decide -----------------------------
+  // --- Step 3: decide ------------------------------------------------------
   //
-  // Read and decide *before* building the candidate record so the commentary
-  // (below) can fold in the change delta `decidePublish` already computed —
-  // never re-derive it separately. This does not change the activity-call
-  // order (readPublishedScorecard still fires after every auditLiveUrl and
-  // before publishScorecardRun/archiveScorecardRun); it only moves where the
-  // in-workflow object is assembled, which is not an activity call.
-  const published = await light.reading.readPublishedScorecard();
+  // `published` was already read at step 0.5 (the guard needs it before the
+  // fan-out); it is deliberately not re-read here — a second call would be a
+  // second history event for the same fact. Decide *before* building the
+  // candidate record so the commentary (below) can fold in the change delta
+  // `decidePublish` already computed, rather than re-deriving it.
   const decision = decidePublish({ iso, metrics }, published, input.maxAgeDays);
 
   const candidate: Omit<ScorecardRunRecord, 'id'> = {
@@ -203,12 +238,12 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
   let prUrl: string | undefined;
   let record: ScorecardRunRecord = { ...candidate, id: iso };
   if (decision.decision === 'open-pr' && input.publishMode === 'pr') {
-    const published = await light.publishing.publishScorecardRun({
+    const opened = await light.publishing.publishScorecardRun({
       record: candidate,
       perPage: perPageSummary,
     });
-    prUrl = published.prUrl;
-    record = { ...candidate, id: published.id };
+    prUrl = opened.prUrl;
+    record = { ...candidate, id: opened.id };
   }
 
   // --- Step 5: always archive ----------------------------------------------

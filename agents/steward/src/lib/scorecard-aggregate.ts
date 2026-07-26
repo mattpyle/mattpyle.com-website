@@ -228,6 +228,96 @@ export interface PublishDecision {
   reason: string;
 }
 
+// ---------------------------------------------------------------------------
+// The audit-set guard (spec §5.4).
+// ---------------------------------------------------------------------------
+
+/**
+ * Pulls the page count out of a published run's `scope` string ("18 live
+ * pages" -> 18). `scope` is the only place the run-log records how many pages
+ * a run covered, so this is the comparison's only available input — and it is
+ * a string written by the workflow, not a schema field, so an unparseable one
+ * returns `undefined` and the guard skips rather than guessing. The two older
+ * seeded runs read "5 live page types", which parses to 5; that is fine and
+ * unused in practice, since only `runs[0]` is ever compared against.
+ */
+export function parsePageCount(scope: string | undefined): number | undefined {
+  if (!scope) return undefined;
+  const match = scope.match(/^\s*(\d+)\b/);
+  if (!match) return undefined;
+  return Number(match[1]);
+}
+
+export interface AuditSetGuardInput {
+  /** How many URLs this run is about to audit. */
+  resolvedCount: number;
+  /** The previous published run's page count, from `parsePageCount(scope)`. `undefined` -> nothing to compare against. */
+  previousCount: number | undefined;
+  /** `--urls` was passed: the operator chose this set deliberately, so the shrink check does not apply. */
+  overridden: boolean;
+  /** `--allow-shrink` was passed: a smaller set is expected (e.g. a post was unpublished). */
+  allowShrink: boolean;
+}
+
+export interface AuditSetGuardResult {
+  ok: boolean;
+  reason: string;
+}
+
+/**
+ * Refuses to audit fewer pages than the site is known to have (spec §5.4).
+ *
+ * Route selection is sitemap-driven, so today the audited set and the sitemap
+ * are identical **by construction** — which is precisely why a regression in
+ * `resolveAuditUrls` (a sitemap 404 handled too gently, a filter that drops a
+ * sub-sitemap, a changed `<loc>` shape) would be invisible: the run would
+ * audit three pages, find them all green, and publish four green metrics. The
+ * expensive failure is not a red Scorecard; it is a green one covering less
+ * than it claims.
+ *
+ * The overrides exist because a shrink can be legitimate — unpublishing a post
+ * is a real and correct reason for the count to drop. **A guard with no
+ * override gets disabled the first time it is wrong, and then it is gone for
+ * good**, so `--allow-shrink` is a deliberate part of the design, not a
+ * loophole.
+ *
+ * An **empty** set is failed unconditionally, past both overrides: a run that
+ * audits nothing has no legitimate form, and `--urls` can never produce one
+ * (the CLI drops empty entries, and an empty list falls back to the sitemap).
+ */
+export function checkAuditSet(input: AuditSetGuardInput): AuditSetGuardResult {
+  const { resolvedCount, previousCount, overridden, allowShrink } = input;
+
+  if (resolvedCount === 0) {
+    return { ok: false, reason: 'resolved audit set is empty — refusing to publish a Scorecard covering no pages' };
+  }
+
+  if (overridden) {
+    return { ok: true, reason: `explicit --urls override of ${resolvedCount} URL(s) — shrink check skipped` };
+  }
+
+  if (previousCount === undefined) {
+    return { ok: true, reason: `${resolvedCount} URL(s) resolved; no previous run page count to compare against` };
+  }
+
+  if (resolvedCount < previousCount) {
+    if (allowShrink) {
+      return {
+        ok: true,
+        reason: `${resolvedCount} URL(s) resolved, down from ${previousCount} — allowed by --allow-shrink`,
+      };
+    }
+    return {
+      ok: false,
+      reason:
+        `resolved audit set shrank: ${resolvedCount} URL(s) vs ${previousCount} in the previous published run. ` +
+        'If pages were genuinely unpublished, re-run with --allow-shrink; otherwise the sitemap resolution is broken.',
+    };
+  }
+
+  return { ok: true, reason: `${resolvedCount} URL(s) resolved (previous run: ${previousCount})` };
+}
+
 /** Performance is the one metric with lab variance; everything else is meant to be pinned (spec §6). */
 const PERFORMANCE_NOISE_THRESHOLD = 3;
 
