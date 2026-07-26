@@ -416,3 +416,71 @@ test('the audited set is sorted, whatever order the sitemap returned it in', asy
     ['https://www.mattpyle.com/', 'https://www.mattpyle.com/about/', 'https://www.mattpyle.com/writing/'],
   );
 });
+
+// ---------------------------------------------------------------------------
+// Spec §6's third publish trigger, end to end: a new page joins the site and
+// scores as well as every other one, so no metric moves. This is the exact
+// case that left `/scorecard` stating "18 tested pages" while the site had 19.
+// ---------------------------------------------------------------------------
+
+const PUBLISHED_GREEN_METRICS = [
+  { name: 'Accessibility', value: '100', maximum: '100', status: 'Pass' as const, description: '' },
+  { name: 'Performance', value: '98', maximum: '100', status: 'Pass' as const, description: '' },
+  { name: 'SEO', value: '100', maximum: '100', status: 'Pass' as const, description: '' },
+  { name: 'Agentic Browsing', value: '4', maximum: '4', status: 'Pass' as const, description: '' },
+];
+
+test('a new page opens a PR even though no metric moved', async () => {
+  const published: PublishedScorecard = {
+    iso: '2000-01-01',
+    scope: '18 live pages',
+    tools: ['Lighthouse 13.4', 'axe-core 4.12'],
+    pageCount: 18,
+    metrics: PUBLISHED_GREEN_METRICS,
+  };
+  const { activities, calls } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(19),
+    readPublishedScorecard: async () => published,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-scope-1',
+      taskQueue: QUEUE,
+      // A very large maxAgeDays proves staleness played no part: the only
+      // reason this publishes is the coverage change.
+      args: [baseInput({ maxAgeDays: 100_000 })],
+    }),
+  );
+
+  assert.equal(result.decision, 'open-pr');
+  assert.equal(result.reason, 'Coverage 18→19 pages');
+  assert.ok(calls.includes('publishScorecardRun'));
+  assert.equal(result.record.scope, '19 live pages');
+  assert.match(result.record.commentary, /Coverage rose from 18 to 19 pages/);
+  // Rule 7: the commentary must still read correctly forever.
+  assert.doesNotMatch(result.record.commentary, /\b(currently|latest|now|today|at present)\b/i);
+});
+
+test('an unchanged page count with unchanged metrics still no-ops', async () => {
+  const published: PublishedScorecard = {
+    iso: '2000-01-01',
+    scope: '19 live pages',
+    tools: ['Lighthouse 13.4', 'axe-core 4.12'],
+    pageCount: 19,
+    metrics: PUBLISHED_GREEN_METRICS,
+  };
+  const { activities, calls } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(19),
+    readPublishedScorecard: async () => published,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-scope-2',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000 })],
+    }),
+  );
+
+  assert.equal(result.decision, 'no-op');
+  assert.ok(!calls.includes('publishScorecardRun'));
+});

@@ -196,7 +196,15 @@ export async function readPublishedScorecard(): Promise<PublishedScorecard | und
   }
   const runs = JSON.parse(raw) as ScorecardRunRecord[];
   if (runs.length === 0) return undefined;
-  return { iso: runs[0].iso, metrics: runs[0].metrics, pageCount: parsePageCount(runs[0].scope) };
+  // `scope` and `tools` come back too: they are half the publish gate (§6's
+  // third trigger), not just display fields.
+  return {
+    iso: runs[0].iso,
+    metrics: runs[0].metrics,
+    scope: runs[0].scope,
+    tools: runs[0].tools,
+    pageCount: parsePageCount(runs[0].scope),
+  };
 }
 
 // ---------------------------------------------------------------------------
