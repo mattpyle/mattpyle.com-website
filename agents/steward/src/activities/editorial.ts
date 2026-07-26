@@ -385,7 +385,7 @@ export function mapClaimsResponse(
         file,
         line: p.line,
         excerpt: p.oldText.slice(0, 200),
-        evidence: `The model proposed replacing this with: "${p.newText}". Rewriting a claim the model flagged as overclaiming, unsupported, or contradictory is an editorial act, and the Steward never makes those automatically (design rule 1) — however small the edit. Decide this one yourself.`,
+        evidence: `The model proposed replacing this with: "${p.newText}". Rewriting a claim the model flagged as overclaiming, unsupported, or contradictory is an editorial act, and Steward never makes those automatically (design rule 1) — however small the edit. Decide this one yourself.`,
       });
       return;
     }
@@ -424,7 +424,7 @@ export function mapClaimsResponse(
       file,
       line: p.line,
       excerpt: p.oldText.slice(0, 200),
-      evidence: `The model proposed replacing this with: "${p.newText}". Editorial patches are limited to mechanical-class edits (<= 3 tokens, <= 20 characters) — anything larger is a prose rewrite, which the Steward never applies automatically.`,
+      evidence: `The model proposed replacing this with: "${p.newText}". Editorial patches are limited to mechanical-class edits (<= 3 tokens, <= 20 characters) — anything larger is a prose rewrite, which Steward never applies automatically.`,
     });
   });
 

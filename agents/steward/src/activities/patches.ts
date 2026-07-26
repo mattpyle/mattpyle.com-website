@@ -96,7 +96,7 @@ export async function applyPatchesActivity(input: ApplyPatchesInput): Promise<Ap
 
     const files = new Set(selected.map((p) => p.file));
     if (files.size > 1) {
-      throw new Error(`Patches span multiple files (${[...files].join(', ')}); the Steward edits one post at a time.`);
+      throw new Error(`Patches span multiple files (${[...files].join(', ')}); Steward edits one post at a time.`);
     }
     const file = selected[0].file;
     const abs = path.join(SITE_DIR, file);

@@ -6,7 +6,7 @@ import { Worker } from '@temporalio/worker';
 /**
  * Replay regression test (temporal-developer skill, testing.md § Replay Testing).
  *
- * This is the tripwire for the Steward's normal operating condition: reviews
+ * This is the tripwire for Steward's normal operating condition: reviews
  * park on `wf.condition` for as long as the human takes, so at almost any given
  * moment there is a workflow sitting mid-wait whose history was written by an
  * older version of `reviewPost`. If a code change alters the sequence of
@@ -72,7 +72,7 @@ import { Worker } from '@temporalio/worker';
  * The 1b fixture is therefore *kept*, not retired — it still guards the richer
  * signal/patch/rereview cycle. The 1c fixture below is added alongside it
  * because 1b covers a path where the build audit is skipped, and nothing would
- * otherwise guard the fan-out shape the Steward now takes by default.
+ * otherwise guard the fan-out shape Steward now takes by default.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));

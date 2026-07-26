@@ -705,7 +705,7 @@ test('a published post is refused outright', async () => {
 // Audit mode — reviewing already-published content.
 //
 // The distinguishing property is *absence*: no durable wait, no verdict, no
-// publish leg, and no path by which the Steward writes to a published file.
+// publish leg, and no path by which Steward writes to a published file.
 // These tests assert the absences, because an audit that quietly grew a way to
 // edit live content would still pass every gate-mode test in this file.
 // ---------------------------------------------------------------------------
@@ -744,7 +744,7 @@ test('audit mode: the gate-mode draft refusal is unchanged', async () => {
 
   await withWorker(activities, async () => {
     // Same published file, gate mode: still refused. Audit mode must widen what
-    // the Steward will review without loosening the gate by even a little.
+    // Steward will review without loosening the gate by even a little.
     const handle = await start('wf-audit-gate-still-refuses');
     await assert.rejects(handle.result(), (err: unknown) => {
       // `WorkflowFailedError`'s own message is the constant "Workflow execution

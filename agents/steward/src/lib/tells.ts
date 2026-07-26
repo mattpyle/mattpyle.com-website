@@ -67,7 +67,7 @@ export const VOICE_DRIVEN_TELLS: readonly TellCategory[] = [
  *
  * It is the one tell that is plainly a voice marker *and* plainly this author's
  * long-established habit — the site's published prose and every build log in
- * this project are dense with em dashes, predating the Steward entirely. So it
+ * this project are dense with em dashes, predating Steward entirely. So it
  * cannot honestly be called format (it is not the changelog template) and it
  * cannot honestly be called AI voice (it is Matt's). Assigning it to either
  * bucket would settle by fiat a question the study is supposed to be asking. It

@@ -156,7 +156,7 @@ export async function callRubric<T>(options: CallRubricOptions<T>): Promise<Call
 
 /**
  * The real Anthropic call. Kept behind the injectable `send` seam so every unit
- * test in this repo runs offline (spec §11: the Steward's tests must not touch
+ * test in this repo runs offline (spec §11: Steward's tests must not touch
  * the network).
  */
 function defaultSend(system: string) {

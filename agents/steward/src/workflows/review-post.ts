@@ -323,7 +323,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
     // gate into something that reviews live posts.
     if (mode === 'gate' && snapshot.frontmatter.draft !== true) {
       throw wf.ApplicationFailure.nonRetryable(
-        `${snapshot.file} is already published; the Steward only reviews drafts in gate mode. ` +
+        `${snapshot.file} is already published; Steward only reviews drafts in gate mode. ` +
           `To review published content, run an audit instead.`,
         'NotADraft',
       );
@@ -370,7 +370,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
 
     // Carried across a rereview deliberately. The spec says rereview "replaces
     // the working report", and it does — but `patchesApplied` is a record of
-    // what the Steward wrote to the human's file, and losing it on the very
+    // what Steward wrote to the human's file, and losing it on the very
     // signal the apply cycle requires would erase the only in-report evidence
     // that the edits happened at all.
     const patchesApplied = report?.human.patchesApplied;
@@ -401,7 +401,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
    * attempts are exhausted, having parked the workflow back on the durable wait
    * with an explanatory message.
    *
-   * **Exhaustion is the expected outcome, not the error case.** The Steward does
+   * **Exhaustion is the expected outcome, not the error case.** Steward does
    * not merge; a human does. Until they do, every attempt fails for a perfectly
    * good reason, and the workflow's job is to say so clearly and wait rather
    * than to fail.
@@ -466,7 +466,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       `PR open, awaiting merge: ${publishInfo!.prUrl}. ` +
       `Verification against production did not pass after ${VERIFY_MAX_ATTEMPTS} attempts ` +
       `(still failing: ${failed.join(', ') || 'none recorded'}). ` +
-      `This is the expected state until the PR is merged — the Steward never merges. ` +
+      `This is the expected state until the PR is merged — Steward never merges. ` +
       `Merge it, then send \`approve\` again to resume verification.`;
     reportPath = (await light.reporting.archiveReport(report!)).reportPath;
     return false;

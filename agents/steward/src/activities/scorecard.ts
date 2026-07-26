@@ -18,7 +18,7 @@ import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRec
 
 /**
  * The Scorecard system's activities (scorecard-audit-spec.md §4.3). A sibling
- * of the Steward's own activities, not a variant of them — see the spec §2
+ * of Steward's own activities, not a variant of them — see the spec §2
  * table for why `auditLiveUrl` must never be confused with
  * `buildAndAuditDraft`, even though both call the same `audit-engine.ts`.
  */

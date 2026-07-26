@@ -2,10 +2,10 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
-// The Steward (agents/steward/src/activities/frontmatter.ts) hand-transcribes
+// Steward (agents/steward/src/activities/frontmatter.ts) hand-transcribes
 // each collection's fields/enums/required-flags into its own RULES constant.
 // Changing a schema here (fields, enums, required flags) means updating that
-// RULES table in the same commit, or the Steward will false-block on — or
+// RULES table in the same commit, or Steward will false-block on — or
 // silently allow — a value this schema no longer agrees with.
 
 const writing = defineCollection({

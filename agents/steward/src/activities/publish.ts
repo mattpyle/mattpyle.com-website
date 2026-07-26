@@ -157,7 +157,7 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
   const lines: string[] = [];
   if (dryRun) {
     lines.push(
-      "> **DRY RUN — do not merge.** This PR exists to verify the Steward's publish mechanics and will be closed.",
+      "> **DRY RUN — do not merge.** This PR exists to verify Steward's publish mechanics and will be closed.",
       '',
     );
   }
@@ -174,7 +174,7 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
     '',
     '---',
     '',
-    '*Opened by the Steward. The Steward never merges — that is deliberately a human act.*',
+    '*Opened by Steward. Steward never merges — that is deliberately a human act.*',
   );
   return lines.join('\n');
 }
@@ -193,7 +193,7 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
  * Every step checks before acting, and the branch is reset to the base each run
  * so the same inputs always produce the same tree.
  *
- * **The Steward does not merge.** Merging is what triggers the production
+ * **Steward does not merge.** Merging is what triggers the production
  * deploy, and it is the human's act. This returns as soon as the PR is open.
  */
 export async function publishPost(input: PublishPostInput): Promise<PublishPostResult> {

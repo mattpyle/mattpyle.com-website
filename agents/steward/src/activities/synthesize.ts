@@ -96,7 +96,7 @@ function orderFindings(passes: PassResult[]): PassResult[] {
  *
  * **Overlapping-but-different patches are deliberately NOT merged.** Two passes
  * proposing different rewrites of the same span is a genuine disagreement, and
- * picking a winner would mean the Steward making an editorial choice on the
+ * picking a winner would mean Steward making an editorial choice on the
  * human's behalf (design rule 1). Both survive as separate patches; selecting
  * both fails safely, because `applyPatchesActivity`'s all-or-nothing exact-match
  * guard finds 0 matches for the second and writes nothing.
