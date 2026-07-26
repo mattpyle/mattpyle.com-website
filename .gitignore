@@ -19,10 +19,11 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Private project docs / agent tooling — not for the public repo
+# Private project docs / agent tooling — not for the public repo.
+# NOTE: these are enumerated, not globbed, so a NEW root-level private doc is
+# public by default until it is added here. The backlog moved into /docs/ (see below).
 /AGENTS.md
 CLAUDE.md
-backlog.md
 learnings.md
 changelog.md
 scoreboard.md
