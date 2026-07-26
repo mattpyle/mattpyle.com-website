@@ -8,6 +8,10 @@ import {
   type ReviewState,
   type ReviewStateResult,
 } from '../lib/report.js';
+// A pure string filter over `report.ts` types only — safe to import into the
+// workflow sandbox. See the module docblock for why the selection has to happen
+// here rather than inside the activity.
+import { selectEprimeFindings } from '../lib/eprime.js';
 
 // Queue names are duplicated here rather than imported from config.ts on
 // purpose: config.ts touches `node:path` and `process.env`, neither of which is
@@ -71,6 +75,21 @@ export interface ReviewPostInput {
    * Resolved by the caller from `ENABLE_AI_TELLS`, same as `skipBuildAudit`.
    */
   enableAiTells?: boolean;
+  /**
+   * Adds the `eprime-alternatives` pass after the fan-out (spec §8.6).
+   *
+   * In the input for the same design-rule-10 reason as every flag above, and the
+   * default matters more here than usual: this pass is **on** in `config.ts`,
+   * whereas `enableAiTells` is off. An absent field therefore has to resolve to
+   * `false`, not to the config default — `input.enableEprimeAlternatives ===
+   * true`, never `?? ENABLE_...`. Every history written before this field existed
+   * has no such command in it, and defaulting an old history to the *current*
+   * config value is precisely how a parked review gets sent down a branch it
+   * never took.
+   *
+   * Resolved by the caller from `ENABLE_EPRIME_ALTERNATIVES`.
+   */
+  enableEprimeAlternatives?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +162,15 @@ const light = {
     retry: { maximumAttempts: 3 },
   }),
   editorial: wf.proxyActivities<Pick<typeof activities, 'editorialPass'>>({
+    taskQueue: QUEUE_LIGHT,
+    startToCloseTimeout: '3 minutes',
+    retry: { maximumAttempts: 3, backoffCoefficient: 2 },
+  }),
+  // Same shape as `editorial` in the §7.4 table — it is the same kind of work
+  // (one LLM call, retried on a transient failure), just a different rubric.
+  // Kept as its own stub rather than widened into `editorial` so the retry entry
+  // is legible per activity rather than shared by name coincidence.
+  eprime: wf.proxyActivities<Pick<typeof activities, 'eprimeAlternativesPass'>>({
     taskQueue: QUEUE_LIGHT,
     startToCloseTimeout: '3 minutes',
     retry: { maximumAttempts: 3, backoffCoefficient: 2 },
@@ -367,6 +395,32 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
         ? [guard('ai_tells', () => light.editorial.editorialPass(snapshot.file, 'ai-tells'))]
         : []),
     ]);
+
+    // ---- eprime-alternatives: a dependent pass, run AFTER the fan-out --------
+    //
+    // This pass consumes Vale's output, so it cannot join the `Promise.all`
+    // above without creating a dependency inside a parallel fan-out. It is
+    // appended as a separate awaited step instead, for the same reason the
+    // ai-tells entry sits last in the array: **the fan-out's command order is
+    // the replay contract.** Adding an activity after the array leaves every
+    // recorded command sequence intact and simply appends one more; reordering
+    // or restructuring the array would not, and would strand every parked
+    // review. Do not "tidy" this into the fan-out.
+    //
+    // Skipped entirely when Vale found no E-Prime instances, so a post that does
+    // not need this makes no API call and costs nothing. That decision is
+    // derived from an activity *result already in history*, so it replays
+    // identically.
+    if (input.enableEprimeAlternatives === true) {
+      const eprimeFindings = selectEprimeFindings(passes);
+      if (eprimeFindings.length > 0) {
+        passes.push(
+          await guard('eprime_alternatives', () =>
+            light.eprime.eprimeAlternativesPass({ file: snapshot.file, eprimeFindings }),
+          ),
+        );
+      }
+    }
 
     // Carried across a rereview deliberately. The spec says rereview "replaces
     // the working report", and it does — but `patchesApplied` is a record of

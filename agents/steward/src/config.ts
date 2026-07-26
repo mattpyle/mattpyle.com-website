@@ -173,6 +173,23 @@ export const WEB_UI = 'http://localhost:8233';
 export const ENABLE_AI_TELLS = false;
 export const ENABLE_BUILD_AUDIT = true;
 /**
+ * The worked-alternatives pass over Vale's E-Prime instances (§8.6).
+ *
+ * **On by default, and deliberately not gated behind `--ai-tells`.** That flag
+ * guards a scorer whose pre-registered validation study failed; this is a
+ * different feature with a different purpose, and tying them together would make
+ * turning one off turn the other off too.
+ *
+ * Off costs nothing to reach for: a post with no E-Prime findings skips the pass
+ * without an API call regardless of this constant, so this exists for the case
+ * where the pass itself turns out to be unwanted rather than as a cost control.
+ *
+ * Resolved by the CLI into the workflow **input**, never read in the workflow —
+ * design rule 10. It decides whether an activity runs, so flipping it here must
+ * not rewrite the past for a review that is still parked.
+ */
+export const ENABLE_EPRIME_ALTERNATIVES = true;
+/**
  * Phase 2. Resolved by the CLI into the `approve` **signal payload**, not into
  * the workflow input — the publish decision is consumed after the durable wait,
  * so for an already-parked review the input is immutable and the decision has

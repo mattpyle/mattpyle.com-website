@@ -10,6 +10,7 @@ export const PassKind = z.enum([
   'build_audit',
   'claims_structure',
   'ai_tells',
+  'eprime_alternatives',
 ]);
 export type PassKind = z.infer<typeof PassKind>;
 

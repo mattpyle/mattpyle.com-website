@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import {
   ENABLE_AI_TELLS,
   ENABLE_BUILD_AUDIT,
+  ENABLE_EPRIME_ALTERNATIVES,
   ENABLE_PUBLISH_LEG,
   NAMESPACE,
   QUEUE_LIGHT,
@@ -223,6 +224,10 @@ program
           // run without a config change, which is what the validation study
           // needs (it must not flip a global while a review sits parked).
           enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
+          // Resolved here for the same reason, and read in the workflow as
+          // `=== true` rather than defaulted, so a history predating the field
+          // replays unchanged even though this config default is `true`.
+          enableEprimeAlternatives: ENABLE_EPRIME_ALTERNATIVES,
         },
       ],
     });
@@ -267,6 +272,7 @@ program
           mode: 'audit',
           skipBuildAudit: opts.skipBuildAudit === true || !ENABLE_BUILD_AUDIT,
           enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
+          enableEprimeAlternatives: ENABLE_EPRIME_ALTERNATIVES,
         },
       ],
     });
