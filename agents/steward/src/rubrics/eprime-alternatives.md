@@ -44,6 +44,17 @@ sentence imports your voice into their post, which is the opposite of the point.
 its punctuation. It must be text that actually appears on the line you cite. A
 paraphrase will be discarded.
 
+**Read your rewrite back before you return it.** Deleting a "to be" form very
+often leaves a fragment or a broken verb phrase: "It turned out to be a known
+issue" does not become "It turned out a known issue". If the sentence no longer
+parses as English, supply a real verb rather than dropping the sentence — the
+sentences worth fixing are usually the ones that need a verb supplied.
+
+**Keep the claim the author made.** Do not trade one assertion for a different
+one: "It is not overly complex" says something about complexity, and "It does not
+do much" says something else. Rewriting is allowed to change the emphasis and the
+rhythm. It is not allowed to change what the post commits to.
+
 **Never rewrite:** quoted material (anything inside quotation marks or a
 blockquote), code, inline code spans, headings, link URLs, frontmatter, or table
 syntax.
