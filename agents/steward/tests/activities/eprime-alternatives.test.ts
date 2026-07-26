@@ -294,6 +294,12 @@ test('a no-op suggestion is dropped rather than offered as an improvement', () =
   const mapped = mapEprimeAlternativesResponse(response, 'posts/known-good.md', EIGHT_LINE_POST);
 
   assert.equal(mapped.findings.length, 0);
+  // Counted rather than silently swallowed. Observed on every real run: the
+  // model pads its list with entries whose `suggestion` equals the `original`
+  // and whose reason says "no change needed here". Knowing how often it does
+  // that is the difference between "the model had two ideas" and "the model had
+  // two ideas and three non-ideas".
+  assert.equal(mapped.rejectedNoOp, 1);
 });
 
 test('zero suggestions is a valid, clean answer', () => {

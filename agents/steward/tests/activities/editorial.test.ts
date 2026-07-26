@@ -323,6 +323,34 @@ test('strips markdown fences the model adds despite instructions', () => {
   assert.equal(stripFences('  {"a":1}  '), '{"a":1}');
 });
 
+test('a model that thinks aloud between two fenced blocks yields the last one', () => {
+  // Observed live on the first real eprime-alternatives run: the model answered,
+  // wrote "Wait, let me reconsider properly.", and answered again. The
+  // whole-string fence pattern matched neither block, so `JSON.parse` died on
+  // the prose and burned the one retry — which came back with a worse answer.
+  // The reconsidered block is the one the model meant, so the LAST wins.
+  const raw = [
+    '```json',
+    '{"a":1}',
+    '```',
+    '',
+    'Wait, let me reconsider properly.',
+    '',
+    '```json',
+    '{"a":2}',
+    '```',
+  ].join('\n');
+  assert.equal(stripFences(raw), '{"a":2}');
+});
+
+test('a single fenced block with prose around it is still extracted', () => {
+  assert.equal(stripFences('Here is the JSON:\n\n```json\n{"a":1}\n```\n\nHope that helps.'), '{"a":1}');
+});
+
+test('unfenced text is returned untouched, so a plain JSON response is unaffected', () => {
+  assert.equal(stripFences('{"a":1, "b":"```"}'), '{"a":1, "b":"```"}');
+});
+
 test('a fenced but otherwise valid response is accepted without a retry', async () => {
   const rubric = await loadRubric('claims-structure');
   let calls = 0;

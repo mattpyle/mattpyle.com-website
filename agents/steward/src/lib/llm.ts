@@ -65,11 +65,33 @@ export function withLineNumbers(text: string): string {
   return lines.map((line, i) => `${String(i + 1).padStart(width, ' ')}| ${line}`).join('\n');
 }
 
-/** Strips ```json fences, which models add despite being told not to. */
+/** Any fenced block anywhere in the response. Global, so the last one can win. */
+const FENCED_BLOCK = /```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n?```/g;
+
+/**
+ * Strips ```json fences, which models add despite being told not to.
+ *
+ * The usual case is a response that is entirely one fenced block. **When there
+ * is more than one, the LAST wins.** Observed live on the first real
+ * `eprime-alternatives` run: the model emitted a complete answer, then wrote
+ * "Wait, let me reconsider properly.", then emitted a second, better one. The
+ * previous whole-string pattern was anchored `^…$` and so matched from the first
+ * fence to the last, capturing the prose and the inner fences along with it —
+ * `JSON.parse` died on that, and the single in-activity retry came back with a
+ * *worse* answer than the one already sitting in the discarded response. A model
+ * that reconsiders means the reconsidered block, so the last one is the answer.
+ *
+ * Scanning for blocks rather than special-casing the whole-string shape is what
+ * fixes it: the common case is simply "exactly one block found".
+ *
+ * A response with no fence at all is returned untouched, so a plain JSON reply —
+ * including one containing a literal ``` inside a string — is unaffected.
+ */
 export function stripFences(raw: string): string {
   const trimmed = raw.trim();
-  const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n?```$/.exec(trimmed);
-  return (fenced ? fenced[1] : trimmed).trim();
+  const blocks = [...trimmed.matchAll(FENCED_BLOCK)];
+  if (blocks.length) return blocks[blocks.length - 1][1].trim();
+  return trimmed;
 }
 
 /**

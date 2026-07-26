@@ -378,6 +378,15 @@ export interface EprimeAlternativesMapped {
   rejectedWorseTells: number;
   /** Rejected because the quoted original is not in the file where it was cited. */
   rejectedNotFound: number;
+  /**
+   * Dropped because the "rewrite" was byte-identical to the original.
+   *
+   * Counted rather than silently swallowed, because the model does this
+   * routinely: it pads its list with entries whose `reason` reads "no change
+   * needed here; leaving as-is". Without the count, a run that produced two real
+   * ideas and three non-ideas is indistinguishable from one that produced two.
+   */
+  rejectedNoOp: number;
   droppedPatches: number;
 }
 
@@ -426,6 +435,7 @@ export function mapEprimeAlternativesResponse(
   const kept: { line: number; original: string; suggestion: string; reason: string }[] = [];
   let rejectedWorseTells = 0;
   let rejectedNotFound = 0;
+  let rejectedNoOp = 0;
 
   for (const s of response.suggestions) {
     const original = s.original.trim();
@@ -434,7 +444,10 @@ export function mapEprimeAlternativesResponse(
     // A no-op is dropped outright, not offered. Same call as the identity-patch
     // rule in `mapClaimsResponse`: presenting an author with a "rewrite" that
     // changes nothing is worse than presenting none.
-    if (!suggestion || suggestion === original) continue;
+    if (!suggestion || suggestion === original) {
+      rejectedNoOp += 1;
+      continue;
+    }
 
     // Guarantee 3 — the original has to exist where it was said to exist.
     const line = locateOriginal(lines, s.line, original);
@@ -480,6 +493,7 @@ export function mapEprimeAlternativesResponse(
     capped,
     rejectedWorseTells,
     rejectedNotFound,
+    rejectedNoOp,
     droppedPatches: response.patches.length,
   };
 }
@@ -533,6 +547,7 @@ export async function eprimeAlternativesPass(
       capped: result.mapped.capped,
       rejectedWorseTells: result.mapped.rejectedWorseTells,
       rejectedNotFound: result.mapped.rejectedNotFound,
+      rejectedNoOp: result.mapped.rejectedNoOp,
     },
     'eprime-alternatives pass complete',
   );
@@ -557,6 +572,7 @@ export async function eprimeAlternativesPass(
       suggestionsCapped: result.mapped.capped,
       rejectedWorseTells: result.mapped.rejectedWorseTells,
       rejectedNotFound: result.mapped.rejectedNotFound,
+      rejectedNoOp: result.mapped.rejectedNoOp,
       droppedPatches: result.mapped.droppedPatches,
     },
   };
