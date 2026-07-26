@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import {
   ENABLE_AI_TELLS,
   ENABLE_BUILD_AUDIT,
+  ENABLE_EPRIME_ALTERNATIVES,
   ENABLE_PUBLISH_LEG,
   NAMESPACE,
   QUEUE_LIGHT,
@@ -223,6 +224,10 @@ program
           // run without a config change, which is what the validation study
           // needs (it must not flip a global while a review sits parked).
           enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
+          // Resolved here for the same reason, and read in the workflow as
+          // `=== true` rather than defaulted, so a history predating the field
+          // replays unchanged even though this config default is `true`.
+          enableEprimeAlternatives: ENABLE_EPRIME_ALTERNATIVES,
         },
       ],
     });
@@ -267,6 +272,7 @@ program
           mode: 'audit',
           skipBuildAudit: opts.skipBuildAudit === true || !ENABLE_BUILD_AUDIT,
           enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
+          enableEprimeAlternatives: ENABLE_EPRIME_ALTERNATIVES,
         },
       ],
     });
@@ -741,14 +747,14 @@ program
 program
   .command('dict-add')
   .argument('<word>')
-  .description('Add a word to the Steward project dictionary (kept sorted, deduplicated)')
+  .description("Add a word to Steward's project dictionary (kept sorted, deduplicated)")
   .action(async (word: string) => {
     const { addWord } = await import('./lib/dictionary.js');
     const result = await addWord(word);
     console.log('');
     console.log(
       result.added
-        ? `  Added "${result.word}" to the Steward dictionary.`
+        ? `  Added "${result.word}" to Steward's dictionary.`
         : `  "${result.word}" is already in the dictionary — nothing to do.`,
     );
     console.log(`  ${result.configPath}`);
@@ -826,7 +832,7 @@ program
     // applied either way — but "signal sent" followed by silence is a terrible
     // way to learn that. An audit's patches are suggestions about content that
     // is already live; acting on them is a git operation the human performs,
-    // not something the Steward does behind an approve.
+    // not something Steward does behind an approve.
     const auditedReport = await findAuditedReport(c, slug);
     if (auditedReport) {
       fail(

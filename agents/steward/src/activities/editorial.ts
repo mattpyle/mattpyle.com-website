@@ -5,7 +5,7 @@ import { SITE_DIR } from '../config.js';
 import { LLM_SETTINGS, callRubric, loadRubric, withLineNumbers, type RubricSend } from '../lib/llm.js';
 import type { Finding, PassKind, PassResult, PatchProposal, Verdict } from '../lib/report.js';
 import { worstVerdict } from '../lib/report.js';
-import { timed } from '../lib/logger.js';
+import { log, timed } from '../lib/logger.js';
 import { TellCategory, TELL_CATEGORIES } from '../lib/tells.js';
 
 // ---------------------------------------------------------------------------
@@ -278,6 +278,308 @@ export function clampScore(score: number): number {
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The eprime-alternatives pass.
+//
+// Vale's `write-good.E-Prime` rule fires mechanically on every "to be" form —
+// 57 times on one real post. That count teaches nothing, because the rule cannot
+// tell the sentence that would genuinely be stronger without it from the great
+// majority that would not. This pass does the half a linter cannot: it hands the
+// mechanically-found instances to the model and asks it to SELECT the few worth
+// rewriting, which is the same division of labour `lib/tells.ts` states as a
+// rule — anything mechanically computable is computed in code and handed to the
+// model as input, never asked of the model.
+//
+// Advisory only, and structurally incapable of being anything else: no
+// `PatchProposal` is ever constructed here, so nothing from this pass can reach
+// `steward apply`. A prose rewrite is not a mechanical fix (design rule 1), and
+// the point of the exercise is a human reading five worked examples and deciding
+// — not a bulk accept.
+// ---------------------------------------------------------------------------
+
+export const EprimeSuggestion = z.object({
+  line: z.number(),
+  original: z.string(),
+  suggestion: z.string(),
+  reason: z.string(),
+});
+
+export const EprimeAlternativesResponse = z.object({
+  // Defaulted so a model that returns `{}` for a post it found nothing in is
+  // treated as having answered "none", which the rubric says is correct.
+  suggestions: z.array(EprimeSuggestion).default([]),
+  /**
+   * Accepted and discarded, for the same reason `AiTellsResponse` accepts it:
+   * Phase 1b established that the model's failure mode is over-eagerness to
+   * convert a judgment into a patch, and failing validation would throw away a
+   * good set of suggestions along with the unwanted patches.
+   */
+  patches: z.array(z.unknown()).default([]),
+});
+export type EprimeAlternativesResponse = z.infer<typeof EprimeAlternativesResponse>;
+
+/** At most this many suggestions reach the report. Enforced here, not in the rubric. */
+export const EPRIME_MAX_SUGGESTIONS = 5;
+
+/** How many lines either side of a flagged line go into the payload. */
+const EPRIME_CONTEXT_LINES = 1;
+
+/**
+ * Builds the model's payload: the flagged lines plus one line of context each,
+ * line-numbered with the *file's* real numbers, with skipped regions elided.
+ *
+ * **Why not the whole post.** Every other LLM pass sends the entire file because
+ * every other LLM pass has to read the whole thing to do its job. This one does
+ * not: the instances have already been found, and the question asked is a local
+ * one about each of them. Sending 57 flagged lines with context instead of a
+ * 3,000-word post is cheaper and keeps the model on the judgment being asked for.
+ *
+ * "One sentence of context" from the design note is implemented as one *line*
+ * either side. Markdown here is line-addressed — Vale cites lines, `Finding`
+ * carries a line, and `withLineNumbers` is line-based — so a sentence-splitting
+ * pass would introduce a second, disagreeing notion of position for no gain.
+ *
+ * Numbering comes from `withLineNumbers` over the *complete* file, so the width
+ * and the values match what every other pass cites, and the model copies a number
+ * it can see rather than counting.
+ */
+export function buildEprimePayload(text: string, findings: Finding[]): string {
+  const numbered = withLineNumbers(text).split('\n');
+
+  const wanted = new Set<number>();
+  for (const f of findings) {
+    if (typeof f.line !== 'number') continue;
+    for (let l = f.line - EPRIME_CONTEXT_LINES; l <= f.line + EPRIME_CONTEXT_LINES; l++) {
+      if (l >= 1 && l <= numbered.length) wanted.add(l);
+    }
+  }
+
+  const lines = [...wanted].sort((a, b) => a - b);
+  const out: string[] = [];
+  let previous = 0;
+  for (const line of lines) {
+    // A gap is marked rather than silently closed: two adjacent excerpt lines
+    // that are really 40 lines apart would otherwise read as one passage, and
+    // the model would judge them as continuous prose.
+    if (previous && line > previous + 1) out.push('...');
+    out.push(numbered[line - 1]);
+    previous = line;
+  }
+  return out.join('\n');
+}
+
+export interface EprimeAlternativesMapped {
+  findings: Finding[];
+  /** How many the model returned, before any gate. */
+  returned: number;
+  /** How many survivors were discarded purely by the cap. */
+  capped: number;
+  /** Rejected because the rewrite scored worse on the deterministic tell counters. */
+  rejectedWorseTells: number;
+  /** Rejected because the quoted original is not in the file where it was cited. */
+  rejectedNotFound: number;
+  /**
+   * Dropped because the "rewrite" was byte-identical to the original.
+   *
+   * Counted rather than silently swallowed, because the model does this
+   * routinely: it pads its list with entries whose `reason` reads "no change
+   * needed here; leaving as-is". Without the count, a run that produced two real
+   * ideas and three non-ideas is indistinguishable from one that produced two.
+   */
+  rejectedNoOp: number;
+  droppedPatches: number;
+}
+
+/**
+ * Locates a quoted original in the file, near the line the model cited.
+ *
+ * Returns the real 1-based line, or `null` if the text is not there. **A
+ * hallucinated excerpt must never reach the report** — the finding's whole value
+ * is that the author can look at the cited line and see the sentence being
+ * discussed, and one invented quotation destroys trust in all five.
+ *
+ * The ±1 tolerance exists because the payload has gaps in it: the model is
+ * copying numbers out of an elided excerpt rather than reading a continuous
+ * document, which is a slightly easier place to be off by one than the other
+ * passes are in. Drift is *re-anchored*, never accepted on trust — the returned
+ * line is always one where the text genuinely appears.
+ */
+function locateOriginal(lines: string[], citedLine: number, original: string): number | null {
+  const needle = original.trim();
+  if (!needle) return null;
+  for (const offset of [0, -1, 1]) {
+    const candidate = citedLine + offset;
+    if (candidate < 1 || candidate > lines.length) continue;
+    if (lines[candidate - 1].includes(needle)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Maps an eprime-alternatives response onto findings, applying the three
+ * code-side guarantees.
+ *
+ * **The gates run before the cap, deliberately.** Truncating first and then
+ * gating would let three rejected suggestions eat three of the five slots and
+ * hand back two, which reads as "the model had little to say" when what actually
+ * happened is that it said several worse things first. Gate, then take the best
+ * five that survived: the cap is a promise about what the author is asked to
+ * read, not a promise about what the model was allowed to say.
+ */
+export function mapEprimeAlternativesResponse(
+  response: EprimeAlternativesResponse,
+  file: string,
+  text: string,
+): EprimeAlternativesMapped {
+  const lines = text.split('\n');
+  const kept: { line: number; original: string; suggestion: string; reason: string }[] = [];
+  let rejectedWorseTells = 0;
+  let rejectedNotFound = 0;
+  let rejectedNoOp = 0;
+
+  for (const s of response.suggestions) {
+    const original = s.original.trim();
+    const suggestion = s.suggestion.trim();
+
+    // A no-op is dropped outright, not offered. Same call as the identity-patch
+    // rule in `mapClaimsResponse`: presenting an author with a "rewrite" that
+    // changes nothing is worse than presenting none.
+    if (!suggestion || suggestion === original) {
+      rejectedNoOp += 1;
+      continue;
+    }
+
+    // Guarantee 3 — the original has to exist where it was said to exist.
+    const line = locateOriginal(lines, s.line, original);
+    if (line === null) {
+      rejectedNotFound += 1;
+      continue;
+    }
+
+    // Guarantee 2 — the tell gate. Like for like: the replaced span against the
+    // suggested span, never whole documents, because a document-level comparison
+    // would drown a one-sentence change in the tells already present elsewhere.
+    // This is the guard against the failure mode the rubric is only *asked* to
+    // avoid, and the funny one is real: a model rewriting prose to sound less
+    // like an LLM by swapping `is` for an em dash.
+    if (computeDeterministicTells(suggestion).length > computeDeterministicTells(original).length) {
+      rejectedWorseTells += 1;
+      continue;
+    }
+
+    kept.push({ line, original, suggestion, reason: s.reason.trim() });
+  }
+
+  // Guarantee 1 — the cap, in code. A rubric instruction is a request.
+  const capped = Math.max(0, kept.length - EPRIME_MAX_SUGGESTIONS);
+  const surviving = kept.slice(0, EPRIME_MAX_SUGGESTIONS);
+
+  const findings: Finding[] = surviving.map((s, i) => ({
+    id: `eprime-alt-${i + 1}`,
+    pass: 'eprime_alternatives',
+    // Clamp 1, applied at the mapping site like every other editorial pass. This
+    // one is pure taste, so it could never be anything else.
+    severity: clampSeverity('flag'),
+    message: `E-Prime alternative: ${s.reason}`,
+    file,
+    line: s.line,
+    excerpt: s.original.slice(0, 200),
+    evidence: `Suggested rewrite: "${s.suggestion}". Advisory only; this is your call, and nothing here can be applied automatically.`,
+  }));
+
+  return {
+    findings,
+    returned: response.suggestions.length,
+    capped,
+    rejectedWorseTells,
+    rejectedNotFound,
+    rejectedNoOp,
+    droppedPatches: response.patches.length,
+  };
+}
+
+export interface EprimeAlternativesInput {
+  /** Repo-relative path to the post, as every other pass names it. */
+  file: string;
+  /** Vale's `write-good.E-Prime` findings, selected by `lib/eprime.ts`. */
+  eprimeFindings: Finding[];
+}
+
+/**
+ * The `eprime-alternatives` pass.
+ *
+ * Reads the file itself rather than taking its text as an argument, exactly as
+ * `editorialPass` does: the post would otherwise be serialised into the workflow
+ * history twice, once as an activity input and once as a result, for no benefit.
+ * The bytes are the same bytes — `snapshotDraft` pinned `contentSha256` at the
+ * top of the fan-out and design rule 2 refuses an approve if they change.
+ *
+ * Returns `pass` when nothing survived the gates, which is a real and common
+ * answer: a post with no sentence worth rewriting has no findings to show.
+ */
+export async function eprimeAlternativesPass(
+  input: EprimeAlternativesInput,
+  options: EditorialPassOptions = {},
+): Promise<PassResult> {
+  const { result, startedAt, durationMs } = await timed('eprimeAlternativesPass', async () => {
+    const rubric = await loadRubric('eprime-alternatives');
+    const text = await fs.readFile(path.join(SITE_DIR, input.file), 'utf8');
+
+    const { data, attempts } = await callRubric({
+      rubric,
+      userContent: buildEprimePayload(text, input.eprimeFindings),
+      schema: EprimeAlternativesResponse,
+      send: options.send,
+    });
+
+    return { mapped: mapEprimeAlternativesResponse(data, input.file, text), rubric, attempts };
+  });
+
+  // Logged so it is possible to tell whether the gates do anything at all. A
+  // tell gate that has never rejected anything is either unnecessary or broken,
+  // and those two look identical from the report.
+  log.info(
+    {
+      file: input.file,
+      eprimeInstances: input.eprimeFindings.length,
+      returned: result.mapped.returned,
+      kept: result.mapped.findings.length,
+      capped: result.mapped.capped,
+      rejectedWorseTells: result.mapped.rejectedWorseTells,
+      rejectedNotFound: result.mapped.rejectedNotFound,
+      rejectedNoOp: result.mapped.rejectedNoOp,
+    },
+    'eprime-alternatives pass complete',
+  );
+
+  return {
+    pass: 'eprime_alternatives',
+    verdict: worstVerdict(result.mapped.findings.map((f) => f.severity)),
+    findings: result.mapped.findings,
+    // Never a patch, and not by clamping: none is constructed anywhere above.
+    patches: [],
+    startedAt,
+    durationMs,
+    rubric: {
+      path: result.rubric.path,
+      sha256: result.rubric.sha256,
+      model: LLM_SETTINGS.model,
+    },
+    metrics: {
+      validationAttempts: result.attempts,
+      eprimeInstances: input.eprimeFindings.length,
+      suggestionsReturned: result.mapped.returned,
+      suggestionsCapped: result.mapped.capped,
+      rejectedWorseTells: result.mapped.rejectedWorseTells,
+      rejectedNotFound: result.mapped.rejectedNotFound,
+      rejectedNoOp: result.mapped.rejectedNoOp,
+      droppedPatches: result.mapped.droppedPatches,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+
 const RUBRIC_TO_PASS: Record<string, PassKind> = {
   'claims-structure': 'claims_structure',
   'ai-tells': 'ai_tells',
@@ -385,7 +687,7 @@ export function mapClaimsResponse(
         file,
         line: p.line,
         excerpt: p.oldText.slice(0, 200),
-        evidence: `The model proposed replacing this with: "${p.newText}". Rewriting a claim the model flagged as overclaiming, unsupported, or contradictory is an editorial act, and the Steward never makes those automatically (design rule 1) — however small the edit. Decide this one yourself.`,
+        evidence: `The model proposed replacing this with: "${p.newText}". Rewriting a claim the model flagged as overclaiming, unsupported, or contradictory is an editorial act, and Steward never makes those automatically (design rule 1) — however small the edit. Decide this one yourself.`,
       });
       return;
     }
@@ -424,7 +726,7 @@ export function mapClaimsResponse(
       file,
       line: p.line,
       excerpt: p.oldText.slice(0, 200),
-      evidence: `The model proposed replacing this with: "${p.newText}". Editorial patches are limited to mechanical-class edits (<= 3 tokens, <= 20 characters) — anything larger is a prose rewrite, which the Steward never applies automatically.`,
+      evidence: `The model proposed replacing this with: "${p.newText}". Editorial patches are limited to mechanical-class edits (<= 3 tokens, <= 20 characters) — anything larger is a prose rewrite, which Steward never applies automatically.`,
     });
   });
 

@@ -36,7 +36,7 @@ test('densities are per 100 words, not per file', () => {
   assert.equal(long.tellTotalPer100, 0.5);
 });
 
-test('the voice aggregate excludes format tells and the unclassified one', () => {
+test('the voice aggregate excludes format tells and includes em dashes', () => {
   const summary = summariseTells(
     counts({
       // voice-driven
@@ -45,18 +45,21 @@ test('the voice aggregate excludes format tells and the unclassified one', () =>
       // format-driven — must not reach the voice aggregate
       UNIFORM_RHYTHM: 4,
       RULE_OF_THREE: 4,
-      // unclassified — must reach NEITHER aggregate
+      // Voice-driven as of 2026-07-25. It sat outside both aggregates while the
+      // repo believed em dashes were the author's own habit; he says otherwise
+      // and the corpus agrees, so an em dash here is a generator artifact.
       EM_DASH_DENSITY: 10,
     }),
     100,
   );
 
-  assert.equal(summary.voiceTellsPer100, 3, 'voice aggregate picked up non-voice tells');
-  assert.equal(summary.formatTellsPer100, 8, 'format aggregate is wrong');
-  // The total still counts everything, including the unclassified tell.
+  assert.equal(summary.voiceTellsPer100, 13, 'voice aggregate is wrong');
+  assert.equal(summary.formatTellsPer100, 8, 'format aggregate picked up voice tells');
   assert.equal(summary.tellTotalPer100, 21);
-  // ...which means the two aggregates deliberately do not sum to the total.
-  assert.notEqual(
+  // With nothing unclassified, the two aggregates now account for every tell.
+  // This is the assertion that fails loudly if a future tell is added to the
+  // enum and to neither bucket.
+  assert.equal(
     (summary.voiceTellsPer100 ?? 0) + (summary.formatTellsPer100 ?? 0),
     summary.tellTotalPer100,
   );

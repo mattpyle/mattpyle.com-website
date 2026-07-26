@@ -12,7 +12,7 @@ export interface RunResult {
 }
 
 /**
- * The Steward's only process-spawning surface (spec §8, general rules).
+ * Steward's only process-spawning surface (spec §8, general rules).
  *
  * Deliberately `node:child_process.execFile` rather than `execa`: the spec named
  * execa for its Windows-safe argument handling, but `execFile` already passes
@@ -127,7 +127,7 @@ export function valeBinary(): string {
   return path.join(STEWARD_DIR, 'bin', process.platform === 'win32' ? 'vale.exe' : 'vale');
 }
 
-/** Absolute path to the Steward's Vale config directory. */
+/** Absolute path to Steward's Vale config directory. */
 export function valeConfigDir(): string {
   return path.join(STEWARD_DIR, 'vale');
 }

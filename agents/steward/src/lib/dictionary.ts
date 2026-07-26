@@ -7,8 +7,8 @@ import { CSPELL_CONFIG } from '../config.js';
  *
  * Since Phase 2 Part A this is the dictionary the site's `npm run spellcheck`
  * uses too, so a `dict-add` now teaches both consumers at once. That is the
- * point: the previous arrangement let the Steward accept a word the site's CI
- * still flagged, which meant the Steward could publish a post that turned the
+ * point: the previous arrangement let Steward accept a word the site's CI
+ * still flagged, which meant Steward could publish a post that turned the
  * repo red.
  *
  * **Scope of the sort.** "Kept sorted and deduplicated" is applied *within a
@@ -21,7 +21,7 @@ import { CSPELL_CONFIG } from '../config.js';
  * words land together, sorted among themselves, visibly distinct from the
  * curated ones.
  *
- * The human remains the approver: the Steward only ever *proposes* a dict-add in
+ * The human remains the approver: Steward only ever *proposes* a dict-add in
  * a report, and this runs when a human types the verb.
  */
 

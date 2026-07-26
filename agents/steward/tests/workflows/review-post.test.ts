@@ -73,6 +73,10 @@ interface MockOverrides {
   runVale?: () => Promise<PassResult>;
   checkFrontmatter?: () => Promise<PassResult>;
   editorialPass?: () => Promise<PassResult>;
+  eprimeAlternativesPass?: (input: {
+    file: string;
+    eprimeFindings: { id: string }[];
+  }) => Promise<PassResult>;
   applyPatchesActivity?: (
     input: ApplyPatchesInput,
   ) => Promise<{ applied: string[]; file: string; contentSha256: string }>;
@@ -144,6 +148,12 @@ function mockActivities(overrides: MockOverrides = {}) {
       overrides.checkFrontmatter ?? (async () => passResult({ pass: 'frontmatter' })),
     editorialPass:
       overrides.editorialPass ?? (async () => passResult({ pass: 'claims_structure' })),
+    eprimeAlternativesPass:
+      overrides.eprimeAlternativesPass ??
+      (async (input: { file: string; eprimeFindings: { id: string }[] }) => {
+        calls.push(`eprimeAlternativesPass:${input.eprimeFindings.length}`);
+        return passResult({ pass: 'eprime_alternatives', verdict: 'flag' });
+      }),
     applyPatchesActivity:
       overrides.applyPatchesActivity ??
       (async (input: ApplyPatchesInput) => ({
@@ -705,7 +715,7 @@ test('a published post is refused outright', async () => {
 // Audit mode — reviewing already-published content.
 //
 // The distinguishing property is *absence*: no durable wait, no verdict, no
-// publish leg, and no path by which the Steward writes to a published file.
+// publish leg, and no path by which Steward writes to a published file.
 // These tests assert the absences, because an audit that quietly grew a way to
 // edit live content would still pass every gate-mode test in this file.
 // ---------------------------------------------------------------------------
@@ -744,7 +754,7 @@ test('audit mode: the gate-mode draft refusal is unchanged', async () => {
 
   await withWorker(activities, async () => {
     // Same published file, gate mode: still refused. Audit mode must widen what
-    // the Steward will review without loosening the gate by even a little.
+    // Steward will review without loosening the gate by even a little.
     const handle = await start('wf-audit-gate-still-refuses');
     await assert.rejects(handle.result(), (err: unknown) => {
       // `WorkflowFailedError`'s own message is the constant "Workflow execution
@@ -999,5 +1009,139 @@ test('a failing PR check parks immediately instead of polling production for 15 
     // And it stopped early rather than burning all ten attempts.
     const verifyCalls = calls.filter((c) => c === 'verifyDeploy').length;
     assert.ok(verifyCalls < 10, `expected an early stop, got ${verifyCalls} verifyDeploy calls`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The eprime-alternatives pass — a dependent step appended AFTER the fan-out.
+// ---------------------------------------------------------------------------
+
+/** A Vale pass carrying `n` E-Prime findings plus one unrelated rule. */
+function valePassWithEprime(n: number): PassResult {
+  const findings = [
+    ...Array.from({ length: n }, (_, i) => ({
+      id: `vale-e${i + 1}`,
+      pass: 'vale' as const,
+      severity: 'flag' as const,
+      message: 'write-good.E-Prime (suggestion): try to avoid "was"',
+      file: 'src/content/writing/fixture-post.md',
+      line: i + 10,
+    })),
+    {
+      id: 'vale-w1',
+      pass: 'vale' as const,
+      severity: 'flag' as const,
+      message: 'write-good.Weasel (suggestion): "clearly" is a weasel word',
+      file: 'src/content/writing/fixture-post.md',
+      line: 5,
+    },
+  ];
+  return passResult({ pass: 'vale', verdict: 'flag', findings });
+}
+
+function startWithEprime(id: string, enabled: boolean) {
+  return env.client.workflow.start(reviewPost, {
+    workflowId: id,
+    taskQueue: QUEUE,
+    args: [
+      {
+        slug: 'fixture-post',
+        collection: 'writing' as const,
+        skipBuildAudit: true,
+        enableEprimeAlternatives: enabled,
+      },
+    ],
+  });
+}
+
+test('the eprime pass runs after the fan-out and receives only the E-Prime findings', async () => {
+  const { activities, calls, archived } = mockActivities({
+    runVale: async () => valePassWithEprime(3),
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await startWithEprime('wf-eprime-runs', true);
+    await waitForState(handle, 'awaiting_verdict');
+
+    // Three E-Prime findings were handed over; the Weasel finding was not.
+    assert.ok(
+      calls.includes('eprimeAlternativesPass:3'),
+      `expected the pass to receive 3 findings, got calls: ${calls.join(', ')}`,
+    );
+    const report = archived.at(-1)!;
+    assert.ok(report.passes.some((p) => p.pass === 'eprime_alternatives'));
+    // Appended last, after every fan-out pass — the order that keeps existing
+    // histories replayable.
+    assert.equal(report.passes.at(-1)!.pass, 'eprime_alternatives');
+  });
+});
+
+test('a post with no E-Prime findings skips the pass entirely rather than calling the API', async () => {
+  // The default `runVale` mock returns a clean pass. Skipping here is what makes
+  // the feature free for a post that does not need it.
+  const { activities, calls, archived } = mockActivities();
+
+  await withWorker(activities, async () => {
+    const handle = await startWithEprime('wf-eprime-skipped', true);
+    await waitForState(handle, 'awaiting_verdict');
+
+    assert.ok(
+      !calls.some((c) => c.startsWith('eprimeAlternativesPass')),
+      `the pass must not run without E-Prime findings; calls: ${calls.join(', ')}`,
+    );
+    assert.ok(!archived.at(-1)!.passes.some((p) => p.pass === 'eprime_alternatives'));
+  });
+});
+
+test('an input predating the field never runs the pass, whatever the config default says', async () => {
+  // The replay guarantee, asserted directly. `ENABLE_EPRIME_ALTERNATIVES` is
+  // `true`, so a workflow that defaulted the absent field to the config value
+  // would emit a command that no pre-existing history contains — stranding every
+  // parked review. `=== true` in the workflow is what prevents that, and `start`
+  // deliberately passes no such field.
+  const { activities, calls } = mockActivities({ runVale: async () => valePassWithEprime(3) });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-eprime-legacy-input');
+    await waitForState(handle, 'awaiting_verdict');
+    assert.ok(
+      !calls.some((c) => c.startsWith('eprimeAlternativesPass')),
+      `calls: ${calls.join(', ')}`,
+    );
+  });
+});
+
+test('the eprime pass never contributes a patch', async () => {
+  const { activities, archived } = mockActivities({
+    runVale: async () => valePassWithEprime(2),
+    eprimeAlternativesPass: async () =>
+      passResult({
+        pass: 'eprime_alternatives',
+        verdict: 'flag',
+        findings: [
+          {
+            id: 'eprime-alt-1',
+            pass: 'eprime_alternatives',
+            severity: 'flag',
+            message: 'E-Prime alternative: names the actor.',
+            file: 'src/content/writing/fixture-post.md',
+            line: 10,
+            excerpt: 'the audit was run',
+            evidence: 'Suggested rewrite: "we ran the audit".',
+          },
+        ],
+      }),
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await startWithEprime('wf-eprime-no-patch', true);
+    await waitForState(handle, 'awaiting_verdict');
+
+    const report = archived.at(-1)!;
+    const pass = report.passes.find((p) => p.pass === 'eprime_alternatives')!;
+    assert.equal(pass.findings.length, 1);
+    assert.deepEqual(pass.patches, []);
+    // Nothing reaches `steward apply`, which reads only `report.patches`.
+    assert.deepEqual(report.patches, []);
   });
 });

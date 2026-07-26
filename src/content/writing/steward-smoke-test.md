@@ -1,8 +1,8 @@
 ---
-title: "A deliberately broken draft that the Steward is supposed to catch every single problem in"
+title: "A deliberately broken draft that Steward is supposed to catch every single problem in"
 date: 2026-07-18
 updated: 2026-07-01
-description: "A permanent draft fixture for the Steward's smoke test. It is schema-valid on purpose — every defect in it is one that Astro's content schema happily allows through."
+description: "A permanent draft fixture for Steward's smoke test. It is schema-valid on purpose — every defect in it is one that Astro's content schema happily allows through."
 tags: []
 draft: true
 ---

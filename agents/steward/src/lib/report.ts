@@ -10,6 +10,7 @@ export const PassKind = z.enum([
   'build_audit',
   'claims_structure',
   'ai_tells',
+  'eprime_alternatives',
 ]);
 export type PassKind = z.infer<typeof PassKind>;
 
@@ -116,7 +117,7 @@ export const ReviewReport = z.object({
   /**
    * Defaulted rather than required so archives written before collections
    * existed still parse. Every such archive is a writing review by construction
-   * — it is the only collection the Steward could review at the time.
+   * — it is the only collection Steward could review at the time.
    */
   collection: Collection.default('writing'),
   /** Defaulted for the same reason: every pre-audit-mode review was a gate. */

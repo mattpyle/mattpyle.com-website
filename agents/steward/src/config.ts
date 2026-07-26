@@ -18,7 +18,7 @@ export const STEWARD_DIR = path.resolve(here, '..');
  * that failure mode is invisible and sends requests under the wrong credential.
  *
  * Values are never logged. The file is gitignored (`.gitignore`), and nothing in
- * the Steward puts a secret into a workflow input or result, where Temporal
+ * Steward puts a secret into a workflow input or result, where Temporal
  * would persist it in history (spec §13).
  */
 function loadDotEnv(): void {
@@ -53,7 +53,7 @@ loadDotEnv();
  * The real checkout containing `agents/steward`, derived from this file's own
  * location and therefore **never** affected by `STEWARD_SITE_DIR`.
  *
- * The Steward's own artifacts — `reviews/`, caches, the Vale binary — always live
+ * Steward's own artifacts — `reviews/`, caches, the Vale binary — always live
  * under `STEWARD_DIR`, no matter which content tree is being reviewed. Anchoring
  * their paths here rather than on `SITE_DIR` is what keeps them findable when the
  * site root is redirected (Phase 1b shipped a `readArchivedReport` that joined an
@@ -151,14 +151,14 @@ export const SCORECARD_ARCHIVE_DIR = path.join(REVIEWS_DIR, '_scorecard');
  * The shared spelling dictionary, at the REPO ROOT — not under `agents/steward`.
  *
  * One file, two consumers: this activity and the site's `npm run spellcheck`
- * (which reaches it via `import` in `cspell.json`). It moved out of the Steward
+ * (which reaches it via `import` in `cspell.json`). It moved out of Steward's
  * workspace in Phase 2 Part A, when the publish leg made a divergence between
  * the two dictionaries able to publish a post the site's own CI marks red.
  *
  * **Read directly, not via `import:`.** `readConfigFile` does NOT resolve
  * cspell's `import` key — a config that imports its wordlist comes back with
  * `words: undefined`. Pointing this at a thin config that imports the shared
- * file would empty the Steward's dictionary. Verified empirically; it is why
+ * file would empty Steward's dictionary. Verified empirically; it is why
  * the shared file holds the words inline and this constant names it directly.
  */
 export const CSPELL_CONFIG = path.join(REPO_ROOT, 'cspell.shared.yaml');
@@ -173,6 +173,23 @@ export const WEB_UI = 'http://localhost:8233';
 export const ENABLE_AI_TELLS = false;
 export const ENABLE_BUILD_AUDIT = true;
 /**
+ * The worked-alternatives pass over Vale's E-Prime instances (§8.6).
+ *
+ * **On by default, and deliberately not gated behind `--ai-tells`.** That flag
+ * guards a scorer whose pre-registered validation study failed; this is a
+ * different feature with a different purpose, and tying them together would make
+ * turning one off turn the other off too.
+ *
+ * Off costs nothing to reach for: a post with no E-Prime findings skips the pass
+ * without an API call regardless of this constant, so this exists for the case
+ * where the pass itself turns out to be unwanted rather than as a cost control.
+ *
+ * Resolved by the CLI into the workflow **input**, never read in the workflow —
+ * design rule 10. It decides whether an activity runs, so flipping it here must
+ * not rewrite the past for a review that is still parked.
+ */
+export const ENABLE_EPRIME_ALTERNATIVES = true;
+/**
  * Phase 2. Resolved by the CLI into the `approve` **signal payload**, not into
  * the workflow input — the publish decision is consumed after the durable wait,
  * so for an already-parked review the input is immutable and the decision has
@@ -182,7 +199,7 @@ export const ENABLE_BUILD_AUDIT = true;
 export const ENABLE_PUBLISH_LEG = process.env.STEWARD_ENABLE_PUBLISH_LEG === 'false' ? false : true;
 
 /**
- * The content collections the Steward reviews.
+ * The content collections Steward reviews.
  *
  * `builds` is deliberately absent. It has no `draft` field in
  * `src/content.config.ts` at all, so neither the gate-mode draft refusal nor the

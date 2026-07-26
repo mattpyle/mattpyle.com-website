@@ -1,0 +1,985 @@
+{
+  "schemaVersion": 1,
+  "slug": "i-turned-on-a-screen-reader",
+  "collection": "writing",
+  "mode": "audit",
+  "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+  "contentSha256": "11a1de110e1964cc905f04518f5ffb14f73478c902613b8ddeb96766fc9f1436",
+  "reviewedAt": "2026-07-26T06:54:18.921Z",
+  "workflowId": "steward-review-i-turned-on-a-screen-reader",
+  "runId": "019f9d33-5061-7f3e-9983-f30f6df13471",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-07-26T06:53:33.746Z",
+      "durationMs": 39,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-22",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 13,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-23",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 15,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'equitable' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 19,
+          "excerpt": "equitable"
+        },
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'requirement' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 19,
+          "excerpt": "requirement"
+        },
+        {
+          "id": "vale-24",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 19,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-25",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 19,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-26",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 19,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-6",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'being parsed' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 21,
+          "excerpt": "being parsed"
+        },
+        {
+          "id": "vale-27",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 21,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-28",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 21,
+          "excerpt": "being"
+        },
+        {
+          "id": "vale-29",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 23,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-30",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 23,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-31",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 25,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-7",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'equitable' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 27,
+          "excerpt": "equitable"
+        },
+        {
+          "id": "vale-32",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 31,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-33",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'It's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 31,
+          "excerpt": "It's"
+        },
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.So (error): Don't start a sentence with 'So '.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 33,
+          "excerpt": "So "
+        },
+        {
+          "id": "vale-34",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'were'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 37,
+          "excerpt": "were"
+        },
+        {
+          "id": "vale-35",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 37,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-36",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 41,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-8",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is applied' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 43,
+          "excerpt": "is applied"
+        },
+        {
+          "id": "vale-9",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'multiple' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 43,
+          "excerpt": "multiple"
+        },
+        {
+          "id": "vale-37",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 43,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-38",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 43,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-10",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'However' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 45,
+          "excerpt": "However"
+        },
+        {
+          "id": "vale-11",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'it is' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 45,
+          "excerpt": "it is"
+        },
+        {
+          "id": "vale-39",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 45,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-40",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 45,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-12",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'completely' is a weasel word!",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 47,
+          "excerpt": "completely"
+        },
+        {
+          "id": "vale-13",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'multiple' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 47,
+          "excerpt": "multiple"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.So (error): Don't start a sentence with 'So '.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 51,
+          "excerpt": "So "
+        },
+        {
+          "id": "vale-14",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'maximum' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 51,
+          "excerpt": "maximum"
+        },
+        {
+          "id": "vale-15",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'was added' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 53,
+          "excerpt": "was added"
+        },
+        {
+          "id": "vale-41",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 53,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-42",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 57,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-43",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 57,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-44",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'aren't'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 57,
+          "excerpt": "aren't"
+        },
+        {
+          "id": "vale-45",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'They're'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 57,
+          "excerpt": "They're"
+        },
+        {
+          "id": "vale-46",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 57,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-47",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 57,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-48",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 59,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-49",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 59,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-16",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'It was' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 61,
+          "excerpt": "It was"
+        },
+        {
+          "id": "vale-50",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 61,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-51",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'am'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 63,
+          "excerpt": "am"
+        },
+        {
+          "id": "vale-52",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'that's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 65,
+          "excerpt": "that's"
+        },
+        {
+          "id": "vale-53",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 65,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-54",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'isn't'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 65,
+          "excerpt": "isn't"
+        },
+        {
+          "id": "vale-55",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 65,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-56",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'That's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 71,
+          "excerpt": "That's"
+        },
+        {
+          "id": "vale-57",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 73,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-58",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 73,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-17",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'completely' is a weasel word!",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 77,
+          "excerpt": "completely"
+        },
+        {
+          "id": "vale-59",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 77,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-60",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 77,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-61",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 77,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-62",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 79,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.So (error): Don't start a sentence with 'So '.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 87,
+          "excerpt": "So "
+        },
+        {
+          "id": "vale-63",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 87,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-64",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 98,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-18",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'been told' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 101,
+          "excerpt": "been told"
+        },
+        {
+          "id": "vale-65",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 101,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-66",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 138,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-67",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 140,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-68",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'That's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 142,
+          "excerpt": "That's"
+        },
+        {
+          "id": "vale-69",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 146,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-70",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'there's'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 146,
+          "excerpt": "there's"
+        },
+        {
+          "id": "vale-71",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 148,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-72",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 148,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-73",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 150,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-19",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'validate' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 152,
+          "excerpt": "validate"
+        },
+        {
+          "id": "vale-74",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 152,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-75",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 152,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-20",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'It is' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 154,
+          "excerpt": "It is"
+        },
+        {
+          "id": "vale-21",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'However' is too wordy.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 154,
+          "excerpt": "However"
+        },
+        {
+          "id": "vale-76",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 154,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-77",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 154,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-78",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 154,
+          "excerpt": "is"
+        }
+      ],
+      "startedAt": "2026-07-26T06:53:33.753Z",
+      "durationMs": 267,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-07-26T06:53:33.750Z",
+      "durationMs": 7
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "claims-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: The opening section takes roughly six paragraphs to reach its actual point (automated tools miss semantic intent; a screen reader reveals what they don't). The section's conclusion never appears in the section at all.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 13,
+          "excerpt": "## a11y is for everyone",
+          "evidence": "Lines 19–27 cover personal history, the agentic web, a hobby project rationale, and a rhetorical question. None of these is the post's thesis. The real lede is buried until at least line 37."
+        },
+        {
+          "id": "claims-3",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "buried lede: The post's central finding — that every automated tool passed a semantically incorrect ARIA implementation that a screen reader exposed — does not appear until line 59, well past the midpoint.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 13,
+          "excerpt": "## a11y is for everyone",
+          "evidence": "Lines 13–33 are scene-setting. The actual discovery (aria-pressed was syntactically valid but semantically wrong, and only listening revealed it) is the post's value; it arrives at line 57–59."
+        },
+        {
+          "id": "claims-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The claim that AI agents now routinely parse the accessibility tree alongside raw HTML and screenshots is stated as established fact with no source cited.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 21,
+          "excerpt": "The past 12 months have brought an interesting new spotlight on a11y practices. The accessibility tree... is now being parsed by AI agents alongside the raw HTML and screenshots.",
+          "evidence": "No tool, paper, or vendor documentation is linked or named to support this behavioral claim about how AI agents operate. It may be accurate but it reads as an assertion the post cannot substantiate on its own."
+        },
+        {
+          "id": "claims-4",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: The section heading promises an explanation of how Agentic Browsing evaluation works, but the section's actual point is that the author's pre-audit predictions were all wrong. The conclusion is not stated at the top.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 29,
+          "excerpt": "## How does Agentic Browsing evaluation work?",
+          "evidence": "The section opens with a description of the Lighthouse Agentic Browsing audit, then pivots to the author's failed predictions. The finding ('All four were absent') arrives at line 37, not at the top of the section."
+        },
+        {
+          "id": "claims-7",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "contradiction: Line 31 states the Agentic Browsing audit gives signals, not a score, but lines 53 and 146 refer to it as '3/3', which is a score.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 31,
+          "excerpt": "it doesn't give you a score — it gives you signals",
+          "evidence": "Line 31: 'it doesn't give you a score — it gives you signals.' Line 53: 'Agentic Browsing stayed at 3/3.' Line 146: '3/3 on Agentic Browsing.' These are directly contradictory representations of the same audit output."
+        },
+        {
+          "id": "claims-5",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: This section covers two distinct concepts: the filter-button state bug and the missing h1 on /about. These are separate findings and should not share a section.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 39,
+          "excerpt": "## What the code review caught and missed",
+          "evidence": "Lines 41–43 address the filter/aria-state problem; lines 45–49 address the missing h1. The section heading is too broad to serve as a conclusion for either, and the two findings have no stated relationship to each other."
+        },
+        {
+          "id": "claims-6",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: A reader encountering this section in isolation would not know what 'Agentic Browsing 3/3' means or what the baseline scores were before the fix, making the comparison unintelligible.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 53,
+          "excerpt": "axe reported zero violations. Lighthouse stayed at 100. Agentic Browsing stayed at 3/3.",
+          "evidence": "The Agentic Browsing audit is introduced in the prior section; its scoring model (signals, not a numeric score) is described there. Extracted alone, '3/3' has no referent and contradicts the earlier description of it as a non-numeric signal audit."
+        },
+        {
+          "id": "claims-8",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: This section resolves a technical debate that was set up in the same section, but a reader extracting only this paragraph would not know what problem was being solved or why aria-pressed was rejected.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 65,
+          "excerpt": "Ultimately, I settled on keeping the filters as buttons with the current active one `aria-current=\"true\"`, and announce the result in a live region.",
+          "evidence": "The section heading ('So I told Claude: Fix the issue, maximum effort, make no mistakes') is not a conclusion and does not summarise the outcome. The resolution (aria-current + live region) is the actual finding but appears only at the end."
+        }
+      ],
+      "startedAt": "2026-07-26T06:53:33.750Z",
+      "durationMs": 35423,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "e684e8d44b3d4c998178bd2e7ff67d8ce5b62d47fd63f5ae4132e949dcacd3d7",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "dictionaryProposals": [
+          {
+            "word": "A11y",
+            "disposition": "proper_noun",
+            "reason": "Numeronym for 'accessibility', used as a subject throughout the post"
+          },
+          {
+            "word": "a11y",
+            "disposition": "proper_noun",
+            "reason": "Lowercase form of the same accessibility numeronym"
+          },
+          {
+            "word": "AEO",
+            "disposition": "proper_noun",
+            "reason": "Industry acronym (Answer Engine Optimisation), used as a named practice"
+          },
+          {
+            "word": "AX",
+            "disposition": "proper_noun",
+            "reason": "Acronym for 'Agent Experience', used as a named concept at line 154"
+          },
+          {
+            "word": "NVDA",
+            "disposition": "proper_noun",
+            "reason": "Name of a screen reader application"
+          },
+          {
+            "word": "axe",
+            "disposition": "proper_noun",
+            "reason": "Name of an accessibility testing tool (Deque axe)"
+          },
+          {
+            "word": "aria-pressed",
+            "disposition": "proper_noun",
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
+          },
+          {
+            "word": "aria-current",
+            "disposition": "proper_noun",
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
+          },
+          {
+            "word": "aria-selected",
+            "disposition": "proper_noun",
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
+          },
+          {
+            "word": "aria-expanded",
+            "disposition": "proper_noun",
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
+          },
+          {
+            "word": "PLG",
+            "disposition": "proper_noun",
+            "reason": "Industry acronym (Product-Led Growth), used as a filter tag label"
+          },
+          {
+            "word": "SAAS",
+            "disposition": "proper_noun",
+            "reason": "Acronym for Software as a Service, used as a filter tag label"
+          },
+          {
+            "word": "seoTitle",
+            "disposition": "proper_noun",
+            "reason": "Frontmatter field name, a code token not a prose word"
+          },
+          {
+            "word": "seoDescription",
+            "disposition": "proper_noun",
+            "reason": "Frontmatter field name, a code token not a prose word"
+          }
+        ]
+      }
+    },
+    {
+      "pass": "eprime_alternatives",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "eprime-alt-1",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The passive hides who does the overlooking; naming an actor makes the accusation land.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 19,
+          "excerpt": "is a basic requirement that is often shamefully overlooked",
+          "evidence": "Suggested rewrite: \"is a basic requirement that the industry shamefully overlooks\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-2",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The expletive opener delays the subject and the buried verb 'appeared' undersells the pattern he's describing.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 45,
+          "excerpt": "This is one of those things that has appeared in my professional life when auditing website best practices.",
+          "evidence": "Suggested rewrite: \"This one has surfaced repeatedly in my professional audits.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-3",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: Wait — 'turned out a known issue' is a fragment. Better: 'A known NVDA/Chrome issue on my machine, nothing more.' The original 'to be' delays the reveal of what the problem actually was.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 79,
+          "excerpt": "It turned out to be a known NVDA/Chrome issue on my machine.",
+          "evidence": "Suggested rewrite: \"It turned out a known NVDA/Chrome issue on my machine.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-5",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: 'Had scored' puts the achievement in active past tense and makes the irony of the sentence — perfect scores, real problems — hit harder.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 146,
+          "excerpt": "The site was already at 100 Accessibility, 100 SEO, 100 Best Practices, and 3/3 on Agentic Browsing before any of this.",
+          "evidence": "Suggested rewrite: \"The site had already scored 100 Accessibility, 100 SEO, 100 Best Practices, and 3/3 on Agentic Browsing before any of this.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-4",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The expletive 'it is' delays the subject; promoting 'nothing' makes the scope of the disclaimer immediate.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 154,
+          "excerpt": "It is not overly complex.",
+          "evidence": "Suggested rewrite: \"Nothing here is overly complex.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        }
+      ],
+      "startedAt": "2026-07-26T06:54:09.202Z",
+      "durationMs": 9693,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/eprime-alternatives.md",
+        "sha256": "affc70f0933d860de603c5853cd9a7bbf7d1ce9f812151179306191460dc5319",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "eprimeInstances": 57,
+        "suggestionsReturned": 5,
+        "suggestionsCapped": 0,
+        "rejectedWorseTells": 0,
+        "rejectedNotFound": 0,
+        "rejectedNoOp": 0,
+        "droppedPatches": 0
+      }
+    }
+  ],
+  "patches": [],
+  "overall": "flag",
+  "summary": "FLAG — nothing blocks publish, but 91 findings want a human look. cspell: pass (0 findings); vale: flag (78 findings); frontmatter: pass (0 findings); claims_structure: flag (8 findings); eprime_alternatives: flag (5 findings). No patches proposed.",
+  "human": {},
+  "publish": {}
+}

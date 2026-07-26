@@ -16,7 +16,7 @@ import {
 /**
  * The shared audit engine (scorecard-audit-spec.md §4.1) — `runAxe`,
  * `runLighthouse`, and `auditUrl`, extracted out of `build-audit.ts` so both
- * the Steward's per-draft `buildAndAuditDraft` and the Scorecard's per-live-URL
+ * Steward's per-draft `buildAndAuditDraft` and the Scorecard's per-live-URL
  * `auditLiveUrl` run the identical tool invocations. Only the *runner* is
  * shared (spec §2) — thresholds, aggregation, and the URL set stay
  * scorecard-specific and never live here.

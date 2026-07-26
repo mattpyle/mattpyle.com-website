@@ -59,21 +59,23 @@ export const VOICE_DRIVEN_TELLS: readonly TellCategory[] = [
   'STOCK_TRANSITIONS',
   'HEDGED_SYMMETRY',
   'ZINGER_BOLDING',
+  'EM_DASH_DENSITY',
 ];
 
 /**
- * `EM_DASH_DENSITY` is deliberately in NEITHER list, and that is a finding
- * rather than an oversight.
+ * Empty, and kept as an export so the partition check has three buckets to
+ * union. Nothing is currently unclassified.
  *
- * It is the one tell that is plainly a voice marker *and* plainly this author's
- * long-established habit — the site's published prose and every build log in
- * this project are dense with em dashes, predating the Steward entirely. So it
- * cannot honestly be called format (it is not the changelog template) and it
- * cannot honestly be called AI voice (it is Matt's). Assigning it to either
- * bucket would settle by fiat a question the study is supposed to be asking. It
- * is reported in the per-category breakdown and excluded from both aggregates.
+ * `EM_DASH_DENSITY` used to live here on the reasoning that em dashes were the
+ * author's own long-standing habit, so counting them could not honestly be
+ * called a measure of AI voice. **That premise was wrong.** Matt states he
+ * rarely uses em dashes and does not reach for them naturally, and the corpus
+ * agrees: his writing is the sparsest prose on the site (`hello-world` 0.09 per
+ * 100 words, one em dash in 1,120), while the AI-generated changelog entries run
+ * 2.01 to 3.23. An em dash in this repo's prose is an artifact of the generator,
+ * not the author, which is what `VOICE_DRIVEN_TELLS` means. It moved there.
  */
-export const UNCLASSIFIED_TELLS: readonly TellCategory[] = ['EM_DASH_DENSITY'];
+export const UNCLASSIFIED_TELLS: readonly TellCategory[] = [];
 
 // ---------------------------------------------------------------------------
 // Deterministic counters (spec §9.2 amendment, design rule 9 / "the promotion

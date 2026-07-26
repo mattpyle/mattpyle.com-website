@@ -323,6 +323,34 @@ test('strips markdown fences the model adds despite instructions', () => {
   assert.equal(stripFences('  {"a":1}  '), '{"a":1}');
 });
 
+test('a model that thinks aloud between two fenced blocks yields the last one', () => {
+  // Observed live on the first real eprime-alternatives run: the model answered,
+  // wrote "Wait, let me reconsider properly.", and answered again. The
+  // whole-string fence pattern matched neither block, so `JSON.parse` died on
+  // the prose and burned the one retry — which came back with a worse answer.
+  // The reconsidered block is the one the model meant, so the LAST wins.
+  const raw = [
+    '```json',
+    '{"a":1}',
+    '```',
+    '',
+    'Wait, let me reconsider properly.',
+    '',
+    '```json',
+    '{"a":2}',
+    '```',
+  ].join('\n');
+  assert.equal(stripFences(raw), '{"a":2}');
+});
+
+test('a single fenced block with prose around it is still extracted', () => {
+  assert.equal(stripFences('Here is the JSON:\n\n```json\n{"a":1}\n```\n\nHope that helps.'), '{"a":1}');
+});
+
+test('unfenced text is returned untouched, so a plain JSON response is unaffected', () => {
+  assert.equal(stripFences('{"a":1, "b":"```"}'), '{"a":1, "b":"```"}');
+});
+
 test('a fenced but otherwise valid response is accepted without a retry', async () => {
   const rubric = await loadRubric('claims-structure');
   let calls = 0;
@@ -408,8 +436,8 @@ test('a clean post yields a pass verdict and no findings', async () => {
 
 // `posts/known-good.md` (see the fixture's own comment) is meant to be clean
 // for every *mechanical* pass, but it is not tell-free: line 13 has a real em
-// dash ("... the fixture needs updating — decide which..."), which is exactly
-// the deliberate, long-standing habit `UNCLASSIFIED_TELLS` describes. Since
+// dash ("... the fixture needs updating — decide which..."), which now counts
+// as a voice tell rather than as the author's habit (see `tells.ts`). Since
 // EM_DASH_DENSITY is now computed in code from the file itself (never asked
 // of the model), that one finding is present in every ai-tells result below
 // regardless of what the LLM stub returns.
@@ -544,7 +572,9 @@ test('an unrecognised tell category fails validation rather than going uncounted
 test('the format/voice split partitions the tells without overlap or omission', () => {
   // The study's honest read depends on this split, and a tell silently in both
   // lists (or in neither, unnoticed) would quietly corrupt the re-ranked
-  // analysis. EM_DASH_DENSITY is deliberately unclassified — see the source.
+  // analysis. `UNCLASSIFIED_TELLS` is currently empty, which this still covers:
+  // every tell must land in exactly one bucket, and an empty third bucket is a
+  // valid partition rather than a hole.
   const all = [...FORMAT_DRIVEN_TELLS, ...VOICE_DRIVEN_TELLS, ...UNCLASSIFIED_TELLS];
   assert.equal(new Set(all).size, all.length, 'a tell appears in more than one bucket');
   assert.deepEqual([...all].sort(), [...TELL_CATEGORIES].sort(), 'a tell is unbucketed');

@@ -11,7 +11,7 @@ export { snapshotDraft, currentContentHash } from './snapshot.js';
 export { runCspell } from './cspell.js';
 export { runVale } from './vale.js';
 export { checkFrontmatter } from './frontmatter.js';
-export { editorialPass } from './editorial.js';
+export { editorialPass, eprimeAlternativesPass } from './editorial.js';
 export { applyPatchesActivity } from './patches.js';
 export { buildAndAuditDraft } from './build-audit.js';
 export { synthesizeReport } from './synthesize.js';

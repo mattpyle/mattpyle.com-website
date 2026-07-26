@@ -51,16 +51,16 @@ async function publishedPosts(collection: string): Promise<string[]> {
   return published;
 }
 
-test('the Steward still flags the smoke-test fixture the SITE spellcheck ignores', async () => {
+test('Steward still flags the smoke-test fixture the SITE spellcheck ignores', async () => {
   // The root cspell.json has `ignorePaths` for this file so `npm run spellcheck`
-  // stays clean. That ignore must not leak into the Steward's own config — if it
+  // stays clean. That ignore must not leak into Steward's own config — if it
   // did, the fixture would silently stop being a fixture and the smoke test
   // would pass for the wrong reason. This asserts the two configs disagree, on
   // purpose.
   const result = await runCspell('src/content/writing/steward-smoke-test.md');
   assert.ok(
     result.findings.length > 0,
-    'the Steward must still see the deliberate typos in the smoke-test fixture',
+    'Steward must still see the deliberate typos in the smoke-test fixture',
   );
   assert.equal(result.verdict, 'block');
 });

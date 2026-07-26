@@ -2,10 +2,10 @@ import { ApplicationFailure } from '@temporalio/activity';
 import { GITHUB_REPO } from '../config.js';
 
 /**
- * The Steward's one GitHub REST client, over plain `fetch` — extracted out of
+ * Steward's one GitHub REST client, over plain `fetch` — extracted out of
  * `activities/publish.ts` so `activities/scorecard.ts`'s `publishScorecardRun`
  * shares the identical auth/error-handling rather than growing a second copy
- * that quietly drifts (scorecard-audit-spec.md §4.3: "reusing the Steward's
+ * that quietly drifts (scorecard-audit-spec.md §4.3: "reusing Steward's
  * git/PR libs").
  *
  * `octokit` was not adopted for the same reason `publish.ts` originally

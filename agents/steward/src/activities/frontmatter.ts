@@ -29,7 +29,7 @@ const SERP_TITLE = 60;
  *
  * Nothing keeps this transcription in sync with the schema automatically — if
  * `src/content.config.ts` changes a collection's fields, enums, or required
- * flags, update RULES below in the same commit, or the Steward will false-block
+ * flags, update RULES below in the same commit, or Steward will false-block
  * on (or silently allow) a value the schema's own rules have since changed.
  */
 interface CollectionRules {
@@ -157,7 +157,7 @@ export async function checkFrontmatter(
     // published; blocking on it would make every audit report open with a
     // finding that the thing being audited is the thing we asked for.
     if (mode === 'gate' && fm.draft !== true) {
-      add('block', 'Post is not `draft: true`. The Steward only reviews drafts in gate mode.');
+      add('block', 'Post is not `draft: true`. Steward only reviews drafts in gate mode.');
     }
 
     // collection-specific enums (Zod-required — defence-in-depth, see above)
