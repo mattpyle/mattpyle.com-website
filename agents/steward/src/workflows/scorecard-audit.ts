@@ -217,13 +217,20 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
   // second history event for the same fact. Decide *before* building the
   // candidate record so the commentary (below) can fold in the change delta
   // `decidePublish` already computed, rather than re-deriving it.
-  const decision = decidePublish({ iso, metrics }, published, input.maxAgeDays);
+  //
+  // `scope` and `tools` are resolved above the decision rather than inline in
+  // `candidate`, because the gate compares them (spec §6, trigger 3): they
+  // describe what was measured, and a change in coverage is news even when
+  // every number held.
+  const scope = `${urls.length} live page${urls.length === 1 ? '' : 's'}`;
+  const tools = ['Lighthouse 13.4', 'axe-core 4.12'];
+  const decision = decidePublish({ iso, metrics, scope, tools }, published, input.maxAgeDays);
 
   const candidate: Omit<ScorecardRunRecord, 'id'> = {
     iso,
     timestamp,
-    scope: `${urls.length} live page${urls.length === 1 ? '' : 's'}`,
-    tools: ['Lighthouse 13.4', 'axe-core 4.12'],
+    scope,
+    tools,
     entry: input.triggeredBy === 'schedule' ? 'Nightly · automated' : 'Manual · intentional',
     commentary: buildCommentary(perPage, metrics, decision),
     metrics,
@@ -294,6 +301,23 @@ function describeChangeDelta(decision: PublishDecision): string | undefined {
   const newMetric = reason.match(/^(.+) is a new metric$/);
   if (newMetric) {
     return `${newMetric[1]} is a new metric this run`;
+  }
+
+  // Spec §6's third trigger. Worth stating in the commentary for the same
+  // reason it is worth publishing on: the page count is baked into every
+  // metric description, so a reader deserves to know coverage moved even
+  // though no score did.
+  const coverageMove = reason.match(/^Coverage (\d+)→(\d+) pages$/);
+  if (coverageMove) {
+    const [, from, to] = coverageMove;
+    const verb = Number(to) > Number(from) ? 'rose' : 'fell';
+    return `Coverage ${verb} from ${from} to ${to} pages`;
+  }
+
+  const toolsMove = reason.match(/^Tools (.+)→(.+)$/);
+  if (toolsMove) {
+    const [, from, to] = toolsMove;
+    return `Measured with ${to} rather than ${from}`;
   }
 
   return undefined;

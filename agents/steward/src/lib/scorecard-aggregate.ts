@@ -205,6 +205,16 @@ function aggregateAgentic(perPage: PageAuditOutcome[]): ScorecardMetric {
 export interface PublishableRun {
   iso: string;
   metrics: ScorecardMetric[];
+  /**
+   * What the run covered, e.g. `"19 live pages"`. Part of the publish gate
+   * (§6): it is rendered on the public page and baked into every metric's
+   * `description`, so a change in coverage is news even when no number moved.
+   * Optional because an older record, or a caller that has not assembled one
+   * yet, may not carry it — the comparison skips rather than guessing.
+   */
+  scope?: string;
+  /** The tool versions the run used. Also part of the publish gate: a version bump changes what "100" means. */
+  tools?: string[];
 }
 
 /**
@@ -351,6 +361,60 @@ function hasChanged(candidate: ScorecardMetric[], published: ScorecardMetric[]):
   return undefined;
 }
 
+/**
+ * Whether what was *measured* changed, independently of what the numbers came
+ * out as (spec §6, trigger 3).
+ *
+ * `hasChanged` above compares only the four metric values, which is not enough:
+ * `scope` and `tools` are published fields, both rendered on the public page,
+ * and `scope`'s page count is baked into every metric `description` by
+ * `aggregate()`. So a site that grows from 18 pages to 19 with every score
+ * unchanged leaves the public page stating "18 tested pages" four separate ways
+ * while covering 19 — a stale factual claim about coverage, not merely a stale
+ * date.
+ *
+ * **This is partly self-healing, which is exactly why it needed a rule.** Every
+ * metric is a min across pages, so a *worse* new page moves a number and the
+ * metric comparison catches it; a new Agentic check changes J and is caught
+ * too. What slips through is the case where the new page scores as well as
+ * every other one — the common case on a site where everything scores 100. The
+ * gate looked like it worked because it fired on the bad days.
+ *
+ * Treated as pinned facts, not noisy measurements: **any** difference is news,
+ * with no threshold. Coverage is compared as a parsed page count rather than
+ * the raw `scope` string, so rewording "18 live pages" would not open a PR by
+ * itself; an unparseable count on either side skips the comparison rather than
+ * guessing.
+ *
+ * **`entry` is deliberately excluded.** It flips between "Nightly · automated"
+ * and "Manual · intentional" purely with how the run was triggered, which says
+ * nothing about what was measured, and gating on it would open a PR every time
+ * a human ran the audit by hand between nightly runs.
+ */
+function hasMeasurementContextChanged(
+  candidate: PublishableRun,
+  published: PublishableRun,
+): string | undefined {
+  const prevPages = parsePageCount(published.scope);
+  const nextPages = parsePageCount(candidate.scope);
+  if (prevPages !== undefined && nextPages !== undefined && prevPages !== nextPages) {
+    return `Coverage ${prevPages}→${nextPages} pages`;
+  }
+
+  const prevTools = published.tools;
+  const nextTools = candidate.tools;
+  if (prevTools && nextTools) {
+    // Order-insensitive: the workflow emits a fixed order today, but a
+    // reordering is not a change in what was measured and must not open a PR.
+    const norm = (tools: string[]) => [...tools].sort().join(', ');
+    if (norm(prevTools) !== norm(nextTools)) {
+      return `Tools ${norm(prevTools)}→${norm(nextTools)}`;
+    }
+  }
+
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Commentary validation (spec §5.1 rule 7): a run's commentary must read
 // correctly forever, not just at the moment it was published.
@@ -414,9 +478,13 @@ function daysBetween(fromIso: string, toIso: string): number {
 /**
  * `decidePublish` (spec §6): open a PR iff the run changed anything worth
  * seeing, or the published run has gone stale — otherwise no-op. `candidate`
- * carries its own `iso` (from `workflow.now()` in the caller), which doubles
+ * carries its own `iso` (from `resolveRunStamp` in the caller), which doubles
  * as "now" for the staleness check — there is no separate clock here, this
  * module is pure.
+ *
+ * Trigger order is deliberate, because the first match becomes the PR's stated
+ * reason and the commentary's delta: a moved **number** is the most important
+ * thing to say, then a change in **what was measured**, then mere staleness.
  */
 export function decidePublish(
   candidate: PublishableRun,
@@ -430,6 +498,11 @@ export function decidePublish(
   const changeReason = hasChanged(candidate.metrics, published.metrics);
   if (changeReason) {
     return { decision: 'open-pr', reason: changeReason };
+  }
+
+  const contextReason = hasMeasurementContextChanged(candidate, published);
+  if (contextReason) {
+    return { decision: 'open-pr', reason: contextReason };
   }
 
   const ageDays = daysBetween(published.iso, candidate.iso);

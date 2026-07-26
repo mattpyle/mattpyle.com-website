@@ -357,3 +357,130 @@ test('the committed run-log\'s newest scope is parseable — the guard has a rea
     `newest run ${runs[0].id} has an unparseable scope ("${runs[0].scope}"), so the shrink guard would silently skip`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// The publish gate's third trigger (spec §6): what was measured changed, even
+// when none of the four numbers did.
+// ---------------------------------------------------------------------------
+
+const TOOLS = ['Lighthouse 13.4', 'axe-core 4.12'];
+
+/** A candidate/published pair that is identical apart from the overrides. */
+function measured(iso: string, scope: string, tools: string[] = TOOLS): PublishableRun {
+  return { iso, metrics: GREEN, scope, tools };
+}
+
+test('coverage growing opens a PR, even with every metric unchanged and the run fresh', () => {
+  const decision = decidePublish(
+    measured('2026-07-16', '19 live pages'),
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(decision.decision, 'open-pr');
+  assert.equal(decision.reason, 'Coverage 18→19 pages');
+});
+
+test('coverage shrinking opens a PR too — any difference is news, in either direction', () => {
+  const decision = decidePublish(
+    measured('2026-07-16', '17 live pages'),
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(decision.decision, 'open-pr');
+  assert.equal(decision.reason, 'Coverage 18→17 pages');
+});
+
+test('identical coverage and tools still no-op when fresh', () => {
+  const decision = decidePublish(
+    measured('2026-07-16', '18 live pages'),
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(decision.decision, 'no-op');
+});
+
+test('rewording scope without changing the count does not open a PR', () => {
+  // The comparison is on the parsed count, not the raw string — an editorial
+  // tweak to the wording is not a change in what was measured.
+  const decision = decidePublish(
+    measured('2026-07-16', '18 live pages audited'),
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(decision.decision, 'no-op');
+});
+
+test('an unparseable scope on either side skips the coverage check rather than guessing', () => {
+  const fromUnparseable = decidePublish(
+    measured('2026-07-16', '19 live pages'),
+    measured('2026-07-15', 'every live page'),
+    7,
+  );
+  assert.equal(fromUnparseable.decision, 'no-op');
+
+  const toUnparseable = decidePublish(
+    measured('2026-07-16', 'every live page'),
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(toUnparseable.decision, 'no-op');
+});
+
+test('a tool version bump opens a PR — it changes what "100" means', () => {
+  const decision = decidePublish(
+    measured('2026-07-16', '18 live pages', ['Lighthouse 13.5', 'axe-core 4.12']),
+    measured('2026-07-15', '18 live pages', ['Lighthouse 13.4', 'axe-core 4.12']),
+    7,
+  );
+  assert.equal(decision.decision, 'open-pr');
+  assert.match(decision.reason, /^Tools .*13\.4.*→.*13\.5/);
+});
+
+test('reordering the tools list is not a change', () => {
+  const decision = decidePublish(
+    measured('2026-07-16', '18 live pages', ['axe-core 4.12', 'Lighthouse 13.4']),
+    measured('2026-07-15', '18 live pages', ['Lighthouse 13.4', 'axe-core 4.12']),
+    7,
+  );
+  assert.equal(decision.decision, 'no-op');
+});
+
+test('a missing tools list on either side skips the tools check', () => {
+  const decision = decidePublish(
+    { iso: '2026-07-16', metrics: GREEN, scope: '18 live pages' },
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(decision.decision, 'no-op');
+});
+
+test('entry is deliberately not part of the gate', () => {
+  // `entry` flips with how the run was triggered, not with what was measured.
+  // Gating on it would open a PR every time a human ran the audit by hand.
+  const candidate = { ...measured('2026-07-16', '18 live pages'), entry: 'Manual · intentional' };
+  const published = { ...measured('2026-07-15', '18 live pages'), entry: 'Nightly · automated' };
+  assert.equal(decidePublish(candidate, published, 7).decision, 'no-op');
+});
+
+test('a moved number outranks a coverage change in the stated reason', () => {
+  // Both changed. The reason becomes the PR title and the commentary's delta,
+  // so the number has to win — it is the more important thing to say.
+  const regressed = GREEN.map((m) => (m.name === 'SEO' ? metric('SEO', '90', '100', 'Fail') : m));
+  const decision = decidePublish(
+    { iso: '2026-07-16', metrics: regressed, scope: '19 live pages', tools: TOOLS },
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(decision.decision, 'open-pr');
+  assert.match(decision.reason, /^SEO /);
+});
+
+test('a coverage change outranks staleness in the stated reason', () => {
+  const decision = decidePublish(
+    measured('2026-08-30', '19 live pages'),
+    measured('2026-07-15', '18 live pages'),
+    7,
+  );
+  assert.equal(decision.decision, 'open-pr');
+  assert.equal(decision.reason, 'Coverage 18→19 pages');
+});
