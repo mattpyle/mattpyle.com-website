@@ -5,16 +5,16 @@
   "mode": "audit",
   "file": "src/content/writing/i-turned-on-a-screen-reader.md",
   "contentSha256": "11a1de110e1964cc905f04518f5ffb14f73478c902613b8ddeb96766fc9f1436",
-  "reviewedAt": "2026-07-26T05:52:43.594Z",
+  "reviewedAt": "2026-07-26T06:54:18.921Z",
   "workflowId": "steward-review-i-turned-on-a-screen-reader",
-  "runId": "019f9cfa-e1fd-73e8-9ace-38ec2bc037ab",
+  "runId": "019f9d33-5061-7f3e-9983-f30f6df13471",
   "passes": [
     {
       "pass": "cspell",
       "verdict": "pass",
       "findings": [],
-      "startedAt": "2026-07-26T05:51:55.488Z",
-      "durationMs": 370,
+      "startedAt": "2026-07-26T06:53:33.746Z",
+      "durationMs": 39,
       "toolVersion": "cspell-lib unknown"
     },
     {
@@ -724,16 +724,16 @@
           "excerpt": "is"
         }
       ],
-      "startedAt": "2026-07-26T05:51:55.668Z",
-      "durationMs": 286,
+      "startedAt": "2026-07-26T06:53:33.753Z",
+      "durationMs": 267,
       "toolVersion": "vale version 3.15.1"
     },
     {
       "pass": "frontmatter",
       "verdict": "pass",
       "findings": [],
-      "startedAt": "2026-07-26T05:51:55.486Z",
-      "durationMs": 1
+      "startedAt": "2026-07-26T06:53:33.750Z",
+      "durationMs": 7
     },
     {
       "pass": "claims_structure",
@@ -743,95 +743,85 @@
           "id": "claims-2",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "buried lede: The actual point of the post — that automated tools gave the site perfect scores but a screen reader revealed real bugs — does not appear until line 37 at the earliest. The first section is scene-setting that delays the lede by roughly 15 lines.",
+          "message": "answer first: The opening section takes roughly six paragraphs to reach its actual point (automated tools miss semantic intent; a screen reader reveals what they don't). The section's conclusion never appears in the section at all.",
           "file": "src/content/writing/i-turned-on-a-screen-reader.md",
           "line": 13,
           "excerpt": "## a11y is for everyone",
-          "evidence": "Lines 13–27 cover personal philosophy, the author's biography, and a vague question about bots; the concrete finding (tools passed, screen reader caught bugs) is the post's value and arrives much later."
+          "evidence": "Lines 19–27 cover personal history, the agentic web, a hobby project rationale, and a rhetorical question. None of these is the post's thesis. The real lede is buried until at least line 37."
         },
         {
           "id": "claims-3",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "answer first: This section does not open with its conclusion; it opens with a meme and a personal statement, and its actual point (automated tools can pass bad alt text) is buried mid-paragraph.",
+          "message": "buried lede: The post's central finding — that every automated tool passed a semantically incorrect ARIA implementation that a screen reader exposed — does not appear until line 59, well past the midpoint.",
           "file": "src/content/writing/i-turned-on-a-screen-reader.md",
           "line": 13,
           "excerpt": "## a11y is for everyone",
-          "evidence": "The section's operative claim — that a tool will pass a terrible alt attribute — appears at line 17, after an image and a paragraph of personal history."
+          "evidence": "Lines 13–33 are scene-setting. The actual discovery (aria-pressed was syntactically valid but semantically wrong, and only listening revealed it) is the post's value; it arrives at line 57–59."
         },
         {
           "id": "claims-1",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "unsupported: The claim that AI agents now routinely parse the accessibility tree alongside raw HTML and screenshots is stated as established fact with no source or evidence in the post.",
+          "message": "unsupported: The claim that AI agents now routinely parse the accessibility tree alongside raw HTML and screenshots is stated as established fact with no source cited.",
           "file": "src/content/writing/i-turned-on-a-screen-reader.md",
           "line": 21,
           "excerpt": "The past 12 months have brought an interesting new spotlight on a11y practices. The accessibility tree... is now being parsed by AI agents alongside the raw HTML and screenshots.",
-          "evidence": "No tool, study, or agent is cited to support this. The post later discusses Lighthouse's Agentic Browsing audit as 'emerging,' which undercuts the certainty of this framing."
+          "evidence": "No tool, paper, or vendor documentation is linked or named to support this behavioral claim about how AI agents operate. It may be accurate but it reads as an assertion the post cannot substantiate on its own."
         },
         {
           "id": "claims-4",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "answer first: The section heading promises an explanation of how Agentic Browsing evaluation works, but the section's actual conclusion — that the author's predicted failures were all absent — is the real point and arrives only at line 37.",
+          "message": "answer first: The section heading promises an explanation of how Agentic Browsing evaluation works, but the section's actual point is that the author's pre-audit predictions were all wrong. The conclusion is not stated at the top.",
           "file": "src/content/writing/i-turned-on-a-screen-reader.md",
           "line": 29,
           "excerpt": "## How does Agentic Browsing evaluation work?",
-          "evidence": "Lines 31–36 describe the tool and the author's predictions before delivering the finding; the section also covers two distinct concepts (what the tool is, and what the author found), violating the one-concept-per-section guideline."
-        },
-        {
-          "id": "claims-9",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "unsupported: The claim that Lighthouse ships this audit 'by default' is a specific product behavior assertion with no version number or release note cited in the post.",
-          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
-          "line": 31,
-          "excerpt": "Lighthouse now ships an Agentic Browsing audit category by default.",
-          "evidence": "The post links to a Chrome developer page but does not quote or paraphrase it confirming 'by default'; this is a factual claim about a tool's shipping state that requires a source."
-        },
-        {
-          "id": "claims-5",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "self containment: This section references 'the filter buttons on my writing index' and '/about' without establishing what the site is or what these pages are, making it misleading if extracted by an AI answer engine.",
-          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
-          "line": 39,
-          "excerpt": "## What the code review caught and missed",
-          "evidence": "A reader encountering only this section would not know whose site, what kind of filter buttons, or why the /about page matters; the context lives in earlier sections."
-        },
-        {
-          "id": "claims-6",
-          "pass": "claims_structure",
-          "severity": "flag",
-          "message": "self containment: The heading names 'Claude' but the body text refers to 'my Coding Assistant' without confirming these are the same tool, and the section assumes knowledge of 'the filter' from the prior section.",
-          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
-          "line": 51,
-          "excerpt": "## So I told Claude: \"Fix the issue, maximum effort, make no mistakes\"",
-          "evidence": "If extracted alone, a reader cannot determine which issue is being fixed, what tool was used (the heading says Claude, the body says 'Coding Assistant'), or what the baseline state was."
+          "evidence": "The section opens with a description of the Lighthouse Agentic Browsing audit, then pivots to the author's failed predictions. The finding ('All four were absent') arrives at line 37, not at the top of the section."
         },
         {
           "id": "claims-7",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "contradiction: The heading attributes the fix instruction to Claude specifically, but line 61 says 'I had shipped the aria-pressed change based on my AI Coding Agent's recommendation,' using a different, generic label for the same tool.",
+          "message": "contradiction: Line 31 states the Agentic Browsing audit gives signals, not a score, but lines 53 and 146 refer to it as '3/3', which is a score.",
           "file": "src/content/writing/i-turned-on-a-screen-reader.md",
-          "line": 51,
-          "excerpt": "## So I told Claude: \"Fix the issue, maximum effort, make no mistakes\"",
-          "evidence": "The heading names Claude; the body uses 'AI Coding Assistant' (line 53) and 'AI Coding Agent' (line 61). These may be the same tool, but the post never confirms it, creating an apparent inconsistency."
+          "line": 31,
+          "excerpt": "it doesn't give you a score — it gives you signals",
+          "evidence": "Line 31: 'it doesn't give you a score — it gives you signals.' Line 53: 'Agentic Browsing stayed at 3/3.' Line 146: '3/3 on Agentic Browsing.' These are directly contradictory representations of the same audit output."
+        },
+        {
+          "id": "claims-5",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: This section covers two distinct concepts: the filter-button state bug and the missing h1 on /about. These are separate findings and should not share a section.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 39,
+          "excerpt": "## What the code review caught and missed",
+          "evidence": "Lines 41–43 address the filter/aria-state problem; lines 45–49 address the missing h1. The section heading is too broad to serve as a conclusion for either, and the two findings have no stated relationship to each other."
+        },
+        {
+          "id": "claims-6",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: A reader encountering this section in isolation would not know what 'Agentic Browsing 3/3' means or what the baseline scores were before the fix, making the comparison unintelligible.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 53,
+          "excerpt": "axe reported zero violations. Lighthouse stayed at 100. Agentic Browsing stayed at 3/3.",
+          "evidence": "The Agentic Browsing audit is introduced in the prior section; its scoring model (signals, not a numeric score) is described there. Extracted alone, '3/3' has no referent and contradicts the earlier description of it as a non-numeric signal audit."
         },
         {
           "id": "claims-8",
           "pass": "claims_structure",
           "severity": "flag",
-          "message": "overclaiming: 'Nothing can' is an absolute generalization that overstates the claim; the post only demonstrates that axe and Lighthouse cannot, not that no tool could ever infer mutual exclusivity from markup.",
+          "message": "self containment: This section resolves a technical debate that was set up in the same section, but a reader extracting only this paragraph would not know what problem was being solved or why aria-pressed was rejected.",
           "file": "src/content/writing/i-turned-on-a-screen-reader.md",
-          "line": 59,
-          "excerpt": "Nothing can, by reading the markup alone.",
-          "evidence": "The post provides evidence only about axe and Lighthouse; extending this to 'nothing' is a universal negative the post does not support."
+          "line": 65,
+          "excerpt": "Ultimately, I settled on keeping the filters as buttons with the current active one `aria-current=\"true\"`, and announce the result in a live region.",
+          "evidence": "The section heading ('So I told Claude: Fix the issue, maximum effort, make no mistakes') is not a conclusion and does not summarise the outcome. The resolution (aria-current + live region) is the actual finding but appears only at the end."
         }
       ],
-      "startedAt": "2026-07-26T05:51:55.490Z",
-      "durationMs": 37045,
+      "startedAt": "2026-07-26T06:53:33.750Z",
+      "durationMs": 35423,
       "rubric": {
         "path": "agents/steward/src/rubrics/claims-structure.md",
         "sha256": "e684e8d44b3d4c998178bd2e7ff67d8ce5b62d47fd63f5ae4132e949dcacd3d7",
@@ -843,7 +833,7 @@
           {
             "word": "A11y",
             "disposition": "proper_noun",
-            "reason": "Established numeronym for 'accessibility' used as a subject throughout the post"
+            "reason": "Numeronym for 'accessibility', used as a subject throughout the post"
           },
           {
             "word": "a11y",
@@ -853,57 +843,62 @@
           {
             "word": "AEO",
             "disposition": "proper_noun",
-            "reason": "Industry acronym (Answer Engine Optimization) used as a named concept"
+            "reason": "Industry acronym (Answer Engine Optimisation), used as a named practice"
           },
           {
             "word": "AX",
             "disposition": "proper_noun",
-            "reason": "Used as a named concept (Agent Experience) in the closing section"
+            "reason": "Acronym for 'Agent Experience', used as a named concept at line 154"
           },
           {
             "word": "NVDA",
             "disposition": "proper_noun",
-            "reason": "Name of a screen reader product"
+            "reason": "Name of a screen reader application"
           },
           {
             "word": "axe",
             "disposition": "proper_noun",
-            "reason": "Name of an accessibility testing tool used throughout"
+            "reason": "Name of an accessibility testing tool (Deque axe)"
           },
           {
             "word": "aria-pressed",
             "disposition": "proper_noun",
-            "reason": "ARIA attribute name, a defined token in the WAI-ARIA specification"
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
           },
           {
             "word": "aria-current",
             "disposition": "proper_noun",
-            "reason": "ARIA attribute name from the WAI-ARIA specification"
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
           },
           {
             "word": "aria-selected",
             "disposition": "proper_noun",
-            "reason": "ARIA attribute name from the WAI-ARIA specification"
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
           },
           {
             "word": "aria-expanded",
             "disposition": "proper_noun",
-            "reason": "ARIA attribute name from the WAI-ARIA specification"
-          },
-          {
-            "word": "mattpyle",
-            "disposition": "proper_noun",
-            "reason": "Domain/site name belonging to the author"
+            "reason": "ARIA attribute name, a defined token in the WAI-ARIA spec"
           },
           {
             "word": "PLG",
             "disposition": "proper_noun",
-            "reason": "Industry acronym (Product-Led Growth) used as a filter tag label"
+            "reason": "Industry acronym (Product-Led Growth), used as a filter tag label"
           },
           {
             "word": "SAAS",
             "disposition": "proper_noun",
-            "reason": "Acronym for Software as a Service used as a filter tag label"
+            "reason": "Acronym for Software as a Service, used as a filter tag label"
+          },
+          {
+            "word": "seoTitle",
+            "disposition": "proper_noun",
+            "reason": "Frontmatter field name, a code token not a prose word"
+          },
+          {
+            "word": "seoDescription",
+            "disposition": "proper_noun",
+            "reason": "Frontmatter field name, a code token not a prose word"
           }
         ]
       }
@@ -916,24 +911,64 @@
           "id": "eprime-alt-1",
           "pass": "eprime_alternatives",
           "severity": "flag",
-          "message": "E-Prime alternative: The opener 'This is one of those things that' delays the subject and adds no information; the sentence starts doing work a word earlier without it.",
+          "message": "E-Prime alternative: The passive hides who does the overlooking; naming an actor makes the accusation land.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 19,
+          "excerpt": "is a basic requirement that is often shamefully overlooked",
+          "evidence": "Suggested rewrite: \"is a basic requirement that the industry shamefully overlooks\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-2",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The expletive opener delays the subject and the buried verb 'appeared' undersells the pattern he's describing.",
           "file": "src/content/writing/i-turned-on-a-screen-reader.md",
           "line": 45,
           "excerpt": "This is one of those things that has appeared in my professional life when auditing website best practices.",
-          "evidence": "Suggested rewrite: \"This one has appeared in my professional life when auditing website best practices.\". Advisory only; this is your call, and nothing here can be applied automatically."
+          "evidence": "Suggested rewrite: \"This one has surfaced repeatedly in my professional audits.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-3",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: Wait — 'turned out a known issue' is a fragment. Better: 'A known NVDA/Chrome issue on my machine, nothing more.' The original 'to be' delays the reveal of what the problem actually was.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 79,
+          "excerpt": "It turned out to be a known NVDA/Chrome issue on my machine.",
+          "evidence": "Suggested rewrite: \"It turned out a known NVDA/Chrome issue on my machine.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-5",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: 'Had scored' puts the achievement in active past tense and makes the irony of the sentence — perfect scores, real problems — hit harder.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 146,
+          "excerpt": "The site was already at 100 Accessibility, 100 SEO, 100 Best Practices, and 3/3 on Agentic Browsing before any of this.",
+          "evidence": "Suggested rewrite: \"The site had already scored 100 Accessibility, 100 SEO, 100 Best Practices, and 3/3 on Agentic Browsing before any of this.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-4",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The expletive 'it is' delays the subject; promoting 'nothing' makes the scope of the disclaimer immediate.",
+          "file": "src/content/writing/i-turned-on-a-screen-reader.md",
+          "line": 154,
+          "excerpt": "It is not overly complex.",
+          "evidence": "Suggested rewrite: \"Nothing here is overly complex.\". Advisory only; this is your call, and nothing here can be applied automatically."
         }
       ],
-      "startedAt": "2026-07-26T05:52:32.557Z",
-      "durationMs": 11009,
+      "startedAt": "2026-07-26T06:54:09.202Z",
+      "durationMs": 9693,
       "rubric": {
         "path": "agents/steward/src/rubrics/eprime-alternatives.md",
-        "sha256": "b622f2fac4236c19e567c3606e501fc28f87068fe7e1786372fa688c02d5bd44",
+        "sha256": "affc70f0933d860de603c5853cd9a7bbf7d1ce9f812151179306191460dc5319",
         "model": "claude-sonnet-4-6"
       },
       "metrics": {
-        "validationAttempts": 2,
+        "validationAttempts": 1,
         "eprimeInstances": 57,
-        "suggestionsReturned": 1,
+        "suggestionsReturned": 5,
         "suggestionsCapped": 0,
         "rejectedWorseTells": 0,
         "rejectedNotFound": 0,
@@ -944,7 +979,7 @@
   ],
   "patches": [],
   "overall": "flag",
-  "summary": "FLAG — nothing blocks publish, but 88 findings want a human look. cspell: pass (0 findings); vale: flag (78 findings); frontmatter: pass (0 findings); claims_structure: flag (9 findings); eprime_alternatives: flag (1 finding). No patches proposed.",
+  "summary": "FLAG — nothing blocks publish, but 91 findings want a human look. cspell: pass (0 findings); vale: flag (78 findings); frontmatter: pass (0 findings); claims_structure: flag (8 findings); eprime_alternatives: flag (5 findings). No patches proposed.",
   "human": {},
   "publish": {}
 }
