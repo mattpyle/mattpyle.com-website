@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 import {
   aggregate,
+  checkAuditSet,
   decidePublish,
+  parsePageCount,
   validateCommentary,
   type PageAuditOutcome,
   type ScorecardMetric,
@@ -269,4 +271,89 @@ test('every committed run-log commentary and metric description is timeless', as
       );
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// The audit-set guard (spec §5.4) — canned counts, no browser, no network.
+// ---------------------------------------------------------------------------
+
+function guard(overrides: Partial<Parameters<typeof checkAuditSet>[0]> = {}) {
+  return checkAuditSet({
+    resolvedCount: 19,
+    previousCount: 18,
+    overridden: false,
+    allowShrink: false,
+    ...overrides,
+  });
+}
+
+test('audit-set guard: an equal set passes', () => {
+  const result = guard({ resolvedCount: 18, previousCount: 18 });
+  assert.equal(result.ok, true);
+  assert.match(result.reason, /18 URL\(s\) resolved \(previous run: 18\)/);
+});
+
+test('audit-set guard: a larger set passes — new pages are the normal case', () => {
+  const result = guard({ resolvedCount: 19, previousCount: 18 });
+  assert.equal(result.ok, true);
+});
+
+test('audit-set guard: a smaller set fails, and the reason names both counts', () => {
+  const result = guard({ resolvedCount: 17, previousCount: 18 });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /17 URL\(s\) vs 18/);
+  assert.match(result.reason, /--allow-shrink/);
+});
+
+test('audit-set guard: an empty set fails', () => {
+  const result = guard({ resolvedCount: 0, previousCount: 18 });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /empty/);
+});
+
+test('audit-set guard: --allow-shrink lets the same smaller set through', () => {
+  const result = guard({ resolvedCount: 17, previousCount: 18, allowShrink: true });
+  assert.equal(result.ok, true);
+  assert.match(result.reason, /allowed by --allow-shrink/);
+});
+
+test('audit-set guard: an empty set fails past both overrides — it has no legitimate form', () => {
+  for (const overrides of [{ allowShrink: true }, { overridden: true }, { allowShrink: true, overridden: true }]) {
+    const result = guard({ resolvedCount: 0, previousCount: 18, ...overrides });
+    assert.equal(result.ok, false, `expected empty to fail with ${JSON.stringify(overrides)}`);
+  }
+});
+
+test('audit-set guard: --urls skips the shrink check entirely', () => {
+  const result = guard({ resolvedCount: 1, previousCount: 18, overridden: true });
+  assert.equal(result.ok, true);
+  assert.match(result.reason, /shrink check skipped/);
+});
+
+test('audit-set guard: no previous count is not a failure — there is nothing to compare against', () => {
+  const result = guard({ resolvedCount: 19, previousCount: undefined });
+  assert.equal(result.ok, true);
+  assert.match(result.reason, /no previous run page count/);
+});
+
+test('parsePageCount reads the leading integer out of a scope string', () => {
+  assert.equal(parsePageCount('18 live pages'), 18);
+  assert.equal(parsePageCount('1 live page'), 1);
+  assert.equal(parsePageCount('5 live page types'), 5);
+});
+
+test('parsePageCount returns undefined for a scope it cannot read, rather than guessing', () => {
+  assert.equal(parsePageCount(undefined), undefined);
+  assert.equal(parsePageCount(''), undefined);
+  assert.equal(parsePageCount('every live page'), undefined);
+});
+
+test('the committed run-log\'s newest scope is parseable — the guard has a real baseline', async () => {
+  const jsonPath = fileURLToPath(new URL('../../../../src/data/scorecard-runs.json', import.meta.url));
+  const runs = JSON.parse(await fs.readFile(jsonPath, 'utf8')) as Array<{ id: string; scope: string }>;
+  const count = parsePageCount(runs[0].scope);
+  assert.ok(
+    typeof count === 'number' && count > 0,
+    `newest run ${runs[0].id} has an unparseable scope ("${runs[0].scope}"), so the shrink guard would silently skip`,
+  );
 });
