@@ -436,8 +436,8 @@ test('a clean post yields a pass verdict and no findings', async () => {
 
 // `posts/known-good.md` (see the fixture's own comment) is meant to be clean
 // for every *mechanical* pass, but it is not tell-free: line 13 has a real em
-// dash ("... the fixture needs updating — decide which..."), which is exactly
-// the deliberate, long-standing habit `UNCLASSIFIED_TELLS` describes. Since
+// dash ("... the fixture needs updating — decide which..."), which now counts
+// as a voice tell rather than as the author's habit (see `tells.ts`). Since
 // EM_DASH_DENSITY is now computed in code from the file itself (never asked
 // of the model), that one finding is present in every ai-tells result below
 // regardless of what the LLM stub returns.
@@ -572,7 +572,9 @@ test('an unrecognised tell category fails validation rather than going uncounted
 test('the format/voice split partitions the tells without overlap or omission', () => {
   // The study's honest read depends on this split, and a tell silently in both
   // lists (or in neither, unnoticed) would quietly corrupt the re-ranked
-  // analysis. EM_DASH_DENSITY is deliberately unclassified — see the source.
+  // analysis. `UNCLASSIFIED_TELLS` is currently empty, which this still covers:
+  // every tell must land in exactly one bucket, and an empty third bucket is a
+  // valid partition rather than a hole.
   const all = [...FORMAT_DRIVEN_TELLS, ...VOICE_DRIVEN_TELLS, ...UNCLASSIFIED_TELLS];
   assert.equal(new Set(all).size, all.length, 'a tell appears in more than one bucket');
   assert.deepEqual([...all].sort(), [...TELL_CATEGORIES].sort(), 'a tell is unbucketed');

@@ -59,35 +59,23 @@ export const VOICE_DRIVEN_TELLS: readonly TellCategory[] = [
   'STOCK_TRANSITIONS',
   'HEDGED_SYMMETRY',
   'ZINGER_BOLDING',
+  'EM_DASH_DENSITY',
 ];
 
 /**
- * `EM_DASH_DENSITY` is deliberately in NEITHER list, and that is a finding
- * rather than an oversight.
+ * Empty, and kept as an export so the partition check has three buckets to
+ * union. Nothing is currently unclassified.
  *
- * **Corrected 2026-07-25. The original reasoning here was wrong on the facts.**
- * It said em dashes were "plainly this author's long-established habit" and that
- * "the site's published prose and every build log in this project are dense with
- * em dashes", and concluded the tell could not honestly be called AI voice
- * because it was Matt's. Measured across the real content collections, that is
- * the opposite of true: Matt's two writing posts are the *sparsest* prose on the
- * site — `hello-world` at 0.09 per 100 words (one em dash in 1,120) and
- * `i-turned-on-a-screen-reader` at 0.65 — while the AI-generated changelog
- * entries run 2.0 to 3.2. The build logs are indeed dense, but they are largely
- * agent-written, which is evidence for the opposite conclusion. The 2026-07-22
- * deterministic corpus scan already found this and the spec recorded it; the
- * claim in this comment was simply never updated to match, and it survived by
- * being asserted confidently in a place nobody re-measured.
- *
- * **The classification is nevertheless left alone, and that is now a deliberate
- * open question rather than a considered answer.** On the corrected numbers
- * `EM_DASH_DENSITY` looks like a voice-driven tell that separates by provenance,
- * which is an argument for moving it into `VOICE_DRIVEN_TELLS`. Doing so would
- * change every aggregate the validation study has already computed, so it is
- * Matt's call and not a tidy-up. Until then it stays out of both aggregates and
- * is reported in the per-category breakdown, as before.
+ * `EM_DASH_DENSITY` used to live here on the reasoning that em dashes were the
+ * author's own long-standing habit, so counting them could not honestly be
+ * called a measure of AI voice. **That premise was wrong.** Matt states he
+ * rarely uses em dashes and does not reach for them naturally, and the corpus
+ * agrees: his writing is the sparsest prose on the site (`hello-world` 0.09 per
+ * 100 words, one em dash in 1,120), while the AI-generated changelog entries run
+ * 2.01 to 3.23. An em dash in this repo's prose is an artifact of the generator,
+ * not the author, which is what `VOICE_DRIVEN_TELLS` means. It moved there.
  */
-export const UNCLASSIFIED_TELLS: readonly TellCategory[] = ['EM_DASH_DENSITY'];
+export const UNCLASSIFIED_TELLS: readonly TellCategory[] = [];
 
 // ---------------------------------------------------------------------------
 // Deterministic counters (spec §9.2 amendment, design rule 9 / "the promotion
