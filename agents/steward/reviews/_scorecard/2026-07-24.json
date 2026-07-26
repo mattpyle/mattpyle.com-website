@@ -1,13 +1,13 @@
 {
-  "iso": "2026-07-25",
-  "timestamp": "2026-07-25T21:18:13-07:00",
+  "iso": "2026-07-24",
+  "timestamp": "2026-07-24T23:49:24-07:00",
   "scope": "19 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Manual · intentional",
-  "commentary": "Coverage rose from 18 to 19 pages; all 19 pages passed all four public metrics.",
+  "commentary": "All 19 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-07-25",
+  "id": "2026-07-24",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -250,8 +250,6 @@
       "axeViolations": 0
     }
   ],
-  "decision": "open-pr",
-  "reason": "Coverage 18→19 pages",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/38",
-  "archiveId": "2026-07-25-3"
+  "decision": "no-op",
+  "reason": "unchanged, published 1d ago (<= 7d threshold)"
 }
