@@ -359,7 +359,19 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
 // ---------------------------------------------------------------------------
 
 export interface ScorecardArchiveRecord {
+  /**
+   * The run's *run-log* identity: the id it was published under, or the
+   * candidate `iso` it would have used had it published. Not necessarily the
+   * archive filename — see `archiveId`.
+   */
   id: string;
+  /**
+   * The archive filename stem, resolved against the files already on disk and
+   * always present on a written record. Equal to `id` in the ordinary case;
+   * `<id>-2`, `<id>-3`, … when this is the second or third run archived on a
+   * day already taken. Set by `archiveScorecardRun`, never by the caller.
+   */
+  archiveId?: string;
   iso: string;
   timestamp?: string;
   scope: string;
@@ -375,6 +387,36 @@ export interface ScorecardArchiveRecord {
 
 export interface ArchiveScorecardRunResult {
   archivePath: string;
+  /** The filename stem actually used — `id`, or `<id>-n` if that was taken. */
+  archiveId: string;
+}
+
+/**
+ * Resolves an archive filename stem that is not already on disk: `<id>`, then
+ * `<id>-2`, `<id>-3`, … .
+ *
+ * `publishScorecardRun`'s `uniqueId` does the same job against the *run-log*,
+ * and deliberately stays separate: the two namespaces genuinely diverge. A
+ * `no-op` or `--dry-run` run never touches the run-log, so it can archive an
+ * `<iso>` the run-log has never heard of; and a later run that *does* publish
+ * resolves `<iso>` from the run-log while that name is already taken on disk.
+ * Sharing one helper across both would only be correct if both stores always
+ * held the same set of runs, which is exactly what a no-op breaks.
+ *
+ * `writeFile` with `flag: 'wx'` does the final check, not this function's
+ * `access` loop, because a check-then-write is a race — two runs finishing in
+ * the same instant would both see `<iso>` free. The loop finds the candidate;
+ * the exclusive write is what makes claiming it atomic.
+ */
+async function nextFreeArchiveId(dir: string, id: string): Promise<string> {
+  for (let n = 1; ; n++) {
+    const candidate = n === 1 ? id : `${id}-${n}`;
+    try {
+      await fs.access(path.join(dir, `${candidate}.json`));
+    } catch {
+      return candidate;
+    }
+  }
 }
 
 /**
@@ -383,19 +425,50 @@ export interface ArchiveScorecardRunResult {
  * (spec §4.2 step 5): a no-op night is still a fact worth keeping, and the
  * archive is the only place that per-page detail survives at all — the
  * public run-log never carries it.
+ *
+ * **The archive is append-only** (spec §5.2), which it was not until this
+ * resolved a filename: a second run on a day already archived overwrote
+ * `<iso>.json` outright, silently destroying the earlier run's per-page detail.
+ * That is easy to hit — two manual runs in a day, or a `--dry-run` followed by
+ * the real thing — and the destroyed record is the *only* copy, since the
+ * public run-log never carried per-page rows.
+ *
+ * `latest.json` is still overwritten every run. It is a pointer at the newest
+ * record, not a record of its own.
  */
 export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promise<ArchiveScorecardRunResult> {
   await fs.mkdir(SCORECARD_ARCHIVE_DIR, { recursive: true });
-  const json = JSON.stringify(record, null, 2) + '\n';
-  const file = path.join(SCORECARD_ARCHIVE_DIR, `${record.id}.json`);
   const latest = path.join(SCORECARD_ARCHIVE_DIR, 'latest.json');
-  await fs.writeFile(file, json, 'utf8');
-  await fs.writeFile(latest, json, 'utf8');
+
+  let archiveId: string;
+  let file: string;
+  for (;;) {
+    archiveId = await nextFreeArchiveId(SCORECARD_ARCHIVE_DIR, record.id);
+    file = path.join(SCORECARD_ARCHIVE_DIR, `${archiveId}.json`);
+    const json = JSON.stringify({ ...record, archiveId }, null, 2) + '\n';
+    try {
+      await fs.writeFile(file, json, { encoding: 'utf8', flag: 'wx' });
+      await fs.writeFile(latest, json, 'utf8');
+      break;
+    } catch (err) {
+      // Lost the race for this name to a concurrent run — take the next one.
+      // Any other failure is a real write error and must surface.
+      if ((err as NodeJS.ErrnoException)?.code !== 'EEXIST') throw err;
+    }
+  }
 
   const archivePath = path.relative(REPO_ROOT, file).split(path.sep).join('/');
   log.info(
-    { activity: 'archiveScorecardRun', id: record.id, decision: record.decision, archivePath },
-    'scorecard run archived',
+    {
+      activity: 'archiveScorecardRun',
+      id: record.id,
+      archiveId,
+      decision: record.decision,
+      archivePath,
+    },
+    archiveId === record.id
+      ? 'scorecard run archived'
+      : 'scorecard run archived under a suffixed id — the day was already taken',
   );
-  return { archivePath };
+  return { archivePath, archiveId };
 }
