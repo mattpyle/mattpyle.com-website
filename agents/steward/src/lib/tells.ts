@@ -65,13 +65,27 @@ export const VOICE_DRIVEN_TELLS: readonly TellCategory[] = [
  * `EM_DASH_DENSITY` is deliberately in NEITHER list, and that is a finding
  * rather than an oversight.
  *
- * It is the one tell that is plainly a voice marker *and* plainly this author's
- * long-established habit — the site's published prose and every build log in
- * this project are dense with em dashes, predating Steward entirely. So it
- * cannot honestly be called format (it is not the changelog template) and it
- * cannot honestly be called AI voice (it is Matt's). Assigning it to either
- * bucket would settle by fiat a question the study is supposed to be asking. It
- * is reported in the per-category breakdown and excluded from both aggregates.
+ * **Corrected 2026-07-25. The original reasoning here was wrong on the facts.**
+ * It said em dashes were "plainly this author's long-established habit" and that
+ * "the site's published prose and every build log in this project are dense with
+ * em dashes", and concluded the tell could not honestly be called AI voice
+ * because it was Matt's. Measured across the real content collections, that is
+ * the opposite of true: Matt's two writing posts are the *sparsest* prose on the
+ * site — `hello-world` at 0.09 per 100 words (one em dash in 1,120) and
+ * `i-turned-on-a-screen-reader` at 0.65 — while the AI-generated changelog
+ * entries run 2.0 to 3.2. The build logs are indeed dense, but they are largely
+ * agent-written, which is evidence for the opposite conclusion. The 2026-07-22
+ * deterministic corpus scan already found this and the spec recorded it; the
+ * claim in this comment was simply never updated to match, and it survived by
+ * being asserted confidently in a place nobody re-measured.
+ *
+ * **The classification is nevertheless left alone, and that is now a deliberate
+ * open question rather than a considered answer.** On the corrected numbers
+ * `EM_DASH_DENSITY` looks like a voice-driven tell that separates by provenance,
+ * which is an argument for moving it into `VOICE_DRIVEN_TELLS`. Doing so would
+ * change every aggregate the validation study has already computed, so it is
+ * Matt's call and not a tidy-up. Until then it stays out of both aggregates and
+ * is reported in the per-category breakdown, as before.
  */
 export const UNCLASSIFIED_TELLS: readonly TellCategory[] = ['EM_DASH_DENSITY'];
 
