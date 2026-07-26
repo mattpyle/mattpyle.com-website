@@ -16,7 +16,23 @@ export const LLM_SETTINGS = {
    * it; `sendRubricRequest` therefore omits it rather than sending it blindly.
    */
   temperature: 0.2,
-  maxTokens: 4000,
+  /**
+   * A backstop against a runaway response, not a budget.
+   *
+   * `max_tokens` is a ceiling, not a reservation — billing follows tokens
+   * actually generated, so a high value costs nothing until output genuinely
+   * grows. And `sendRubricRequest` **throws** on `stop_reason === 'max_tokens'`
+   * rather than degrading, which makes a low value a failure mode instead of a
+   * safety valve.
+   *
+   * It sat at 4000 from the first build, and that number started shaping
+   * decisions it had no business shaping: a proposal to raise the
+   * eprime-alternatives suggestion count was argued down to ~25 on a token
+   * calculation derived entirely from this constant. Raised to 16000, which is
+   * still far below what the configured model will emit and still catches a
+   * genuinely runaway generation.
+   */
+  maxTokens: 16000,
 } as const;
 
 /** Models that still accept `temperature`. Anything else must omit it. */

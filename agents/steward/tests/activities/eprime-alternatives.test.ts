@@ -354,3 +354,74 @@ test('a post the model finds nothing worth rewriting in passes cleanly', async (
   assert.equal(result.verdict, 'pass');
   assert.deepEqual(result.findings, []);
 });
+
+// ---------------------------------------------------------------------------
+// A configurable suggestion count. 5 suits a publish gate; a first sweep of an
+// article being rewritten wholesale wants breadth.
+// ---------------------------------------------------------------------------
+
+const { buildEprimeRequest, resolveMaxSuggestions, EPRIME_MAX_SUGGESTIONS, EPRIME_SUGGESTION_LIMIT } =
+  await import('../../src/activities/editorial.js');
+
+test('the requested count reaches the model through the user turn, not the rubric', () => {
+  // It must NOT be appended to the rubric: `rubric.sha256` is the record of the
+  // exact prompt text that produced a verdict (design rule 6), and it is what
+  // caught a stale archived report on this very branch. A per-run parameter
+  // belongs in the payload, which already varies per post.
+  const request = buildEprimeRequest(TEN_LINES, [valeFinding('vale-1', 2, 'write-good.E-Prime', 'is')], 20);
+  assert.match(request, /\b20\b/);
+  // The excerpt is still in there, unchanged.
+  assert.ok(request.includes('bravo two is here'));
+});
+
+test('the cap defaults to 5 and is clamped to a sane range', () => {
+  assert.equal(resolveMaxSuggestions(undefined), EPRIME_MAX_SUGGESTIONS);
+  assert.equal(resolveMaxSuggestions(20), 20);
+  // Zero or negative would ask the model for nothing and waste a call.
+  assert.equal(resolveMaxSuggestions(0), 1);
+  assert.equal(resolveMaxSuggestions(-3), 1);
+  // A runaway request is clamped rather than sent: max_tokens is the only
+  // backstop against an enormous response, and asking for 500 would hit it.
+  assert.equal(resolveMaxSuggestions(9999), EPRIME_SUGGESTION_LIMIT);
+});
+
+test('the code cap honours the requested count, not the default', () => {
+  const response = EprimeAlternativesResponse.parse({ suggestions: eightGoodSuggestions() });
+
+  const five = mapEprimeAlternativesResponse(response, 'posts/known-good.md', EIGHT_LINE_POST);
+  assert.equal(five.findings.length, 5, 'default is unchanged');
+
+  const eight = mapEprimeAlternativesResponse(response, 'posts/known-good.md', EIGHT_LINE_POST, 8);
+  assert.equal(eight.findings.length, 8);
+  assert.equal(eight.capped, 0);
+
+  const two = mapEprimeAlternativesResponse(response, 'posts/known-good.md', EIGHT_LINE_POST, 2);
+  assert.equal(two.findings.length, 2);
+  assert.equal(two.capped, 6);
+});
+
+test('a raised cap does not weaken the gates', () => {
+  // The point of raising the ceiling is more *valid* suggestions, not a bypass.
+  const response = EprimeAlternativesResponse.parse({
+    suggestions: [
+      ...eightGoodSuggestions().slice(0, 2),
+      {
+        line: 3,
+        original: 'Sentence number 3 was written by somebody.',
+        suggestion: 'Somebody wrote sentence number 3 — genuinely.',
+        reason: 'Adds an em dash.',
+      },
+      {
+        line: 4,
+        original: 'This text is nowhere in the post.',
+        suggestion: 'Nor is this.',
+        reason: 'Hallucinated.',
+      },
+    ],
+  });
+  const mapped = mapEprimeAlternativesResponse(response, 'posts/known-good.md', EIGHT_LINE_POST, 20);
+
+  assert.equal(mapped.findings.length, 2);
+  assert.equal(mapped.rejectedWorseTells, 1);
+  assert.equal(mapped.rejectedNotFound, 1);
+});
