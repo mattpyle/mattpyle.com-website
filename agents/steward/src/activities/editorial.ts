@@ -321,6 +321,30 @@ export type EprimeAlternativesResponse = z.infer<typeof EprimeAlternativesRespon
 /** At most this many suggestions reach the report. Enforced here, not in the rubric. */
 export const EPRIME_MAX_SUGGESTIONS = 5;
 
+/**
+ * The most this pass will ever ask for, however large a `--max` is passed.
+ *
+ * Not a token calculation — `LLM_SETTINGS.maxTokens` is comfortably above what
+ * 50 suggestions cost (~110 tokens each). It is a backstop against a typo in a
+ * flag turning into an enormous, slow, expensive response, which is the one job
+ * `max_tokens` was doing when it was set too low to be useful for anything else.
+ */
+export const EPRIME_SUGGESTION_LIMIT = 50;
+
+/**
+ * How many suggestions to ask for and keep.
+ *
+ * 5 is right for a review that runs on every draft. It is wrong for a first
+ * sweep of an article being rewritten wholesale, which is what raised this: a
+ * post with 57 E-Prime instances has more than five sentences worth looking at,
+ * and "at most 5" was inherited from the publish-gate framing rather than
+ * measured.
+ */
+export function resolveMaxSuggestions(requested?: number): number {
+  if (requested === undefined || !Number.isFinite(requested)) return EPRIME_MAX_SUGGESTIONS;
+  return Math.min(EPRIME_SUGGESTION_LIMIT, Math.max(1, Math.floor(requested)));
+}
+
 /** How many lines either side of a flagged line go into the payload. */
 const EPRIME_CONTEXT_LINES = 1;
 
@@ -366,6 +390,35 @@ export function buildEprimePayload(text: string, findings: Finding[]): string {
     previous = line;
   }
   return out.join('\n');
+}
+
+/**
+ * The full user turn: how many suggestions to return, then the excerpt.
+ *
+ * **The count goes here rather than into the rubric, and that is load-bearing.**
+ * `loadRubric` hashes the rubric file and the report records `rubric.sha256`, so
+ * a verdict can always be traced to the exact prompt text that produced it
+ * (design rule 6). Appending "return N" to the rubric content would make that
+ * hash describe something other than what was sent. This is not hypothetical
+ * bookkeeping: that field is what revealed an archived report on this branch had
+ * been produced by a superseded rubric. A per-run parameter belongs in the user
+ * turn, which already varies per post.
+ */
+export function buildEprimeRequest(
+  text: string,
+  findings: Finding[],
+  maxSuggestions: number,
+): string {
+  // "Aim for N", not "at most N". Measured: with the rubric asking for 5 and the
+  // request permitting 20, the model returned 5 every time — "at most" grants
+  // headroom without asking for it, and the rubric's own number wins by default.
+  // The target has to be stated as a target.
+  return (
+    `Aim for ${maxSuggestions} suggestions, ordered by how much the rewrite improves the prose. ` +
+    `That is a target, not a ceiling to stay under; return fewer only if the post genuinely ` +
+    `offers fewer. This count replaces any number named in your instructions.\n\n` +
+    buildEprimePayload(text, findings)
+  );
 }
 
 export interface EprimeAlternativesMapped {
@@ -430,6 +483,7 @@ export function mapEprimeAlternativesResponse(
   response: EprimeAlternativesResponse,
   file: string,
   text: string,
+  maxSuggestions: number = EPRIME_MAX_SUGGESTIONS,
 ): EprimeAlternativesMapped {
   const lines = text.split('\n');
   const kept: { line: number; original: string; suggestion: string; reason: string }[] = [];
@@ -471,8 +525,9 @@ export function mapEprimeAlternativesResponse(
   }
 
   // Guarantee 1 — the cap, in code. A rubric instruction is a request.
-  const capped = Math.max(0, kept.length - EPRIME_MAX_SUGGESTIONS);
-  const surviving = kept.slice(0, EPRIME_MAX_SUGGESTIONS);
+  const limit = resolveMaxSuggestions(maxSuggestions);
+  const capped = Math.max(0, kept.length - limit);
+  const surviving = kept.slice(0, limit);
 
   const findings: Finding[] = surviving.map((s, i) => ({
     id: `eprime-alt-${i + 1}`,
@@ -503,6 +558,14 @@ export interface EprimeAlternativesInput {
   file: string;
   /** Vale's `write-good.E-Prime` findings, selected by `lib/eprime.ts`. */
   eprimeFindings: Finding[];
+  /**
+   * How many suggestions to ask for and keep. Defaults to 5.
+   *
+   * Optional so the workflow keeps sending the activity input it always has: an
+   * added optional field deserialises as `undefined` when replaying any history
+   * that predates it, and resolves to the same 5 those runs actually used.
+   */
+  maxSuggestions?: number;
 }
 
 /**
@@ -521,18 +584,24 @@ export async function eprimeAlternativesPass(
   input: EprimeAlternativesInput,
   options: EditorialPassOptions = {},
 ): Promise<PassResult> {
+  const limit = resolveMaxSuggestions(input.maxSuggestions);
+
   const { result, startedAt, durationMs } = await timed('eprimeAlternativesPass', async () => {
     const rubric = await loadRubric('eprime-alternatives');
     const text = await fs.readFile(path.join(SITE_DIR, input.file), 'utf8');
 
     const { data, attempts } = await callRubric({
       rubric,
-      userContent: buildEprimePayload(text, input.eprimeFindings),
+      userContent: buildEprimeRequest(text, input.eprimeFindings, limit),
       schema: EprimeAlternativesResponse,
       send: options.send,
     });
 
-    return { mapped: mapEprimeAlternativesResponse(data, input.file, text), rubric, attempts };
+    return {
+      mapped: mapEprimeAlternativesResponse(data, input.file, text, limit),
+      rubric,
+      attempts,
+    };
   });
 
   // Logged so it is possible to tell whether the gates do anything at all. A
@@ -542,6 +611,7 @@ export async function eprimeAlternativesPass(
     {
       file: input.file,
       eprimeInstances: input.eprimeFindings.length,
+      maxSuggestions: limit,
       returned: result.mapped.returned,
       kept: result.mapped.findings.length,
       capped: result.mapped.capped,
@@ -568,6 +638,7 @@ export async function eprimeAlternativesPass(
     metrics: {
       validationAttempts: result.attempts,
       eprimeInstances: input.eprimeFindings.length,
+      maxSuggestions: limit,
       suggestionsReturned: result.mapped.returned,
       suggestionsCapped: result.mapped.capped,
       rejectedWorseTells: result.mapped.rejectedWorseTells,

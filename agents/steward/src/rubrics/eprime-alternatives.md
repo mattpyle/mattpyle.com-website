@@ -28,8 +28,10 @@ Pick the sentences where removing the "to be" form does real work:
 Leave a sentence alone when "to be" states a genuine identity or definition ("Vale
 is a prose linter"), or when the rewrite would only be different rather than better.
 
-**Aim for 5.** Return fewer only when the post genuinely offers fewer — not because
-you are being careful. Order them by how much the rewrite improves the prose. Do not
+**Aim for the number of suggestions the request asks for.** That number is stated
+at the top of the user message and it is a target, not a ceiling to stay well
+under. Return fewer only when the post genuinely offers fewer — not because you
+are being careful. Order them by how much the rewrite improves the prose. Do not
 pad with sentences you do not believe in, and never return an entry whose
 "suggestion" repeats the original unchanged: if a sentence should stay as it is,
 just leave it out.

@@ -24,7 +24,7 @@ import {
 } from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
 import { readArchivedReport, readLatestReport } from './lib/read-report.js';
-import { DIM, paint, renderReport } from './lib/render-report.js';
+import { BOLD, DIM, GREEN, RED, RESET, paint, renderReport } from './lib/render-report.js';
 import { deriveInboxHint } from './lib/inbox.js';
 import {
   reviewPost,
@@ -547,6 +547,105 @@ program
       console.log('    Compare against PROSE baselines, not the Phase 1b 8.8/file figure — see README rule 4.');
     }
     console.log('');
+  });
+
+program
+  .command('suggest')
+  .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
+  .argument('<slug>')
+  .option('--max <n>', 'how many rewrite suggestions to ask for', '5')
+  .description('Worked E-Prime alternatives for one post. No workflow, no worker, no verdict.')
+  .action(async (collectionArg: string, slug: string, opts: { max: string }) => {
+    const collection = parseCollection(collectionArg);
+    const max = Number(opts.max);
+    if (!Number.isInteger(max) || max < 1) fail(`--max must be a positive integer, got "${opts.max}"`);
+
+    // Imported lazily, exactly as `score` and `study` do: this verb sits outside
+    // the write->publish flow and must not drag the Temporal client in.
+    const { eprimeAlternativesPass } = await import('./activities/editorial.js');
+    const { runVale } = await import('./activities/vale.js');
+    const { selectEprimeFindings } = await import('./lib/eprime.js');
+    const { computeDeterministicTells } = await import('./lib/tells.js');
+    const { postRelPath, SITE_DIR } = await import('./config.js');
+    const fsp = await import('node:fs/promises');
+    const nodePath = await import('node:path');
+
+    const file = postRelPath(slug, collection);
+    let text: string;
+    try {
+      text = await fsp.readFile(nodePath.join(SITE_DIR, file), 'utf8');
+    } catch {
+      fail(`No such post: ${file}`);
+    }
+
+    const words = text.replace(/^---[\s\S]*?\n---/, '').split(/\s+/).filter(Boolean).length;
+    console.log(`\n  ${BOLD}${collection}/${slug}${RESET}  ·  ${words} words\n`);
+
+    // --- Free, deterministic, no API call ---------------------------------
+    // Printed first and unconditionally, because it costs nothing and answers a
+    // different question than the suggestions do: not "what should I rewrite"
+    // but "where is the machine voice". EM_DASH_DENSITY counts as a voice tell
+    // here (see lib/tells.ts) — this author does not use em dashes.
+    const tells = computeDeterministicTells(text);
+    const byCategory = new Map<string, number[]>();
+    for (const t of tells) {
+      if (!byCategory.has(t.category)) byCategory.set(t.category, []);
+      byCategory.get(t.category)!.push(t.line);
+    }
+    console.log(`  ${BOLD}DETERMINISTIC TELLS${RESET} ${paint('(free, no API call)', DIM)}`);
+    if (byCategory.size === 0) {
+      console.log('      None.');
+    } else {
+      for (const [category, lines] of [...byCategory].sort((a, b) => b[1].length - a[1].length)) {
+        const per100 = ((lines.length / Math.max(words, 1)) * 100).toFixed(2);
+        console.log(
+          `      ${String(lines.length).padStart(3)}  ${per100.padStart(5)}/100w  ${category}` +
+            `  ${paint(`lines ${lines.join(', ')}`, DIM)}`,
+        );
+      }
+    }
+
+    // --- Vale, then the one LLM call --------------------------------------
+    const vale = await runVale(file);
+    const eprimeFindings = selectEprimeFindings([vale]);
+    console.log(
+      `\n  ${BOLD}E-PRIME${RESET} — Vale found ${eprimeFindings.length} instance${eprimeFindings.length === 1 ? '' : 's'}`,
+    );
+
+    // The same skip the workflow makes: nothing to select from, no API call.
+    if (eprimeFindings.length === 0) {
+      console.log('      Nothing to select from, so no API call was made.\n');
+      return;
+    }
+
+    const result = await eprimeAlternativesPass({ file, eprimeFindings, maxSuggestions: max });
+    const m = (result.metrics ?? {}) as Record<string, number>;
+
+    console.log(
+      `      asked for ${m.maxSuggestions}, got ${m.suggestionsReturned}, kept ${result.findings.length}` +
+        `  ${paint(`(${result.durationMs}ms)`, DIM)}`,
+    );
+    const dropped = [
+      m.suggestionsCapped ? `${m.suggestionsCapped} over the cap` : '',
+      m.rejectedWorseTells ? `${m.rejectedWorseTells} added tells` : '',
+      m.rejectedNotFound ? `${m.rejectedNotFound} not found in the file` : '',
+      m.rejectedNoOp ? `${m.rejectedNoOp} unchanged` : '',
+    ].filter(Boolean);
+    if (dropped.length) console.log(`      ${paint(`dropped: ${dropped.join(', ')}`, DIM)}`);
+    console.log('');
+
+    for (const f of result.findings) {
+      const suggestion = (f.evidence ?? '')
+        .replace(/^Suggested rewrite: "/, '')
+        .replace(/"\. Advisory only.*$/, '');
+      console.log(`  ${BOLD}line ${f.line}${RESET}`);
+      console.log(`      ${paint('-', RED)} ${f.excerpt}`);
+      console.log(`      ${paint('+', GREEN)} ${suggestion}`);
+      console.log(`        ${paint(f.message.replace(/^E-Prime alternative: /, ''), DIM)}`);
+      console.log('');
+    }
+
+    console.log(`  ${paint('Advisory only. Nothing here is applied; re-run for a different selection.', DIM)}\n`);
   });
 
 program
