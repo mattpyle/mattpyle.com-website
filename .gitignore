@@ -24,11 +24,7 @@ Thumbs.db
 # public by default until it is added here. The backlog moved into /docs/ (see below).
 /AGENTS.md
 CLAUDE.md
-learnings.md
 changelog.md
-scoreboard.md
-measurement.md
-research.md
 .claude/
 .agents/
 skills-lock.json
