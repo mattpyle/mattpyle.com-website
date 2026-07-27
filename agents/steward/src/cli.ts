@@ -17,6 +17,7 @@ import {
   STEWARD_TIMEZONE,
   SITE_DIR,
   workflowIdFor,
+  isValidSlug,
   parseWorkflowId,
   isCollection,
   COLLECTIONS,
@@ -50,6 +51,28 @@ function deepLink(slug: string, collection: Collection = 'writing'): string {
 function parseCollection(value: string): Collection {
   if (!isCollection(value)) {
     fail(`Unknown collection "${value}". Expected one of: ${COLLECTIONS.join(', ')}.`);
+  }
+  return value;
+}
+
+const SLUG_HELP = 'content slug — lowercase kebab-case, e.g. hello-world';
+
+/**
+ * Commander argument coercion, wired into every `<slug>` argument so the check
+ * is uniform rather than remembered per command.
+ *
+ * `postRelPath` enforces this too, and that is the load-bearing guard (see
+ * `assertValidSlug` in config.ts — an unvalidated slug traverses out of the
+ * content collections and into the private docs, which then go to the LLM).
+ * This one exists so the operator gets a one-line message at parse time instead
+ * of a failed activity and a stack trace several seconds into a workflow.
+ */
+function parseSlug(value: string): string {
+  if (!isValidSlug(value)) {
+    fail(
+      `Invalid slug "${value}". Slugs are lowercase kebab-case and name an entry ` +
+        `inside a content collection — no paths, no traversal, no ".md".`,
+    );
   }
   return value;
 }
@@ -175,7 +198,7 @@ program.name('steward').description('Editorial agent for mattpyle.com').version(
 
 program
   .command('review')
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--skip-build-audit', 'skip the heavy build+audit pass (SHOW_DRAFTS build, axe, Lighthouse)')
   .option('--ai-tells', 'add the ai-tells pass (unvalidated — see spec §9.2)')
   .description('Start a review and render the report when the fan-out finishes')
@@ -241,7 +264,7 @@ program
 program
   .command('audit')
   .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--skip-build-audit', 'skip the heavy build+audit pass (build, axe, Lighthouse)')
   .option('--ai-tells', 'add the ai-tells pass (unvalidated — see spec §9.2)')
   .description('Review already-published content. Advisory only — no verdict, no patches applied.')
@@ -289,7 +312,7 @@ program
 
 program
   .command('status')
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .description('Query the current review state')
   .action(async (slug: string) => {
     const c = await client();
@@ -309,7 +332,7 @@ program
 
 program
   .command('report')
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--collection <name>', `one of: ${COLLECTIONS.join(', ')}`, 'writing')
   .description('Pretty-print the latest archived report for a slug — no live workflow needed')
   .action(async (slug: string, opts: { collection: string }) => {
@@ -552,7 +575,7 @@ program
 program
   .command('suggest')
   .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--max <n>', 'how many rewrite suggestions to ask for', '5')
   .description('Worked E-Prime alternatives for one post. No workflow, no worker, no verdict.')
   .action(async (collectionArg: string, slug: string, opts: { max: string }) => {
@@ -651,7 +674,7 @@ program
 program
   .command('score')
   .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--runs <n>', 'how many times to score the piece', '2')
   .option('--provenance <label>', 'ai | human | mixed — recorded, never inferred', 'unknown')
   .description('Score one piece with the ai-tells rubric (validation study). No workflow, no verdict.')
@@ -862,7 +885,7 @@ program
 
 program
   .command('approve')
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--force', 'approve despite blocking findings')
   .description('Approve the review')
   .action(async (slug: string, opts: { force?: boolean }) => {
@@ -898,7 +921,7 @@ program
 
 program
   .command('reject')
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .requiredOption('--reason <text>', 'why the post was rejected')
   .description('Reject the review')
   .action(async (slug: string, opts: { reason: string }) => {
@@ -913,7 +936,7 @@ program
 
 program
   .command('apply')
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .requiredOption('--patches <ids>', 'comma-separated patch IDs, e.g. patch-1,patch-3')
   .description('Apply selected patches to the post in the primary checkout')
   .action(async (slug: string, opts: { patches: string }) => {
@@ -968,7 +991,7 @@ program
 
 program
   .command('rereview')
-  .argument('<slug>')
+  .argument('<slug>', SLUG_HELP, parseSlug)
   .description('Re-run the checks against the current file and render the new report')
   .action(async (slug: string) => {
     const c = await client();

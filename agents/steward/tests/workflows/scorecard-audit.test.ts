@@ -1,7 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { TestWorkflowEnvironment } from '@temporalio/testing';
+import type { TestWorkflowEnvironment } from '@temporalio/testing';
+import { createTestEnv } from '../helpers/test-env.js';
 import { Worker } from '@temporalio/worker';
 import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js';
 import type { PageAuditOutcome, PublishableRun } from '../../src/lib/scorecard-aggregate.js';
@@ -21,7 +22,7 @@ const QUEUE_HEAVY = 'steward-heavy';
 let env: TestWorkflowEnvironment;
 
 before(async () => {
-  env = await TestWorkflowEnvironment.createTimeSkipping();
+  env = await createTestEnv();
 }, { timeout: 120_000 });
 
 after(async () => {

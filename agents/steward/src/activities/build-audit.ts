@@ -215,6 +215,13 @@ export async function buildAndAuditDraft(
     // the real error that got us here. Chrome/Lighthouse teardown now lives
     // inside `runLighthouse` (audit-engine.ts) itself, in its own `finally` —
     // the static server is the only resource this activity still owns directly.
+    //
+    // The heartbeat pump is the other one. An uncleared interval keeps the
+    // activity Context alive for the life of the worker and goes on calling
+    // `heartbeat()` for an activity that finished minutes ago; a long-lived
+    // worker accumulates one per audit. `scorecard.ts` already clears its
+    // equivalent pump — this is the same contract.
+    clearInterval(pump);
     await server?.close().catch(() => {});
   }
 }

@@ -2,7 +2,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TestWorkflowEnvironment } from '@temporalio/testing';
+import type { TestWorkflowEnvironment } from '@temporalio/testing';
+import { createTestEnv } from '../helpers/test-env.js';
 import { Worker } from '@temporalio/worker';
 import type { DraftSnapshot, PassResult, ReviewReport } from '../../src/lib/report.js';
 import {
@@ -17,8 +18,12 @@ import {
 /**
  * Workflow-level tests (spec §11). Every activity is mocked, so these assert the
  * orchestration — state sequence, the block refusal, the stale refusal — and
- * nothing about what the real checks find. No network: the time-skipping test
- * server ships with @temporalio/testing.
+ * nothing about what the real checks find.
+ *
+ * No network *per test* — but the time-skipping server binary does not ship
+ * inside @temporalio/testing, contrary to what this comment used to claim. It is
+ * downloaded on first use and cached, which is why `createTestEnv` pins the
+ * cache somewhere durable; see `tests/helpers/test-env.ts`.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
@@ -28,7 +33,7 @@ const QUEUE_HEAVY = 'steward-heavy';
 let env: TestWorkflowEnvironment;
 
 before(async () => {
-  env = await TestWorkflowEnvironment.createTimeSkipping();
+  env = await createTestEnv();
 }, { timeout: 120_000 });
 
 after(async () => {
@@ -914,6 +919,90 @@ test('a repeat approve after a park is an idempotent resume: it re-verifies and 
     assert.equal(publishCalls, 1, 'a resume must never open a second PR');
     assert.equal(verifyCalls, 11);
     assert.equal(calls.length, 0);
+  });
+});
+
+/**
+ * The publish-failure park returns to `awaiting_verdict` — the same state the
+ * review was already in when the approve was sent, because no PR exists and the
+ * approve is genuinely still owed. So `waitForState` can't see it: it matches
+ * the pre-signal state and returns before the signal is even processed. Poll the
+ * `staleReason` instead, which is what actually carries the news.
+ */
+async function waitForStaleReason(
+  handle: { query: (q: typeof getReviewState) => Promise<any> },
+  pattern: RegExp,
+  attempts = 200,
+) {
+  let last = '';
+  for (let i = 0; i < attempts; i++) {
+    const state = await handle.query(getReviewState);
+    last = state.staleReason ?? '';
+    if (pattern.test(last)) return state;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  throw new Error(`staleReason never matched ${pattern} (last seen: ${JSON.stringify(last)})`);
+}
+
+test('a publish failure parks the review instead of destroying it', async () => {
+  // Design rule 12 (spec §303-324): an operator-fixable failure must park, not
+  // fail the workflow. `publishPost` runs with `maximumAttempts: 1`, so before
+  // this an expired GITHUB_TOKEN threw straight out and took the entire durable
+  // review with it — every finding, and the approve the human had just sent.
+  const { activities } = mockActivities({
+    publishPost: async () => {
+      throw new Error('Bad credentials');
+    },
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-fails');
+    await waitForState(handle, 'awaiting_verdict');
+    await handle.signal(approve, false, true);
+
+    const state = await waitForStaleReason(handle, /Publish failed/i);
+    assert.equal(state.state, 'awaiting_verdict');
+    assert.match(state.staleReason ?? '', /no PR was opened/i);
+    assert.match(state.staleReason ?? '', /Bad credentials/);
+    assert.match(state.staleReason ?? '', /approve.*again/is);
+
+    const desc = await handle.describe();
+    assert.equal(desc.status.name, 'RUNNING', 'a park must not be a failure');
+  });
+});
+
+test('a parked publish failure resumes on the next approve once the cause is fixed', async () => {
+  // The park is only worth having if the review is genuinely still usable. The
+  // first approve hits a bad credential; the operator fixes it and re-approves,
+  // and the same workflow — same history, same findings — publishes and verifies.
+  let publishCalls = 0;
+  const { activities } = mockActivities({
+    publishPost: async () => {
+      publishCalls += 1;
+      if (publishCalls === 1) throw new Error('Bad credentials');
+      return {
+        branch: 'steward/publish-fixture-post',
+        prUrl: 'https://github.com/o/r/pull/1',
+        title: 'Fixture Post',
+        committed: true,
+      };
+    },
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-publish-recovers');
+    await waitForState(handle, 'awaiting_verdict');
+
+    await handle.signal(approve, false, true);
+    const parked = await waitForStaleReason(handle, /Publish failed/i);
+    assert.equal(parked.state, 'awaiting_verdict');
+
+    await handle.signal(approve, false, true);
+    const report = await handle.result();
+
+    assert.equal(publishCalls, 2, 'the retry must actually re-run the publish');
+    assert.equal(report.publish.prUrl, 'https://github.com/o/r/pull/1');
+    assert.equal(report.publish.deployVerified, true);
   });
 });
 

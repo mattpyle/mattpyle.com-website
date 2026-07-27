@@ -214,19 +214,61 @@ export function isCollection(v: string): v is Collection {
 }
 
 /**
+ * A content slug: lowercase kebab-case, nothing else. Matches every entry in
+ * both collections, and Astro's own slug shape.
+ */
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * The guard behind `CLAUDE.md`'s promise that the private documents never reach
+ * an external API.
+ *
+ * That guarantee is stated as architectural — "every LLM-bound read resolves
+ * through `postRelPath`, which hard-codes the content collections" — but
+ * hard-coding the *prefix* is not the same as constraining the *slug*. Nothing
+ * validated the slug on the way in, and `path.join` normalises away traversal,
+ * so `src/content/writing/` + `../../../steward/steward-spec` resolves to a real
+ * private file. `snapshot.ts` reads whatever `postRelPath` returns and
+ * `editorial.ts` sends it to Anthropic; a single mistyped or pasted CLI argument
+ * was enough to leak the spec, the build log, or a vault note.
+ *
+ * Validating here rather than at each call site is the point: this is the choke
+ * point the guarantee already names, so a future activity that resolves a path
+ * the documented way inherits the check instead of having to remember it.
+ */
+export function assertValidSlug(slug: string): void {
+  if (!SLUG_RE.test(slug)) {
+    throw new Error(
+      `Invalid slug ${JSON.stringify(slug)}. Slugs are lowercase kebab-case ` +
+        `(letters, digits, single hyphens) and name an entry inside a content ` +
+        `collection — no path separators, no traversal, no extension.`,
+    );
+  }
+}
+
+/** Non-throwing form, for the CLI's own argument checking. */
+export function isValidSlug(slug: string): boolean {
+  return SLUG_RE.test(slug);
+}
+
+/**
  * Where a post lives, given a slug. Repo-relative.
  *
  * The collection name is both the content directory and the URL segment for
  * both current collections (`src/content/writing/` → `/writing/<slug>/`), but
  * that is a coincidence of naming rather than a guarantee, which is why
  * `urlPathFor` exists separately instead of callers reusing this.
+ *
+ * Throws on a slug that is not a plain content slug — see `assertValidSlug`.
  */
 export function postRelPath(slug: string, collection: Collection = 'writing'): string {
+  assertValidSlug(slug);
   return `src/content/${collection}/${slug}.md`;
 }
 
 /** The site URL path a collection's entry renders at. Trailing slash included. */
 export function urlPathFor(slug: string, collection: Collection = 'writing'): string {
+  assertValidSlug(slug);
   return `/${collection}/${slug}/`;
 }
 
