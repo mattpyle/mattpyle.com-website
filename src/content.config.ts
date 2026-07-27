@@ -58,6 +58,8 @@ const changelog = defineCollection({
     significance: z.enum(['major', 'minor', 'patch']),
     /** Optional full-content-width hero on the entry page. */
     hero:         image().optional(),
+    /** Alt text for an informative hero. Omit for a purely decorative one (renders alt=""). */
+    heroAlt:      z.string().optional(),
     draft:        z.boolean().default(false),
   }),
 });
