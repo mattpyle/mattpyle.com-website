@@ -27,11 +27,14 @@ test('static routes resolve against the site-wide significant-change date', { sk
   assert.equal(policy.resolveStaticLastmod('/missing/'), undefined);
 });
 
-test('scorecard verification label is derived from the shared ISO date', { skip: !policy }, () => {
+test('scorecard verification is derived from the newest archived run', { skip: !policy || !scorecardRuns }, () => {
+  // Asserts the derivation, not a literal date — the newest run's iso legitimately
+  // changes on every scorecard run, and a hardcoded fixture goes red with it.
   assert.deepEqual(policy.SCORECARD_VERIFIED, {
-    iso: '2026-07-15',
-    label: '15 Jul 2026',
+    iso: scorecardRuns[0].iso,
+    label: policy.formatVerifiedLabel(scorecardRuns[0].iso),
   });
+  assert.equal(policy.formatVerifiedLabel('2026-07-15'), '15 Jul 2026');
 });
 
 test(
