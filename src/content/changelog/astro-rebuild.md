@@ -2,14 +2,14 @@
 title: "Rebuilt on Astro"
 summary: "Moved the site onto Astro content collections and shipped the foundational discoverability layer — sitemap, robots.txt, agents.md, and llms.txt. The foundation everything else here sits on."
 date: 2026-07-12
-updated: 2026-07-19
+updated: 2026-07-26
 type: launch
 significance: major
 tags: ["infra"]
+hero: ../../assets/tech-stack.png
+heroAlt: "Isometric diagram of the site's foundation: an Astro content-collections layer resting on a base block, connected to robots.txt, sitemap.xml, agents.md, and llms.txt. Discoverable by machines, useful for people."
 draft: false
 ---
-
-![A visual tech stack image showing Astro as the foundation with underpinning files to make the site discoverable by machine and useful for people."](../../assets/tech-stack.png)
 
 The site was rebuilt on Astro, with content living in typed content collections rather than hand-maintained pages. This is the substrate every later entry builds on — writing and builds are Zod-validated collections, and pages that expose them (the sitemap, `llms.txt`, this changelog) are generated from that same source at build time.
 
