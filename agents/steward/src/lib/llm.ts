@@ -10,10 +10,11 @@ import { log } from './logger.js';
 export const LLM_SETTINGS = {
   model: MODEL,
   /**
-   * Spec §13. Valid only because `STEWARD_MODEL` defaults to a Sonnet 4.6-era
-   * model — `temperature` is rejected outright (400) on Opus 4.7/4.8, Sonnet 5,
-   * and Fable 5. If the model is ever moved forward, this field has to go with
-   * it; `sendRubricRequest` therefore omits it rather than sending it blindly.
+   * Spec §13. Sent only when the configured model actually accepts it —
+   * `temperature` is rejected outright (400) on Opus 5, Opus 4.8, Opus 4.7,
+   * Sonnet 5, Fable 5, and Mythos 5. `acceptsTemperature` below is the gate,
+   * and it is an allowlist so that moving `STEWARD_MODEL` forward drops the
+   * field rather than 400ing.
    */
   temperature: 0.2,
   /**
@@ -35,9 +36,22 @@ export const LLM_SETTINGS = {
   maxTokens: 16000,
 } as const;
 
-/** Models that still accept `temperature`. Anything else must omit it. */
-function acceptsTemperature(model: string): boolean {
-  return !/^claude-(opus-4-[78]|sonnet-5|fable-5|mythos-5)/.test(model);
+/**
+ * Models that still accept `temperature`. Anything else must omit it.
+ *
+ * An **allowlist**, deliberately. This was a denylist of the models known to
+ * reject `temperature`, which inverted the rule the comment states: every model
+ * *not* on the list got `temperature` sent. That fails open — `claude-opus-5`
+ * postdated the list, so pointing `STEWARD_MODEL` at it 400s every editorial
+ * pass, and the same is true of whatever ships next. An allowlist fails closed:
+ * an unrecognised model omits the field, which is valid on every model, because
+ * `temperature` is optional everywhere it is accepted at all.
+ *
+ * Accepted on the 4.6-and-earlier families. Rejected outright (400) on Opus 5,
+ * Opus 4.8, Opus 4.7, Sonnet 5, Fable 5, and Mythos 5.
+ */
+export function acceptsTemperature(model: string): boolean {
+  return /^claude-(opus-4-[0156]|sonnet-4-[056]|haiku-4-5|haiku-3|3-)/.test(model);
 }
 
 export interface LoadedRubric {

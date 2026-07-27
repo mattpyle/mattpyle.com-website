@@ -15,7 +15,10 @@
     "astro": "astro",
     "a11y": "axe",
     "spellcheck": "cspell --no-progress \"src/content/**/*.md\"",
+    "check": "astro check",
     "test": "node --test tests/*.test.mjs",
+    "test:steward": "npm test --workspace @mattpyle/steward",
+    "check:steward": "npm run typecheck --workspace @mattpyle/steward",
     "validate:sitemap": "node scripts/validate-sitemap.mjs"
   },
   "dependencies": {

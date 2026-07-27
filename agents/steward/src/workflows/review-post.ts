@@ -671,7 +671,31 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
 
     // ---- Publish leg (spec §7.3 step 5, §8.7, §8.8) ----------------------
     state = 'publishing';
-    const published = await light.publishing.publishPost({ report: report! });
+    let published: { branch: string; prUrl: string; title: string };
+    try {
+      published = await light.publishing.publishPost({ report: report! });
+    } catch (err) {
+      // Park, don't die. `publishPost` runs with `maximumAttempts: 1`, so an
+      // expired GITHUB_TOKEN, a misconfigured remote, or one transient 5xx threw
+      // straight out of the workflow — taking the whole durable review with it,
+      // including every finding and the human's decision. That is the incident
+      // design rule 12 exists to prevent (spec §303-324), and every neighbouring
+      // failure path here already parks: a failed patch apply and a red PR check
+      // both land back on the wait with an explanation.
+      //
+      // `awaiting_verdict` rather than `publishing`: no PR exists, so unlike the
+      // post-publish verification parks there is nothing open to merge, and the
+      // approve is genuinely still owed once the cause is fixed. Re-sending
+      // `approve` re-runs this leg — the activity's own idempotency guard
+      // (spec §8.7) is what makes that safe rather than a duplicate-PR machine.
+      state = 'awaiting_verdict';
+      staleReason =
+        `Publish failed and no PR was opened: ${describeActivityError(err)}. ` +
+        `The review is intact and still approved-pending — fix the cause ` +
+        `(credentials and remote are the usual ones) and send \`approve\` again.`;
+      reportPath = (await light.reporting.archiveReport(report!)).reportPath;
+      continue;
+    }
     publishInfo = published;
     report!.publish = {
       ...report!.publish,
