@@ -10,6 +10,7 @@ import {
   SCORECARD_ARCHIVE_DIR,
 } from '../config.js';
 import { git, worktreeExists } from '../lib/git.js';
+import { withWorktreeLock, PUBLISH_ACQUIRE_TIMEOUT_MS } from '../lib/worktree-lock.js';
 import { gh } from '../lib/github.js';
 import { auditUrl } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
@@ -323,32 +324,45 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
 
   // Same reasoning as `publishPost` (design rule 3): the worktree does the git
   // work, never the primary checkout, which may be mid-edit under the human.
-  if (!(await worktreeExists(SITE_DIR, WORKTREE_DIR))) {
-    await git(SITE_DIR, ['worktree', 'add', '--detach', WORKTREE_DIR, `origin/${base}`]);
-  }
-  await git(WORKTREE_DIR, ['fetch', 'origin', base]);
-  await git(WORKTREE_DIR, ['checkout', '-B', branch, `origin/${base}`]);
-  await git(WORKTREE_DIR, ['clean', '-fd', '-e', 'node_modules', '-e', 'dist']);
+  //
+  // And, like `publishPost`, the whole worktree section runs under the shared
+  // lock (`worktree-lock.ts`). This is the activity the card's scenario is
+  // actually about: a nightly scorecard publishing into the same tree an
+  // interactive review is mid-build in.
+  const { record, id, committed } = await withWorktreeLock(
+    `publishScorecardRun:${input.record.iso}`,
+    async () => {
+      if (!(await worktreeExists(SITE_DIR, WORKTREE_DIR))) {
+        await git(SITE_DIR, ['worktree', 'add', '--detach', WORKTREE_DIR, `origin/${base}`]);
+      }
+      await git(WORKTREE_DIR, ['fetch', 'origin', base]);
+      await git(WORKTREE_DIR, ['checkout', '-B', branch, `origin/${base}`]);
+      await git(WORKTREE_DIR, ['clean', '-fd', '-e', 'node_modules', '-e', 'dist']);
 
-  const runsPath = path.join(WORKTREE_DIR, SCORECARD_RUNS_PATH);
-  const existing = JSON.parse(await fs.readFile(runsPath, 'utf8')) as ScorecardRunRecord[];
+      const runsPath = path.join(WORKTREE_DIR, SCORECARD_RUNS_PATH);
+      const existing = JSON.parse(await fs.readFile(runsPath, 'utf8')) as ScorecardRunRecord[];
 
-  const id = uniqueId(input.record.iso, existing);
-  const record: ScorecardRunRecord = { ...input.record, id };
-  const updated = [record, ...existing];
-  await fs.writeFile(runsPath, JSON.stringify(updated, null, 2) + '\n', 'utf8');
+      const id = uniqueId(input.record.iso, existing);
+      const record: ScorecardRunRecord = { ...input.record, id };
+      const updated = [record, ...existing];
+      await fs.writeFile(runsPath, JSON.stringify(updated, null, 2) + '\n', 'utf8');
 
-  let committed = false;
-  await git(WORKTREE_DIR, ['add', '--', SCORECARD_RUNS_PATH]);
-  const staged = await git(WORKTREE_DIR, ['status', '--porcelain', '--', SCORECARD_RUNS_PATH]);
-  if (staged.trim()) {
-    await git(WORKTREE_DIR, ['commit', '-m', `chore(scorecard): publish ${id} run`]);
-    committed = true;
-  } else {
-    log.info({ activity: 'publishScorecardRun', id, branch }, 'nothing to commit — base already carries this run');
-  }
-  await git(WORKTREE_DIR, ['push', '--force-with-lease', '-u', 'origin', branch]);
-  await git(WORKTREE_DIR, ['checkout', '--detach']).catch(() => {});
+      let committed = false;
+      await git(WORKTREE_DIR, ['add', '--', SCORECARD_RUNS_PATH]);
+      const staged = await git(WORKTREE_DIR, ['status', '--porcelain', '--', SCORECARD_RUNS_PATH]);
+      if (staged.trim()) {
+        await git(WORKTREE_DIR, ['commit', '-m', `chore(scorecard): publish ${id} run`]);
+        committed = true;
+      } else {
+        log.info({ activity: 'publishScorecardRun', id, branch }, 'nothing to commit — base already carries this run');
+      }
+      await git(WORKTREE_DIR, ['push', '--force-with-lease', '-u', 'origin', branch]);
+      await git(WORKTREE_DIR, ['checkout', '--detach']).catch(() => {});
+
+      return { record, id, committed };
+    },
+    { acquireTimeoutMs: PUBLISH_ACQUIRE_TIMEOUT_MS },
+  );
 
   const owner = GITHUB_REPO.split('/')[0];
   const title = `${input.dryRun ? '[dry run] ' : ''}Scorecard: ${id}`;

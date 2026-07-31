@@ -10,6 +10,7 @@ import {
   type Collection,
 } from '../config.js';
 import { syncWorktree, needsInstall, recordInstall } from '../lib/git.js';
+import { withWorktreeLock } from '../lib/worktree-lock.js';
 import { runCancellable } from '../lib/proc.js';
 import { serveStatic, type StaticServer } from '../lib/serve.js';
 import { auditUrl } from '../lib/audit-engine.js';
@@ -118,93 +119,110 @@ export async function buildAndAuditDraft(
     // session's runs. Sweeping on entry is the only cleanup that covers a kill.
     await sweepStaleProfiles();
 
-    // --- 1. Worktree ------------------------------------------------------
-    step('syncing worktree');
-    const sync = await syncWorktree(REPO_ROOT, WORKTREE_DIR, file);
-    log.info({ slug, sha: sync.sha, created: sync.created }, 'worktree synced');
+    // --- 1-7, all under the worktree lock ----------------------------------
+    //
+    // The lock covers far more than the `syncWorktree` call that mutates the
+    // tree first. Everything from the sync to the last audit request reads or
+    // writes `WORKTREE_DIR` — `npm ci` writes `node_modules`, the build writes
+    // `dist/`, and the static server goes on serving those bytes off disk while
+    // axe and Lighthouse fetch them. A publish activity's `checkout -B` +
+    // `clean -fd` landing anywhere in that window is exactly the "builds the
+    // wrong bytes" failure this guards against, so the critical section is the
+    // whole region, not just the sync.
+    //
+    // The cost is honest: this activity holds the lock for minutes, and a
+    // publish that arrives mid-build waits. See `worktree-lock.ts` for what
+    // that means for the publish activities' timeouts.
+    step('waiting for the worktree lock');
+    return await withWorktreeLock(`buildAndAuditDraft:${slug}`, async (): Promise<PassResult> => {
+      // --- 1. Worktree ----------------------------------------------------
+      step('syncing worktree');
+      const sync = await syncWorktree(REPO_ROOT, WORKTREE_DIR, file);
+      log.info({ slug, sha: sync.sha, created: sync.created }, 'worktree synced');
 
-    // --- 2. npm ci (lockfile-hash cached) ---------------------------------
-    step('checking dependencies');
-    const install = await needsInstall(WORKTREE_DIR, INSTALL_STATE);
-    if (install.needed) {
-      step('npm ci');
-      const ci = npmCommand(['ci']);
-      const res = await runCancellable(ci.binary, ci.args, { cwd: WORKTREE_DIR, signal });
-      if (res.exitCode !== 0) {
-        throw new Error(`npm ci failed (exit ${res.exitCode}):\n${res.stderr.slice(-4000)}`);
+      // --- 2. npm ci (lockfile-hash cached) -------------------------------
+      step('checking dependencies');
+      const install = await needsInstall(WORKTREE_DIR, INSTALL_STATE);
+      if (install.needed) {
+        step('npm ci');
+        const ci = npmCommand(['ci']);
+        const res = await runCancellable(ci.binary, ci.args, { cwd: WORKTREE_DIR, signal });
+        if (res.exitCode !== 0) {
+          throw new Error(`npm ci failed (exit ${res.exitCode}):\n${res.stderr.slice(-4000)}`);
+        }
+        await recordInstall(INSTALL_STATE, install.hash);
       }
-      await recordInstall(INSTALL_STATE, install.hash);
-    }
 
-    // --- 3. Build with drafts visible -------------------------------------
-    step('building (SHOW_DRAFTS=true)');
-    const buildStarted = Date.now();
-    // Env via the spawn options, never a shell `VAR=x` prefix — that syntax does
-    // not exist on Windows and there is no shell here by design (design rule 8).
-    const runBuild = npmCommand(['run', 'build']);
-    const build = await runCancellable(runBuild.binary, runBuild.args, {
-      cwd: WORKTREE_DIR,
-      env: { SHOW_DRAFTS: 'true' },
-      signal,
+      // --- 3. Build with drafts visible -----------------------------------
+      step('building (SHOW_DRAFTS=true)');
+      const buildStarted = Date.now();
+      // Env via the spawn options, never a shell `VAR=x` prefix — that syntax does
+      // not exist on Windows and there is no shell here by design (design rule 8).
+      const runBuild = npmCommand(['run', 'build']);
+      const build = await runCancellable(runBuild.binary, runBuild.args, {
+        cwd: WORKTREE_DIR,
+        env: { SHOW_DRAFTS: 'true' },
+        signal,
+      });
+      if (build.exitCode !== 0) {
+        throw new Error(`SHOW_DRAFTS build failed (exit ${build.exitCode}):\n${build.stderr.slice(-4000)}`);
+      }
+      const buildMs = Date.now() - buildStarted;
+
+      // A draft that built but emitted no page is a real finding, and a clearer
+      // one than whatever 404 the auditors would report downstream. This guard is
+      // also the thing standing between a wrong per-collection URL and an audit
+      // that silently scores a 404 page — it must stay ahead of the serve step.
+      const urlPath = urlPathFor(slug, collection);
+      const pageDir = path.join(WORKTREE_DIR, DOC_ROOT, collection, slug);
+      try {
+        await fs.stat(path.join(pageDir, 'index.html'));
+      } catch {
+        throw new Error(
+          `Build succeeded but ${DOC_ROOT}${urlPath}index.html was not emitted. ` +
+            `Is the ${collection} entry present, and (in gate mode) draft:true with SHOW_DRAFTS honoured?`,
+        );
+      }
+
+      // --- 4. Serve -------------------------------------------------------
+      step('starting static server');
+      server = await serveStatic(path.join(WORKTREE_DIR, DOC_ROOT));
+      const url = `${server.origin}${urlPath}`;
+
+      // --- 5+6. axe + Lighthouse, via the shared engine (spec §4.1) -------
+      step('running axe + Lighthouse');
+      const raw = await auditUrl(url, signal);
+
+      // --- 7. Map to findings ----------------------------------------------
+      step('mapping results');
+      const findings: Finding[] = [
+        ...axeFindings(raw.axeViolations, file, url),
+        ...lighthouseFindings(raw.scores, file, url, {
+          suppressSeo: isExpectedDraftSeoPenalty(raw.lhr),
+        }),
+      ];
+
+      return {
+        pass: 'build_audit',
+        verdict: overallVerdict(findings),
+        findings,
+        startedAt,
+        durationMs: Date.now() - started,
+        metrics: {
+          url: raw.url,
+          scores: raw.scores,
+          agenticChecks: raw.agenticChecks,
+          failedAudits: raw.failedAudits,
+          axeViolations: raw.axeViolations.length,
+          axeFiltered: raw.axeFiltered,
+          buildMs,
+          axeMs: raw.durations.axeMs,
+          lighthouseMs: raw.durations.lighthouseMs,
+          worktreeSha: sync.sha,
+          npmCi: install.needed,
+        },
+      };
     });
-    if (build.exitCode !== 0) {
-      throw new Error(`SHOW_DRAFTS build failed (exit ${build.exitCode}):\n${build.stderr.slice(-4000)}`);
-    }
-    const buildMs = Date.now() - buildStarted;
-
-    // A draft that built but emitted no page is a real finding, and a clearer
-    // one than whatever 404 the auditors would report downstream. This guard is
-    // also the thing standing between a wrong per-collection URL and an audit
-    // that silently scores a 404 page — it must stay ahead of the serve step.
-    const urlPath = urlPathFor(slug, collection);
-    const pageDir = path.join(WORKTREE_DIR, DOC_ROOT, collection, slug);
-    try {
-      await fs.stat(path.join(pageDir, 'index.html'));
-    } catch {
-      throw new Error(
-        `Build succeeded but ${DOC_ROOT}${urlPath}index.html was not emitted. ` +
-          `Is the ${collection} entry present, and (in gate mode) draft:true with SHOW_DRAFTS honoured?`,
-      );
-    }
-
-    // --- 4. Serve ---------------------------------------------------------
-    step('starting static server');
-    server = await serveStatic(path.join(WORKTREE_DIR, DOC_ROOT));
-    const url = `${server.origin}${urlPath}`;
-
-    // --- 5+6. axe + Lighthouse, via the shared engine (spec §4.1) ---------
-    step('running axe + Lighthouse');
-    const raw = await auditUrl(url, signal);
-
-    // --- 7. Map to findings ----------------------------------------------
-    step('mapping results');
-    const findings: Finding[] = [
-      ...axeFindings(raw.axeViolations, file, url),
-      ...lighthouseFindings(raw.scores, file, url, {
-        suppressSeo: isExpectedDraftSeoPenalty(raw.lhr),
-      }),
-    ];
-
-    return {
-      pass: 'build_audit',
-      verdict: overallVerdict(findings),
-      findings,
-      startedAt,
-      durationMs: Date.now() - started,
-      metrics: {
-        url: raw.url,
-        scores: raw.scores,
-        agenticChecks: raw.agenticChecks,
-        failedAudits: raw.failedAudits,
-        axeViolations: raw.axeViolations.length,
-        axeFiltered: raw.axeFiltered,
-        buildMs,
-        axeMs: raw.durations.axeMs,
-        lighthouseMs: raw.durations.lighthouseMs,
-        worktreeSha: sync.sha,
-        npmCi: install.needed,
-      },
-    };
   } catch (err) {
     if (err instanceof CancelledFailure) {
       log.warn({ slug }, 'build audit cancelled; tearing down children');
