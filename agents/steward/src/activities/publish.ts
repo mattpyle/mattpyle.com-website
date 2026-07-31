@@ -8,6 +8,7 @@ import matter from 'gray-matter';
 import { log } from '../lib/logger.js';
 import { GITHUB_REPO, SITE_DIR, WORKTREE_DIR, postRelPath, type Collection } from '../config.js';
 import { git, worktreeExists } from '../lib/git.js';
+import { withWorktreeLock, PUBLISH_ACQUIRE_TIMEOUT_MS } from '../lib/worktree-lock.js';
 import { gh } from '../lib/github.js';
 import type { ReviewReport } from '../lib/report.js';
 
@@ -246,52 +247,65 @@ export async function publishPost(input: PublishPostInput): Promise<PublishPostR
   // from the primary checkout — exactly the overlay `syncWorktree` already does
   // for the build audit, and for the same reason (the post is usually
   // uncommitted, so HEAD's version of it is nothing at all).
-  if (!(await worktreeExists(SITE_DIR, WORKTREE_DIR))) {
-    await git(SITE_DIR, ['worktree', 'add', '--detach', WORKTREE_DIR, `origin/${base}`]);
-  }
-  await git(WORKTREE_DIR, ['fetch', 'origin', base]);
-  // `-B` creates or resets. Resetting to origin/base every run is what makes a
-  // re-publish produce an identical tree rather than stacking commits.
-  await git(WORKTREE_DIR, ['checkout', '-B', branch, `origin/${base}`]);
-  await git(WORKTREE_DIR, ['clean', '-fd', '-e', 'node_modules', '-e', 'dist']);
+  // Everything that touches `WORKTREE_DIR` runs under the shared lock
+  // (`worktree-lock.ts`): a build audit resetting the tree between the
+  // `checkout -B` and the `commit` here would publish whatever it left behind.
+  // The section ends at the detach, after which nothing in this activity reads
+  // the worktree again.
+  const { flipped, committed } = await withWorktreeLock(
+    `publishPost:${report.slug}`,
+    async () => {
+      if (!(await worktreeExists(SITE_DIR, WORKTREE_DIR))) {
+        await git(SITE_DIR, ['worktree', 'add', '--detach', WORKTREE_DIR, `origin/${base}`]);
+      }
+      await git(WORKTREE_DIR, ['fetch', 'origin', base]);
+      // `-B` creates or resets. Resetting to origin/base every run is what makes a
+      // re-publish produce an identical tree rather than stacking commits.
+      await git(WORKTREE_DIR, ['checkout', '-B', branch, `origin/${base}`]);
+      await git(WORKTREE_DIR, ['clean', '-fd', '-e', 'node_modules', '-e', 'dist']);
 
-  // --- Step 4: the frontmatter flip ----------------------------------------
-  const today = new Date().toISOString().slice(0, 10);
-  const flipped = flipDraftFrontmatter(raw, today);
+      // --- Step 4: the frontmatter flip ------------------------------------
+      const today = new Date().toISOString().slice(0, 10);
+      const flipped = flipDraftFrontmatter(raw, today);
 
-  const wtPath = path.join(WORKTREE_DIR, relPath);
-  await fs.mkdir(path.dirname(wtPath), { recursive: true });
-  await fs.writeFile(wtPath, flipped.content, 'utf8');
+      const wtPath = path.join(WORKTREE_DIR, relPath);
+      await fs.mkdir(path.dirname(wtPath), { recursive: true });
+      await fs.writeFile(wtPath, flipped.content, 'utf8');
 
-  // --- Step 5: commit + push -----------------------------------------------
-  let committed = false;
-  await git(WORKTREE_DIR, ['add', '--', relPath]);
-  const staged = await git(WORKTREE_DIR, ['status', '--porcelain', '--', relPath]);
-  if (staged.trim()) {
-    await git(WORKTREE_DIR, ['commit', '-m', `chore(steward): publish ${report.slug}`]);
-    committed = true;
-  } else {
-    // Not an error — this is the idempotent path. A re-approve after a park
-    // finds origin/base already carrying the published post.
-    log.info(
-      { activity: 'publishPost', slug: report.slug, branch },
-      'nothing to commit — base already carries the published post',
-    );
-  }
-  // force-with-lease, not plain force: the branch is Steward-owned by naming
-  // convention, but "owned by convention" is not "safe to clobber blindly".
-  // The lease fails loudly if someone else moved it.
-  await git(WORKTREE_DIR, ['push', '--force-with-lease', '-u', 'origin', branch]);
+      // --- Step 5: commit + push -------------------------------------------
+      let committed = false;
+      await git(WORKTREE_DIR, ['add', '--', relPath]);
+      const staged = await git(WORKTREE_DIR, ['status', '--porcelain', '--', relPath]);
+      if (staged.trim()) {
+        await git(WORKTREE_DIR, ['commit', '-m', `chore(steward): publish ${report.slug}`]);
+        committed = true;
+      } else {
+        // Not an error — this is the idempotent path. A re-approve after a park
+        // finds origin/base already carrying the published post.
+        log.info(
+          { activity: 'publishPost', slug: report.slug, branch },
+          'nothing to commit — base already carries the published post',
+        );
+      }
+      // force-with-lease, not plain force: the branch is Steward-owned by naming
+      // convention, but "owned by convention" is not "safe to clobber blindly".
+      // The lease fails loudly if someone else moved it.
+      await git(WORKTREE_DIR, ['push', '--force-with-lease', '-u', 'origin', branch]);
 
-  // Detach the worktree from the branch it just pushed.
-  //
-  // Found by doing the dry-run teardown: git refuses to delete a branch that is
-  // checked out in *any* worktree, so leaving the worktree parked on
-  // `steward/publish-<slug>` makes the branch undeletable — including by the
-  // human cleaning up after a merge, who gets an error naming a directory they
-  // may not even know exists. Detaching costs nothing: the worktree is a
-  // disposable snapshot, and the commit is already on the remote.
-  await git(WORKTREE_DIR, ['checkout', '--detach']).catch(() => {});
+      // Detach the worktree from the branch it just pushed.
+      //
+      // Found by doing the dry-run teardown: git refuses to delete a branch that is
+      // checked out in *any* worktree, so leaving the worktree parked on
+      // `steward/publish-<slug>` makes the branch undeletable — including by the
+      // human cleaning up after a merge, who gets an error naming a directory they
+      // may not even know exists. Detaching costs nothing: the worktree is a
+      // disposable snapshot, and the commit is already on the remote.
+      await git(WORKTREE_DIR, ['checkout', '--detach']).catch(() => {});
+
+      return { flipped, committed };
+    },
+    { acquireTimeoutMs: PUBLISH_ACQUIRE_TIMEOUT_MS },
+  );
 
   // --- Step 6: the PR -------------------------------------------------------
   const owner = GITHUB_REPO.split('/')[0];

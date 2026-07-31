@@ -29,6 +29,24 @@ import {
 /** Cache dir holding Chrome profiles. Shared with build-audit.ts's own sweep. */
 const CACHE_DIR = path.join(STEWARD_DIR, '.cache');
 
+/** Monotonic within the process; the part of `tempRunName` that cannot collide. */
+let tempRunSeq = 0;
+
+/**
+ * A temp file/directory name unique to this launch.
+ *
+ * `${pid}-${Date.now()}` was not: two launches in the same millisecond inside
+ * one process — which the scorecard fan-out makes ordinary, not exotic —
+ * produce the same name, and then one run's axe result file or Chrome profile
+ * is the other's. Two audits sharing a Chrome profile dir is also a way to get
+ * the profile deleted out from under a live Chrome. The counter makes it
+ * unique within the process by construction; the pid keeps it unique across
+ * processes sharing the temp and cache dirs.
+ */
+export function tempRunName(prefix: string): string {
+  return `${prefix}-${process.pid}-${Date.now()}-${tempRunSeq++}`;
+}
+
 /**
  * Runs `@axe-core/cli` against a served page.
  *
@@ -41,7 +59,7 @@ export async function runAxe(
   signal: AbortSignal,
 ): Promise<{ violations: AxeViolation[]; raw: AxeViolation[] }> {
   const outDir = os.tmpdir();
-  const outName = `steward-axe-${process.pid}-${Date.now()}.json`;
+  const outName = `${tempRunName('steward-axe')}.json`;
   const outFile = path.join(outDir, outName);
 
   const require = createRequire(import.meta.url);
@@ -79,7 +97,7 @@ export async function runAxe(
  */
 export async function runLighthouse(url: string, _signal: AbortSignal): Promise<LighthouseLike> {
   const { launch } = await import('chrome-launcher');
-  const userDataDir = path.join(CACHE_DIR, `chrome-${process.pid}-${Date.now()}`);
+  const userDataDir = path.join(CACHE_DIR, tempRunName('chrome'));
   await fs.mkdir(userDataDir, { recursive: true });
   const launched = await launch({
     chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu'],
