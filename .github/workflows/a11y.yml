@@ -56,7 +56,7 @@ jobs:
       # internal default it falls back to when the flag is absent.
       - name: Run axe-core accessibility audit
         run: |
-          npm run --silent a11y -- \
+          npm run --silent a11y:axe -- \
             --exit \
             http://localhost:4321/ \
             http://localhost:4321/about \
