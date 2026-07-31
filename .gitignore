@@ -61,3 +61,11 @@ agents/steward/.temporal/
 agents/steward/.cache/
 agents/steward/.env
 agents/steward/bin/
+
+# Playwright a11y suite (npm run a11y) run artifacts — traces, screenshots, HTML
+# report. The committed part of the suite is tests/a11y/ plus its aria goldens in
+# tests/a11y/__snapshots__/, which are a checked-in fixture, not output.
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/

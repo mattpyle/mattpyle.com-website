@@ -1,0 +1,53 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: MATT PYLE
+  - navigation "Main navigation":
+    - link "Writing":
+      - /url: /writing
+    - link "Builds":
+      - /url: /builds
+    - link "Changelog":
+      - /url: /changelog
+    - link "Scorecard":
+      - /url: /scorecard
+    - link "About":
+      - /url: /about
+- main:
+  - article:
+    - link "← ALL WRITING":
+      - /url: /writing
+    - time: /\d+ JUL \d+/
+    - text: 9 min read
+    - heading "·" [level=1]
+    - paragraph: ·
+    - list:
+      - listitem: ·
+    - region "Use this article":
+      - heading "Use this article" [level=2]
+      - link "View markdown":
+        - /url: /writing/i-turned-on-a-screen-reader.md
+      - button "Copy markdown"
+      - link "Ask ChatGPT (opens in a new tab)":
+        - /url: https://chatgpt.com/?hint=search&q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Fi-turned-on-a-screen-reader%2F+so+I+can+ask+questions+about+its+contents
+      - link "Ask Claude (opens in a new tab)":
+        - /url: https://claude.ai/new?q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Fi-turned-on-a-screen-reader%2F+so+I+can+ask+questions+about+its+contents
+      - status
+    - link "← ALL WRITING":
+      - /url: /writing
+- contentinfo:
+  - navigation "Social links":
+    - link "RSS feed for Writing":
+      - /url: /rss.xml
+      - text: ""
+    - link "GitHub":
+      - /url: https://github.com/mattpyle
+    - link "LinkedIn":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "WebMCP":
+      - /url: /webmcp
+    - button "Switch to retro mode"
+  - paragraph: /© \d+ Matt Pyle/
+- status
