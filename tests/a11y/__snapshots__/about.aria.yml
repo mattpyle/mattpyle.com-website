@@ -1,0 +1,61 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: MATT PYLE
+  - navigation "Main navigation":
+    - link "Writing":
+      - /url: /writing
+    - link "Builds":
+      - /url: /builds
+    - link "Changelog":
+      - /url: /changelog
+    - link "Scorecard":
+      - /url: /scorecard
+    - link "About":
+      - /url: /about
+- main:
+  - paragraph: About
+  - heading "Matt Pyle" [level=1]
+  - paragraph: Director of Growth at Temporal Technologies.
+  - complementary:
+    - img "Matt Pyle"
+    - paragraph: MATT PYLE
+    - paragraph: Director of Growth
+    - paragraph: Temporal Technologies
+  - region "Background":
+    - heading "Background" [level=2]
+    - paragraph: Eyup! I think about product-led growth, marketing strategy, and the intersection of AI with how modern marketing teams actually work.
+    - paragraph: I build software as a hobbyist — not a professional engineer, but someone who increasingly vibe codes to bring ideas to life. Most of the projects are small and questionably useful. Occasionally one escapes into the wild.
+    - paragraph: This site is where I think out loud.
+  - region "Areas of interest":
+    - heading "Areas of interest" [level=2]
+    - list:
+      - listitem: Product-led growth
+      - listitem: SaaS marketing strategy
+      - listitem: AI + marketing workflows
+      - listitem: Building software (the hobbyist kind)
+      - listitem: Good coffee, taken seriously
+      - listitem: Asking "why does this actually work?"
+  - region "Connect":
+    - heading "Connect" [level=2]
+    - navigation "Contact and social links":
+      - link "GITHUB github.com/mattpyle ↗":
+        - /url: https://github.com/mattpyle
+      - link "LINKEDIN linkedin.com/in/matt-pyle ↗":
+        - /url: https://linkedin.com/in/matt-pyle
+- contentinfo:
+  - navigation "Social links":
+    - link "RSS feed for Writing":
+      - /url: /rss.xml
+      - text: ""
+    - link "GitHub":
+      - /url: https://github.com/mattpyle
+    - link "LinkedIn":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "WebMCP":
+      - /url: /webmcp
+    - button "Switch to retro mode"
+  - paragraph: /© \d+ Matt Pyle/
+- status

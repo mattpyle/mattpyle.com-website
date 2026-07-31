@@ -1,0 +1,83 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: MATT PYLE
+  - navigation "Main navigation":
+    - link "Writing":
+      - /url: /writing
+    - link "Builds":
+      - /url: /builds
+    - link "Changelog":
+      - /url: /changelog
+    - link "Scorecard":
+      - /url: /scorecard
+    - link "About":
+      - /url: /about
+- main:
+  - paragraph: Public scorecard · live web
+  - heading "Scorecard" [level=1]
+  - paragraph: The latest verified scores, followed by every live-network run we have recorded.
+  - region "·":
+    - paragraph: Latest run
+    - heading "·" [level=2]:
+      - time: ·
+    - paragraph:
+      - strong: ·
+      - text: ·
+    - article:
+      - heading "Accessibility" [level=3]
+      - text: ·
+      - paragraph: ··
+      - paragraph: ·
+    - article:
+      - heading "Performance" [level=3]
+      - text: ·
+      - paragraph: ··
+      - paragraph: ·
+    - article:
+      - heading "SEO" [level=3]
+      - text: ·
+      - paragraph: ··
+      - paragraph: ·
+    - article:
+      - heading "Agentic Browsing" [level=3]
+      - text: ·
+      - paragraph: ··
+      - paragraph: ·
+    - term: Scope
+    - definition: ·
+    - term: Tools
+    - definition: ·
+    - term: Entry
+    - definition: ·
+    - paragraph: ·
+  - region "Run history":
+    - paragraph: Archive
+    - heading "Run history" [level=2]
+    - paragraph: ·
+    - group:
+      - time: ·
+      - time: ·
+      - group "·"
+      - group "·"
+      - group "·"
+      - group "·"
+      - text: ·
+    - text: ·
+    - navigation "Scorecard history pagination": ← Newer Page 1 Older →
+- contentinfo:
+  - navigation "Social links":
+    - link "RSS feed for Writing":
+      - /url: /rss.xml
+      - text: ""
+    - link "GitHub":
+      - /url: https://github.com/mattpyle
+    - link "LinkedIn":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "WebMCP":
+      - /url: /webmcp
+    - button "Switch to retro mode"
+  - paragraph: /© \d+ Matt Pyle/
+- status

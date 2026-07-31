@@ -1,0 +1,48 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: MATT PYLE
+  - navigation "Main navigation":
+    - link "Writing":
+      - /url: /writing
+    - link "Builds":
+      - /url: /builds
+    - link "Changelog":
+      - /url: /changelog
+    - link "Scorecard":
+      - /url: /scorecard
+    - link "About":
+      - /url: /about
+- main:
+  - article:
+    - link "← ALL CHANGELOG":
+      - /url: /changelog
+    - time: ·
+    - text: · ·
+    - heading "·" [level=1]
+    - paragraph: ·
+    - list:
+      - listitem: ·
+    - navigation "·":
+      - link "· ·":
+        - /url: "#"
+      - link "· ·":
+        - /url: "#"
+      - link "·":
+        - /url: "#"
+- contentinfo:
+  - navigation "Social links":
+    - link "RSS feed for Writing":
+      - /url: /rss.xml
+      - text: ""
+    - link "GitHub":
+      - /url: https://github.com/mattpyle
+    - link "LinkedIn":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "WebMCP":
+      - /url: /webmcp
+    - button "Switch to retro mode"
+  - paragraph: /© \d+ Matt Pyle/
+- status

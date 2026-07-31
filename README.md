@@ -61,10 +61,20 @@ Other scripts:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run a11y` | Runs `axe` against a running build. |
+| `npm run a11y` | Builds, serves `dist/client`, and runs the Playwright accessibility suite in `tests/a11y/` — keyboard order, focus visibility, ClientRouter focus, 320px reflow, reduced motion, and a committed aria-tree golden per template. Advisory; never in the `build` chain. |
+| `npm run a11y:run` | The same suite against whatever is already in `dist/client`. The fast loop. |
+| `npm run a11y:axe` | Runs `axe` against a running build. |
 | `npm run spellcheck` | `cspell` over all content markdown, including frontmatter. Advisory — doesn't block builds. |
 | `npm run test` | Node's built-in test runner over `tests/*.test.mjs`. |
 | `npm run validate:sitemap` | Checks the generated sitemap against the content collections. |
+
+The a11y suite needs a browser binary once per machine: `npx playwright install chromium`.
+
+> [!NOTE]
+> `npm run a11y` is currently red on one known, verified defect: the header navigation
+> overflows below 352px, so every page scrolls horizontally at the 320px width WCAG 1.4.10
+> requires. Everything else passes. The reflow check is left failing on purpose rather than
+> skipped, so the defect stays visible.
 
 `npm run build` also runs a few guard scripts after `astro build`: one asserts no draft content
 leaked into the output, one validates the sitemap, and one checks article action wiring.

@@ -2,7 +2,9 @@
   "name": "mattpyle-com",
   "type": "module",
   "version": "0.0.1",
-  "workspaces": ["agents/steward"],
+  "workspaces": [
+    "agents/steward"
+  ],
   "engines": {
     "node": "22.x"
   },
@@ -13,7 +15,9 @@
     "build": "astro build && node scripts/assert-no-drafts.mjs && node scripts/validate-sitemap.mjs && node scripts/validate-article-actions.mjs",
     "preview": "astro preview",
     "astro": "astro",
-    "a11y": "axe",
+    "a11y": "npm run build && playwright test",
+    "a11y:run": "playwright test",
+    "a11y:axe": "axe",
     "spellcheck": "cspell --no-progress \"src/content/**/*.md\"",
     "check": "astro check",
     "test": "node --test tests/*.test.mjs",
@@ -33,6 +37,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@axe-core/cli": "^4.12.1",
+    "@playwright/test": "^1.62.1",
     "@resvg/resvg-js": "^2.6.2",
     "cspell": "^10.0.1",
     "fast-xml-parser": "^5.10.1",
