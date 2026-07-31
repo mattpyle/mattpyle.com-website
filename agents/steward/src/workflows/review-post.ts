@@ -188,9 +188,23 @@ const light = {
   // `ApplicationFailure.nonRetryable` directly: a hash mismatch or a rejected
   // credential will never come good by trying again, and retrying a publish is
   // how duplicate PRs get opened.
+  //
+  // 20 minutes, not 5, and the extra fifteen are almost all waiting rather than
+  // working: the publish takes the shared worktree lock, and `buildAndAuditDraft`
+  // can hold it for its full 15-minute `startToCloseTimeout`. A publish that
+  // arrives mid-build has to be able to outlast the build, or the human's approve
+  // dies on a deadline it could never have met and has to be sent again. This
+  // timeout is now the publish's only deadline — no `heartbeatTimeout` is set, and
+  // the lock waits unbounded (`worktree-lock.ts`) precisely because the deadline
+  // belongs here.
+  //
+  // Retries were the alternative and are rejected: a waiting publish under a
+  // longer deadline reaches the same outcome without re-running side-effectful
+  // git and GitHub steps, which is the thing `maximumAttempts: 1` exists to
+  // prevent.
   publishing: wf.proxyActivities<Pick<typeof activities, 'publishPost'>>({
     taskQueue: QUEUE_LIGHT,
-    startToCloseTimeout: '5 minutes',
+    startToCloseTimeout: '20 minutes',
     retry: {
       maximumAttempts: 1,
       nonRetryableErrorTypes: [

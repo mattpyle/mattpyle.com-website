@@ -10,7 +10,7 @@ import {
   SCORECARD_ARCHIVE_DIR,
 } from '../config.js';
 import { git, worktreeExists } from '../lib/git.js';
-import { withWorktreeLock, PUBLISH_ACQUIRE_TIMEOUT_MS } from '../lib/worktree-lock.js';
+import { withWorktreeLock } from '../lib/worktree-lock.js';
 import { gh } from '../lib/github.js';
 import { auditUrl } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
@@ -361,7 +361,6 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
 
       return { record, id, committed };
     },
-    { acquireTimeoutMs: PUBLISH_ACQUIRE_TIMEOUT_MS },
   );
 
   const owner = GITHUB_REPO.split('/')[0];

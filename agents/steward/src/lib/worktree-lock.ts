@@ -27,16 +27,18 @@ import { log } from './logger.js';
  * `maxConcurrentActivityTaskExecutions: 1`, or one worktree per worker.
  *
  * Deliberately Temporal-free, like the rest of `lib/`: callers own heartbeats
- * and cancellation. Both activity call sites already run a heartbeat pump or
- * complete well inside their timeout, so a wait here does not look like a
- * wedged activity.
+ * and cancellation. `buildAndAuditDraft` runs a heartbeat pump against its
+ * `heartbeatTimeout: '30 seconds'`; the two publish activities set no
+ * `heartbeatTimeout` at all, so a publish waiting here stays healthy from
+ * Temporal's point of view for the whole wait and its `startToCloseTimeout` is
+ * the only thing that can end it. If a `heartbeatTimeout` is ever added to a
+ * publish stub, this wait becomes a wedged-activity signal and the waiting
+ * caller has to heartbeat through it.
  */
 
 interface Waiter {
   holder: string;
   grant: () => void;
-  fail: (err: Error) => void;
-  timer?: NodeJS.Timeout;
 }
 
 let currentHolder: string | undefined;
@@ -47,45 +49,6 @@ export function worktreeLockState(): { holder?: string; waiting: string[] } {
   return { holder: currentHolder, waiting: waiters.map((w) => w.holder) };
 }
 
-export interface WorktreeLockOptions {
-  /**
-   * How long to wait for the lock before giving up, in milliseconds.
-   *
-   * Undefined means wait forever, which is right for a caller whose own
-   * `startToCloseTimeout` is the real deadline. A caller with
-   * `maximumAttempts: 1` wants a *shorter* deadline than its timeout, so the
-   * failure names the actual cause ("worktree busy") instead of surfacing as an
-   * opaque activity timeout minutes later.
-   */
-  acquireTimeoutMs?: number;
-}
-
-/**
- * How long the two publish activities wait for the lock before failing.
- *
- * Both run with `startToCloseTimeout: '5 minutes'` and `maximumAttempts: 1`,
- * and those workflow-side options may not change here: they are scheduled-command
- * attributes, and reviews park durably in `awaiting_verdict` where a changed
- * attribute risks non-determinism when those open histories replay. So a publish
- * that waits out a long build audit fails either way; giving up at four minutes
- * only chooses *which* failure the human sees — a `WorktreeBusyError` naming the
- * activity that held the tree, rather than a bare activity timeout. The remedy
- * is the same in both cases: re-approve (or re-run the scorecard's publish leg)
- * once the build finishes.
- */
-export const PUBLISH_ACQUIRE_TIMEOUT_MS = 4 * 60_000;
-
-/** Thrown when `acquireTimeoutMs` elapses before the lock is free. */
-export class WorktreeBusyError extends Error {
-  constructor(holder: string, waitedMs: number, heldBy?: string) {
-    super(
-      `worktree busy: ${holder} waited ${waitedMs}ms for WORKTREE_DIR` +
-        (heldBy ? `, still held by ${heldBy}` : ''),
-    );
-    this.name = 'WorktreeBusyError';
-  }
-}
-
 /**
  * Runs `fn` with exclusive access to the worktree.
  *
@@ -93,13 +56,23 @@ export class WorktreeBusyError extends Error {
  * is released in a `finally`, so a throwing or cancelled critical section hands
  * it on rather than wedging every later worktree activity for the life of the
  * worker.
+ *
+ * **The wait is unbounded, deliberately: the caller's `startToCloseTimeout` is
+ * the only deadline.** An earlier version let the two publish activities give up
+ * after four minutes with a `WorktreeBusyError`, because their scheduled
+ * `startToCloseTimeout` was five minutes and a bounded failure at least named the
+ * cause. That was choosing which failure the human saw, not avoiding one: a
+ * publish arriving mid-build could not outlast a 15-minute build audit either
+ * way, and the cost landed on the one step where failure costs an approve the
+ * human already sent. Both publish stubs now carry a 20-minute
+ * `startToCloseTimeout` (`workflows/review-post.ts`,
+ * `workflows/scorecard-audit.ts`), which is past the build audit's bound, so
+ * waiting here actually succeeds. If a bounded acquire is ever wanted again, it
+ * belongs back in this module rather than in a caller's own timer, and it needs a
+ * caller whose deadline is genuinely shorter than its patience.
  */
-export async function withWorktreeLock<T>(
-  holder: string,
-  fn: () => Promise<T>,
-  options: WorktreeLockOptions = {},
-): Promise<T> {
-  const release = await acquire(holder, options.acquireTimeoutMs);
+export async function withWorktreeLock<T>(holder: string, fn: () => Promise<T>): Promise<T> {
+  const release = await acquire(holder);
   try {
     return await fn();
   } finally {
@@ -107,7 +80,7 @@ export async function withWorktreeLock<T>(
   }
 }
 
-async function acquire(holder: string, timeoutMs?: number): Promise<() => void> {
+async function acquire(holder: string): Promise<() => void> {
   if (currentHolder === undefined) {
     currentHolder = holder;
     return makeRelease(holder);
@@ -120,28 +93,8 @@ async function acquire(holder: string, timeoutMs?: number): Promise<() => void> 
     'waiting for the worktree lock',
   );
 
-  await new Promise<void>((resolve, reject) => {
-    const waiter: Waiter = {
-      holder,
-      grant: () => {
-        if (waiter.timer) clearTimeout(waiter.timer);
-        resolve();
-      },
-      fail: (err) => {
-        if (waiter.timer) clearTimeout(waiter.timer);
-        reject(err);
-      },
-    };
-    if (timeoutMs !== undefined) {
-      waiter.timer = setTimeout(() => {
-        const i = waiters.indexOf(waiter);
-        if (i !== -1) waiters.splice(i, 1);
-        waiter.fail(new WorktreeBusyError(holder, Date.now() - started, currentHolder));
-      }, timeoutMs);
-      // A pending acquisition must not be the reason the process stays alive.
-      waiter.timer.unref?.();
-    }
-    waiters.push(waiter);
+  await new Promise<void>((resolve) => {
+    waiters.push({ holder, grant: resolve });
   });
 
   log.info({ holder, waitedMs: Date.now() - started }, 'acquired the worktree lock');

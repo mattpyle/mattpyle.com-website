@@ -73,9 +73,16 @@ const light = {
     startToCloseTimeout: '30 seconds',
     retry: { maximumAttempts: 3 },
   }),
+  // 20 minutes for the same reason `reviewPost`'s publish stub carries it: this
+  // activity takes the shared worktree lock, and `buildAndAuditDraft` can hold
+  // that lock for its full 15 minutes. This is the contention the lock's own
+  // docblock is about — a nightly scorecard publishing into the tree an
+  // interactive review is mid-build in — so the scorecard's publish leg has to be
+  // able to wait the build out rather than dying on a deadline it cannot meet.
+  // The lock waits unbounded, so this is the only deadline in play.
   publishing: wf.proxyActivities<Pick<typeof activities, 'publishScorecardRun'>>({
     taskQueue: QUEUE_LIGHT,
-    startToCloseTimeout: '5 minutes',
+    startToCloseTimeout: '20 minutes',
     retry: {
       maximumAttempts: 1,
       nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'],

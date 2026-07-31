@@ -6,12 +6,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import {
-  withWorktreeLock,
-  worktreeLockState,
-  WorktreeBusyError,
-  PUBLISH_ACQUIRE_TIMEOUT_MS,
-} from '../../src/lib/worktree-lock.js';
+import { withWorktreeLock, worktreeLockState } from '../../src/lib/worktree-lock.js';
 import { syncWorktree } from '../../src/lib/git.js';
 
 const exec = promisify(execFile);
@@ -84,7 +79,11 @@ test('a throwing critical section releases the lock', async () => {
   assert.equal(await withWorktreeLock('after', async () => 'ok'), 'ok');
 });
 
-test('acquireTimeoutMs fails with WorktreeBusyError naming the holder, and does not leak a waiter', async () => {
+test('a waiter waits as long as the holder takes, rather than giving up', async () => {
+  // The card's change (steward-publish-contention-timeout): the acquire is
+  // unbounded, so the caller's own `startToCloseTimeout` is the only deadline.
+  // The publish used to abandon the queue after four minutes; nothing here may
+  // reject a waiter for waiting.
   let releaseHolder!: () => void;
   const held = withWorktreeLock('long-build', async () => {
     await new Promise<void>((resolve) => {
@@ -92,55 +91,25 @@ test('acquireTimeoutMs fails with WorktreeBusyError naming the holder, and does 
     });
   });
 
-  // Give the holder a turn to acquire before the impatient caller arrives.
+  // Give the holder a turn to acquire before the waiter arrives.
   await tick();
 
-  const err = await withWorktreeLock('impatient-publish', async () => 'never runs', {
-    acquireTimeoutMs: 10,
-  }).then(
-    () => undefined,
-    (e: unknown) => e,
-  );
+  let acquired = false;
+  const waiting = withWorktreeLock('patient-publish', async () => {
+    acquired = true;
+    return 'ran';
+  });
 
-  assert.ok(err instanceof WorktreeBusyError, `expected WorktreeBusyError, got ${String(err)}`);
-  assert.match(err.message, /long-build/);
-  assert.deepEqual(worktreeLockState().waiting, [], 'timed-out waiter left in the queue');
+  // Several event-loop turns and a real timer later, the waiter is still queued
+  // and still un-rejected: the only thing that can end this wait is the holder.
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(acquired, false, 'waiter entered while the holder was inside');
+  assert.deepEqual(worktreeLockState(), { holder: 'long-build', waiting: ['patient-publish'] });
 
   releaseHolder();
   await held;
-  assert.equal(worktreeLockState().holder, undefined);
-});
-
-test('a timed-out waiter never later steals the lock', async () => {
-  let releaseHolder!: () => void;
-  const held = withWorktreeLock('holder', async () => {
-    await new Promise<void>((resolve) => {
-      releaseHolder = resolve;
-    });
-  });
-  await tick();
-
-  await assert.rejects(
-    () => withWorktreeLock('gone', async () => 'never runs', { acquireTimeoutMs: 5 }),
-    WorktreeBusyError,
-  );
-
-  let ran = false;
-  releaseHolder();
-  await held;
-  await withWorktreeLock('next', async () => {
-    ran = true;
-    assert.deepEqual(worktreeLockState().waiting, []);
-  });
-  assert.ok(ran);
-});
-
-test('the publish acquire timeout stays inside the publish activities startToCloseTimeout', () => {
-  // Both publish activities are scheduled with `startToCloseTimeout: '5 minutes'`
-  // and may not be changed workflow-side (replay risk on parked reviews). If this
-  // constant ever exceeds that, the WorktreeBusyError it exists to produce would
-  // never fire — the activity would time out first.
-  assert.ok(PUBLISH_ACQUIRE_TIMEOUT_MS < 5 * 60_000);
+  assert.equal(await waiting, 'ran');
+  assert.deepEqual(worktreeLockState(), { holder: undefined, waiting: [] });
 });
 
 // ---------------------------------------------------------------------------
@@ -215,6 +184,48 @@ test('an overlapping build and publish serialise, and the build reads its own by
   // The deterministic serialised outcome: whichever order they ran in, the
   // build saw the draft it synced, never the publish commit's version.
   assert.equal(seen[0], SYNCED_BYTES);
+  assert.equal(worktreeLockState().holder, undefined);
+});
+
+test('a publish that arrives mid-build waits the build out and still publishes', async () => {
+  // The card this change exists for (steward-publish-contention-timeout). The
+  // test above starts both at once, so FIFO may hand the tree to the publish
+  // first; here the build is provably already inside its critical section when
+  // the publish arrives, which is the case that used to fail with
+  // `WorktreeBusyError` and cost Matt a re-approve.
+  await syncWorktree(repo, worktree, POST);
+
+  const seen: string[] = [];
+  const build = withWorktreeLock('buildAndAuditDraft:temp-post', () =>
+    buildSection('under review', seen),
+  );
+
+  // Wait until the build genuinely holds the lock before the publish asks for it.
+  while (worktreeLockState().holder === undefined) await tick();
+  assert.equal(worktreeLockState().holder, 'buildAndAuditDraft:temp-post');
+
+  const branch = 'steward/publish-mid-build';
+  const startedWaiting = Date.now();
+  const publish = withWorktreeLock(`publishPost:temp-post`, () => publishSection(branch));
+
+  // Queued, not refused.
+  await tick();
+  assert.deepEqual(worktreeLockState().waiting, ['publishPost:temp-post']);
+
+  // The publish resolves — no rejection, no bounded-wait failure — and it did so
+  // by outlasting the build rather than by racing it.
+  await assert.doesNotReject(() => publish);
+  const waited = Date.now() - startedWaiting;
+  await build;
+
+  assert.ok(
+    waited >= BUILD_HOLD_MS - 50,
+    `publish completed after ${waited}ms, too fast to have waited out the ${BUILD_HOLD_MS}ms build`,
+  );
+  // The build still read its own synced bytes, and the publish's commit exists.
+  assert.deepEqual(seen, [SYNCED_BYTES]);
+  const { stdout } = await exec('git', ['log', '-1', '--format=%s', branch], { cwd: worktree });
+  assert.equal(stdout.trim(), `publish ${branch}`);
   assert.equal(worktreeLockState().holder, undefined);
 });
 
