@@ -8,7 +8,7 @@ import matter from 'gray-matter';
 import { log } from '../lib/logger.js';
 import { GITHUB_REPO, SITE_DIR, WORKTREE_DIR, postRelPath, type Collection } from '../config.js';
 import { git, worktreeExists } from '../lib/git.js';
-import { withWorktreeLock, PUBLISH_ACQUIRE_TIMEOUT_MS } from '../lib/worktree-lock.js';
+import { withWorktreeLock } from '../lib/worktree-lock.js';
 import { gh } from '../lib/github.js';
 import type { ReviewReport } from '../lib/report.js';
 
@@ -304,7 +304,6 @@ export async function publishPost(input: PublishPostInput): Promise<PublishPostR
 
       return { flipped, committed };
     },
-    { acquireTimeoutMs: PUBLISH_ACQUIRE_TIMEOUT_MS },
   );
 
   // --- Step 6: the PR -------------------------------------------------------
