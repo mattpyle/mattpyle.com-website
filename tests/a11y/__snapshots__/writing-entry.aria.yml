@@ -20,7 +20,7 @@
     - link "← ALL WRITING":
       - /url: /writing
     - time: /\d+ JUL \d+/
-    - text: 9 min read
+    - text: 8 min read
     - heading "·" [level=1]
     - paragraph: ·
     - list:
@@ -28,12 +28,12 @@
     - region "Use this article":
       - heading "Use this article" [level=2]
       - link "View markdown":
-        - /url: /writing/i-turned-on-a-screen-reader.md
+        - /url: /writing/accessibility-and-ai.md
       - button "Copy markdown"
       - link "Ask ChatGPT (opens in a new tab)":
-        - /url: https://chatgpt.com/?hint=search&q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Fi-turned-on-a-screen-reader%2F+so+I+can+ask+questions+about+its+contents
+        - /url: https://chatgpt.com/?hint=search&q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Faccessibility-and-ai%2F+so+I+can+ask+questions+about+its+contents
       - link "Ask Claude (opens in a new tab)":
-        - /url: https://claude.ai/new?q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Fi-turned-on-a-screen-reader%2F+so+I+can+ask+questions+about+its+contents
+        - /url: https://claude.ai/new?q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Faccessibility-and-ai%2F+so+I+can+ask+questions+about+its+contents
       - status
     - link "← ALL WRITING":
       - /url: /writing

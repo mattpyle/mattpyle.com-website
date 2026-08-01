@@ -14,6 +14,23 @@ const NEGOTIABLE = [
   { section: 'changelog', re: /^\/changelog\/(?!\d+\/?$)([^/.]+)\/?$/ },
 ];
 
+// Slugs that shipped publicly and then moved. Inbound links and cached RSS entries
+// hold the old URL forever, so it 301s rather than 404s.
+//
+// This lives in the middleware, not vercel.json's `redirects`, because the middleware
+// runs before the platform's routing rules: a config-level redirect would be shadowed
+// for an `Accept: text/markdown` request, which reaches the negotiation below first
+// and proxies to a `.md` route that no longer exists. That is the one request shape
+// most likely to be held by an agent, so it is the one that must not 404. Keeping a
+// single map here also keeps the two request shapes (page and `.md`) from drifting.
+const RETIRED_WRITING_SLUGS: Record<string, string> = {
+  'i-turned-on-a-screen-reader': 'accessibility-and-ai',
+};
+
+// Matches both shapes a retired writing URL arrives in: the page (with or without a
+// trailing slash) and its `.md` sibling.
+const RETIRABLE = /^\/writing\/([^/.]+?)(\.md)?\/?$/;
+
 interface MediaRange {
   type: string;
   q: number;
@@ -63,6 +80,19 @@ function prefersMarkdown(acceptHeader: string | null): boolean {
 
 export default async function middleware(request: Request) {
   const url = new URL(request.url);
+
+  // Retired slugs first: a moved URL redirects whatever the Accept header asks for.
+  const retirable = url.pathname.match(RETIRABLE);
+  if (retirable) {
+    const target = RETIRED_WRITING_SLUGS[retirable[1]];
+    if (target) {
+      // Canonical shapes: the page carries a trailing slash, the markdown sibling
+      // is an extension on a slash-less path.
+      const location = retirable[2] ? `/writing/${target}.md` : `/writing/${target}/`;
+      console.log(`[middleware] 301 ${url.pathname} -> ${location}`);
+      return new Response(null, { status: 301, headers: { Location: location } });
+    }
+  }
 
   let section: string | undefined;
   let slug: string | undefined;

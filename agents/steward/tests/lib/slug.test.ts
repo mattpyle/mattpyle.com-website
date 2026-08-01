@@ -13,7 +13,7 @@ import { assertValidSlug, isValidSlug, postRelPath, urlPathFor } from '../../src
  */
 
 test('real slugs are accepted', () => {
-  for (const slug of ['hello-world', 'i-turned-on-a-screen-reader', 'astro-rebuild', 'webmcp-tools']) {
+  for (const slug of ['hello-world', 'accessibility-and-ai', 'astro-rebuild', 'webmcp-tools']) {
     assert.equal(isValidSlug(slug), true, slug);
   }
 });

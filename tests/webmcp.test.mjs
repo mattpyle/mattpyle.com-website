@@ -21,9 +21,9 @@ const INDEX = {
   },
   writing: [
     {
-      title: 'I turned on a screen reader',
-      slug: 'i-turned-on-a-screen-reader',
-      url: 'https://www.mattpyle.com/writing/i-turned-on-a-screen-reader',
+      title: 'Accessibility, AI, and testing with screen readers',
+      slug: 'accessibility-and-ai',
+      url: 'https://www.mattpyle.com/writing/accessibility-and-ai',
       date: '2026-07-12T00:00:00.000Z',
       updated: '2026-07-14T00:00:00.000Z',
       tags: ['accessibility', 'agents'],
@@ -115,7 +115,7 @@ test('get_recent_writing defaults to 5 posts, newest first', async () => {
   const { posts } = await toolsByName().get_recent_writing.execute({});
 
   assert.equal(posts.length, 2);
-  assert.equal(posts[0].title, 'I turned on a screen reader');
+  assert.equal(posts[0].title, 'Accessibility, AI, and testing with screen readers');
   assert.equal(posts[0].updated, '2026-07-14T00:00:00.000Z');
   assert.equal('updated' in posts[1], false);
 });
@@ -142,7 +142,7 @@ test('search_content matches title, description, and tags across writing, builds
   const byTitle = await tool.execute({ query: 'screen reader' });
   assert.equal(byTitle.results.length, 1);
   assert.equal(byTitle.results[0].type, 'writing');
-  assert.equal(byTitle.results[0].url, 'https://www.mattpyle.com/writing/i-turned-on-a-screen-reader');
+  assert.equal(byTitle.results[0].url, 'https://www.mattpyle.com/writing/accessibility-and-ai');
 
   const byTag = await tool.execute({ query: 'astro' });
   assert.equal(byTag.results.length, 1);

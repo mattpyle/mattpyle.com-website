@@ -33,7 +33,7 @@ export interface PageSpec {
   snapshotRedact?: string[];
 }
 
-export const WRITING_ENTRY = 'i-turned-on-a-screen-reader';
+export const WRITING_ENTRY = 'accessibility-and-ai';
 export const CHANGELOG_ENTRY = 'public-scorecard';
 
 export const PAGES: PageSpec[] = [
