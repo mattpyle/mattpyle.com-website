@@ -243,6 +243,14 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
   </head>
   <body>
     <a href="#main" class="skip-link">Skip to content</a>
+    {/* THROWAWAY. A deliberate WCAG 2.1.2 keyboard trap, to prove the CI guard
+        goes red on it. This branch is never merged. */}
+    <script>
+      document.addEventListener('keydown', event => {
+        if (event.key !== 'Tab') return;
+        if (document.activeElement?.classList.contains('skip-link')) event.preventDefault();
+      });
+    </script>
     <AppearanceBanner />
     <Nav />
     <main class="site-main" id="main">
