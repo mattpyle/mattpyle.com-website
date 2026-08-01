@@ -39,7 +39,13 @@ export default defineConfig({
   webServer: {
     command: `npx serve dist/client --listen ${PORT} --no-clipboard --no-port-switching`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // CI normally refuses to reuse a server, so a stale process cannot make a
+    // run pass against yesterday's build. The a11y workflow is the deliberate
+    // exception: it has already built once and served dist/client on this port
+    // for the axe audit, and `--no-port-switching` means a second `serve` here
+    // would not fall back to 4322, it would just fail. A11Y_REUSE_SERVER is the
+    // workflow saying "that server is mine, and it is this commit's build".
+    reuseExistingServer: !process.env.CI || process.env.A11Y_REUSE_SERVER === '1',
     timeout: 60_000,
   },
 });

@@ -18,6 +18,11 @@ import { installPageLoadCounter, gotoSettled } from './helpers/settle';
  *
  * Update deliberately: `npx playwright test aria-snapshot --update-snapshots`,
  * then read the diff. A diff here means the accessibility tree changed shape.
+ *
+ * Tagged @golden because these are the one family the per-PR guard in
+ * .github/workflows/a11y.yml excludes: they match as a subset rather than an
+ * exact tree, so they are a scorecard axis with a human reading the diff, not a
+ * gate. The tag is the filter, so a new spec file joins the guard by default.
  */
 
 test.beforeEach(async ({ page }) => {
@@ -72,7 +77,7 @@ async function prune(page: import('@playwright/test').Page, spec: PageSpec): Pro
 }
 
 for (const spec of PAGES) {
-  test(`${spec.name} (${spec.path}): accessibility tree matches the golden`, async ({ page }) => {
+  test(`${spec.name} (${spec.path}): accessibility tree matches the golden`, { tag: '@golden' }, async ({ page }) => {
     await gotoSettled(page, spec.path);
     await prune(page, spec);
     await expect(page.locator('body')).toMatchAriaSnapshot({

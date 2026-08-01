@@ -1,4 +1,4 @@
-name: Accessibility (axe-core)
+name: Accessibility (axe-core + guard checks)
 
 on:
   push:
@@ -35,6 +35,33 @@ jobs:
           google-chrome-stable --version
           npx chromedriver --version
 
+      # Playwright downloads a pinned Chromium build per release, so the cache
+      # key has to be the resolved @playwright/test version, not the range in
+      # package.json. A bump to a release with a newer Chromium must miss the
+      # cache, or the guard runs against a browser the runner's Playwright does
+      # not support and fails for a reason that has nothing to do with the PR.
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+      # The browser binary is cached; the system libraries it links against are
+      # not, because they land in /usr/lib and are not ours to cache. On a hit,
+      # install-deps alone; on a miss, both.
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
       - name: Build site
         run: npm run build
 
@@ -65,3 +92,24 @@ jobs:
             http://localhost:4321/scorecard \
             http://localhost:4321/webmcp \
             http://localhost:4321/writing/accessibility-and-ai/
+
+      # The deterministic WCAG checks axe and Lighthouse defer to manual review:
+      # keyboard order, focus visibility, ClientRouter focus, 320px reflow,
+      # reduced motion. See docs/reference/a11y-manual-checks-suite.md.
+      #
+      # if: always() because the axe step runs with --exit. Without it a red axe
+      # ends the job here and the PR never learns whether the guard also broke;
+      # splitting them into two jobs would cost a second build instead.
+      #
+      # a11y:run, not a11y: the build above is this commit's build, already
+      # served on 4321. A11Y_REUSE_SERVER tells playwright.config.ts to use that
+      # server rather than start a second one on the same port and fail.
+      #
+      # --grep-invert @golden drops the aria snapshots. They match their golden
+      # as a subset, so they are blind to additions and belong on the scorecard
+      # with a human reading the diff, not on a per-PR gate.
+      - name: Run accessibility guard checks (Playwright)
+        if: always()
+        env:
+          A11Y_REUSE_SERVER: '1'
+        run: npm run --silent a11y:run -- --grep-invert @golden
