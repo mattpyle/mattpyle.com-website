@@ -160,8 +160,16 @@ export const SCORECARD_ARCHIVE_DIR = path.join(REVIEWS_DIR, '_scorecard');
  * `words: undefined`. Pointing this at a thin config that imports the shared
  * file would empty Steward's dictionary. Verified empirically; it is why
  * the shared file holds the words inline and this constant names it directly.
+ *
+ * Overridable for the same reason as REVIEWS_DIR above, and one more: `node
+ * --test` runs test *files* in parallel processes, so `dictionary.test.ts`
+ * writing this file raced `cspell.test.ts` reading it, and the reader caught it
+ * mid-write with an empty wordlist (card: cspell-test-isolation-flake). The
+ * writing tests point this at a temp copy instead. Production never sets it.
  */
-export const CSPELL_CONFIG = path.join(REPO_ROOT, 'cspell.shared.yaml');
+export const CSPELL_CONFIG = process.env.STEWARD_CSPELL_CONFIG
+  ? path.resolve(process.env.STEWARD_CSPELL_CONFIG)
+  : path.join(REPO_ROOT, 'cspell.shared.yaml');
 export const RUBRICS_DIR = path.join(STEWARD_DIR, 'src', 'rubrics');
 
 export const WEB_UI = 'http://localhost:8233';

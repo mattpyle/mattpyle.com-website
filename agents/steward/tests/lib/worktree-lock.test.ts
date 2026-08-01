@@ -146,22 +146,29 @@ after(async () => {
  * the file it is about to "build" — the read is the part a concurrent publish
  * corrupts.
  */
-async function buildSection(marker: string, seen: string[]): Promise<void> {
+async function buildSection(
+  marker: string,
+  seen: string[],
+  hold: () => Promise<unknown> = timerHold,
+): Promise<void> {
   await fs.writeFile(path.join(repo, POST), `---\ntitle: "${marker}"\n---\n`, 'utf8');
   await syncWorktree(repo, worktree, POST);
-  // Stand-in for npm ci + build + serve + audit: a window, comfortably longer
-  // than the publish section's git work, during which the worktree must not
-  // move under this activity. The real thing holds it for minutes.
-  await new Promise((r) => setTimeout(r, BUILD_HOLD_MS));
+  // Stand-in for npm ci + build + serve + audit: a window during which the
+  // worktree must not move under this activity. The real thing holds it for
+  // minutes. The lock tests use the timer; the control arm passes a barrier so
+  // the window is defined by the other section rather than by the clock.
+  await hold();
   seen.push(await fs.readFile(path.join(worktree, POST), 'utf8'));
 }
 
 /** Long enough that an unlocked publish lands inside the build's window. */
 const BUILD_HOLD_MS = 800;
+const timerHold = () => new Promise((r) => setTimeout(r, BUILD_HOLD_MS));
 const SYNCED_BYTES = '---\ntitle: "under review"\n---\n';
 
 /** Stands in for a publish activity's region: branch the worktree, write, commit. */
-async function publishSection(branch: string): Promise<void> {
+async function publishSection(branch: string, waitFor?: Promise<unknown>): Promise<void> {
+  if (waitFor) await waitFor;
   await git(worktree, 'checkout', '-B', branch, 'main');
   await git(worktree, 'clean', '-fd');
   await fs.writeFile(path.join(worktree, POST), `---\ntitle: "${branch}"\ndraft: false\n---\n`, 'utf8');
@@ -230,21 +237,63 @@ test('a publish that arrives mid-build waits the build out and still publishes',
 });
 
 test('without the lock the same two sections corrupt each other (the control)', async () => {
+  // The arm that makes the two tests above mean something: it proves the
+  // serialisation they assert is the lock's doing and not something the sections
+  // would have done anyway.
+  //
+  // It used to start both sections at once and rely on the runner to race them,
+  // betting that the publish's git work landed inside the build's fixed 800ms
+  // window. On a slow or contended GitHub runner it did not: the two serialised
+  // naturally, the build read its own bytes, and the arm scored that clean pass
+  // as a failure on PRs that touched nothing (card:
+  // steward-worktree-lock-control-flake). Timing was an assumption, and it was
+  // the assumption doing the work.
+  //
+  // Now the interleaving is forced through two explicit scheduling points rather
+  // than hoped for: the publish waits until the build has synced its draft, and
+  // the build's window closes only once the publish has finished mutating the
+  // tree. That is exactly the ordering the lock exists to make impossible, so
+  // what the arm demonstrates is unchanged — an unlocked build and publish
+  // sharing one worktree do interfere — but it no longer depends on the runner
+  // to produce the overlap.
   await syncWorktree(repo, worktree, POST);
+
+  let buildSynced!: () => void;
+  const synced = new Promise<void>((resolve) => {
+    buildSynced = resolve;
+  });
+  let publishFinished!: () => void;
+  const published = new Promise<void>((resolve) => {
+    publishFinished = resolve;
+  });
 
   const seen: string[] = [];
   let threw = false;
   try {
     await Promise.all([
-      buildSection('under review', seen),
-      publishSection('steward/publish-unlocked'),
+      buildSection('under review', seen, () => {
+        buildSynced();
+        return published;
+      }),
+      // `finally`, not `then`: if the publish's git work fails, the build must be
+      // let go rather than left hanging on a barrier nobody will release.
+      publishSection('steward/publish-unlocked', synced).finally(publishFinished),
     ]);
   } catch {
-    // Either outcome proves the point: two checkouts racing in one tree can also
-    // fail outright on git's own index lock. What must not happen is a clean pass.
+    // Still a valid outcome: two checkouts in one tree can also fail outright on
+    // git's own index lock. What must not happen is a clean pass.
     threw = true;
   }
 
-  const clean = !threw && seen.length === 1 && seen[0] === SYNCED_BYTES;
-  assert.ok(!clean, 'unlocked sections did not interfere — this test no longer proves anything');
+  if (threw) return;
+
+  assert.equal(seen.length, 1);
+  assert.notEqual(
+    seen[0],
+    SYNCED_BYTES,
+    'unlocked sections did not interfere — this test no longer proves anything',
+  );
+  // And specifically: what the build read back was the publish's commit, the
+  // corruption the lock prevents, not merely "something unexpected".
+  assert.match(seen[0], /draft: false/);
 });
