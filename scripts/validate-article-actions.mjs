@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { chatGptUrl, claudeUrl } from '../src/lib/article-actions.mjs';
 import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 
-const slug = 'i-turned-on-a-screen-reader';
+const slug = 'accessibility-and-ai';
 const canonicalUrl = `${SITE_ORIGIN}/writing/${slug}/`;
 const markdownUrl = `/writing/${slug}.md`;
 const articlePath = new URL(`../dist/client/writing/${slug}/index.html`, import.meta.url);

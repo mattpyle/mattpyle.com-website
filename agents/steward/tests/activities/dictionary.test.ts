@@ -87,6 +87,6 @@ test('the file stays valid for cspell after a write', async () => {
   await addWord('Zzyzx');
   const { runCspell } = await import('../../src/activities/cspell.js');
   // If the write broke the YAML, loadSettings throws on an empty dictionary.
-  const result = await runCspell('src/content/writing/i-turned-on-a-screen-reader.md');
+  const result = await runCspell('src/content/writing/accessibility-and-ai.md');
   assert.equal(result.findings.length, 0, 'the published post is still clean after a dict-add');
 });

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { articlePrompt, chatGptUrl, claudeUrl } from '../src/lib/article-actions.mjs';
 
-const canonicalUrl = 'https://www.mattpyle.com/writing/i-turned-on-a-screen-reader/';
+const canonicalUrl = 'https://www.mattpyle.com/writing/accessibility-and-ai/';
 const expectedPrompt = `Read from ${canonicalUrl} so I can ask questions about its contents`;
 
 test('articlePrompt uses the approved sentence and canonical URL', () => {

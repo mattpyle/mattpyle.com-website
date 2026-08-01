@@ -64,4 +64,4 @@ jobs:
             http://localhost:4321/builds \
             http://localhost:4321/scorecard \
             http://localhost:4321/webmcp \
-            http://localhost:4321/writing/i-turned-on-a-screen-reader/
+            http://localhost:4321/writing/accessibility-and-ai/
