@@ -97,10 +97,11 @@ const NAV_LINKS = [
   /* WCAG 1.4.10 reflow: the single non-wrapping row needs 352px, so below that
      the header wraps instead of scrolling the page sideways. The wordmark takes
      its own row (flex-basis 100%) and the links follow, wrapping among
-     themselves as needed — retro restyles this same markup in wider faces
-     (Comic Sans wordmark, bold Verdana links) and must fit too, so nothing here
-     assumes the modern fonts' metrics. Scoped below 360px, so 375 and up keep
-     the single 60px row. */
+     themselves as needed. Retro restyles this same markup in wider faces
+     (Comic Sans wordmark, bold Verdana links) and needs the same wrap further
+     up, at 440px, which retro.css layers on top; nothing here assumes either
+     mode's font metrics. Scoped below 360px, so 375 and up keep the single
+     60px row. */
   @media (max-width: 359.98px) {
     .nav-inner {
       flex-wrap: wrap;

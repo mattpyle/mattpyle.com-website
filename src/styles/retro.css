@@ -218,6 +218,32 @@ html[data-appearance='retro'] .nav-link.is-active {
   border-bottom-color: var(--retro-gold);
 }
 
+/* WCAG 1.4.10 reflow, retro only. Nav.astro wraps the header below 360px, where
+   the modern faces stop fitting on one row. Retro's Comic Sans wordmark and bold
+   Verdana links need about 429px for that same row, so this extends the shipped
+   wrap pattern up to 440px (about 11px of slack over the measured need) instead
+   of moving the shared breakpoint and reflowing modern. Retro at 440 and up
+   keeps its single row. Selectors are scoped under [data-module='nav'] so they
+   outweigh Nav.astro's scoped rules, whose cid attribute counts as a class. */
+@media (max-width: 439.98px) {
+  html[data-appearance='retro'] [data-module='nav'] .nav-inner {
+    flex-wrap: wrap;
+    height: auto;
+    padding-block: 10px;
+    row-gap: 8px;
+  }
+
+  html[data-appearance='retro'] [data-module='nav'] .nav-logo {
+    flex: 0 0 100%;
+  }
+
+  html[data-appearance='retro'] [data-module='nav'] nav {
+    flex: 0 0 100%;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+}
+
 /* ── Mode banner (bulletproof exit #1) ──────────────────────────────────
    Present in the DOM on every page in both modes; hidden by default,
    revealed here. See src/components/AppearanceBanner.astro. */
@@ -342,6 +368,15 @@ html[data-appearance='retro'] [data-module='footer'] nav a {
   color: var(--retro-cream-soft);
 }
 
+/* WCAG 1.4.10 reflow: the footer's five links plus the appearance toggle sit on
+   one non-wrapping row, which Verdana pushes past 320px (the toggle overflowed
+   to right=326). Wrapping is retro-only because modern's narrower faces fit.
+   Scoped under [data-module='footer'] to outweigh Footer.astro's scoped rule. */
+html[data-appearance='retro'] [data-module='footer'] nav {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 html[data-appearance='retro'] .appearance-toggle {
   color: var(--retro-cream);
   border-color: var(--retro-cream-soft);
@@ -444,6 +479,19 @@ html[data-appearance='retro'] .log-header {
 
 html[data-appearance='retro'] .log-title {
   color: var(--retro-maroon);
+}
+
+/* WCAG 1.4.10 reflow, retro only. The header's heading and "VIEW CHANGELOG"
+   link are both white-space: nowrap, so the panel's min-content width is their
+   sum, 304px in retro's faces against a 280px column at 320px viewport. The
+   panel is a grid item with the default min-width: auto, so that min-content
+   pushed the whole page sideways. Letting the header wrap drops min-content to
+   the wider of the two. Modern's narrower faces fit on one row and are left
+   alone; above the retro nav breakpoint there is room for both. */
+@media (max-width: 439.98px) {
+  html[data-appearance='retro'] [data-module='activity-log'] .log-header {
+    flex-wrap: wrap;
+  }
 }
 
 html[data-appearance='retro'] .view-all {
