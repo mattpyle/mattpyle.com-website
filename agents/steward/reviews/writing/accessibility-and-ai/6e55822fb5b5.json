@@ -1,0 +1,1007 @@
+{
+  "schemaVersion": 1,
+  "slug": "accessibility-and-ai",
+  "collection": "writing",
+  "mode": "gate",
+  "file": "src/content/writing/accessibility-and-ai.md",
+  "contentSha256": "6e55822fb5b56462e46d8ec23a9f99290e6dd286bf59a4a13ccd17fb649acb59",
+  "reviewedAt": "2026-08-01T04:47:45.964Z",
+  "workflowId": "steward-review-accessibility-and-ai",
+  "runId": "019fbba5-82f6-7384-8434-f6aa3f5f7600",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "cspell-1",
+          "pass": "cspell",
+          "severity": "flag",
+          "message": "\"evalaute\" is not in the dictionary (suggestions: evaluate, evacuate, evaluated). Fix it, or add it to cspell.shared.yaml (`steward dict-add`) if it is jargon. — likely typo: no evidence it is a name; defaulting to typo so a human looks before it is admitted",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 19,
+          "excerpt": "This website exists to build, play, experiment, and learn so I ran an accessibility audit against this website and learned that in order to truly evalaute your accessibility experience, you must exper"
+        }
+      ],
+      "startedAt": "2026-08-01T04:46:55.097Z",
+      "durationMs": 569,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-19",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 13,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-20",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 13,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'being parsed' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 15,
+          "excerpt": "being parsed"
+        },
+        {
+          "id": "vale-21",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 15,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-22",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 15,
+          "excerpt": "being"
+        },
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'in order to' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 19,
+          "excerpt": "in order to"
+        },
+        {
+          "id": "vale-23",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 21,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-24",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 23,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'equitable' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 27,
+          "excerpt": "equitable"
+        },
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'requirement' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 27,
+          "excerpt": "requirement"
+        },
+        {
+          "id": "vale-25",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 27,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-26",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 27,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-27",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 27,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-28",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 29,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-29",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 29,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-30",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 31,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-31",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 37,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-6",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is applied' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 39,
+          "excerpt": "is applied"
+        },
+        {
+          "id": "vale-7",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'multiple' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 39,
+          "excerpt": "multiple"
+        },
+        {
+          "id": "vale-32",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 39,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-33",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 39,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-8",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'However' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 41,
+          "excerpt": "However"
+        },
+        {
+          "id": "vale-9",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'it is' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 41,
+          "excerpt": "it is"
+        },
+        {
+          "id": "vale-34",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 41,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-35",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 41,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-10",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'completely' is a weasel word!",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 43,
+          "excerpt": "completely"
+        },
+        {
+          "id": "vale-11",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'multiple' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 43,
+          "excerpt": "multiple"
+        },
+        {
+          "id": "vale-12",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'maximum' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 49,
+          "excerpt": "maximum"
+        },
+        {
+          "id": "vale-13",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'was added' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 51,
+          "excerpt": "was added"
+        },
+        {
+          "id": "vale-36",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 51,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-37",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 51,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-38",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 55,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-39",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 55,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-40",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'aren't'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 55,
+          "excerpt": "aren't"
+        },
+        {
+          "id": "vale-41",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'They're'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 55,
+          "excerpt": "They're"
+        },
+        {
+          "id": "vale-42",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 55,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-43",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 57,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-44",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 57,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-14",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'It was' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 59,
+          "excerpt": "It was"
+        },
+        {
+          "id": "vale-45",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 59,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-46",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'am'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 61,
+          "excerpt": "am"
+        },
+        {
+          "id": "vale-47",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'that's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 63,
+          "excerpt": "that's"
+        },
+        {
+          "id": "vale-48",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 63,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-49",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'isn't'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 63,
+          "excerpt": "isn't"
+        },
+        {
+          "id": "vale-50",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 63,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-51",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'That's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 69,
+          "excerpt": "That's"
+        },
+        {
+          "id": "vale-15",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'completely' is a weasel word!",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 71,
+          "excerpt": "completely"
+        },
+        {
+          "id": "vale-52",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 71,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-53",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 71,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-54",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 71,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-55",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 71,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-56",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 71,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.So (error): Don't start a sentence with 'So '.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 79,
+          "excerpt": "So "
+        },
+        {
+          "id": "vale-57",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 79,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-58",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 90,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-16",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'been told' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 93,
+          "excerpt": "been told"
+        },
+        {
+          "id": "vale-59",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 93,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-60",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 130,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-61",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 132,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-62",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'That's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 134,
+          "excerpt": "That's"
+        },
+        {
+          "id": "vale-63",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 138,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-64",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'there's'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 138,
+          "excerpt": "there's"
+        },
+        {
+          "id": "vale-65",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 140,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-66",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 142,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-17",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'validate' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 144,
+          "excerpt": "validate"
+        },
+        {
+          "id": "vale-67",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 144,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-68",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 144,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-18",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'However' is too wordy.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 146,
+          "excerpt": "However"
+        },
+        {
+          "id": "vale-69",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 146,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-70",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 146,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-71",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 146,
+          "excerpt": "is"
+        }
+      ],
+      "startedAt": "2026-08-01T04:46:54.306Z",
+      "durationMs": 1204,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-08-01T04:46:55.096Z",
+      "durationMs": 7
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "claims-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The version number (13.3) and launch date (May 2026) are specific factual claims with no source linked in the post; the linked URL points to a Chrome developer doc but does not appear to confirm either the version or the date.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 13,
+          "excerpt": "Lighthouse 13.3, launched in May 2026, shipped an Agentic Browsing audit category by default.",
+          "evidence": "The post provides no citation that confirms '13.3' or 'May 2026'; the linked page is about scoring methodology, not a release announcement. A reader cannot verify these specifics from anything in the post."
+        },
+        {
+          "id": "claims-patch-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "mechanical fix: Obvious transposition typo.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 19,
+          "excerpt": "evalaute"
+        },
+        {
+          "id": "claims-3",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "buried lede: The section 'a11y is for everyone' takes roughly five sentences of personal motivation and philosophy before arriving at any substantive point; the section has no actionable conclusion and functions purely as wind-up.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 21,
+          "excerpt": "## a11y is for everyone",
+          "evidence": "Lines 27–33 are entirely motivational framing. The section's only concrete observation (that alt text can be gamed) appears at line 25, before the section heading, making the section itself a lede-less digression."
+        },
+        {
+          "id": "claims-4",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: This section does not open with a conclusion; it opens with an image and then personal backstory, and never delivers a section-level conclusion at all.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 21,
+          "excerpt": "## a11y is for everyone",
+          "evidence": "The section covers at least two distinct concepts (alt-text gaming of automated tools; personal motivation for caring about accessibility) without a unifying conclusion stated up front or at all."
+        },
+        {
+          "id": "claims-5",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: The section opens with a specific finding (filter buttons lack active-state markup) but buries the second finding (missing h1 on /about) after a paragraph break introduced by 'However', making the section cover two separate discoveries without a unifying opening conclusion.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 35,
+          "excerpt": "## What the code review caught and missed",
+          "evidence": "Lines 37–39 cover the filter-button issue; lines 41–45 pivot to the missing h1. A reader extracting either paragraph alone would not know the other finding exists, and the section heading promises a unified answer that the opening sentence does not deliver."
+        },
+        {
+          "id": "claims-6",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: The section references 'my writing index', '/about', 'axe', and 'Lighthouse accessibility-tree audit' without defining any of them, making it unintelligible if extracted without the surrounding post context.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 35,
+          "excerpt": "## What the code review caught and missed",
+          "evidence": "An AI agent consuming only this section would not know what site is being audited, what 'axe' is, or what 'the Lighthouse accessibility-tree audit' refers to, since none are introduced within the section."
+        },
+        {
+          "id": "claims-7",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: The section title promises an explanation of aria-pressed but the section is actually about why aria-pressed was the wrong choice for this specific widget; extracted alone it reads as a general tutorial but is really a case-specific post-mortem.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 47,
+          "excerpt": "## How 'aria-pressed' works",
+          "evidence": "Lines 55–57 contain the real conclusion (aria-pressed is syntactically valid but semantically wrong for mutually exclusive filters), but the section heading and opening sentence frame it as a general explainer, which would mislead an agent extracting it."
+        },
+        {
+          "id": "claims-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The three named sub-checks ('Accessibility tree is well-formed', 'Cumulative Layout Shift passes', 'llms.txt follows recommendations') are presented as the canonical Agentic Browsing criteria with no source confirming these are the actual check names or the complete list.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 51,
+          "excerpt": "Agentic Browsing stayed at 3/3 (Accessibility tree is well-formed, Cumulative Layout Shift passes, and llms.txt follows recommendations).",
+          "evidence": "The linked Chrome developer doc in line 13 is the only reference to Agentic Browsing in the post; the post does not quote or cite that doc as the source for these three specific criteria names."
+        },
+        {
+          "id": "claims-8",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "overclaiming: 'Nothing can' is an absolute generalisation; it is possible in principle for a tool with knowledge of the full DOM state or test suite to infer mutual exclusivity.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 57,
+          "excerpt": "Nothing can, by reading the markup alone.",
+          "evidence": "The post provides no evidence that every conceivable tool or approach is incapable of detecting mutual exclusivity from markup; the claim is stronger than the demonstrated evidence (axe and Lighthouse missed it)."
+        },
+        {
+          "id": "claims-9",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "contradiction: Line 61 says the aria-pressed implementation 'seems acceptable', but line 63 says the author 'settled on keeping the filters as buttons with the current active one aria-current=\"true\"', implying aria-pressed was replaced — contradicting the claim that it was acceptable enough to keep.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 61,
+          "excerpt": "Reading the W3C ARIA spec, my implementation seems acceptable. Imperfect, but acceptable.",
+          "evidence": "If the implementation were acceptable, the natural conclusion would be to keep it; the author instead replaced it entirely, which contradicts the 'acceptable' characterisation on line 61."
+        }
+      ],
+      "startedAt": "2026-08-01T04:46:55.096Z",
+      "durationMs": 40188,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "e684e8d44b3d4c998178bd2e7ff67d8ce5b62d47fd63f5ae4132e949dcacd3d7",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "dictionaryProposals": [
+          {
+            "word": "a11y",
+            "disposition": "proper_noun",
+            "reason": "Established numeronym for 'accessibility' used as a technical term throughout the post."
+          },
+          {
+            "word": "AEO",
+            "disposition": "proper_noun",
+            "reason": "Industry acronym (Answer Engine Optimisation) used as a named concept."
+          },
+          {
+            "word": "AX",
+            "disposition": "proper_noun",
+            "reason": "Used as a named concept ('Agent Experience') in the post."
+          },
+          {
+            "word": "axe",
+            "disposition": "proper_noun",
+            "reason": "Name of the Deque accessibility testing tool, used as a product name throughout."
+          },
+          {
+            "word": "NVDA",
+            "disposition": "proper_noun",
+            "reason": "Name of the NonVisual Desktop Access screen reader."
+          },
+          {
+            "word": "llms.txt",
+            "disposition": "proper_noun",
+            "reason": "Name of a proposed web standard file, used as a named artifact."
+          },
+          {
+            "word": "aria-pressed",
+            "disposition": "proper_noun",
+            "reason": "Named WAI-ARIA attribute used as a technical term."
+          },
+          {
+            "word": "aria-current",
+            "disposition": "proper_noun",
+            "reason": "Named WAI-ARIA attribute used as a technical term."
+          },
+          {
+            "word": "aria-selected",
+            "disposition": "proper_noun",
+            "reason": "Named WAI-ARIA attribute used as a technical term."
+          },
+          {
+            "word": "aria-expanded",
+            "disposition": "proper_noun",
+            "reason": "Named WAI-ARIA attribute used as a technical term."
+          },
+          {
+            "word": "PLG",
+            "disposition": "proper_noun",
+            "reason": "Industry acronym (Product-Led Growth) used as a tag/category name."
+          },
+          {
+            "word": "SAAS",
+            "disposition": "proper_noun",
+            "reason": "Used as a filter tag label on the site being described."
+          }
+        ]
+      }
+    },
+    {
+      "pass": "build_audit",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "build_audit.lighthouse.best-practices",
+          "pass": "build_audit",
+          "severity": "flag",
+          "message": "Lighthouse best-practices scored 96, below the site floor of 100.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "evidence": "url: http://127.0.0.1:52187/writing/accessibility-and-ai/\nscore: 96\nfloor: 100"
+        }
+      ],
+      "startedAt": "2026-08-01T04:46:54.304Z",
+      "durationMs": 31922,
+      "metrics": {
+        "url": "http://127.0.0.1:52187/writing/accessibility-and-ai/",
+        "scores": {
+          "performance": 97,
+          "accessibility": 100,
+          "best-practices": 96,
+          "seo": 69,
+          "agentic-browsing": 100
+        },
+        "agenticChecks": [
+          {
+            "id": "agent-accessibility-tree",
+            "title": "Accessibility tree is well-formed",
+            "applicable": true,
+            "passed": true
+          },
+          {
+            "id": "cumulative-layout-shift",
+            "title": "Cumulative Layout Shift",
+            "applicable": true,
+            "passed": true
+          },
+          {
+            "id": "llms-txt",
+            "title": "llms.txt follows recommendations",
+            "applicable": true,
+            "passed": true
+          }
+        ],
+        "failedAudits": [
+          "cache-insight",
+          "errors-in-console",
+          "forced-reflow-insight",
+          "is-crawlable",
+          "network-dependency-tree-insight",
+          "render-blocking-insight",
+          "unused-css-rules"
+        ],
+        "axeViolations": 0,
+        "axeFiltered": 0,
+        "buildMs": 5148,
+        "axeMs": 1436,
+        "lighthouseMs": 8934,
+        "worktreeSha": "118dd65f960de8b861deb6b9c873865a8363ae5a",
+        "npmCi": true
+      }
+    },
+    {
+      "pass": "eprime_alternatives",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "eprime-alt-1",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The passive 'is often shamefully overlooked' hides who is doing the overlooking; naming an actor makes the accusation land.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 27,
+          "excerpt": "Ensuring that every human has an equitable and safe experience online to unlock that same impact is a basic requirement that is often shamefully overlooked.",
+          "evidence": "Suggested rewrite: \"Ensuring that every human has an equitable and safe experience online to unlock that same impact is a basic requirement that the industry shamefully overlooks.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-2",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The expletive 'This is one of those things that' delays the subject and dilutes the observation; cutting it lets the sentence start with the fact.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 41,
+          "excerpt": "This is one of those things that has appeared in my professional life when auditing website best practices.",
+          "evidence": "Suggested rewrite: \"This one has appeared in my professional life when auditing website best practices.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-3",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The missing 'because' makes the sentence a run-on and buries the causal logic that explains why the tools failed to catch the problem.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 57,
+          "excerpt": "Every automated tool passed it as `aria-pressed` on a `<button>` is *syntactically valid ARIA*.",
+          "evidence": "Suggested rewrite: \"Every automated tool passed it because `aria-pressed` on a `<button>` is *syntactically valid ARIA*.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-4",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: 'Overly' hedges a claim that doesn't need hedging; the site is simple, and the qualifier softens the sentence without adding meaning.",
+          "file": "src/content/writing/accessibility-and-ai.md",
+          "line": 146,
+          "excerpt": "Nothing here is overly complex.",
+          "evidence": "Suggested rewrite: \"Nothing here is complex.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        }
+      ],
+      "startedAt": "2026-08-01T04:47:35.308Z",
+      "durationMs": 10631,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/eprime-alternatives.md",
+        "sha256": "c266fd3a3e8626ed2231739e5c0a9c603ec05e5be81b7cb31c9a5b1a275dcfdc",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "eprimeInstances": 53,
+        "maxSuggestions": 5,
+        "suggestionsReturned": 5,
+        "suggestionsCapped": 0,
+        "rejectedWorseTells": 1,
+        "rejectedNotFound": 0,
+        "rejectedNoOp": 0,
+        "droppedPatches": 0
+      }
+    }
+  ],
+  "patches": [
+    {
+      "id": "patch-1",
+      "findingId": "claims-patch-1",
+      "file": "src/content/writing/accessibility-and-ai.md",
+      "oldText": "evalaute",
+      "newText": "evaluate",
+      "rationale": "Obvious transposition typo.",
+      "source": "editorial",
+      "sourcePasses": [
+        "claims_structure"
+      ]
+    }
+  ],
+  "overall": "flag",
+  "summary": "FLAG — nothing blocks publish, but 87 findings want a human look. cspell: flag (1 finding); vale: flag (71 findings); frontmatter: pass (0 findings); claims_structure: flag (10 findings); build_audit: flag (1 finding); eprime_alternatives: flag (4 findings). 1 patch proposed.",
+  "human": {},
+  "publish": {}
+}
