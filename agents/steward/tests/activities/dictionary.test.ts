@@ -1,13 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { CSPELL_CONFIG } from '../../src/config.js';
-import { addWord } from '../../src/lib/dictionary.js';
+// A byte-for-byte copy of the real `cspell.shared.yaml`, not a fixture: these
+// tests exist to prove the curated sections, the attribution comments and the
+// checkout's line endings in the *real* file survive an `addWord`, so a
+// hand-written stand-in would prove nothing. What the copy buys is isolation.
+//
+// `node --test` runs test files in parallel processes. Writing the real file
+// here raced `cspell.test.ts` reading it, and the reader caught it mid-write
+// with an empty wordlist — `runCspell`'s own guard then threw "The shared
+// dictionary loaded with no words" on a branch touching neither file (card:
+// cspell-test-isolation-flake). Nothing under test writes the repo's real
+// dictionary any more.
+//
+// Set before importing config, same as scorecard-archive.test.ts: CSPELL_CONFIG
+// is resolved once, at module evaluation.
+const REAL_CSPELL_CONFIG = fileURLToPath(new URL('../../../../cspell.shared.yaml', import.meta.url));
+const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-dictionary-'));
+const tmpConfig = path.join(tmpDir, 'cspell.shared.yaml');
+await fs.copyFile(REAL_CSPELL_CONFIG, tmpConfig);
+process.env.STEWARD_CSPELL_CONFIG = tmpConfig;
 
-// The real config file is edited and restored. It is the thing under test —
-// `addWord` writes to CSPELL_CONFIG by design, and a fixture copy would not
-// prove that the curated sections in the real file survive.
+const { CSPELL_CONFIG } = await import('../../src/config.js');
+const { addWord } = await import('../../src/lib/dictionary.js');
+
+// Belt and braces: if the override ever stops being read, the tests below would
+// silently go back to writing the repo's real dictionary. Fail loudly instead.
+assert.equal(CSPELL_CONFIG, tmpConfig, 'STEWARD_CSPELL_CONFIG was not honoured');
+
 let original: string;
 
 test.before(async () => {
@@ -16,6 +40,10 @@ test.before(async () => {
 
 test.afterEach(async () => {
   await fs.writeFile(CSPELL_CONFIG, original, 'utf8');
+});
+
+test.after(async () => {
+  await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
 });
 
 test('a new word is appended and reported as added', async () => {
@@ -72,7 +100,8 @@ test('the machine-added section stays sorted', async () => {
 
 test('existing line endings are preserved', async () => {
   // On a CRLF checkout, joining with '\n' would rewrite every line and bury the
-  // one-word change in a whole-file diff.
+  // one-word change in a whole-file diff. `copyFile` is byte-for-byte, so the
+  // temp copy carries the checkout's real line-ending style into this test.
   const crlf = original.includes('\r\n');
   await addWord('Zzyzx');
   const after = await fs.readFile(CSPELL_CONFIG, 'utf8');
@@ -87,6 +116,8 @@ test('the file stays valid for cspell after a write', async () => {
   await addWord('Zzyzx');
   const { runCspell } = await import('../../src/activities/cspell.js');
   // If the write broke the YAML, loadSettings throws on an empty dictionary.
+  // `runCspell` reads CSPELL_CONFIG too, so it reads the temp copy — the point
+  // of this test is that the file this suite just wrote is still loadable.
   const result = await runCspell('src/content/writing/accessibility-and-ai.md');
   assert.equal(result.findings.length, 0, 'the published post is still clean after a dict-add');
 });
