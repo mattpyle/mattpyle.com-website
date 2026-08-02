@@ -3,7 +3,8 @@ import { next } from '@vercel/functions';
 // Vercel Routing Middleware — a platform-level primitive, distinct from Astro's own
 // `astro:middleware`. It runs before cache/static-file serving, which is required here:
 // /writing/<slug> is a prerendered static page, and Astro's own middleware (any mode)
-// never runs against prerendered routes at all. See changelog.md for the full trail.
+// never runs against prerendered routes at all. The full trail is in the retired
+// engineering log, docs/_archive/changelog-retired-2026-08-01.md.
 //
 // Both collections expose an on-demand `.md` sibling (writing/[slug].md.ts,
 // changelog/[slug].md.ts) that this middleware proxies to on a genuine text/markdown
