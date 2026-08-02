@@ -1,4 +1,5 @@
 // @ts-check
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
@@ -6,6 +7,23 @@ import vercel from '@astrojs/vercel';
 import { readWritingMetadata } from './scripts/lib/writing-metadata.mjs';
 import { SITE_ORIGIN } from './src/data/site-origin.mjs';
 import { resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
+import { PRE_PAINT_APPEARANCE_SCRIPT } from './src/lib/pre-paint-appearance.mjs';
+
+// Astro hashes the scripts it bundles. It does not hash is:inline scripts, in
+// <head> or in <body>, because is:inline means "emit these bytes untouched".
+// The pre-paint appearance script has to be is:inline to beat first paint, so
+// its hash is computed here from the same constant Layout.astro renders, and
+// declared as an additional script-src hash. Derived, never pasted: a literal
+// would work until the first edit to the script and then fail silently, which
+// is precisely how the script came to be dead from 0b9832a to 2026-08-01.
+// scripts/validate-csp-hashes.mjs re-checks this against the built HTML.
+// Typed as the literal shape rather than imported as Astro's CspHash: that type
+// only lives at astro/dist/core/csp/config.js, a deep internal path, and this
+// spelling is the same sha256 member of the union it exports.
+/** @type {`sha256-${string}`} */
+const prePaintAppearanceHash = `sha256-${createHash('sha256')
+  .update(PRE_PAINT_APPEARANCE_SCRIPT, 'utf8')
+  .digest('base64')}`;
 
 const writingDir = fileURLToPath(new URL('./src/content/writing/', import.meta.url));
 const writingMetadata = readWritingMetadata(writingDir);
@@ -45,6 +63,10 @@ export default defineConfig({
       // 'never', so all CSS ships as files). Fonts are self-hosted as of Batch 9,
       // so the old https://fonts.googleapis.com carve-out is gone.
       styleDirective: { resources: ["'self'"] },
+      // resources is deliberately left alone: Astro's default script-src stays,
+      // and this only adds the one hash it declines to compute. No
+      // 'unsafe-inline' here, ever: it would void every hash in the directive.
+      scriptDirective: { hashes: [prePaintAppearanceHash] },
     },
   },
   integrations: [

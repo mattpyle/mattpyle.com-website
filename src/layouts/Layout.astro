@@ -8,6 +8,7 @@ import SpeedInsights from '@vercel/speed-insights/astro';
 import WebMCP from '../components/WebMCP.astro';
 import AppearanceBanner from '../components/AppearanceBanner.astro';
 import AppearanceUI from '../components/AppearanceUI.astro';
+import { PRE_PAINT_APPEARANCE_SCRIPT } from '../lib/pre-paint-appearance.mjs';
 
 interface Breadcrumb {
   name: string;
@@ -171,25 +172,16 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
       script so it runs synchronously, before the render-blocking stylesheets
       below are applied, and before first paint. This is what stops a returning
       retro visitor from seeing a flash of modern. is:inline keeps it literally
-      inline (not bundled to an external file); security.csp in astro.config.mjs
-      still SHA-256 hashes its content into the meta CSP automatically, so it's
-      not an unhashed inline script.
+      inline (not bundled to an external file).
 
-      Duplicates the storage-key read from src/lib/appearance.mjs rather than
-      importing it: a classic inline script can't use ES import, and a type=module
-      script is deferred until after parsing — too late to beat first paint. Keep
-      the key ('mattpyle:appearance') and the allowed value ('retro') in sync with
-      appearance.mjs by hand; there is no way to share the constant here.
+      security.csp does NOT hash this. Astro hashes the scripts it bundles, and
+      is:inline scripts, in <head> or in <body>, are by definition not bundled.
+      astro.config.mjs adds the hash itself, computed from the same constant
+      rendered here, so the two cannot drift. Never paste the script text back
+      into this file: that breaks the derivation, and the CSP then refuses the
+      script in production, silently, as it did from 0b9832a to 2026-08-01.
     */}
-    <script is:inline>
-      (function () {
-        try {
-          if (localStorage.getItem('mattpyle:appearance') === 'retro') {
-            document.documentElement.dataset.appearance = 'retro';
-          }
-        } catch (e) {}
-      })();
-    </script>
+    <script is:inline set:html={PRE_PAINT_APPEARANCE_SCRIPT} />
     {/*
       Chrome WebMCP origin trial — bound to https://www.mattpyle.com (the canonical host; the apex
       308s to it) and EXPIRES 2026-11-17, after which Chrome ignores it and the tools in
