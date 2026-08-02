@@ -38,6 +38,7 @@ skills-lock.json
 /design_handoff_og_images/
 /design_handoff_changelog/
 /design_handoff_webmcp/
+/design_handoff_guestbook/
 
 # Generated per-post OG images — rebuilt by scripts/generate-og-images.mjs
 /public/og/

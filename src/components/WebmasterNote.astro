@@ -1,0 +1,265 @@
+---
+/**
+ * Component B of the guest book bundle: "Email the Webmaster", a joke that admits it.
+ *
+ * The 1997 gesture is intact — a note field, a SEND IT button, a confirmation — and the
+ * confirmation is where the bit lands: the note was filed in this browser and nowhere else. Under
+ * it, the one real channel. No mailto, no backend; the `contact-form` card still owns a real form.
+ *
+ * Retro-only furniture on the same terms as Guestbook.astro: same DOM in both modes, hidden in
+ * modern by `.retro-furniture`, layout here and skin in src/styles/retro.css.
+ *
+ * FILED IS TERMINAL FOR THE SESSION. There is no "write another" control: the panel has just said
+ * the note went nowhere, and offering a second empty form turns the joke into a chore. A reload
+ * restores the form.
+ */
+import { NOTE_MAX } from '../lib/webmaster-notes.mjs';
+---
+
+<section class="wm-panel" data-module="webmaster-note" id="webmaster-note" aria-labelledby="webmaster-heading">
+  <div class="wm-header">
+    <h2 id="webmaster-heading">Email the Webmaster</h2>
+  </div>
+
+  <div class="wm-body">
+    <form class="wm-form" data-wm-form novalidate>
+      {/*
+        Visually hidden, never dropped: the panel heading names the task, but the field still needs
+        a real accessible name, and a placeholder is not one — it disappears exactly when the field
+        is filled.
+      */}
+      <label class="wm-sr-only" for="wm-msg">Your note to the webmaster</label>
+      <textarea
+        class="wm-input"
+        id="wm-msg"
+        name="note"
+        rows="4"
+        maxlength={NOTE_MAX}
+        aria-describedby="wm-msg-hint"
+        data-wm-input
+        disabled></textarea>
+
+      <div class="wm-underline">
+        <span class="wm-hint" id="wm-msg-hint">Up to {NOTE_MAX} characters.</span>
+        <span class="wm-count" data-wm-count aria-hidden="true">0 / {NOTE_MAX}</span>
+      </div>
+
+      <p class="wm-error" id="wm-msg-error" data-wm-error hidden></p>
+
+      <div class="wm-actions">
+        <button class="wm-submit" type="submit" data-wm-submit disabled>SEND IT</button>
+        <p class="wm-nojs" data-wm-nojs>Disabled. Needs JavaScript.</p>
+      </div>
+    </form>
+
+    {/*
+      The filing card replaces the form inside the body's reserved height. Dashed and cream, not
+      solid maroon: it must not be readable as the error state.
+    */}
+    <div class="wm-filed" data-wm-filed hidden>
+      <p class="wm-filed-copy" data-wm-filed-copy></p>
+      <p class="wm-linkedin">
+        Want to actually reach me? <a href="https://linkedin.com/in/matt-pyle">Matt Pyle on LinkedIn</a>. That one goes to a real person.
+      </p>
+    </div>
+
+    {/*
+      A separate, always-present announcer rather than making the card itself live: a live region
+      that is `hidden` at first paint is not reliably announced when it is revealed, and the card
+      carries a link that has no business being read out as a status message.
+    */}
+    <p class="wm-sr-only" data-wm-announce role="status" aria-live="polite"></p>
+  </div>
+</section>
+
+<style>
+  .wm-panel { display: block; }
+
+  .wm-header {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 13px 18px;
+  }
+
+  .wm-header h2 {
+    margin: 0;
+    font-size: 21px;
+    line-height: 1.2;
+  }
+
+  /* The idle form's own natural height. Reserving the taller filed state instead left a band of
+     blank parchment under the button in the state every visitor sees first; the two states are
+     within ~40px of each other, and that growth is below the button the visitor just pressed,
+     inside 500ms of their own click. Re-measure both if the copy changes. */
+  .wm-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px 18px 22px;
+    min-height: 196px;
+  }
+
+  .wm-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+  }
+
+  .wm-input {
+    width: 100%;
+    height: 92px;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  .wm-underline {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .wm-hint { font-size: 10.5px; line-height: 1.45; }
+  .wm-count { font-size: 10.5px; white-space: nowrap; }
+
+  .wm-error {
+    margin: 0;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1.45;
+  }
+
+  .wm-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 10px;
+  }
+
+  .wm-submit {
+    padding: 9px 18px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    cursor: pointer;
+  }
+
+  .wm-submit:disabled { cursor: default; }
+
+  .wm-nojs { margin: 0; font-size: 10.5px; }
+
+  .wm-filed {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding: 16px 16px 18px;
+  }
+
+  /* `display: flex` on a class beats the UA's `[hidden] { display: none }`, which is how the
+     filing card would otherwise sit open under the form at rest, and how the form would stay on
+     screen under it after a submit. Both of these swap on `hidden`, so both need it back. */
+  .wm-form[hidden],
+  .wm-filed[hidden] { display: none; }
+
+  .wm-filed-copy {
+    margin: 0;
+    max-width: 60ch;
+    font-size: 15.5px;
+    line-height: 1.65;
+  }
+
+  .wm-linkedin {
+    margin: 0;
+    padding-top: 11px;
+    font-size: 12.5px;
+    line-height: 1.7;
+  }
+
+  .wm-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 600px) {
+    .wm-header { padding: 12px 14px; }
+    .wm-body { padding: 16px 12px 18px; min-height: 250px; }
+    .wm-input { height: 104px; }
+    .wm-submit { min-height: 44px; padding: 12px 18px; }
+  }
+</style>
+
+<script>
+  import { NOTE_MAX, clampNote, fileNote } from '../lib/webmaster-notes.mjs';
+
+  function wire(panel: HTMLElement) {
+    const form = panel.querySelector<HTMLFormElement>('[data-wm-form]');
+    const input = panel.querySelector<HTMLTextAreaElement>('[data-wm-input]');
+    const count = panel.querySelector<HTMLElement>('[data-wm-count]');
+    const error = panel.querySelector<HTMLElement>('[data-wm-error]');
+    const submit = panel.querySelector<HTMLButtonElement>('[data-wm-submit]');
+    const nojs = panel.querySelector<HTMLElement>('[data-wm-nojs]');
+    const filed = panel.querySelector<HTMLElement>('[data-wm-filed]');
+    const filedCopy = panel.querySelector<HTMLElement>('[data-wm-filed-copy]');
+    const announce = panel.querySelector<HTMLElement>('[data-wm-announce]');
+
+    if (!form || !input || !count || !error || !submit || !nojs || !filed || !filedCopy || !announce) return;
+
+    input.disabled = false;
+    submit.disabled = false;
+    nojs.textContent = '';
+    nojs.hidden = true;
+
+    function syncCount() {
+      count!.textContent = `${input!.value.length} / ${NOTE_MAX}`;
+    }
+
+    input.addEventListener('input', syncCount);
+    syncCount();
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const result = fileNote(clampNote(input.value));
+
+      if (!result.ok) {
+        error!.textContent = 'ERROR — Write something first. An empty note files an empty drawer.';
+        error!.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+        input.setAttribute('aria-describedby', 'wm-msg-hint wm-msg-error');
+        input.focus();
+        return;
+      }
+
+      const copy =
+        `Your note has been filed in drawer ${result.drawer} of ${result.of}, in a cabinet only ` +
+        'you can open. It never left this browser: no server received it, no inbox is waiting on ' +
+        'it, and the only person who will ever read it is you.';
+
+      filedCopy!.textContent = copy;
+      form.hidden = true;
+      filed!.hidden = false;
+      announce!.textContent = copy;
+    });
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLElement>('[data-module="webmaster-note"]').forEach((panel) => {
+      if (panel.dataset.wired) return;
+      panel.dataset.wired = 'true';
+      wire(panel);
+    });
+  });
+</script>

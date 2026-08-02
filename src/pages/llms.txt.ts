@@ -38,7 +38,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Changelog](${base}/changelog): reverse-chronological log of what has shipped on this site.`);
   lines.push(`- [Scorecard](${base}/scorecard): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
   lines.push(`- [About](${base}/about): full bio, interests, contact links.`);
-  lines.push(`- [WebMCP](${base}/webmcp): the WebMCP tools this site registers for in-browser AI agents, what they return, and how to test them.`);
+  lines.push(`- [WebMCP](${base}/webmcp): the six WebMCP tools this site registers for in-browser AI agents (four read, two write), what they return, and how to test them.`);
   lines.push('');
 
   lines.push('## Machine-readable resources');

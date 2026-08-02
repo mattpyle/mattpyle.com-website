@@ -19,7 +19,7 @@
   - paragraph: Agent tools · Experiment
   - heading "WebMCP" [level=1]
   - paragraph: The typed tools this site hands to an AI agent, what they return, and where the standard honestly stands.
-  - paragraph: WebMCP is a browser API that lets a page hand an AI agent a set of typed tools — real functions with names, inputs, and return values — instead of leaving it to guess its way through the interface. It is a W3C Community Group draft, available in Chrome behind an origin trial, and the 4 tools below are the ones this site registers.
+  - paragraph: WebMCP is a browser API that lets a page hand an AI agent a set of typed tools — real functions with names, inputs, and return values — instead of leaving it to guess its way through the interface. It is a W3C Community Group draft, available in Chrome behind an origin trial, and the 6 tools below are the ones this site registers.
   - paragraph: Run any of them here. The buttons call the same handler an agent calls, in this page — not a live protocol round-trip.
   - region "Where does WebMCP actually stand today?":
     - heading "Where does WebMCP actually stand today?" [level=2]
@@ -57,7 +57,7 @@
       - text: — which is currently every browser except Chrome behind a flag or the origin trial — the code returns immediately, writes no DOM, and reads no layout. Remove the tools and the site is byte-for-byte what it was.
   - region "Which tools does this site register?":
     - heading "Which tools does this site register?" [level=2]
-    - paragraph: "4 tools: 3 that read published content, 1 that writes — and what it writes is a preference in your own browser. Definitions below are read from the live tool objects at build time, so they stay in sync with what an agent receives."
+    - paragraph: "6 tools: 4 that read published content, 2 that write. What they write is a preference and a guest-book entry, both in your own browser and nowhere else. Definitions below are read from the live tool objects at build time, so they stay in sync with what an agent receives."
     - article:
       - paragraph: /Tool \d+ \/ \d+/
       - heading "describe_site" [level=3]
@@ -99,7 +99,11 @@
       - code: query
       - text: ", falling back to modern for an unknown"
       - code: mode
-      - text: .
+      - text: ", trimming an over-long guest-book"
+      - code: name
+      - text: or
+      - code: message
+      - text: to the same limits the visible form enforces.
   - region "How can I test them myself?":
     - heading "How can I test them myself?" [level=2]
     - paragraph: The buttons on this page work everywhere, in any browser, with no setup — they call the handler directly. What they do not exercise is the protocol.
@@ -110,6 +114,12 @@
       - link "WebMCP documentation":
         - /url: https://developer.chrome.com/docs/ai/webmcp
       - text: is the current reference for both.
+    - paragraph:
+      - text: /Four of the six tools have been driven that way, on Chrome \d+\.\d+\.\d+\.\d+, which is where the calling convention above came from\./
+      - code: sign_guestbook
+      - text: and
+      - code: list_related_sites
+      - text: "are newer and have not had that check yet: their handlers run here, and their registration follows the identical path, but nothing on this page claims an external client has invoked them. That line moves when it is measured, not when it ships."
   - region "Where are the machine-readable resources?":
     - heading "Where are the machine-readable resources?" [level=2]
     - paragraph: If you are reading this as text rather than executing JavaScript on the live page, you cannot call the tools — but you can read the same things they read.

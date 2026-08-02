@@ -39,16 +39,31 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 
 ## WebMCP tools (experimental)
 
-The live pages register four WebMCP tools: three that read published content, and one that writes. They are an experiment, not a supported API, and may be withdrawn without notice. See `/webmcp` for the full write-up.
+The live pages register six WebMCP tools: four that read published content, and two that write. They are an experiment, not a supported API, and may be withdrawn without notice. See `/webmcp` for the full write-up.
 
 | Tool | Kind | What it does |
 |---|---|---|
 | `describe_site` | read | Returns the author entity, the site description, and the section map. Takes no input. |
 | `get_recent_writing` | read | Lists recent published articles, newest first. Optional `limit` (1–20, default 5) and `tag`. |
 | `search_content` | read | Case-insensitive search over the titles, descriptions, and tags of all published writing, builds, and changelog entries. Requires `query`. |
+| `list_related_sites` | read | Returns the site's curated web ring: name, URL, description, and status for each member. Some entries are open slots with no URL yet. Takes no input. |
 | `set_appearance` | **write** | Switches this site between its modern appearance and a retro, 1990s-era skin. Requires `mode` (`modern` or `retro`). |
+| `sign_guestbook` | **write** | Appends an entry to the guest book on the homepage. Requires `name` (≤40 chars) and `message` (≤280 chars); both are trimmed rather than rejected. |
 
-**The one write tool is client-local.** `set_appearance` stores a preference in the calling browser's own `localStorage` and sets an attribute on that page. There is no server state to change and no other visitor to affect: an agent flipping retro mode changes only the view in the browser it is driving. The three read tools mutate nothing at all.
+**Both write tools are client-local.** `set_appearance` stores a preference in the calling browser's own `localStorage` and sets an attribute on that page. `sign_guestbook` appends an entry to a `localStorage` key in that same browser. There is no server state to change and no other visitor to affect: an agent flipping retro mode or signing the book changes only the view in the browser it is driving, and nobody else will ever see the entry. The four read tools mutate nothing at all.
+
+**Entries signed by a tool are labelled as such.** The guest book records how each entry was written and renders agent-written entries with a visible `[ SIGNED BY AGENT ]` badge naming the `sign_guestbook` tool. The provenance is set by the code path that wrote the entry, not by a field the caller passes, so the form cannot claim to be an agent and the tool cannot disclaim being one. The claim it makes is narrow and true: this is what this browser's own stored data records. `localStorage` is user-editable, so it is evidence about one browser, not a signature.
+
+**Storage keys this site writes**, all per-origin `localStorage` on `https://www.mattpyle.com`, all readable and clearable by the visitor:
+
+| Key | Written by | Holds |
+|---|---|---|
+| `mattpyle:appearance` | `set_appearance`, the footer toggle | `modern` or `retro`. |
+| `mattpyle:guestbook` | `sign_guestbook`, the guest book form | This browser's own guest-book entries. The five seeded entries are not stored; they are compiled into the page. |
+| `mattpyle:webmaster-notes` | The "Email the Webmaster" form | Notes written in that form. It is a joke that admits it: nothing is sent anywhere, and the confirmation says so. |
+| `mattpyle:visits` | The homepage | How many times this browser has loaded the site, for the retro visit counter. |
+
+The guest book and the web ring are retro-only furniture: they exist in the page in both appearances and are displayed in retro mode. `sign_guestbook` works in either mode and always writes the entry.
 
 **Only in-browser agents can call these.** The tools are registered on `document.modelContext` (identical to `navigator.modelContext` — on Chrome 150 they are the same object) when a page is loaded in a browser that implements WebMCP. As of mid-2026 that means Chrome with the WebMCP origin trial or the `enable-webmcp-testing` flag, driving an agent or the Model Context Tool Inspector extension. If you are reading this file as text rather than executing JavaScript on the live page, **you cannot invoke them** — fetch `/webmcp/tools.json` for the definitions and `/webmcp/index.json` for the same data these tools read.
 

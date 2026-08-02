@@ -108,7 +108,7 @@ const title = 'WebMCP';
 const seoTitle = 'WebMCP tools this site gives to AI agents';
 // 120-155 characters: long enough to survive a SERP, short enough not to be truncated in one.
 const description =
-  'Four live WebMCP tools on a personal site: three that read, one that writes. Runnable ' +
+  'Six live WebMCP tools on a personal site: four that read, two that write. Runnable ' +
   'examples, a tool manifest, and what Chrome actually does.';
 
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
@@ -232,9 +232,10 @@ const breadcrumbs = [
     <section aria-labelledby="tool-catalog-title">
       <h2 id="tool-catalog-title" class="catalog-title">Which tools does this site register?</h2>
       <p class="catalog-dek">
-        {catalog.length} tools: {readCount} that read published content, {writeCount} that writes —
-        and what it writes is a preference in your own browser. Definitions below are read from the
-        live tool objects at build time, so they stay in sync with what an agent receives.
+        {catalog.length} tools: {readCount} that read published content, {writeCount} that write.
+        What they write is a preference and a guest-book entry, both in your own browser and
+        nowhere else. Definitions below are read from the live tool objects at build time, so they
+        stay in sync with what an agent receives.
       </p>
 
       <div class="tool-catalog">
@@ -408,7 +409,8 @@ const breadcrumbs = [
       <p>
         Because Chrome does not enforce the declared <code>inputSchema</code>, every handler
         validates its own inputs — clamping <code>limit</code>, rejecting a blank <code>query</code>,
-        falling back to modern for an unknown <code>mode</code>.
+        falling back to modern for an unknown <code>mode</code>, trimming an over-long guest-book
+        <code>name</code> or <code>message</code> to the same limits the visible form enforces.
       </p>
     </section>
 
@@ -424,6 +426,13 @@ const breadcrumbs = [
         the calls — the Model Context Tool Inspector extension is the straightforward option.
         Chrome's <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">WebMCP
         documentation</a> is the current reference for both.
+      </p>
+      <p>
+        Four of the six tools have been driven that way, on Chrome {WEBMCP_VERIFIED.chrome}, which is
+        where the calling convention above came from. <code>sign_guestbook</code> and
+        <code>list_related_sites</code> are newer and have not had that check yet: their handlers
+        run here, and their registration follows the identical path, but nothing on this page claims
+        an external client has invoked them. That line moves when it is measured, not when it ships.
       </p>
     </section>
 

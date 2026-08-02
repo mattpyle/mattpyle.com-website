@@ -23,6 +23,10 @@ html[data-appearance='retro'] {
   --retro-frame-bg: #fffdf5;
   --retro-frame-border: #8a5a2b;
   --retro-ink: #33291a;
+  /* Formalised in Phase 3 after eleven bare copies of this hex accumulated in the file (tag-pill
+     text, hints, disabled page links, output status). 6.3:1 on parchment, 6.0:1 on the sidebar
+     ground — it carries real content, so it has to read as text, not as a grey. */
+  --retro-ink-muted: #5a4a30;
   --retro-forest: #234327;
   --retro-forest-hover: #2f5a34;
   --retro-maroon: #7a1f1f;
@@ -410,7 +414,7 @@ html[data-appearance='retro'] .retro-footer-badges span {
   display: inline-block;
   background: var(--retro-frame-bg);
   border: 1px solid var(--retro-frame-border);
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
   font-family: var(--retro-font-mono);
   font-size: 10px;
   padding: 2px 5px;
@@ -559,7 +563,7 @@ html[data-appearance='retro'] .tag-pill {
   background: var(--retro-sidebar-bg);
   border: 1px solid var(--retro-frame-border);
   border-radius: 0;
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
 }
 
 /* ── /builds grid ─────────────────────────────────────────────────────── */
@@ -640,7 +644,7 @@ html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
 
 html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
   background: var(--retro-sidebar-bg);
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
 }
 
 /* Significance dots + legend: map the modern --color-sig-* tokens onto the
@@ -777,7 +781,7 @@ html[data-appearance='retro'] .page-number {
 }
 
 /* .page-link--disabled used var(--color-border), a near-invisible pale token on
-   parchment. #5a4a30 is the same muted-ink brown already used for tag-pill text
+   parchment. var(--retro-ink-muted) is the same muted-ink brown already used for tag-pill text
    elsewhere in this file — dark enough to read as present-but-inactive (~6.3:1
    on parchment) rather than gone. */
 html[data-appearance='retro'] .page-link {
@@ -787,7 +791,7 @@ html[data-appearance='retro'] .page-link {
 }
 
 html[data-appearance='retro'] .page-link--disabled {
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
   text-decoration: none;
 }
 
@@ -920,7 +924,7 @@ html[data-appearance='retro'] [data-module='webmcp'] .tool-card--write {
 
 html[data-appearance='retro'] [data-module='webmcp'] .tool-index {
   font-family: var(--retro-font-mono);
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .tool-name {
@@ -936,7 +940,7 @@ html[data-appearance='retro'] [data-module='webmcp'] .tool-badge {
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .tool-badge--read {
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
   border-color: var(--retro-frame-border);
 }
 
@@ -1003,7 +1007,7 @@ html[data-appearance='retro'] [data-module='webmcp'] .field-input:disabled { bor
 
 html[data-appearance='retro'] [data-module='webmcp'] .field-hint {
   font-family: var(--retro-font-ui);
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .run-button {
@@ -1030,18 +1034,18 @@ html[data-appearance='retro'] [data-module='webmcp'] .run-button[data-running] {
 
 html[data-appearance='retro'] [data-module='webmcp'] .run-button:disabled:not([data-running]) {
   background: transparent;
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
   border: 2px dashed var(--retro-frame-border);
   box-shadow: none;
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .action-note {
   font-family: var(--retro-font-ui);
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .filter-pill:disabled {
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
   border-style: dashed;
 }
 
@@ -1080,7 +1084,7 @@ html[data-appearance='retro'] [data-module='webmcp'] .output-status {
 html[data-appearance='retro'] [data-module='webmcp'] .output-label,
 html[data-appearance='retro'] [data-module='webmcp'] .snippet-label { color: var(--retro-maroon); }
 
-html[data-appearance='retro'] [data-module='webmcp'] .output-status { color: #5a4a30; }
+html[data-appearance='retro'] [data-module='webmcp'] .output-status { color: var(--retro-ink-muted); }
 html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='running'] .output-status { color: var(--retro-maroon); }
 html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='success'] .output-status { color: var(--retro-forest); }
 html[data-appearance='retro'] [data-module='webmcp'] .output-frame[data-state='error'] .output-status { color: var(--retro-maroon); }
@@ -1182,7 +1186,7 @@ html[data-appearance='retro'] [data-module='webmcp'] .copy-button[data-state='fa
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .copy-button:disabled {
-  color: #5a4a30;
+  color: var(--retro-ink-muted);
   border-style: dashed;
   box-shadow: none;
 }
@@ -1191,11 +1195,391 @@ html[data-appearance='retro'] [data-module='webmcp'] .copy-button:disabled {
   html[data-appearance='retro'] [data-module='webmcp'] .copy-button { padding: 7px 10px; }
 }
 
+/* ── Homepage advertisement block: the LCD counter + the guest book anchor ──
+   Replaces design-brief §4's two beveled buttons (approved 2026-08-02). The counter is the neon
+   LCD from the brief; the digits are aria-hidden and a sibling sentence carries the plain value,
+   because "000004" read aloud is six digits rather than a count. */
+
+html[data-appearance='retro'] .retro-ad-inner {
+  background: var(--retro-sidebar-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] .retro-ad-label {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .retro-counter-digits {
+  font-family: var(--retro-font-mono);
+  font-weight: bold;
+  color: var(--retro-lcd-digit);
+  background: var(--retro-lcd-ground);
+  border: 2px inset var(--retro-frame-border);
+  text-shadow: 0 0 8px rgba(31, 143, 15, .9);
+}
+
+html[data-appearance='retro'] .retro-ad-caption {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* The hero CTA bevel verbatim — this is an <a>, and .cta-primary is one too, so nothing here is
+   claiming a button's affordance for a link. */
+html[data-appearance='retro'] .retro-ad-cta {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-cream);
+  background: var(--retro-forest);
+  border: 3px outset var(--retro-forest-hover);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
+  text-decoration: none;
+}
+
+html[data-appearance='retro'] .retro-ad-cta:hover {
+  color: var(--retro-gold);
+  text-decoration: none;
+}
+
+html[data-appearance='retro'] .retro-ad-cta:active {
+  border-style: inset;
+  box-shadow: none;
+  transform: translate(1px, 1px);
+}
+
+/* ── The guest book, the webmaster note, and the web ring ──────────────────
+   Colour / type / border / background only; every dimension is in the components' own scoped
+   styles. All three reuse constructions already in this file rather than inventing new ones: the
+   activity-log frame, the .log-header bar, the /webmcp sunken field, and the .run-button bevel.
+
+   Scoped through [data-module='…'] deliberately. Astro stamps a data-astro-cid attribute onto
+   every compound in a component's scoped styles, so a bare `.gb-input` here would tie and lose;
+   the module attribute buys the specificity back. */
+
+html[data-appearance='retro'] [data-module='guestbook'],
+html[data-appearance='retro'] [data-module='webmaster-note'],
+html[data-appearance='retro'] [data-module='web-ring'] {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-header,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-header,
+html[data-appearance='retro'] [data-module='web-ring'] .ring-header {
+  background: var(--retro-sidebar-bg);
+  border-bottom: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-header h2,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-header h2,
+html[data-appearance='retro'] [data-module='web-ring'] .ring-header h2 {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* The CSS ball bullet the rest of the retro headings carry. Decorative pseudo-element with no
+   content string, so there is nothing for a screen reader to read. */
+html[data-appearance='retro'] [data-module='guestbook'] .gb-header h2::before,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-header h2::before,
+html[data-appearance='retro'] [data-module='web-ring'] .ring-header h2::before {
+  content: '';
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #fff, #e85d5d 45%, var(--retro-maroon));
+}
+
+/* ── Fields, shared by the book and the note ───────────────────────────── */
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-label {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-input,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-input {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink);
+  background: var(--retro-cream);
+  border: 2px inset var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-input:disabled,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-input:disabled {
+  border-style: dashed;
+}
+
+/* Error is carried by three cues, none of them colour alone: the word ERROR, the border STYLE
+   flipping from bevel to flat, and the counter's weight change. */
+html[data-appearance='retro'] [data-module='guestbook'] .gb-input[aria-invalid='true'],
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-input[aria-invalid='true'] {
+  border: 2px solid var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-hint,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-hint {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-count,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-count {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-count--over {
+  font-weight: bold;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-error,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-error {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-submit,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-submit {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-cream);
+  background: var(--retro-forest);
+  border: 3px outset var(--retro-forest-hover);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-submit:hover:not(:disabled),
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-submit:hover:not(:disabled) {
+  color: var(--retro-gold);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-submit:active,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-submit:active {
+  border-style: inset;
+  box-shadow: none;
+  transform: translate(1px, 1px);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-submit:disabled,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-submit:disabled {
+  background: transparent;
+  color: var(--retro-ink-muted);
+  border: 2px dashed var(--retro-frame-border);
+  box-shadow: none;
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-nojs,
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-nojs,
+html[data-appearance='retro'] [data-module='web-ring'] .ring-nojs {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-ink-muted);
+}
+
+/* One sentence, body type, reading colour: an explanation, not a warning banner. This is where
+   the client-local guarantee is stated. */
+html[data-appearance='retro'] [data-module='guestbook'] .gb-confirm {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* ── The entries ───────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entries {
+  border-top: 2px solid var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entry {
+  border-bottom: 1px dashed var(--retro-frame-border);
+  background: var(--retro-frame-bg);
+}
+
+/* The stripe is the period reference: 1997 guest books were striped tables, and it is what keeps
+   a five-entry list from reading as one block of text. */
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entry:nth-child(even) {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entry-number {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entry-name {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entry-date {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entry-message {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* THE BADGE IS THE ONLY MARKER of provenance. An earlier pass also gave agent rows a maroon left
+   rule; it was cut — two markers for one fact, and the rule fought the stripe for the row's
+   identity. Three cues survive here on their own: the word, the 2px border, the gold fill, and
+   the word alone survives greyscale.
+
+   Flat, never beveled: bevels mean pressable, and this is a label. */
+html[data-appearance='retro'] [data-module='guestbook'] .gb-badge {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+  background: var(--retro-gold);
+  border: 2px solid var(--retro-maroon);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-badge--new {
+  font-size: 10px;
+  color: var(--retro-cream);
+  background: var(--retro-forest);
+  border-color: var(--retro-forest);
+}
+
+/* The tool name is the evidence; the badge is the headline. */
+html[data-appearance='retro'] [data-module='guestbook'] .gb-via {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='guestbook'] .gb-entry--new {
+  border: 3px solid var(--retro-forest);
+  animation: retro-entry-land 1.2s ease-out 1;
+}
+
+/* The only motion either panel has. Under prefers-reduced-motion it is dropped and the entry
+   renders already settled — the forest border and the [ JUST ADDED ] badge were carrying the
+   state anyway, which is why the still version reads correctly. */
+@keyframes retro-entry-land {
+  from { background: var(--retro-gold); }
+  to { background: var(--retro-frame-bg); }
+}
+
+/* ── The webmaster note's filed card ───────────────────────────────────── */
+
+/* Dashed and cream is the manila-folder cue, and it is visibly NOT the solid maroon of the error
+   state, so the confirmation cannot be misread as a failure. */
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-filed {
+  background: var(--retro-cream);
+  border: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-filed-copy {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-linkedin {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-ink);
+  border-top: 2px dotted var(--retro-frame-border);
+}
+
+/* Quiet on purpose: no bevel, no badge, no fill. It is findable because it is the only link in
+   either panel and it sits alone under its own rule. */
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-linkedin a {
+  color: var(--retro-link);
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='webmaster-note'] .wm-linkedin a:visited {
+  color: var(--retro-link-visited);
+}
+
+/* ── The web ring ──────────────────────────────────────────────────────── */
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-dek {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-member {
+  background: var(--retro-sidebar-bg);
+  border: 2px inset var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-position {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-ink-muted);
+  text-transform: uppercase;
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-name {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-desc {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-visit {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-visit a {
+  color: var(--retro-link);
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-visit a:visited {
+  color: var(--retro-link-visited);
+}
+
+/* The « Prev · Random · Next » row, in the period's own bold maroon. Beveled because these are
+   the only pressable things in the panel. */
+html[data-appearance='retro'] [data-module='web-ring'] .ring-button {
+  font-family: var(--retro-font-ui);
+  color: var(--retro-maroon);
+  background: var(--retro-frame-bg);
+  border: 3px outset var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-button:hover:not(:disabled) {
+  background: var(--retro-sidebar-bg);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-button:active {
+  border-style: inset;
+  transform: translate(1px, 1px);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-button:disabled {
+  color: var(--retro-ink-muted);
+  border: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-divider);
+}
+
 /* ── Motion: prefers-reduced-motion disables all of it ──────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   html[data-appearance='retro'] .retro-divider,
-  html[data-appearance='retro'] .nav-flourish {
+  html[data-appearance='retro'] .nav-flourish,
+  html[data-appearance='retro'] [data-module='guestbook'] .gb-entry--new {
     animation: none;
   }
 

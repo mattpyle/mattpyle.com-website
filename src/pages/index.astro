@@ -3,6 +3,9 @@ import Layout from '../layouts/Layout.astro';
 import Hero from '../components/Hero.astro';
 import RecentWriting from '../components/RecentWriting.astro';
 import RetroHomeFurniture from '../components/RetroHomeFurniture.astro';
+import Guestbook from '../components/Guestbook.astro';
+import WebmasterNote from '../components/WebmasterNote.astro';
+import WebRing from '../components/WebRing.astro';
 import { getCollection } from 'astro:content';
 import { showDrafts } from '../lib/show-drafts';
 import { compareChangelogEntries } from '../lib/changelog-order';
@@ -35,4 +38,39 @@ const activityItems = (
   <Hero activityItems={activityItems} />
   <RetroHomeFurniture />
   <RecentWriting articles={recentArticles} />
+  {/*
+    The guest book section: one inline block below RecentWriting, above the footer. Retro-only —
+    it is in the DOM in both modes and hidden in modern by `.retro-furniture`, so nothing is
+    injected or revealed at toggle time and the sidebar's `Sign the Guest Book ↓` anchor always
+    has a target. The section spans the shell; its inner column is capped at the reading measure,
+    because guest-book messages are prose and 1000px runs past 100 characters.
+  */}
+  <section class="retro-furniture guestbook-section" id="guestbook">
+    <div class="guestbook-column">
+      <Guestbook />
+      <WebmasterNote />
+      <WebRing />
+    </div>
+  </section>
 </Layout>
+
+<style>
+  .guestbook-section {
+    max-width: var(--width-shell);
+    margin: 0 auto;
+    padding: 8px var(--gutter) 56px;
+  }
+
+  .guestbook-column {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    max-width: var(--width-content);
+    margin: 0 auto;
+  }
+
+  @media (max-width: 600px) {
+    .guestbook-section { padding: 8px var(--gutter-mobile) 40px; }
+    .guestbook-column { gap: 24px; }
+  }
+</style>
