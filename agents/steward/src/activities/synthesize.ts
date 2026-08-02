@@ -54,12 +54,20 @@ export function templateSummary(passes: PassResult[], overall: Verdict, patches:
   const blocks = all.filter((f) => f.severity === 'block').length;
   const flags = all.filter((f) => f.severity === 'flag').length;
 
+  // `pass`-severity findings are informational: the uncommitted-draft note is
+  // the first of them. They are deliberately not counted as defects anywhere
+  // above, but "PASS — no findings" printed above a visible finding reads as a
+  // bug in the report, so the lead names them for what they are.
+  const notes = all.filter((f) => f.severity === 'pass').length;
+
   const lead =
     overall === 'block'
       ? `BLOCK — ${pluralize(blocks, 'blocking finding')} must be resolved before publish.`
       : overall === 'flag'
         ? `FLAG — nothing blocks publish, but ${pluralize(flags, 'finding')} want a human look.`
-        : 'PASS — no findings.';
+        : notes > 0
+          ? `PASS — nothing to fix; ${pluralize(notes, 'note')} for information.`
+          : 'PASS — no findings.';
 
   const byPass = passes
     .map((p) => `${p.pass}: ${p.verdict} (${pluralize(p.findings.length, 'finding')})`)

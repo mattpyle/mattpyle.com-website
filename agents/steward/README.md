@@ -44,6 +44,12 @@ Steward opens the pull request. **A human merges it.** That's the only thing tha
 Vercel deploy, and it's deliberately never automated. Re-sending `approve` after merging is an
 idempotent resume — it re-checks the live site, it does not re-run the publish.
 
+Steward never touches your working directory to do any of this: the branch, the commit, and the
+push all happen in its own git worktree. The cost is that a draft you never committed is still
+sitting in your checkout afterwards, a stale twin of the post that just went live, and `git pull`
+refuses to move past it. `steward cleanup <slug>` is the reconciliation step for that, guarded so
+it deletes only a file that is provably recoverable from `origin` and refuses rather than guesses.
+
 "Published" means verified against the live origin — not "the PR merged," not "the build succeeded."
 The workflow checks the real page (HTML, negotiated and direct markdown variants, `llms.txt`, the
 sitemap, the OG image) on `www.mattpyle.com` itself before it calls anything done.
@@ -69,6 +75,7 @@ In another terminal:
 steward review my-draft-slug     # runs the checks, parks on your verdict
 steward status my-draft-slug     # see where it's at
 steward approve my-draft-slug    # opens the publish PR, then verifies once merged
+steward cleanup my-draft-slug    # after the merge: drop the local draft twin, fast-forward
 ```
 
 `steward inbox` lists every review waiting on you, across every slug, with a plain-language hint for
