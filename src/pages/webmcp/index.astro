@@ -551,12 +551,15 @@ const breadcrumbs = [
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
 
-    // Force a layout flush after the enable swap. Chrome leaves getComputedStyle half-stale
-    // after a :disabled -> :enabled transition — it reported the enabled `color` alongside the
-    // disabled `background-color` until something read layout, which made axe score the run
-    // button against a colour pair the page never actually paints. Rendering was always
-    // correct; this only keeps what tools observe in step with it.
+    // Force a layout flush after the enable swap, so the enabled styles are the ones that paint.
+    // On its own this was not enough: the `background` transition still ran for 150ms afterwards,
+    // and axe sampling inside that window scored the button against a blend the page never rests
+    // on. The transition is suppressed in CSS until `data-settled`, set below.
     void runButton.offsetHeight;
+
+    // Two frames: the first schedules the paint of the enabled state, the second runs after it.
+    // Re-enabling transitions any earlier would put them back inside the load swap.
+    requestAnimationFrame(() => requestAnimationFrame(() => (root.dataset.settled = 'true')));
 
     function readArgs(): Record<string, unknown> {
       const args: Record<string, unknown> = {};
@@ -1055,6 +1058,14 @@ const breadcrumbs = [
     color: var(--color-muted);
     cursor: default;
   }
+
+  /* No transition until the console has painted its enabled state once. The disabled -> enabled
+     swap on load changes `color` instantly but `background` over 150ms, so a tool sampling
+     mid-transition sees near-white text on a background still part page-coloured and scores a
+     contrast failure the page never actually paints. It also meant the buttons visibly animated
+     themselves on load for no reason. `data-settled` lands after that first paint. */
+  .tool-console:not([data-settled]) .run-button,
+  .tool-console:not([data-settled]) .filter-pill { transition: none; }
 
   .action-note {
     margin: 0;
