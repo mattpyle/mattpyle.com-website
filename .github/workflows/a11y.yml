@@ -95,7 +95,8 @@ jobs:
 
       # The deterministic WCAG checks axe and Lighthouse defer to manual review:
       # keyboard order, focus visibility, ClientRouter focus, 320px reflow,
-      # reduced motion. See docs/reference/a11y-manual-checks-suite.md.
+      # reduced motion, and self-animation on load (the one that made the axe
+      # step above flake). See docs/reference/a11y-manual-checks-suite.md.
       #
       # if: always() because the axe step runs with --exit. Without it a red axe
       # ends the job here and the PR never learns whether the guard also broke;
