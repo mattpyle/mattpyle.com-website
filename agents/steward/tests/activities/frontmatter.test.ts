@@ -1,5 +1,6 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -108,6 +109,55 @@ test('the over-long title advice does not name a field the schema lacks', async 
   assert.ok(
     !titleFinding.message.includes('seoTitle'),
     'must not suggest an override the changelog schema would reject',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The uncommitted-draft note (design rule 9: a deterministically checkable
+// condition gets promoted into mechanical code).
+//
+// Drafts staying out of git is the documented normal here, and publish works
+// fine either way — Steward reads the bytes off disk and commits them in its own
+// worktree. What the author cannot see coming is the leftover twin afterwards,
+// so this is a note about the routine, not a warning about a mistake. It carries
+// `pass` severity for that reason: it must not move the pass's verdict, and it
+// must not read as something to fix.
+// ---------------------------------------------------------------------------
+
+const FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
+const UNTRACKED = path.join(FIXTURES, 'posts', 'untracked-draft.md');
+
+after(async () => {
+  await fs.rm(UNTRACKED, { force: true }).catch(() => {});
+});
+
+test('an untracked draft gets an informational note naming `steward cleanup`', async () => {
+  await fs.copyFile(path.join(FIXTURES, 'posts', 'known-good.md'), UNTRACKED);
+
+  const result = await checkFrontmatter('posts/untracked-draft.md');
+  const note = result.findings.find((f) => f.message.includes('steward cleanup'));
+
+  assert.ok(note, `expected a cleanup note, got: ${JSON.stringify(result.findings)}`);
+  assert.equal(note.severity, 'pass', 'informational — it must not warn');
+  assert.equal(result.verdict, 'pass', 'the note must not move the pass verdict');
+  assert.match(note.message, /untracked/i);
+  assert.match(note.message, /steward cleanup untracked-draft/);
+  // The tone test: it says publish works, because it does.
+  assert.match(note.message, /publish/i);
+});
+
+test('a committed, unmodified draft gets no note', async () => {
+  const result = await checkFrontmatter('posts/known-good.md');
+  assert.deepEqual(result.findings, [], 'a tracked clean file has nothing to reconcile');
+});
+
+test('audit mode never notes it — published content has no twin to clean up', async () => {
+  await fs.copyFile(path.join(FIXTURES, 'posts', 'known-good.md'), UNTRACKED);
+
+  const audit = await checkFrontmatter('posts/untracked-draft.md', 'writing', 'audit');
+  assert.equal(
+    audit.findings.some((f) => f.message.includes('steward cleanup')),
+    false,
   );
 });
 

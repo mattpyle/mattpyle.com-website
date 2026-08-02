@@ -16,6 +16,7 @@ import {
   SCORECARD_RUNS_PATH,
   STEWARD_TIMEZONE,
   SITE_DIR,
+  postRelPath,
   workflowIdFor,
   isValidSlug,
   parseWorkflowId,
@@ -27,6 +28,7 @@ import type { ReviewStateResult, Verdict } from './lib/report.js';
 import { readArchivedReport, readLatestReport } from './lib/read-report.js';
 import { BOLD, DIM, GREEN, RED, RESET, paint, renderReport } from './lib/render-report.js';
 import { deriveInboxHint } from './lib/inbox.js';
+import { cleanupPublishedTwin } from './lib/cleanup.js';
 import {
   reviewPost,
   approve as approveSignal,
@@ -915,6 +917,15 @@ program
       ENABLE_PUBLISH_LEG ? 20 * 60 * 1000 : 2 * 60 * 1000,
     );
     await render(c, slug, state);
+    // The publish is verified against production, and the author's own checkout
+    // is the one thing the flow deliberately never touched (design rule 3). This
+    // is the moment that gap is real and actionable, so it is the moment the
+    // command gets named — not a warning at review time about something that has
+    // not happened yet.
+    if (state.state === 'published') {
+      console.log(`  Next: \`steward cleanup ${slug}\` to remove the local draft twin and`);
+      console.log(`  fast-forward your checkout. It refuses rather than guesses.\n`);
+    }
     if (!TERMINAL.includes(state.state)) process.exitCode = 1;
     await c.connection.close();
   });
@@ -987,6 +998,78 @@ program
       process.exitCode = 1;
     }
     await c.connection.close();
+  });
+
+/**
+ * Post-publish reconciliation, and the only CLI verb that touches the author's
+ * own checkout.
+ *
+ * Deliberately a verb the human types rather than a step inside the publish
+ * workflow: the workflow finishes when production is verified, which may be
+ * hours after the approve, and by then the checkout could be on any branch
+ * mid-anything. Design rule 3 keeps Steward out of the primary checkout for
+ * exactly that reason — so reconciliation is offered, guarded, and invoked, not
+ * performed behind the author's back.
+ *
+ * No Temporal client: the archived report is the only input, and the workflow is
+ * usually long gone by the time this runs.
+ */
+program
+  .command('cleanup')
+  .argument('<slug>', SLUG_HELP, parseSlug)
+  .option('--collection <name>', `one of: ${COLLECTIONS.join(', ')}`, 'writing')
+  .description("Delete the published post's local draft twin and fast-forward the checkout")
+  .action(async (slug: string, opts: { collection: string }) => {
+    const collection = parseCollection(opts.collection);
+    const report = await readLatestReport(collection, slug);
+    if (!report) {
+      fail(
+        `No archived review for "${collection}/${slug}", so there is no record of what was ` +
+          `published or which bytes were reviewed. Cleanup needs both to be safe.`,
+      );
+    }
+    if (!report.publish.prUrl) {
+      fail(
+        `The latest review of "${collection}/${slug}" never reached the publish leg — no PR was ` +
+          `opened, so nothing has been published and there is no twin to reconcile.`,
+      );
+    }
+
+    const result = await cleanupPublishedTwin({
+      repoDir: SITE_DIR,
+      relPath: postRelPath(slug, collection),
+      slug,
+      reviewedSha256: report.contentSha256,
+    });
+
+    console.log('');
+    if (!result.ok) {
+      const { guard, why, commands } = result.refusal;
+      console.log(`  ${paint(`Refused (${guard} guard) — nothing was changed.`, RED)}`);
+      console.log('');
+      console.log(`  ${why}`);
+      console.log('');
+      console.log('  Do it by hand instead:');
+      console.log('');
+      for (const command of commands) console.log(`      ${command}`);
+      console.log('');
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(`  ${paint('Reconciled.', GREEN)}`);
+    console.log('');
+    console.log(
+      result.deleted
+        ? `      removed the local draft twin: ${postRelPath(slug, collection)}`
+        : `      no local twin to remove — already reconciled`,
+    );
+    console.log(
+      result.pulled
+        ? `      fast-forwarded ${result.base}: ${result.from.slice(0, 8)} → ${result.to.slice(0, 8)}`
+        : `      ${result.base} was already at origin's tip (${result.to.slice(0, 8)})`,
+    );
+    console.log('');
   });
 
 program

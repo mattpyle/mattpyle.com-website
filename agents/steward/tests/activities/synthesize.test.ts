@@ -245,3 +245,36 @@ test('patches differing only by file are not collapsed', async () => {
   });
   assert.equal(report.patches.length, 2);
 });
+
+// ---------------------------------------------------------------------------
+// Informational findings (`pass` severity).
+//
+// The uncommitted-draft note is the first of these. It must survive into the
+// report — it is the whole point — without being counted as something to fix.
+// ---------------------------------------------------------------------------
+
+test('a `pass`-severity finding leaves the verdict alone and is not counted as a defect', async () => {
+  const report = await synthesizeReport({
+    ...base,
+    passes: [
+      pass({
+        pass: 'frontmatter',
+        verdict: 'pass',
+        findings: [
+          {
+            id: 'frontmatter-1',
+            pass: 'frontmatter',
+            severity: 'pass',
+            message: 'run `steward cleanup x` once the PR merges',
+          },
+        ],
+      }),
+    ],
+  });
+
+  assert.equal(report.overall, 'pass');
+  assert.equal(report.passes[0].findings.length, 1, 'the note survives synthesis');
+  // The most-read line in the report must not say "no findings" above a finding.
+  assert.doesNotMatch(report.summary, /PASS — no findings/);
+  assert.match(report.summary, /note/i);
+});
