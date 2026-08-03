@@ -1462,7 +1462,7 @@ html[data-appearance='retro'] [data-module='guestbook'] .gb-entry--new {
 }
 
 /* The only motion either panel has. Under prefers-reduced-motion it is dropped and the entry
-   renders already settled — the forest border and the [ JUST ADDED ] badge were carrying the
+   renders already settled — the forest border and the [JUST ADDED] badge were carrying the
    state anyway, which is why the still version reads correctly. */
 @keyframes retro-entry-land {
   from { background: var(--retro-gold); }

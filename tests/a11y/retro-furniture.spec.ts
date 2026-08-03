@@ -152,7 +152,7 @@ test('a signature prepends the entry, badges it as just added, and states where 
   await expect(entries).toHaveCount(6);
   await expect(entries.first()).toContainText('A keyboard');
   await expect(entries.first()).toContainText('#006');
-  await expect(entries.first().locator('.gb-badge--new')).toHaveText('[ JUST ADDED ]');
+  await expect(entries.first().locator('.gb-badge--new')).toHaveText('[JUST ADDED]');
 
   // A form entry is a human entry: no agent badge, whatever the visitor typed.
   await expect(entries.first().locator('.gb-badge').filter({ hasText: 'SIGNED BY AGENT' })).toHaveCount(0);
@@ -194,11 +194,24 @@ test('a stored agent entry renders with the provenance badge and the tool name',
 
   const first = page.locator('[data-module="guestbook"] .gb-entry').first();
   await expect(first).toContainText('a test agent');
-  await expect(first.locator('.gb-badge').first()).toHaveText('[ SIGNED BY AGENT ]');
+  await expect(first.locator('.gb-badge').first()).toHaveText('[SIGNED BY AGENT]');
   await expect(first.locator('.gb-via')).toContainText('sign_guestbook');
 
-  // Session-only: [ JUST ADDED ] does not survive a reload, when the number and date do the job.
+  // Session-only: [JUST ADDED] does not survive a reload, when the number and date do the job.
   await expect(first.locator('.gb-badge--new')).toHaveCount(0);
+
+  // A script-built row must get the same layout as a server-rendered one. It does not get Astro's
+  // scoping attribute, so a scoped entry rule would style the seeds and skip everything this
+  // browser wrote — which is what happened, and it was invisible until a stored entry existed.
+  const stored = first.locator('.gb-entry-meta');
+  const seed = page.locator('[data-module="guestbook"] .gb-entry').nth(1).locator('.gb-entry-meta');
+  for (const property of ['display', 'columnGap', 'justifyContent']) {
+    const built = await stored.evaluate((el, p) => getComputedStyle(el)[p as any], property);
+    const rendered = await seed.evaluate((el, p) => getComputedStyle(el)[p as any], property);
+    expect(built, `${property} on a script-built entry`).toBe(rendered);
+    expect(built).not.toBe('');
+  }
+  await expect(stored).toHaveCSS('display', 'flex');
 });
 
 test('filing a webmaster note replaces the form with the confirmation and the real link', async ({ page }) => {

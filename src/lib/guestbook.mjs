@@ -46,6 +46,19 @@ export function formatEntryDate(date) {
   return `${day} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+/**
+ * `YYYY-MM-DD` for a `<time datetime>`, read off the SAME local calendar day formatEntryDate
+ * prints. `toISOString()` is UTC, so an entry signed after 5pm Pacific would carry tomorrow's
+ * machine-readable date under today's visible one.
+ *
+ * @param {Date} date
+ */
+export function toLocalIsoDate(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 /** `#008` — the entry number as the book prints it. @param {number} number */
 export function formatEntryNumber(number) {
   return `#${String(number).padStart(3, '0')}`;
@@ -77,7 +90,7 @@ export function clampMessage(value) {
 /**
  * The book's permanent floor: five entries, newest first, rendered server-side so the section
  * reads with JavaScript off. Two of them are agent entries, which is what puts the
- * [ SIGNED BY AGENT ] badge on the page before anybody calls the tool.
+ * [SIGNED BY AGENT] badge on the page before anybody calls the tool.
  */
 export const SEED_ENTRIES = Object.freeze(
   [
@@ -199,7 +212,7 @@ export function addEntry(fields, source) {
     name,
     message,
     date: formatEntryDate(now),
-    iso: now.toISOString().slice(0, 10),
+    iso: toLocalIsoDate(now),
     source: source === 'agent' ? 'agent' : 'human',
   };
 

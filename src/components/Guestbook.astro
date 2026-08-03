@@ -92,7 +92,7 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
           <p class="gb-entry-message">{entry.message}</p>
           {entry.source === 'agent' && (
             <p class="gb-entry-provenance">
-              <span class="gb-badge">[ SIGNED BY AGENT ]</span>
+              <span class="gb-badge">[SIGNED BY AGENT]</span>
               <span class="gb-via">via the <b>sign_guestbook</b> tool</span>
             </p>
           )}
@@ -236,32 +236,41 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
     padding: 0;
   }
 
-  .gb-entry { padding: 14px 16px; }
+  /* EVERY ENTRY RULE BELOW IS :global(), ON PURPOSE, AND MUST STAY THAT WAY.
+     buildEntry() in the script below constructs entry rows with createElement, which cannot carry
+     Astro's scoping attribute. A scoped rule therefore styles the five server-rendered seeds and
+     nothing a visitor or an agent writes — and the moment this browser has one entry of its own the
+     script replaces the whole list, so the layout vanished for exactly the people who had used the
+     book. The `[data-module='guestbook']` prefix keeps the reach as narrow as scoping did: it is the
+     panel's own attribute, it is server-rendered, and it is the same handle retro.css uses. */
+  [data-module='guestbook'] :global(.gb-entry) { padding: 14px 16px; }
 
-  .gb-entry-meta {
+  /* Row gap stays small and column gap does the separating: when the date wraps under the lead at
+     narrow widths the header must read as one block, not as two. */
+  [data-module='guestbook'] :global(.gb-entry-meta) {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 5px 20px;
   }
 
-  .gb-entry-lead {
+  [data-module='guestbook'] :global(.gb-entry-lead) {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 9px;
+    gap: 5px 14px;
   }
 
-  .gb-entry-number { font-size: 11.5px; font-weight: 700; }
-  .gb-entry-name { font-size: 12.5px; font-weight: 700; }
+  [data-module='guestbook'] :global(.gb-entry-number) { font-size: 11.5px; font-weight: 700; }
+  [data-module='guestbook'] :global(.gb-entry-name) { font-size: 12.5px; font-weight: 700; }
 
-  .gb-entry-date {
+  [data-module='guestbook'] :global(.gb-entry-date) {
     font-size: 11px;
     white-space: nowrap;
   }
 
-  .gb-entry-message {
+  [data-module='guestbook'] :global(.gb-entry-message) {
     margin: 8px 0 0;
     max-width: 64ch;
     font-size: 15px;
@@ -272,22 +281,24 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
 
   /* The badge is the entry's footnote, on its own row after the message. Beside the name it
      pushed the date onto a second line at 390px. */
-  .gb-entry-provenance {
+  [data-module='guestbook'] :global(.gb-entry-provenance) {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 9px;
-    margin: 10px 0 0;
+    gap: 6px 14px;
+    margin: 12px 0 0;
   }
 
-  .gb-badge {
-    padding: 3px 8px;
+  /* The tracking puts a .14em space after the closing bracket that the opening bracket does not
+     get, so the right padding is short by exactly that much to keep the box optically centred. */
+  [data-module='guestbook'] :global(.gb-badge) {
+    padding: 3px calc(8px - .14em) 3px 8px;
     font-size: 10.5px;
     font-weight: 700;
     letter-spacing: .14em;
   }
 
-  .gb-via { font-size: 11px; }
+  [data-module='guestbook'] :global(.gb-via) { font-size: 11px; }
 
   @media (max-width: 600px) {
     .gb-header { padding: 12px 14px; }
@@ -295,7 +306,7 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
     .gb-field--name { flex: 1 1 100%; }
     .gb-textarea { height: 104px; }
     .gb-submit { min-height: 44px; padding: 12px 18px; }
-    .gb-entry { padding: 13px 12px; }
+    [data-module='guestbook'] :global(.gb-entry) { padding: 13px 12px; }
   }
 </style>
 
@@ -322,7 +333,7 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
   };
 
   /**
-   * Session-only, per the bundle: [ JUST ADDED ] marks what happened while you were looking, and
+   * Session-only, per the bundle: [JUST ADDED] marks what happened while you were looking, and
    * is gone on reload when the entry number and the date do the job instead.
    */
   let justAdded: number | null = null;
@@ -351,7 +362,7 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
     if (entry.number === justAdded) {
       const fresh = document.createElement('span');
       fresh.className = 'gb-badge gb-badge--new';
-      fresh.textContent = '[ JUST ADDED ]';
+      fresh.textContent = '[JUST ADDED]';
       lead.append(fresh);
     }
 
@@ -374,7 +385,7 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
 
       const badge = document.createElement('span');
       badge.className = 'gb-badge';
-      badge.textContent = '[ SIGNED BY AGENT ]';
+      badge.textContent = '[SIGNED BY AGENT]';
 
       const via = document.createElement('span');
       via.className = 'gb-via';

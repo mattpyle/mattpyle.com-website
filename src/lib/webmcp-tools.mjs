@@ -15,7 +15,7 @@
  *
  * PROVENANCE IS SET HERE, NOT PASSED IN. sign_guestbook hardcodes source 'agent' and the
  * form hardcodes 'human'. Neither reads it off a field, which is the only reason the
- * [ SIGNED BY AGENT ] badge on the rendered entry means anything.
+ * [SIGNED BY AGENT] badge on the rendered entry means anything.
  *
  * CHROME DOES NOT VALIDATE inputSchema. Measured on Chrome 150 against the live origin trial
  * (2026-07-17): `search_content` was invoked with `{}` despite `query` being declared `required`,
@@ -260,7 +260,7 @@ export function createTools(getIndex) {
             source: result.entry.source,
           },
           message:
-            `Signed as entry ${number}, marked [ SIGNED BY AGENT ]. ${where} ` +
+            `Signed as entry ${number}, marked [SIGNED BY AGENT]. ${where} ` +
             'It was written to this browser\'s localStorage only: no server received it, and no ' +
             'other visitor to mattpyle.com will ever see it.',
         };

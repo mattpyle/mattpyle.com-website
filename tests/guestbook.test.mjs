@@ -14,13 +14,14 @@ import {
   nextEntryNumber,
   readEntries,
   readStoredEntries,
+  toLocalIsoDate,
 } from '../src/lib/guestbook.mjs';
 import { WEB_RING, ringMembers } from '../src/lib/web-ring.mjs';
 import { NOTE_MAX, WEBMASTER_NOTES_STORAGE_KEY, clampNote, fileNote, readNotes } from '../src/lib/webmaster-notes.mjs';
 import { VISITS_STORAGE_KEY, formatVisits, readVisits, recordVisit } from '../src/lib/visit-counter.mjs';
 
 /**
- * The guest book's whole claim is that the [ SIGNED BY AGENT ] badge is trustworthy. That rests on
+ * The guest book's whole claim is that the [SIGNED BY AGENT] badge is trustworthy. That rests on
  * exactly one property: provenance is set by the code path that wrote the entry, never by an
  * argument. These tests are what keeps that true after the next refactor.
  */
@@ -124,6 +125,27 @@ test('entry numbers and dates print the way the book does', () => {
   assert.equal(formatEntryNumber(6), '#006');
   assert.equal(formatEntryNumber(142), '#142');
   assert.equal(formatEntryDate(new Date(2026, 7, 2)), '02 AUG 2026');
+});
+
+test('the machine-readable date is the local calendar day, not the UTC one', () => {
+  // 23:30 local on 2 August. In any timezone west of UTC this instant is already 3 August in UTC,
+  // so a toISOString()-derived iso would disagree with the visible date on the same entry. The
+  // Date is built from local components, so the assertion holds in whatever zone the runner is in.
+  const evening = new Date(2026, 7, 2, 23, 30);
+  assert.equal(toLocalIsoDate(evening), '2026-08-02');
+  assert.equal(formatEntryDate(evening), '02 AUG 2026');
+
+  // Padding: single-digit months and days both keep two characters.
+  assert.equal(toLocalIsoDate(new Date(2026, 0, 9, 0, 5)), '2026-01-09');
+});
+
+test('a written entry\'s iso and its displayed date are the same day', () => {
+  reset();
+
+  // `T12:00:00` with no zone parses as local noon, so this reads the iso back as a calendar day
+  // and reprints it. If addEntry ever stamps iso from UTC again, an evening run fails here.
+  const { entry } = addEntry({ name: 'Ada', message: 'Signed just now.' }, 'human');
+  assert.equal(formatEntryDate(new Date(`${entry.iso}T12:00:00`)), entry.date);
 });
 
 test('the ring ships with a real member and labelled open slots', () => {

@@ -79,7 +79,7 @@ export const WEBMCP_TOOL_NOTES = Object.freeze({
     }),
     notes:
       "Writes to this browser's localStorage and nothing else. The entry is recorded as " +
-      'agent-written and renders with a [ SIGNED BY AGENT ] badge in the guest book on the homepage.',
+      'agent-written and renders with a [SIGNED BY AGENT] badge in the guest book on the homepage.',
   }),
 
   list_related_sites: Object.freeze({

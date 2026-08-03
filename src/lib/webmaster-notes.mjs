@@ -13,6 +13,8 @@
  * NO TOP-LEVEL SIDE EFFECTS — this file sits on a chain that Node imports at build time.
  */
 
+import { toLocalIsoDate } from './guestbook.mjs';
+
 export const WEBMASTER_NOTES_STORAGE_KEY = 'mattpyle:webmaster-notes';
 
 export const NOTE_MAX = 500;
@@ -47,7 +49,9 @@ export function fileNote(message) {
   if (!text) return { ok: false, error: 'empty' };
 
   const notes = readNotes();
-  notes.push({ message: text, iso: new Date().toISOString().slice(0, 10) });
+  // Local, not UTC: the same reason the guest book's iso is (a note filed in the evening in
+  // Pacific must not be stamped with tomorrow's date).
+  notes.push({ message: text, iso: toLocalIsoDate(new Date()) });
   try {
     localStorage.setItem(WEBMASTER_NOTES_STORAGE_KEY, JSON.stringify(notes));
   } catch {
