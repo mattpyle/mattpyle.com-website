@@ -36,6 +36,42 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/llms-full.txt` — full plain-text dump of all published writing and builds content plus the current scorecard snapshot, generated at build time from the same content that backs the site.
 - `/webmcp/index.json` — the JSON index backing the WebMCP tools below. A plain static file; any agent can fetch it directly, no tool call required.
 - `/webmcp/tools.json` — the tool manifest: name, description, input schema, return summary, and an example call for every tool below. Generated at build time from the live tool objects, so it cannot drift from what an agent actually receives.
+- `/.well-known/agent-card.json`: the A2A Agent Card (`application/a2a+json`). See below.
+
+## A2A (experimental)
+
+This site is an A2A participant. There is an Agent Card at `/.well-known/agent-card.json` and a live endpoint at `/a2a`, and between them they do exactly one thing: answer questions about this site.
+
+| | |
+|---|---|
+| Agent Card | `https://www.mattpyle.com/.well-known/agent-card.json` |
+| Endpoint | `https://www.mattpyle.com/a2a` |
+| Binding | JSON-RPC 2.0 over HTTPS POST, `Content-Type: application/json` |
+| Protocol version | A2A 1.0 |
+| Method | `SendMessage`, and nothing else |
+| Skill | `ask-about-site`: who Matt is, what he has written and built, what shipped recently, and which agent surfaces exist |
+| Auth | None. Read-only, public content only. |
+
+The reply is a direct `Message`, not a `Task`: the skill is a single read-only turn with no state to track, so there is nothing to poll to completion. Replies come back as `text/markdown` in the voice of this site's retro webmaster, with the facts and URLs compiled from the site's own published content at build time. Nothing it returns is unavailable to a plain `fetch`.
+
+A minimal call:
+
+```bash
+curl -sS https://www.mattpyle.com/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"SendMessage",
+       "params":{"message":{"role":"ROLE_USER","messageId":"1",
+                            "parts":[{"text":"What is this site about?"}]}}}'
+```
+
+Notes for anyone calling it:
+
+- **The method is `SendMessage`, not `message/send`.** A2A 1.0 (spec §9.1) renamed the JSON-RPC methods to PascalCase matching gRPC. The 0.x `message/send` spelling is accepted here as an alias, per the migration guidance in the spec's Appendix A.2, but responses only ever use the current form.
+- **Text parts are the 1.0 shape**, `{"text": "..."}`, with no `kind` discriminator. The 0.x `{"kind":"text","text":"..."}` form is also read, since the member is in the same place either way.
+- **Errors ride an HTTP 200** with a JSON-RPC error object, as JSON-RPC intends. `error.data` is an array of objects each carrying an `@type`, per spec §9.5. An unknown method returns `-32601` naming the one method that works; a message with no text part returns `-32602` naming the field.
+- **Not implemented:** streaming, `Task` objects, push notifications, the extended Agent Card, and authentication. The Agent Card declares all of these as false rather than leaving you to find out.
+- **A `GET`** returns `405` with a worked example, rather than a bare status.
+- This is an experiment on a personal site, not a supported API, and it may be withdrawn without notice.
 
 ## WebMCP tools (experimental)
 

@@ -1,0 +1,41 @@
+{
+  "name": "The mattpyle.com webmaster",
+  "description": "The webmaster of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Answers questions about the site: its writing, builds, changelog, scorecard, and agent-readable surfaces. Replies are written in the voice of the site's retro webmaster and the facts in them are current. Read-only, unauthenticated, and public: no accounts, no payments, no private data, and nothing it returns that is not already published on the site.",
+  "supportedInterfaces": [
+    {
+      "url": "https://www.mattpyle.com/a2a",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "provider": {
+    "organization": "Matt Pyle",
+    "url": "https://www.mattpyle.com/"
+  },
+  "version": "0.1.0",
+  "documentationUrl": "https://www.mattpyle.com/agents.md",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extendedAgentCard": false
+  },
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/markdown"],
+  "skills": [
+    {
+      "id": "ask-about-site",
+      "name": "Ask about this site",
+      "description": "Answers questions about mattpyle.com: who Matt Pyle is, what he has written and built, what has shipped recently, and which agent-readable surfaces the site exposes (agents.md, llms.txt, raw-markdown variants, WebMCP tools, this endpoint). Answers cite site URLs and are compiled from the site's own published content at build time, so they never contradict the pages themselves.",
+      "tags": ["personal-site", "writing", "changelog", "webmcp", "agent-experience"],
+      "examples": [
+        "What is this site about?",
+        "Who is Matt Pyle?",
+        "What has Matt written recently?",
+        "What has shipped on this site lately?",
+        "What agent-readable surfaces does this site expose?"
+      ],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/markdown"]
+    }
+  ]
+}
