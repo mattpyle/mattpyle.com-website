@@ -67,6 +67,23 @@ function normalize(value) {
 }
 
 /**
+ * Every tag carried by the given entries, deduplicated case-insensitively and sorted, in the
+ * casing the content itself uses. Only ever read on the empty branch of get_recent_writing, so
+ * the cost lands on the call that needs the help.
+ *
+ * @param {any[]} entries
+ */
+function collectTags(entries) {
+  const seen = new Map();
+  for (const entry of entries) {
+    for (const tag of entry.tags ?? []) {
+      if (!seen.has(normalize(tag))) seen.set(normalize(tag), tag);
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Build the tool definitions.
  *
  * @param {() => Promise<WebmcpIndex>} getIndex
@@ -124,6 +141,26 @@ export function createTools(getIndex) {
             description: post.description,
           }));
 
+        // An empty result has to diagnose itself. Measured in build-log Session 16: the Model
+        // Context Tool Inspector autofilled the optional `tag` with "example_string", so every
+        // call honestly returned zero posts and an agent reading only `posts` would conclude the
+        // site has no writing. Clients that generate placeholder arguments from a schema turn an
+        // optional filter into a filter that matches nothing, so the empty case carries the
+        // unmatched value, the unfiltered count, and the tags that would work. The non-empty
+        // shape is untouched: only this branch gains fields.
+        if (tag && posts.length === 0) {
+          return {
+            posts: [],
+            unmatchedTag: String(args.tag),
+            publishedCount: writing.length,
+            availableTags: collectTags(writing),
+            note:
+              `No published article on mattpyle.com is tagged "${args.tag}". ` +
+              `${writing.length} published article${writing.length === 1 ? '' : 's'} exist without the tag filter — ` +
+              'call this tool again with no `tag` to list them, or use one of `availableTags`.',
+          };
+        }
+
         return { posts };
       },
     },
@@ -143,7 +180,15 @@ export function createTools(getIndex) {
       execute: async (args = {}) => {
         const { writing, builds, changelog = [] } = await getIndex();
         const query = normalize(args.query).trim();
-        if (!query) return { results: [] };
+        if (!query) {
+          // Chrome does not enforce `required`, so a blank or missing query reaches the handler.
+          // Returning a bare empty array reads identically to "nothing on this site matches",
+          // which is the one thing it does not mean.
+          return {
+            results: [],
+            note: 'search_content needs a non-empty `query`; nothing was searched. Pass the text to search for.',
+          };
+        }
 
         /** @param {any} entry @param {'writing'|'build'|'changelog'} type */
         const match = (entry, type) => {
@@ -164,6 +209,23 @@ export function createTools(getIndex) {
           ...builds.map((entry) => match(entry, 'build')),
           ...changelog.map((entry) => match(entry, 'changelog')),
         ].filter(Boolean);
+
+        // A miss names the query it searched for and the corpus it searched, so an agent can tell
+        // "this site has nothing about X" apart from "this tool searched nothing". The corpus is
+        // titles, descriptions, and tags only, which is why a page like /webmcp — not a content
+        // collection entry — is unfindable here; saying so is cheaper than a wrong conclusion.
+        if (results.length === 0) {
+          return {
+            results: [],
+            query: String(args.query),
+            corpus: { writing: writing.length, builds: builds.length, changelog: changelog.length },
+            note:
+              `Nothing on mattpyle.com matches "${args.query}". ` +
+              `Searched the titles, descriptions, and tags of ${writing.length + builds.length + changelog.length} entries ` +
+              `(${writing.length} writing, ${builds.length} builds, ${changelog.length} changelog). ` +
+              'Full article text is not indexed; try a broader term or call get_recent_writing to browse.',
+          };
+        }
 
         return { results };
       },

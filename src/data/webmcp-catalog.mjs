@@ -57,13 +57,17 @@ export const WEBMCP_TOOL_NOTES = Object.freeze({
 
   get_recent_writing: Object.freeze({
     kind: 'read',
-    returns: 'An object with posts: title, url, date, tags, description.',
+    returns:
+      'An object with posts: title, url, date, tags, description. If a tag matches nothing, ' +
+      'posts is empty and the result adds a note, the unmatched tag, the unfiltered count, and the tags that do exist.',
     example: Object.freeze({ limit: 5 }),
   }),
 
   search_content: Object.freeze({
     kind: 'read',
-    returns: 'An object with results: type, title, url, snippet.',
+    returns:
+      'An object with results: type, title, url, snippet. A query that matches nothing returns ' +
+      'an empty results with a note naming the query and the corpus that was searched.',
     example: Object.freeze({ query: 'webmcp' }),
   }),
 

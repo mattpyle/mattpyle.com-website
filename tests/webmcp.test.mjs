@@ -147,6 +147,27 @@ test('get_recent_writing filters by tag, case-insensitively', async () => {
   assert.deepEqual((await tool.execute({ tag: 'nonexistent' })).posts, []);
 });
 
+test('a tag that matches nothing returns a result that diagnoses itself', async () => {
+  // Session 16: the inspector autofilled `tag` with "example_string" on every call. A bare
+  // `{ posts: [] }` reads as "this site has no writing", which is the worst available reading.
+  const result = await toolsByName().get_recent_writing.execute({ limit: 5, tag: 'example_string' });
+
+  assert.deepEqual(result.posts, []);
+  assert.equal(result.unmatchedTag, 'example_string');
+  assert.equal(result.publishedCount, 2, 'the count without the filter, so the emptiness is attributable');
+  assert.deepEqual(result.availableTags, ['accessibility', 'agents'], 'deduplicated, sorted, a next call that works');
+  assert.match(result.note, /example_string/);
+  assert.match(result.note, /2 published articles/);
+});
+
+test('a non-empty get_recent_writing result gains no diagnostic fields', async () => {
+  // The diagnosis is for the empty branch only: the success shape stays exactly what Session 16
+  // measured through the protocol.
+  const result = await toolsByName().get_recent_writing.execute({ tag: 'agents' });
+
+  assert.deepEqual(Object.keys(result), ['posts']);
+});
+
 test('search_content matches title, description, and tags across writing, builds, and changelog', async () => {
   const tool = toolsByName().search_content;
 
@@ -183,6 +204,33 @@ test('search_content still works when the index predates the changelog field', a
 
 test('search_content ignores a blank query rather than matching everything', async () => {
   assert.deepEqual((await toolsByName().search_content.execute({ query: '   ' })).results, []);
+});
+
+test('a blank query says a query is required rather than returning silence', async () => {
+  const blank = await toolsByName().search_content.execute({ query: '   ' });
+  const missing = await toolsByName().search_content.execute({});
+
+  for (const result of [blank, missing]) {
+    assert.deepEqual(result.results, []);
+    assert.match(result.note, /non-empty `query`/);
+    assert.equal('corpus' in result, false, 'nothing was searched, so there is no corpus to report');
+  }
+});
+
+test('a query that matches nothing names the query and the corpus it searched', async () => {
+  const result = await toolsByName().search_content.execute({ query: 'nothing matches this' });
+
+  assert.deepEqual(result.results, []);
+  assert.equal(result.query, 'nothing matches this');
+  assert.deepEqual(result.corpus, { writing: 2, builds: 1, changelog: 1 });
+  assert.match(result.note, /nothing matches this/);
+  assert.match(result.note, /4 entries/);
+});
+
+test('a non-empty search_content result gains no diagnostic fields', async () => {
+  const result = await toolsByName().search_content.execute({ query: 'screen reader' });
+
+  assert.deepEqual(Object.keys(result), ['results']);
 });
 
 test('set_appearance enumerates the allowed modes and switches the appearance', async () => {
