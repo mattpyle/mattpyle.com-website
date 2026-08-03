@@ -38,7 +38,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('## WebMCP tools (experimental)');
   lines.push('');
   lines.push(
-    'The live pages register four WebMCP tools on document.modelContext. Three are read-only — describe_site, get_recent_writing, and search_content. One is a write tool: set_appearance, which switches this site between its modern and retro appearances. Its write is client-local, storing a preference in the calling browser\'s own localStorage; it changes no server state and affects no other visitor. (navigator.modelContext is the same object as document.modelContext, not a deprecated fallback — measured on Chrome 150, 2026-07-17.)'
+    'The live pages register six WebMCP tools on document.modelContext. Four are read-only: describe_site, get_recent_writing, search_content, and list_related_sites (the site\'s curated web ring). Two are write tools: set_appearance, which switches this site between its modern and retro appearances, and sign_guestbook, which appends a name and a message to the guest book on the homepage. Both writes are client-local, going to keys in the calling browser\'s own localStorage; they change no server state and affect no other visitor, and nobody else will ever see a guest-book entry written this way. Entries written through sign_guestbook are recorded as agent-written and render with a visible "signed by agent" badge; the provenance is set by the code path that wrote the entry, not by a field the caller passes. (navigator.modelContext is the same object as document.modelContext, not a deprecated fallback — measured on Chrome 150, 2026-07-17.)'
   );
   lines.push('');
   lines.push(

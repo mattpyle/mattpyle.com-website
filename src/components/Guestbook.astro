@@ -1,0 +1,521 @@
+---
+/**
+ * Component A of the guest book bundle: the localStorage guest book.
+ *
+ * RETRO-ONLY FURNITURE, NOT A RETRO-ONLY FEATURE. The markup ships in both modes and is hidden
+ * in modern by the existing `.retro-furniture` rule, so nothing is injected, revealed or
+ * reordered at toggle time. Layout lives in this component's scoped styles; every retro
+ * difference is colour / type / border / background and lives in src/styles/retro.css.
+ *
+ * PROGRESSIVE ENHANCEMENT. The five seeded entries are server-rendered from
+ * src/lib/guestbook.mjs, so with JavaScript off the book still reads. The form's controls ship
+ * `disabled` with a note beside them, and the script enables them — a JS failure degrades to a
+ * readable book, never to a dead form.
+ *
+ * ORDER IS DELIBERATE: form first, entries below. A new entry is prepended, so a signature moves
+ * only content below the button the visitor just pressed, inside 500ms of their own click, which
+ * is excluded from CLS. Putting the list above the form would move the form on every signature.
+ */
+import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/guestbook.mjs';
+---
+
+<section class="gb-panel" data-module="guestbook" aria-labelledby="guestbook-heading">
+  <div class="gb-header">
+    <h2 id="guestbook-heading">Sign the Guest Book</h2>
+  </div>
+
+  <div class="gb-body">
+    <form class="gb-form" data-gb-form novalidate>
+      <div class="gb-fields">
+        <div class="gb-field gb-field--name">
+          <label class="gb-label" for="gb-name">Your name</label>
+          <input
+            class="gb-input"
+            id="gb-name"
+            name="name"
+            type="text"
+            maxlength={NAME_MAX}
+            autocomplete="off"
+            aria-describedby="gb-name-hint"
+            data-gb-name
+            disabled
+          />
+          <div class="gb-underline">
+            <span class="gb-hint" id="gb-name-hint">Required. Up to {NAME_MAX} characters.</span>
+            <span class="gb-count" data-gb-name-count aria-hidden="true">0 / {NAME_MAX}</span>
+          </div>
+          <p class="gb-error" id="gb-name-error" data-gb-name-error hidden></p>
+        </div>
+
+        <div class="gb-field gb-field--message">
+          <label class="gb-label" for="gb-message">Message</label>
+          <textarea
+            class="gb-input gb-textarea"
+            id="gb-message"
+            name="message"
+            rows="4"
+            maxlength={MESSAGE_MAX}
+            aria-describedby="gb-message-hint"
+            data-gb-message
+            disabled></textarea>
+          <div class="gb-underline">
+            <span class="gb-hint" id="gb-message-hint">Up to {MESSAGE_MAX} characters.</span>
+            <span class="gb-count" data-gb-message-count aria-hidden="true">0 / {MESSAGE_MAX}</span>
+          </div>
+          <p class="gb-error" id="gb-message-error" data-gb-message-error hidden></p>
+        </div>
+      </div>
+
+      <div class="gb-actions">
+        <button class="gb-submit" type="submit" data-gb-submit disabled>SIGN THE BOOK</button>
+        <p class="gb-nojs" data-gb-nojs>Disabled. Needs JavaScript.</p>
+      </div>
+
+      {/*
+        In the DOM from first paint and empty until a submit, per the bundle: a live region
+        created at submit time is not reliably announced. This one sentence is where the
+        client-local guarantee is stated, so screen-reader users get it with everyone else.
+      */}
+      <p class="gb-confirm" data-gb-confirm role="status" aria-live="polite"></p>
+    </form>
+
+    <ul class="gb-entries" data-gb-entries>
+      {SEED_ENTRIES.map((entry) => (
+        <li class="gb-entry">
+          <div class="gb-entry-meta">
+            <span class="gb-entry-lead">
+              <span class="gb-entry-number">{formatEntryNumber(entry.number)}</span>
+              <span class="gb-entry-name">{entry.name}</span>
+            </span>
+            <time class="gb-entry-date" datetime={entry.iso}>{entry.date}</time>
+          </div>
+          <p class="gb-entry-message">{entry.message}</p>
+          {entry.source === 'agent' && (
+            <p class="gb-entry-provenance">
+              <span class="gb-badge">[SIGNED BY AGENT]</span>
+              <span class="gb-via">via the <b>sign_guestbook</b> tool</span>
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  /* Layout only. Colour, type, borders and backgrounds are in src/styles/retro.css — this
+     component is invisible in modern, so what is here is the structure a modern skin would
+     inherit if one is ever written. */
+  .gb-panel { display: block; }
+
+  .gb-header {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 13px 18px;
+  }
+
+  .gb-header h2 {
+    margin: 0;
+    font-size: 21px;
+    line-height: 1.2;
+  }
+
+  .gb-body {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 20px 18px 22px;
+  }
+
+  .gb-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 0;
+  }
+
+  .gb-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .gb-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .gb-field--name { flex: 0 1 260px; }
+  .gb-field--message { flex: 1 1 100%; }
+
+  .gb-label {
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+
+  .gb-input {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .gb-field--name .gb-input { height: 36px; }
+
+  .gb-textarea {
+    height: 92px;
+    resize: vertical;
+  }
+
+  .gb-underline {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .gb-hint {
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+
+  .gb-count {
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+
+  .gb-error {
+    margin: 0;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1.45;
+  }
+
+  /* The no-JS note sits BESIDE the button, never under it: hiding it on enable then changes the
+     row's width and not its height, so the enable swap cannot shift the page. Same construction
+     as .actions-row on /webmcp. */
+  .gb-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .gb-submit {
+    padding: 9px 18px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    cursor: pointer;
+  }
+
+  .gb-submit:disabled { cursor: default; }
+
+  .gb-nojs {
+    margin: 0;
+    font-size: 10.5px;
+  }
+
+  .gb-confirm {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* An empty confirmation must occupy no space at all, or the resting panel carries a blank
+     band it never explains. :empty is exact here — the script writes textContent only. */
+  .gb-confirm:empty { display: none; }
+
+  .gb-entries {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* EVERY ENTRY RULE BELOW IS :global(), ON PURPOSE, AND MUST STAY THAT WAY.
+     buildEntry() in the script below constructs entry rows with createElement, which cannot carry
+     Astro's scoping attribute. A scoped rule therefore styles the five server-rendered seeds and
+     nothing a visitor or an agent writes — and the moment this browser has one entry of its own the
+     script replaces the whole list, so the layout vanished for exactly the people who had used the
+     book. The `[data-module='guestbook']` prefix keeps the reach as narrow as scoping did: it is the
+     panel's own attribute, it is server-rendered, and it is the same handle retro.css uses. */
+  [data-module='guestbook'] :global(.gb-entry) { padding: 14px 16px; }
+
+  /* Row gap stays small and column gap does the separating: when the date wraps under the lead at
+     narrow widths the header must read as one block, not as two. */
+  [data-module='guestbook'] :global(.gb-entry-meta) {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 5px 20px;
+  }
+
+  [data-module='guestbook'] :global(.gb-entry-lead) {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+  }
+
+  [data-module='guestbook'] :global(.gb-entry-number) { font-size: 11.5px; font-weight: 700; }
+  [data-module='guestbook'] :global(.gb-entry-name) { font-size: 12.5px; font-weight: 700; }
+
+  [data-module='guestbook'] :global(.gb-entry-date) {
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  [data-module='guestbook'] :global(.gb-entry-message) {
+    margin: 8px 0 0;
+    max-width: 64ch;
+    font-size: 15px;
+    line-height: 1.6;
+    text-wrap: pretty;
+    white-space: pre-line;
+  }
+
+  /* The badge is the entry's footnote, on its own row after the message. Beside the name it
+     pushed the date onto a second line at 390px. */
+  [data-module='guestbook'] :global(.gb-entry-provenance) {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 12px 0 0;
+  }
+
+  /* The tracking puts a .14em space after the closing bracket that the opening bracket does not
+     get, so the right padding is short by exactly that much to keep the box optically centred. */
+  [data-module='guestbook'] :global(.gb-badge) {
+    padding: 3px calc(8px - .14em) 3px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .14em;
+  }
+
+  [data-module='guestbook'] :global(.gb-via) { font-size: 11px; }
+
+  @media (max-width: 600px) {
+    .gb-header { padding: 12px 14px; }
+    .gb-body { padding: 16px 12px 18px; }
+    .gb-field--name { flex: 1 1 100%; }
+    .gb-textarea { height: 104px; }
+    .gb-submit { min-height: 44px; padding: 12px 18px; }
+    [data-module='guestbook'] :global(.gb-entry) { padding: 13px 12px; }
+  }
+</style>
+
+<script>
+  import {
+    NAME_MAX,
+    MESSAGE_MAX,
+    GUESTBOOK_CHANGE_EVENT,
+    addEntry,
+    clampMessage,
+    clampName,
+    formatEntryNumber,
+    readEntries,
+    readStoredEntries,
+  } from '../lib/guestbook.mjs';
+
+  type Entry = {
+    number: number;
+    name: string;
+    message: string;
+    date: string;
+    iso: string;
+    source: string;
+  };
+
+  /**
+   * Session-only, per the bundle: [JUST ADDED] marks what happened while you were looking, and
+   * is gone on reload when the entry number and the date do the job instead.
+   */
+  let justAdded: number | null = null;
+
+  function buildEntry(entry: Entry): HTMLLIElement {
+    const li = document.createElement('li');
+    li.className = 'gb-entry';
+
+    const meta = document.createElement('div');
+    meta.className = 'gb-entry-meta';
+
+    const lead = document.createElement('span');
+    lead.className = 'gb-entry-lead';
+
+    const number = document.createElement('span');
+    number.className = 'gb-entry-number';
+    number.textContent = formatEntryNumber(entry.number);
+
+    const name = document.createElement('span');
+    name.className = 'gb-entry-name';
+    // textContent, never innerHTML: every string below is visitor- or agent-supplied.
+    name.textContent = entry.name;
+
+    lead.append(number, name);
+
+    if (entry.number === justAdded) {
+      const fresh = document.createElement('span');
+      fresh.className = 'gb-badge gb-badge--new';
+      fresh.textContent = '[JUST ADDED]';
+      lead.append(fresh);
+    }
+
+    const date = document.createElement('time');
+    date.className = 'gb-entry-date';
+    date.dateTime = entry.iso;
+    date.textContent = entry.date;
+
+    meta.append(lead, date);
+
+    const message = document.createElement('p');
+    message.className = 'gb-entry-message';
+    message.textContent = entry.message;
+
+    li.append(meta, message);
+
+    if (entry.source === 'agent') {
+      const provenance = document.createElement('p');
+      provenance.className = 'gb-entry-provenance';
+
+      const badge = document.createElement('span');
+      badge.className = 'gb-badge';
+      badge.textContent = '[SIGNED BY AGENT]';
+
+      const via = document.createElement('span');
+      via.className = 'gb-via';
+      via.append('via the ');
+      const tool = document.createElement('b');
+      tool.textContent = 'sign_guestbook';
+      via.append(tool, ' tool');
+
+      provenance.append(badge, via);
+      li.append(provenance);
+    }
+
+    if (entry.number === justAdded) li.classList.add('gb-entry--new');
+    return li;
+  }
+
+  function renderEntries(list: HTMLElement) {
+    list.replaceChildren(...readEntries().map((entry) => buildEntry(entry as Entry)));
+  }
+
+  function setError(field: HTMLElement, region: HTMLElement, message: string | null) {
+    if (message) {
+      region.textContent = `ERROR — ${message}`;
+      region.hidden = false;
+      field.setAttribute('aria-invalid', 'true');
+      field.setAttribute('aria-describedby', `${field.id}-hint ${field.id}-error`);
+    } else {
+      region.textContent = '';
+      region.hidden = true;
+      field.removeAttribute('aria-invalid');
+      field.setAttribute('aria-describedby', `${field.id}-hint`);
+    }
+  }
+
+  function wire(panel: HTMLElement) {
+    const form = panel.querySelector<HTMLFormElement>('[data-gb-form]');
+    const nameField = panel.querySelector<HTMLInputElement>('[data-gb-name]');
+    const messageField = panel.querySelector<HTMLTextAreaElement>('[data-gb-message]');
+    const nameCount = panel.querySelector<HTMLElement>('[data-gb-name-count]');
+    const messageCount = panel.querySelector<HTMLElement>('[data-gb-message-count]');
+    const nameError = panel.querySelector<HTMLElement>('[data-gb-name-error]');
+    const messageError = panel.querySelector<HTMLElement>('[data-gb-message-error]');
+    const submit = panel.querySelector<HTMLButtonElement>('[data-gb-submit]');
+    const nojs = panel.querySelector<HTMLElement>('[data-gb-nojs]');
+    const confirm = panel.querySelector<HTMLElement>('[data-gb-confirm]');
+    const entries = panel.querySelector<HTMLElement>('[data-gb-entries]');
+
+    if (!form || !nameField || !messageField || !submit || !confirm || !entries) return;
+    if (!nameCount || !messageCount || !nameError || !messageError || !nojs) return;
+
+    nameField.disabled = false;
+    messageField.disabled = false;
+    submit.disabled = false;
+    nojs.textContent = '';
+    nojs.hidden = true;
+
+    // Only re-render when this browser has entries of its own. With empty storage the server
+    // already rendered exactly what readEntries() would produce, so skipping the swap keeps the
+    // common load path free of any DOM churn at all.
+    if (readStoredEntries().length > 0) renderEntries(entries);
+
+    function syncCounts() {
+      nameCount!.textContent = `${nameField!.value.length} / ${NAME_MAX}`;
+      messageCount!.textContent = `${messageField!.value.length} / ${MESSAGE_MAX}`;
+      nameCount!.classList.toggle('gb-count--over', nameField!.value.length > NAME_MAX);
+      messageCount!.classList.toggle('gb-count--over', messageField!.value.length > MESSAGE_MAX);
+    }
+
+    nameField.addEventListener('input', syncCounts);
+    messageField.addEventListener('input', syncCounts);
+    syncCounts();
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const name = clampName(nameField.value);
+      const message = clampMessage(messageField.value);
+
+      // maxlength stops most over-runs at the keyboard, so this mainly catches paste. It is kept
+      // because sign_guestbook clamps too, and the visible rule has to match the tool's.
+      const nameProblem = !name ? 'Add a name so the entry has a signature. Anything you like.' : null;
+      const overBy = messageField.value.length - MESSAGE_MAX;
+      const messageProblem = !message
+        ? 'Write something so there is an entry to sign.'
+        : overBy > 0
+          ? `Message is ${overBy} characters over the ${MESSAGE_MAX}-character limit.`
+          : null;
+
+      setError(nameField, nameError!, nameProblem);
+      setError(messageField, messageError!, messageProblem);
+
+      if (nameProblem || messageProblem) {
+        (nameProblem ? nameField : messageField).focus();
+        return;
+      }
+
+      // 'human' is hardcoded here and 'agent' is hardcoded in the tool. Neither path reads the
+      // provenance off a field, which is the only reason the badge means anything.
+      const result = addEntry({ name, message }, 'human');
+      if (!result.ok) return;
+
+      justAdded = result.entry.number;
+      renderEntries(entries!);
+
+      nameField.value = '';
+      messageField.value = '';
+      syncCounts();
+
+      confirm!.textContent =
+        `Entry ${formatEntryNumber(result.entry.number)} is at the top of the book. ` +
+        'It was saved to this browser only. Nobody else will ever see it, and clearing your ' +
+        'browsing data wipes it.';
+    });
+
+    // An agent can call sign_guestbook while the visitor is looking at the book. Re-render so
+    // the entry appears where the tool's confirmation says it did.
+    document.addEventListener(GUESTBOOK_CHANGE_EVENT, ((event: CustomEvent<{ entry: Entry }>) => {
+      if (event.detail?.entry?.source !== 'agent') return;
+      justAdded = event.detail.entry.number;
+      renderEntries(entries!);
+    }) as EventListener);
+  }
+
+  // Per-element flag rather than a window global: ClientRouter re-runs this script on every soft
+  // nav, and the panel it wired may have been replaced by a fresh one.
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLElement>('[data-module="guestbook"]').forEach((panel) => {
+      if (panel.dataset.wired) return;
+      panel.dataset.wired = 'true';
+      wire(panel);
+    });
+  });
+</script>

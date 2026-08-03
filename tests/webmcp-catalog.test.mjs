@@ -24,6 +24,9 @@ const tools = createTools(throwingGetIndex);
 const BASE = 'https://www.mattpyle.com';
 const agentsMd = readFileSync(fileURLToPath(new URL('../public/agents.md', import.meta.url)), 'utf8');
 
+/** agents.md is prose, so it spells its counts. Indexed by count, not a lookup by name. */
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
 /** Minimal JSON Schema check — enough for the four hand-written schemas, no dependency. */
 function validateAgainstSchema(schema, args, label) {
   const properties = schema.properties ?? {};
@@ -125,11 +128,42 @@ test('agents.md names every registered tool and no longer claims three read-only
   assert.ok(!/three\s+\*{0,2}read-only/i.test(agentsMd), 'public/agents.md still claims "three read-only" tools');
 });
 
-test('agents.md marks the write tool as a write and states its client-local scope', () => {
+test('agents.md marks every write tool as a write and states its client-local scope', () => {
   const writeTools = tools.filter((tool) => WEBMCP_TOOL_NOTES[tool.name].kind === 'write');
   assert.ok(writeTools.length > 0, 'expected at least one write tool');
   assert.match(agentsMd, /\bwrite\b/i);
   assert.match(agentsMd, /localStorage/);
+
+  // The count in the prose is the thing that silently goes stale — it went stale once already,
+  // which is why the "three read-only" guard above exists. Assert the current numbers instead of
+  // banning last year's sentence.
+  const readCount = tools.length - writeTools.length;
+  assert.ok(
+    agentsMd.includes(`${NUMBER_WORDS[tools.length]} WebMCP tools`),
+    `public/agents.md must say "${NUMBER_WORDS[tools.length]} WebMCP tools"`
+  );
+  assert.ok(
+    agentsMd.includes(`${NUMBER_WORDS[readCount]} that read`),
+    `public/agents.md must say "${NUMBER_WORDS[readCount]} that read"`
+  );
+  assert.ok(
+    agentsMd.includes(`${NUMBER_WORDS[writeTools.length]} that write`),
+    `public/agents.md must say "${NUMBER_WORDS[writeTools.length]} that write"`
+  );
+});
+
+test('agents.md documents every localStorage key the tools and their UI write', () => {
+  // A tool that writes to a key nobody has documented is exactly the sort of thing an agent
+  // should be able to find out about before it calls the tool.
+  for (const key of ['mattpyle:appearance', 'mattpyle:guestbook', 'mattpyle:webmaster-notes', 'mattpyle:visits']) {
+    assert.ok(agentsMd.includes(key), `public/agents.md must document the ${key} storage key`);
+  }
+});
+
+test('agents.md states that tool-written guest-book entries are labelled as such', () => {
+  // The badge is the point of the build; a public doc that omits it lets an agent think its entry
+  // is indistinguishable from a human's.
+  assert.match(agentsMd, /SIGNED BY AGENT/);
 });
 
 test('formatJson tokenizes keys, strings, numbers, keywords, brackets, and punctuation', () => {

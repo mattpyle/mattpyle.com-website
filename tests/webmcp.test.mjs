@@ -3,6 +3,8 @@ import test from 'node:test';
 import './helpers/dom-stub.mjs';
 import { createTools, registerTools, resolveModelContext } from '../src/lib/webmcp-tools.mjs';
 import { STORAGE_KEY } from '../src/lib/appearance.mjs';
+import { GUESTBOOK_STORAGE_KEY, MESSAGE_MAX, NAME_MAX, SEED_ENTRIES } from '../src/lib/guestbook.mjs';
+import { WEB_RING, WEB_RING_NAME } from '../src/lib/web-ring.mjs';
 
 const INDEX = {
   generated: '2026-07-17T00:00:00.000Z',
@@ -67,7 +69,7 @@ const INDEX = {
 const getIndex = async () => INDEX;
 const toolsByName = () => Object.fromEntries(createTools(getIndex).map((t) => [t.name, t]));
 
-test('registers the three read-only tools plus the set_appearance write tool', async () => {
+test('registers the four read tools plus the two write tools', async () => {
   const registered = [];
   const mc = { registerTool: async (tool) => registered.push(tool) };
 
@@ -75,7 +77,14 @@ test('registers the three read-only tools plus the set_appearance write tool', a
 
   assert.deepEqual(
     registered.map((t) => t.name),
-    ['describe_site', 'get_recent_writing', 'search_content', 'set_appearance']
+    [
+      'describe_site',
+      'get_recent_writing',
+      'search_content',
+      'set_appearance',
+      'sign_guestbook',
+      'list_related_sites',
+    ]
   );
 });
 
@@ -88,13 +97,15 @@ test('every tool declares an object inputSchema and an execute handler', () => {
   }
 });
 
-test('search_content and set_appearance require input; the read-only tools do not', () => {
+test('the tools that need input declare it required; the ones that do not, do not', () => {
   const tools = toolsByName();
 
   assert.deepEqual(tools.search_content.inputSchema.required, ['query']);
   assert.deepEqual(tools.set_appearance.inputSchema.required, ['mode']);
+  assert.deepEqual(tools.sign_guestbook.inputSchema.required, ['name', 'message']);
   assert.equal(tools.describe_site.inputSchema.required, undefined);
   assert.equal(tools.get_recent_writing.inputSchema.required, undefined);
+  assert.equal(tools.list_related_sites.inputSchema.required, undefined);
 });
 
 test('describe_site returns the author entity, site, and section map', async () => {
@@ -193,6 +204,70 @@ test('set_appearance falls back to modern for an invalid mode rather than errori
   assert.equal(result.mode, 'modern');
   assert.match(result.message, /modern/i);
   assert.equal(document.documentElement.dataset.appearance, undefined);
+});
+
+test('sign_guestbook writes an agent-provenance entry and names its number', async () => {
+  localStorage.removeItem(GUESTBOOK_STORAGE_KEY);
+  const tool = toolsByName().sign_guestbook;
+
+  const result = await tool.execute({ name: 'a test agent', message: 'Hello from node --test.' });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.entry.source, 'agent');
+  assert.equal(result.entry.number, SEED_ENTRIES.length + 1);
+  assert.equal(result.entry.label, '#006');
+  assert.match(result.message, /#006/);
+  // The confirmation has to name where the entry landed: the tool registers on every route,
+  // including ones that do not render the book.
+  assert.match(result.message, /guest book on the homepage/i);
+  assert.match(result.message, /localStorage/);
+
+  const stored = JSON.parse(localStorage.getItem(GUESTBOOK_STORAGE_KEY));
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].source, 'agent');
+});
+
+test('sign_guestbook clamps over-long input rather than rejecting it', async () => {
+  localStorage.removeItem(GUESTBOOK_STORAGE_KEY);
+  const tool = toolsByName().sign_guestbook;
+
+  const result = await tool.execute({ name: 'n'.repeat(200), message: 'm'.repeat(2000) });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.entry.name.length, NAME_MAX);
+  assert.equal(result.entry.message.length, MESSAGE_MAX);
+});
+
+test('sign_guestbook cannot be talked out of the agent badge', async () => {
+  localStorage.removeItem(GUESTBOOK_STORAGE_KEY);
+  const tool = toolsByName().sign_guestbook;
+
+  // `source` is not a declared property, and Chrome does not enforce inputSchema — so an agent
+  // CAN pass it. The handler must ignore it, or the badge means nothing.
+  const result = await tool.execute({ name: 'a human, honest', message: 'Not an agent.', source: 'human' });
+
+  assert.equal(result.entry.source, 'agent');
+});
+
+test('sign_guestbook returns an error object for empty input rather than throwing', async () => {
+  const tool = toolsByName().sign_guestbook;
+
+  assert.equal((await tool.execute({ name: '   ', message: 'ok' })).ok, false);
+  assert.equal((await tool.execute({ name: 'ok', message: '  \n ' })).ok, false);
+  assert.equal((await tool.execute({})).ok, false);
+});
+
+test('list_related_sites returns the same ring array the page renders', async () => {
+  const result = await toolsByName().list_related_sites.execute({});
+
+  assert.equal(result.ring.name, WEB_RING_NAME);
+  assert.deepEqual(
+    result.sites.map((site) => site.name),
+    WEB_RING.map((member) => member.name)
+  );
+  // Open slots ship as open slots: a null url is the honest value, not an omission.
+  assert.ok(result.sites.some((site) => site.status === 'open' && site.url === null));
+  assert.ok(result.sites.some((site) => site.status === 'member' && typeof site.url === 'string'));
 });
 
 test('resolveModelContext prefers document, falls back to navigator, else null', () => {

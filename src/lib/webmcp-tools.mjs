@@ -1,15 +1,21 @@
 /**
- * The three read-only WebMCP tools exposed by src/components/WebMCP.astro.
+ * The six WebMCP tools exposed by src/components/WebMCP.astro: four read, two write.
  *
  * Kept out of the component's <script> so `node --test` can import and exercise the
  * handlers without a browser or the origin trial (see tests/webmcp.test.mjs) — same
  * split as src/lib/article-actions.mjs.
  *
- * The read tools (describe_site, get_recent_writing, search_content) are read-only
- * and deterministic: their only I/O is the caller-supplied getIndex(), which resolves
- * the same-origin /webmcp/index.json payload. set_appearance is the exception — a write
- * tool that flips the client-local appearance (localStorage + the <html data-appearance>
- * attribute) via src/lib/appearance.mjs, touching no server and no other visitor's view.
+ * The read tools (describe_site, get_recent_writing, search_content, list_related_sites)
+ * are read-only and deterministic: their only I/O is the caller-supplied getIndex(), which
+ * resolves the same-origin /webmcp/index.json payload, or a frozen array compiled into the
+ * bundle. The two write tools are client-local by construction and touch no server and no
+ * other visitor's view: set_appearance flips the appearance (localStorage + the
+ * <html data-appearance> attribute) via src/lib/appearance.mjs, and sign_guestbook appends
+ * an entry to this browser's guest book via src/lib/guestbook.mjs.
+ *
+ * PROVENANCE IS SET HERE, NOT PASSED IN. sign_guestbook hardcodes source 'agent' and the
+ * form hardcodes 'human'. Neither reads it off a field, which is the only reason the
+ * [SIGNED BY AGENT] badge on the rendered entry means anything.
  *
  * CHROME DOES NOT VALIDATE inputSchema. Measured on Chrome 150 against the live origin trial
  * (2026-07-17): `search_content` was invoked with `{}` despite `query` being declared `required`,
@@ -22,7 +28,9 @@
  * and serializes whatever the handler returns into a JSON string for the caller.
  */
 
-import { APPEARANCES, setAppearance } from './appearance.mjs';
+import { APPEARANCES, getAppearance, setAppearance } from './appearance.mjs';
+import { MESSAGE_MAX, NAME_MAX, addEntry, formatEntryNumber } from './guestbook.mjs';
+import { WEB_RING, WEB_RING_DESCRIPTION, WEB_RING_NAME } from './web-ring.mjs';
 
 /**
  * @typedef {object} WebmcpIndex
@@ -190,6 +198,90 @@ export function createTools(getIndex) {
               : 'Modern mode is now on for this browser.',
         };
       },
+    },
+
+    {
+      name: 'sign_guestbook',
+      description:
+        "Sign the guest book on mattpyle.com with a name and a message. The entry is saved in the calling browser's own localStorage and nowhere else — no server receives it and no other visitor can see it. Entries signed through this tool are recorded and displayed as agent-written, which the form cannot claim and this tool cannot disclaim.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            minLength: 1,
+            maxLength: NAME_MAX,
+            description: `The signature on the entry (1-${NAME_MAX} characters; longer names are trimmed).`,
+          },
+          message: {
+            type: 'string',
+            minLength: 1,
+            maxLength: MESSAGE_MAX,
+            description: `What the entry says (1-${MESSAGE_MAX} characters; longer messages are trimmed).`,
+          },
+        },
+        required: ['name', 'message'],
+        additionalProperties: false,
+      },
+      execute: async (args = {}) => {
+        // Clamping is load-bearing, not decoration: the runtime does not enforce maxLength (see
+        // the module doc comment), and the visible form's maxlength has to mean the same thing
+        // whichever path wrote the entry. addEntry() clamps, then rejects only what is empty
+        // after clamping.
+        const result = addEntry({ name: args.name, message: args.message }, 'agent');
+
+        if (!result.ok) {
+          return {
+            ok: false,
+            error:
+              result.error === 'name'
+                ? 'The entry needs a name. Pass a non-empty `name`.'
+                : 'The entry needs a message. Pass a non-empty `message`.',
+          };
+        }
+
+        const number = formatEntryNumber(result.entry.number);
+        // The tool registers on every route, so it can be called from a page that does not render
+        // the book. Say where the entry landed rather than splitting the registration path.
+        const where =
+          getAppearance() === 'retro'
+            ? 'It is at the top of the guest book on the homepage.'
+            : 'It is at the top of the guest book on the homepage, which displays in retro mode ' +
+              '(call set_appearance with mode "retro" to show it).';
+
+        return {
+          ok: true,
+          entry: {
+            number: result.entry.number,
+            label: number,
+            name: result.entry.name,
+            message: result.entry.message,
+            date: result.entry.date,
+            source: result.entry.source,
+          },
+          message:
+            `Signed as entry ${number}, marked [SIGNED BY AGENT]. ${where} ` +
+            'It was written to this browser\'s localStorage only: no server received it, and no ' +
+            'other visitor to mattpyle.com will ever see it.',
+        };
+      },
+    },
+
+    {
+      name: 'list_related_sites',
+      description:
+        'List the sites in the web ring on mattpyle.com: a hand-picked, one-directional ring of sites experimenting with the agentic web. Read-only. The ring is still being filled, so some entries are open slots with no URL.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => ({
+        ring: { name: WEB_RING_NAME, description: WEB_RING_DESCRIPTION },
+        // The same array the ring box on the homepage renders. One source, two surfaces.
+        sites: WEB_RING.map((member) => ({
+          name: member.name,
+          url: member.url,
+          description: member.description,
+          status: member.status,
+        })),
+      }),
     },
   ];
 }

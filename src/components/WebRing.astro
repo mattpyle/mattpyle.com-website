@@ -1,0 +1,192 @@
+---
+/**
+ * The curated web ring, the third piece of retro furniture.
+ *
+ * ONE ARRAY, TWO SURFACES. This box and the `list_related_sites` WebMCP tool both read
+ * src/lib/web-ring.mjs, so what an agent is told about the ring is definitionally what is on the
+ * page. Ring UI for humans, tool for agents, no second copy.
+ *
+ * A DEVIATION FROM design-brief §4, which specs the classic « Prev · Random · Next » as three
+ * links out to neighbouring sites. The ring ships with open slots (Matt picks the membership),
+ * and three anchors pointing at nothing is worse furniture than none, so the controls cycle the
+ * member on display inside a fixed-height panel instead. Same gesture, same three words, and it
+ * degrades honestly: with JavaScript off the buttons ship disabled and the first member reads.
+ * When the ring has real members the controls can go back to being anchors.
+ */
+import { WEB_RING, WEB_RING_NAME, WEB_RING_DESCRIPTION } from '../lib/web-ring.mjs';
+
+const first = WEB_RING[0];
+---
+
+<section class="ring-panel" data-module="web-ring" aria-labelledby="web-ring-heading">
+  <div class="ring-header">
+    <h2 id="web-ring-heading">{WEB_RING_NAME}</h2>
+  </div>
+
+  <div class="ring-body">
+    <p class="ring-dek">{WEB_RING_DESCRIPTION}</p>
+
+    <div class="ring-member" data-ring-member role="status" aria-live="polite">
+      <p class="ring-position" data-ring-position>Site 1 of {WEB_RING.length}</p>
+      <p class="ring-name" data-ring-name>{first.name}</p>
+      <p class="ring-desc" data-ring-desc>{first.description}</p>
+      <p class="ring-visit" data-ring-visit>
+        <a href={first.url}>Visit {first.name} &rarr;</a>
+      </p>
+    </div>
+
+    <div class="ring-controls">
+      <button type="button" class="ring-button" data-ring-prev disabled>&laquo; Prev</button>
+      <span class="ring-sep" aria-hidden="true">&middot;</span>
+      <button type="button" class="ring-button" data-ring-random disabled>Random</button>
+      <span class="ring-sep" aria-hidden="true">&middot;</span>
+      <button type="button" class="ring-button" data-ring-next disabled>Next &raquo;</button>
+    </div>
+
+    <p class="ring-nojs" data-ring-nojs>Cycling the ring needs JavaScript. The first site is shown above.</p>
+  </div>
+</section>
+
+<style>
+  .ring-panel { display: block; }
+
+  .ring-header {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 13px 18px;
+  }
+
+  .ring-header h2 {
+    margin: 0;
+    font-size: 21px;
+    line-height: 1.2;
+  }
+
+  .ring-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 18px 22px;
+  }
+
+  .ring-dek {
+    margin: 0;
+    max-width: 64ch;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Fixed height so cycling a member cannot move the controls under the pointer, and so the
+     longest description in the array sets the box once rather than per member. */
+  .ring-member {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-height: 148px;
+    padding: 14px 16px;
+  }
+
+  .ring-position { margin: 0; font-size: 10.5px; letter-spacing: .12em; }
+  .ring-name { margin: 0; font-size: 15px; font-weight: 700; }
+
+  .ring-desc {
+    margin: 0;
+    max-width: 60ch;
+    font-size: 13.5px;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+
+  .ring-visit { margin: auto 0 0; font-size: 12.5px; }
+
+  .ring-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .ring-button {
+    padding: 6px 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .ring-button:disabled { cursor: default; }
+
+  .ring-nojs { margin: 0; text-align: center; font-size: 10.5px; }
+
+  @media (max-width: 600px) {
+    .ring-header { padding: 12px 14px; }
+    .ring-body { padding: 16px 12px 18px; }
+    .ring-member { min-height: 190px; }
+    .ring-button { min-height: 44px; padding: 12px 14px; }
+  }
+</style>
+
+<script>
+  import { WEB_RING } from '../lib/web-ring.mjs';
+
+  type Member = { name: string; url: string | null; description: string; status: string };
+
+  function wire(panel: HTMLElement) {
+    const position = panel.querySelector<HTMLElement>('[data-ring-position]');
+    const name = panel.querySelector<HTMLElement>('[data-ring-name]');
+    const desc = panel.querySelector<HTMLElement>('[data-ring-desc]');
+    const visit = panel.querySelector<HTMLElement>('[data-ring-visit]');
+    const nojs = panel.querySelector<HTMLElement>('[data-ring-nojs]');
+    const prev = panel.querySelector<HTMLButtonElement>('[data-ring-prev]');
+    const random = panel.querySelector<HTMLButtonElement>('[data-ring-random]');
+    const next = panel.querySelector<HTMLButtonElement>('[data-ring-next]');
+
+    if (!position || !name || !desc || !visit || !nojs || !prev || !random || !next) return;
+
+    const ring = WEB_RING as unknown as Member[];
+    let index = 0;
+
+    [prev, random, next].forEach((button) => (button.disabled = false));
+    nojs.textContent = '';
+    nojs.hidden = true;
+
+    function show(nextIndex: number) {
+      index = ((nextIndex % ring.length) + ring.length) % ring.length;
+      const member = ring[index];
+
+      position!.textContent = `Site ${index + 1} of ${ring.length}`;
+      name!.textContent = member.name;
+      desc!.textContent = member.description;
+
+      if (member.url) {
+        const link = document.createElement('a');
+        link.href = member.url;
+        link.textContent = `Visit ${member.name} →`;
+        visit!.replaceChildren(link);
+      } else {
+        visit!.replaceChildren('No link yet. This slot is open.');
+      }
+    }
+
+    prev.addEventListener('click', () => show(index - 1));
+    next.addEventListener('click', () => show(index + 1));
+    random.addEventListener('click', () => {
+      // A ring of one would loop forever here, and "random" that returns where you already are
+      // reads as a broken button either way.
+      if (ring.length < 2) return;
+      let pick = index;
+      while (pick === index) pick = Math.floor(Math.random() * ring.length);
+      show(pick);
+    });
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLElement>('[data-module="web-ring"]').forEach((panel) => {
+      if (panel.dataset.wired) return;
+      panel.dataset.wired = 'true';
+      wire(panel);
+    });
+  });
+</script>

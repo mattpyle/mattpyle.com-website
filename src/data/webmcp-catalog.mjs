@@ -69,4 +69,22 @@ export const WEBMCP_TOOL_NOTES = Object.freeze({
     notes:
       "Writes to this browser's localStorage and nothing else. No server state, no other visitor.",
   }),
+
+  sign_guestbook: Object.freeze({
+    kind: 'write',
+    returns: 'An object with ok, the entry that was written, and a confirmation message naming its number.',
+    example: Object.freeze({
+      name: 'an agent reading this page',
+      message: 'Called the tool from the catalog to see what the badge looks like.',
+    }),
+    notes:
+      "Writes to this browser's localStorage and nothing else. The entry is recorded as " +
+      'agent-written and renders with a [SIGNED BY AGENT] badge in the guest book on the homepage.',
+  }),
+
+  list_related_sites: Object.freeze({
+    kind: 'read',
+    returns: 'An object with ring (name, description) and sites: name, url, description, status.',
+    example: Object.freeze({}),
+  }),
 });

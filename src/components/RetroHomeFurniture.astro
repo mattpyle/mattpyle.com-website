@@ -1,15 +1,28 @@
 ---
 /**
- * Decorative, behavior-free retro furniture for the homepage only (design-brief.md
- * §2: furniture concentrates on the homepage hero/sidebar and the global footer,
- * not the reading column). Exists in the DOM in both modes; hidden by default via
- * the .retro-furniture rule in src/styles/retro.css and revealed only in retro.
+ * Retro furniture for the homepage only (design-brief.md §2: furniture concentrates on the
+ * homepage hero/sidebar and the global footer, not the reading column). Exists in the DOM in both
+ * modes; hidden by default via the .retro-furniture rule in src/styles/retro.css and revealed
+ * only in retro.
  *
- * Everything here is aria-hidden: it's period flavor, not information — hiding it
- * from modern-mode assistive tech (where it's invisible anyway) and from retro-mode
- * assistive tech (where the real page content already says the same things) loses
- * nothing.
+ * The marquee, divider and construction banner are aria-hidden: period flavor, not information.
+ * The advertisement block below them is NOT — it carries a real link and a real number, and the
+ * caption under the counter is a claim about how the site works.
+ *
+ * THE ADVERTISEMENT BLOCK IS A DEVIATION from design-brief §4, approved by Matt 2026-08-02.
+ * §4 specs two beveled buttons, "Sign the Guestbook" and "Email the Webmaster". Both now jump to
+ * panels on this same page, and two jumps to one destination you can already see is not
+ * navigation. It collapses to what it always was in 1997: an advertisement — the counter, a
+ * label, and one anchor. The webmaster note sits directly under the guest book and needs no
+ * second jump. The control is an <a>, not a <button>: anchor semantics, no JavaScript, cannot
+ * shift layout, and the hero already ships beveled anchors.
  */
+import { VISIT_DIGITS } from '../lib/visit-counter.mjs';
+
+// Zero-padded to the same width the script will write, so replacing it on load cannot reflow the
+// box. A visitor with JavaScript off reads their first visit, which is all a static host could
+// ever have known about them anyway.
+const initialCount = '1'.padStart(VISIT_DIGITS, '0');
 ---
 
 <div class="retro-furniture retro-marquee" aria-hidden="true">
@@ -23,3 +36,109 @@
 <div class="retro-furniture retro-construction" aria-hidden="true">
   <b>Under Construction</b> &mdash; always tinkering
 </div>
+
+<div class="retro-furniture retro-ad">
+  <div class="retro-ad-inner">
+    <p class="retro-ad-label">Visits from this browser</p>
+    <p class="retro-counter">
+      <span class="retro-counter-digits" data-visit-digits aria-hidden="true">{initialCount}</span>
+      <span class="retro-ad-sr" data-visit-plain>1 visit from this browser.</span>
+    </p>
+    <p class="retro-ad-caption">
+      A 1997 counter counted everybody. This one counts you, in your own browser, because a static
+      site has nobody else&rsquo;s visits to count.
+    </p>
+    <a class="retro-ad-cta" href="#guestbook">Sign the Guest Book &darr;</a>
+  </div>
+</div>
+
+<style>
+  /* Layout only; the skin is in src/styles/retro.css with the rest of the furniture. */
+  .retro-ad { margin: 20px 0; }
+
+  .retro-ad-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: max-content;
+    max-width: calc(100% - (var(--gutter) * 2));
+    margin: 0 auto;
+    padding: 16px 22px 18px;
+    text-align: center;
+  }
+
+  .retro-ad-label {
+    margin: 0;
+    font-size: 10.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  .retro-counter { margin: 0; }
+
+  .retro-counter-digits {
+    display: inline-block;
+    padding: 6px 12px;
+    font-size: 26px;
+    letter-spacing: .12em;
+  }
+
+  .retro-ad-caption {
+    margin: 0;
+    max-width: 44ch;
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+
+  .retro-ad-cta {
+    padding: 9px 18px;
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+
+  .retro-ad-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 600px) {
+    .retro-ad-inner { max-width: calc(100% - (var(--gutter-mobile) * 2)); padding: 14px 16px 16px; }
+    .retro-counter-digits { font-size: 22px; }
+    .retro-ad-cta { min-height: 44px; display: inline-flex; align-items: center; }
+  }
+</style>
+
+<script>
+  import { formatVisits, recordVisit } from '../lib/visit-counter.mjs';
+
+  /**
+   * The digits are aria-hidden and a plain sentence carries the same number to assistive tech —
+   * "000004" read aloud is six digits, not a count (design-brief §4 asks for an aria-label with
+   * the plain value; a sibling sentence does the same job without an aria-label on a text node).
+   *
+   * Counted once per document load, not per soft nav: astro:page-load fires on every ClientRouter
+   * navigation, and counting those would inflate the number against its own caption.
+   */
+  let counted = false;
+
+  document.addEventListener('astro:page-load', () => {
+    const digits = document.querySelector<HTMLElement>('[data-visit-digits]');
+    const plain = document.querySelector<HTMLElement>('[data-visit-plain]');
+    if (!digits || !plain) return;
+
+    if (counted) return;
+    counted = true;
+
+    const visits = recordVisit();
+    digits.textContent = formatVisits(visits);
+    plain.textContent = visits === 1 ? '1 visit from this browser.' : `${visits} visits from this browser.`;
+  });
+</script>
