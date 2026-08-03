@@ -15,17 +15,22 @@
 /**
  * When the tool behaviour below was last measured against the live origin trial.
  *
- * 2026-07-24 raised this from handler-level to PROTOCOL-level: the tools were driven through
- * `document.modelContext.executeTool` on the deployed site rather than by calling the handlers
- * directly, which is what established the real `executeTool` signature (see
- * src/lib/webmcp-snippet.mjs) and reconfirmed that Chrome ignores `inputSchema`. Still page-side —
- * an agent driving these from outside the page remains unverified.
+ * 2026-08-02 raised this to EXTERNAL-CLIENT level for the WHOLE surface: a client running outside
+ * the page (the Model Context Tool Inspector side panel) enumerated all six tools on production and
+ * invoked every one of them. Nothing on /webmcp now rests on a page-side measurement.
+ *
+ * The earlier dates covered narrower claims, and the difference is the point. 2026-07-24 raised
+ * this from handler-level to PROTOCOL-level by driving the tools through
+ * `document.modelContext.executeTool` on the deployed site rather than calling the handlers
+ * directly, which established the real `executeTool` signature (see src/lib/webmcp-snippet.mjs)
+ * and reconfirmed that Chrome ignores `inputSchema` — but the caller was the page itself for four
+ * of the tools, and only `set_appearance` was ever driven from outside it.
  *
  * NOT a build date. It feeds the visible "verified" line on /webmcp, that page's JSON-LD
  * `dateModified`, and the `/webmcp/` sitemap lastmod, mirroring how SCORECARD_VERIFIED works.
  * Advance it only when the behaviour is re-measured.
  */
-export const WEBMCP_VERIFIED = Object.freeze({ iso: '2026-07-24', chrome: '150.0.7871.182' });
+export const WEBMCP_VERIFIED = Object.freeze({ iso: '2026-08-02', chrome: '150.0.7871.187' });
 
 /**
  * When this origin's WebMCP origin-trial token expires — after which Chrome ignores it and the

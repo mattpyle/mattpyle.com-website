@@ -115,11 +115,11 @@
         - /url: https://developer.chrome.com/docs/ai/webmcp
       - text: is the current reference for both.
     - paragraph:
-      - text: /Four of the six tools have been driven that way, on Chrome \d+\.\d+\.\d+\.\d+, which is where the calling convention above came from\./
+      - text: /All six tools have been driven that way, on Chrome \d+\.\d+\.\d+\.\d+, which is where the calling convention above came from\. A client running outside the page enumerated the six and invoked every one against this production site\. The read tools returned what the page itself renders,/
+      - code: set_appearance
+      - text: flipped this browser's view, and
       - code: sign_guestbook
-      - text: and
-      - code: list_related_sites
-      - text: "are newer and have not had that check yet: their handlers run here, and their registration follows the identical path, but nothing on this page claims an external client has invoked them. That line moves when it is measured, not when it ships."
+      - text: wrote an entry that appeared in the guest book while it was open, badged as agent-written. Each claim here moves when it is measured, not when it ships.
   - region "Where are the machine-readable resources?":
     - heading "Where are the machine-readable resources?" [level=2]
     - paragraph: If you are reading this as text rather than executing JavaScript on the live page, you cannot call the tools — but you can read the same things they read.
