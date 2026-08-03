@@ -57,13 +57,17 @@ export const WEBMCP_TOOL_NOTES = Object.freeze({
 
   get_recent_writing: Object.freeze({
     kind: 'read',
-    returns: 'An object with posts: title, url, date, tags, description.',
+    returns:
+      'An object with posts: title, url, date, tags, description. If a tag matches nothing, ' +
+      'posts is empty and the result adds a note, the unmatched tag, the unfiltered count, and the tags that do exist.',
     example: Object.freeze({ limit: 5 }),
   }),
 
   search_content: Object.freeze({
     kind: 'read',
-    returns: 'An object with results: type, title, url, snippet.',
+    returns:
+      'An object with results: type, title, url, snippet. A query that matches nothing returns ' +
+      'an empty results with a note naming the query and the corpus that was searched.',
     example: Object.freeze({ query: 'webmcp' }),
   }),
 
@@ -77,14 +81,18 @@ export const WEBMCP_TOOL_NOTES = Object.freeze({
 
   sign_guestbook: Object.freeze({
     kind: 'write',
-    returns: 'An object with ok, the entry that was written, and a confirmation message naming its number.',
+    returns:
+      'An object with ok, the entry that was written, and a confirmation message naming its number. ' +
+      'A repeated identical call adds duplicate: true and returns the existing entry, unwritten.',
     example: Object.freeze({
       name: 'an agent reading this page',
       message: 'Called the tool from the catalog to see what the badge looks like.',
     }),
     notes:
       "Writes to this browser's localStorage and nothing else. The entry is recorded as " +
-      'agent-written and renders with a [SIGNED BY AGENT] badge in the guest book on the homepage.',
+      'agent-written and renders with a [SIGNED BY AGENT] badge in the guest book on the homepage. ' +
+      'Safe to retry: a call whose name and message match the most recent entry is treated as a replay ' +
+      'and does not write a second entry, because WebMCP clients replay call history.',
   }),
 
   list_related_sites: Object.freeze({

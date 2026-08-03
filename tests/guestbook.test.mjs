@@ -76,6 +76,51 @@ test('a written entry is prepended, numbered next, and stored', () => {
   assert.equal(readStoredEntries().length, 2, 'seeds are never written to storage');
 });
 
+test('an entry identical to the most recent one is not written twice', () => {
+  // At-least-once delivery: a WebMCP client can replay a write it already made. The guard lives
+  // in the store, not in the tool, so the form inherits it — which is why this is the only place
+  // the form path needs covering.
+  reset();
+
+  const first = addEntry({ name: 'Ada', message: 'Sent once.' }, 'agent');
+  const replay = addEntry({ name: 'Ada', message: 'Sent once.' }, 'agent');
+
+  assert.equal(replay.ok, true, 'a replay is not an error');
+  assert.equal(replay.duplicate, true);
+  assert.deepEqual(replay.entry, first.entry);
+  assert.equal(readStoredEntries().length, 1);
+  assert.equal(nextEntryNumber(), 7, 'the book did not advance');
+
+  // Clamping happens before the comparison, so a replay that differs only in trimmed whitespace
+  // or an over-long tail is still recognised as the same entry.
+  const padded = addEntry({ name: '  Ada  ', message: 'Sent once.\n\n\n\n' }, 'agent');
+  assert.equal(padded.duplicate, true);
+  assert.equal(readStoredEntries().length, 1);
+
+  // Only the most recent entry is compared: the same words after somebody else's entry are a
+  // second signature, not a replay.
+  addEntry({ name: 'Grace', message: 'Interrupting.' }, 'human');
+  const again = addEntry({ name: 'Ada', message: 'Sent once.' }, 'agent');
+  assert.equal(again.duplicate, undefined);
+  assert.equal(again.entry.number, 8);
+  assert.equal(readStoredEntries().length, 3);
+});
+
+test('the replay guard never hands one code path the other one\'s entry', () => {
+  // source is part of the comparison. A replay comes back through the path that made the original
+  // call, so it still matches; what this excludes is a form submission inheriting an agent entry
+  // and wearing the [SIGNED BY AGENT] badge on a human's words.
+  reset();
+
+  const byAgent = addEntry({ name: 'x', message: 'y' }, 'agent');
+  const byForm = addEntry({ name: 'x', message: 'y' }, 'human');
+
+  assert.equal(byForm.duplicate, undefined, 'same words, different writer: a real entry');
+  assert.equal(byForm.entry.source, 'human');
+  assert.equal(byAgent.entry.source, 'agent');
+  assert.equal(readStoredEntries().length, 2);
+});
+
 test('provenance comes from the caller, not the fields', () => {
   reset();
 

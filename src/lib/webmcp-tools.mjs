@@ -67,6 +67,23 @@ function normalize(value) {
 }
 
 /**
+ * Every tag carried by the given entries, deduplicated case-insensitively and sorted, in the
+ * casing the content itself uses. Only ever read on the empty branch of get_recent_writing, so
+ * the cost lands on the call that needs the help.
+ *
+ * @param {any[]} entries
+ */
+function collectTags(entries) {
+  const seen = new Map();
+  for (const entry of entries) {
+    for (const tag of entry.tags ?? []) {
+      if (!seen.has(normalize(tag))) seen.set(normalize(tag), tag);
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Build the tool definitions.
  *
  * @param {() => Promise<WebmcpIndex>} getIndex
@@ -124,6 +141,26 @@ export function createTools(getIndex) {
             description: post.description,
           }));
 
+        // An empty result has to diagnose itself. Measured in build-log Session 16: the Model
+        // Context Tool Inspector autofilled the optional `tag` with "example_string", so every
+        // call honestly returned zero posts and an agent reading only `posts` would conclude the
+        // site has no writing. Clients that generate placeholder arguments from a schema turn an
+        // optional filter into a filter that matches nothing, so the empty case carries the
+        // unmatched value, the unfiltered count, and the tags that would work. The non-empty
+        // shape is untouched: only this branch gains fields.
+        if (tag && posts.length === 0) {
+          return {
+            posts: [],
+            unmatchedTag: String(args.tag),
+            publishedCount: writing.length,
+            availableTags: collectTags(writing),
+            note:
+              `No published article on mattpyle.com is tagged "${args.tag}". ` +
+              `${writing.length} published article${writing.length === 1 ? '' : 's'} exist without the tag filter — ` +
+              'call this tool again with no `tag` to list them, or use one of `availableTags`.',
+          };
+        }
+
         return { posts };
       },
     },
@@ -143,7 +180,15 @@ export function createTools(getIndex) {
       execute: async (args = {}) => {
         const { writing, builds, changelog = [] } = await getIndex();
         const query = normalize(args.query).trim();
-        if (!query) return { results: [] };
+        if (!query) {
+          // Chrome does not enforce `required`, so a blank or missing query reaches the handler.
+          // Returning a bare empty array reads identically to "nothing on this site matches",
+          // which is the one thing it does not mean.
+          return {
+            results: [],
+            note: 'search_content needs a non-empty `query`; nothing was searched. Pass the text to search for.',
+          };
+        }
 
         /** @param {any} entry @param {'writing'|'build'|'changelog'} type */
         const match = (entry, type) => {
@@ -164,6 +209,23 @@ export function createTools(getIndex) {
           ...builds.map((entry) => match(entry, 'build')),
           ...changelog.map((entry) => match(entry, 'changelog')),
         ].filter(Boolean);
+
+        // A miss names the query it searched for and the corpus it searched, so an agent can tell
+        // "this site has nothing about X" apart from "this tool searched nothing". The corpus is
+        // titles, descriptions, and tags only, which is why a page like /webmcp — not a content
+        // collection entry — is unfindable here; saying so is cheaper than a wrong conclusion.
+        if (results.length === 0) {
+          return {
+            results: [],
+            query: String(args.query),
+            corpus: { writing: writing.length, builds: builds.length, changelog: changelog.length },
+            note:
+              `Nothing on mattpyle.com matches "${args.query}". ` +
+              `Searched the titles, descriptions, and tags of ${writing.length + builds.length + changelog.length} entries ` +
+              `(${writing.length} writing, ${builds.length} builds, ${changelog.length} changelog). ` +
+              'Full article text is not indexed; try a broader term or call get_recent_writing to browse.',
+          };
+        }
 
         return { results };
       },
@@ -203,7 +265,7 @@ export function createTools(getIndex) {
     {
       name: 'sign_guestbook',
       description:
-        "Sign the guest book on mattpyle.com with a name and a message. The entry is saved in the calling browser's own localStorage and nowhere else — no server receives it and no other visitor can see it. Entries signed through this tool are recorded and displayed as agent-written, which the form cannot claim and this tool cannot disclaim.",
+        "Sign the guest book on mattpyle.com with a name and a message. The entry is saved in the calling browser's own localStorage and nowhere else — no server receives it and no other visitor can see it. Entries signed through this tool are recorded and displayed as agent-written, which the form cannot claim and this tool cannot disclaim. Safe to retry: calling it again with the same name and message as the most recent entry returns that entry instead of writing a duplicate.",
       inputSchema: {
         type: 'object',
         properties: {
@@ -249,16 +311,33 @@ export function createTools(getIndex) {
             : 'It is at the top of the guest book on the homepage, which displays in retro mode ' +
               '(call set_appearance with mode "retro" to show it).';
 
+        const entry = {
+          number: result.entry.number,
+          label: number,
+          name: result.entry.name,
+          message: result.entry.message,
+          date: result.entry.date,
+          source: result.entry.source,
+        };
+
+        // addEntry() suppressed a replay (see its doc comment). Say so rather than reporting a
+        // write that did not happen: an agent told "signed as #006" twice has been lied to about
+        // the state of the book, which is the failure this whole guard exists to avoid.
+        if (result.duplicate) {
+          return {
+            ok: true,
+            duplicate: true,
+            entry,
+            message:
+              `That entry is already in the book as ${number}, signed on ${result.entry.date}, so nothing was ` +
+              'written. An identical name and message repeated against the most recent entry is treated as a ' +
+              `replay of the same call rather than a second signature. ${where}`,
+          };
+        }
+
         return {
           ok: true,
-          entry: {
-            number: result.entry.number,
-            label: number,
-            name: result.entry.name,
-            message: result.entry.message,
-            date: result.entry.date,
-            source: result.entry.source,
-          },
+          entry,
           message:
             `Signed as entry ${number}, marked [SIGNED BY AGENT]. ${where} ` +
             'It was written to this browser\'s localStorage only: no server received it, and no ' +

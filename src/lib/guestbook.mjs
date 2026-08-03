@@ -195,9 +195,21 @@ export function nextEntryNumber() {
  * NOT read from `fields`, so the form cannot claim to be an agent and the tool cannot disclaim
  * being one. Anything other than 'agent' resolves to 'human'.
  *
+ * AT-LEAST-ONCE DELIVERY IS ASSUMED. Measured in build-log Session 16: the Model Context Tool
+ * Inspector replays its entire call history when its content script re-injects, and nothing in
+ * the WebMCP protocol flags a replayed write. So an entry whose clamped name and message match
+ * THE MOST RECENT STORED ENTRY is not written twice; the existing entry comes back with
+ * `duplicate: true` instead. Only the most recent is compared, on purpose: the same signature
+ * after somebody else's entry is a person signing again, not a replay, and it is written. The
+ * guard lives here rather than in the tool so the form inherits it too.
+ *
+ * `source` is part of that comparison. A replay arrives from the code path that made the original
+ * call, so it always matches; what the check excludes is handing a form submission an entry the
+ * tool wrote, which would put the [SIGNED BY AGENT] badge on a human's words.
+ *
  * @param {{ name?: unknown, message?: unknown }} fields
  * @param {string} source
- * @returns {{ ok: true, entry: GuestbookEntry } | { ok: false, error: 'name' | 'message' }}
+ * @returns {{ ok: true, entry: GuestbookEntry, duplicate?: true } | { ok: false, error: 'name' | 'message' }}
  */
 export function addEntry(fields, source) {
   const name = clampName(fields?.name);
@@ -206,6 +218,16 @@ export function addEntry(fields, source) {
   if (!name) return { ok: false, error: 'name' };
   if (!message) return { ok: false, error: 'message' };
 
+  const resolvedSource = source === 'agent' ? 'agent' : 'human';
+
+  const existing = readStoredEntries();
+  const latest = existing[existing.length - 1];
+  if (latest && latest.name === name && latest.message === message && latest.source === resolvedSource) {
+    // No write, and no guestbook:change event: nothing about the book changed, so there is
+    // nothing for the rendered panel to re-render.
+    return { ok: true, entry: latest, duplicate: true };
+  }
+
   const now = new Date();
   const entry = {
     number: nextEntryNumber(),
@@ -213,13 +235,12 @@ export function addEntry(fields, source) {
     message,
     date: formatEntryDate(now),
     iso: toLocalIsoDate(now),
-    source: source === 'agent' ? 'agent' : 'human',
+    source: resolvedSource,
   };
 
-  const stored = readStoredEntries();
-  stored.push(entry);
+  existing.push(entry);
   try {
-    localStorage.setItem(GUESTBOOK_STORAGE_KEY, JSON.stringify(stored));
+    localStorage.setItem(GUESTBOOK_STORAGE_KEY, JSON.stringify(existing));
   } catch {
     // Storage unavailable (private mode, quota). The entry is still returned and still rendered
     // for this page view; it just will not survive a reload. Degrade, do not throw.
