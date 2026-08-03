@@ -9,7 +9,7 @@ significance: major
 tags: ["agents", "webmcp", "accessibility"]
 hero: ../../assets/retro-mode.png
 heroAlt: "Hero image to announce the Retro 1997 mode, showing a 1990s era PC with the monitor displaying a rendered version of the retro mode website layout"
-draft: true
+draft: false
 ---
 
 The site now has two appearances: the modern one and a 1997 homage to websites I used to build on GeoCities. A toggle in the footer switches between them, the choice persists across pages and reloads, and any failure falls back to modern. The more interesting switch is the second one: `set_appearance`, this site's first WebMCP tool that takes an action instead of returning data.
