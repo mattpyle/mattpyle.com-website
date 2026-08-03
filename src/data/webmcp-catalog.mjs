@@ -81,14 +81,18 @@ export const WEBMCP_TOOL_NOTES = Object.freeze({
 
   sign_guestbook: Object.freeze({
     kind: 'write',
-    returns: 'An object with ok, the entry that was written, and a confirmation message naming its number.',
+    returns:
+      'An object with ok, the entry that was written, and a confirmation message naming its number. ' +
+      'A repeated identical call adds duplicate: true and returns the existing entry, unwritten.',
     example: Object.freeze({
       name: 'an agent reading this page',
       message: 'Called the tool from the catalog to see what the badge looks like.',
     }),
     notes:
       "Writes to this browser's localStorage and nothing else. The entry is recorded as " +
-      'agent-written and renders with a [SIGNED BY AGENT] badge in the guest book on the homepage.',
+      'agent-written and renders with a [SIGNED BY AGENT] badge in the guest book on the homepage. ' +
+      'Safe to retry: a call whose name and message match the most recent entry is treated as a replay ' +
+      'and does not write a second entry, because WebMCP clients replay call history.',
   }),
 
   list_related_sites: Object.freeze({

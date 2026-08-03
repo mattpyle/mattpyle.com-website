@@ -275,6 +275,41 @@ test('sign_guestbook writes an agent-provenance entry and names its number', asy
   assert.equal(stored[0].source, 'agent');
 });
 
+test('a replayed sign_guestbook call does not grow the book, and says so', async () => {
+  // Session 16: the inspector replays its whole call history when its content script re-injects.
+  // The same call twice has to leave one entry and a confirmation that does not claim two.
+  localStorage.removeItem(GUESTBOOK_STORAGE_KEY);
+  const tool = toolsByName().sign_guestbook;
+  const args = { name: 'a replaying client', message: 'Sent once, delivered twice.' };
+
+  const first = await tool.execute(args);
+  const second = await tool.execute(args);
+
+  assert.equal(JSON.parse(localStorage.getItem(GUESTBOOK_STORAGE_KEY)).length, 1, 'one stored entry');
+  assert.equal(first.duplicate, undefined, 'the first call is a real write');
+  assert.equal(second.ok, true, 'a replay is not an error; the requested state is already true');
+  assert.equal(second.duplicate, true);
+  assert.deepEqual(second.entry, first.entry, 'the existing entry comes back, same number');
+  assert.match(second.message, /already in the book as #006/);
+  assert.doesNotMatch(second.message, /^Signed as entry/, 'it must not claim a fresh write');
+});
+
+test('sign_guestbook writes an identical entry again once something else is on top', async () => {
+  // Deliberate: only the most recent entry is compared, so a visitor signing the same words after
+  // somebody else is a second signature, not a replay.
+  localStorage.removeItem(GUESTBOOK_STORAGE_KEY);
+  const tool = toolsByName().sign_guestbook;
+  const args = { name: 'twice, on purpose', message: 'Hello again.' };
+
+  await tool.execute(args);
+  await tool.execute({ name: 'somebody else', message: 'Interrupting.' });
+  const third = await tool.execute(args);
+
+  assert.equal(third.duplicate, undefined);
+  assert.equal(third.entry.number, 8);
+  assert.equal(JSON.parse(localStorage.getItem(GUESTBOOK_STORAGE_KEY)).length, 3);
+});
+
 test('sign_guestbook clamps over-long input rather than rejecting it', async () => {
   localStorage.removeItem(GUESTBOOK_STORAGE_KEY);
   const tool = toolsByName().sign_guestbook;

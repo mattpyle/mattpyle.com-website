@@ -265,7 +265,7 @@ export function createTools(getIndex) {
     {
       name: 'sign_guestbook',
       description:
-        "Sign the guest book on mattpyle.com with a name and a message. The entry is saved in the calling browser's own localStorage and nowhere else — no server receives it and no other visitor can see it. Entries signed through this tool are recorded and displayed as agent-written, which the form cannot claim and this tool cannot disclaim.",
+        "Sign the guest book on mattpyle.com with a name and a message. The entry is saved in the calling browser's own localStorage and nowhere else — no server receives it and no other visitor can see it. Entries signed through this tool are recorded and displayed as agent-written, which the form cannot claim and this tool cannot disclaim. Safe to retry: calling it again with the same name and message as the most recent entry returns that entry instead of writing a duplicate.",
       inputSchema: {
         type: 'object',
         properties: {
@@ -311,16 +311,33 @@ export function createTools(getIndex) {
             : 'It is at the top of the guest book on the homepage, which displays in retro mode ' +
               '(call set_appearance with mode "retro" to show it).';
 
+        const entry = {
+          number: result.entry.number,
+          label: number,
+          name: result.entry.name,
+          message: result.entry.message,
+          date: result.entry.date,
+          source: result.entry.source,
+        };
+
+        // addEntry() suppressed a replay (see its doc comment). Say so rather than reporting a
+        // write that did not happen: an agent told "signed as #006" twice has been lied to about
+        // the state of the book, which is the failure this whole guard exists to avoid.
+        if (result.duplicate) {
+          return {
+            ok: true,
+            duplicate: true,
+            entry,
+            message:
+              `That entry is already in the book as ${number}, signed on ${result.entry.date}, so nothing was ` +
+              'written. An identical name and message repeated against the most recent entry is treated as a ' +
+              `replay of the same call rather than a second signature. ${where}`,
+          };
+        }
+
         return {
           ok: true,
-          entry: {
-            number: result.entry.number,
-            label: number,
-            name: result.entry.name,
-            message: result.entry.message,
-            date: result.entry.date,
-            source: result.entry.source,
-          },
+          entry,
           message:
             `Signed as entry ${number}, marked [SIGNED BY AGENT]. ${where} ` +
             'It was written to this browser\'s localStorage only: no server received it, and no ' +
