@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Vendored subset of the official A2A 1.0 schema (https://a2a-protocol.org/latest/spec/a2a.json, fetched 2026-08-03). Provenance and the three deliberate narrowings are documented in scripts/validate-a2a-card.mjs. Do not hand-edit; re-vendor.",
+  "$ref": "#/$defs/AgentCard",
+  "$defs": {
+    "AgentCard": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/AgentCapabilities"
+        },
+        "defaultInputModes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "defaultOutputModes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": {
+          "type": "string"
+        },
+        "documentationUrl": {
+          "type": "string"
+        },
+        "iconUrl": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/AgentProvider"
+        },
+        "securityRequirements": {
+          "items": {
+            "$comment": "unvalidated: lf.a2a.v1.SecurityRequirement.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "securitySchemes": {
+          "additionalProperties": {
+            "$comment": "unvalidated: lf.a2a.v1.SecurityScheme.jsonschema.json"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "signatures": {
+          "items": {
+            "$ref": "#/$defs/AgentCardSignature"
+          },
+          "type": "array"
+        },
+        "skills": {
+          "items": {
+            "$ref": "#/$defs/AgentSkill"
+          },
+          "type": "array"
+        },
+        "supportedInterfaces": {
+          "items": {
+            "$ref": "#/$defs/AgentInterface"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "supportedInterfaces",
+        "version",
+        "capabilities",
+        "defaultInputModes",
+        "defaultOutputModes",
+        "skills"
+      ]
+    },
+    "AgentInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "protocolBinding": {
+          "type": "string"
+        },
+        "protocolVersion": {
+          "type": "string"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [
+        "url",
+        "protocolBinding",
+        "protocolVersion"
+      ]
+    },
+    "AgentProvider": {
+      "additionalProperties": false,
+      "properties": {
+        "organization": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [
+        "url",
+        "organization"
+      ]
+    },
+    "AgentCapabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "extendedAgentCard": {
+          "type": "boolean"
+        },
+        "extensions": {
+          "items": {
+            "$ref": "#/$defs/AgentExtension"
+          },
+          "type": "array"
+        },
+        "pushNotifications": {
+          "type": "boolean"
+        },
+        "streaming": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "AgentSkill": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inputModes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "outputModes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "securityRequirements": {
+          "items": {
+            "$comment": "unvalidated: lf.a2a.v1.SecurityRequirement.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "description"
+      ]
+    },
+    "AgentExtension": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "$comment": "unvalidated: google.protobuf.Struct.jsonschema.json"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "AgentCardSignature": {
+      "additionalProperties": false,
+      "properties": {
+        "header": {
+          "$comment": "unvalidated: google.protobuf.Struct.jsonschema.json"
+        },
+        "protected": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [
+        "protected",
+        "signature"
+      ]
+    }
+  }
+}

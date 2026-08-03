@@ -1,0 +1,284 @@
+{
+  "site": {
+    "name": "Matt Pyle",
+    "url": "https://www.mattpyle.com/",
+    "description": "Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies.",
+    "person": {
+      "name": "Matt Pyle",
+      "jobTitle": "Director of Growth",
+      "worksFor": "Temporal Technologies",
+      "url": "https://www.mattpyle.com/",
+      "sameAs": [
+        "https://github.com/mattpyle",
+        "https://linkedin.com/in/matt-pyle"
+      ]
+    },
+    "sections": [
+      {
+        "name": "Home",
+        "url": "https://www.mattpyle.com/",
+        "summary": "Bio, tagline, recent activity feed."
+      },
+      {
+        "name": "Writing",
+        "url": "https://www.mattpyle.com/writing",
+        "summary": "All writing."
+      },
+      {
+        "name": "Builds",
+        "url": "https://www.mattpyle.com/builds",
+        "summary": "Side projects."
+      },
+      {
+        "name": "Changelog",
+        "url": "https://www.mattpyle.com/changelog",
+        "summary": "Reverse-chronological log of what has shipped on this site."
+      },
+      {
+        "name": "Scorecard",
+        "url": "https://www.mattpyle.com/scorecard",
+        "summary": "Latest verified accessibility, performance, SEO, and agentic browsing scores."
+      },
+      {
+        "name": "About",
+        "url": "https://www.mattpyle.com/about",
+        "summary": "Full bio, interests, contact links."
+      }
+    ]
+  },
+  "surfaces": [
+    {
+      "name": "agents.md",
+      "url": "https://www.mattpyle.com/agents.md",
+      "description": "Plain-language brief for agents reading, summarising, or citing the site."
+    },
+    {
+      "name": "llms.txt",
+      "url": "https://www.mattpyle.com/llms.txt",
+      "description": "Concise markdown index of every page and machine-readable resource."
+    },
+    {
+      "name": "llms-full.txt",
+      "url": "https://www.mattpyle.com/llms-full.txt",
+      "description": "Full plain-text export of all published content plus the scorecard snapshot."
+    },
+    {
+      "name": "Raw markdown per entry",
+      "url": "https://www.mattpyle.com/writing/",
+      "description": "Every article and changelog entry has a .md sibling, and the canonical URL serves markdown to an Accept: text/markdown request that genuinely prefers it."
+    },
+    {
+      "name": "WebMCP tools",
+      "url": "https://www.mattpyle.com/webmcp",
+      "description": "Six tools registered on document.modelContext for in-browser agents, four read and two write. Callable only from a browser that implements WebMCP; the definitions are at /webmcp/tools.json and the data they read is at /webmcp/index.json."
+    },
+    {
+      "name": "A2A Agent Card",
+      "url": "https://www.mattpyle.com/.well-known/agent-card.json",
+      "description": "This agent, described for A2A clients."
+    },
+    {
+      "name": "A2A endpoint",
+      "url": "https://www.mattpyle.com/a2a",
+      "description": "This endpoint. JSON-RPC 2.0, SendMessage only."
+    },
+    {
+      "name": "Sitemap",
+      "url": "https://www.mattpyle.com/sitemap-index.xml",
+      "description": "Every published URL, with lastmod."
+    }
+  ],
+  "writing": [
+    {
+      "title": "Hello, World! Or, this post is a lie.",
+      "url": "https://www.mattpyle.com/writing/hello-world",
+      "markdownUrl": "https://www.mattpyle.com/writing/hello-world.md",
+      "date": "2026-07-18T00:00:00.000Z",
+      "updated": "2026-07-18T00:00:00.000Z",
+      "tags": [
+        "agents",
+        "temporal",
+        "tech"
+      ],
+      "description": "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
+    },
+    {
+      "title": "Accessibility, AI, and testing with screen readers",
+      "url": "https://www.mattpyle.com/writing/accessibility-and-ai",
+      "markdownUrl": "https://www.mattpyle.com/writing/accessibility-and-ai.md",
+      "date": "2026-07-13T00:00:00.000Z",
+      "updated": "2026-07-31T00:00:00.000Z",
+      "tags": [
+        "accessibility",
+        "agents",
+        "measurement"
+      ],
+      "description": "AI built this site. Every automated tool gave it top marks. Then I installed a screen reader for the first time, spent an evening fumbling with it, and heard what my site actually sounds like."
+    }
+  ],
+  "builds": [
+    {
+      "title": "mattpyle.com",
+      "url": "https://www.mattpyle.com/builds",
+      "date": "2026-07-13T00:00:00.000Z",
+      "status": "live",
+      "tags": [
+        "Astro",
+        "TypeScript",
+        "Vercel",
+        "accessibility",
+        "AEO"
+      ],
+      "description": "This site. A static Astro 7 personal site used as a live testbed for emerging web/agent standards — llms.txt, agents.md, Lighthouse's Agentic Browsing audits — with a hypothesis-first measurement approach behind it.",
+      "github": "https://github.com/mattpyle/mattpyle.com-website",
+      "live": "https://www.mattpyle.com"
+    }
+  ],
+  "changelog": [
+    {
+      "slug": "webmcp-resource-page",
+      "title": "Added a /webmcp page to showcase WebMCP functionality",
+      "url": "https://www.mattpyle.com/changelog/webmcp-resource-page",
+      "date": "2026-07-24T00:00:00.000Z",
+      "publishedAt": "2026-08-03T07:15:00.000Z",
+      "type": "feature",
+      "significance": "minor",
+      "tags": [
+        "agents",
+        "webmcp",
+        "measurement"
+      ],
+      "summary": "The tools this site hands to agents get a page built from the live tool objects, with runnable examples."
+    },
+    {
+      "slug": "agent-driven-retro-mode",
+      "title": "Retro mode: a 1997 skin an agent can switch on",
+      "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode",
+      "date": "2026-07-24T00:00:00.000Z",
+      "publishedAt": "2026-08-03T05:45:00.000Z",
+      "type": "feature",
+      "significance": "major",
+      "tags": [
+        "agents",
+        "webmcp",
+        "accessibility"
+      ],
+      "summary": "A 1997 GeoCities-era appearance, and set_appearance: the site's first WebMCP tool that changes something instead of returning data, in your browser only."
+    },
+    {
+      "slug": "scorecard-run-history",
+      "title": "The Scorecard gets a memory",
+      "url": "https://www.mattpyle.com/changelog/scorecard-run-history",
+      "date": "2026-07-18T00:00:00.000Z",
+      "publishedAt": "2026-07-18T07:22:47.000Z",
+      "type": "feature",
+      "significance": "minor",
+      "tags": [
+        "measurement",
+        "performance",
+        "accessibility",
+        "agents"
+      ],
+      "summary": "Redesigned /scorecard around a prominent latest run and a compact, expandable history, so score movement stays legible without creating a detail page for every audit."
+    },
+    {
+      "slug": "homepage-activity-from-changelog",
+      "title": "Homepage activity now comes from the changelog",
+      "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog",
+      "date": "2026-07-17T00:00:00.000Z",
+      "publishedAt": "2026-07-18T06:31:45.000Z",
+      "type": "feature",
+      "significance": "minor",
+      "tags": [
+        "meta",
+        "changelog",
+        "accessibility"
+      ],
+      "summary": "The homepage's hand-maintained activity list is now a linked preview of the public changelog, with explicit dates and deterministic same-day ordering."
+    },
+    {
+      "slug": "public-changelog",
+      "title": "Public changelog launches",
+      "url": "https://www.mattpyle.com/changelog/public-changelog",
+      "date": "2026-07-17T00:00:00.000Z",
+      "type": "launch",
+      "significance": "minor",
+      "tags": [
+        "meta",
+        "infra"
+      ],
+      "summary": "A reverse-chronological log of what ships on this site — launches, features, infrastructure, and experiments. Starting with this page."
+    },
+    {
+      "slug": "webmcp-tools",
+      "title": "WebMCP read-only tool surface",
+      "url": "https://www.mattpyle.com/changelog/webmcp-tools",
+      "date": "2026-07-17T00:00:00.000Z",
+      "type": "experiment",
+      "significance": "minor",
+      "tags": [
+        "agents",
+        "webmcp"
+      ],
+      "summary": "Registered three read-only, agent-callable WebMCP tools behind Chrome's origin trial — pure progressive enhancement, removable in one step, and consumed by approximately nothing."
+    },
+    {
+      "slug": "markdown-post-variants",
+      "title": "Raw-markdown post variants + content negotiation",
+      "url": "https://www.mattpyle.com/changelog/markdown-post-variants",
+      "date": "2026-07-16T00:00:00.000Z",
+      "type": "infra",
+      "significance": "minor",
+      "tags": [
+        "agents",
+        "aeo"
+      ],
+      "summary": "Every post now has a token-efficient raw-markdown sibling at /writing/<slug>.md, and the canonical URL itself serves markdown when a request genuinely prefers it. Took three attempts to land the negotiation."
+    },
+    {
+      "slug": "public-scorecard",
+      "title": "The public Scorecard",
+      "url": "https://www.mattpyle.com/changelog/public-scorecard",
+      "date": "2026-07-15T00:00:00.000Z",
+      "type": "feature",
+      "significance": "minor",
+      "tags": [
+        "measurement",
+        "agents",
+        "performance",
+        "accessibility"
+      ],
+      "summary": "Published /scorecard as a manually verified snapshot of the site's latest Accessibility, Performance, SEO, and Agentic Browsing results — the same facts exposed to human and agent readers from one source."
+    },
+    {
+      "slug": "site-live",
+      "title": "mattpyle.com goes live",
+      "url": "https://www.mattpyle.com/changelog/site-live",
+      "date": "2026-07-14T00:00:00.000Z",
+      "type": "launch",
+      "significance": "major",
+      "tags": [
+        "infra"
+      ],
+      "summary": "The domain went live with www as the canonical host. Fixed every emitted URL to the canonical host, fixed a layout-shift regression, captured the first live-network baseline, and confirmed every AI crawler gets a 200."
+    },
+    {
+      "slug": "self-hosted-fonts",
+      "title": "Self-hosted fonts, Performance back to 100",
+      "url": "https://www.mattpyle.com/changelog/self-hosted-fonts",
+      "date": "2026-07-14T00:00:00.000Z",
+      "type": "infra",
+      "significance": "major",
+      "tags": [
+        "performance"
+      ],
+      "summary": "Dropped the render-blocking cross-origin Google Fonts stylesheet for self-hosted subset woff2 files. Live Performance went from 84–87 to 97–100 on every page; first paint from ~3.3s to under a second."
+    }
+  ],
+  "counts": {
+    "writing": 2,
+    "builds": 1,
+    "changelog": 12,
+    "changelogListed": 10
+  }
+}

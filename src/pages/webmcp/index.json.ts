@@ -1,14 +1,20 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { compareChangelogEntries } from '../../lib/changelog-order';
+import {
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  sitePerson,
+  siteSections,
+} from '../../data/site-sections.mjs';
 
 /**
  * The single data source behind the WebMCP tools (see src/components/WebMCP.astro).
  * Prerenders to dist/webmcp/index.json at build — no on-demand rendering needed.
  *
- * The `site` block restates the Person/WebSite JSON-LD in src/layouts/Layout.astro and the
- * section list in src/pages/llms.txt.ts. That duplication is deliberate for the spike; if it
- * starts drifting, extract the constants to src/data/ and import them in all three places.
+ * The `site` block restates the Person/WebSite JSON-LD in src/layouts/Layout.astro. It used to
+ * restate the section list too; that now comes from src/data/site-sections.mjs, which the A2A
+ * digest also reads, so the two agent-facing surfaces cannot describe the site differently.
  */
 export const GET: APIRoute = async ({ site }) => {
   // Derive the host from astro.config.mjs `site` so this file can never emit a
@@ -34,34 +40,11 @@ export const GET: APIRoute = async ({ site }) => {
     docs: `${base}/webmcp`,
     tools: `${base}/webmcp/tools.json`,
     site: {
-      name: 'Matt Pyle',
+      name: SITE_NAME,
       url: `${base}/`,
-      description:
-        'Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies.',
-      person: {
-        name: 'Matt Pyle',
-        jobTitle: 'Director of Growth',
-        worksFor: 'Temporal Technologies',
-        url: `${base}/`,
-        sameAs: ['https://github.com/mattpyle', 'https://linkedin.com/in/matt-pyle'],
-      },
-      sections: [
-        { name: 'Home', url: `${base}/`, summary: 'Bio, tagline, recent activity feed.' },
-        { name: 'Writing', url: `${base}/writing`, summary: 'All writing.' },
-        { name: 'Builds', url: `${base}/builds`, summary: 'Side projects.' },
-        {
-          name: 'Changelog',
-          url: `${base}/changelog`,
-          summary: 'Reverse-chronological log of what has shipped on this site.',
-        },
-        {
-          name: 'Scorecard',
-          url: `${base}/scorecard`,
-          summary:
-            'Latest verified accessibility, performance, SEO, and agentic browsing scores.',
-        },
-        { name: 'About', url: `${base}/about`, summary: 'Full bio, interests, contact links.' },
-      ],
+      description: SITE_DESCRIPTION,
+      person: sitePerson(base),
+      sections: siteSections(base),
     },
     writing: articles.map((article) => ({
       title: article.data.title,
