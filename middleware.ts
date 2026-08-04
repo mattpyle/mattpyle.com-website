@@ -1,4 +1,5 @@
 import { next } from '@vercel/functions';
+import { formatSurfaceLine, isAgentSurface } from './src/lib/agent-surfaces.mjs';
 
 // Vercel Routing Middleware — a platform-level primitive, distinct from Astro's own
 // `astro:middleware`. It runs before cache/static-file serving, which is required here:
@@ -82,6 +83,28 @@ function prefersMarkdown(acceptHeader: string | null): boolean {
 export default async function middleware(request: Request) {
   const url = new URL(request.url);
 
+  // Agent surfaces: observe and get out of the way. These paths are in the matcher purely so the
+  // request reaches a function at all — every one of them is a static file, and a static fetch is
+  // invisible in this plan's logs otherwise. No negotiation, no rewrite, no header touched; the
+  // request continues to the routing layer byte-identical.
+  //
+  // Wrapped because these are the site's discovery documents: a bug in a logging line must never
+  // be what breaks llms.txt. Anything thrown here is swallowed and the request passes through.
+  if (isAgentSurface(url.pathname)) {
+    try {
+      console.log(
+        formatSurfaceLine({
+          path: url.pathname,
+          ua: request.headers.get('user-agent'),
+          accept: request.headers.get('accept'),
+        })
+      );
+    } catch {
+      // Deliberately empty: observation is never worth a failed response.
+    }
+    return next();
+  }
+
   // Retired slugs first: a moved URL redirects whatever the Accept header asks for.
   const retirable = url.pathname.match(RETIRABLE);
   if (retirable) {
@@ -130,6 +153,23 @@ export default async function middleware(request: Request) {
 // Both collections expose the negotiated .md variant, so the middleware must run for
 // both path prefixes. The handler self-filters (numeric changelog slugs and .md URLs
 // fall through to next()), so matching the whole subtree is safe.
+//
+// Everything after the two collections is the agent-surface list from
+// src/lib/agent-surfaces.mjs, kept literal here because Vercel reads this matcher
+// statically at build time and cannot evaluate an imported constant. The two lists must
+// stay in sync: a path in the module but not here is simply never seen.
 export const config = {
-  matcher: ['/writing/:path*', '/changelog/:path*'],
+  matcher: [
+    '/writing/:path*',
+    '/changelog/:path*',
+    '/llms.txt',
+    '/llms-full.txt',
+    '/agents.md',
+    '/robots.txt',
+    '/webmcp/tools.json',
+    '/webmcp/index.json',
+    '/sitemap-index.xml',
+    '/sitemap-0.xml',
+    '/.well-known/:path*',
+  ],
 };
