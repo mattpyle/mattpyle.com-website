@@ -18,6 +18,15 @@
       ]
     },
     {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Link",
+          "value": "</llms.txt>; rel=\"alternate\"; type=\"text/markdown\", </agents.md>; rel=\"describedby\"; type=\"text/markdown\", </.well-known/agent-card.json>; rel=\"service-desc\"; type=\"application/a2a+json\""
+        }
+      ]
+    },
+    {
       "source": "/writing/:slug([^/.]+)",
       "headers": [{ "key": "Vary", "value": "Accept" }]
     },
