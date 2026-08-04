@@ -1,6 +1,12 @@
 import type { APIRoute } from 'astro';
 
+// The Content-Signal line (contentsignals.org) is the machine-readable half of what the per-bot
+// Allow blocks below already say bot by bot: yes on every axis. search = search indexing,
+// ai-input = grounding a live AI answer in this page, ai-train = training or fine-tuning a model.
+// It attaches to the group it sits in, so it rides `User-agent: *` and covers everything without
+// its own group.
 const crawlerRules = `User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 
 # AI / LLM crawlers — explicitly welcomed (agent/AEO-friendly site)
