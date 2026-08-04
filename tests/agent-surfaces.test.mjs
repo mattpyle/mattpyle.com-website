@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { AGENT_SURFACE_PATHS, formatSurfaceLine, isAgentSurface } from '../src/lib/agent-surfaces.mjs';
+
+const middlewareSource = readFileSync(fileURLToPath(new URL('../middleware.ts', import.meta.url)), 'utf8');
+
+function matcherEntries() {
+  const block = middlewareSource.match(/matcher:\s*\[([\s\S]*?)\]/);
+  assert.ok(block, 'middleware.ts must export a config.matcher array');
+  return [...block[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+}
+
+test('every advertised surface is recognised', () => {
+  for (const path of AGENT_SURFACE_PATHS) {
+    assert.equal(isAgentSurface(path), true, path);
+  }
+});
+
+test('the whole .well-known subtree counts, including paths the site does not serve', () => {
+  assert.equal(isAgentSurface('/.well-known/agent-card.json'), true);
+  assert.equal(isAgentSurface('/.well-known/ai-plugin.json'), true);
+  assert.equal(isAgentSurface('/.well-known/security.txt'), true);
+});
+
+test('ordinary pages and reader furniture are not surfaces', () => {
+  // /rss.xml and the icons are excluded on purpose; see the module comment.
+  for (const path of ['/', '/about/', '/writing/some-post/', '/rss.xml', '/favicon.ico', '/site.webmanifest']) {
+    assert.equal(isAgentSurface(path), false, path);
+  }
+});
+
+test('a trailing slash does not hide a surface', () => {
+  assert.equal(isAgentSurface('/llms.txt/'), true);
+  assert.equal(isAgentSurface('/'), false);
+});
+
+// The matcher is what makes a static fetch reach a function at all. A path recognised by the
+// module but missing from the matcher is silently never logged, which is the one failure mode of
+// this feature that looks exactly like "no agent came".
+test('middleware.ts matches every path the module recognises', () => {
+  const matcher = matcherEntries();
+  for (const path of AGENT_SURFACE_PATHS) {
+    assert.ok(matcher.includes(path), `middleware.ts config.matcher is missing ${path}`);
+  }
+  assert.ok(matcher.includes('/.well-known/:path*'), 'config.matcher is missing the .well-known subtree');
+});
+
+test('the matcher lists no agent path the module would ignore', () => {
+  const collections = ['/writing/:path*', '/changelog/:path*'];
+  for (const entry of matcherEntries()) {
+    if (collections.includes(entry)) continue;
+    const probe = entry.replace('/:path*', '/probe');
+    assert.equal(isAgentSurface(probe), true, `${entry} is matched but not recognised as a surface`);
+  }
+});
+
+test('the log line is one parseable line with exactly three fields', () => {
+  const line = formatSurfaceLine({
+    path: '/llms.txt',
+    ua: 'Mozilla/5.0 (compatible; ClaudeBot/1.0)',
+    accept: 'text/plain, */*',
+  });
+  assert.equal(line.includes('\n'), false);
+  assert.equal(
+    line,
+    '[agent-surface] path="/llms.txt" ua="Mozilla/5.0 (compatible; ClaudeBot/1.0)" accept="text/plain, */*"'
+  );
+});
+
+test('missing headers log as empty rather than as the string null', () => {
+  assert.equal(
+    formatSurfaceLine({ path: '/agents.md', ua: null, accept: null }),
+    '[agent-surface] path="/agents.md" ua="" accept=""'
+  );
+});
+
+test('a user agent containing quotes stays on one parseable line', () => {
+  const line = formatSurfaceLine({ path: '/agents.md', ua: 'weird"agent\nnewline', accept: '*/*' });
+  assert.equal(line.includes('\n'), false);
+  assert.equal(line, '[agent-surface] path="/agents.md" ua="weird\\"agent\\nnewline" accept="*/*"');
+});
