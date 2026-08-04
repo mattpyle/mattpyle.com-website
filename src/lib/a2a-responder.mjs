@@ -17,14 +17,25 @@
  * 0.x spelling and appears nowhere in the 1.0 specification. It is accepted here anyway, as an
  * alias, because appendix A.2 explicitly permits it ("Server Implementations MAY: Accept both
  * legacy and current request message forms during the overlap period") and because a client built
- * against a 0.x SDK is exactly the kind of caller this experiment wants to hear from. Responses
- * only ever use the current form, per the same appendix.
+ * against a 0.x SDK is exactly the kind of caller this experiment wants to hear from.
  *
- * ERROR SHAPES ARE THE 1.0 ONES. `error.data` is an *array* of objects each carrying an `@type`
- * (specification section 9.5), not the bare object the 0.x-era examples used. The house rule from
- * the WebMCP tools carries over: an error names what was wrong, what was expected, and the one
- * call that would have worked, because an agent that cannot self-correct from the error will
- * either retry identically or conclude the site is broken.
+ * A REPLY USES THE DIALECT OF THE REQUEST. A call arriving as `SendMessage` is answered with the
+ * 1.0 `SendMessageResponse`, where `result` is `{"message": {...}}` and a text part is
+ * `{"text":"..."}`. A call arriving as `message/send` is answered with the 0.x shape, where
+ * `result` *is* the Message, carrying `kind: "message"`, a lowercase `role: "agent"` and
+ * `{"kind":"text","text":"..."}` parts. Appendix A.2 permits accepting the legacy request form
+ * during the overlap period and says nothing about answering it in the current one; measured
+ * against `a2a-sdk` 0.3.26 and `@a2a-js/sdk`'s `compat/v0_3`, a 1.0 envelope on the alias path is
+ * a 200 the caller cannot read, which is the worst of the three available behaviours. Decision
+ * record on docs/work/a2a-legacy-response-shape.md.
+ *
+ * ERROR SHAPES ARE THE 1.0 ONES, ON BOTH PATHS. `error.data` is an *array* of objects each
+ * carrying an `@type` (specification section 9.5), not the bare object the 0.x-era examples used.
+ * It stays an array on the alias path because 0.x types `JSONRPCError.data` as `Any | None`, so
+ * every 0.x client accepts the array as-is; the envelope around it is identical in both versions.
+ * The house rule from the WebMCP tools carries over: an error names what was wrong, what was
+ * expected, and the one call that would have worked, because an agent that cannot self-correct
+ * from the error will either retry identically or conclude the site is broken.
  *
  * WHAT IT DOES NOT DO: streaming, Tasks, push notifications, authentication, or any state at all.
  * The skill is read-only over public content, so every call is trivially replay-safe and there is
@@ -36,7 +47,7 @@ const DOMAIN = 'www.mattpyle.com';
 /** The one method this endpoint implements, in its A2A 1.0 spelling. */
 export const A2A_METHOD = 'SendMessage';
 
-/** Pre-1.0 spellings accepted from older clients. Never emitted. */
+/** Pre-1.0 spellings accepted from older clients, and answered in the matching dialect. */
 export const LEGACY_METHODS = Object.freeze(['message/send']);
 
 export const ERROR_CODES = Object.freeze({
@@ -473,10 +484,17 @@ function handleRequest(request, { digest, newId }) {
     };
   }
 
+  // Everything from here answers in the dialect the request arrived in. The prefix rides the
+  // outcome token rather than a new log field because the token is the whole dataset until the
+  // hit counter exists, and it is a prefix rather than a suffix because the tokens already carry
+  // slashes of their own (`method-not-found/tasks/get`).
+  const legacy = LEGACY_METHODS.includes(method);
+  const dialect = legacy ? 'legacy/' : '';
+
   const params = request.params;
   if (!params || typeof params !== 'object' || Array.isArray(params)) {
     return {
-      outcome: 'invalid-params/no-params',
+      outcome: `${dialect}invalid-params/no-params`,
       notification: isNotification,
       payload: errorResponse(id, ERROR_CODES.invalidParams, `Invalid parameters. ${A2A_METHOD} takes a SendMessageRequest object as params, with a "message" holding at least one part carrying text.`, [
         badRequest([{ field: 'params', description: 'Must be a SendMessageRequest object.' }]),
@@ -496,7 +514,7 @@ function handleRequest(request, { digest, newId }) {
       !params.message || typeof params.message !== 'object' ? 'message' : 'message.parts';
 
     return {
-      outcome: 'invalid-params/no-text',
+      outcome: `${dialect}invalid-params/no-text`,
       notification: isNotification,
       payload: errorResponse(id, ERROR_CODES.invalidParams, 'Invalid parameters. This skill answers questions in text, so the message needs a text part; nothing was found to answer.', [
         badRequest([{ field, description }]),
@@ -506,28 +524,44 @@ function handleRequest(request, { digest, newId }) {
 
   const { intent, text: reply } = answer(text, digest);
 
+  const messageId = newId();
+  // Servers must set contextId. An inbound one is echoed so a client threading a conversation
+  // keeps its own thread id.
+  const contextId =
+    typeof params.message.contextId === 'string' && params.message.contextId !== ''
+      ? params.message.contextId
+      : newId();
+
   return {
-    outcome: `ok/${intent}`,
+    outcome: `${dialect}ok/${intent}`,
     notification: isNotification,
     payload: {
       jsonrpc: '2.0',
       id,
-      // A SendMessageResponse carrying a Message rather than a Task. The skill is a single
-      // read-only turn with nothing to track, so creating a Task would be ceremony that a client
-      // then has to poll to completion for no reason. The spec allows either.
-      result: {
-        message: {
-          role: 'ROLE_AGENT',
-          messageId: newId(),
-          // Servers must set contextId. An inbound one is echoed so a client threading a
-          // conversation keeps its own thread id.
-          contextId:
-            typeof params.message.contextId === 'string' && params.message.contextId !== ''
-              ? params.message.contextId
-              : newId(),
-          parts: [{ text: reply, mediaType: 'text/markdown' }],
-        },
-      },
+      // Either way a Message rather than a Task. The skill is a single read-only turn with nothing
+      // to track, so creating a Task would be ceremony that a client then has to poll to
+      // completion for no reason. The spec allows either, in both versions.
+      result: legacy
+        ? {
+            // The 0.x shape: the Message itself, discriminated by `kind`, with the lowercase role
+            // enum and a text part that carries its own `kind`. No mediaType: 0.x has no such
+            // field on a TextPart, and the reference SDK's own 1.0-to-0.x downgrade drops it
+            // rather than inventing a home for it.
+            kind: 'message',
+            messageId,
+            role: 'agent',
+            contextId,
+            parts: [{ kind: 'text', text: reply }],
+          }
+        : {
+            // The 1.0 shape: a SendMessageResponse wrapping the Message.
+            message: {
+              role: 'ROLE_AGENT',
+              messageId,
+              contextId,
+              parts: [{ text: reply, mediaType: 'text/markdown' }],
+            },
+          },
     },
   };
 }

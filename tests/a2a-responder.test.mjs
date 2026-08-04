@@ -30,6 +30,18 @@ const call = (body, id = 1) =>
 
 const ask = (text) => call({ params: { message: { role: 'ROLE_USER', messageId: 'm1', parts: [{ text }] } } });
 
+/** The same question from a 0.x client: legacy method name, legacy text part. */
+const legacyAsk = (text, method = LEGACY_METHODS[0]) =>
+  respond(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      params: { message: { role: 'user', messageId: 'm1', parts: [{ kind: 'text', text }] } },
+    }),
+    { digest, newId: ids() }
+  );
+
 /** The markdown the webmaster replied with. */
 const said = (result) => result.payload.result.message.parts[0].text;
 
@@ -85,18 +97,110 @@ test('a request with no id is a notification and gets no body', () => {
 
 test('the 0.x method name is accepted, and the 0.x text part shape with it', () => {
   for (const method of LEGACY_METHODS) {
-    const result = respond(
-      JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method,
-        params: { message: { parts: [{ kind: 'text', text: 'What is this site about?' }] } },
-      }),
-      { digest, newId: ids() }
-    );
+    const result = legacyAsk('What is this site about?', method);
     assert.equal(result.payload.error, undefined, `${method} should be accepted`);
-    assert.ok(said(result).includes('Webmaster'));
+    assert.ok(result.payload.result.parts[0].text.includes('Webmaster'));
   }
+});
+
+/* ---------------------------------------------------------------- the 0.x dialect */
+
+test('a legacy alias is answered in the 0.x response shape, not the 1.0 one', () => {
+  // Measured against a2a-sdk 0.3.26 and @a2a-js/sdk compat/v0_3: `result` is the Message itself,
+  // discriminated by `kind`, with a lowercase role and text parts carrying their own `kind`.
+  for (const method of LEGACY_METHODS) {
+    const result = legacyAsk('What is this site about?', method);
+
+    assert.equal(result.status, 200);
+    assert.equal(result.payload.jsonrpc, '2.0');
+    assert.equal(result.payload.id, 1);
+
+    const message = result.payload.result;
+    assert.equal(message.message, undefined, 'must not wrap the Message the 1.0 way');
+    assert.equal(message.kind, 'message', 'the 0.x discriminator the JS compat client reads');
+    assert.equal(message.role, 'agent', 'the 0.x Role enum is lowercase');
+    assert.equal(message.messageId, 'id-1');
+    assert.ok(message.contextId);
+    assert.deepEqual(Object.keys(message.parts[0]), ['kind', 'text']);
+    assert.equal(message.parts[0].kind, 'text');
+    assert.equal(typeof message.parts[0].text, 'string');
+  }
+});
+
+test('an inbound contextId is echoed on the legacy path too', () => {
+  const result = respond(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'abc',
+      method: LEGACY_METHODS[0],
+      params: { message: { parts: [{ kind: 'text', text: 'hello' }] }, },
+    }),
+    { digest, newId: ids() }
+  );
+  assert.equal(result.payload.result.contextId, 'id-2', 'a fresh one when the client sent none');
+
+  const echoed = respond(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'abc',
+      method: LEGACY_METHODS[0],
+      params: { message: { contextId: 'ctx-from-client', parts: [{ kind: 'text', text: 'hello' }] } },
+    }),
+    { digest, newId: ids() }
+  );
+  assert.equal(echoed.payload.result.contextId, 'ctx-from-client');
+});
+
+test('a current-form SendMessage reply is unchanged by the alias work', () => {
+  // The whole payload, byte for byte. The 0.x shape is additive: nothing about it may leak into
+  // the answer a 1.0 client gets.
+  const result = ask('What is this site about?');
+  assert.deepEqual(result.payload, {
+    jsonrpc: '2.0',
+    id: 1,
+    result: {
+      message: {
+        role: 'ROLE_AGENT',
+        messageId: 'id-1',
+        contextId: 'id-2',
+        parts: [{ text: said(result), mediaType: 'text/markdown' }],
+      },
+    },
+  });
+  assert.equal(result.outcome, 'ok/site');
+});
+
+test('an error on the legacy path stays readable to the client that sent it', () => {
+  // 0.x types JSONRPCError.data as `Any | None`, so the 1.0 array of @type-carrying objects
+  // validates there unchanged; the error envelope is identical in both versions. Nothing to
+  // translate, which is the finding as much as the behaviour.
+  const result = respond(
+    JSON.stringify({ jsonrpc: '2.0', id: 3, method: LEGACY_METHODS[0], params: { message: { parts: [] } } }),
+    { digest, newId: ids() }
+  );
+
+  assert.equal(result.payload.error.code, ERROR_CODES.invalidParams);
+  assert.ok(Array.isArray(result.payload.error.data));
+  assert.equal(result.payload.error.data[0]['@type'], 'type.googleapis.com/google.rpc.BadRequest');
+});
+
+test('a legacy call is countable in the log line, separately from a current-form one', () => {
+  // The outcome token is the endpoint's only dataset until the hit counter exists. The dialect
+  // rides it as a prefix, since the tokens already carry slashes of their own.
+  assert.equal(legacyAsk('What is this site about?').outcome, 'legacy/ok/site');
+  assert.equal(ask('What is this site about?').outcome, 'ok/site');
+
+  const noParams = respond(JSON.stringify({ jsonrpc: '2.0', id: 1, method: LEGACY_METHODS[0] }), {
+    digest,
+    newId: ids(),
+  });
+  assert.equal(noParams.outcome, 'legacy/invalid-params/no-params');
+
+  const noText = respond(
+    JSON.stringify({ jsonrpc: '2.0', id: 1, method: LEGACY_METHODS[0], params: {} }),
+    { digest, newId: ids() }
+  );
+  assert.equal(noText.outcome, 'legacy/invalid-params/no-text');
 });
 
 /* ---------------------------------------------------------------- error shapes */
