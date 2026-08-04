@@ -30,8 +30,17 @@ conformance check, not a highlight reel.
 assistants), [`llms.txt` / `llms-full.txt`](https://www.mattpyle.com/llms.txt) (a machine-readable
 index and full-text dump generated at build time from the same content that backs the HTML), and
 a `.md` variant of every article and changelog entry served via content negotiation
-(`Accept: text/markdown`). A handful of pages also register read-only [WebMCP](https://github.com/webmachinelearning/webmcp)
-tools — genuinely experimental, and documented as such in `agents.md`.
+(`Accept: text/markdown`). The site also registers six [WebMCP](https://github.com/webmachinelearning/webmcp)
+tools behind Chrome's origin trial: four that read the site and two that write, including one that
+signs the retro guest book with a visible agent-provenance badge. They are documented with runnable
+examples at [`/webmcp`](https://www.mattpyle.com/webmcp), and remain genuinely experimental.
+
+**An A2A participant.** The site publishes an Agent Card at
+[`/.well-known/agent-card.json`](https://www.mattpyle.com/.well-known/agent-card.json) and answers
+real A2A 1.0 `SendMessage` calls at `/a2a`, in the retro webmaster's voice, from a digest compiled
+at build time. Calls arriving with the 0.x `message/send` spelling are answered in the 0.x response
+shape, so legacy clients can read the reply. Delete the card and the route, and the rest of the
+built site is byte-identical.
 
 **A curated [`/changelog`](https://www.mattpyle.com/changelog).** A public, edited-down log of what
 shipped on the site — not raw commit history, not an engineering log.
@@ -61,7 +70,7 @@ Other scripts:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run a11y` | Builds, serves `dist/client`, and runs the Playwright accessibility suite in `tests/a11y/` — keyboard order, focus visibility, ClientRouter focus, 320px reflow, reduced motion, and a committed aria-tree golden per template. Advisory; never in the `build` chain. |
+| `npm run a11y` | Builds, serves `dist/client`, and runs the Playwright accessibility suite in `tests/a11y/`: keyboard order, focus visibility, ClientRouter focus, 320px reflow, reduced motion, the retro-mode checks, and a committed aria-tree golden per template. A tagged axe subset gates PRs in CI; the rest is advisory and stays out of the `build` chain. |
 | `npm run a11y:run` | The same suite against whatever is already in `dist/client`. The fast loop. |
 | `npm run a11y:axe` | Runs `axe` against a running build. |
 | `npm run spellcheck` | `cspell` over all content markdown, including frontmatter. Advisory — doesn't block builds. |
@@ -70,11 +79,27 @@ Other scripts:
 
 The a11y suite needs a browser binary once per machine: `npx playwright install chromium`.
 
-> [!NOTE]
-> `npm run a11y` is currently red on one known, verified defect: the header navigation
-> overflows below 352px, so every page scrolls horizontally at the 320px width WCAG 1.4.10
-> requires. Everything else passes. The reflow check is left failing on purpose rather than
-> skipped, so the defect stays visible.
+`npm run build` also runs five guard scripts after `astro build`: no draft content in the output, a
+valid sitemap, article action wiring, CSP hashes, and a conformant A2A Agent Card.
 
-`npm run build` also runs a few guard scripts after `astro build`: one asserts no draft content
-leaked into the output, one validates the sitemap, and one checks article action wiring.
+### Previewing drafts
+
+Content with `draft: true` stays out of every index, feed, sitemap, and `.md` variant. The dev
+server renders a draft at its direct URL (for example `/changelog/<slug>`); index pages never list
+it, so navigate straight to the entry.
+
+For a faithful pre-publish check, build with drafts enabled and serve the output:
+
+```bash
+# bash
+SHOW_DRAFTS=true npm run build && npx serve dist/client
+```
+
+```powershell
+# PowerShell
+$env:SHOW_DRAFTS = "true"; npm run build; Remove-Item Env:\SHOW_DRAFTS
+npx serve dist/client
+```
+
+A draft's generated share image is deliberately not built, so its OG meta points at a missing file
+until publish. Expected, not a bug.
