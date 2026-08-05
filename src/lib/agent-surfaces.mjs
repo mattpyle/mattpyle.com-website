@@ -44,6 +44,26 @@ const EXACT = new Set(AGENT_SURFACE_PATHS);
  */
 const WELL_KNOWN_PREFIX = '/.well-known/';
 
+/**
+ * The well-known documents this site actually serves, named rather than left to the prefix rule.
+ *
+ * isAgentSurface() already returns true for every one of these — the prefix covers them and the
+ * matcher fronts the subtree — so nothing about logging depends on this list. It exists because
+ * "covered by a prefix" is not the same as "checked": scripts/agent-surface-parity.mjs probes
+ * these by name across a deploy, and tests/agent-surfaces.test.mjs asserts each is recognised, so
+ * a regression in the prefix rule fails against real paths instead of hypothetical ones.
+ *
+ * The Agent Skills entries are the instrument for that card's hypothesis. The index and the skill
+ * are separate lines in the log on purpose: "something fetched the index" and "something that
+ * fetched the index went on to fetch the skill" are different findings, and only the second one
+ * says an agent did anything with what it discovered.
+ */
+export const WELL_KNOWN_SURFACE_PATHS = [
+  '/.well-known/agent-card.json',
+  '/.well-known/agent-skills/index.json',
+  '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',
+];
+
 /** Trailing slash tolerated so /llms.txt/ logs as the same surface; '/' itself is not a surface. */
 function normalize(pathname) {
   if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);

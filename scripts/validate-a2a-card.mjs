@@ -28,119 +28,18 @@
  *    `$ref`s are replaced by a `$comment`, so those subtrees pass unexamined. If the card ever
  *    grows a security scheme, vendor them properly rather than trusting this.
  *
- * The validator below implements only the keywords the vendored schema actually uses. That is a
- * feature: an unimplemented keyword appearing in the schema throws rather than being ignored, so
- * a future re-vendoring cannot quietly weaken the check.
+ * The shared validator in scripts/lib/json-schema.mjs implements only the keywords the transcribed
+ * schemas actually use. That is a feature: an unimplemented keyword appearing in a schema throws
+ * rather than being ignored, so a future re-vendoring cannot quietly weaken the check.
  */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { validate } from './lib/json-schema.mjs';
 import { PRODUCTION_ORIGIN } from '../src/data/site-origin.mjs';
 
 const CARD_PATH = fileURLToPath(new URL('../public/.well-known/agent-card.json', import.meta.url));
 const SCHEMA_PATH = fileURLToPath(new URL('./lib/a2a-agent-card.schema.json', import.meta.url));
-
-const KNOWN_KEYWORDS = new Set([
-  // Annotations, ignored on purpose.
-  '$schema', '$comment', '$defs',
-  // Assertions, all implemented below.
-  '$ref', 'type', 'properties', 'additionalProperties', 'required', 'items',
-  'propertyNames', 'enum', 'pattern', 'anyOf', 'minimum', 'maximum',
-]);
-
-function typeOf(value) {
-  if (value === null) return 'null';
-  if (Array.isArray(value)) return 'array';
-  if (Number.isInteger(value)) return 'integer';
-  return typeof value;
-}
-
-function matchesType(value, type) {
-  if (type === 'integer') return Number.isInteger(value);
-  if (type === 'number') return typeof value === 'number';
-  return typeOf(value) === type || (type === 'number' && typeOf(value) === 'integer');
-}
-
-/**
- * Validate `value` against `schema`, collecting human-readable errors.
- *
- * @param {unknown} value
- * @param {object} schema
- * @param {object} root The document holding `$defs`.
- * @param {string} path JSON-pointer-ish location, for messages.
- * @param {string[]} errors Accumulator.
- */
-export function validate(value, schema, root, path = '', errors = []) {
-  if (schema.$comment && !schema.$ref && !schema.type && !schema.properties) return errors;
-
-  for (const keyword of Object.keys(schema)) {
-    if (!KNOWN_KEYWORDS.has(keyword)) {
-      throw new Error(`${path || '/'}: schema uses unimplemented keyword "${keyword}"`);
-    }
-  }
-
-  if (schema.$ref) {
-    const name = schema.$ref.replace('#/$defs/', '');
-    const target = root.$defs?.[name];
-    if (!target) throw new Error(`${path || '/'}: unresolvable $ref ${schema.$ref}`);
-    return validate(value, target, root, path, errors);
-  }
-
-  if (schema.anyOf) {
-    const matched = schema.anyOf.some((branch) => validate(value, branch, root, path, []).length === 0);
-    if (!matched) errors.push(`${path || '/'}: matches none of the allowed forms`);
-    return errors;
-  }
-
-  if (schema.type && !matchesType(value, schema.type)) {
-    errors.push(`${path || '/'}: expected ${schema.type}, got ${typeOf(value)}`);
-    return errors;
-  }
-
-  if (schema.enum && !schema.enum.includes(value)) {
-    errors.push(`${path || '/'}: ${JSON.stringify(value)} is not one of ${schema.enum.join(', ')}`);
-  }
-  if (schema.pattern && typeof value === 'string' && !new RegExp(schema.pattern).test(value)) {
-    errors.push(`${path || '/'}: does not match ${schema.pattern}`);
-  }
-
-  if (schema.type === 'array' && Array.isArray(value)) {
-    if (schema.items) {
-      value.forEach((item, index) => validate(item, schema.items, root, `${path}[${index}]`, errors));
-    }
-    return errors;
-  }
-
-  if (typeOf(value) === 'object' && (schema.properties || schema.additionalProperties !== undefined)) {
-    for (const name of schema.required ?? []) {
-      if (!(name in value)) {
-        errors.push(`${path || '/'}: missing required property "${name}"`);
-        continue;
-      }
-      // Section 5.7: "Arrays marked as required MUST contain at least one element."
-      if (Array.isArray(value[name]) && value[name].length === 0) {
-        errors.push(`${path}/${name}: required array is empty`);
-      }
-    }
-
-    for (const [name, child] of Object.entries(value)) {
-      const childSchema = schema.properties?.[name];
-      if (childSchema) {
-        validate(child, childSchema, root, `${path}/${name}`, errors);
-        continue;
-      }
-      if (schema.additionalProperties === false) {
-        errors.push(`${path}/${name}: property is not allowed by the A2A 1.0 schema`);
-        continue;
-      }
-      if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
-        validate(child, schema.additionalProperties, root, `${path}/${name}`, errors);
-      }
-    }
-  }
-
-  return errors;
-}
 
 /**
  * Schema conformance plus the checks a schema cannot make: that the card describes *this* site,

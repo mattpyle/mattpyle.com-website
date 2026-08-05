@@ -1,0 +1,50 @@
+{
+  "$comment": "Transcribed by hand from the Agent Skills Discovery RFC v0.2.0, sections 'Discovery Index' and 'Integrity and Verification' (github.com/cloudflare/agent-skills-discovery-rfc at commit 1bd11679, read 2026-08-04). Transcribed rather than vendored because no machine-readable schema is published: the RFC states the $schema URI is an opaque identifier that need not resolve, and as of 2026-08-04 schemas.agentskills.io does not resolve at all. The field tables in the RFC are the normative source; this file is their JSON Schema spelling, and scripts/validate-agent-skills-index.mjs is the only consumer.",
+  "type": "object",
+  "required": ["$schema", "skills"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "$comment": "'The index MUST include a top-level $schema field containing a URI that identifies the index schema version.' Pinned to the one version this site implements: an index claiming a version whose rules were never read here is worse than no index.",
+      "type": "string",
+      "enum": ["https://schemas.agentskills.io/discovery/0.2.0/schema.json"]
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "description", "url", "digest"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$comment": "Agent Skills naming rules: 1-64 characters, lowercase alphanumeric and hyphens, no leading, trailing, or consecutive hyphens. The pattern expresses all three hyphen rules; maxLength carries the bound.",
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "type": {
+            "$comment": "'MUST be \"skill-md\" (single SKILL.md file) or \"archive\" (bundled archive).' Both are listed even though this site publishes only skill-md, so the schema stays a description of the spec rather than of today's content; the validator checks separately that an archive entry is not silently unhandled.",
+            "type": "string",
+            "enum": ["skill-md", "archive"]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "url": {
+            "$comment": "Resolved per RFC 3986 section 5 against the index URL. Path-absolute, absolute, and relative are all permitted by the spec; the validator narrows this site to path-absolute.",
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "$comment": "'formatted as sha256:{hex} where {hex} is 64 lowercase hexadecimal characters.'",
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}
