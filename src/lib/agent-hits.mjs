@@ -35,23 +35,33 @@ export const KEY_VERSION = 'v1';
 export const EVENTS = ['surface', 'markdown'];
 
 /**
- * Dates are Matt's local date everywhere on this site (see CLAUDE.md), so the counters agree with
- * the vault, the changelog and every rendered timestamp. A UTC day would roll over mid-evening and
- * put an evening's traffic on tomorrow's row.
+ * Buckets are UTC, and the field carries the UTC hour.
+ *
+ * This is the one place on the site that is not on Matt's local date, and it is deliberate. The
+ * vault, the changelog and every rendered timestamp stay America/Vancouver (see CLAUDE.md); that
+ * convention is about dates people read, and this is storage.
+ *
+ * Storing a local day would be a lossy, irreversible choice made at write time: a Vancouver day
+ * cannot be re-projected into any other timezone afterwards, and the site's own timezone is not
+ * obviously the right frame for a page about who is fetching this site from where. Hour resolution
+ * in UTC is strictly more information than either: the render layer reconstructs a Vancouver day,
+ * or any other, by summing the right 24 hours, and an hourly trend becomes a rendering rather than
+ * a schema change. It also matches every system this data will ever be cross-referenced against,
+ * starting with Vercel's own logs.
+ *
+ * The cost is 24x the fields per day hash in the worst case, which is a few hundred fields on a
+ * site this size and still one HGETALL.
  */
-export const COUNTER_TIME_ZONE = 'America/Vancouver';
+export const COUNTER_TIME_ZONE = 'UTC';
 
-// en-CA formats as YYYY-MM-DD, which sorts lexically. Constructed once: this runs per request.
-const DAY_FORMAT = new Intl.DateTimeFormat('en-CA', {
-  timeZone: COUNTER_TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-/** @param {Date} date @returns {string} YYYY-MM-DD in America/Vancouver */
+/** @param {Date} date @returns {string} YYYY-MM-DD, UTC */
 export function counterDay(date) {
-  return DAY_FORMAT.format(date);
+  return date.toISOString().slice(0, 10);
+}
+
+/** @param {Date} date @returns {string} HH, 00 to 23, UTC */
+export function counterHour(date) {
+  return date.toISOString().slice(11, 13);
 }
 
 /**
@@ -185,26 +195,33 @@ export function counterPath(event, pathname) {
  *
  * | Key | Type | Answers |
  * |---|---|---|
- * | `hits:v1:day:<day>` | hash, field `<event>\|<family>\|<path>` | everything about one day, in one HGETALL |
- * | `hits:v1:days` | set of days | which days exist, so a trend view never has to SCAN |
+ * | `hits:v1:day:<utc-day>` | hash, field `<utc-hour>\|<event>\|<family>\|<path>` | everything about one UTC day, at hour resolution, in one HGETALL |
+ * | `hits:v1:days` | set of UTC days | which days exist, so a trend view never has to SCAN |
  * | `hits:v1:total` | counter | the one number the retro homepage widget wants |
  *
- * A day's hash holds at most (2 events x ~30 families x ~40 paths) fields and realistically a few
- * dozen, so one round trip answers totals, per-client and per-path for any window. Nothing expires:
- * per-day keys are the history, which is the whole reason the card insisted on them from day one.
+ * The hour leads the field so a prefix match answers "this hour" without parsing, and so the
+ * fields of a day sort into chronological order.
  *
- * The field delimiter is `|`, which cannot appear in an event, a family or a bucketed path.
+ * A day's hash holds at most (24 hours x 2 events x ~30 families x ~40 paths) fields and
+ * realistically a few dozen, so one round trip answers totals, per-client, per-path and per-hour
+ * for any window, in any timezone. Nothing expires: per-day keys are the history, which is the
+ * whole reason the card insisted on them from day one.
+ *
+ * The field delimiter is `|`, which cannot appear in an hour, an event, a family or a bucketed
+ * path.
  *
  * @param {{ event: string, path: string, ua?: string | null, now?: Date }} hit
- * @returns {{ day: string, event: string, family: string, path: string, field: string,
- *             dayKey: string, daysKey: string, totalKey: string, commands: string[][] }}
+ * @returns {{ day: string, hour: string, event: string, family: string, path: string,
+ *             field: string, dayKey: string, daysKey: string, totalKey: string,
+ *             commands: string[][] }}
  */
 export function hitKeys({ event, path, ua, now = new Date() }) {
   if (!EVENTS.includes(event)) throw new Error(`unknown event class: ${event}`);
   const day = counterDay(now);
+  const hour = counterHour(now);
   const family = classifyClient(ua);
   const countedPath = counterPath(event, path);
-  const field = `${event}|${family}|${countedPath}`;
+  const field = `${hour}|${event}|${family}|${countedPath}`;
 
   const dayKey = `hits:${KEY_VERSION}:day:${day}`;
   const daysKey = `hits:${KEY_VERSION}:days`;
@@ -212,6 +229,7 @@ export function hitKeys({ event, path, ua, now = new Date() }) {
 
   return {
     day,
+    hour,
     event,
     family,
     path: countedPath,
