@@ -1,4 +1,5 @@
-import { next } from '@vercel/functions';
+import { next, waitUntil } from '@vercel/functions';
+import { recordHit } from './src/lib/agent-hits.mjs';
 import { formatSurfaceLine, isAgentSurface } from './src/lib/agent-surfaces.mjs';
 import { markdownSiblingFor, prefersMarkdown } from './src/lib/markdown-negotiation.mjs';
 
@@ -32,6 +33,21 @@ const RETIRED_WRITING_SLUGS: Record<string, string> = {
 // trailing slash) and its `.md` sibling.
 const RETIRABLE = /^\/writing\/([^/.]+?)(\.md)?\/?$/;
 
+// Fire-and-forget durable counting, in its own failure domain and its own try/catch.
+//
+// Two separate wrappers rather than one around both the log and the count, on purpose: the console
+// line is the debugging view and the counter is the record, and a store outage must not be able to
+// take the log line with it. `waitUntil` keeps the round trip off the response path entirely, and
+// recordHit() already swallows everything it can; this catch covers the one gap that leaves, a
+// throw raised before waitUntil is handed a promise.
+function countHit(event: 'surface' | 'markdown', path: string, request: Request): void {
+  try {
+    waitUntil(recordHit({ event, path, ua: request.headers.get('user-agent') }));
+  } catch {
+    // Deliberately empty: observation is never worth a failed response.
+  }
+}
+
 // The canonical page URL a markdown response points back at: trailing slash, absolute.
 function canonicalPageUrl(url: URL): string {
   const pathname = url.pathname.endsWith('/') ? url.pathname : `${url.pathname}/`;
@@ -60,6 +76,7 @@ export default async function middleware(request: Request) {
     } catch {
       // Deliberately empty: observation is never worth a failed response.
     }
+    countHit('surface', url.pathname, request);
     return next();
   }
 
@@ -107,6 +124,11 @@ export default async function middleware(request: Request) {
   // One line per served markdown response, so "does anything ever negotiate?" is a query
   // rather than an assumption.
   console.log(`[markdown] hit path="${url.pathname}" sibling="${sibling}" accept="${accept ?? ''}"`);
+
+  // Counted only past the upstream.ok check above, so the path is a page that exists. That is what
+  // bounds this event class's key space to the site's own pages; the caps in counterPath() are the
+  // second lock rather than the first.
+  countHit('markdown', url.pathname, request);
 
   // Headers are built here rather than relayed. The curated siblings are function responses
   // and the converted ones are static files, and a static hit can carry a `content-encoding`
