@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { AGENT_SURFACE_PATHS, formatSurfaceLine, isAgentSurface } from '../src/lib/agent-surfaces.mjs';
+import {
+  AGENT_SURFACE_PATHS,
+  WELL_KNOWN_SURFACE_PATHS,
+  formatSurfaceLine,
+  isAgentSurface,
+} from '../src/lib/agent-surfaces.mjs';
+import { readSkills, skillUrlFor, SKILLS_INDEX_PATH } from '../src/lib/agent-skills.mjs';
 import { NEGOTIABLE_PAGE_MATCHER } from '../src/lib/markdown-negotiation.mjs';
 
 const middlewareSource = readFileSync(fileURLToPath(new URL('../middleware.ts', import.meta.url)), 'utf8');
@@ -23,6 +29,27 @@ test('the whole .well-known subtree counts, including paths the site does not se
   assert.equal(isAgentSurface('/.well-known/agent-card.json'), true);
   assert.equal(isAgentSurface('/.well-known/ai-plugin.json'), true);
   assert.equal(isAgentSurface('/.well-known/security.txt'), true);
+});
+
+test('every named well-known surface is recognised, including the nested skill path', () => {
+  // The skill URL is three segments deep. A prefix rule that only matched one level would still
+  // pass every other test in this file and silently drop the half of the hypothesis that matters.
+  for (const path of WELL_KNOWN_SURFACE_PATHS) {
+    assert.equal(isAgentSurface(path), true, path);
+  }
+  assert.ok(WELL_KNOWN_SURFACE_PATHS.some((path) => path.split('/').length > 3));
+});
+
+test('the named well-known surfaces are the ones the site actually publishes', () => {
+  // WELL_KNOWN_SURFACE_PATHS is a literal list because middleware.ts imports this module and it
+  // must stay free of filesystem reads. This is the diff that keeps the literal honest: publish a
+  // second skill and the list fails here rather than going unlogged forever.
+  const expected = [
+    '/.well-known/agent-card.json',
+    SKILLS_INDEX_PATH,
+    ...readSkills().map((skill) => skillUrlFor(skill.name)),
+  ];
+  assert.deepEqual([...WELL_KNOWN_SURFACE_PATHS].sort(), expected.sort());
 });
 
 test('ordinary pages and reader furniture are not surfaces', () => {

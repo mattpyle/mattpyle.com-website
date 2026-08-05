@@ -26,8 +26,8 @@ test('the validator rejects the 0.x field spellings rather than ignoring them', 
     schema
   );
   assert.deepEqual(errors.sort(), [
-    '/protocolVersion: property is not allowed by the A2A 1.0 schema',
-    '/url: property is not allowed by the A2A 1.0 schema',
+    '/protocolVersion: property is not allowed by this schema',
+    '/url: property is not allowed by this schema',
   ]);
 });
 

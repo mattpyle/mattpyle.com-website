@@ -17,13 +17,17 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { AGENT_SURFACE_PATHS } from '../src/lib/agent-surfaces.mjs';
+import { AGENT_SURFACE_PATHS, WELL_KNOWN_SURFACE_PATHS } from '../src/lib/agent-surfaces.mjs';
 
 const WATCHED_HEADERS = ['content-type', 'cache-control', 'vary', 'access-control-allow-origin', 'location'];
 
 const PROBES = [
   ...AGENT_SURFACE_PATHS.map((path) => ({ path, accept: '*/*' })),
-  { path: '/.well-known/agent-card.json', accept: '*/*' },
+  // The .well-known documents reach the middleware by prefix rather than by name, so they are
+  // probed from their own list. Content-Type is in WATCHED_HEADERS, which makes this the check
+  // that the Agent Skills index and skill keep answering as application/json and text/markdown:
+  // the RFC makes both a MUST, and both are set by vercel.json rather than by the route.
+  ...WELL_KNOWN_SURFACE_PATHS.map((path) => ({ path, accept: '*/*' })),
   // Content negotiation, unchanged behaviour expected on both sides of the branch.
   { path: '/writing/', accept: 'text/html' },
   { path: '/changelog/', accept: 'text/html' },
