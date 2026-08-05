@@ -23,8 +23,57 @@
         {
           "key": "Link",
           "value": "</llms.txt>; rel=\"alternate\"; type=\"text/markdown\", </agents.md>; rel=\"describedby\"; type=\"text/markdown\", </.well-known/agent-card.json>; rel=\"service-desc\"; type=\"application/a2a+json\""
-        }
+        },
+        { "key": "Vary", "value": "Accept" }
       ]
+    },
+    {
+      "source": "/about",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/about/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/builds",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/builds/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/scorecard",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/scorecard/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/webmcp",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/webmcp/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/writing",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/writing/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/changelog",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/changelog/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
     },
     {
       "source": "/writing/:slug([^/.]+)",

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { AGENT_SURFACE_PATHS, formatSurfaceLine, isAgentSurface } from '../src/lib/agent-surfaces.mjs';
+import { NEGOTIABLE_PAGE_MATCHER } from '../src/lib/markdown-negotiation.mjs';
 
 const middlewareSource = readFileSync(fileURLToPath(new URL('../middleware.ts', import.meta.url)), 'utf8');
 
@@ -48,9 +49,11 @@ test('middleware.ts matches every path the module recognises', () => {
 });
 
 test('the matcher lists no agent path the module would ignore', () => {
-  const collections = ['/writing/:path*', '/changelog/:path*'];
+  // The page paths are in the matcher for markdown negotiation, not for surface logging —
+  // NEGOTIABLE_PAGE_MATCHER in src/lib/markdown-negotiation.mjs owns them, and
+  // tests/markdown-negotiation.test.mjs asserts that side of the sync.
   for (const entry of matcherEntries()) {
-    if (collections.includes(entry)) continue;
+    if (NEGOTIABLE_PAGE_MATCHER.includes(entry)) continue;
     const probe = entry.replace('/:path*', '/probe');
     assert.equal(isAgentSurface(probe), true, `${entry} is matched but not recognised as a surface`);
   }

@@ -14,13 +14,19 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 
 - `/` — Homepage: short bio, a typewriter tagline, and a feed of recent writing and builds.
 - `/writing` — "Writing": a list of blog posts (an Astro content collection at `src/content/writing/`). Each post has a title, publish date, tags, and a short description. Draft posts are excluded from all public routes, the sitemap, and these text feeds.
-- `/writing/<slug>` — Individual article pages. Each has a raw-markdown variant at `/writing/<slug>.md` (`Content-Type: text/markdown`, YAML frontmatter with title/author/datePublished/description/canonical/source) — prefer this over scraping the HTML.
+- `/writing/<slug>` — Individual article pages. Each has a hand-authored raw-markdown variant at `/writing/<slug>.md` (`Content-Type: text/markdown`, YAML frontmatter with title/author/datePublished/description/canonical/source) — prefer this over scraping the HTML.
 - `/builds` — "Builds": a list of side projects (an Astro content collection at `src/content/builds/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo.
 - `/changelog` — "Changelog": a reverse-chronological, curated log of what has shipped on this site (an Astro content collection at `src/content/changelog/`). Each entry has a title, summary, date, tags, a `type` (launch/feature/content/infra/experiment), and a `significance` (major/minor/patch).
-- `/changelog/<slug>` — Individual changelog entry pages, with the full write-up. Each has a raw-markdown variant at `/changelog/<slug>.md` (same content negotiation as writing — an `Accept: text/markdown` request to the canonical URL returns markdown) — prefer this over scraping the HTML.
+- `/changelog/<slug>` — Individual changelog entry pages, with the full write-up. Each has a hand-authored raw-markdown variant at `/changelog/<slug>.md` — prefer this over scraping the HTML.
 - `/scorecard` — "Scorecard": the latest manually verified accessibility, performance, SEO, and agentic-browsing results for this site.
 - `/about` — Bio, areas of interest, and contact/social links.
 - `/webmcp` — "WebMCP": the tools below in full — what each one takes and returns, how an agent calls them, how to test them, and the dated state of the standard.
+
+## Markdown instead of HTML
+
+Every page on this site answers in Markdown. Send `Accept: text/markdown` with a q-value that outranks HTML — `Accept: text/markdown` on its own, or `text/markdown, text/html;q=0.5` — and the canonical URL returns `Content-Type: text/markdown` instead of the page. A wildcard (`*/*`, `text/*`) is not a markdown preference and always gets HTML, so nothing changes for a normal crawler.
+
+Every representation is also fetchable directly, at the page's own path with `.md` on the end: `/index.md`, `/about.md`, `/writing.md`, `/writing/<slug>.md`, `/changelog/2.md`. Entry pages (writing and changelog) serve the source markdown the post was written in. Every other page's is converted from the rendered page's `main` landmark at build time, so it is the page's content without the navigation, footer, or interactive controls.
 
 ## How to cite this site
 
