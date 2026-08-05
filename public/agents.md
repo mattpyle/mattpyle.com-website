@@ -26,7 +26,7 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 
 Every page on this site answers in Markdown. Send `Accept: text/markdown` with a q-value that outranks HTML — `Accept: text/markdown` on its own, or `text/markdown, text/html;q=0.5` — and the canonical URL returns `Content-Type: text/markdown` instead of the page. A wildcard (`*/*`, `text/*`) is not a markdown preference and always gets HTML, so nothing changes for a normal crawler.
 
-Every representation is also fetchable directly, at the page's own path with `.md` on the end: `/index.md`, `/about.md`, `/writing.md`, `/writing/<slug>.md`, `/changelog/2.md`. Entry pages (writing and changelog) serve the source markdown the post was written in. Every other page's is converted from the rendered page's `main` landmark at build time, so it is the page's content without the navigation, footer, or interactive controls.
+Every representation is also fetchable directly, at the page's own path with `.md` on the end: `/index.md`, `/about.md`, `/writing.md`, `/writing/<slug>.md`, `/scorecard.md`. Entry pages (writing and changelog) serve the source markdown the post was written in. Every other page's is converted from the rendered page's `main` landmark at build time, so it is the page's content without the navigation, footer, or interactive controls.
 
 ## How to cite this site
 
@@ -43,6 +43,7 @@ Every representation is also fetchable directly, at the page's own path with `.m
 - `/webmcp/index.json` — the JSON index backing the WebMCP tools below. A plain static file; any agent can fetch it directly, no tool call required.
 - `/webmcp/tools.json` — the tool manifest: name, description, input schema, return summary, and an example call for every tool below. Generated at build time from the live tool objects, so it cannot drift from what an agent actually receives.
 - `/.well-known/agent-card.json`: the A2A Agent Card (`application/a2a+json`). See below.
+- DNS discovery (DNS-AID): DNSSEC-signed `SVCB` and `HTTPS` records at `_index._agents.mattpyle.com` and `_a2a._agents.mattpyle.com` point agents at this origin, per `draft-mozleywilliams-dnsop-dnsaid-02`. `_a2a._agents` is the DNS-side pointer to the A2A endpoint below.
 
 ## A2A (experimental)
 
