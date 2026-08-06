@@ -758,6 +758,63 @@ html[data-appearance='retro'] .history-run[open] .history-toggle::after {
   content: '[ \2212 ]';
 }
 
+/* ── /scorecard, Agent traffic ────────────────────────────────────────── */
+
+/* Every rule below hangs off #agent-traffic, and the id is doing real work rather than being
+   lazy about class names. Astro stamps its scoping attribute onto every compound of a page's
+   own selectors, so `.traffic thead th` in scorecard.astro compiles to three classes-worth of
+   specificity and outranks any plain `html[data-appearance='retro'] .traffic thead th` here,
+   however specific it looks. An id outranks all of it in one token and stays readable. The
+   section has one anyway: /agent-traffic redirects to this anchor. */
+
+html[data-appearance='retro'] #agent-traffic .traffic-panel,
+html[data-appearance='retro'] #agent-traffic .traffic-empty,
+html[data-appearance='retro'] #agent-traffic .traffic-unavailable {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] #agent-traffic h2,
+html[data-appearance='retro'] #agent-traffic h3,
+html[data-appearance='retro'] #agent-traffic .num {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] #agent-traffic .stat {
+  border-right-color: var(--retro-frame-border);
+  border-bottom-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] #agent-traffic .label,
+html[data-appearance='retro'] #agent-traffic .freshness,
+html[data-appearance='retro'] #agent-traffic .footnote,
+html[data-appearance='retro'] #agent-traffic th,
+html[data-appearance='retro'] #agent-traffic code,
+html[data-appearance='retro'] #agent-traffic td.family {
+  font-family: var(--retro-font-mono);
+}
+
+html[data-appearance='retro'] #agent-traffic table {
+  background: var(--retro-frame-bg);
+  border-color: var(--retro-frame-border);
+  font-family: var(--retro-font-ui);
+}
+
+html[data-appearance='retro'] #agent-traffic th,
+html[data-appearance='retro'] #agent-traffic td {
+  border-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] #agent-traffic th {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] #agent-traffic tbody tr:hover {
+  background: var(--retro-sidebar-bg);
+}
+
 /* The [+ ]/[- ] text needs more room than the 42px column the icon-only
    chevron fit in — same grid, last track widened so the indicator doesn't
    wrap or overflow into the metric columns. */

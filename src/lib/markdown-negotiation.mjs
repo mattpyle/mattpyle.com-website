@@ -78,7 +78,16 @@ export function markdownSiblingFor(pathname) {
 // Purely-numeric changelog slugs are pagination index pages, not entries, so they convert
 // like any other page. Only the emit step and the coverage validator read this; the
 // middleware deliberately does not, because its 404 fallback is the safety net.
-const CURATED_SIBLINGS = [/^\/writing\/[^/]+\.md$/, /^\/changelog\/(?!\d+\.md$)[^/]+\.md$/];
+//
+// /scorecard.md is here for a different reason from the other two. Those are entries whose source
+// markdown beats anything a converter could produce; /scorecard renders on demand (its Agent
+// traffic section reads the hit store at request time), so there is no built HTML file for the
+// emit step to convert and a curated route is the only way it can have a sibling at all.
+const CURATED_SIBLINGS = [
+  /^\/writing\/[^/]+\.md$/,
+  /^\/changelog\/(?!\d+\.md$)[^/]+\.md$/,
+  /^\/scorecard\.md$/,
+];
 
 /** @param {string} siblingPath @returns {boolean} */
 export function hasCuratedSibling(siblingPath) {

@@ -5,6 +5,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { SyntaxValidator } from 'fast-xml-validator';
 import { readWritingMetadata } from './lib/writing-metadata.mjs';
 import {
+  ON_DEMAND_PAGES,
   STATIC_ROUTE_LASTMOD,
   latestDate,
   resolveSitemapLastmod,
@@ -16,6 +17,8 @@ const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 // endpoint) makes Astro write static output to dist/client/, not dist/ —
 // dist/ itself now only holds the adapter's server bundle.
 const dist = join(root, 'dist', 'client');
+const onDemandPaths = new Set(ON_DEMAND_PAGES);
+const renderFunctionDir = join(root, '.vercel', 'output', 'functions', '_render.func');
 const siteOrigin = SITE_ORIGIN;
 const parser = new XMLParser({ ignoreAttributes: false });
 const failures = [];
@@ -95,6 +98,23 @@ for (const item of urls) {
 
   const pathname = new URL(location).pathname;
   const htmlPath = builtHtmlPath(pathname);
+
+  // An on-demand page has no file to inspect, so the two checks below (self-canonical, noindex)
+  // cannot run against it. What can be checked is that it is on demand on purpose: a prerendered
+  // file at its path means the `prerender = false` was dropped and this exemption is now hiding a
+  // page nobody is checking, and a missing render function means the adapter emitted nothing to
+  // serve it with. Its rendered HTML is exercised instead by the a11y suite, which serves the real
+  // function (scripts/serve-built-site.mjs).
+  if (onDemandPaths.has(pathname)) {
+    if (existsSync(htmlPath)) {
+      failures.push(`${location}: listed as on-demand but prerendered a file at ${htmlPath}`);
+    }
+    if (!existsSync(renderFunctionDir)) {
+      failures.push(`${location}: renders on demand, but the adapter emitted no ${renderFunctionDir}`);
+    }
+    continue;
+  }
+
   if (!existsSync(htmlPath)) {
     failures.push(`${location}: no built HTML page at ${htmlPath}`);
     continue;

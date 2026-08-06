@@ -53,6 +53,17 @@ export const STATIC_ROUTE_LASTMOD = Object.freeze({
   '/writing/': '2026-07-15',
 });
 
+/**
+ * Pages that render on demand rather than prerendering to a file.
+ *
+ * They are real, indexable pages and belong in the sitemap exactly like any other, but nothing in
+ * the build can find them by walking dist/client: there is no file. This list is what
+ * astro.config.mjs feeds the sitemap integration as `customPages`, and what
+ * scripts/validate-sitemap.mjs checks by fetching-shape rather than by file existence. A page
+ * added here without a STATIC_ROUTE_LASTMOD entry has no lastmod policy and fails the build.
+ */
+export const ON_DEMAND_PAGES = Object.freeze(['/scorecard/']);
+
 /** @param {...(string | undefined)} dates */
 export function latestDate(...dates) {
   const presentDates = dates.filter((date) => date !== undefined);

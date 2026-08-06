@@ -12,8 +12,11 @@ import { defineConfig, devices } from '@playwright/test';
  * dist/client, which is the fast loop while iterating on a check.
  *
  * `npm run preview` is deliberately not used here: the Vercel adapter rejects
- * `astro preview`, so this serves dist/client statically the same way the
- * scoreboard's audit method does.
+ * `astro preview`, so this serves dist/client the same way the scoreboard's
+ * audit method does — via scripts/serve-built-site.mjs, which is `serve
+ * dist/client` plus a fallback to the adapter's render function for the routes
+ * that no longer prerender. /scorecard is one of them, and a plain static
+ * server 404s it.
  */
 const PORT = 4321;
 
@@ -37,8 +40,12 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: `npx serve dist/client --listen ${PORT} --no-clipboard --no-port-switching`,
+    command: `node scripts/serve-built-site.mjs --port ${PORT}`,
     url: `http://localhost:${PORT}`,
+    // The traffic tables on /scorecard read a store that does not exist locally or on a runner.
+    // Without this the section only ever renders its unavailable state, and its tables would ship
+    // never having been scanned by axe, reflowed at 320px, or seen by the aria golden.
+    env: { AGENT_TRAFFIC_FIXTURE: '1' },
     // CI normally refuses to reuse a server, so a stale process cannot make a
     // run pass against yesterday's build. The a11y workflow is the deliberate
     // exception: it has already built once and served dist/client on this port

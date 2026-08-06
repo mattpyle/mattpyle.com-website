@@ -187,6 +187,40 @@ export function counterPath(event, pathname) {
   return path;
 }
 
+/** The set holding every UTC day that has a hash, so a reader never has to SCAN. */
+export const DAYS_KEY = `hits:${KEY_VERSION}:days`;
+
+/** The all-time counter. */
+export const TOTAL_KEY = `hits:${KEY_VERSION}:total`;
+
+/** The hash holding one UTC day. @param {string} day YYYY-MM-DD, UTC @returns {string} */
+export function dayKeyFor(day) {
+  return `hits:${KEY_VERSION}:day:${day}`;
+}
+
+/** The field delimiter inside a day hash. Cannot appear in an hour, event, family or path. */
+const FIELD_DELIMITER = '|';
+
+/**
+ * A day-hash field, back into its parts. The inverse of the `field` built in hitKeys(), and the
+ * reason src/lib/agent-traffic.mjs never rebuilds the schema: both directions live here, so a
+ * reshape of the key is one file rather than a hunt.
+ *
+ * A field that does not split into exactly four parts is returned as null rather than guessed at.
+ * The only way one can exist is a schema change that forgot to bump KEY_VERSION, and a reader
+ * dropping the row it cannot parse beats a reader inventing a path from it.
+ *
+ * @param {string} field
+ * @returns {{ hour: string, event: string, family: string, path: string } | null}
+ */
+export function parseHitField(field) {
+  const parts = field.split(FIELD_DELIMITER);
+  if (parts.length !== 4) return null;
+  const [hour, event, family, path] = parts;
+  if (!/^\d{2}$/.test(hour) || !EVENTS.includes(event) || !family || !path) return null;
+  return { hour, event, family, path };
+}
+
 /**
  * The whole key schema, in one function, so the render layer reads it from here rather than
  * rebuilding string literals that can drift.
@@ -221,11 +255,11 @@ export function hitKeys({ event, path, ua, now = new Date() }) {
   const hour = counterHour(now);
   const family = classifyClient(ua);
   const countedPath = counterPath(event, path);
-  const field = `${hour}|${event}|${family}|${countedPath}`;
+  const field = [hour, event, family, countedPath].join(FIELD_DELIMITER);
 
-  const dayKey = `hits:${KEY_VERSION}:day:${day}`;
-  const daysKey = `hits:${KEY_VERSION}:days`;
-  const totalKey = `hits:${KEY_VERSION}:total`;
+  const dayKey = dayKeyFor(day);
+  const daysKey = DAYS_KEY;
+  const totalKey = TOTAL_KEY;
 
   return {
     day,

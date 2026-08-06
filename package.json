@@ -14,6 +14,7 @@
     "prebuild": "node scripts/generate-og-images.mjs && node scripts/generate-a2a-digest.mjs && node scripts/generate-agent-skills-index.mjs",
     "build": "astro build && node scripts/emit-markdown-siblings.mjs && node scripts/assert-no-drafts.mjs && node scripts/validate-sitemap.mjs && node scripts/validate-article-actions.mjs && node scripts/validate-csp-hashes.mjs && node scripts/validate-a2a-card.mjs && node scripts/validate-agent-skills-index.mjs && node scripts/validate-markdown-siblings.mjs",
     "preview": "astro preview",
+    "serve": "node scripts/serve-built-site.mjs",
     "astro": "astro",
     "a11y": "npm run build && playwright test",
     "a11y:run": "playwright test",

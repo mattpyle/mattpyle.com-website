@@ -53,6 +53,80 @@
     - term: Entry
     - definition: ·
     - paragraph: ·
+  - region "Agent traffic":
+    - paragraph: Live · read at render time
+    - heading "Agent traffic" [level=2]
+    - paragraph:
+      - text: ·
+      - time: ·
+    - paragraph: "What agents actually fetch here. Every request to this site's discovery documents, and every page served as Markdown to a client that asked for it, counted at the edge and read from the store when this page rendered. Aggregate counts only: no addresses, no headers, no per-request record exists to publish. Every window below is a rolling one ending now."
+    - paragraph: Requests, total
+    - paragraph: ·
+    - paragraph: Everything counted since the store went in.
+    - paragraph: Requests, last 7 days
+    - paragraph: ·
+    - paragraph: /Requests, last \d+ hours/
+    - paragraph: ·
+    - heading "By surface" [level=3]
+    - region "By surface":
+      - table "By surface":
+        - rowgroup:
+          - row /Surface 7 days \d+ days Total Last fetched/:
+            - columnheader "Surface"
+            - columnheader "7 days"
+            - columnheader /\d+ days/
+            - columnheader "Total"
+            - columnheader "Last fetched"
+        - rowgroup:
+          - row "· · · · ·":
+            - cell "·":
+              - code: ·
+            - cell "·"
+            - cell "·"
+            - cell "·"
+            - cell "·":
+              - time: ·
+    - paragraph:
+      - code: /.well-known/*
+      - text: "is any well-known document this site does not publish, bucketed together: what a client expected to find is the interesting half of that request. Times are the hour the store recorded, which is all the resolution it keeps."
+    - heading "By client type" [level=3]
+    - region "By client type":
+      - table "By client type":
+        - rowgroup:
+          - row /Client 7 days \d+ days Total/:
+            - columnheader "Client"
+            - columnheader "7 days"
+            - columnheader /\d+ days/
+            - columnheader "Total"
+        - rowgroup:
+          - row "· · · ·":
+            - cell "·"
+            - cell "·"
+            - cell "·"
+            - cell "·"
+    - paragraph: One row per client that names itself, classified from the user agent and then thrown away. Both event classes are counted here, so this table totals the headline number.
+    - heading "Markdown negotiation" [level=3]
+    - region "Markdown negotiation":
+      - table "Markdown negotiation":
+        - rowgroup:
+          - row /Page 7 days \d+ days Total/:
+            - columnheader "Page"
+            - columnheader "7 days"
+            - columnheader /\d+ days/
+            - columnheader "Total"
+        - rowgroup:
+          - row "· · · ·":
+            - cell "·":
+              - code: ·
+            - cell "·"
+            - cell "·"
+            - cell "·"
+    - paragraph:
+      - text: Counted when a client sent an
+      - code: Accept
+      - text: header preferring
+      - code: text/markdown
+      - text: and got it, which is the negotiation contract working rather than a page view.
   - region "Run history":
     - paragraph: Archive
     - heading "Run history" [level=2]
