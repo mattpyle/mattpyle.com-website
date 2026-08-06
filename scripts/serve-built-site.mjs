@@ -13,6 +13,11 @@
  * run on a CI runner and on Matt's machine with neither. Deliberately not `astro preview` either:
  * the Vercel adapter rejects it outright (see playwright.config.ts).
  *
+ * RESTART IT AFTER A REBUILD. Static files are read from disk per request, but the adapter's
+ * render function is imported once and held in memory, so a rebuild mid-session leaves this
+ * serving the previous build's HTML against the new build's asset hashes — which looks like the
+ * page lost its stylesheet, not like a stale server.
+ *
  * Usage:
  *   node scripts/serve-built-site.mjs [--port 4321] [--root dist/client]
  *

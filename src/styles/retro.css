@@ -710,7 +710,6 @@ html[data-appearance='retro'] .history-detail dd,
 html[data-appearance='retro'] .history-date time,
 html[data-appearance='retro'] .history-number,
 html[data-appearance='retro'] .history-result,
-html[data-appearance='retro'] .history-timestamp,
 html[data-appearance='retro'] .section-label {
   font-family: var(--retro-font-mono);
 }

@@ -8,6 +8,10 @@ import {
   readAgentTraffic,
   summarizeTraffic,
 } from '../lib/agent-traffic.mjs';
+// The store counts the page path a client asked for; the table shows the URL that answered, so a
+// row reads as the markdown document it was. Same function the middleware derives the sibling
+// with, so the two can never disagree about what /about's markdown is called.
+import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 /**
  * On demand, for the Agent traffic section alone.
@@ -51,13 +55,38 @@ const utcStamp = new Intl.DateTimeFormat('en-GB', {
   timeZoneName: 'short',
 });
 
+// The table's own stamp, one per row: no year, because a column of them is furniture rather than
+// reading and the full instant is in the `datetime` attribute regardless. The zone label stays:
+// this cell says UTC before the script runs and local after it, and a reader who cannot tell
+// which is looking at a number that means nothing.
+const utcStampCompact = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'UTC',
+  timeZoneName: 'short',
+});
+
 /** The hour a bucket started, as an instant. Hour resolution is all the store keeps. */
 function bucketStamp(hour: number): { iso: string; label: string } {
   const at = hourStart(hour);
-  return { iso: at.toISOString(), label: utcStamp.format(at) };
+  return { iso: at.toISOString(), label: utcStampCompact.format(at) };
 }
 
 const renderedStamp = { iso: renderedAt.toISOString(), label: utcStamp.format(renderedAt) };
+
+/**
+ * What the section says when it has no numbers. Three states, not two: "no store configured" and
+ * "the store did not answer" are the same blank space on the page and completely different
+ * findings, and only the second can happen in production. The first is what a local build looks
+ * like, and saying the store failed there would be a small lie told on every preview.
+ */
+const emptyStateCopy = traffic.ok
+  ? 'Counting is running and nothing has been counted yet. The first agent request to a discovery document fills this in.'
+  : traffic.reason === 'no-store'
+    ? 'No counter store is configured in this environment, so there is nothing to read. That is a local build; production reads the live store.'
+    : 'Live counts are unavailable right now: the store did not answer this render. Nothing above or below this section depends on it.';
 
 // Two families are not crawler names and read as jargon without a gloss.
 const FAMILY_NOTES: Record<string, string> = {
@@ -145,38 +174,27 @@ function shortMetricName(name: string): string {
 
     <section id="agent-traffic" class="traffic" aria-labelledby="agent-traffic-title">
       <header class="traffic-header">
-        <div>
-          <p class="section-label">Live · read at render time</p>
-          <h2 id="agent-traffic-title">Agent traffic</h2>
-        </div>
+        <h2 id="agent-traffic-title">Agent traffic</h2>
         <p class="freshness">
           Rendered <time datetime={renderedStamp.iso} data-local-time>{renderedStamp.label}</time>
         </p>
       </header>
-
-      <p class="traffic-intro">
-        What agents actually fetch here. Every request to this site's discovery documents, and
-        every page served as Markdown to a client that asked for it, counted at the edge and read
-        from the store when this page rendered. Aggregate counts only: no addresses, no headers, no
-        per-request record exists to publish. Every window below is a rolling one ending now.
-      </p>
 
       {summary && summary.counted ? (
         <Fragment>
           <div class="traffic-panel">
             <div class="statrow">
               <div class="stat">
-                <p class="label">Requests, total</p>
-                <p class="num">{counts.format(summary.totals.total)}</p>
-                <p class="sub">Everything counted since the store went in.</p>
+                <p class="label">Requests, last 24 hours</p>
+                <p class="num">{counts.format(summary.totals.day)}</p>
               </div>
               <div class="stat">
                 <p class="label">Requests, last 7 days</p>
                 <p class="num">{counts.format(summary.totals.week)}</p>
               </div>
               <div class="stat">
-                <p class="label">Requests, last 24 hours</p>
-                <p class="num">{counts.format(summary.totals.day)}</p>
+                <p class="label">Requests, total</p>
+                <p class="num">{counts.format(summary.totals.total)}</p>
               </div>
             </div>
           </div>
@@ -208,7 +226,7 @@ function shortMetricName(name: string): string {
                     <td class="n">{counts.format(row.month)}</td>
                     <td class="n">{counts.format(row.total)}</td>
                     <td>
-                      <time datetime={bucketStamp(row.lastHour).iso} data-local-time>
+                      <time datetime={bucketStamp(row.lastHour).iso} data-local-time="compact">
                         {bucketStamp(row.lastHour).label}
                       </time>
                     </td>
@@ -217,12 +235,9 @@ function shortMetricName(name: string): string {
               </tbody>
             </table>
             </div>
-            <p class="footnote">
-              <code>/.well-known/*</code> is any well-known document this site does not publish, bucketed
-              together: what a client expected to find is the interesting half of that request.
-              Times are the hour the store recorded, which is all the resolution it keeps.
-              {summary.surfaces.omitted > 0 && ` ${summary.surfaces.omitted} further surface(s) below the top ${MAX_TABLE_ROWS} are not shown.`}
-            </p>
+            {summary.surfaces.omitted > 0 && (
+              <p class="footnote">{summary.surfaces.omitted} further surface(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+            )}
           </div>
 
           <div class="subsect">
@@ -254,11 +269,9 @@ function shortMetricName(name: string): string {
               </tbody>
             </table>
             </div>
-            <p class="footnote">
-              One row per client that names itself, classified from the user agent and then thrown
-              away. Both event classes are counted here, so this table totals the headline number.
-              {summary.clients.omitted > 0 && ` ${summary.clients.omitted} further client type(s) below the top ${MAX_TABLE_ROWS} are not shown.`}
-            </p>
+            {summary.clients.omitted > 0 && (
+              <p class="footnote">{summary.clients.omitted} further client type(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+            )}
           </div>
 
           <div class="subsect">
@@ -277,7 +290,7 @@ function shortMetricName(name: string): string {
                 <tbody>
                   {summary.pages.rows.map(row => (
                     <tr>
-                      <td><code>{row.path}</code></td>
+                      <td><code>{markdownSiblingFor(row.path ?? '') ?? row.path}</code></td>
                       <td class="n">{counts.format(row.week)}</td>
                       <td class="n">{counts.format(row.month)}</td>
                       <td class="n">{counts.format(row.total)}</td>
@@ -293,20 +306,13 @@ function shortMetricName(name: string): string {
                 fills in the first time something asks.
               </p>
             )}
-            <p class="footnote">
-              {/* Kept on one line: Astro drops the whitespace where a line break meets a tag
-                  boundary, and `preferring<code>text/markdown</code>` is how that reads. */}
-              Counted when a client sent an <code>Accept</code> header preferring <code>text/markdown</code> and got it, which is the negotiation contract working rather than a page view.
-              {summary.pages.omitted > 0 && ` ${summary.pages.omitted} further page(s) below the top ${MAX_TABLE_ROWS} are not shown.`}
-            </p>
+            {summary.pages.omitted > 0 && (
+              <p class="footnote">{summary.pages.omitted} further page(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+            )}
           </div>
         </Fragment>
       ) : (
-        <p class="traffic-unavailable">
-          {traffic.ok
-            ? 'Counting is running and nothing has been counted yet. The first agent request to a discovery document fills this in.'
-            : 'Live counts are unavailable right now: the store did not answer this render. Nothing above or below this section depends on it.'}
-        </p>
+        <p class="traffic-unavailable">{emptyStateCopy}</p>
       )}
     </section>
 
@@ -331,13 +337,14 @@ function shortMetricName(name: string): string {
           return (
             <details class="history-run" id={`run-${run.id}`}>
               <summary>
+                {/*
+                  One date per run, DD MMM YYYY. The raw ISO audit time used to render underneath
+                  it, which made the one run that has a `timestamp` twice as tall as the four that
+                  do not and put a machine string where a person reads. The exact instant is not
+                  lost: it is the `datetime` attribute, which is where a machine looks anyway.
+                */}
                 <span class="history-date">
-                  <time datetime={run.verified.iso}>{run.verified.label}</time>
-                  {run.verified.timestamp && (
-                    <time class="history-timestamp" datetime={run.verified.timestamp}>
-                      {run.verified.timestamp}
-                    </time>
-                  )}
+                  <time datetime={run.verified.timestamp ?? run.verified.iso}>{run.verified.label}</time>
                 </span>
 
                 {run.metrics.map(metric => (
@@ -656,14 +663,6 @@ function shortMetricName(name: string): string {
     text-align: right;
   }
 
-  .traffic-intro {
-    max-width: 640px;
-    margin: 0 0 26px;
-    color: var(--color-muted);
-    font-size: 13.5px;
-    line-height: 1.6;
-  }
-
   .traffic-panel {
     overflow: hidden;
     margin-bottom: 34px;
@@ -705,13 +704,6 @@ function shortMetricName(name: string): string {
     font-weight: 600;
     letter-spacing: -.035em;
     line-height: .85;
-  }
-
-  .stat .sub {
-    margin: 12px 0 0;
-    color: var(--color-muted);
-    font-size: 11.5px;
-    line-height: 1.55;
   }
 
   .subsect { margin-bottom: 30px; }
@@ -870,13 +862,6 @@ function shortMetricName(name: string): string {
     font-family: var(--font-serif);
     font-size: 16px;
     font-weight: 600;
-  }
-
-  .history-timestamp {
-    color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    line-height: 1.35;
   }
 
   .history-metric {
@@ -1088,21 +1073,25 @@ function shortMetricName(name: string): string {
    * page without a fresh document (see the other components in src/components).
    */
   function localiseTimes(): void {
-    const local = new Intl.DateTimeFormat(undefined, {
+    const base = {
       day: 'numeric',
       month: 'short',
-      year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       timeZoneName: 'short',
-    });
+    } as const;
+    // `data-local-time="compact"` drops the year, mirroring the two server-side formatters: one
+    // stamp for the whole page wants it, a column of them does not.
+    const local = new Intl.DateTimeFormat(undefined, { ...base, year: 'numeric' });
+    const localCompact = new Intl.DateTimeFormat(undefined, base);
 
     for (const element of document.querySelectorAll<HTMLTimeElement>('time[data-local-time]')) {
       const iso = element.getAttribute('datetime');
       if (!iso) continue;
       const at = new Date(iso);
       if (Number.isNaN(at.getTime())) continue;
-      element.textContent = local.format(at);
+      const format = element.dataset.localTime === 'compact' ? localCompact : local;
+      element.textContent = format.format(at);
     }
   }
 
