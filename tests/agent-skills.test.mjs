@@ -9,6 +9,8 @@ import {
   SKILLS_SCHEMA_URI,
   buildSkillsIndex,
   digestOf,
+  firstSentence,
+  formatSkillsIndexLines,
   isValidSkillName,
   normaliseSkillBody,
   parseSkillFrontmatter,
@@ -80,11 +82,25 @@ test('the skill body is a usable SKILL.md, not just a file that exists', () => {
   }
 });
 
-test('the skill states that the experimental surfaces can be withdrawn', () => {
+test('the site-tour skill states that the experimental surfaces can be withdrawn', () => {
   // A skill that presents the A2A endpoint and the WebMCP tools as stable infrastructure would be
-  // teaching agents something this site cannot promise.
-  const [skill] = readSkills();
+  // teaching agents something this site cannot promise. Named rather than taken positionally: this
+  // is a claim about the skill that tours this site, not about whichever file sorts first.
+  const skill = readSkills().find((candidate) => candidate.name === 'using-mattpyle-com');
+  assert.ok(skill, 'using-mattpyle-com is missing');
   assert.match(skill.body, /withdrawn/i);
+});
+
+test('an implementation-pattern skill is portable, naming no site and no history', () => {
+  // These teach a pattern to an agent working on somebody else's site. That reader has none of this
+  // repo's context, and instructions do not carry citations, so a reference to this site, a PR
+  // number or a date is a leak rather than provenance. Provenance lives on the card and in the PR.
+  for (const skill of readSkills().filter((candidate) => candidate.name.startsWith('implement-'))) {
+    const body = `${skill.body}\n${skill.description}`;
+    assert.doesNotMatch(body, /mattpyle/i, `${skill.name} names this site`);
+    assert.doesNotMatch(body, /\bPR #?\d+/i, `${skill.name} cites a pull request`);
+    assert.doesNotMatch(body, /\b20\d{2}-\d{2}-\d{2}\b/, `${skill.name} carries a date`);
+  }
 });
 
 test('the naming rules reject every shape the spec forbids', () => {
@@ -188,4 +204,44 @@ test('a duplicate skill name is caught', () => {
   assert.ok(
     validateSkillsIndex(doubled, schema, []).some((error) => error.includes('is listed more than once'))
   );
+});
+
+// --- llms.txt enumeration -----------------------------------------------------------------
+//
+// llms.txt used to name the single published skill in prose, which is a sentence that goes stale
+// the day a second skill lands. These guard the replacement: the line is built from the committed
+// index, and the route holds no skill name of its own.
+
+const llmsRoute = readFileSync(
+  fileURLToPath(new URL('../src/pages/llms.txt.ts', import.meta.url)),
+  'utf8'
+);
+
+test('the llms.txt skills lines enumerate every committed skill', () => {
+  const base = 'https://www.example.com';
+  const lines = formatSkillsIndexLines(base, committed.skills);
+
+  assert.equal(lines.length, committed.skills.length + 1);
+  assert.match(lines[0], new RegExp(`\(${base}${SKILLS_INDEX_PATH}\)`));
+  assert.ok(
+    lines[0].includes(`lists ${committed.skills.length} skill${committed.skills.length === 1 ? '' : 's'}`),
+    `index line does not state the skill count: ${lines[0]}`
+  );
+
+  committed.skills.forEach((skill, i) => {
+    const line = lines[i + 1];
+    assert.ok(line.startsWith('  - '), `skill line is not nested under the index line: ${line}`);
+    assert.ok(line.includes(`[${skill.name}](${base}${skill.url})`), `skill line does not link ${skill.name}`);
+    assert.ok(skill.description.startsWith(firstSentence(skill.description)));
+  });
+});
+
+test('llms.txt names no skill of its own', () => {
+  // The point of enumerating: publishing skill three is adding a file, with no edit here.
+  for (const skill of committed.skills) {
+    assert.ok(
+      !llmsRoute.includes(skill.name),
+      `llms.txt.ts hard-codes the skill name "${skill.name}"; it should enumerate from the index`
+    );
+  }
 });

@@ -164,6 +164,44 @@ export function readSkills(dir = SKILLS_DIR) {
 }
 
 /**
+ * The first sentence of a skill description, used as its one-line gloss in llms.txt.
+ *
+ * Naive on purpose: the first period followed by whitespace or end of string. It survives the
+ * shapes descriptions actually take here (`mattpyle.com`, `v0.2.0`, `text/markdown` all keep their
+ * periods, because none is followed by a space) and would truncate early on an inline "e.g. ",
+ * which is a reason not to write one in a description rather than a reason for a parser.
+ *
+ * @param {string} description
+ */
+export function firstSentence(description) {
+  const match = description.match(/^[\s\S]*?\.(?=\s|$)/);
+  return match ? match[0] : description;
+}
+
+/**
+ * The llms.txt entry for the Agent Skills index: a line for the index itself, then one nested line
+ * per skill, enumerated from the committed index.
+ *
+ * Enumerated rather than hand-written because llms.txt previously named the single skill in prose,
+ * which is a sentence that goes stale the day a second skill lands. Publishing a skill is adding a
+ * file in src/data/skills/; this keeps that true for llms.txt too.
+ *
+ * @param {string} base Origin with no trailing slash.
+ * @param {{ name: string, description: string, url: string }[]} skills
+ * @returns {string[]} Lines, ready to push.
+ */
+export function formatSkillsIndexLines(base, skills) {
+  const count = skills.length;
+  const lines = [
+    `- [Agent Skills index](${base}${SKILLS_INDEX_PATH}): the Agent Skills Discovery RFC v0.2.0 index. It lists ${count} skill${count === 1 ? '' : 's'}, each with a sha256 digest of the artifact so a client can verify what it downloaded.`,
+  ];
+  for (const skill of skills) {
+    lines.push(`  - [${skill.name}](${base}${skill.url}): ${firstSentence(skill.description)}`);
+  }
+  return lines;
+}
+
+/**
  * The index document, exactly as served.
  *
  * URLs are path-absolute rather than fully qualified, which the RFC's "URL Resolution" resolves

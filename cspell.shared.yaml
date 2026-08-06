@@ -97,6 +97,9 @@ words:
   # --- Terms of art verified in existing content ---
   - Contentful
   - preconnects
+  # Framework vocabulary for build-time rendering, in the published skills.
+  - prerendered
+  - prerendering
 
   # --- en-GB collateral (2026-07-19, Prompt 3c) ---
   # NOT jargon. Both are ordinary words that `language: en` accepted and the

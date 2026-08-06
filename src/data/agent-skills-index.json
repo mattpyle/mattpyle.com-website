@@ -2,6 +2,13 @@
   "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "skills": [
     {
+      "name": "implement-markdown-negotiation",
+      "type": "skill-md",
+      "description": "Implement site-wide Markdown content negotiation, so every HTML page also answers `Accept: text/markdown` with a clean Markdown representation of itself. Covers the sibling URL rule, build-time conversion from the page's main landmark, edge negotiation with a fallback to HTML, and the traps that only surface in production: output roots, response headers, recursion, extraction, and registration drift. Use when adding Markdown representations to a site for AI agents, or when an agent-readiness check reports that a site does not serve Markdown.",
+      "url": "/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md",
+      "digest": "sha256:ba57be66fec31c0908e10797d980cec76c1d9f72e245a814ef5f4f3c295823ef"
+    },
+    {
       "name": "using-mattpyle-com",
       "type": "skill-md",
       "description": "Work with mattpyle.com as an agent. Covers which discovery surface answers which question, fetching any page as Markdown instead of HTML, calling the site's A2A endpoint, using its in-browser WebMCP tools, and how to cite it. Use when reading, summarising, citing, or interacting with mattpyle.com.",

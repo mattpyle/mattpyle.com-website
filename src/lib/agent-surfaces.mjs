@@ -53,14 +53,16 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  * these by name across a deploy, and tests/agent-surfaces.test.mjs asserts each is recognised, so
  * a regression in the prefix rule fails against real paths instead of hypothetical ones.
  *
- * The Agent Skills entries are the instrument for that card's hypothesis. The index and the skill
+ * The Agent Skills entries are the instrument for that card's hypothesis. The index and each skill
  * are separate lines in the log on purpose: "something fetched the index" and "something that
  * fetched the index went on to fetch the skill" are different findings, and only the second one
- * says an agent did anything with what it discovered.
+ * says an agent did anything with what it discovered. One line per skill rather than one for the
+ * subtree, so which skill an agent came for is answerable too.
  */
 export const WELL_KNOWN_SURFACE_PATHS = [
   '/.well-known/agent-card.json',
   '/.well-known/agent-skills/index.json',
+  '/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md',
   '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',
 ];
 
