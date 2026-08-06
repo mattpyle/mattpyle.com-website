@@ -4,7 +4,6 @@ import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
 import {
   MAX_TABLE_ROWS,
   flattenDayHashes,
-  hourStart,
   readAgentTraffic,
   summarizeTraffic,
 } from '../lib/agent-traffic.mjs';
@@ -54,25 +53,6 @@ const utcStamp = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
   timeZoneName: 'short',
 });
-
-// The table's own stamp, one per row: no year, because a column of them is furniture rather than
-// reading and the full instant is in the `datetime` attribute regardless. The zone label stays:
-// this cell says UTC before the script runs and local after it, and a reader who cannot tell
-// which is looking at a number that means nothing.
-const utcStampCompact = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: 'UTC',
-  timeZoneName: 'short',
-});
-
-/** The hour a bucket started, as an instant. Hour resolution is all the store keeps. */
-function bucketStamp(hour: number): { iso: string; label: string } {
-  const at = hourStart(hour);
-  return { iso: at.toISOString(), label: utcStampCompact.format(at) };
-}
 
 const renderedStamp = { iso: renderedAt.toISOString(), label: utcStamp.format(renderedAt) };
 
@@ -215,7 +195,6 @@ function shortMetricName(name: string): string {
                   <th scope="col" class="n">7 days</th>
                   <th scope="col" class="n">30 days</th>
                   <th scope="col" class="n">Total</th>
-                  <th scope="col">Last fetched</th>
                 </tr>
               </thead>
               <tbody>
@@ -225,11 +204,6 @@ function shortMetricName(name: string): string {
                     <td class="n">{counts.format(row.week)}</td>
                     <td class="n">{counts.format(row.month)}</td>
                     <td class="n">{counts.format(row.total)}</td>
-                    <td>
-                      <time datetime={bucketStamp(row.lastHour).iso} data-local-time="compact">
-                        {bucketStamp(row.lastHour).label}
-                      </time>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -776,8 +750,6 @@ function shortMetricName(name: string): string {
     white-space: nowrap;
   }
 
-  .traffic td time { white-space: nowrap; }
-
   .family-note { color: var(--color-muted); }
 
   .footnote {
@@ -1073,25 +1045,21 @@ function shortMetricName(name: string): string {
    * page without a fresh document (see the other components in src/components).
    */
   function localiseTimes(): void {
-    const base = {
+    const local = new Intl.DateTimeFormat(undefined, {
       day: 'numeric',
       month: 'short',
+      year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       timeZoneName: 'short',
-    } as const;
-    // `data-local-time="compact"` drops the year, mirroring the two server-side formatters: one
-    // stamp for the whole page wants it, a column of them does not.
-    const local = new Intl.DateTimeFormat(undefined, { ...base, year: 'numeric' });
-    const localCompact = new Intl.DateTimeFormat(undefined, base);
+    });
 
     for (const element of document.querySelectorAll<HTMLTimeElement>('time[data-local-time]')) {
       const iso = element.getAttribute('datetime');
       if (!iso) continue;
       const at = new Date(iso);
       if (Number.isNaN(at.getTime())) continue;
-      const format = element.dataset.localTime === 'compact' ? localCompact : local;
-      element.textContent = format.format(at);
+      element.textContent = local.format(at);
     }
   }
 

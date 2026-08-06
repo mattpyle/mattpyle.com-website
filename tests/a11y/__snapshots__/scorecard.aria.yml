@@ -68,21 +68,18 @@
     - region "By surface":
       - table "By surface":
         - rowgroup:
-          - row /Surface 7 days \d+ days Total Last fetched/:
+          - row /Surface 7 days \d+ days Total/:
             - columnheader "Surface"
             - columnheader "7 days"
             - columnheader /\d+ days/
             - columnheader "Total"
-            - columnheader "Last fetched"
         - rowgroup:
-          - row "· · · · ·":
+          - row "· · · ·":
             - cell "·":
               - code: ·
             - cell "·"
             - cell "·"
             - cell "·"
-            - cell "·":
-              - time: ·
     - heading "By client type" [level=3]
     - region "By client type":
       - table "By client type":

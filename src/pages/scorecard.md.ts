@@ -1,11 +1,6 @@
 import type { APIRoute } from 'astro';
 import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
-import {
-  flattenDayHashes,
-  hourStart,
-  readAgentTraffic,
-  summarizeTraffic,
-} from '../lib/agent-traffic.mjs';
+import { flattenDayHashes, readAgentTraffic, summarizeTraffic } from '../lib/agent-traffic.mjs';
 
 /**
  * The Markdown representation of /scorecard.
@@ -110,14 +105,8 @@ export const GET: APIRoute = async ({ request }) => {
       ),
       '### By surface',
       table(
-        ['Surface', '7 days', '30 days', 'Total', 'Last fetched'],
-        summary.surfaces.rows.map((row) => [
-          row.path ?? '',
-          row.week,
-          row.month,
-          row.total,
-          utcStamp(hourStart(row.lastHour)),
-        ])
+        ['Surface', '7 days', '30 days', 'Total'],
+        summary.surfaces.rows.map((row) => [row.path ?? '', row.week, row.month, row.total])
       ),
       '### By client type',
       table(
