@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { compareChangelogEntries } from '../lib/changelog-order';
+import { formatSkillsIndexLines } from '../lib/agent-skills.mjs';
+import skillsIndex from '../data/agent-skills-index.json';
 
 export const GET: APIRoute = async ({ site }) => {
   // Derive the host from astro.config.mjs `site` so llms.txt can never emit a
@@ -45,7 +47,9 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('');
   lines.push(`- [WebMCP tool manifest](${base}/webmcp/tools.json): names, descriptions, and input schemas for the tools above, generated from the live tool objects.`);
   lines.push(`- [WebMCP content index](${base}/webmcp/index.json): the JSON index those tools read — author entity, section map, and every published article, build, and changelog entry.`);
-  lines.push(`- [Agent Skills index](${base}/.well-known/agent-skills/index.json): the Agent Skills Discovery RFC v0.2.0 index. It lists one skill, [using-mattpyle-com](${base}/.well-known/agent-skills/using-mattpyle-com/SKILL.md), which teaches an agent how to work with this site's surfaces. Each entry carries a sha256 digest of the artifact.`);
+  // Enumerated from the committed index rather than named in prose, so publishing a skill stays
+  // "add a file in src/data/skills/" with no edit here.
+  lines.push(...formatSkillsIndexLines(base, skillsIndex.skills));
   lines.push(`- [A2A Agent Card](${base}/.well-known/agent-card.json): this site as an A2A agent. One skill, ask-about-site, answered by a JSON-RPC 2.0 endpoint at ${base}/a2a (A2A 1.0, method SendMessage, no auth, read-only). Full calling notes are in agents.md.`);
   lines.push(`- [llms-full.txt](${base}/llms-full.txt): the full plain-text content export.`);
   lines.push(`- [agents.md](${base}/agents.md): how to read and cite this site.`);
