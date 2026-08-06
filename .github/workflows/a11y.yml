@@ -69,8 +69,20 @@ jobs:
       # puts astro build into hybrid "server" mode, which nests prerendered
       # static output under dist/client/ instead of writing straight into
       # dist/ — serve dist/client, not dist, or every route here 404s.
+      #
+      # Not `npx serve` any more: /scorecard renders on demand (its Agent
+      # traffic section reads the hit store per request), so a static server
+      # 404s one of the seven routes audited below. serve-built-site.mjs serves
+      # the same directory and falls back to the adapter's render function,
+      # which is the ordering Vercel itself uses.
+      #
+      # AGENT_TRAFFIC_FIXTURE makes that section render its tables rather than
+      # its store-unavailable state, so axe actually scans the markup that
+      # ships. No store exists on a runner, and never should.
       - name: Serve built site
-        run: npx serve dist/client -l 4321 &
+        env:
+          AGENT_TRAFFIC_FIXTURE: '1'
+        run: node scripts/serve-built-site.mjs --port 4321 &
 
       - name: Wait for local server
         run: npx wait-on http://localhost:4321 --timeout 30000

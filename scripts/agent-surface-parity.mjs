@@ -17,6 +17,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { AGENT_SURFACE_PATHS, WELL_KNOWN_SURFACE_PATHS } from '../src/lib/agent-surfaces.mjs';
 
 const WATCHED_HEADERS = ['content-type', 'cache-control', 'vary', 'access-control-allow-origin', 'location'];
@@ -33,6 +34,32 @@ const PROBES = [
   { path: '/changelog/', accept: 'text/html' },
 ];
 
+// Fields that change on every deploy without anything about the surface changing. The two WebMCP
+// catalogs carry a build-time `generated: new Date().toISOString()`, so a clean deploy prints two
+// differences with identical byte counts and changed hashes — a false positive this script hit on
+// three consecutive compares before it was stripped. `bytes` still records the real response, so a
+// body that actually grew or shrank is still caught; only the hash is taken over the normalized
+// JSON. A capture taken before this change is not comparable to one taken after it, for these two
+// rows: retake both sides.
+const VOLATILE_JSON_FIELDS = {
+  '/webmcp/tools.json': ['generated'],
+  '/webmcp/index.json': ['generated'],
+};
+
+/** The bytes to hash: the response as served, minus any field listed above. */
+export function hashableBody(path, body) {
+  const fields = VOLATILE_JSON_FIELDS[path];
+  if (!fields) return body;
+  try {
+    const parsed = JSON.parse(body.toString('utf8'));
+    for (const field of fields) delete parsed[field];
+    return Buffer.from(JSON.stringify(parsed), 'utf8');
+  } catch {
+    // Not JSON at all is itself a finding — hash what arrived and let the compare report it.
+    return body;
+  }
+}
+
 async function probe(origin, { path, accept }) {
   const response = await fetch(new URL(path, origin), { headers: { accept, 'user-agent': 'agent-surface-parity' } });
   const body = Buffer.from(await response.arrayBuffer());
@@ -45,7 +72,7 @@ async function probe(origin, { path, accept }) {
     key: `${path} (accept: ${accept})`,
     status: response.status,
     bytes: body.length,
-    sha256: createHash('sha256').update(body).digest('hex'),
+    sha256: createHash('sha256').update(hashableBody(path, body)).digest('hex'),
     headers,
   };
 }
@@ -87,8 +114,14 @@ function compare(beforeFile, afterFile) {
   return 1;
 }
 
-const [command, ...args] = process.argv.slice(2);
-if (command === 'capture') {
+// Guarded so tests/agent-surface-parity.test.mjs can import hashableBody without the CLI
+// parsing the test runner's argv and exiting 2 underneath it.
+const isEntryModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+const [command, ...args] = isEntryModule ? process.argv.slice(2) : ['noop'];
+if (command === 'noop') {
+  // imported, not run
+} else if (command === 'capture') {
   const [origin, outfile] = args;
   if (!origin || !outfile) {
     console.error('usage: agent-surface-parity.mjs capture <origin> <outfile>');

@@ -6,7 +6,7 @@ import sitemap from '@astrojs/sitemap';
 import vercel from '@astrojs/vercel';
 import { readWritingMetadata } from './scripts/lib/writing-metadata.mjs';
 import { SITE_ORIGIN } from './src/data/site-origin.mjs';
-import { resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
+import { ON_DEMAND_PAGES, resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
 import { PRE_PAINT_APPEARANCE_SCRIPT } from './src/lib/pre-paint-appearance.mjs';
 
 // Astro hashes the scripts it bundles. It does not hash is:inline scripts, in
@@ -71,6 +71,11 @@ export default defineConfig({
   },
   integrations: [
     sitemap({
+      // The integration builds its list by walking the pages the build emitted, so an on-demand
+      // page is invisible to it — /scorecard would silently drop out of the sitemap the moment it
+      // stopped prerendering. These are declared instead, and still pass through `filter` and
+      // `serialize`, so they get the same lastmod policy as everything else.
+      customPages: ON_DEMAND_PAGES.map((pathname) => `${SITE_ORIGIN}${pathname}`),
       filter: (url) => {
         const writingId = collectionSlug(url, 'writing');
         if (writingId) return !writingMetadata.get(writingId)?.draft;

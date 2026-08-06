@@ -116,12 +116,25 @@ export const PAGES: PageSpec[] = [
   {
     name: 'scorecard',
     path: '/scorecard',
-    why: 'Scorecard template plus the details/summary run history disclosures',
+    why: 'Scorecard template, the details/summary run history disclosures, and the live Agent traffic tables',
     // Every scorecard run rewrites src/data/scorecard-runs.json, so every number,
     // date and commentary line on this page is content-variable by construction.
     // The four metric names are not, and they are the part worth guarding.
-    snapshotKeepFirst: ['.history-run'],
+    //
+    // The Agent traffic section is content-variable in a stronger sense again: it
+    // reads a live store per request. The suite serves it with AGENT_TRAFFIC_FIXTURE
+    // set (see playwright.config.ts), so the row COUNT is deterministic and the
+    // shape of a row is worth guarding — one row per table, with its cells redacted.
+    snapshotKeepFirst: [
+      '.history-run',
+      'table[aria-labelledby="traffic-surfaces-title"] tbody tr',
+      'table[aria-labelledby="traffic-clients-title"] tbody tr',
+      'table[aria-labelledby="traffic-markdown-title"] tbody tr',
+    ],
     snapshotRedact: [
+      '.freshness',
+      '#agent-traffic .num',
+      '#agent-traffic tbody tr',
       '#latest-run-title',
       '.latest-time',
       '.run-verdict',

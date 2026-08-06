@@ -53,12 +53,69 @@
     - term: Entry
     - definition: ·
     - paragraph: ·
+  - region "Agent traffic":
+    - heading "Agent traffic" [level=2]
+    - paragraph:
+      - text: ·
+      - time: ·
+    - paragraph: /Requests, last \d+ hours/
+    - paragraph: ·
+    - paragraph: Requests, last 7 days
+    - paragraph: ·
+    - paragraph: Requests, total
+    - paragraph: ·
+    - heading "By surface" [level=3]
+    - region "By surface":
+      - table "By surface":
+        - rowgroup:
+          - row /Surface 7 days \d+ days Total/:
+            - columnheader "Surface"
+            - columnheader "7 days"
+            - columnheader /\d+ days/
+            - columnheader "Total"
+        - rowgroup:
+          - row "· · · ·":
+            - cell "·":
+              - code: ·
+            - cell "·"
+            - cell "·"
+            - cell "·"
+    - heading "By client type" [level=3]
+    - region "By client type":
+      - table "By client type":
+        - rowgroup:
+          - row /Client 7 days \d+ days Total/:
+            - columnheader "Client"
+            - columnheader "7 days"
+            - columnheader /\d+ days/
+            - columnheader "Total"
+        - rowgroup:
+          - row "· · · ·":
+            - cell "·"
+            - cell "·"
+            - cell "·"
+            - cell "·"
+    - heading "Markdown negotiation" [level=3]
+    - region "Markdown negotiation":
+      - table "Markdown negotiation":
+        - rowgroup:
+          - row /Page 7 days \d+ days Total/:
+            - columnheader "Page"
+            - columnheader "7 days"
+            - columnheader /\d+ days/
+            - columnheader "Total"
+        - rowgroup:
+          - row "· · · ·":
+            - cell "·":
+              - code: ·
+            - cell "·"
+            - cell "·"
+            - cell "·"
   - region "Run history":
     - paragraph: Archive
     - heading "Run history" [level=2]
     - paragraph: ·
     - group:
-      - time: ·
       - time: ·
       - group "·"
       - group "·"

@@ -23,7 +23,14 @@ const outputRoots = [primaryRoot, join(root, '.vercel', 'output', 'static')].fil
 
 // The source routes that answer the curated sibling URLs. Checked as files rather than
 // trusted, so deleting one turns into a build failure instead of a live 404.
-const CURATED_ROUTES = ['src/pages/writing/[slug].md.ts', 'src/pages/changelog/[slug].md.ts'];
+const CURATED_ROUTES = [
+  'src/pages/writing/[slug].md.ts',
+  'src/pages/changelog/[slug].md.ts',
+  // /scorecard renders on demand, so no built HTML exists for the emit step to convert; this
+  // route is the page's only markdown sibling. Deleting it would leave the negotiation contract
+  // silently falling back to HTML on one of the site's seven audited routes.
+  'src/pages/scorecard.md.ts',
+];
 for (const route of CURATED_ROUTES) {
   assert.ok(existsSync(join(root, route)), `curated markdown route is missing: ${route}`);
 }
