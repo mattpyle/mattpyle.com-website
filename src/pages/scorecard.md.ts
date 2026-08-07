@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
-import { flattenDayHashes, readAgentTraffic, summarizeTraffic } from '../lib/agent-traffic.mjs';
+import { flattenTraffic, readAgentTraffic, summarizeTraffic } from '../lib/agent-traffic.mjs';
 
 /**
  * The Markdown representation of /scorecard.
@@ -49,7 +49,7 @@ export const GET: APIRoute = async ({ request }) => {
 
   const renderedAt = new Date();
   const traffic = await readAgentTraffic({ now: renderedAt });
-  const summary = traffic.ok ? summarizeTraffic(flattenDayHashes(traffic.dayHashes), renderedAt) : null;
+  const summary = traffic.ok ? summarizeTraffic(flattenTraffic(traffic), renderedAt) : null;
   const passes = SCORECARD.metrics.filter((metric) => metric.status === 'Pass').length;
 
   const sections: string[] = [

@@ -198,6 +198,37 @@ export function dayKeyFor(day) {
   return `hits:${KEY_VERSION}:day:${day}`;
 }
 
+/**
+ * The rollup keys. Nothing in the write path below ever touches these: they are written by the
+ * read path (src/lib/agent-traffic.mjs) when it notices a day old enough that no rendered number
+ * can still reach its hours. They live here because the schema lives here, both directions.
+ *
+ * Month keys sit BESIDE the v1 day keys rather than reshaping them. A day hash still means exactly
+ * what it meant; a month hash is the same counts with the hour dropped, because past the longest
+ * rolling window the hour is provably unused (see agent-traffic.mjs for that argument).
+ */
+
+/** The set holding every UTC month that has a rollup hash, so a reader never has to SCAN. */
+export const MONTHS_KEY = `hits:${KEY_VERSION}:months`;
+
+/** The hash holding one rolled-up UTC month. @param {string} month YYYY-MM, UTC @returns {string} */
+export function monthKeyFor(month) {
+  return `hits:${KEY_VERSION}:month:${month}`;
+}
+
+/** The lock a render takes before it moves any day into a month. */
+export const ROLLUP_LOCK_KEY = `hits:${KEY_VERSION}:rollup`;
+
+/** The UTC month a stored day belongs to. @param {string} day YYYY-MM-DD @returns {string} */
+export function monthOf(day) {
+  return day.slice(0, 7);
+}
+
+/** Is this what the schema calls a month? Guards a key built from whatever SMEMBERS returned. */
+export function isCounterMonth(month) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+}
+
 /** The field delimiter inside a day hash. Cannot appear in an hour, event, family or path. */
 const FIELD_DELIMITER = '|';
 
@@ -222,6 +253,33 @@ export function parseHitField(field) {
 }
 
 /**
+ * A day-hash row, as the month-hash field it rolls up into: the same three components with the
+ * hour dropped. Three parts rather than four is what makes the two field shapes impossible to
+ * confuse, in either direction, without a version bump.
+ *
+ * @param {{ event: string, family: string, path: string }} row
+ * @returns {string}
+ */
+export function monthFieldFor({ event, family, path }) {
+  return [event, family, path].join(FIELD_DELIMITER);
+}
+
+/**
+ * A month-hash field, back into its parts. Same contract as parseHitField(): a field that is not
+ * exactly what the schema promises is returned as null and dropped by the caller, never guessed at.
+ *
+ * @param {string} field
+ * @returns {{ event: string, family: string, path: string } | null}
+ */
+export function parseMonthField(field) {
+  const parts = field.split(FIELD_DELIMITER);
+  if (parts.length !== 3) return null;
+  const [event, family, path] = parts;
+  if (!EVENTS.includes(event) || !family || !path) return null;
+  return { event, family, path };
+}
+
+/**
  * The whole key schema, in one function, so the render layer reads it from here rather than
  * rebuilding string literals that can drift.
  *
@@ -233,13 +291,23 @@ export function parseHitField(field) {
  * | `hits:v1:days` | set of UTC days | which days exist, so a trend view never has to SCAN |
  * | `hits:v1:total` | counter | the one number the retro homepage widget wants |
  *
+ * And three more that no hit ever writes, added 2026-08-06 so a render's cost stops growing with
+ * the site's age. The read path writes them; see src/lib/agent-traffic.mjs.
+ *
+ * | Key | Type | Answers |
+ * |---|---|---|
+ * | `hits:v1:month:<utc-month>` | hash, field `<event>\|<family>\|<path>` | one whole UTC month, hour dropped, in one HGETALL |
+ * | `hits:v1:months` | set of UTC months | which months exist, the month set's twin |
+ * | `hits:v1:rollup` | string with a TTL | the lock one render holds while it folds days into a month |
+ *
  * The hour leads the field so a prefix match answers "this hour" without parsing, and so the
  * fields of a day sort into chronological order.
  *
  * A day's hash holds at most (24 hours x 2 events x ~30 families x ~40 paths) fields and
  * realistically a few dozen, so one round trip answers totals, per-client, per-path and per-hour
- * for any window, in any timezone. Nothing expires: per-day keys are the history, which is the
- * whole reason the card insisted on them from day one.
+ * for any window, in any timezone. Nothing expires and nothing is thrown away: a day past every
+ * rolling window is folded into its month rather than deleted, so the all-time numbers are
+ * unchanged and only the hour, which nothing renders at that age, is gone.
  *
  * The field delimiter is `|`, which cannot appear in an hour, an event, a family or a bucketed
  * path.

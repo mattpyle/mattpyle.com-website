@@ -21,9 +21,24 @@
  * 2. Fail soft. A missing env var, a slow store, a malformed field: all of them are a page that
  *    renders without the section's numbers, never a page that 500s. The conformance sections on
  *    /scorecard render from committed JSON and must be unaffected by anything in here.
+ *
+ * This module also owns the monthly rollup, which is the only thing on the read side that writes.
+ * See "The monthly rollup" below for why it lives here and what it is allowed to lose.
  */
 
-import { DAYS_KEY, dayKeyFor, parseHitField, readStoreConfig } from './agent-hits.mjs';
+import {
+  DAYS_KEY,
+  MONTHS_KEY,
+  ROLLUP_LOCK_KEY,
+  dayKeyFor,
+  isCounterMonth,
+  monthFieldFor,
+  monthKeyFor,
+  monthOf,
+  parseHitField,
+  parseMonthField,
+  readStoreConfig,
+} from './agent-hits.mjs';
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -90,6 +105,46 @@ export function flattenDayHashes(dayHashes) {
 }
 
 /**
+ * Month hashes in, one flat row per bucket out, with `hour: null`.
+ *
+ * A null hour is not a missing value, it is the shape of the fact: a rolled-up month knows what
+ * was fetched and how often, and deliberately no longer knows when within the month. Everything
+ * downstream treats a null hour as "inside no rolling window", which is exactly true — a month
+ * only ever gets rolled up once every window has moved past every hour in it.
+ *
+ * Same drop-rather-than-guess rule as flattenDayHashes().
+ *
+ * @param {Array<{ month: string, fields: Record<string, string | number> }>} monthHashes
+ * @returns {Array<{ hour: null, event: string, family: string, path: string, count: number }>}
+ */
+export function flattenMonthHashes(monthHashes) {
+  const rows = [];
+  for (const { fields } of monthHashes ?? []) {
+    for (const [field, rawCount] of Object.entries(fields ?? {})) {
+      const parsed = parseMonthField(field);
+      if (!parsed) continue;
+      const count = Number(rawCount);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      rows.push({ hour: null, event: parsed.event, family: parsed.family, path: parsed.path, count });
+    }
+  }
+  return rows;
+}
+
+/**
+ * A whole read, flattened: the recent days and the rolled-up months as one row list.
+ *
+ * The one function a page should call, so neither /scorecard nor /scorecard.md can render a
+ * lopsided total by forgetting half the store.
+ *
+ * @param {{ dayHashes?: Array<{ day: string, fields: Record<string, string> }>,
+ *           monthHashes?: Array<{ month: string, fields: Record<string, string> }> }} read
+ */
+export function flattenTraffic({ dayHashes = [], monthHashes = [] } = {}) {
+  return [...flattenDayHashes(dayHashes), ...flattenMonthHashes(monthHashes)];
+}
+
+/**
  * The oldest hour bucket inside a window ending now.
  *
  * A window of N hours is the last N hour buckets, the newest of which is the one in progress. So
@@ -105,7 +160,20 @@ export function windowStart(nowHour, hours) {
 }
 
 /**
- * @param {Array<{ hour: number, count: number }>} rows
+ * Is this row inside the given rolling window?
+ *
+ * A rolled-up month row (`hour: null`) is inside no window and every all-time total. That is not a
+ * fallback, it is the invariant the rollup is built on: a day is only folded once every window has
+ * moved past its last hour, so a month row answering "no" here is answering correctly.
+ *
+ * @param {{ hour: number | null }} row @param {number} nowHour @param {number} hours
+ */
+function inWindow(row, nowHour, hours) {
+  return row.hour !== null && row.hour >= windowStart(nowHour, hours);
+}
+
+/**
+ * @param {Array<{ hour: number | null, count: number }>} rows
  * @param {number} nowHour
  */
 function windowTotals(rows, nowHour) {
@@ -113,7 +181,7 @@ function windowTotals(rows, nowHour) {
   for (const row of rows) {
     totals.total += row.count;
     for (const [id, hours] of Object.entries(WINDOW_HOURS)) {
-      if (row.hour >= windowStart(nowHour, hours)) totals[id] += row.count;
+      if (inWindow(row, nowHour, hours)) totals[id] += row.count;
     }
   }
   return totals;
@@ -121,7 +189,7 @@ function windowTotals(rows, nowHour) {
 
 /**
  * @typedef {{ path?: string, family?: string, total: number, day: number, week: number,
- *             month: number, lastHour: number }} TallyRow
+ *             month: number, lastHour: number | null }} TallyRow
  */
 
 /**
@@ -145,9 +213,13 @@ function tally(rows, keyOf, nowHour, keyName) {
     }
     group.total += row.count;
     for (const [id, hours] of Object.entries(WINDOW_HOURS)) {
-      if (row.hour >= windowStart(nowHour, hours)) group[id] += row.count;
+      if (inWindow(row, nowHour, hours)) group[id] += row.count;
     }
-    if (row.hour > group.lastHour) group.lastHour = row.hour;
+    // A group seen only in rolled-up months has no last hour to report, which is the one thing the
+    // rollup gives up. Nothing renders this today; the tables render the three window columns.
+    if (row.hour !== null && (group.lastHour === null || row.hour > group.lastHour)) {
+      group.lastHour = row.hour;
+    }
   }
 
   const sorted = [...groups.values()].sort(
@@ -162,13 +234,15 @@ function tally(rows, keyOf, nowHour, keyName) {
  * The headline numbers count both event classes: a surface fetch and a negotiated-markdown serve
  * are both an agent asking this site for something, and the page says which is which underneath.
  *
- * @param {Array<{ hour: number, event: string, family: string, path: string, count: number }>} rows
+ * @param {Array<{ hour: number | null, event: string, family: string, path: string,
+ *                 count: number }>} rows
  * @param {Date} now
  */
 export function summarizeTraffic(rows, now = new Date()) {
   const nowHour = epochHour(now);
   const surfaceRows = rows.filter((row) => row.event === 'surface');
   const markdownRows = rows.filter((row) => row.event === 'markdown');
+  const hours = rows.map((row) => row.hour).filter((hour) => hour !== null);
 
   return {
     counted: rows.length > 0,
@@ -178,9 +252,149 @@ export function summarizeTraffic(rows, now = new Date()) {
     surfaces: tally(surfaceRows, (row) => row.path, nowHour, 'path'),
     clients: tally(rows, (row) => row.family, nowHour, 'family'),
     pages: tally(markdownRows, (row) => row.path, nowHour, 'path'),
-    /** The newest bucket anything landed in, for "last counted". Null when nothing has. */
-    lastHour: rows.length === 0 ? null : Math.max(...rows.map((row) => row.hour)),
+    /**
+     * The newest bucket anything landed in, for "last counted". Null when nothing has, and null
+     * when everything there is has been rolled up into months, which is the same statement: no
+     * hour is known.
+     */
+    lastHour: hours.length === 0 ? null : Math.max(...hours),
   };
+}
+
+// ── The monthly rollup ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Why this exists: before it, one render cost `1 + N` Redis commands where N was every day the
+ * site had ever counted, so the cost of an attack grew with the site's age while the cost of
+ * mounting it stayed one HTTP request (security audit, 2026-08-06, finding 2). Now a render costs
+ * roughly 33 days plus one command per month of site age, which grows twelve a year rather than
+ * three hundred and sixty-five.
+ *
+ * Why dropping the hour is not a loss: every number this module renders is either a rolling window
+ * over the last 720 hours or an all-time tally with no time frame at all. Past the window, hour
+ * resolution is provably unread. The rollup keeps every count and discards only the part of the
+ * key that nothing can ask about any more.
+ *
+ * This is a deliberate narrowing of the UTC-hour storage decision recorded in CLAUDE.md, which
+ * asks for hour granularity "or finer where practical". Recent history keeps it; history past
+ * every window keeps month granularity instead.
+ */
+
+/**
+ * How far past the longest window a day has to be before it can be folded.
+ *
+ * The window itself is the correctness boundary; this margin is the safety belt on it. Two whole
+ * days covers a render whose clock is skewed, a rollup that started just before a window boundary
+ * and finished after it, and the fact that eligibility is judged on a day name while the window is
+ * judged on an hour. Nothing renders differently for a wider margin — it only means a handful of
+ * extra day keys survive a little longer.
+ */
+export const ROLLUP_MARGIN_HOURS = 48;
+
+/** The hour bucket a day must be entirely older than to be eligible. @param {Date} now */
+export function rollupCutoffHour(now) {
+  return windowStart(epochHour(now), WINDOW_HOURS.month) - ROLLUP_MARGIN_HOURS;
+}
+
+/**
+ * Which of these days can be folded, judged on the day's LAST possible hour bucket (its 23:00), so
+ * a day is only ever eligible when no hour in it can still fall inside a window.
+ *
+ * A day name that is not a date is never eligible: it cannot be parsed, so it is left alone for a
+ * human to find rather than quietly rewritten.
+ *
+ * @param {string[]} days @param {Date} now @returns {string[]}
+ */
+export function rollupEligibleDays(days, now) {
+  const cutoff = rollupCutoffHour(now);
+  return days.filter((day) => {
+    const lastHour = bucketHour(day, '23');
+    return lastHour !== null && lastHour < cutoff;
+  });
+}
+
+/**
+ * One day hash's fields, summed into the month fields they roll up into.
+ *
+ * Drops exactly what flattenDayHashes() drops, by the same rules, which is what makes the rollup
+ * numerically invisible: a field the reader would have ignored is not smuggled into a total by
+ * being folded.
+ *
+ * @param {Record<string, string | number>} fields
+ * @returns {Record<string, number>}
+ */
+export function foldDayFields(fields) {
+  /** @type {Record<string, number>} */
+  const folded = {};
+  for (const [field, rawCount] of Object.entries(fields ?? {})) {
+    const parsed = parseHitField(field);
+    if (!parsed) continue;
+    const count = Number(rawCount);
+    if (!Number.isFinite(count) || count <= 0) continue;
+    const monthField = monthFieldFor(parsed);
+    folded[monthField] = (folded[monthField] ?? 0) + count;
+  }
+  return folded;
+}
+
+/**
+ * The commands that fold these day hashes into their months.
+ *
+ * ORDER IS THE CRASH SAFETY, and it is chosen so every interruption undercounts rather than
+ * double-counts, matching the posture the whole counter inherits:
+ *
+ * 1. `SREM` the day from the day set. After this the day is invisible to a reader, so no second
+ *    render can fold it again even if this one dies on the next line.
+ * 2. `SADD` the month to the month set, before anything lands in the month hash, so a hash can
+ *    never exist unreachably.
+ * 3. `HINCRBY` the folded counts.
+ * 4. `DEL` the day hash.
+ *
+ * Interrupted between 1 and 3, one old day's counts are gone from the all-time total. Interrupted
+ * between 3 and 4, an orphan day hash is left behind that nothing reads. The reverse order would
+ * risk adding a day's counts to its month twice, which is the one failure that would show up on
+ * the page as a number that grew on its own.
+ *
+ * @param {Array<{ day: string, fields: Record<string, string> }>} dayHashes
+ * @returns {string[][]}
+ */
+export function rollupCommands(dayHashes) {
+  const commands = [];
+  for (const { day, fields } of dayHashes) {
+    const month = monthOf(day);
+    const folded = foldDayFields(fields);
+    commands.push(['SREM', DAYS_KEY, day]);
+    if (Object.keys(folded).length > 0) {
+      commands.push(['SADD', MONTHS_KEY, month]);
+      for (const [field, count] of Object.entries(folded)) {
+        commands.push(['HINCRBY', monthKeyFor(month), field, String(count)]);
+      }
+    }
+    commands.push(['DEL', dayKeyFor(day)]);
+  }
+  return commands;
+}
+
+/**
+ * How long the rollup lock lives. Long enough to outlast a render that is mid-rollup, short enough
+ * that a lost lock costs one missed rollup rather than a stuck one.
+ */
+export const ROLLUP_LOCK_TTL_SECONDS = 60;
+
+/**
+ * Take the lock, or find out somebody else has it. `SET ... NX` answers `OK` or null, so the race
+ * is settled by the store in one command rather than by a read-then-write this code would lose.
+ *
+ * The lock is never released explicitly: the TTL is the release. If the holder dies mid-rollup,
+ * nothing rolls up for up to a minute and the next render retries — and because rollupCommands()
+ * removes each day from the set before it folds it, the retry sees only the days the dead render
+ * never reached. The failure mode of a lost lock is therefore a delay, plus at most the counts of
+ * whichever single day it died inside.
+ *
+ * @param {string} token written only so a human reading the store can see which render holds it
+ */
+export function rollupLockCommand(token) {
+  return ['SET', ROLLUP_LOCK_KEY, token, 'NX', 'EX', String(ROLLUP_LOCK_TTL_SECONDS)];
 }
 
 // ── Transport ────────────────────────────────────────────────────────────────────────────────
@@ -232,12 +446,21 @@ async function pipeline(store, commands, fetchImpl) {
 }
 
 /**
- * Read the whole store: which days exist, then every day's hash.
+ * Read the whole store: which days and months exist, then one hash for each.
  *
- * Two round trips, because the day list has to come back before the hashes can be asked for. The
- * second is pipelined into one request whatever the day count. Reading every day is what the
- * all-time total costs, and at this site's scale that is a few dozen fields per day and a handful
- * of days; a monthly rollup key is the named later fix when it stops being.
+ * Two round trips, because the two sets have to come back before the hashes can be asked for. The
+ * second is pipelined into one request whatever the count. The bill for a render is therefore
+ * `2 + D + M`, where D is capped by the rollup at around 33 recent days and M grows twelve a year.
+ *
+ * The rollup rides along rather than costing a third round trip: eligibility is decided from the
+ * day NAMES, which the first round trip already returned, so the lock attempt is appended to the
+ * second pipeline and only exists at all on a render that has something to fold.
+ *
+ * A render that wins the lock does the fold before returning, which is one extra pipeline on
+ * roughly one render a day. Awaited rather than fired and forgotten because there is no
+ * `waitUntil` in a page render, and an unawaited promise here is a promise the platform may kill
+ * halfway. The days it folds are still returned to this caller: the fold is invisible to the
+ * numbers on the page, which is the whole design.
  *
  * The fixture branch is for the accessibility suite and local preview: no store exists there, and
  * a section that only ever renders its unavailable state is a section whose tables were never
@@ -245,32 +468,81 @@ async function pipeline(store, commands, fetchImpl) {
  * set in production, and it produces its buckets relative to `now` so every window is populated.
  *
  * @param {{ env?: Record<string, string | undefined>, fetchImpl?: typeof fetch, now?: Date }} options
- * @returns {Promise<{ ok: true, dayHashes: Array<{ day: string, fields: Record<string, string> }> }
+ * @returns {Promise<{ ok: true, dayHashes: Array<{ day: string, fields: Record<string, string> }>,
+ *                     monthHashes: Array<{ month: string, fields: Record<string, string> }> }
  *                  | { ok: false, reason: string }>}
  */
 export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, now = new Date() } = {}) {
   try {
-    if (env.AGENT_TRAFFIC_FIXTURE === '1') return { ok: true, dayHashes: fixtureDayHashes(now) };
+    if (env.AGENT_TRAFFIC_FIXTURE === '1') {
+      return { ok: true, dayHashes: fixtureDayHashes(now), monthHashes: fixtureMonthHashes(now) };
+    }
 
     const store = readStoreConfig(env);
     if (!store) return { ok: false, reason: 'no-store' };
 
-    const [days] = await pipeline(store, [['SMEMBERS', DAYS_KEY]], fetchImpl);
-    if (!Array.isArray(days) || days.length === 0) return { ok: true, dayHashes: [] };
-
-    const ordered = [...days].map(String).sort();
-    const hashes = await pipeline(
+    const [days, months] = await pipeline(
       store,
-      ordered.map((day) => ['HGETALL', dayKeyFor(day)]),
+      [
+        ['SMEMBERS', DAYS_KEY],
+        ['SMEMBERS', MONTHS_KEY],
+      ],
       fetchImpl
     );
 
-    return {
-      ok: true,
-      dayHashes: ordered.map((day, index) => ({ day, fields: toFieldMap(hashes[index]) })),
-    };
+    const orderedDays = Array.isArray(days) ? [...days].map(String).sort() : [];
+    // Months are filtered where days are not: a month name is used to build a key AND is the thing
+    // the rollup writes, so a garbage member would mint a key rather than just read an absent one.
+    const orderedMonths = Array.isArray(months) ? [...months].map(String).filter(isCounterMonth).sort() : [];
+    if (orderedDays.length === 0 && orderedMonths.length === 0) {
+      return { ok: true, dayHashes: [], monthHashes: [] };
+    }
+
+    const eligible = rollupEligibleDays(orderedDays, now);
+    const commands = [
+      ...orderedDays.map((day) => ['HGETALL', dayKeyFor(day)]),
+      ...orderedMonths.map((month) => ['HGETALL', monthKeyFor(month)]),
+    ];
+    if (eligible.length > 0) commands.push(rollupLockCommand(now.toISOString()));
+
+    const results = await pipeline(store, commands, fetchImpl);
+
+    const dayHashes = orderedDays.map((day, index) => ({ day, fields: toFieldMap(results[index]) }));
+    const monthHashes = orderedMonths.map((month, index) => ({
+      month,
+      fields: toFieldMap(results[orderedDays.length + index]),
+    }));
+
+    // Null means another render holds the lock, which is a reason to do nothing at all: the read
+    // above is already complete and correct, and the fold will happen on some later render.
+    if (eligible.length > 0 && results[commands.length - 1] !== null) {
+      const eligibleSet = new Set(eligible);
+      await rollUp(store, dayHashes.filter(({ day }) => eligibleSet.has(day)), fetchImpl);
+    }
+
+    return { ok: true, dayHashes, monthHashes };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.name || error.message : 'error' };
+  }
+}
+
+/**
+ * Fold these day hashes into their months, and never let that be why a page failed.
+ *
+ * Its own try/catch because it is the one write on the read path: by the time it runs, the caller
+ * already holds every number the page needs, so a store that refuses the fold is a rollup that
+ * happens tomorrow instead. Fail open, exactly like everything else in these two modules.
+ *
+ * @param {{ url: string, token: string }} store
+ * @param {Array<{ day: string, fields: Record<string, string> }>} dayHashes
+ * @param {typeof fetch} fetchImpl
+ */
+async function rollUp(store, dayHashes, fetchImpl) {
+  try {
+    const commands = rollupCommands(dayHashes);
+    if (commands.length > 0) await pipeline(store, commands, fetchImpl);
+  } catch {
+    // Deliberately swallowed: see above. The lock's TTL means the next render retries.
   }
 }
 
@@ -309,4 +581,31 @@ function fixtureDayHashes(now) {
     byDay.set(day, fields);
   }
   return [...byDay.entries()].sort().map(([day, fields]) => ({ day, fields }));
+}
+
+/**
+ * A canned rolled-up month, so the fixture exercises the merged day-plus-month path rather than
+ * only the day half of it.
+ *
+ * Every surface, family and path here already appears in fixtureDayHashes(), on purpose: the
+ * month contributes to the all-time column of rows that exist anyway, so no table gains or loses a
+ * row and the committed aria goldens are untouched. It is dated well before the rollup cutoff so
+ * it reads as what it is.
+ *
+ * @param {Date} now
+ */
+function fixtureMonthHashes(now) {
+  const month = hourStart(epochHour(now) - 24 * 200)
+    .toISOString()
+    .slice(0, 7);
+  return [
+    {
+      month,
+      fields: {
+        'surface|curl|/llms.txt': '12',
+        'surface|googlebot|/sitemap-index.xml': '9',
+        'markdown|claude-user|/writing/accessibility-and-ai': '4',
+      },
+    },
+  ];
 }
