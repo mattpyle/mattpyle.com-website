@@ -1,0 +1,177 @@
+name: Security scan (gitleaks + dependency audit)
+
+# The repo-side half of the security guardrails. GitHub's own controls (secret
+# scanning with push protection, Dependabot, CodeQL, the protect-master
+# ruleset) are the gate that actually stops a secret landing; this is the
+# second opinion that runs on every change and once a month, so "would I know
+# if a key leaked" has an answer that does not depend on remembering to look.
+#
+# Advisory on pull requests, in the posture spellcheck.yml established: a
+# finding turns the check red, and nothing in protect-master requires this
+# check, so it never blocks a merge. Deliberately NOT continue-on-error — that
+# would make the job green on a finding, which is the one outcome that would
+# make this workflow worthless. On the scheduled run the same red is the whole
+# point, since a scheduled run nobody is waiting on is only ever noticed when
+# it fails.
+#
+# No third-party actions, matching the other three workflows: gitleaks arrives
+# as a pinned release binary with its checksum verified, not as
+# gitleaks/gitleaks-action. Version bumps are deliberate edits to the two env
+# values below (checksums come from the release's gitleaks_<v>_checksums.txt).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # 04:23 America/Vancouver on the 1st. Off the hour on purpose: GitHub queues
+  # scheduled runs and drops them under load, and the top of the hour is where
+  # that load is.
+  schedule:
+    - cron: '23 12 1 * *'
+  workflow_dispatch:
+
+# The repo has no Actions secrets and the default token is already read-only.
+# Stated explicitly here because this is the workflow where least privilege
+# should be visible rather than inherited.
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret scan (full history)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: '8.30.1'
+      # sha256 of gitleaks_8.30.1_linux_x64.tar.gz
+      GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+    steps:
+      # fetch-depth: 0 or the full-history claim is a lie — the default shallow
+      # clone gives gitleaks exactly one commit to scan and it reports clean.
+      - name: Checkout (full history, all refs)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          curl -fsSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          mkdir -p gitleaks-bin
+          tar -xzf gitleaks.tar.gz -C gitleaks-bin gitleaks
+          rm gitleaks.tar.gz
+          echo "${RUNNER_TEMP}/gitleaks-bin" >> "$GITHUB_PATH"
+
+      # The whole history, not a diff of the PR: 200-odd commits scan in about a
+      # second, so the diff-only mode buys nothing and gives up the one thing
+      # this job is for, which is catching a secret that landed on some branch
+      # before anyone thought to look. --log-opts=--all reaches the
+      # remote-tracking refs too, so branches other than this one are covered.
+      #
+      # --redact because these logs are public. A finding should say enough to
+      # act on and not one character more; the report artifact is not uploaded
+      # for the same reason.
+      - name: Scan git history with gitleaks
+        id: gitleaks
+        run: |
+          set -uo pipefail
+          # GitHub runs `run:` steps under `bash -e`, so the gitleaks pipeline
+          # below would abort the step the moment it found something — before
+          # writing a word of the summary, in exactly the case the summary is
+          # for. The step's exit status is set deliberately at the end instead.
+          set +e
+          gitleaks git . \
+            --log-opts=--all \
+            --redact \
+            --no-banner \
+            --no-color \
+            --verbose \
+            --report-format json \
+            --report-path "${RUNNER_TEMP}/gitleaks-report.json" \
+            2>&1 | tee "${RUNNER_TEMP}/gitleaks-log.txt"
+          status=${PIPESTATUS[0]}
+
+          # Both summaries go through `tee` rather than a plain append: the run
+          # summary is not readable from `gh run view`, so a summary that only
+          # ever landed there could silently be rendering its fallback branch
+          # and nobody would know.
+          findings=0
+          if [ -f "${RUNNER_TEMP}/gitleaks-report.json" ]; then
+            findings=$(jq 'length' "${RUNNER_TEMP}/gitleaks-report.json")
+          fi
+
+          # Read the commit count off gitleaks rather than off `git rev-list
+          # --all --count`, which is a larger number (274 vs 202 when this was
+          # written) and would misreport it. `git log -p` emits no diff for a
+          # merge commit, so gitleaks skips them; the content of a merge is
+          # already carried by the parents it scanned, so the gap is in the
+          # counting, not in the coverage. --no-color above is what makes this
+          # line greppable.
+          scanned=$(grep -oE '[0-9]+ commits scanned' "${RUNNER_TEMP}/gitleaks-log.txt" | tail -1 | cut -d' ' -f1)
+
+          {
+            echo "## gitleaks ${GITLEAKS_VERSION}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Scope | full history, all refs (\`--log-opts=--all\`) |"
+            echo "| Commits scanned | ${scanned:-unreported} of $(git rev-list --all --count) reachable (merges carry no diff) |"
+            echo "| Findings | ${findings} |"
+            echo "| Exit code | ${status} |"
+            echo
+            if [ "$status" -eq 0 ]; then
+              echo "No leaks found."
+            elif [ "$findings" -gt 0 ]; then
+              echo "**${findings} finding(s).** Details are redacted in the log above; re-run locally to see them:"
+              echo
+              echo '```'
+              echo "gitleaks git . --log-opts=--all --verbose"
+              echo '```'
+            else
+              echo "**gitleaks exited ${status} without producing findings** — that is a tool or environment error, not a leak."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit "$status"
+
+      # Scheduled and manual runs only. On a PR this would be noise: the counts
+      # move when Dependabot opens a PR, not when Matt edits a post.
+      #
+      # Never fails, whatever it finds. The 2026-08 audit established a standing
+      # advisory count with nothing in the production request path (the Steward
+      # chain, and path-to-regexp under @astrojs/vercel), so a job that failed on
+      # a non-zero count would be red every month by default and would stop being
+      # read. The number in the summary is the signal: watch it move.
+      #
+      # No `npm ci` first — `npm audit` resolves against package-lock.json alone,
+      # so this step installs nothing and runs no lifecycle scripts.
+      - name: Dependency audit (advisory, never fails)
+        if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: |
+          set -uo pipefail
+          # Same reason as the step above: `npm audit` exits non-zero whenever
+          # it finds anything, and this step must never fail.
+          set +e
+          npm audit --json > "${RUNNER_TEMP}/npm-audit.json"
+
+          {
+            echo "## npm audit"
+            echo
+            if jq -e '.metadata.vulnerabilities' "${RUNNER_TEMP}/npm-audit.json" > /dev/null 2>&1; then
+              echo "| Severity | Count |"
+              echo "|---|---|"
+              jq -r '.metadata.vulnerabilities | to_entries[] | "| \(.key) | \(.value) |"' \
+                "${RUNNER_TEMP}/npm-audit.json"
+              echo
+              echo "Advisory. Compare against the standing count in \`docs/reference/security-audit-2026-08.md\`; a jump is the thing to look at, and Dependabot files the individual advisories."
+            else
+              echo "\`npm audit\` produced no parseable summary. Output head:"
+              echo
+              echo '```'
+              head -c 2000 "${RUNNER_TEMP}/npm-audit.json"
+              echo
+              echo '```'
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
