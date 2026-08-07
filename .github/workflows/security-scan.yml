@@ -136,8 +136,7 @@ jobs:
 
           exit "$status"
 
-      # Scheduled and manual runs only. On a PR this would be noise: the counts
-      # move when Dependabot opens a PR, not when Matt edits a post.
+      # Scheduled and manual runs only. On a PR this would be noise: the counts      # move when Dependabot opens a PR, not when Matt edits a post.
       #
       # Never fails, whatever it finds. The 2026-08 audit established a standing
       # advisory count with nothing in the production request path (the Steward
@@ -175,3 +174,89 @@ jobs:
               echo '```'
             fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The other half of the leak problem on a public repo. Push protection and
+  # gitleaks both look for secret-shaped strings; the private prose here (the
+  # vault, the steward docs, the security audit, every handoff) is kept out of
+  # the repo by .gitignore alone, and nothing else would notice a bad ignore
+  # edit or a stray `git add -A` publishing it. This job is that noticing.
+  #
+  # Same advisory posture as the job above: red on a hit, never
+  # continue-on-error, nothing in protect-master requires it.
+  private-paths:
+    name: Private paths not tracked
+    runs-on: ubuntu-latest
+    steps:
+      # Shallow is fine, unlike the job above: `git ls-files` reads the index,
+      # not history, so one commit is all this needs.
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Assert no gitignored-by-design path is tracked
+        run: |
+          set -uo pipefail
+          # Same reason as the gitleaks step: `run:` steps inherit `bash -e`, so
+          # a hit would abort before writing the summary that names it. The exit
+          # status is set deliberately at the end.
+          set +e
+
+          # ---------------------------------------------------------------
+          # The private set. Source of truth is the "Gitignored files" table
+          # in CLAUDE.md, with the commented private-docs section of
+          # .gitignore as its implementation. A new private path goes in all
+          # three in the same change or this tripwire has a hole in it.
+          #
+          # Anchoring follows the ignore rules: `CLAUDE.md`, `.claude/` and
+          # friends are unanchored in .gitignore and so match at any depth
+          # (agents/steward/CLAUDE.md is one of them); `/docs/`, `/steward/`
+          # and `/public/og/` are root-anchored and matched as such.
+          # ---------------------------------------------------------------
+          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/'
+
+          tracked_private=$(git ls-files | grep -E "$private")
+
+          # Env files get their own pass because of the `!.env.example` carve-out
+          # in .gitignore. agents/steward/.env.example is tracked on purpose.
+          tracked_env=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$')
+
+          # The free generic case, and the reason the list above is not the whole
+          # job: this catches a file that is tracked while some ignore rule
+          # matches it, whatever its path and whichever rule it is.
+          tracked_ignored=$(git ls-files -c -i --exclude-standard)
+
+          offenders=$(printf '%s\n%s\n%s\n' "$tracked_private" "$tracked_env" "$tracked_ignored" | grep -v '^$' | sort -u)
+
+          # Counted through printf with explicit newlines, not by concatenating
+          # the variables: two non-empty results run together into one line
+          # otherwise and the count comes out one short.
+          private_count=$(printf '%s\n%s\n' "$tracked_private" "$tracked_env" | grep -c .)
+          ignored_count=$(printf '%s\n' "$tracked_ignored" | grep -c .)
+
+          status=0
+          [ -n "$offenders" ] && status=1
+
+          # Paths only, never contents. The names are already public in
+          # .gitignore; what is inside these files is the thing being protected.
+          {
+            echo "## Private paths"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tracked files checked | $(git ls-files | wc -l) |"
+            echo "| Private-path matches | ${private_count} |"
+            echo "| Tracked-but-ignored (generic) | ${ignored_count} |"
+            echo
+            if [ "$status" -eq 0 ]; then
+              echo "Both checks clean: no gitignored-by-design path is tracked, and no tracked file matches an ignore rule."
+            else
+              echo "**A private path is tracked on this branch.** Paths only, contents deliberately not shown:"
+              echo
+              echo '```'
+              echo "$offenders"
+              echo '```'
+              echo
+              echo "Remove it from the index (\`git rm --cached <path>\`) and check whether the file was ever pushed; if it was, the content is public and rotating or retracting it is a separate decision."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit "$status"
