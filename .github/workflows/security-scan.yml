@@ -136,7 +136,8 @@ jobs:
 
           exit "$status"
 
-      # Scheduled and manual runs only. On a PR this would be noise: the counts      # move when Dependabot opens a PR, not when Matt edits a post.
+      # Scheduled and manual runs only. On a PR this would be noise: the counts
+      # move when Dependabot opens a PR, not when Matt edits a post.
       #
       # Never fails, whatever it finds. The 2026-08 audit established a standing
       # advisory count with nothing in the production request path (the Steward
