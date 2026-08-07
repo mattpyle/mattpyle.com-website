@@ -74,6 +74,16 @@ export default defineConfig({
         // Nothing is loaded off-origin: fonts are self-hosted, there are no
         // frames, workers, or manifests. default-src exists so the directives
         // nobody thought to declare stop being unrestricted.
+        //
+        // It lives here and NOT in the vercel.json header, which is the one
+        // place the two policies differ on purpose. A prerendered page carries
+        // both, and a browser enforces their intersection: an inline script has
+        // to be allowed by every policy present. The vercel.json header declares
+        // no script-src, so adding default-src there would make 'self' the
+        // fallback for scripts and refuse all 70 inline scripts on the site,
+        // pre-paint appearance included, because the hashes that permit them
+        // exist only in this policy. The rule: default-src belongs only in a
+        // policy that also carries the script hashes.
         "default-src 'self'",
         "font-src 'self'",
         "img-src 'self'",
