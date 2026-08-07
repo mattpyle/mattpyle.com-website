@@ -70,3 +70,6 @@ agents/steward/bin/
 /playwright-report/
 /blob-report/
 /.playwright/
+
+# TEMP tripwire proof, delete this branch
+/README.md
