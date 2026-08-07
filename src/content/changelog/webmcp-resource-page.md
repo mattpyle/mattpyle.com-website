@@ -1,6 +1,8 @@
 ---
 title: "Added a /webmcp page to showcase WebMCP functionality"
 summary: "The tools this site hands to agents get a page built from the live tool objects, with runnable examples."
+seoTitle: "A /webmcp page showcasing the site's tools"
+seoDescription: "The tools this site hands to agents get a page built from the live tool objects, with runnable examples and a machine-readable manifest."
 date: 2026-07-24
 publishedAt: 2026-08-03T00:15:00-07:00
 updated: 2026-08-03

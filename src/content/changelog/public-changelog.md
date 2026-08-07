@@ -1,6 +1,7 @@
 ---
 title: "Public changelog launches"
 summary: "A reverse-chronological log of what ships on this site — launches, features, infrastructure, and experiments. Starting with this page."
+seoTitle: "Public changelog launches: what ships here"
 date: 2026-07-17
 updated: 2026-07-17
 type: launch

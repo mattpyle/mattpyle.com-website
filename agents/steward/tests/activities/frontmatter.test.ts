@@ -100,15 +100,17 @@ test('changelog rules are applied, not the writing ones', async () => {
   assert.ok(has('No `tags`'), 'tags rule is collection-independent');
 });
 
-test('the over-long title advice does not name a field the schema lacks', async () => {
+test('the over-long title advice names the override the schema actually has', async () => {
   const result = await checkFrontmatter('posts/changelog-bad.md', 'changelog');
   const titleFinding = result.findings.find((f) => f.message.includes('SERP limit'));
   assert.ok(titleFinding, 'the over-long title is still flagged');
-  // Telling a changelog author to add `seoTitle` would be advice for a field
-  // that does not exist, and following it would fail the build.
+  // `changelog` gained `seoTitle`/`seoDescription` on 2026-08-07, so this advice
+  // is now actionable. Before that the schema had no override and naming one
+  // would have sent the author to a field the build rejects — which is why this
+  // test exists at all. If the fields ever leave the schema, flip it back.
   assert.ok(
-    !titleFinding.message.includes('seoTitle'),
-    'must not suggest an override the changelog schema would reject',
+    titleFinding.message.includes('seoTitle'),
+    'the override the changelog schema accepts should be named by name',
   );
 });
 

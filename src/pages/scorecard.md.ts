@@ -55,7 +55,9 @@ export const GET: APIRoute = async ({ request }) => {
   const sections: string[] = [
     [
       '---',
-      'title: "Scorecard — Matt Pyle"',
+      // Matches the HTML page's <title> (src/pages/scorecard.astro) so the two
+      // representations of this route describe themselves the same way.
+      'title: "Scorecard: accessibility, performance, and SEO — Matt Pyle"',
       `description: ${JSON.stringify(SCORECARD.description)}`,
       `canonical: ${CANONICAL}`,
       `source: ${CANONICAL}`,

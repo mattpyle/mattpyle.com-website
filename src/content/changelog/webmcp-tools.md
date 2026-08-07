@@ -1,6 +1,8 @@
 ---
 title: "WebMCP read-only tool surface"
 summary: "Registered three read-only, agent-callable WebMCP tools behind Chrome's origin trial — pure progressive enhancement, removable in one step, and consumed by approximately nothing."
+seoTitle: "WebMCP read-only tool surface goes live"
+seoDescription: "Registered three read-only, agent-callable WebMCP tools behind Chrome's origin trial: progressive enhancement, removable in a single step."
 date: 2026-07-17
 updated: 2026-07-17
 type: experiment

@@ -56,12 +56,16 @@ const shownThrough = page.end + 1;
 const isFirst = page.currentPage === 1;
 
 const description = "What's shipped on this site — launches, features, and the occasional experiment.";
+// Meta-only. `description` above is the visible header subtitle and stays as written;
+// this is the SERP-length variant (see the seoDescription prop in Layout.astro).
+const seoDescription = 'Everything shipped on this site, newest first: launches, features, infrastructure work, and the occasional experiment that did not pan out.';
 const breadcrumbUrl = isFirst ? '/changelog' : `/changelog/${page.currentPage}`;
 ---
 
 <Layout
-  title={isFirst ? 'Changelog' : `Changelog — page ${page.currentPage}`}
+  title={isFirst ? 'Changelog: what has shipped on this site' : `Changelog: what has shipped, page ${page.currentPage}`}
   description={description}
+  seoDescription={seoDescription}
   breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'Changelog', url: breadcrumbUrl }]}
 >
   <div class="changelog-shell">
