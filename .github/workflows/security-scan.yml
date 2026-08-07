@@ -77,6 +77,11 @@ jobs:
         id: gitleaks
         run: |
           set -uo pipefail
+          # GitHub runs `run:` steps under `bash -e`, so the gitleaks pipeline
+          # below would abort the step the moment it found something — before
+          # writing a word of the summary, in exactly the case the summary is
+          # for. The step's exit status is set deliberately at the end instead.
+          set +e
           gitleaks git . \
             --log-opts=--all \
             --redact \
@@ -146,7 +151,10 @@ jobs:
         if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         run: |
           set -uo pipefail
-          npm audit --json > "${RUNNER_TEMP}/npm-audit.json" || true
+          # Same reason as the step above: `npm audit` exits non-zero whenever
+          # it finds anything, and this step must never fail.
+          set +e
+          npm audit --json > "${RUNNER_TEMP}/npm-audit.json"
 
           {
             echo "## npm audit"
