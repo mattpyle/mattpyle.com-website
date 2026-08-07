@@ -2,17 +2,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MAX_TABLE_ROWS,
+  ROLLUP_MARGIN_HOURS,
   WINDOW_HOURS,
   bucketHour,
   epochHour,
   flattenDayHashes,
+  flattenMonthHashes,
+  flattenTraffic,
+  foldDayFields,
   hourStart,
   readAgentTraffic,
+  rollupCommands,
+  rollupEligibleDays,
   summarizeTraffic,
   toFieldMap,
   windowStart,
 } from '../src/lib/agent-traffic.mjs';
-import { DAYS_KEY, dayKeyFor, hitKeys } from '../src/lib/agent-hits.mjs';
+import {
+  DAYS_KEY,
+  MONTHS_KEY,
+  ROLLUP_LOCK_KEY,
+  dayKeyFor,
+  hitKeys,
+  monthKeyFor,
+} from '../src/lib/agent-hits.mjs';
 
 // The read side of the hit counter. The window math is the part worth guarding: it is arithmetic
 // over UTC hour buckets that renders as three numbers a reader takes at face value, and nothing
@@ -218,6 +231,183 @@ test('nothing counted is a state the page can render, not an error', () => {
   assert.deepEqual(summary.surfaces.rows, []);
 });
 
+// ── The monthly rollup ───────────────────────────────────────────────────────────────────────
+
+/**
+ * A toy store that understands exactly the commands rollupCommands() emits, so the identity test
+ * below runs the real command sequence rather than a paraphrase of it. An unknown verb throws:
+ * teaching this function a new command should be a deliberate edit.
+ */
+function applyRollup(state, commands) {
+  for (const [verb, ...args] of commands) {
+    if (verb === 'SREM') state.days.delete(args[1]);
+    else if (verb === 'SADD') state.months.add(args[1]);
+    else if (verb === 'DEL') state.dayFields.delete(args[0]);
+    else if (verb === 'HINCRBY') {
+      const [key, field, by] = args;
+      const fields = state.monthFields.get(key) ?? {};
+      fields[field] = String(Number(fields[field] ?? 0) + Number(by));
+      state.monthFields.set(key, fields);
+    } else throw new Error(`applyRollup does not know the command ${verb}`);
+  }
+}
+
+function storeFrom(buckets) {
+  const state = { days: new Set(), months: new Set(), dayFields: new Map(), monthFields: new Map() };
+  for (const { day, fields } of dayHashesFrom(buckets)) {
+    state.days.add(day);
+    state.dayFields.set(dayKeyFor(day), fields);
+  }
+  return state;
+}
+
+function readFrom(state) {
+  return {
+    dayHashes: [...state.days].sort().map((day) => ({ day, fields: state.dayFields.get(dayKeyFor(day)) ?? {} })),
+    monthHashes: [...state.months]
+      .sort()
+      .map((month) => ({ month, fields: state.monthFields.get(monthKeyFor(month)) ?? {} })),
+  };
+}
+
+test('a day is only eligible once no window can reach any hour in it', () => {
+  const cutoffHoursAgo = WINDOW_HOURS.month - 1 + ROLLUP_MARGIN_HOURS;
+  const dayOf = (hoursAgo) =>
+    hourStart(NOW_HOUR - hoursAgo)
+      .toISOString()
+      .slice(0, 10);
+
+  // Judged on the day's own 23:00 bucket, so the day containing the cutoff is never eligible.
+  assert.deepEqual(rollupEligibleDays([dayOf(0), dayOf(cutoffHoursAgo)], NOW), []);
+  assert.deepEqual(rollupEligibleDays([dayOf(cutoffHoursAgo + 48)], NOW), [dayOf(cutoffHoursAgo + 48)]);
+});
+
+test('a day name that is not a date is left alone rather than rewritten', () => {
+  assert.deepEqual(rollupEligibleDays(['not-a-day', '', 'hits:v1:day:2020-01-01'], NOW), []);
+});
+
+test('folding sums the hours away and drops exactly what the reader drops', () => {
+  assert.deepEqual(
+    foldDayFields({
+      '06|surface|curl|/llms.txt': '2',
+      '09|surface|curl|/llms.txt': '3', // same three components, a different hour
+      '11|surface|gptbot|/llms.txt': '1',
+      '06|surface|curl': '9', // too few parts
+      '06|invented|curl|/llms.txt': '9', // unknown event class
+      'xx|surface|curl|/llms.txt': '9', // not an hour
+      '07|surface|curl|/agents.md': 'not-a-number',
+      '08|surface|curl|/agents.md': '0',
+    }),
+    { 'surface|curl|/llms.txt': 5, 'surface|gptbot|/llms.txt': 1 }
+  );
+});
+
+test('the fold order removes a day from the set before it adds it to a month', () => {
+  // The crash-safety argument in the module: interrupted anywhere, this loses counts rather than
+  // adding a day to its month twice. Asserted as an order because that is what it is.
+  const commands = rollupCommands([{ day: '2026-05-04', fields: { '06|surface|curl|/llms.txt': '2' } }]);
+  assert.deepEqual(commands, [
+    ['SREM', DAYS_KEY, '2026-05-04'],
+    ['SADD', MONTHS_KEY, '2026-05'],
+    ['HINCRBY', monthKeyFor('2026-05'), 'surface|curl|/llms.txt', '2'],
+    ['DEL', dayKeyFor('2026-05-04')],
+  ]);
+});
+
+test('a day with nothing foldable in it is removed without minting a month', () => {
+  assert.deepEqual(rollupCommands([{ day: '2026-05-04', fields: { 'xx|bad|field': '3' } }]), [
+    ['SREM', DAYS_KEY, '2026-05-04'],
+    ['DEL', dayKeyFor('2026-05-04')],
+  ]);
+});
+
+test('month rows carry no hour, so they reach the all-time total and no rolling window', () => {
+  const rows = flattenMonthHashes([{ month: '2026-05', fields: { 'surface|curl|/llms.txt': '7' } }]);
+  assert.deepEqual(rows, [{ hour: null, event: 'surface', family: 'curl', path: '/llms.txt', count: 7 }]);
+
+  const summary = summarizeTraffic(rows, NOW);
+  assert.equal(summary.totals.total, 7);
+  assert.deepEqual([summary.totals.day, summary.totals.week, summary.totals.month], [0, 0, 0]);
+  assert.equal(summary.lastHour, null);
+  assert.equal(summary.surfaces.rows[0].lastHour, null);
+});
+
+test('a month field that is not what the schema promises is dropped, not guessed at', () => {
+  assert.deepEqual(
+    flattenMonthHashes([
+      {
+        month: '2026-05',
+        fields: {
+          'surface|curl|/llms.txt': '2',
+          '06|surface|curl|/llms.txt': '9', // a day field, four parts
+          'surface|curl': '9', // too few parts
+          'invented|curl|/llms.txt': '9', // unknown event class
+          'surface|curl|/agents.md': '0',
+        },
+      },
+    ]).map((row) => row.path),
+    ['/llms.txt']
+  );
+});
+
+// THE CORE CORRECTNESS TEST. Everything else in this section is a detail of how the rollup gets
+// there; this is the property that makes it allowed to happen at all.
+test('rolling old days up changes no number the page renders', () => {
+  const buckets = [
+    bucket(0, 'surface', 'curl', '/llms.txt', 4),
+    bucket(30, 'surface', 'claudebot', '/agents.md', 3),
+    bucket(700, 'markdown', 'curl', '/about', 2),
+    // Past every window plus the margin, so these are the ones that fold.
+    bucket(1000, 'surface', 'curl', '/llms.txt', 5),
+    bucket(1001, 'surface', 'curl', '/llms.txt', 1),
+    bucket(1400, 'surface', 'googlebot', '/sitemap-index.xml', 8),
+    bucket(1600, 'markdown', 'claude-user', '/writing/accessibility-and-ai', 6),
+  ];
+
+  const state = storeFrom(buckets);
+  const before = summarizeTraffic(flattenTraffic(readFrom(state)), NOW);
+
+  const read = readFrom(state);
+  const eligible = new Set(rollupEligibleDays([...state.days], NOW));
+  assert.ok(eligible.size >= 3, 'the fixture must actually have days to roll up');
+  applyRollup(state, rollupCommands(read.dayHashes.filter(({ day }) => eligible.has(day))));
+
+  const after = summarizeTraffic(flattenTraffic(readFrom(state)), NOW);
+
+  assert.deepEqual(after.totals, before.totals);
+  assert.deepEqual(after.surfaceTotals, before.surfaceTotals);
+  assert.deepEqual(after.markdownTotals, before.markdownTotals);
+  for (const table of ['surfaces', 'clients', 'pages']) {
+    assert.deepEqual(
+      after[table].rows.map(({ lastHour, ...rest }) => rest),
+      before[table].rows.map(({ lastHour, ...rest }) => rest),
+      table
+    );
+    assert.equal(after[table].omitted, before[table].omitted, table);
+  }
+  // lastHour is the one thing a fold gives up, and only for a group with nothing recent left.
+  assert.equal(after.lastHour, before.lastHour);
+  const googlebot = after.clients.rows.find((row) => row.family === 'googlebot');
+  assert.equal(googlebot.lastHour, null);
+  assert.equal(googlebot.total, 8);
+
+  // And the state it left behind: the recent days survive, the old ones are months now.
+  assert.equal(state.days.size, 3);
+  assert.ok(state.months.size > 0);
+});
+
+test('rolling up twice is not a double count, because a folded day leaves the set', () => {
+  const state = storeFrom([bucket(1000, 'surface', 'curl', '/llms.txt', 5)]);
+  const first = readFrom(state);
+  applyRollup(state, rollupCommands(first.dayHashes));
+
+  const second = readFrom(state);
+  assert.deepEqual(second.dayHashes, []);
+  applyRollup(state, rollupCommands(second.dayHashes));
+
+  assert.equal(summarizeTraffic(flattenTraffic(readFrom(state)), NOW).totals.total, 5);
+});
+
 // ── Transport ────────────────────────────────────────────────────────────────────────────────
 
 test('HGETALL is accepted as a flat array or as an object', () => {
@@ -239,20 +429,22 @@ test('no store configured makes no network call at all', async () => {
   assert.deepEqual(result, { ok: false, reason: 'no-store' });
 });
 
-test('the reader asks for the day set, then one HGETALL per day, by imported key names', async () => {
+test('the reader asks for both sets, then one HGETALL per day and per month, by imported key names', async () => {
   const sent = [];
   const result = await readAgentTraffic({
     env: { UPSTASH_REDIS_REST_URL: 'https://store.example/', UPSTASH_REDIS_REST_TOKEN: 't' },
+    now: NOW,
     fetchImpl: async (url, init) => {
       sent.push({ url, commands: JSON.parse(init.body) });
       const first = sent.length === 1;
       return new Response(
         JSON.stringify(
           first
-            ? [{ result: ['2026-08-06', '2026-08-05'] }]
+            ? [{ result: ['2026-08-06', '2026-08-05'] }, { result: ['2026-05'] }]
             : [
                 { result: ['06|surface|curl|/llms.txt', '2'] },
                 { result: ['14|surface|gptbot|/agents.md', '1'] },
+                { result: ['surface|curl|/llms.txt', '40'] },
               ]
         ),
         { status: 200 }
@@ -261,25 +453,56 @@ test('the reader asks for the day set, then one HGETALL per day, by imported key
   });
 
   assert.equal(sent[0].url, 'https://store.example/pipeline');
-  assert.deepEqual(sent[0].commands, [['SMEMBERS', DAYS_KEY]]);
-  // Sorted, so the hashes line up with the days they came from.
+  assert.deepEqual(sent[0].commands, [
+    ['SMEMBERS', DAYS_KEY],
+    ['SMEMBERS', MONTHS_KEY],
+  ]);
+  // Sorted, so the hashes line up with the days and months they came from.
   assert.deepEqual(sent[1].commands, [
     ['HGETALL', dayKeyFor('2026-08-05')],
     ['HGETALL', dayKeyFor('2026-08-06')],
+    ['HGETALL', monthKeyFor('2026-05')],
   ]);
+  // No day is eligible here, so no lock is taken and no third round trip happens.
+  assert.equal(sent.length, 2);
   assert.equal(result.ok, true);
   assert.deepEqual(result.dayHashes[0], { day: '2026-08-05', fields: { '06|surface|curl|/llms.txt': '2' } });
+  assert.deepEqual(result.monthHashes[0], { month: '2026-05', fields: { 'surface|curl|/llms.txt': '40' } });
 });
 
-test('an empty day set is a successful read of nothing', async () => {
+test('a month name the schema would not have written is never turned into a key', async () => {
+  // A month member is used to BUILD a key and is written by the rollup, so a garbage member is a
+  // minted key rather than an absent read. Days are read-only and are left as found.
+  const sent = [];
   const result = await readAgentTraffic({
     env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
-    fetchImpl: async () => new Response(JSON.stringify([{ result: [] }]), { status: 200 }),
+    now: NOW,
+    fetchImpl: async (_url, init) => {
+      sent.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify(
+          sent.length === 1 ? [{ result: [] }, { result: ['2026-13', 'nonsense', '2026-07'] }] : [{ result: [] }]
+        ),
+        { status: 200 }
+      );
+    },
   });
-  assert.deepEqual(result, { ok: true, dayHashes: [] });
+
+  assert.deepEqual(sent[1], [['HGETALL', monthKeyFor('2026-07')]]);
+  assert.equal(result.ok, true);
+});
+
+test('two empty sets are a successful read of nothing', async () => {
+  const result = await readAgentTraffic({
+    env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
+    fetchImpl: async () => new Response(JSON.stringify([{ result: [] }, { result: [] }]), { status: 200 }),
+  });
+  assert.deepEqual(result, { ok: true, dayHashes: [], monthHashes: [] });
 });
 
 test('a store that errors is a reason, never a throw', async () => {
+  // Every branch answers the two SMEMBERS commands with the same shape, so what is being tested is
+  // the failure and not an arity mismatch.
   const status = await readAgentTraffic({
     env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
     fetchImpl: async () => new Response('nope', { status: 500 }),
@@ -301,6 +524,113 @@ test('a store that errors is a reason, never a throw', async () => {
   assert.equal(garbage.ok, false);
 });
 
+/**
+ * The store as the reader sees it: two SMEMBERS, then the hash pipeline (whose last command is the
+ * lock attempt when a rollup is pending), then the rollup pipeline. `lock` decides what the SET NX
+ * answers.
+ */
+function storeFetch({ days, months = [], dayFields = {}, lock = 'OK', sent }) {
+  return async (_url, init) => {
+    const commands = JSON.parse(init.body);
+    sent.push(commands);
+    if (commands.length === 2 && commands[0][0] === 'SMEMBERS') {
+      return new Response(JSON.stringify([{ result: days }, { result: months }]), { status: 200 });
+    }
+    const results = commands.map((command) => {
+      if (command[0] === 'SET') return { result: lock };
+      if (command[0] === 'HGETALL') {
+        const day = command[1].replace(/^hits:v1:day:/, '');
+        return { result: dayFields[day] ?? [] };
+      }
+      return { result: 1 };
+    });
+    return new Response(JSON.stringify(results), { status: 200 });
+  };
+}
+
+test('a render with an eligible day takes the lock in the read pipeline and then folds it', async () => {
+  const old = hourStart(NOW_HOUR - 1200)
+    .toISOString()
+    .slice(0, 10);
+  const today = NOW.toISOString().slice(0, 10);
+  const sent = [];
+
+  const result = await readAgentTraffic({
+    env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
+    now: NOW,
+    fetchImpl: storeFetch({
+      days: [today, old],
+      dayFields: { [old]: ['06|surface|curl|/llms.txt', '5'] },
+      sent,
+    }),
+  });
+
+  // The lock rides the read pipeline rather than costing a round trip of its own.
+  assert.equal(sent[1].at(-1)[0], 'SET');
+  assert.equal(sent[1].at(-1)[1], ROLLUP_LOCK_KEY);
+  assert.deepEqual(sent[1].at(-1).slice(3), ['NX', 'EX', '60']);
+
+  assert.equal(sent.length, 3, 'the fold is one further pipeline');
+  assert.deepEqual(sent[2], [
+    ['SREM', DAYS_KEY, old],
+    ['SADD', MONTHS_KEY, old.slice(0, 7)],
+    ['HINCRBY', monthKeyFor(old.slice(0, 7)), 'surface|curl|/llms.txt', '5'],
+    ['DEL', dayKeyFor(old)],
+  ]);
+
+  // The render that folds still reports the day it folded, so its own numbers are unchanged.
+  assert.equal(result.ok, true);
+  assert.equal(summarizeTraffic(flattenTraffic(result), NOW).totals.total, 5);
+});
+
+test('losing the lock skips the fold and leaves the read exactly as it is', async () => {
+  const old = hourStart(NOW_HOUR - 1200)
+    .toISOString()
+    .slice(0, 10);
+  const sent = [];
+
+  const result = await readAgentTraffic({
+    env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
+    now: NOW,
+    fetchImpl: storeFetch({ days: [old], dayFields: { [old]: ['06|surface|curl|/llms.txt', '5'] }, lock: null, sent }),
+  });
+
+  assert.equal(sent.length, 2, 'no fold pipeline is sent');
+  assert.equal(result.ok, true);
+  assert.equal(summarizeTraffic(flattenTraffic(result), NOW).totals.total, 5);
+});
+
+test('a render with nothing to fold never asks for the lock at all', async () => {
+  const sent = [];
+  await readAgentTraffic({
+    env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
+    now: NOW,
+    fetchImpl: storeFetch({ days: [NOW.toISOString().slice(0, 10)], sent }),
+  });
+  assert.equal(sent.length, 2);
+  assert.ok(!sent[1].some((command) => command[0] === 'SET'));
+});
+
+test('a fold that fails is still a successful read', async () => {
+  const old = hourStart(NOW_HOUR - 1200)
+    .toISOString()
+    .slice(0, 10);
+  let call = 0;
+  const result = await readAgentTraffic({
+    env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
+    now: NOW,
+    fetchImpl: async (url, init) => {
+      call += 1;
+      if (call === 3) return new Response('nope', { status: 500 });
+      return storeFetch({ days: [old], dayFields: { [old]: ['06|surface|curl|/llms.txt', '5'] }, sent: [] })(url, init);
+    },
+  });
+
+  assert.equal(call, 3, 'the fold was attempted');
+  assert.equal(result.ok, true);
+  assert.equal(summarizeTraffic(flattenTraffic(result), NOW).totals.total, 5);
+});
+
 test('the fixture is opt-in, never reaches a store, and fills every window', async () => {
   let called = false;
   const result = await readAgentTraffic({
@@ -318,9 +648,19 @@ test('the fixture is opt-in, never reaches a store, and fills every window', asy
 
   assert.equal(called, false);
   assert.equal(result.ok, true);
-  const summary = summarizeTraffic(flattenDayHashes(result.dayHashes), NOW);
+  const summary = summarizeTraffic(flattenTraffic(result), NOW);
   assert.ok(summary.totals.day > 0, '24-hour window is populated');
   assert.ok(summary.totals.week > summary.totals.day, '7-day window is larger');
   assert.ok(summary.totals.month > summary.totals.week, '30-day window is larger');
   assert.ok(summary.pages.rows.length > 0, 'the markdown table has rows');
+
+  // The fixture covers the merged path too, and its month only ever adds to rows that already
+  // exist, so the tables it produces are the same shape with or without it.
+  assert.ok(result.monthHashes.length > 0, 'the fixture includes a rolled-up month');
+  assert.ok(summary.totals.total > summary.totals.month, 'the month rows land in the all-time total');
+  const daysOnly = summarizeTraffic(flattenDayHashes(result.dayHashes), NOW);
+  assert.deepEqual(
+    summary.surfaces.rows.map((row) => row.path).sort(),
+    daysOnly.surfaces.rows.map((row) => row.path).sort()
+  );
 });

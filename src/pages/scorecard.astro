@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
 import {
   MAX_TABLE_ROWS,
-  flattenDayHashes,
+  flattenTraffic,
   readAgentTraffic,
   summarizeTraffic,
 } from '../lib/agent-traffic.mjs';
@@ -36,7 +36,7 @@ const historyPageSize = 20;
 // One clock for the whole render, so the windows and the "rendered at" stamp cannot disagree.
 const renderedAt = new Date();
 const traffic = await readAgentTraffic({ now: renderedAt });
-const summary = traffic.ok ? summarizeTraffic(flattenDayHashes(traffic.dayHashes), renderedAt) : null;
+const summary = traffic.ok ? summarizeTraffic(flattenTraffic(traffic), renderedAt) : null;
 
 const counts = new Intl.NumberFormat('en-GB');
 

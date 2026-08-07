@@ -2,6 +2,7 @@ import { next, waitUntil } from '@vercel/functions';
 import { recordHit } from './src/lib/agent-hits.mjs';
 import { formatSurfaceLine, isAgentSurface } from './src/lib/agent-surfaces.mjs';
 import { markdownSiblingFor, prefersMarkdown } from './src/lib/markdown-negotiation.mjs';
+import { canonicalOnDemandPath } from './src/lib/on-demand-routes.mjs';
 
 // Vercel Routing Middleware — a platform-level primitive, distinct from Astro's own
 // `astro:middleware`. It runs before cache/static-file serving, which is required here:
@@ -56,6 +57,20 @@ function canonicalPageUrl(url: URL): string {
 
 export default async function middleware(request: Request) {
   const url = new URL(request.url);
+
+  // Cache-key canonicalisation, before every other branch including the counting ones.
+  //
+  // On the on-demand routes the query string is part of the CDN cache key, so a unique value forces
+  // a fresh render and a fresh store read for the cost of one request. Answering with a 308 means
+  // the render only ever happens against a URL the cache already has (src/lib/on-demand-routes.mjs
+  // has the measurement). It is first so a busted request is never counted: the follow-up canonical
+  // request re-enters this function and gets counted normally, so a redirect costs a count rather
+  // than inventing one.
+  const canonical = canonicalOnDemandPath(url.pathname, url.search);
+  if (canonical) {
+    console.log(`[middleware] 308 ${url.pathname}${url.search} -> ${canonical}`);
+    return new Response(null, { status: 308, headers: { Location: canonical } });
+  }
 
   // Agent surfaces: observe and get out of the way. These paths are in the matcher purely so the
   // request reaches a function at all — every one of them is a static file, and a static fetch is
@@ -159,6 +174,11 @@ export default async function middleware(request: Request) {
 // no-whitelist rule; the pass-through design keeps it cheap.
 //
 // Then the agent-surface list from src/lib/agent-surfaces.mjs.
+//
+// Finally `/scorecard.md`, which is neither: it is in ON_DEMAND_PATHS in
+// src/lib/on-demand-routes.mjs, and it is here purely so the query-string canonicalisation above
+// can reach it. Nothing else in this function acts on it — a `.md` URL maps to no sibling, so it
+// falls straight through to next().
 export const config = {
   matcher: [
     '/',
@@ -166,6 +186,7 @@ export const config = {
     '/about/',
     '/scorecard',
     '/scorecard/',
+    '/scorecard.md',
     '/builds/:path*',
     '/webmcp/:path*',
     '/writing/:path*',
