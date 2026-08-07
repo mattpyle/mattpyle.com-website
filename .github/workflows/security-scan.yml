@@ -86,6 +86,10 @@ jobs:
             --report-path "${RUNNER_TEMP}/gitleaks-report.json" \
             && status=0 || status=$?
 
+          # Both summaries go through `tee` rather than a plain append: the run
+          # summary is not readable from `gh run view`, so a summary that only
+          # ever landed there could silently be rendering its fallback branch
+          # and nobody would know.
           findings=0
           if [ -f "${RUNNER_TEMP}/gitleaks-report.json" ]; then
             findings=$(jq 'length' "${RUNNER_TEMP}/gitleaks-report.json")
@@ -112,7 +116,7 @@ jobs:
             else
               echo "**gitleaks exited ${status} without producing findings** — that is a tool or environment error, not a leak."
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
           exit "$status"
 
@@ -151,4 +155,4 @@ jobs:
               echo
               echo '```'
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
