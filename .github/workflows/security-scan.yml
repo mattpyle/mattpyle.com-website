@@ -235,6 +235,16 @@ jobs:
           status=0
           [ -n "$offenders" ] && status=1
 
+          # Which check fired decides the wording. The generic check reaches
+          # paths outside the private set — a tracked file that any ignore rule
+          # happens to match — and calling one of those "a private path" would
+          # misdescribe the finding to whoever is reading the red run.
+          if [ "$private_count" -gt 0 ]; then
+            headline="**A gitignored-by-design path is tracked on this branch.**"
+          else
+            headline="**A tracked file matches an ignore rule.** Not one of the enumerated private paths, so check whether the ignore rule is wrong or the file should not be tracked."
+          fi
+
           # Paths only, never contents. The names are already public in
           # .gitignore; what is inside these files is the thing being protected.
           {
@@ -249,7 +259,7 @@ jobs:
             if [ "$status" -eq 0 ]; then
               echo "Both checks clean: no gitignored-by-design path is tracked, and no tracked file matches an ignore rule."
             else
-              echo "**A private path is tracked on this branch.** Paths only, contents deliberately not shown:"
+              echo "${headline} Paths only, contents deliberately not shown:"
               echo
               echo '```'
               echo "$offenders"
