@@ -81,10 +81,12 @@ jobs:
             --log-opts=--all \
             --redact \
             --no-banner \
+            --no-color \
             --verbose \
             --report-format json \
             --report-path "${RUNNER_TEMP}/gitleaks-report.json" \
-            && status=0 || status=$?
+            2>&1 | tee "${RUNNER_TEMP}/gitleaks-log.txt"
+          status=${PIPESTATUS[0]}
 
           # Both summaries go through `tee` rather than a plain append: the run
           # summary is not readable from `gh run view`, so a summary that only
@@ -95,13 +97,22 @@ jobs:
             findings=$(jq 'length' "${RUNNER_TEMP}/gitleaks-report.json")
           fi
 
+          # Read the commit count off gitleaks rather than off `git rev-list
+          # --all --count`, which is a larger number (274 vs 202 when this was
+          # written) and would misreport it. `git log -p` emits no diff for a
+          # merge commit, so gitleaks skips them; the content of a merge is
+          # already carried by the parents it scanned, so the gap is in the
+          # counting, not in the coverage. --no-color above is what makes this
+          # line greppable.
+          scanned=$(grep -oE '[0-9]+ commits scanned' "${RUNNER_TEMP}/gitleaks-log.txt" | tail -1 | cut -d' ' -f1)
+
           {
             echo "## gitleaks ${GITLEAKS_VERSION}"
             echo
             echo "| | |"
             echo "|---|---|"
             echo "| Scope | full history, all refs (\`--log-opts=--all\`) |"
-            echo "| Commits scanned | $(git rev-list --all --count) |"
+            echo "| Commits scanned | ${scanned:-unreported} of $(git rev-list --all --count) reachable (merges carry no diff) |"
             echo "| Findings | ${findings} |"
             echo "| Exit code | ${status} |"
             echo
