@@ -20,13 +20,15 @@ const SERP_TITLE = 60;
  * | | `writing` | `changelog` |
  * |---|---|---|
  * | dek/meta field | `description` | `summary` |
- * | SERP override | `seoDescription` / `seoTitle` | **none — no escape hatch exists** |
+ * | SERP override | `seoDescription` / `seoTitle` | `seoDescription` / `seoTitle` |
  * | `updated` | optional | **required** |
  * | extra enums | — | `type`, `significance` |
  *
- * The `seoDescription` row is the one with teeth. Telling a changelog author to
- * "add a short `seoDescription`" would be advice for a field the schema does not
- * have, and following it would fail the build.
+ * The override row used to be the one with teeth: `changelog` had no escape
+ * hatch, so advising an author to "add a short `seoDescription`" named a field
+ * the schema did not have and would have failed the build. It gained both
+ * override fields on 2026-08-07, so the advice is now valid for either
+ * collection — but the dek field still differs, and that difference is live.
  *
  * Nothing keeps this transcription in sync with the schema automatically — if
  * `src/content.config.ts` changes a collection's fields, enums, or required
@@ -55,6 +57,8 @@ const RULES: Record<Collection, CollectionRules> = {
   },
   changelog: {
     dekField: 'summary',
+    dekOverride: 'seoDescription',
+    titleOverride: 'seoTitle',
     enums: [
       { field: 'type', values: ['launch', 'feature', 'content', 'infra', 'experiment'] },
       { field: 'significance', values: ['major', 'minor', 'patch'] },

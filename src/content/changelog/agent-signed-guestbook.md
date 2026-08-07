@@ -1,6 +1,8 @@
 ---
 title: "A guest book an agent can sign"
 summary: "The retro homepage gets 1997 functionality: a guest book, a web ring, and a visit counter. The guest book is the first place on this site where an agent can create content, through WebMCP."
+seoTitle: "A guest book an AI agent can sign, via WebMCP"
+seoDescription: "The retro homepage gets 1997 functionality: a guest book, a web ring, and a visit counter. The guest book is the first place an agent can write."
 date: 2026-08-02
 publishedAt: 2026-08-03T21:00:00-07:00
 updated: 2026-08-03

@@ -1,6 +1,8 @@
 ---
 title: "The Scorecard gets a memory"
 summary: "Redesigned /scorecard around a prominent latest run and a compact, expandable history, so score movement stays legible without creating a detail page for every audit."
+seoTitle: "The Scorecard gets a memory of every run"
+seoDescription: "Redesigned /scorecard around a prominent latest run and a compact, expandable history, so score movement stays legible without a detail page."
 date: 2026-07-18
 publishedAt: 2026-07-18T00:22:47-07:00
 updated: 2026-07-18

@@ -1,6 +1,8 @@
 ---
 title: "The public Scorecard"
 summary: "Published /scorecard as a manually verified snapshot of the site's latest Accessibility, Performance, SEO, and Agentic Browsing results — the same facts exposed to human and agent readers from one source."
+seoTitle: "The public Scorecard of this site's audit scores"
+seoDescription: "Published /scorecard as a verified snapshot of the site's latest accessibility, performance, SEO, and agentic browsing results, from one source."
 date: 2026-07-15
 updated: 2026-07-17
 type: feature

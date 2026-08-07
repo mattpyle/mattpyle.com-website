@@ -1,10 +1,10 @@
 ---
 title: "Hello, World! Or, this post is a lie."
 date: 2026-07-18
-updated: 2026-07-18
+updated: 2026-08-07
 description: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
-seoTitle: "Hello, World! Or, this post is a lie."
-seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
+seoTitle: "Hello, World! Or, why this post is a lie"
+seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI by building an editor for my website. The first post is the smoke test."
 tags: ["agents", "temporal", "tech"]
 featured: false
 draft: false

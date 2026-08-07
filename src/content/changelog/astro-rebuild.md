@@ -1,6 +1,8 @@
 ---
 title: "Rebuilt on Astro"
 summary: "Moved the site onto Astro content collections and shipped the foundational discoverability layer — sitemap, robots.txt, agents.md, and llms.txt. The foundation everything else here sits on."
+seoTitle: "Rebuilt on Astro with a discoverability layer"
+seoDescription: "Moved the site onto Astro content collections and shipped the discoverability layer: sitemap, robots.txt, agents.md, and llms.txt."
 date: 2026-07-12
 updated: 2026-07-26
 type: launch

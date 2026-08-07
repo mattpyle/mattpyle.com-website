@@ -83,7 +83,7 @@ const [latest, ...history] = RUNS;
  * and both now read the same `RUNS[0].iso`.
  */
 export const SCORECARD: ScorecardSnapshot = {
-  description: "This website's scores on the latest deploy.",
+  description: 'Live Lighthouse accessibility, performance, and SEO scores for this site, plus agentic browsing checks, with the full history of every run.',
   verified: SCORECARD_VERIFIED,
   scope: latest.scope,
   tools: latest.tools,

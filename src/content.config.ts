@@ -56,6 +56,9 @@ const changelog = defineCollection({
     type:         z.enum(['launch', 'feature', 'content', 'infra', 'experiment']),
     /** Drives the coloured significance dot + legend. */
     significance: z.enum(['major', 'minor', 'patch']),
+    /** Short, untruncated overrides for search engines. `title` and `summary` still drive the visible H1 and dek, and the JSON-LD, so an entry's on-page text never bends to a SERP budget. Leave unset unless the rendered title/description exceed ~60/~155 chars. */
+    seoTitle:       z.string().optional(),
+    seoDescription: z.string().optional(),
     /** Optional full-content-width hero on the entry page. */
     hero:         image().optional(),
     /** Alt text for an informative hero. Omit for a purely decorative one (renders alt=""). */

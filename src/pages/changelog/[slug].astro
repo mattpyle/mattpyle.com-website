@@ -31,14 +31,16 @@ function formatDate(date: Date): string {
   return `${d} ${m} ${y}`;
 }
 
-const { title, summary, date, publishedAt, updated, tags, type, significance, hero, heroAlt, draft } = entry.data;
+const { title, summary, seoTitle, seoDescription, date, publishedAt, updated, tags, type, significance, hero, heroAlt, draft } = entry.data;
 const sigLabel = significance.toUpperCase();
 const markdownUrl = `/changelog/${entry.id}.md`;
 ---
 
 <Layout
   title={title}
+  seoTitle={seoTitle}
   description={summary}
+  seoDescription={seoDescription}
   type="article"
   image={`/og/changelog/${entry.id}.png`}
   publishedTime={publishedAt ?? date}

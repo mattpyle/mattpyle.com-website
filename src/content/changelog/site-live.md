@@ -1,6 +1,8 @@
 ---
 title: "mattpyle.com goes live"
 summary: "The domain went live with www as the canonical host. Fixed every emitted URL to the canonical host, fixed a layout-shift regression, captured the first live-network baseline, and confirmed every AI crawler gets a 200."
+seoTitle: "mattpyle.com goes live on its own domain"
+seoDescription: "The domain went live with www as the canonical host. Fixed every emitted URL, fixed a layout-shift regression, and captured the first baseline."
 date: 2026-07-14
 updated: 2026-07-17
 type: launch
