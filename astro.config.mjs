@@ -59,6 +59,30 @@ export default defineConfig({
   build: { inlineStylesheets: 'never' },
   security: {
     csp: {
+      // These directives duplicate the Content-Security-Policy in vercel.json on
+      // purpose, and the two must be edited together. Astro emits its policy as a
+      // <meta> on a prerendered page, where it stacks with the vercel.json header,
+      // but as a real response header on an on-demand render (/scorecard), and a
+      // framework-set header *replaces* the vercel.json one rather than merging
+      // with it. Before 2026-08-06 that left /scorecard with script-src and
+      // style-src alone: no frame-ancestors, so the page was framable by any
+      // origin. Declaring the full set here makes Astro's policy self-sufficient
+      // whichever way it ships. See section 3 of the phase-one security audit.
+      // frame-ancestors is ignored inside a <meta>; on the prerendered pages that
+      // is fine, because the vercel.json header carries it there.
+      directives: [
+        // Nothing is loaded off-origin: fonts are self-hosted, there are no
+        // frames, workers, or manifests. default-src exists so the directives
+        // nobody thought to declare stop being unrestricted.
+        "default-src 'self'",
+        "font-src 'self'",
+        "img-src 'self'",
+        "connect-src 'self'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+      ],
       // 'self' covers the site's own external stylesheets (inlineStylesheets is
       // 'never', so all CSS ships as files). Fonts are self-hosted as of Batch 9,
       // so the old https://fonts.googleapis.com carve-out is gone.
