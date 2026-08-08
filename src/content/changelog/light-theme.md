@@ -4,10 +4,12 @@ summary: "Retired the dark, amber, monospace look for a warmer, serif-led readin
 seoTitle: "A new light theme, and a move off clay orange"
 seoDescription: "Retired the dark, amber, monospace look for a warmer, serif-led reading design, and moved the accent to oxblood to break the AI-design tell."
 date: 2026-07-13
-updated: 2026-07-17
+updated: 2026-08-08
 type: feature
 significance: major
 tags: ["design"]
+hero: ../../assets/light-theme-changelog-hero.png
+heroAlt: "Hero image for the light theme announcement: a before-and-after pair of site mock-ups beside the headline A new light theme. The before card shows the old dark, amber-on-black monospace design; the after card shows the warm cream, serif-led design with oxblood accents."
 draft: false
 ---
 
