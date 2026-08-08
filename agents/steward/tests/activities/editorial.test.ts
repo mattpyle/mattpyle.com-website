@@ -437,10 +437,14 @@ test('a clean post yields a pass verdict and no findings', async () => {
 // `posts/known-good.md` (see the fixture's own comment) is meant to be clean
 // for every *mechanical* pass, but it is not tell-free: line 13 has a real em
 // dash ("... the fixture needs updating — decide which..."), which now counts
-// as a voice tell rather than as the author's habit (see `tells.ts`). Since
-// EM_DASH_DENSITY is now computed in code from the file itself (never asked
-// of the model), that one finding is present in every ai-tells result below
-// regardless of what the LLM stub returns.
+// as a voice tell rather than as the author's habit (see `tells.ts`).
+//
+// EM_DASH_DENSITY is computed in code from the file itself, never asked of the
+// model — and since the split (spec §8.6b) its *citation* belongs to the
+// `tell_citations` pass, which runs with no flag. This pass still **counts** it,
+// because `tellCounts` is the study's unit of comparison, but no longer emits a
+// finding for it: printing it here as well would show every em dash twice in a
+// report where both passes ran. So the findings below are the LLM half only.
 const AI_TELLS_VALID = JSON.stringify({
   aiLikenessScore: 62,
   findings: [
@@ -485,11 +489,17 @@ test('ai-tells reports the composite score and a per-category breakdown', async 
 
   assert.equal(result.pass, 'ai_tells');
   assert.equal(result.metrics?.aiLikenessScore, 62);
-  // 2 NOT_X_BUT_Y + 1 ZINGER_BOLDING from the LLM, + 1 EM_DASH_DENSITY
-  // computed deterministically from the fixture's own em dash. The model's
-  // RULE_OF_THREE finding is dropped (see the fixture comment above), not
-  // counted as a fifth.
-  assert.equal(result.findings.length, 4);
+  // 2 NOT_X_BUT_Y + 1 ZINGER_BOLDING from the LLM, and nothing else. The
+  // model's RULE_OF_THREE finding is dropped (see the fixture comment above),
+  // and the deterministic EM_DASH_DENSITY citation now belongs to
+  // `tell_citations` — it is still counted below, just not cited twice.
+  assert.equal(result.findings.length, 3);
+  for (const f of result.findings) {
+    assert.ok(
+      f.id.startsWith('ai-tells-llm-'),
+      `this pass emits LLM-judged findings only, got ${f.id}`,
+    );
+  }
 
   // The breakdown is what lets the study separate format-driven tells from
   // voice-driven ones without retuning the rubric, so it is asserted directly.
@@ -537,7 +547,7 @@ test('ai-tells never yields a patch, even when the model proposes one (clamp 3)'
   assert.deepEqual(result.patches, []);
   assert.equal(result.metrics?.droppedPatches, 2);
   // The findings survive: dropping the patches must not cost us the analysis.
-  assert.equal(result.findings.length, 4);
+  assert.equal(result.findings.length, 3);
 });
 
 test('an out-of-range aiLikenessScore is clamped rather than discarded', () => {

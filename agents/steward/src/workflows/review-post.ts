@@ -76,6 +76,28 @@ export interface ReviewPostInput {
    */
   enableAiTells?: boolean;
   /**
+   * Adds the deterministic `tell_citations` pass to the fan-out (spec §8.6b).
+   *
+   * **This is the half of `enableAiTells` that no longer needs asking for.** The
+   * citations are computed in code, cost nothing, and are auditable line by
+   * line; the composite above them failed its validation study. One flag over
+   * both meant the trustworthy half was reachable only by paying for the
+   * discredited one, which is the deadlock this field breaks: the re-validation
+   * needs archived corpus data, and produced none while the whole feature was
+   * switched off.
+   *
+   * It still travels in the input, and for the identical design-rule-10 reason
+   * as every field above — it adds a command to the `Promise.all` fan-out.
+   * `ENABLE_TELL_CITATIONS` defaults to `true`, so this is the case the eprime
+   * comment below warns about: read it as `=== true`, never `?? ENABLE_...`. An
+   * absent field means a history written before this pass existed, and such a
+   * history has no such command in it — defaulting it to the current config
+   * value is exactly how a parked review gets sent down a branch it never took.
+   *
+   * Resolved by the caller from `ENABLE_TELL_CITATIONS`.
+   */
+  enableTellCitations?: boolean;
+  /**
    * Adds the `eprime-alternatives` pass after the fan-out (spec §8.6).
    *
    * In the input for the same design-rule-10 reason as every flag above, and the
@@ -165,6 +187,14 @@ const light = {
     taskQueue: QUEUE_LIGHT,
     startToCloseTimeout: '3 minutes',
     retry: { maximumAttempts: 3, backoffCoefficient: 2 },
+  }),
+  // A file read and five regex sweeps — no network, no subprocess. It gets the
+  // 30-second linter-class timeout rather than the editorial 3 minutes because
+  // nothing in it can legitimately take longer than a slow disk.
+  tells: wf.proxyActivities<Pick<typeof activities, 'tellCitations'>>({
+    taskQueue: QUEUE_LIGHT,
+    startToCloseTimeout: '30 seconds',
+    retry: { maximumAttempts: 3 },
   }),
   // Same shape as `editorial` in the §7.4 table — it is the same kind of work
   // (one LLM call, retried on a transient failure), just a different rubric.
@@ -407,6 +437,14 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       // history that predates the flag simply has no such command.
       ...(input.enableAiTells
         ? [guard('ai_tells', () => light.editorial.editorialPass(snapshot.file, 'ai-tells'))]
+        : []),
+      // The deterministic tell citations (spec §8.6b). Appended after the
+      // ai-tells entry for the same reason that one sits last: the fan-out's
+      // command order is the replay contract, and the end of the array is the
+      // only position that leaves every recorded sequence intact. `=== true`,
+      // never defaulted — see `ReviewPostInput.enableTellCitations`.
+      ...(input.enableTellCitations === true
+        ? [guard('tell_citations', () => light.tells.tellCitations(snapshot.file))]
         : []),
     ]);
 

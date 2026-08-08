@@ -1,5 +1,6 @@
 import { FLOORS } from './audit-map.js';
 import type { PassResult, ReviewReport, Verdict } from './report.js';
+import { formatTellGroup, groupArchivedCitations } from './tell-citations.js';
 
 /**
  * `steward report <slug>` and the tail of `steward review` (build-log "readable
@@ -50,11 +51,100 @@ function formatWhen(iso: string): string {
  * just cheaper ones) was the specific failure this renderer exists to fix.
  * Everything else sorts worst-verdict-first.
  */
+const SECTIONED_PASSES: readonly PassResult['pass'][] = [
+  'claims_structure',
+  'build_audit',
+  // Both halves of the ai-tells taxonomy have their own section below, and both
+  // read badly in the generic finding list: the citations because twenty-one of
+  // them at three lines each would bury every other check, the composite because
+  // it is a metric rather than a finding and has to be rendered with its
+  // validation warning attached.
+  'tell_citations',
+  'ai_tells',
+];
+
 function orderOtherPasses(passes: PassResult[]): PassResult[] {
   return passes
-    .filter((p) => p.pass !== 'claims_structure' && p.pass !== 'build_audit')
+    .filter((p) => !SECTIONED_PASSES.includes(p.pass))
     .slice()
     .sort((a, b) => RANK[b.verdict] - RANK[a.verdict]);
+}
+
+/**
+ * The machine-voice section: deterministic citations by default, the composite
+ * only when it was asked for.
+ *
+ * **The split this renders is the whole point of the section.** The citations
+ * are counted in code and name the line they fired on, so a wrong one costs the
+ * reader two seconds to disprove. `aiLikenessScore` is a different kind of
+ * object: its pre-registered study found it correlates 0.813 with word count and
+ * ranked the one human-edited post in the corpus as the most AI-like. It is
+ * printed only when `--ai-tells` asked for it, and never without the warning —
+ * displayed casually it would anchor the author toward shortening posts to move
+ * a number that mostly measured length.
+ *
+ * Citations render as counts, densities and line numbers rather than as one
+ * entry per hit. A post with fifteen triads does not need fifteen paragraphs
+ * telling it so; it needs the number and the lines.
+ */
+function renderMachineVoice(report: ReviewReport): string[] {
+  const citations = report.passes.find((p) => p.pass === 'tell_citations');
+  const aiTells = report.passes.find((p) => p.pass === 'ai_tells');
+  if (!citations && !aiTells) return [];
+
+  const lines: string[] = [];
+  lines.push('');
+  lines.push(
+    `  ${BOLD}MACHINE VOICE${RESET} ` +
+      `${paint('(deterministic tell citations — counted in code, no API call)', DIM)}`,
+  );
+
+  if (!citations) {
+    lines.push('      Citations did not run.');
+  } else {
+    const words = Number(citations.metrics?.words ?? 0);
+    const groups = groupArchivedCitations(citations.findings, words);
+    if (groups.length === 0) {
+      lines.push('      No tells fired.');
+    } else {
+      for (const group of groups) lines.push(`      ${formatTellGroup(group)}`);
+      lines.push('');
+      for (const f of citations.findings) {
+        lines.push(`      ${paint(`line ${f.line}`, DIM)}  ${f.message}`);
+        if (f.excerpt) lines.push(`          "${f.excerpt}"`);
+      }
+      lines.push('');
+      lines.push(
+        `      ${paint('Citations only. Style is the author\'s call — nothing here is applied.', DIM)}`,
+      );
+    }
+  }
+
+  if (aiTells) {
+    const score = aiTells.metrics?.aiLikenessScore;
+    lines.push('');
+    lines.push(`  ${BOLD}AI-LIKENESS COMPOSITE${RESET}  ${paint('(--ai-tells)', DIM)}`);
+    lines.push(`      aiLikenessScore: ${typeof score === 'number' ? score : '—'} / 100`);
+    lines.push(
+      `      ${paint('! UNVALIDATED (spec §9.2): this composite failed its pre-registered study —', AMBER)}`,
+    );
+    lines.push(
+      `      ${paint('  r = 0.813 against word count, and it ranked the one human-edited post', AMBER)}`,
+    );
+    lines.push(
+      `      ${paint('  in the corpus as the most AI-like. Not evidence of authorship.', AMBER)}`,
+    );
+    if (aiTells.findings.length) {
+      lines.push('');
+      lines.push(`      ${paint('LLM-judged tells:', DIM)}`);
+      for (const f of aiTells.findings) {
+        lines.push(`      ${badge(f.severity)}  ${f.message}${f.line ? ` (line ${f.line})` : ''}`);
+        if (f.excerpt) lines.push(`          "${f.excerpt}"`);
+      }
+    }
+  }
+
+  return lines;
 }
 
 function renderPass(pass: PassResult, report: ReviewReport): string[] {
@@ -135,6 +225,9 @@ export function renderReport(report: ReviewReport): string {
   } else {
     lines.push('      Pass did not run.');
   }
+
+  // --- Machine voice (tell_citations, and the composite only if asked for) --
+  lines.push(...renderMachineVoice(report));
 
   // --- Other checks -------------------------------------------------------
   const others = orderOtherPasses(report.passes);

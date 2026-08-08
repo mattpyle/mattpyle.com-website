@@ -12,6 +12,7 @@ export { runCspell } from './cspell.js';
 export { runVale } from './vale.js';
 export { checkFrontmatter } from './frontmatter.js';
 export { editorialPass, eprimeAlternativesPass } from './editorial.js';
+export { tellCitations } from './tells.js';
 export { applyPatchesActivity } from './patches.js';
 export { buildAndAuditDraft } from './build-audit.js';
 export { synthesizeReport } from './synthesize.js';
