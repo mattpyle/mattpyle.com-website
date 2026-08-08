@@ -9,7 +9,7 @@ type: feature
 significance: major
 tags: ["design"]
 hero: ../../assets/light-theme-changelog-hero.png
-heroAlt: "Hero image for the light theme announcement: a before-and-after pair of site mockups beside the headline A new light theme. The before card shows the old dark, amber-on-black monospace design; the after card shows the warm cream, serif-led design with oxblood accents."
+heroAlt: "Hero image for the light theme announcement: a before-and-after pair of site mock-ups beside the headline A new light theme. The before card shows the old dark, amber-on-black monospace design; the after card shows the warm cream, serif-led design with oxblood accents."
 draft: false
 ---
 
