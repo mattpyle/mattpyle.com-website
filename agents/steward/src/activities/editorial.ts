@@ -215,20 +215,18 @@ export function mapAiTellsResponse(
     number
   >;
 
-  // Five of the eight tells are computed here, in code, never asked of the
-  // model (spec §9.2 amendment, design rule 9). See lib/tells.ts.
-  computeDeterministicTells(text).forEach((f, i) => {
+  // Five of the eight tells are computed in code, never asked of the model
+  // (spec §9.2 amendment, design rule 9). See lib/tells.ts.
+  //
+  // **Counted here, cited elsewhere.** The findings for these five now belong to
+  // the `tell_citations` pass, which runs on every review with no flag (spec
+  // §8.6b) — so emitting them here as well would print every em dash twice in
+  // any report where both passes ran. The *counts* stay, because `tellCounts` is
+  // the study's unit of comparison across the corpus (`lib/stats.ts`,
+  // `steward study`), and silently dropping five of its eight categories would
+  // break every archived comparison rather than merely change a display.
+  computeDeterministicTells(text).forEach((f) => {
     tellCounts[f.category] += 1;
-    findings.push({
-      id: `ai-tells-det-${i + 1}`,
-      pass: 'ai_tells',
-      severity: clampSeverity('flag'),
-      message: `${f.category}: ${f.message}`,
-      file,
-      line: f.line,
-      excerpt: f.excerpt.slice(0, 200),
-      evidence: f.evidence,
-    });
   });
 
   // The remaining three tells stay LLM judgment calls. Anything the model

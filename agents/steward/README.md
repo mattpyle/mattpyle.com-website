@@ -81,6 +81,16 @@ steward cleanup my-draft-slug    # after the merge: drop the local draft twin, f
 `steward inbox` lists every review waiting on you, across every slug, with a plain-language hint for
 what to do next.
 
+```bash
+steward tells src/content/writing/my-post.md   # deterministic tell citations for one file
+```
+
+`steward tells` needs no worker, no Temporal server, and no API key: it reads the file, runs the five
+deterministic counters, and prints counts, per-100-word densities, and the line each hit came from.
+The same citations ride on every review and audit report under **MACHINE VOICE**. The composite
+`aiLikenessScore` is a separate thing and stays behind `--ai-tells`, because it failed its validation
+study (spec §9.2) — the citations did not.
+
 > [!TIP]
 > Run any command with `npx tsx src/cli.ts <args>` instead of the `steward` shim if something fails
 > silently — the shim's process wrapping can swallow the CLI's own error output.

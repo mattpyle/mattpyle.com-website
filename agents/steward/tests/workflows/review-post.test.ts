@@ -77,7 +77,8 @@ interface MockOverrides {
   runCspell?: () => Promise<PassResult>;
   runVale?: () => Promise<PassResult>;
   checkFrontmatter?: () => Promise<PassResult>;
-  editorialPass?: () => Promise<PassResult>;
+  editorialPass?: (file: string, rubric: string) => Promise<PassResult>;
+  tellCitations?: (file: string) => Promise<PassResult>;
   eprimeAlternativesPass?: (input: {
     file: string;
     eprimeFindings: { id: string }[];
@@ -152,7 +153,37 @@ function mockActivities(overrides: MockOverrides = {}) {
     checkFrontmatter:
       overrides.checkFrontmatter ?? (async () => passResult({ pass: 'frontmatter' })),
     editorialPass:
-      overrides.editorialPass ?? (async () => passResult({ pass: 'claims_structure' })),
+      overrides.editorialPass ??
+      (async (_file: string, rubric: string) => {
+        // Only the ai-tells rubric is recorded. `calls` is asserted empty by the
+        // publish tests, which are about side-effectful activities; the
+        // claims pass runs in every review and would make that assertion
+        // meaningless.
+        if (rubric === 'ai-tells') calls.push(`editorialPass:${rubric}`);
+        return passResult({
+          pass: rubric === 'ai-tells' ? 'ai_tells' : 'claims_structure',
+          metrics: rubric === 'ai-tells' ? { aiLikenessScore: 62 } : undefined,
+        });
+      }),
+    tellCitations:
+      overrides.tellCitations ??
+      (async (file: string) => {
+        calls.push(`tellCitations:${file}`);
+        return passResult({
+          pass: 'tell_citations',
+          findings: [
+            {
+              id: 'tell-1',
+              pass: 'tell_citations',
+              severity: 'pass',
+              message: 'EM_DASH_DENSITY: em dash (—)',
+              file,
+              line: 13,
+            },
+          ],
+          metrics: { words: 120 },
+        });
+      }),
     eprimeAlternativesPass:
       overrides.eprimeAlternativesPass ??
       (async (input: { file: string; eprimeFindings: { id: string }[] }) => {
@@ -1197,6 +1228,112 @@ test('an input predating the field never runs the pass, whatever the config defa
       !calls.some((c) => c.startsWith('eprimeAlternativesPass')),
       `calls: ${calls.join(', ')}`,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The split ai-tells gate (spec §8.6b): deterministic citations with no flag,
+// the composite only when asked for.
+// ---------------------------------------------------------------------------
+
+function startWithTells(
+  id: string,
+  input: { enableTellCitations?: boolean; enableAiTells?: boolean },
+) {
+  return env.client.workflow.start(reviewPost, {
+    workflowId: id,
+    taskQueue: QUEUE,
+    args: [
+      {
+        slug: 'fixture-post',
+        collection: 'writing' as const,
+        skipBuildAudit: true,
+        ...input,
+      },
+    ],
+  });
+}
+
+test('citations run with no flag, and the composite does not come with them', async () => {
+  const { activities, calls, archived } = mockActivities();
+
+  await withWorker(activities, async () => {
+    const handle = await startWithTells('wf-tells-citations-only', { enableTellCitations: true });
+    const parked = await waitForState(handle, 'awaiting_verdict');
+
+    const report = archived.at(-1)!;
+    assert.ok(report.passes.some((p) => p.pass === 'tell_citations'), 'the citations must run');
+    assert.ok(
+      !report.passes.some((p) => p.pass === 'ai_tells'),
+      'the unvalidated composite must not arrive with them',
+    );
+    assert.ok(
+      !calls.includes('editorialPass:ai-tells'),
+      `no LLM ai-tells call may be made without the flag; calls: ${calls.join(', ')}`,
+    );
+    // A citation is informational. A post containing an em dash must not be
+    // flagged for it.
+    assert.equal(parked.overall, 'pass');
+  });
+});
+
+test('--ai-tells adds the composite alongside the citations rather than replacing them', async () => {
+  const { activities, archived } = mockActivities();
+
+  await withWorker(activities, async () => {
+    const handle = await startWithTells('wf-tells-both', {
+      enableTellCitations: true,
+      enableAiTells: true,
+    });
+    await waitForState(handle, 'awaiting_verdict');
+
+    const report = archived.at(-1)!;
+    const aiTells = report.passes.find((p) => p.pass === 'ai_tells');
+    assert.ok(aiTells, 'the flag still buys the LLM pass');
+    assert.equal(aiTells!.metrics?.aiLikenessScore, 62);
+    assert.ok(report.passes.some((p) => p.pass === 'tell_citations'));
+    // Appended after the ai-tells entry — the end of the array is the only
+    // position that leaves every recorded command sequence intact.
+    assert.equal(report.passes.at(-1)!.pass, 'tell_citations');
+  });
+});
+
+test('an input predating the citations field never runs the pass, whatever the config default says', async () => {
+  // The replay guarantee, asserted directly, exactly as the eprime test above
+  // does. `ENABLE_TELL_CITATIONS` is `true`, so a workflow that defaulted the
+  // absent field to the config value would emit a command no pre-existing
+  // history contains — stranding every parked review and both replay fixtures.
+  // `=== true` in the workflow is what prevents that, and `start` passes no
+  // such field.
+  const { activities, calls, archived } = mockActivities();
+
+  await withWorker(activities, async () => {
+    const handle = await start('wf-tells-legacy-input');
+    await waitForState(handle, 'awaiting_verdict');
+
+    assert.ok(
+      !calls.some((c) => c.startsWith('tellCitations')),
+      `calls: ${calls.join(', ')}`,
+    );
+    assert.ok(!archived.at(-1)!.passes.some((p) => p.pass === 'tell_citations'));
+  });
+});
+
+test('a broken citations pass degrades to a flag rather than taking the review down', async () => {
+  const { activities, archived } = mockActivities({
+    tellCitations: async () => {
+      throw new Error('EPERM: operation not permitted, open ...');
+    },
+  });
+
+  await withWorker(activities, async () => {
+    const handle = await startWithTells('wf-tells-broken', { enableTellCitations: true });
+    await waitForState(handle, 'awaiting_verdict');
+
+    const pass = archived.at(-1)!.passes.find((p) => p.pass === 'tell_citations')!;
+    assert.equal(pass.verdict, 'flag');
+    assert.match(pass.findings[0].message, /operation not permitted/);
+    assert.match(pass.findings[0].message, /not a clean bill of health/);
   });
 });
 

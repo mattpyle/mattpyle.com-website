@@ -7,6 +7,7 @@ import {
   ENABLE_BUILD_AUDIT,
   ENABLE_EPRIME_ALTERNATIVES,
   ENABLE_PUBLISH_LEG,
+  ENABLE_TELL_CITATIONS,
   NAMESPACE,
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
@@ -202,7 +203,11 @@ program
   .command('review')
   .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--skip-build-audit', 'skip the heavy build+audit pass (SHOW_DRAFTS build, axe, Lighthouse)')
-  .option('--ai-tells', 'add the ai-tells pass (unvalidated — see spec §9.2)')
+  .option(
+    '--ai-tells',
+    'add the LLM ai-tells pass and its composite score (unvalidated — see spec §9.2). ' +
+      'The deterministic citations run without this.',
+  )
   .description('Start a review and render the report when the fan-out finishes')
   .action(async (slug: string, opts: { skipBuildAudit?: boolean; aiTells?: boolean }) => {
     const c = await client();
@@ -249,6 +254,11 @@ program
           // run without a config change, which is what the validation study
           // needs (it must not flip a global while a review sits parked).
           enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
+          // No CLI flag on purpose: the citations are free, deterministic, and
+          // cite the line they fired on, so there is nothing to opt into. The
+          // constant exists for the case where the pass itself turns out to be
+          // unwanted, not as a cost control.
+          enableTellCitations: ENABLE_TELL_CITATIONS,
           // Resolved here for the same reason, and read in the workflow as
           // `=== true` rather than defaulted, so a history predating the field
           // replays unchanged even though this config default is `true`.
@@ -268,7 +278,11 @@ program
   .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
   .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--skip-build-audit', 'skip the heavy build+audit pass (build, axe, Lighthouse)')
-  .option('--ai-tells', 'add the ai-tells pass (unvalidated — see spec §9.2)')
+  .option(
+    '--ai-tells',
+    'add the LLM ai-tells pass and its composite score (unvalidated — see spec §9.2). ' +
+      'The deterministic citations run without this.',
+  )
   .description('Review already-published content. Advisory only — no verdict, no patches applied.')
   .action(async (collectionArg: string, slug: string, opts: { skipBuildAudit?: boolean; aiTells?: boolean }) => {
     const collection = parseCollection(collectionArg);
@@ -297,6 +311,7 @@ program
           mode: 'audit',
           skipBuildAudit: opts.skipBuildAudit === true || !ENABLE_BUILD_AUDIT,
           enableAiTells: opts.aiTells === true || ENABLE_AI_TELLS,
+          enableTellCitations: ENABLE_TELL_CITATIONS,
           enableEprimeAlternatives: ENABLE_EPRIME_ALTERNATIVES,
         },
       ],
@@ -572,6 +587,69 @@ program
       console.log('    Compare against PROSE baselines, not the Phase 1b 8.8/file figure — see README rule 4.');
     }
     console.log('');
+  });
+
+program
+  .command('tells')
+  .argument('<file>', 'path to a markdown file — repo-relative or absolute')
+  .description('Deterministic tell citations for one file. No workflow, no worker, no API call.')
+  .action(async (fileArg: string) => {
+    // Lazy, like `suggest`/`score`/`study`: this verb must not drag in the
+    // Temporal client, and the import graph is what keeps "no API call" a
+    // property rather than a promise — nothing reachable from here imports
+    // `lib/llm.ts`.
+    const { computeDeterministicTells } = await import('./lib/tells.js');
+    const { bodyWordCount, groupTellCitations, formatTellGroup } = await import(
+      './lib/tell-citations.js'
+    );
+    const { REPO_ROOT } = await import('./config.js');
+    const fsp = await import('node:fs/promises');
+    const nodePath = await import('node:path');
+
+    // **An arbitrary path is accepted here, and only here, on purpose.** Every
+    // other verb resolves content through `postRelPath` precisely so a slug can
+    // never traverse out of the content collections and send a private document
+    // to a rubric (`agents/steward/CLAUDE.md` §4). That guard protects the
+    // *network*, and this verb makes no network call: it reads the file, runs
+    // five regexes, and prints. Scanning the private vault with local code is
+    // explicitly the sanctioned way to benchmark it. Keep it that way — the
+    // moment anything here calls a model, it needs `postRelPath` back.
+    const abs = nodePath.isAbsolute(fileArg) ? fileArg : nodePath.resolve(REPO_ROOT, fileArg);
+    let text: string;
+    try {
+      text = await fsp.readFile(abs, 'utf8');
+    } catch {
+      fail(`No such file: ${abs}`);
+    }
+
+    const words = bodyWordCount(text);
+    const findings = computeDeterministicTells(text);
+    const groups = groupTellCitations(findings, words);
+    const rel = nodePath.relative(REPO_ROOT, abs).split(nodePath.sep).join('/');
+
+    console.log(`\n  ${BOLD}${rel}${RESET}  ·  ${words} body words\n`);
+    console.log(
+      `  ${BOLD}DETERMINISTIC TELLS${RESET} ${paint('(counted in code — no API call)', DIM)}`,
+    );
+    if (groups.length === 0) {
+      console.log('      None fired.\n');
+      return;
+    }
+    for (const group of groups) console.log(`      ${formatTellGroup(group)}`);
+
+    console.log('');
+    console.log(`  ${BOLD}CITATIONS${RESET}`);
+    for (const f of findings) {
+      console.log(`      ${paint(`line ${String(f.line).padStart(4)}`, DIM)}  ${f.category}`);
+      console.log(`          "${f.excerpt}"`);
+    }
+    console.log('');
+    console.log(
+      `  ${paint('Citations only. Style is the author\'s call — nothing here is applied,', DIM)}`,
+    );
+    console.log(
+      `  ${paint('and no composite score is computed (spec §9.2: that one failed validation).', DIM)}\n`,
+    );
   });
 
 program

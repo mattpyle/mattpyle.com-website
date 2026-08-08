@@ -179,6 +179,21 @@ export const WEB_UI = 'http://localhost:8233';
  * in a working state rather than a half-wired one.
  */
 export const ENABLE_AI_TELLS = false;
+/**
+ * The deterministic tell citations (§8.6b) — the free half of what
+ * `ENABLE_AI_TELLS` used to gate as one lump.
+ *
+ * **On, and reachable with no flag.** The counters are code, cost nothing, and
+ * cite the line they fired on, so a wrong one is disproved in two seconds. The
+ * composite `aiLikenessScore` is the part that failed validation (§9.2), and it
+ * stays behind `--ai-tells` with the warning attached to it. Keeping one switch
+ * over both is what created the deadlock the re-validation has sat in since
+ * 2026-07-21: it needs archived corpus data and the switch produced none.
+ *
+ * Resolved by the CLI into the workflow **input**, never read in the workflow —
+ * design rule 10. It decides whether an activity runs.
+ */
+export const ENABLE_TELL_CITATIONS = true;
 export const ENABLE_BUILD_AUDIT = true;
 /**
  * The worked-alternatives pass over Vale's E-Prime instances (§8.6).

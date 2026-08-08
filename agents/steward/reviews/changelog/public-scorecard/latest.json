@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "slug": "public-scorecard",
+  "collection": "changelog",
+  "mode": "audit",
+  "file": "src/content/changelog/public-scorecard.md",
+  "contentSha256": "3f73e7b7d5490d9bc622932395ee165dd40f4d9b1ba5fe16ff2575de9d196feb",
+  "reviewedAt": "2026-08-08T07:52:04.558Z",
+  "workflowId": "steward-review-changelog-public-scorecard",
+  "runId": "019fe05b-6220-700a-98a3-67b21ab4590a",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-08-08T07:51:53.183Z",
+      "durationMs": 15,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 14,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Weasel (warning): 'several' is a weasel word!",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 16,
+          "excerpt": "several"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is linked' may be passive voice. Use active voice if you can.",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 18,
+          "excerpt": "is linked"
+        },
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'is documented' may be passive voice. Use active voice if you can.",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 18,
+          "excerpt": "is documented"
+        },
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 18,
+          "excerpt": "is"
+        }
+      ],
+      "startedAt": "2026-08-08T07:51:53.174Z",
+      "durationMs": 238,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-08-08T07:51:53.178Z",
+      "durationMs": 1
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-08-08T07:51:53.180Z",
+      "durationMs": 6378,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "e684e8d44b3d4c998178bd2e7ff67d8ce5b62d47fd63f5ae4132e949dcacd3d7",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "dictionaryProposals": [
+          {
+            "word": "llms.txt",
+            "disposition": "proper_noun",
+            "reason": "a specific file name/convention in the agentic web ecosystem"
+          },
+          {
+            "word": "llms-full.txt",
+            "disposition": "proper_noun",
+            "reason": "a specific file name/convention in the agentic web ecosystem"
+          },
+          {
+            "word": "agents.md",
+            "disposition": "proper_noun",
+            "reason": "a specific file name referenced as a site artifact"
+          },
+          {
+            "word": "scorecard",
+            "disposition": "proper_noun",
+            "reason": "used as a named URL path and page identifier throughout the post"
+          },
+          {
+            "word": "Agentic",
+            "disposition": "proper_noun",
+            "reason": "used as a named audit category on the site"
+          }
+        ]
+      }
+    },
+    {
+      "pass": "ai_tells",
+      "verdict": "pass",
+      "findings": [],
+      "startedAt": "2026-08-08T07:51:53.185Z",
+      "durationMs": 1317,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/ai-tells.md",
+        "sha256": "94f13ecd5c52d79b94930087e0b373936800026a5a7a81a497d88272f19e5a17",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "aiLikenessScore": 4,
+        "tellCounts": {
+          "NOT_X_BUT_Y": 0,
+          "ZINGER_BOLDING": 0,
+          "RULE_OF_THREE": 3,
+          "EM_DASH_DENSITY": 0,
+          "UNIFORM_RHYTHM": 0,
+          "HEDGED_SYMMETRY": 0,
+          "STOCK_TRANSITIONS": 0,
+          "LIST_INFLATION": 0
+        },
+        "droppedPatches": 0
+      }
+    },
+    {
+      "pass": "tell_citations",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "tell-1",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 14,
+          "excerpt": "Performance, SEO, and Agentic Browsing results",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        },
+        {
+          "id": "tell-2",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 18,
+          "excerpt": "A single typed object feeds both the visible HTML page and the machine-readable export, so the numbers a human sees and the numbers an agent reads can't drift apart",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        },
+        {
+          "id": "tell-3",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 18,
+          "excerpt": "The page is linked in navigation, appears in the sitemap, and is documented in `llms",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        }
+      ],
+      "startedAt": "2026-08-08T07:51:53.178Z",
+      "durationMs": 0,
+      "metrics": {
+        "tellCounts": {
+          "NOT_X_BUT_Y": 0,
+          "ZINGER_BOLDING": 0,
+          "RULE_OF_THREE": 3,
+          "EM_DASH_DENSITY": 0,
+          "UNIFORM_RHYTHM": 0,
+          "HEDGED_SYMMETRY": 0,
+          "STOCK_TRANSITIONS": 0,
+          "LIST_INFLATION": 0
+        },
+        "words": 91,
+        "densities": {
+          "RULE_OF_THREE": 3.3
+        }
+      }
+    },
+    {
+      "pass": "eprime_alternatives",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "eprime-alt-1",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: \"Is linked\" makes the page a passive recipient of someone else's action; \"lives in\" makes it a stable, intentional presence, which matches the deliberate tone of the surrounding paragraph.",
+          "file": "src/content/changelog/public-scorecard.md",
+          "line": 18,
+          "excerpt": "The page is linked in navigation, appears in the sitemap, and is documented in `llms.txt`, `llms-full.txt`, and `agents.md`.",
+          "evidence": "Suggested rewrite: \"The page lives in navigation, appears in the sitemap, and is documented in `llms.txt`, `llms-full.txt`, and `agents.md`.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        }
+      ],
+      "startedAt": "2026-08-08T07:51:59.579Z",
+      "durationMs": 4956,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/eprime-alternatives.md",
+        "sha256": "c266fd3a3e8626ed2231739e5c0a9c603ec05e5be81b7cb31c9a5b1a275dcfdc",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "eprimeInstances": 2,
+        "maxSuggestions": 5,
+        "suggestionsReturned": 1,
+        "suggestionsCapped": 0,
+        "rejectedWorseTells": 0,
+        "rejectedNotFound": 0,
+        "rejectedNoOp": 0,
+        "droppedPatches": 0
+      }
+    }
+  ],
+  "patches": [],
+  "overall": "flag",
+  "summary": "FLAG — nothing blocks publish, but 6 findings want a human look. cspell: pass (0 findings); vale: flag (5 findings); frontmatter: pass (0 findings); claims_structure: pass (0 findings); ai_tells: pass (0 findings); tell_citations: pass (3 findings); eprime_alternatives: flag (1 finding). No patches proposed.",
+  "human": {},
+  "publish": {}
+}

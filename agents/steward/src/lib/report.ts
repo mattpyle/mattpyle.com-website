@@ -10,6 +10,14 @@ export const PassKind = z.enum([
   'build_audit',
   'claims_structure',
   'ai_tells',
+  /**
+   * The deterministic half of the ai-tells taxonomy, run in code with no API
+   * call and no flag (spec §8.6b). Separate from `ai_tells` on purpose: the
+   * citations are free and auditable line by line, while the composite
+   * `aiLikenessScore` failed its validation study, and one gate over both meant
+   * the trustworthy half was reachable only by paying for the discredited one.
+   */
+  'tell_citations',
   'eprime_alternatives',
 ]);
 export type PassKind = z.infer<typeof PassKind>;
