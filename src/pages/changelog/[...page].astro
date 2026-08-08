@@ -59,7 +59,7 @@ const description = "What's shipped on this site — launches, features, and the
 // Meta-only. `description` above is the visible header subtitle and stays as written;
 // this is the SERP-length variant (see the seoDescription prop in Layout.astro).
 const seoDescription = 'Everything shipped on this site, newest first: launches, features, infrastructure work, and the occasional experiment that did not pan out.';
-const breadcrumbUrl = isFirst ? '/changelog' : `/changelog/${page.currentPage}`;
+const breadcrumbUrl = isFirst ? '/changelog/' : `/changelog/${page.currentPage}/`;
 ---
 
 <Layout

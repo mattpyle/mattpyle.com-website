@@ -23,7 +23,7 @@ const activityItems = (
   .slice(0, 4)
   .map(({ id, data }) => ({
     date: data.date,
-    href: `/changelog/${id}`,
+    href: `/changelog/${id}/`,
     title: data.title,
     type: data.type,
     significance: data.significance,

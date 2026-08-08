@@ -6,28 +6,28 @@
     - text: MATT PYLE
   - navigation "Main navigation":
     - link "Writing":
-      - /url: /writing
+      - /url: /writing/
     - link "Builds":
-      - /url: /builds
+      - /url: /builds/
     - link "Changelog":
-      - /url: /changelog
+      - /url: /changelog/
     - link "Scorecard":
-      - /url: /scorecard
+      - /url: /scorecard/
     - link "About":
-      - /url: /about
+      - /url: /about/
 - main:
   - paragraph: Growth & PLG, in public
   - heading "Matt Pyle" [level=1]
   - paragraph: I think about growth, write about marketing, and build things that sometimes work.
   - paragraph: Director of Growth · Temporal Technologies
   - link "Read the writing":
-    - /url: /writing
+    - /url: /writing/
   - link "See the builds →":
-    - /url: /builds
+    - /url: /builds/
   - complementary "Latest activity":
     - heading "Latest activity" [level=2]
     - link "VIEW CHANGELOG":
-      - /url: /changelog
+      - /url: /changelog/
     - list:
       - listitem:
         - link "· · · ·":
@@ -41,7 +41,7 @@
         - /url: "#"
       - time: ·
   - link "ALL WRITING →":
-    - /url: /writing
+    - /url: /writing/
 - contentinfo:
   - navigation "Social links":
     - link "RSS feed for Writing":
@@ -52,7 +52,7 @@
     - link "LinkedIn":
       - /url: https://linkedin.com/in/matt-pyle
     - link "WebMCP":
-      - /url: /webmcp
+      - /url: /webmcp/
     - button "Switch to retro mode"
   - paragraph: /© \d+ Matt Pyle/
 - status

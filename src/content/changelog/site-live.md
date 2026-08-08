@@ -23,4 +23,4 @@ A layout-shift regression on the list pages was fixed with metric-matched fallba
 
 ## First honest numbers
 
-This replaced every prior localhost baseline, which had been flattering the site by construction. The first live-network audit is the one that found the Performance gap — see the [self-hosted fonts](/changelog/self-hosted-fonts) entry for how that got closed. All six AI crawler user agents were confirmed to receive a 200.
+This replaced every prior localhost baseline, which had been flattering the site by construction. The first live-network audit is the one that found the Performance gap — see the [self-hosted fonts](/changelog/self-hosted-fonts/) entry for how that got closed. All six AI crawler user agents were confirmed to receive a 200.

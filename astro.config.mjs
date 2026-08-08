@@ -52,6 +52,18 @@ export default defineConfig({
   adapter: vercel({
     webAnalytics: { enabled: true },
   }),
+  // Dev parity with vercel.json's `"trailingSlash": true`, which 308s the slash-less
+  // form of every page in production. Without this the dev server happily serves both
+  // shapes, so a link that regresses to the slash-less form looks fine locally and only
+  // costs a redirect once deployed. Measured on Astro 7 before adopting: 'always' makes
+  // the dev server 404 the slash-less page outright, so the regression fails loudly at
+  // the moment it is written. Extension paths are unaffected — `.md` siblings, llms.txt,
+  // and the JSON manifests all still answer at their own URLs, in dev and in production.
+  //
+  // Build output is unchanged: `build.format` is 'directory' (the default), so every page
+  // was already emitted as <route>/index.html and every canonical, sitemap entry, and OG
+  // URL already carried the slash.
+  trailingSlash: 'always',
   markdown: { syntaxHighlight: false },
   // 'never': keep CSS in external files. Astro's default ('auto') inlines small
   // bundles as <style> tags, which a strict style-src CSP (no 'unsafe-inline')

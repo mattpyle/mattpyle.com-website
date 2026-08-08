@@ -101,7 +101,7 @@ test('the tools.json payload carries one complete entry per registered tool', ()
     assert.notEqual(entry.example, undefined);
   }
 
-  assert.equal(payload.docs, `${BASE}/webmcp`);
+  assert.equal(payload.docs, `${BASE}/webmcp/`);
   assert.equal(payload.index, `${BASE}/webmcp/index.json`);
   assert.equal(payload.verified.date, WEBMCP_VERIFIED.iso);
 });

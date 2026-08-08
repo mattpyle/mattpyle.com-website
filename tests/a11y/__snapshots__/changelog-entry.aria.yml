@@ -6,19 +6,19 @@
     - text: MATT PYLE
   - navigation "Main navigation":
     - link "Writing":
-      - /url: /writing
+      - /url: /writing/
     - link "Builds":
-      - /url: /builds
+      - /url: /builds/
     - link "Changelog":
-      - /url: /changelog
+      - /url: /changelog/
     - link "Scorecard":
-      - /url: /scorecard
+      - /url: /scorecard/
     - link "About":
-      - /url: /about
+      - /url: /about/
 - main:
   - article:
     - link "← ALL CHANGELOG":
-      - /url: /changelog
+      - /url: /changelog/
     - time: ·
     - text: · ·
     - heading "·" [level=1]
@@ -42,7 +42,7 @@
     - link "LinkedIn":
       - /url: https://linkedin.com/in/matt-pyle
     - link "WebMCP":
-      - /url: /webmcp
+      - /url: /webmcp/
     - button "Switch to retro mode"
   - paragraph: /© \d+ Matt Pyle/
 - status

@@ -26,16 +26,16 @@ I've never been good at self-promotion and advocacy so I'm utilising what I do f
 
 ## Building in the open
 
-One of the goals of this website is to be as transparent as possible, while remaining safe and secure. The website codebase is available to view on my [Github profile](https://github.com/mattpyle/mattpyle.com-website), verified site test scores are published on the [scorecard](/scorecard), there's a [changelog](/changelog) where details on major site changes and features are shared. 
+One of the goals of this website is to be as transparent as possible, while remaining safe and secure. The website codebase is available to view on my [Github profile](https://github.com/mattpyle/mattpyle.com-website), verified site test scores are published on the [scorecard](/scorecard/), there's a [changelog](/changelog/) where details on major site changes and features are shared. 
 
-This is just the start. As can be read on the changelog, a lot of experimental features, such as adding a [WebMCP surface](/changelog/webmcp-tools), have been added in the short time since this site went live. Those features and changes are all in the pursuit of learning (something I enjoy) and will be written and shared here (something I'm learning to enjoy!).
+This is just the start. As can be read on the changelog, a lot of experimental features, such as adding a [WebMCP surface](/changelog/webmcp-tools/), have been added in the short time since this site went live. Those features and changes are all in the pursuit of learning (something I enjoy) and will be written and shared here (something I'm learning to enjoy!).
 
 There are a few things currently .gitignored. Aside from environment variables, api keys, and config that has no reason to be public I'm currently not sharing:
 - Claude.md - *for Claude*
 - AGENTS.md - *for Codex*
 - Backlog.md - An evolving set of ideas for website features, builds, and content
 - Learnings.md - A quick file to capture learnings from building. *note to self: this is actually looking outdated*
-- Scoreboard.md - This captures the output and scores from regular performance, a11y, seo, and agentic browsing checks. Now available publicly on the [scorecard](/scorecard)
+- Scoreboard.md - This captures the output and scores from regular performance, a11y, seo, and agentic browsing checks. Now available publicly on the [scorecard](/scorecard/)
 - `/steward` - The reason this post exists *...more on that later*
 
 ### This post is a test

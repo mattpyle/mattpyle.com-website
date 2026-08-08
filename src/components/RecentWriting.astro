@@ -25,7 +25,7 @@ function formatDate(date: Date): string {
       <ol role="list" class="article-list">
         {articles.map(article => (
           <li class="article-item">
-            <a href={`/writing/${article.id}`} class="article-title">
+            <a href={`/writing/${article.id}/`} class="article-title">
               {article.data.title}
             </a>
             <time datetime={article.data.date.toISOString()} class="article-date">
@@ -37,7 +37,7 @@ function formatDate(date: Date): string {
     ) : (
       <p class="empty-state">More writing coming soon.</p>
     )}
-    <a href="/writing" class="all-link">ALL WRITING →</a>
+    <a href="/writing/" class="all-link">ALL WRITING →</a>
   </div>
 </section>
 

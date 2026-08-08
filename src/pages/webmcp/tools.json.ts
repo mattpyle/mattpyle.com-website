@@ -32,7 +32,7 @@ const throwingGetIndex = () => {
 export function buildToolsPayload(base: string) {
   return {
     generated: new Date().toISOString(),
-    docs: `${base}/webmcp`,
+    docs: `${base}/webmcp/`,
     index: `${base}/webmcp/index.json`,
     verified: { date: WEBMCP_VERIFIED.iso, chrome: WEBMCP_VERIFIED.chrome },
     note:

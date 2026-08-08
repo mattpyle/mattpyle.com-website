@@ -6,19 +6,19 @@
     - text: MATT PYLE
   - navigation "Main navigation":
     - link "Writing":
-      - /url: /writing
+      - /url: /writing/
     - link "Builds":
-      - /url: /builds
+      - /url: /builds/
     - link "Changelog":
-      - /url: /changelog
+      - /url: /changelog/
     - link "Scorecard":
-      - /url: /scorecard
+      - /url: /scorecard/
     - link "About":
-      - /url: /about
+      - /url: /about/
 - main:
   - article:
     - link "← ALL WRITING":
-      - /url: /writing
+      - /url: /writing/
     - time: /\d+ JUL \d+/
     - text: 8 min read
     - heading "·" [level=1]
@@ -36,7 +36,7 @@
         - /url: https://claude.ai/new?q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Faccessibility-and-ai%2F+so+I+can+ask+questions+about+its+contents
       - status
     - link "← ALL WRITING":
-      - /url: /writing
+      - /url: /writing/
 - contentinfo:
   - navigation "Social links":
     - link "RSS feed for Writing":
@@ -47,7 +47,7 @@
     - link "LinkedIn":
       - /url: https://linkedin.com/in/matt-pyle
     - link "WebMCP":
-      - /url: /webmcp
+      - /url: /webmcp/
     - button "Switch to retro mode"
   - paragraph: /© \d+ Matt Pyle/
 - status

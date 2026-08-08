@@ -49,8 +49,8 @@ const markdownUrl = `/changelog/${entry.id}.md`;
   markdownAlternate={markdownUrl}
   breadcrumbs={[
     { name: 'Home', url: '/' },
-    { name: 'Changelog', url: '/changelog' },
-    { name: title, url: `/changelog/${entry.id}` },
+    { name: 'Changelog', url: '/changelog/' },
+    { name: title, url: `/changelog/${entry.id}/` },
   ]}
 >
   <article data-module="article">
@@ -59,7 +59,7 @@ const markdownUrl = `/changelog/${entry.id}.md`;
       <p class="draft-banner" role="status">DRAFT — not published, preview only</p>
     )}
 
-    <a href="/changelog" class="back-link">← ALL CHANGELOG</a>
+    <a href="/changelog/" class="back-link">← ALL CHANGELOG</a>
 
     <header>
       <div class="changelog-meta">
@@ -92,7 +92,7 @@ const markdownUrl = `/changelog/${entry.id}.md`;
         {(prev || next) && (
           <div class="entry-links">
             {prev && (
-              <a href={`/changelog/${prev.id}`} class="entry-link entry-link--previous">
+              <a href={`/changelog/${prev.id}/`} class="entry-link entry-link--previous">
                 <span class="entry-direction">
                   <span aria-hidden="true">←</span> Previous entry
                 </span>
@@ -100,7 +100,7 @@ const markdownUrl = `/changelog/${entry.id}.md`;
               </a>
             )}
             {next && (
-              <a href={`/changelog/${next.id}`} class="entry-link entry-link--next">
+              <a href={`/changelog/${next.id}/`} class="entry-link entry-link--next">
                 <span class="entry-direction">
                   Next entry <span aria-hidden="true">→</span>
                 </span>
@@ -109,7 +109,7 @@ const markdownUrl = `/changelog/${entry.id}.md`;
             )}
           </div>
         )}
-        <a href="/changelog" class="changelog-index-link">
+        <a href="/changelog/" class="changelog-index-link">
           <span class="index-mark" aria-hidden="true"><i></i><i></i><i></i></span>
           View all changelog entries
         </a>

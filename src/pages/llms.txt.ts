@@ -35,12 +35,12 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('## Pages');
   lines.push('');
   lines.push(`- [Home](${base}/): bio, tagline, recent activity feed.`);
-  lines.push(`- [Writing](${base}/writing): all writing.`);
-  lines.push(`- [Builds](${base}/builds): side projects.`);
-  lines.push(`- [Changelog](${base}/changelog): reverse-chronological log of what has shipped on this site.`);
-  lines.push(`- [Scorecard](${base}/scorecard): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
-  lines.push(`- [About](${base}/about): full bio, interests, contact links.`);
-  lines.push(`- [WebMCP](${base}/webmcp): the six WebMCP tools this site registers for in-browser AI agents (four read, two write), what they return, and how to test them.`);
+  lines.push(`- [Writing](${base}/writing/): all writing.`);
+  lines.push(`- [Builds](${base}/builds/): side projects.`);
+  lines.push(`- [Changelog](${base}/changelog/): reverse-chronological log of what has shipped on this site.`);
+  lines.push(`- [Scorecard](${base}/scorecard/): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
+  lines.push(`- [About](${base}/about/): full bio, interests, contact links.`);
+  lines.push(`- [WebMCP](${base}/webmcp/): the six WebMCP tools this site registers for in-browser AI agents (four read, two write), what they return, and how to test them.`);
   lines.push('');
 
   lines.push('## Machine-readable resources');
@@ -59,7 +59,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('');
   for (const article of articles) {
     lines.push(
-      `- [${article.data.title}](${base}/writing/${article.id}): ${article.data.description} ([Markdown](${base}/writing/${article.id}.md))`
+      `- [${article.data.title}](${base}/writing/${article.id}/): ${article.data.description} ([Markdown](${base}/writing/${article.id}.md))`
     );
   }
   lines.push('');
@@ -73,7 +73,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     for (const tag of writingTags) {
       const count = articles.filter(a => a.data.tags.includes(tag)).length;
-      lines.push(`- [${tag}](${base}/writing?tag=${encodeURIComponent(tag)}): ${count} post${count === 1 ? '' : 's'}`);
+      lines.push(`- [${tag}](${base}/writing/?tag=${encodeURIComponent(tag)}): ${count} post${count === 1 ? '' : 's'}`);
     }
     lines.push('');
   }
@@ -89,7 +89,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('');
   for (const entry of changelog) {
     lines.push(
-      `- [${entry.data.title}](${base}/changelog/${entry.id}) (${entry.data.type}, ${entry.data.significance}): ${entry.data.summary}`
+      `- [${entry.data.title}](${base}/changelog/${entry.id}/) (${entry.data.type}, ${entry.data.significance}): ${entry.data.summary}`
     );
   }
   lines.push('');
