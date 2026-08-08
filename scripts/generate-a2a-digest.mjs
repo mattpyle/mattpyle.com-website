@@ -16,7 +16,7 @@
  *
  * Ordering note: the changelog comparator below is a transcription of
  * compareChangelogEntries in src/lib/changelog-order.ts, which this script cannot import (it is
- * TypeScript, and type stripping is not reliably on under the Node 22 the build targets).
+ * TypeScript, and this script stays plain ESM rather than leaning on Node's type stripping).
  * tests/a2a-digest.test.mjs runs the real comparator over the same entries and asserts the two
  * agree, so a change there fails here rather than silently reordering what an agent is told
  * shipped most recently.
@@ -221,7 +221,8 @@ export function writeDigest(path = DIGEST_PATH) {
   return true;
 }
 
-// import.meta.main is Node 24; this spelling works on the Node 22 the build targets.
+// The build targets Node 24, so import.meta.main is available; this spelling is kept because it
+// also works under any older Node someone runs the script with by hand.
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const changed = writeDigest();
   console.log(`[a2a-digest] ${changed ? 'wrote' : 'unchanged'} src/data/a2a-digest.json`);
