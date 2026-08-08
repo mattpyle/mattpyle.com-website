@@ -5,6 +5,11 @@ on:
     branches: [master]
   pull_request:
 
+# Read-only: this job reads source markdown and reports. Stated explicitly
+# rather than inherited, matching security-scan.yml.
+permissions:
+  contents: read
+
 jobs:
   cspell:
     runs-on: ubuntu-latest

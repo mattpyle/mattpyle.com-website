@@ -14,6 +14,11 @@ on:
     branches: [master]
   pull_request:
 
+# No job here writes through the token: it checks out, installs, typechecks and
+# runs tests. Stated explicitly rather than inherited, matching security-scan.yml.
+permissions:
+  contents: read
+
 jobs:
   site:
     name: Site tests & astro check

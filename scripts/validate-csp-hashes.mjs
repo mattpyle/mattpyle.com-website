@@ -16,6 +16,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import domino from '@mixmark-io/domino';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 // Static output lands in dist/client/ because of the Vercel adapter (see
@@ -44,20 +45,36 @@ export function sha256(content) {
 }
 
 /**
- * The inline scripts a browser would execute, as {attrs, content} pairs.
+ * The inline scripts a browser would execute, as {type, content} pairs.
  * Scripts with a src are external and covered by script-src's source list, not
  * by a hash, so they are skipped.
+ *
+ * Parsed with domino rather than matched with a regex. A regex over HTML gets
+ * the tag boundaries wrong on inputs a parser handles correctly — an attribute
+ * value containing `>`, a `</script` inside a string — and every way it can be
+ * wrong here is the same way: a script silently missing from the list, which is
+ * this validator green-lighting a CSP that refuses the script in production.
+ * The parser is the thing whose disagreement with the browser is worth ruling
+ * out, not the thing whose speed matters.
+ *
+ * The hashes are computed over the exact bytes between the tags, so this relies
+ * on domino returning script content verbatim. It does: script is a rawtext
+ * element, so its text node carries `&amp;` and `<` as written, undecoded.
+ * `tests/validate-csp-hashes.test.mjs` holds that as an assertion rather than
+ * an assumption.
  *
  * @param {string} html
  */
 export function inlineScripts(html) {
+  const document = domino.createDocument(html, true);
   const scripts = [];
-  for (const match of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
-    const [, attrs, content] = match;
-    if (/\ssrc\s*=/.test(attrs)) continue;
-    const type = attrs.match(/\stype\s*=\s*["']?([^"'\s>]*)/)?.[1]?.toLowerCase() ?? '';
+  for (const element of Array.from(document.querySelectorAll('script'))) {
+    if (element.hasAttribute('src')) continue;
+    // Trimmed and lowercased because that is how a browser compares the type
+    // attribute; `type=" module "` is a module.
+    const type = (element.getAttribute('type') ?? '').trim().toLowerCase();
     if (!EXECUTABLE_TYPES.has(type)) continue;
-    scripts.push({ attrs, content });
+    scripts.push({ type, content: element.textContent });
   }
   return scripts;
 }
