@@ -222,7 +222,14 @@ test('the llms.txt skills lines enumerate every committed skill', () => {
   const lines = formatSkillsIndexLines(base, committed.skills);
 
   assert.equal(lines.length, committed.skills.length + 1);
-  assert.match(lines[0], new RegExp(`\(${base}${SKILLS_INDEX_PATH}\)`));
+  // A literal containment check, not a regex. The `new RegExp` version of this line lost its
+  // backslashes to the template literal, so it asserted a capture group where it meant literal
+  // parentheses and matched the URL's dots as wildcards: it passed on strings this test means to
+  // reject. Nothing here needs a pattern — the expected substring is fully known.
+  assert.ok(
+    lines[0].includes(`(${base}${SKILLS_INDEX_PATH})`),
+    `index line does not link the index as a markdown target: ${lines[0]}`
+  );
   assert.ok(
     lines[0].includes(`lists ${committed.skills.length} skill${committed.skills.length === 1 ? '' : 's'}`),
     `index line does not state the skill count: ${lines[0]}`

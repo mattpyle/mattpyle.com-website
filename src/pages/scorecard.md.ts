@@ -25,9 +25,16 @@ export const prerender = false;
 
 const CANONICAL = 'https://www.mattpyle.com/scorecard/';
 
-/** Pipes inside a cell would end it early. Nothing here should contain one; belt and braces. */
+/**
+ * Pipes inside a cell would end it early. Nothing here should contain one; belt and braces.
+ *
+ * Backslashes are escaped first, and that order is the whole point: escaping only pipes leaves a
+ * value ending in a backslash able to consume the backslash of the pipe escape that follows it
+ * ("a\" + "\|" reads as an escaped backslash and then a live pipe), which breaks the row it was
+ * meant to protect.
+ */
 function cell(value: string | number): string {
-  return String(value).replace(/\|/g, '\\|');
+  return String(value).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 }
 
 function table(headers: string[], rows: (string | number)[][]): string {

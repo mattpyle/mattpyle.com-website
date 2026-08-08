@@ -5,6 +5,13 @@ on:
     branches: [master]
   pull_request:
 
+# The job builds the site, serves it locally and audits it; nothing writes
+# through the token. Stated explicitly rather than inherited, matching
+# security-scan.yml. The gating @axe step reports as a check run, which needs no
+# token permission of its own.
+permissions:
+  contents: read
+
 jobs:
   axe:
     runs-on: ubuntu-latest

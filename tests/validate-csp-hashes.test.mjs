@@ -108,6 +108,29 @@ test("single quotes inside the content attribute do not truncate the hash list",
   assert.equal(hashes.size, 2);
 });
 
+test('script content comes back verbatim, with entities undecoded', () => {
+  // The hashes are computed over the exact bytes Astro emitted between the tags, so the parser
+  // must not normalise them. script is a rawtext element, so `&amp;` and a bare `<` stay as
+  // written — this asserts that rather than trusting it, because a parser that decoded entities
+  // would produce hashes that never match and a validator that fails every build.
+  const source = 'const s = "&amp; &lt; &#39;"; if (1 < 2 && 3 > 2) go();';
+  const [script] = inlineScripts(`<html><head><script>${source}</script></head></html>`);
+  assert.equal(script.content, source);
+  assert.equal(sha256(script.content), sha256(source));
+});
+
+test('a > inside an attribute value does not truncate the script', () => {
+  // The case the regex got wrong: `<script([^>]*)>` ends the open tag at the first `>`, whatever
+  // is quoting it, so the hash is taken over the tail of an attribute plus the code.
+  const [script] = inlineScripts('<html><head><script data-note="a>b">alert(1)</script></head></html>');
+  assert.equal(script.content, 'alert(1)');
+});
+
+test('a type with surrounding whitespace is still executable', () => {
+  // How a browser compares it: trimmed and ASCII-case-insensitive.
+  assert.equal(inlineScripts('<html><head><script type=" MODULE ">x()</script></head></html>').length, 1);
+});
+
 test('the pre-paint appearance script reads the storage key from appearance.mjs', () => {
   assert.match(PRE_PAINT_APPEARANCE_SCRIPT, /"mattpyle:appearance"/);
   assert.match(PRE_PAINT_APPEARANCE_SCRIPT, /\["retro"\]/);
