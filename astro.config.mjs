@@ -52,18 +52,26 @@ export default defineConfig({
   adapter: vercel({
     webAnalytics: { enabled: true },
   }),
-  // Dev parity with vercel.json's `"trailingSlash": true`, which 308s the slash-less
-  // form of every page in production. Without this the dev server happily serves both
-  // shapes, so a link that regresses to the slash-less form looks fine locally and only
-  // costs a redirect once deployed. Measured on Astro 7 before adopting: 'always' makes
-  // the dev server 404 the slash-less page outright, so the regression fails loudly at
-  // the moment it is written. Extension paths are unaffected — `.md` siblings, llms.txt,
-  // and the JSON manifests all still answer at their own URLs, in dev and in production.
+  // DO NOT set `trailingSlash: 'always'` here. It reads like free dev parity with the
+  // slash normalisation in middleware.ts, and it was adopted on that basis and then
+  // reverted, measured on a preview deployment:
   //
-  // Build output is unchanged: `build.format` is 'directory' (the default), so every page
-  // was already emitted as <route>/index.html and every canonical, sitemap entry, and OG
-  // URL already carried the slash.
-  trailingSlash: 'always',
+  //   - The Vercel adapter turns it into a global 308 route in .vercel/output/config.json
+  //     (`"src": "^/((?:[^/]+/)*[^/\\.]+)$"`), which is a second, wider redirect than the
+  //     one the middleware issues, applied to paths the matcher deliberately excludes.
+  //   - It registers /a2a at the slash form only (`"src": "^/a2a/$"`), so `POST /a2a`
+  //     308'd. That is the endpoint the Agent Card, agents.md, and the `_a2a._agents` DNS
+  //     record publish, and a client that does not follow redirects on POST loses it.
+  //
+  // Astro's setting is global with no per-route opt-out, so there is no spelling of it
+  // that spares /a2a. Slash normalisation belongs in middleware.ts, where the matcher
+  // decides what it reaches. The cost of leaving this unset is real but small: the dev
+  // server answers both shapes, so a link that regresses to the slash-less form looks
+  // fine locally and only costs a redirect once deployed.
+  //
+  // Build output does not depend on this either way: `build.format` is 'directory' (the
+  // default), so every page is emitted as <route>/index.html and every canonical, sitemap
+  // entry, and OG URL already carries the slash.
   markdown: { syntaxHighlight: false },
   // 'never': keep CSS in external files. Astro's default ('auto') inlines small
   // bundles as <style> tags, which a strict style-src CSP (no 'unsafe-inline')
