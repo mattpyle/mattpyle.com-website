@@ -1,5 +1,4 @@
 {
-  "trailingSlash": true,
   "redirects": [
     { "source": "/agent-traffic", "destination": "/scorecard/#agent-traffic", "permanent": false },
     { "source": "/agent-traffic/", "destination": "/scorecard/#agent-traffic", "permanent": false }

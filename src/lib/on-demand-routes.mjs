@@ -23,6 +23,8 @@
  * markdown-negotiation.mjs.
  */
 
+import { trailingSlashRedirectFor } from './trailing-slash.mjs';
+
 /**
  * The on-demand paths, in every shape the site serves them in.
  *
@@ -45,6 +47,15 @@ const ON_DEMAND = new Set(ON_DEMAND_PATHS);
  * the list, or one carrying no query string at all, is never touched — which is every request the
  * site actually wants to serve.
  *
+ * The target is the *fully* canonical shape, not merely the query-free one: `/scorecard?q=1` goes
+ * straight to `/scorecard/`, slash included. Returning the bare `/scorecard` would be correct as
+ * far as this rule goes and then immediately earn a second 308 from the slash normalisation in
+ * src/lib/trailing-slash.mjs, so a cache-busting request would cost two round trips instead of one
+ * and every such URL would sit behind a redirect chain. One hop, always.
+ *
+ * `/scorecard.md` is the exception that proves it: an extension path has no slash form, so its
+ * canonical target is itself, query stripped.
+ *
  * @param {string} pathname
  * @param {string} search the URL's search component, `?q=1` or ''
  * @returns {string | null}
@@ -52,5 +63,5 @@ const ON_DEMAND = new Set(ON_DEMAND_PATHS);
 export function canonicalOnDemandPath(pathname, search) {
   if (!search) return null;
   if (!ON_DEMAND.has(pathname)) return null;
-  return pathname;
+  return trailingSlashRedirectFor(pathname) ?? pathname;
 }
