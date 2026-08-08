@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { ON_DEMAND_PATHS, canonicalOnDemandPath } from '../src/lib/on-demand-routes.mjs';
+import { trailingSlashRedirectFor } from '../src/lib/trailing-slash.mjs';
 
 // Query-string canonicalisation on the routes that render per request. The rule is narrow on
 // purpose and the tests below are mostly about the paths it must NOT touch: a redirect that
@@ -16,9 +17,26 @@ function matcherEntries() {
   return [...block[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
 }
 
-test('a query string on an on-demand path canonicalises to the bare path', () => {
+test('a query string on an on-demand path canonicalises to the fully canonical path', () => {
+  // Slash form included, so the hop lands on the canonical URL rather than on a path that
+  // immediately owes a second 308 to trailing-slash normalisation. One hop, always.
+  const expected = {
+    '/scorecard': '/scorecard/',
+    '/scorecard/': '/scorecard/',
+    '/scorecard.md': '/scorecard.md',
+  };
   for (const path of ON_DEMAND_PATHS) {
-    assert.equal(canonicalOnDemandPath(path, '?q=abc'), path, path);
+    assert.equal(canonicalOnDemandPath(path, '?q=abc'), expected[path], path);
+  }
+});
+
+test('canonicalisation never returns a target that would redirect again', () => {
+  // The chain guard, stated as a property rather than a table: whatever this returns must be a
+  // fixed point of both rules, or a cache-busting request costs two round trips.
+  for (const path of ON_DEMAND_PATHS) {
+    const target = canonicalOnDemandPath(path, '?q=abc');
+    assert.equal(trailingSlashRedirectFor(target), null, `${path} -> ${target} redirects again`);
+    assert.equal(canonicalOnDemandPath(target, ''), null, `${path} -> ${target} canonicalises again`);
   }
 });
 

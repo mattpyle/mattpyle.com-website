@@ -43,8 +43,8 @@ const articleBody = article.body ?? '';
   markdownAlternate={markdownUrl}
   breadcrumbs={[
     { name: 'Home', url: '/' },
-    { name: 'Writing', url: '/writing' },
-    { name: title, url: `/writing/${article.id}` },
+    { name: 'Writing', url: '/writing/' },
+    { name: title, url: `/writing/${article.id}/` },
   ]}
 >
   <article data-module="article">
@@ -53,7 +53,7 @@ const articleBody = article.body ?? '';
       <p class="draft-banner" role="status">DRAFT — not published, preview only</p>
     )}
 
-    <a href="/writing" class="back-link">← ALL WRITING</a>
+    <a href="/writing/" class="back-link">← ALL WRITING</a>
 
     <header>
       <div data-module="article-meta">
@@ -75,7 +75,7 @@ const articleBody = article.body ?? '';
     </div>
 
     <footer class="article-footer">
-      <a href="/writing" class="back-link">← ALL WRITING</a>
+      <a href="/writing/" class="back-link">← ALL WRITING</a>
     </footer>
 
   </article>

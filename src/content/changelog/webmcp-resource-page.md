@@ -14,7 +14,7 @@ heroAlt: "Diagram of a webpage's tools flowing through a WebMCP node labelled ty
 draft: false
 ---
 
-This site's WebMCP tools now have a public home: [/webmcp](/webmcp) documents every tool the site registers, what each returns, how to test them, and where the standard honestly stands. At shipping that was four tools: the three readers, and `set_appearance` from [the retro mode addition](/changelog/agent-driven-retro-mode).
+This site's WebMCP tools now have a public home: [/webmcp](/webmcp/) documents every tool the site registers, what each returns, how to test them, and where the standard honestly stands. At shipping that was four tools: the three readers, and `set_appearance` from [the retro mode addition](/changelog/agent-driven-retro-mode/).
 
 ## How the page surfaces the tools
 
@@ -30,6 +30,6 @@ WebMCP is a W3C Community Group draft, available in Chrome behind an origin tria
 
 ## How you can test WebMCP functionality
 
-You can run every tool yourself on [/webmcp](/webmcp) by using a Chrome extension like [WebMCP - Model Context Tool Inspector](https://chromewebstore.google.com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd) and enabling chrome://flags/#enable-webmcp-testing.
+You can run every tool yourself on [/webmcp](/webmcp/) by using a Chrome extension like [WebMCP - Model Context Tool Inspector](https://chromewebstore.google.com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd) and enabling chrome://flags/#enable-webmcp-testing.
 
-If you want to try it out manually then use the buttons on the [/webmcp](/webmcp) page to call the same handlers an agent calls, in any browser.
+If you want to try it out manually then use the buttons on the [/webmcp](/webmcp/) page to call the same handlers an agent calls, in any browser.

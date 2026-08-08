@@ -37,7 +37,7 @@ export const GET: APIRoute = async ({ site }) => {
     // manifest — and it is the more guessable of the two URLs under /webmcp/. Point at the
     // manifest and the human page so an agent that lands here first doesn't mistake it for
     // the tool surface. (The name stays: live tools fetch this URL and it is published.)
-    docs: `${base}/webmcp`,
+    docs: `${base}/webmcp/`,
     tools: `${base}/webmcp/tools.json`,
     site: {
       name: SITE_NAME,
@@ -49,7 +49,7 @@ export const GET: APIRoute = async ({ site }) => {
     writing: articles.map((article) => ({
       title: article.data.title,
       slug: article.id,
-      url: `${base}/writing/${article.id}`,
+      url: `${base}/writing/${article.id}/`,
       date: article.data.date.toISOString(),
       ...(article.data.updated ? { updated: article.data.updated.toISOString() } : {}),
       tags: article.data.tags,
@@ -59,7 +59,7 @@ export const GET: APIRoute = async ({ site }) => {
       title: build.data.title,
       slug: build.id,
       // Builds have no per-entry route — src/pages/builds/ is an index page only.
-      url: `${base}/builds`,
+      url: `${base}/builds/`,
       date: build.data.date.toISOString(),
       status: build.data.status,
       tags: build.data.tags,
@@ -72,7 +72,7 @@ export const GET: APIRoute = async ({ site }) => {
     changelog: changelog.map((entry) => ({
       title: entry.data.title,
       slug: entry.id,
-      url: `${base}/changelog/${entry.id}`,
+      url: `${base}/changelog/${entry.id}/`,
       date: entry.data.date.toISOString(),
       ...(entry.data.publishedAt ? { publishedAt: entry.data.publishedAt.toISOString() } : {}),
       ...(entry.data.updated ? { updated: entry.data.updated.toISOString() } : {}),

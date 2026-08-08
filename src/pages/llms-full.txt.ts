@@ -46,7 +46,7 @@ export const GET: APIRoute = async ({ site }) => {
   );
   lines.push('');
   lines.push(
-    `Machine-readable: ${base}/webmcp/tools.json is the tool manifest (names, descriptions, input schemas, example calls), generated from the live tool objects. ${base}/webmcp/index.json is the static content index the tools read — the same author entity, section map, writing list, and builds list exported below — and you can fetch it directly. ${base}/webmcp is the human-facing page, with the per-tool detail and the current state of the standard.`
+    `Machine-readable: ${base}/webmcp/tools.json is the tool manifest (names, descriptions, input schemas, example calls), generated from the live tool objects. ${base}/webmcp/index.json is the static content index the tools read — the same author entity, section map, writing list, and builds list exported below — and you can fetch it directly. ${base}/webmcp/ is the human-facing page, with the per-tool detail and the current state of the standard.`
   );
   lines.push('');
   lines.push('---');
@@ -54,7 +54,7 @@ export const GET: APIRoute = async ({ site }) => {
 
   lines.push('## Scorecard');
   lines.push('');
-  lines.push(`URL: ${base}/scorecard`);
+  lines.push(`URL: ${base}/scorecard/`);
   lines.push(`Verified: ${SCORECARD.verified.iso}`);
   lines.push(`Scope: ${SCORECARD.scope}`);
   lines.push(`Tools: ${SCORECARD.tools.join(', ')}`);
@@ -73,7 +73,7 @@ export const GET: APIRoute = async ({ site }) => {
   for (const article of articles) {
     lines.push(`### ${article.data.title}`);
     lines.push('');
-    lines.push(`URL: ${base}/writing/${article.id}`);
+    lines.push(`URL: ${base}/writing/${article.id}/`);
     lines.push(`Markdown: ${base}/writing/${article.id}.md`);
     lines.push(`Date: ${formatDate(article.data.date)}`);
     lines.push(`Tags: ${article.data.tags.join(', ')}`);
@@ -110,7 +110,7 @@ export const GET: APIRoute = async ({ site }) => {
   for (const entry of changelog) {
     lines.push(`### ${entry.data.title}`);
     lines.push('');
-    lines.push(`URL: ${base}/changelog/${entry.id}`);
+    lines.push(`URL: ${base}/changelog/${entry.id}/`);
     lines.push(`Date: ${formatDate(entry.data.date)}`);
     if (entry.data.publishedAt) lines.push(`Published: ${entry.data.publishedAt.toISOString()}`);
     lines.push(`Type: ${entry.data.type}`);

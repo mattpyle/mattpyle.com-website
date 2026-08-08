@@ -3,6 +3,7 @@ import { recordHit } from './src/lib/agent-hits.mjs';
 import { formatSurfaceLine, isAgentSurface } from './src/lib/agent-surfaces.mjs';
 import { markdownSiblingFor, prefersMarkdown } from './src/lib/markdown-negotiation.mjs';
 import { canonicalOnDemandPath } from './src/lib/on-demand-routes.mjs';
+import { trailingSlashRedirectFor } from './src/lib/trailing-slash.mjs';
 
 // Vercel Routing Middleware — a platform-level primitive, distinct from Astro's own
 // `astro:middleware`. It runs before cache/static-file serving, which is required here:
@@ -16,6 +17,14 @@ import { canonicalOnDemandPath } from './src/lib/on-demand-routes.mjs';
 // file converted from the rendered HTML at build. This middleware does not know or care
 // which: it derives the URL, fetches it, and falls back to HTML if it is not there. No
 // manifest, so nothing to keep in sync and nothing to go stale.
+//
+// It also owns slash normalisation: a matched page path with no trailing slash 308s to the
+// slash form, the canonical shape every canonical tag, sitemap entry, and internal link on
+// the site already uses. That rule lives here rather than in vercel.json's `trailingSlash`
+// for a measured reason — the platform's version runs BEFORE middleware, so it 308'd
+// `Accept: text/markdown` requests instead of letting the negotiation below answer them,
+// and it caught `POST /a2a` as well. Here the ordering is ours and the matcher bounds the
+// blast radius. Measurements and the full reasoning: src/lib/trailing-slash.mjs.
 
 // Slugs that shipped publicly and then moved. Inbound links and cached RSS entries
 // hold the old URL forever, so it 301s rather than 404s.
@@ -53,6 +62,24 @@ function countHit(event: 'surface' | 'markdown', path: string, request: Request)
 function canonicalPageUrl(url: URL): string {
   const pathname = url.pathname.endsWith('/') ? url.pathname : `${url.pathname}/`;
   return `${url.origin}${pathname}`;
+}
+
+// The last thing every non-markdown request does: 308 to the slash form, or carry on.
+//
+// This is the single exit point for slash normalisation, and it is a function rather than an
+// inline branch because it has to be reachable from two places — the ordinary path, and the
+// fallback taken when a sibling was expected but the fetch missed. A page that fell back to
+// HTML still owes the redirect.
+//
+// The query string rides along: /about?utm_source=x must not lose the parameter that a
+// client-side analytics read is waiting for. The one case that deliberately drops a query is
+// the on-demand canonicalisation at the top of the handler, which has already run by now.
+function slashRedirectOrNext(url: URL): Response {
+  const slashed = trailingSlashRedirectFor(url.pathname);
+  if (!slashed) return next();
+  const location = `${slashed}${url.search}`;
+  console.log(`[middleware] 308 ${url.pathname}${url.search} -> ${location}`);
+  return new Response(null, { status: 308, headers: { Location: location } });
 }
 
 export default async function middleware(request: Request) {
@@ -111,11 +138,14 @@ export default async function middleware(request: Request) {
   // A path that maps to no sibling is not negotiable — which includes every `.md` URL, so
   // the proxy fetch below re-enters this function once and falls straight through. That is
   // the recursion guard: it lives in the mapping, not in a flag on the request.
+  //
+  // Both of these fall through to slashRedirectOrNext() rather than returning next()
+  // directly, and that ordering is the point of this whole design: negotiation gets first
+  // refusal on a request, and only what it declines can be redirected. A slash-less URL
+  // asking for markdown is answered with markdown, never with a 308.
   const sibling = markdownSiblingFor(url.pathname);
-  if (!sibling) return next();
-
   const accept = request.headers.get('accept');
-  if (!prefersMarkdown(accept)) return next();
+  if (!sibling || !prefersMarkdown(accept)) return slashRedirectOrNext(url);
 
   const target = new URL(url);
   target.pathname = sibling;
@@ -133,7 +163,7 @@ export default async function middleware(request: Request) {
   // exists to catch at build time.
   if (!upstream.ok) {
     console.log(`[markdown] miss path="${url.pathname}" sibling="${sibling}" status=${upstream.status}`);
-    return next();
+    return slashRedirectOrNext(url);
   }
 
   // One line per served markdown response, so "does anything ever negotiate?" is a query
@@ -167,11 +197,19 @@ export default async function middleware(request: Request) {
 // serves HTML, or goes unlogged, forever.
 //
 // First, every page path, mirroring NEGOTIABLE_PAGE_MATCHER in
-// src/lib/markdown-negotiation.mjs. Section roots appear in both shapes because the site
-// serves both (/about from the nav, /about/ as the canonical). The handler self-filters —
-// any `.md` URL and anything with an extension falls through to next() — so matching whole
-// subtrees is safe. Fronting every page with a function is the accepted cost of the
+// src/lib/markdown-negotiation.mjs. Section roots appear in both shapes, and since slash
+// normalisation moved in here that is load-bearing rather than merely tolerant: the
+// slash-less entry is the one that receives the 308 and the slash-less form is now the only
+// way to reach it, so dropping either shape would silently remove a redirect. The handler
+// self-filters — any `.md` URL and anything with an extension falls through — so matching
+// whole subtrees is safe. Fronting every page with a function is the accepted cost of the
 // no-whitelist rule; the pass-through design keeps it cheap.
+//
+// What is NOT here matters just as much now. `/a2a` is absent on purpose: it is an
+// extension-less POST endpoint, so any slash rule that reached it would 308 a JSON-RPC call,
+// and a client that does not follow redirects on POST would lose the endpoint the Agent
+// Card, agents.md, and the `_a2a._agents` DNS record all publish. Leaving it unmatched is
+// what keeps it answering at both shapes. Do not add it.
 //
 // Then the agent-surface list from src/lib/agent-surfaces.mjs.
 //

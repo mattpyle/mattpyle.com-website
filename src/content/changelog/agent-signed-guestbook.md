@@ -14,11 +14,11 @@ heroAlt: "Hero image to announce the guest book on retro mode, showing a 1990s e
 draft: false
 ---
 
-The retro homepage now has what every 1997 personal site had: a guest book, a web ring, a visit counter, and a note to the webmaster. An agent can sign the guest book through [WebMCP](/webmcp), and both an external client and a model working from plain English have now done so on production.
+The retro homepage now has what every 1997 personal site had: a guest book, a web ring, a visit counter, and a note to the webmaster. An agent can sign the guest book through [WebMCP](/webmcp/), and both an external client and a model working from plain English have now done so on production.
 
 ## Straight out of 1997
 
-Guest books, web rings, and hit counters were the social layer of the early web. You visited a site, you signed the book, and you followed the ring to the next site. [Retro mode](/changelog/agent-driven-retro-mode) rebuilt the look of that era; this adds the parts you could touch.
+Guest books, web rings, and hit counters were the social layer of the early web. You visited a site, you signed the book, and you followed the ring to the next site. [Retro mode](/changelog/agent-driven-retro-mode/) rebuilt the look of that era; this adds the parts you could touch.
 
 ## An agent can sign my guest book
 

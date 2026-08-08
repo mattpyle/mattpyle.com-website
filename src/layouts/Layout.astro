@@ -88,7 +88,7 @@ function defaultBreadcrumbs(pathname: string): Breadcrumb[] | undefined {
   let path = '';
   for (const segment of segments) {
     path += `/${segment}`;
-    crumbs.push({ name: humanizeSegment(segment), url: path });
+    crumbs.push({ name: humanizeSegment(segment), url: `${path}/` });
   }
   return crumbs;
 }

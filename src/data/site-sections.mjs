@@ -44,18 +44,18 @@ export function sitePerson(base) {
 export function siteSections(base) {
   return [
     { name: 'Home', url: `${base}/`, summary: 'Bio, tagline, recent activity feed.' },
-    { name: 'Writing', url: `${base}/writing`, summary: 'All writing.' },
-    { name: 'Builds', url: `${base}/builds`, summary: 'Side projects.' },
+    { name: 'Writing', url: `${base}/writing/`, summary: 'All writing.' },
+    { name: 'Builds', url: `${base}/builds/`, summary: 'Side projects.' },
     {
       name: 'Changelog',
-      url: `${base}/changelog`,
+      url: `${base}/changelog/`,
       summary: 'Reverse-chronological log of what has shipped on this site.',
     },
     {
       name: 'Scorecard',
-      url: `${base}/scorecard`,
+      url: `${base}/scorecard/`,
       summary: 'Latest verified accessibility, performance, SEO, and agentic browsing scores.',
     },
-    { name: 'About', url: `${base}/about`, summary: 'Full bio, interests, contact links.' },
+    { name: 'About', url: `${base}/about/`, summary: 'Full bio, interests, contact links.' },
   ];
 }

@@ -47,7 +47,7 @@ for (const entry of entries) {
           <span class="year-line" aria-hidden="true"></span>
         </div>
         {group.items.map(entry => (
-          <a href={`/changelog/${entry.id}`} class="lg-row" data-type={entry.data.type}>
+          <a href={`/changelog/${entry.id}/`} class="lg-row" data-type={entry.data.type}>
             <div class="lg-when">
               <span class={`sig-dot sig-dot--${entry.data.significance}`} aria-hidden="true"></span>
               <span class="lg-date">{formatDate(entry.data.date)}</span>

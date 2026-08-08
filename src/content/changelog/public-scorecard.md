@@ -11,7 +11,7 @@ tags: ["measurement", "agents", "performance", "accessibility"]
 draft: false
 ---
 
-[`/scorecard`](/scorecard) reports the site's current Accessibility, Performance, SEO, and Agentic Browsing results. The snapshot is deliberately manual and intentional at this stage: one verified deploy snapshot, not a stream of automated audit entries or a claim of continuous monitoring.
+[`/scorecard`](/scorecard/) reports the site's current Accessibility, Performance, SEO, and Agentic Browsing results. The snapshot is deliberately manual and intentional at this stage: one verified deploy snapshot, not a stream of automated audit entries or a claim of continuous monitoring.
 
 ## One source, several readers
 

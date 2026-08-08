@@ -137,7 +137,7 @@ That's the first thing in this entire exercise I verified by *listening* rather 
 
 The site was already at 100 Accessibility, 100 SEO, 100 Best Practices, and 3/3 on Agentic Browsing before any of this. It passed everything but, you know, there's not much here.
 
-This website will be as transparent as possible. I've launched a publicly-facing [`/scorecard`](/scorecard) with my own scores across these categories as well as a change log and what I learned from each change.
+This website will be as transparent as possible. I've launched a publicly-facing [`/scorecard`](/scorecard/) with my own scores across these categories as well as a change log and what I learned from each change.
 
 ## A green scoreboard is only a signal
 

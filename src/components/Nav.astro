@@ -1,16 +1,20 @@
 ---
-const path = Astro.url.pathname;
+// Normalised to the trailing-slash canonical before comparing, because the hrefs below
+// now carry it. Production always serves the slash form (the 308 in middleware.ts),
+// but the dev server and the a11y suite's local server both answer a slash-less URL
+// directly, and an un-normalised path would silently drop the active state there.
+const path = Astro.url.pathname.endsWith('/') ? Astro.url.pathname : `${Astro.url.pathname}/`;
 
 function isActive(href: string): boolean {
   return href === '/' ? path === '/' : path.startsWith(href);
 }
 
 const NAV_LINKS = [
-  { label: 'Writing',   href: '/writing'   },
-  { label: 'Builds',    href: '/builds'    },
-  { label: 'Changelog', href: '/changelog' },
-  { label: 'Scorecard', href: '/scorecard' },
-  { label: 'About',     href: '/about'     },
+  { label: 'Writing',   href: '/writing/'   },
+  { label: 'Builds',    href: '/builds/'    },
+  { label: 'Changelog', href: '/changelog/' },
+  { label: 'Scorecard', href: '/scorecard/' },
+  { label: 'About',     href: '/about/'     },
 ] as const;
 ---
 
