@@ -56,9 +56,11 @@ test('drafts never reach the digest', () => {
 });
 
 test('the digest changelog is in the same order the site publishes', () => {
-  // scripts/generate-a2a-digest.mjs transcribes compareChangelogEntries because it cannot import
-  // TypeScript under the Node the build targets. This runs the real comparator over the same
-  // entries and asserts the transcription still agrees with it.
+  // scripts/generate-a2a-digest.mjs imports compareChangelogEntries now rather than transcribing
+  // it, so this no longer guards a copy against its original; changelog-order.test.mjs owns the
+  // comparator's own behaviour. It is still worth asserting, one level up: that the committed
+  // artifact an agent is served is actually in comparator order. Drop the sort from the script,
+  // or sort by something else, and this fails.
   const entries = committed.changelog.map((entry) => ({
     id: entry.slug,
     data: {

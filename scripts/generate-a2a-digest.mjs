@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Compile the digest the /a2a responder answers from.
  *
  * Runs in `prebuild` (and `predev`) and writes src/data/a2a-digest.json, which src/pages/a2a.ts
@@ -14,18 +14,19 @@
  * exact payload a reviewer needs to see to know what the responder will say, and a diff on it is
  * the review signal when content changes what an agent gets told.
  *
- * Ordering note: the changelog comparator below is a transcription of
- * compareChangelogEntries in src/lib/changelog-order.ts, which this script cannot import (it is
- * TypeScript, and this script stays plain ESM rather than leaning on Node's type stripping).
- * tests/a2a-digest.test.mjs runs the real comparator over the same entries and asserts the two
- * agree, so a change there fails here rather than silently reordering what an agent is told
- * shipped most recently.
+ * Ordering note: the changelog is sorted by the real compareChangelogEntries from
+ * src/lib/changelog-order.ts, the same function every page and generator uses, imported straight
+ * from TypeScript on Node's type stripping. It used to be transcribed here because a plain node
+ * script could not import a .ts file; PR #97 moved every environment to Node 24 and that
+ * constraint went with it. Changelog rows are therefore built collection-shaped, sorted, and only
+ * then projected to digest rows, so the comparator sees the shape it is written against.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readCollection } from './lib/content-frontmatter.mjs';
+import { compareChangelogEntries } from '../src/lib/changelog-order.ts';
 import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 import {
   SITE_DESCRIPTION,
@@ -40,8 +41,6 @@ export const DIGEST_PATH = fileURLToPath(new URL('../src/data/a2a-digest.json', 
 /** How many changelog entries the responder can cite. The rest are one link away. */
 const CHANGELOG_LIMIT = 10;
 
-const SIGNIFICANCE_PRIORITY = { major: 0, minor: 1, patch: 2 };
-
 /** @param {string} value @param {string} where */
 function requireString(value, where) {
   if (typeof value !== 'string' || value === '') {
@@ -55,35 +54,6 @@ function isoDate(value, where) {
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T00:00:00.000Z` : String(value));
   if (Number.isNaN(date.getTime())) throw new Error(`${where}: unparseable date ${JSON.stringify(value)}`);
   return date.toISOString();
-}
-
-/** Transcription of compareChangelogEntries; see the file header. */
-function compareChangelog(a, b) {
-  const dateDifference = Date.parse(b.date) - Date.parse(a.date);
-  if (dateDifference !== 0) return dateDifference;
-
-  const aPublished = a.publishedAt ? Date.parse(a.publishedAt) : undefined;
-  const bPublished = b.publishedAt ? Date.parse(b.publishedAt) : undefined;
-  if (aPublished !== undefined && bPublished !== undefined) {
-    const publishedDifference = bPublished - aPublished;
-    if (publishedDifference !== 0) return publishedDifference;
-  } else if (aPublished !== undefined) {
-    return -1;
-  } else if (bPublished !== undefined) {
-    return 1;
-  }
-
-  const significanceDifference =
-    SIGNIFICANCE_PRIORITY[a.significance] - SIGNIFICANCE_PRIORITY[b.significance];
-  if (significanceDifference !== 0) return significanceDifference;
-
-  const launchDifference = Number(b.type === 'launch') - Number(a.type === 'launch');
-  if (launchDifference !== 0) return launchDifference;
-
-  const titleDifference = a.title.localeCompare(b.title, 'en', { sensitivity: 'base' });
-  if (titleDifference !== 0) return titleDifference;
-
-  return a.slug.localeCompare(b.slug, 'en', { sensitivity: 'base' });
 }
 
 /**
@@ -121,22 +91,36 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
     }))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 
+  // Collection-shaped first, because that is the shape compareChangelogEntries is written
+  // against. Projecting to digest rows after the sort keeps the adapter out of the comparator.
   const allChangelog = readCollection(`${contentDir}changelog`)
     .filter(({ data }) => data.draft !== true)
     .map(({ slug, data }) => ({
-      slug,
-      title: requireString(data.title, `changelog/${slug} title`),
-      url: `${base}/changelog/${slug}`,
-      date: isoDate(data.date, `changelog/${slug} date`),
-      ...(data.publishedAt
-        ? { publishedAt: isoDate(data.publishedAt, `changelog/${slug} publishedAt`) }
-        : {}),
-      type: requireString(data.type, `changelog/${slug} type`),
-      significance: requireString(data.significance, `changelog/${slug} significance`),
-      tags: data.tags ?? [],
-      summary: requireString(data.summary, `changelog/${slug} summary`),
+      id: slug,
+      data: {
+        title: requireString(data.title, `changelog/${slug} title`),
+        date: new Date(isoDate(data.date, `changelog/${slug} date`)),
+        ...(data.publishedAt
+          ? { publishedAt: new Date(isoDate(data.publishedAt, `changelog/${slug} publishedAt`)) }
+          : {}),
+        type: requireString(data.type, `changelog/${slug} type`),
+        significance: requireString(data.significance, `changelog/${slug} significance`),
+        tags: data.tags ?? [],
+        summary: requireString(data.summary, `changelog/${slug} summary`),
+      },
     }))
-    .sort(compareChangelog);
+    .sort(compareChangelogEntries)
+    .map(({ id, data }) => ({
+      slug: id,
+      title: data.title,
+      url: `${base}/changelog/${id}`,
+      date: data.date.toISOString(),
+      ...(data.publishedAt ? { publishedAt: data.publishedAt.toISOString() } : {}),
+      type: data.type,
+      significance: data.significance,
+      tags: data.tags,
+      summary: data.summary,
+    }));
 
   return {
     // No `generated` timestamp. The digest is committed, so a wall-clock field would make every
