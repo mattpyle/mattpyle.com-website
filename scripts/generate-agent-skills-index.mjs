@@ -41,7 +41,8 @@ export function writeSkillsIndex(path = INDEX_PATH) {
   return true;
 }
 
-// import.meta.main is Node 24; this spelling works on the Node 22 the build targets.
+// The build targets Node 24, so import.meta.main is available; this spelling is kept because it
+// also works under any older Node someone runs the script with by hand.
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const changed = writeSkillsIndex();
   console.log(`[agent-skills] ${changed ? 'wrote' : 'unchanged'} src/data/agent-skills-index.json`);

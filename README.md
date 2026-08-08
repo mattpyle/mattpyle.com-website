@@ -53,7 +53,7 @@ builds and deploys exactly the same. See `agents/steward/README.md` for how it w
 
 ## Local development
 
-Requires Node 22+.
+Requires Node 24+.
 
 ```bash
 npm install

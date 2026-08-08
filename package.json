@@ -6,7 +6,7 @@
     "agents/steward"
   ],
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "scripts": {
     "predev": "node scripts/generate-og-images.mjs && node scripts/generate-a2a-digest.mjs && node scripts/generate-agent-skills-index.mjs",
