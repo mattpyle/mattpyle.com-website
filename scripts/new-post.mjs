@@ -59,8 +59,12 @@ if (existsSync(file)) {
   process.exit(1);
 }
 
+// Backslashes doubled first so the quote escapes added next are not re-escaped;
+// both are YAML escape characters inside a double-quoted scalar.
+const yamlTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 const frontmatter = `---
-title: "${title.replace(/"/g, '\\"')}"
+title: "${yamlTitle}"
 date: ${date}
 description: "REPLACE: one to two sentences; drives the index card and meta description."
 tags: []
