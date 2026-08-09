@@ -25,7 +25,9 @@ that's the property being dogfooded here, on a low-stakes, real target.
 - **`scorecardAuditWorkflow`** — a separate, scheduled-or-manual sweep of the *live* site (not a
   draft) against a fixed set of public conformance metrics (axe violations, Lighthouse categories,
   agentic-browsing checks). It opens a PR when the result changed or the last run is stale, and never
-  self-merges.
+  self-merges. `steward scorecard-schedule create` puts it on a daily Temporal Schedule — which fires
+  only while this local stack is up, so it is a daily audit on a laptop rather than unattended nightly
+  auditing, and a missed firing is discarded rather than queued.
 
 ### The publish leg
 

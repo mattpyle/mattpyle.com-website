@@ -1,6 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { Client, Connection, WorkflowNotFoundError, type WorkflowExecutionInfo } from '@temporalio/client';
+import {
+  Client,
+  Connection,
+  WorkflowNotFoundError,
+  type ScheduleOptions,
+  type WorkflowExecutionInfo,
+} from '@temporalio/client';
 import { Command } from 'commander';
 import {
   ENABLE_AI_TELLS,
@@ -39,6 +45,15 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
+import {
+  SCORECARD_SCHEDULE_ACTIONS,
+  SCORECARD_SCHEDULE_DEFAULT_AT,
+  buildScorecardScheduleOptions,
+  isScorecardScheduleAction,
+  parseTimeOfDay,
+  runScorecardScheduleAction,
+  type TimeOfDay,
+} from './lib/scorecard-schedule.js';
 import type { ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 
 async function client(): Promise<Client> {
@@ -1302,6 +1317,98 @@ program
     }
     console.log(`\n  showing ${shown.length} of ${runs.length} run(s) total.\n`);
   });
+
+program
+  .command('scorecard-schedule')
+  .argument('<action>', `one of: ${SCORECARD_SCHEDULE_ACTIONS.join(' | ')}`)
+  .option(
+    '--at <hh:mm>',
+    `create only — daily firing time, local to ${STEWARD_TIMEZONE}`,
+    SCORECARD_SCHEDULE_DEFAULT_AT,
+  )
+  .option('--dry-run', 'create only — scheduled runs audit and archive but never open a PR')
+  .option(
+    '--max-age-days <n>',
+    'create only — staleness threshold every scheduled run carries',
+    String(SCORECARD_MAX_AGE_DAYS_DEFAULT),
+  )
+  .option('--note <text>', 'pause/unpause only — note recorded on the schedule')
+  .description('Manage the daily Scorecard audit Schedule (scorecard-audit-spec.md §7)')
+  .action(
+    async (
+      actionArg: string,
+      opts: { at: string; dryRun?: boolean; maxAgeDays: string; note?: string },
+      command: Command,
+    ) => {
+      if (!isScorecardScheduleAction(actionArg)) {
+        fail(`Unknown action "${actionArg}". Expected one of: ${SCORECARD_SCHEDULE_ACTIONS.join(', ')}.`);
+      }
+
+      // Options that only `create` reads are refused rather than ignored on the
+      // other four verbs: `--at 09:00` typed against `unpause` looks like it
+      // rescheduled something, and silently doing nothing is how an operator
+      // ends up believing a schedule fires at an hour it does not.
+      const given = (name: string) => command.getOptionValueSource(name) === 'cli';
+      // Commander keys options camelCase; an operator types the long flag. The
+      // message has to name the flag they typed, or following it verbatim gets
+      // them "unknown option --dryRun".
+      const flag = (name: string) =>
+        command.options.find((o) => o.attributeName() === name)?.long ?? `--${name}`;
+      const createOnly = (['at', 'dryRun', 'maxAgeDays'] as const).filter(given);
+      if (actionArg !== 'create' && createOnly.length > 0) {
+        fail(`${flag(createOnly[0])} applies to \`create\` only, and \`${actionArg}\` would ignore it.`);
+      }
+      if (actionArg !== 'pause' && actionArg !== 'unpause' && given('note')) {
+        fail('--note applies to `pause` and `unpause` only.');
+      }
+
+      let options: ScheduleOptions | undefined;
+      if (actionArg === 'create') {
+        const maxAgeDays = Number(opts.maxAgeDays);
+        if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
+          fail(`--max-age-days must be a positive number, got "${opts.maxAgeDays}"`);
+        }
+        let at: TimeOfDay;
+        try {
+          at = parseTimeOfDay(opts.at);
+        } catch (err) {
+          fail(err instanceof Error ? err.message : String(err));
+        }
+        options = buildScorecardScheduleOptions({
+          at,
+          timeZone: STEWARD_TIMEZONE,
+          taskQueue: QUEUE_LIGHT,
+          // Resolved HERE and frozen into the Schedule's action, exactly as the
+          // manual verb resolves them into the workflow input (design rule 3) —
+          // a scheduled run must not pick up a config change made months after
+          // the schedule was created.
+          input: {
+            sitemapUrl: SITEMAP_URL,
+            publishMode: opts.dryRun ? ('dry-run' as const) : ('pr' as const),
+            maxAgeDays,
+            triggeredBy: 'schedule' as const,
+            timeZone: STEWARD_TIMEZONE,
+          },
+        });
+      }
+
+      const c = await client();
+      try {
+        const outcome = await runScorecardScheduleAction(actionArg, {
+          schedule: c.schedule,
+          options,
+          note: opts.note,
+          timeZone: STEWARD_TIMEZONE,
+        });
+        console.log('');
+        console.log(`  ${outcome.scheduleId}`);
+        for (const line of outcome.lines) console.log(`  ${line}`);
+        console.log('');
+      } finally {
+        await c.connection.close();
+      }
+    },
+  );
 
 /**
  * A failed workflow reaches the CLI as `WorkflowFailedError: Workflow
