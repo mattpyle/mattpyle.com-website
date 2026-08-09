@@ -205,8 +205,11 @@ function describeNext(nextActionTimes: Date[], timeZone: string): string {
     timeStyle: 'short',
     hour12: false,
   });
+  // Joined with a middle dot, not a comma: the formatted stamp already contains
+  // one ("2026-08-09, 00:23"), and a comma-joined list of those reads as six
+  // items rather than three.
   const shown = nextActionTimes.slice(0, NEXT_FIRINGS_SHOWN).map((d) => format.format(d));
-  return `next firings (${timeZone}): ${shown.join(', ')}`;
+  return `next firings (${timeZone}): ${shown.join(' · ')}`;
 }
 
 /**
