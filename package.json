@@ -21,6 +21,7 @@
     "a11y:axe": "axe",
     "spellcheck": "cspell --no-progress \"src/content/**/*.md\" \"src/data/skills/**/*.md\"",
     "check": "astro check",
+    "new-post": "node scripts/new-post.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:steward": "npm test --workspace @mattpyle/steward",
     "check:steward": "npm run typecheck --workspace @mattpyle/steward",
