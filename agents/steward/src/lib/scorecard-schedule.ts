@@ -25,15 +25,26 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
 export const SCORECARD_SCHEDULE_ID = 'steward-scorecard-daily';
 
 /**
- * The base workflow ID for scheduled starts. The server appends the action's
- * nominal time (`…-2026-08-08T10:30:00Z`), so every firing is its own
- * execution — matching the timestamped IDs `steward scorecard` already uses,
- * and readable in `temporal workflow list` as one family.
+ * The base workflow ID for scheduled starts. The scheduler appends the action's
+ * nominal time to it, so each firing is its own execution rather than a
+ * collision on one ID — matching the timestamped IDs `steward scorecard`
+ * already uses, and readable in `temporal workflow list` as one family.
+ *
+ * Verified live 2026-08-09 (build log): the first real firing ran as
+ * `steward-scorecard-scheduled-2026-08-09T...`.
  */
 export const SCORECARD_SCHEDULE_WORKFLOW_ID = 'steward-scorecard-scheduled';
 
-/** Default firing time, local to {@link ScorecardScheduleParams.timeZone}. */
-export const SCORECARD_SCHEDULE_DEFAULT_AT = '03:30';
+/**
+ * Default firing time, local to {@link ScorecardScheduleParams.timeZone}.
+ *
+ * **Mid-morning, not a quiet 3am hour**, and the catchup window is why. A
+ * schedule set for 03:30 on a laptop fires while the machine is asleep, and a
+ * missed firing here is discarded rather than taken on wake — so the tidy
+ * overnight default is the one setting guaranteed to produce zero runs. The
+ * default has to be an hour the stack is plausibly up.
+ */
+export const SCORECARD_SCHEDULE_DEFAULT_AT = '10:00';
 
 /**
  * Near zero, not the SDK's one-year default — the single most consequential
@@ -119,6 +130,15 @@ export function buildScorecardScheduleOptions(params: ScorecardScheduleParams): 
       workflowId: SCORECARD_SCHEDULE_WORKFLOW_ID,
       taskQueue: params.taskQueue,
       args: [params.input],
+      // The stop against the one way this design can fail silently. `SKIP`
+      // suppresses a firing while the previous execution is still Running, and
+      // an execution nobody ever completes — a firing started with the server
+      // up but the worker dead, which is a routine state here — would stay
+      // Running forever and suppress every firing after it. `pauseOnFailure`
+      // cannot catch that, because nothing fails. A timeout well above a real
+      // run (~12 min audit, 20 min publish deadline) turns the wedge into a
+      // failed action the next firing recovers from.
+      workflowExecutionTimeout: '2 hours',
     },
     policies: {
       // Never stack a second audit behind a slow one. The audit takes ~12
@@ -147,6 +167,7 @@ export function buildScorecardScheduleOptions(params: ScorecardScheduleParams): 
 export interface ScorecardScheduleHandleLike {
   describe(): Promise<{
     state: { paused: boolean; note?: string };
+    policies: { overlap: ScheduleOverlapPolicy; catchupWindow: number; pauseOnFailure: boolean };
     info: { nextActionTimes: Date[]; numActionsTaken: number };
   }>;
   pause(note?: string): Promise<void>;
@@ -170,10 +191,43 @@ export interface ScorecardScheduleOutcome {
 
 const NEXT_FIRINGS_SHOWN = 3;
 
-function describeNext(nextActionTimes: Date[]): string {
+/**
+ * Firing times in the schedule's own zone, not UTC. The operator typed `--at
+ * 03:30` local and the repo's convention is local dates wherever a person reads
+ * them; a UTC-only answer makes them do the arithmetic that the daylight-saving
+ * edge then gets wrong.
+ */
+function describeNext(nextActionTimes: Date[], timeZone: string): string {
   if (nextActionTimes.length === 0) return 'next firings: none scheduled';
-  const shown = nextActionTimes.slice(0, NEXT_FIRINGS_SHOWN).map((d) => d.toISOString());
-  return `next firings (UTC): ${shown.join(', ')}`;
+  const format = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    dateStyle: 'short',
+    timeStyle: 'short',
+    hour12: false,
+  });
+  const shown = nextActionTimes.slice(0, NEXT_FIRINGS_SHOWN).map((d) => format.format(d));
+  return `next firings (${timeZone}): ${shown.join(', ')}`;
+}
+
+/**
+ * The policies the **server** stored, echoed back from `describe()`.
+ *
+ * Not decoration: `catchupWindow` is the choice this whole design turns on, it
+ * is the one the server may clamp, and nothing else in the system would show a
+ * clamp or a changed SDK default. Printing it after every action makes a silent
+ * revert to "queue the missed firings" visible on the next command an operator
+ * runs.
+ */
+function describePolicies(policies: {
+  overlap: ScheduleOverlapPolicy;
+  catchupWindow: number;
+  pauseOnFailure: boolean;
+}): string {
+  return (
+    `policies: overlap ${policies.overlap ?? 'server default'} · ` +
+    `catchup window ${policies.catchupWindow}ms · ` +
+    `pauseOnFailure ${policies.pauseOnFailure}`
+  );
 }
 
 /**
@@ -190,9 +244,11 @@ export async function runScorecardScheduleAction(
     /** Required by `create`; ignored by the other four verbs. */
     options?: ScheduleOptions;
     note?: string;
+    /** The zone firing times are reported in — `STEWARD_TIMEZONE`, resolved by the CLI. */
+    timeZone: string;
   },
 ): Promise<ScorecardScheduleOutcome> {
-  const { schedule, note } = deps;
+  const { schedule, note, timeZone } = deps;
   const lines: string[] = [];
 
   if (action === 'create') {
@@ -210,7 +266,8 @@ export async function runScorecardScheduleAction(
     }
     lines.push('created');
     const description = await schedule.getHandle(SCORECARD_SCHEDULE_ID).describe();
-    lines.push(describeNext(description.info.nextActionTimes));
+    lines.push(describePolicies(description.policies));
+    lines.push(describeNext(description.info.nextActionTimes, timeZone));
     lines.push(
       'It fires only while the Temporal dev server and worker are up (`steward up`) — ' +
         'a daily audit on this laptop, not unattended nightly auditing.',
@@ -257,6 +314,7 @@ export async function runScorecardScheduleAction(
   const description = await handle.describe();
   lines.push(`paused: ${description.state.paused}`);
   lines.push(`actions taken so far: ${description.info.numActionsTaken}`);
-  lines.push(describeNext(description.info.nextActionTimes));
+  lines.push(describePolicies(description.policies));
+  lines.push(describeNext(description.info.nextActionTimes, timeZone));
   return { action, scheduleId: SCORECARD_SCHEDULE_ID, lines };
 }

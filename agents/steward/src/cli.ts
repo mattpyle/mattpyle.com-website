@@ -1349,9 +1349,14 @@ program
       // rescheduled something, and silently doing nothing is how an operator
       // ends up believing a schedule fires at an hour it does not.
       const given = (name: string) => command.getOptionValueSource(name) === 'cli';
+      // Commander keys options camelCase; an operator types the long flag. The
+      // message has to name the flag they typed, or following it verbatim gets
+      // them "unknown option --dryRun".
+      const flag = (name: string) =>
+        command.options.find((o) => o.attributeName() === name)?.long ?? `--${name}`;
       const createOnly = (['at', 'dryRun', 'maxAgeDays'] as const).filter(given);
       if (actionArg !== 'create' && createOnly.length > 0) {
-        fail(`--${createOnly[0]} applies to \`create\` only, and \`${actionArg}\` would ignore it.`);
+        fail(`${flag(createOnly[0])} applies to \`create\` only, and \`${actionArg}\` would ignore it.`);
       }
       if (actionArg !== 'pause' && actionArg !== 'unpause' && given('note')) {
         fail('--note applies to `pause` and `unpause` only.');
@@ -1393,6 +1398,7 @@ program
           schedule: c.schedule,
           options,
           note: opts.note,
+          timeZone: STEWARD_TIMEZONE,
         });
         console.log('');
         console.log(`  ${outcome.scheduleId}`);
