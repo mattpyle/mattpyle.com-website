@@ -162,14 +162,8 @@ export default async function middleware(request: Request) {
   // It also masks a wholly broken emit step, which is what scripts/validate-markdown-siblings.mjs
   // exists to catch at build time.
   if (!upstream.ok) {
-    console.log(
-      formatLogLine('markdown', {
-        result: 'miss',
-        path: url.pathname,
-        sibling,
-        status: upstream.status,
-      })
-    );
+    const status = upstream.status;
+    console.log(formatLogLine('markdown', { result: 'miss', path: url.pathname, sibling, status }));
     return slashRedirectOrNext(url);
   }
 
@@ -177,9 +171,7 @@ export default async function middleware(request: Request) {
   // rather than an assumption. `hit`/`miss` is a `result=` field rather than a bare word after
   // the tag: nothing parses these lines today, so this is the cheap moment to take the shape
   // that a parser would want.
-  console.log(
-    formatLogLine('markdown', { result: 'hit', path: url.pathname, sibling, accept })
-  );
+  console.log(formatLogLine('markdown', { result: 'hit', path: url.pathname, sibling, accept }));
 
   // Counted only past the upstream.ok check above, so the path is a page that exists. That is what
   // bounds this event class's key space to the site's own pages; the caps in counterPath() are the

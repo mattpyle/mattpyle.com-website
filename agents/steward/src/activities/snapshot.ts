@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
 import { ApplicationFailure } from '@temporalio/common';
 import { SITE_DIR, postRelPath, type Collection } from '../config.js';
+import { parseFrontmatter } from '../lib/frontmatter.js';
 import type { DraftSnapshot } from '../lib/report.js';
 import { timed } from '../lib/logger.js';
 
@@ -23,7 +23,7 @@ async function listDraftSlugs(collection: Collection): Promise<string[]> {
   for (const name of names) {
     if (!name.endsWith('.md')) continue;
     const raw = await fs.readFile(path.join(dir, name), 'utf8');
-    if (matter(raw).data?.draft === true) drafts.push(name.replace(/\.md$/, ''));
+    if (parseFrontmatter(raw).data?.draft === true) drafts.push(name.replace(/\.md$/, ''));
   }
   return drafts;
 }
@@ -52,7 +52,7 @@ export async function snapshotDraft(
         'PostNotFound',
       );
     }
-    const parsed = matter(bytes.toString('utf8'));
+    const parsed = parseFrontmatter(bytes.toString('utf8'));
     return {
       slug,
       collection,

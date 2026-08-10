@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
 import { SITE_DIR, type Collection } from '../config.js';
+import { parseFrontmatter } from '../lib/frontmatter.js';
 import type { Finding, PassResult, ReviewMode, Verdict } from '../lib/report.js';
 import { worstVerdict } from '../lib/report.js';
 import { pathState } from '../lib/git.js';
@@ -101,7 +101,7 @@ export async function checkFrontmatter(
   const { result, startedAt, durationMs } = await timed('checkFrontmatter', async () => {
     const abs = path.join(SITE_DIR, file);
     const raw = await fs.readFile(abs, 'utf8');
-    const parsed = matter(raw);
+    const parsed = parseFrontmatter(raw);
     const fm = parsed.data as Record<string, unknown>;
     const body = parsed.content;
     // Offset of the body within the raw file, so reported line numbers point at
