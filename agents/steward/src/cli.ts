@@ -32,7 +32,12 @@ import {
   type Collection,
 } from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
-import { readArchivedReport, readLatestReport } from './lib/read-report.js';
+import {
+  describeMissingReport,
+  readArchivedReport,
+  readLatestReport,
+  readPostState,
+} from './lib/read-report.js';
 import { BOLD, DIM, GREEN, RED, RESET, paint, renderReport } from './lib/render-report.js';
 import { deriveInboxHint } from './lib/inbox.js';
 import { cleanupPublishedTwin } from './lib/cleanup.js';
@@ -365,14 +370,24 @@ program
 program
   .command('report')
   .argument('<slug>', SLUG_HELP, parseSlug)
-  .option('--collection <name>', `one of: ${COLLECTIONS.join(', ')}`, 'writing')
-  .description('Pretty-print the latest archived report for a slug — no live workflow needed')
+  .option(
+    '--collection <name>',
+    `one of: ${COLLECTIONS.join(', ')} (a flag here, a positional argument on \`review\`/\`audit\`)`,
+    'writing',
+  )
+  .description(
+    'Pretty-print the latest archived report for a slug — no live workflow needed. ' +
+      'Reads `reviews/<collection>/<slug>/`, which is where `review` and `audit` archive; ' +
+      '`score` writes elsewhere and produces no report.',
+  )
   .action(async (slug: string, opts: { collection: string }) => {
     const collection = parseCollection(opts.collection);
     const report = await readLatestReport(collection, slug);
     if (!report) {
-      const label = collection === 'writing' ? slug : `${collection}/${slug}`;
-      fail(`No report found for ${label} — run \`steward review ${slug}\` first.`);
+      // Which verb to name depends on the file, not on a guess: `review` is gate
+      // mode and refuses a published post, so the old unconditional "run
+      // `steward review`" sent the reader to a second refusal.
+      fail(describeMissingReport(collection, slug, await readPostState(collection, slug)));
     }
     console.log(renderReport(report));
   });
@@ -772,7 +787,11 @@ program
   .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--runs <n>', 'how many times to score the piece', '2')
   .option('--provenance <label>', 'ai | human | mixed — recorded, never inferred', 'unknown')
-  .description('Score one piece with the ai-tells rubric (validation study). No workflow, no verdict.')
+  .description(
+    'Score one piece with the ai-tells rubric (validation study). No workflow, no verdict. ' +
+      'Writes to `reviews/_study/`, not `reviews/<collection>/<slug>/` — a scored piece still has ' +
+      'no report for `steward report` to print.',
+  )
   .action(async (collectionArg: string, slug: string, opts: { runs: string; provenance: string }) => {
     const collection = parseCollection(collectionArg);
     const runs = Number(opts.runs);

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { REVIEWS_DIR, resolveArchivePath, type Collection } from '../config.js';
+import { REVIEWS_DIR, SITE_DIR, postRelPath, resolveArchivePath, type Collection } from '../config.js';
+import { parseFrontmatter } from './frontmatter.js';
 import { ReviewReport as ReviewReportSchema, type ReviewReport, type ReviewStateResult } from './report.js';
 
 /**
@@ -80,6 +81,80 @@ export async function readArchivedReport(
  * design-rule-11 contract: absence is a legitimate `null`, a broken or
  * unparsable archive is not.
  */
+/**
+ * What the file behind a slug turns out to be, which is what decides which verb
+ * can actually review it. `missing` is its own state rather than an assumed
+ * `published`, because a mistyped slug and a published post need different
+ * advice and guessing between them is how the old message went wrong.
+ */
+export type PostState = 'draft' | 'published' | 'missing';
+
+/**
+ * Reads a slug's draft state off disk. Only `ENOENT` becomes `missing` — an
+ * unreadable file is a real failure and must not be reported as an absent post,
+ * the same distinction design rule 11 makes for the archive above.
+ */
+export async function readPostState(collection: Collection, slug: string): Promise<PostState> {
+  const file = path.join(SITE_DIR, postRelPath(slug, collection));
+  let raw: string;
+  try {
+    raw = await readFile(file, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 'missing';
+    throw new Error(`Could not read ${file}: ${(err as Error).message}`);
+  }
+  return parseFrontmatter(raw).data.draft === true ? 'draft' : 'published';
+}
+
+/**
+ * The message `steward report` fails with when the archive has nothing.
+ *
+ * It used to say "run `steward review <slug>` first" unconditionally. `review`
+ * is gate mode and refuses anything without `draft: true`, so for a published
+ * post that instruction cannot work: you run it, get a second refusal, and have
+ * to already know `audit` exists to get anywhere. Naming the verb that will run
+ * against *this* file is the fix; naming both, with the distinction stated, is
+ * what stops the next person hitting the mirror image of the same wall.
+ *
+ * Pure, so the wording is testable without a workflow, a server, or an archive.
+ */
+export function describeMissingReport(
+  collection: Collection,
+  slug: string,
+  state: PostState,
+): string {
+  const label = `${collection}/${slug}`;
+  const audit = `steward audit ${collection} ${slug}`;
+  const review = `steward review ${slug}`;
+
+  if (state === 'missing') {
+    return (
+      `No report found for ${label}, and no post at \`${postRelPath(slug, collection)}\` either. ` +
+      `Check the slug and \`--collection\` (\`report\` defaults to writing; \`audit\` takes the ` +
+      `collection as a positional argument instead).`
+    );
+  }
+
+  const lines =
+    state === 'draft'
+      ? [
+          `No report found for ${label}. It is a draft, so review it with \`${review}\`.`,
+          `(\`review\` is gate mode and only accepts \`draft: true\`. Once it is published, \`${audit}\` is the one that runs.)`,
+        ]
+      : [
+          `No report found for ${label}. It is published, so audit it with \`${audit}\`.`,
+          `(\`review\` is gate mode and refuses anything without \`draft: true\`, so it cannot run against this file.)`,
+        ];
+
+  // The archive split, stated here because this is where it gets mistaken for a
+  // broken archive: a piece can have been scored by the study and still have no
+  // report, which looks identical to "the archive lost my report".
+  lines.push(
+    '`review` and `audit` archive to `reviews/<collection>/<slug>/`; `score` writes to `reviews/_study/` and produces no report.',
+  );
+  return lines.join('\n  ');
+}
+
 export async function readLatestReport(
   collection: Collection,
   slug: string,
