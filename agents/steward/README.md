@@ -27,7 +27,8 @@ that's the property being dogfooded here, on a low-stakes, real target.
   agentic-browsing checks). It opens a PR when the result changed or the last run is stale, and never
   self-merges. `steward scorecard-schedule create` puts it on a daily Temporal Schedule — which fires
   only while this local stack is up, so it is a daily audit on a laptop rather than unattended nightly
-  auditing, and a missed firing is discarded rather than queued.
+  auditing. It fires at 20:00 local, or on the next `steward up` within 23 hours of a missed firing, at
+  most once a day.
 
 ### The publish leg
 

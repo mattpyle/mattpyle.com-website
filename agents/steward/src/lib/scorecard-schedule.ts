@@ -18,6 +18,9 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
  * **The honest limit, restated because it is the whole point (§7):** Steward's
  * server and worker are local. A Schedule only takes an action while that stack
  * is up, so this is a daily audit on a laptop, not unattended nightly auditing.
+ * The catchup window narrows that gap — a firing missed while the stack was
+ * down runs on the next `steward up` within 23 hours — but it does not close
+ * it: a machine off for a week still produces no runs for that week.
  * `steward/user-guide.md` says so to the operator; do not describe it otherwise.
  */
 
@@ -38,28 +41,36 @@ export const SCORECARD_SCHEDULE_WORKFLOW_ID = 'steward-scorecard-scheduled';
 /**
  * Default firing time, local to {@link ScorecardScheduleParams.timeZone}.
  *
- * **Mid-morning, not a quiet 3am hour**, and the catchup window is why. A
- * schedule set for 03:30 on a laptop fires while the machine is asleep, and a
- * missed firing here is discarded rather than taken on wake — so the tidy
- * overnight default is the one setting guaranteed to produce zero runs. The
- * default has to be an hour the stack is plausibly up.
+ * **Evening, not mid-morning and not a quiet 3am hour.** The default has to be
+ * an hour the stack is plausibly up, and on this machine that is the evening:
+ * Matt is at work at 10am with the laptop off, so a morning default produced
+ * close to zero firings. The catchup window below recovers a missed evening
+ * firing on the next `steward up`, but the default hour is still the one that
+ * decides whether the common case needs recovering at all.
  */
-export const SCORECARD_SCHEDULE_DEFAULT_AT = '10:00';
+export const SCORECARD_SCHEDULE_DEFAULT_AT = '20:00';
 
 /**
- * Near zero, not the SDK's one-year default — the single most consequential
- * line in this file (card: "the catchup window is the important part").
+ * 23 hours, not the SDK's one-year default and no longer the near-zero window
+ * this shipped with — the single most consequential line in this file.
  *
- * The audit measures the live site **at execution time**. A firing missed on
- * Monday and taken on Thursday measures Thursday's site, so a drained backlog
- * writes four near-identical points into what is supposed to be a time series.
- * That is not late data, it is fake data. Missed firings must drop.
+ * The original reasoning was written for **unbounded** queueing: a firing
+ * missed on Monday and drained on Thursday alongside Tuesday's and Wednesday's
+ * writes several near-identical points into what is supposed to be a time
+ * series, which is fake data rather than late data. That argument does not
+ * survive a bounded window. With `overlap: SKIP` and a window under 24 hours,
+ * at most one missed firing can run late per day; the audit measures the live
+ * site at execution time and the archive stamps the actual execution time, so a
+ * catchup run is a real observation that happens to be late.
  *
- * Ten seconds rather than zero because a firing that lands while the server is
- * momentarily busy is still that minute's firing; ten seconds cannot span a
- * laptop sleeping, which is the case this exists to discard.
+ * 23 rather than 24 keeps the window strictly shorter than the firing interval,
+ * so a missed firing expires before the next one is due and no two firings can
+ * ever be outstanding at once.
+ *
+ * The trade this buys: on a laptop that is off at 20:00 and on later, the
+ * choice is a late run or no run, and a late run is the more useful record.
  */
-export const SCORECARD_SCHEDULE_CATCHUP_WINDOW = '10 seconds';
+export const SCORECARD_SCHEDULE_CATCHUP_WINDOW = '23 hours';
 
 /** The five verbs `steward scorecard-schedule` accepts. */
 export const SCORECARD_SCHEDULE_ACTIONS = ['create', 'pause', 'unpause', 'trigger', 'delete'] as const;
@@ -217,9 +228,12 @@ function describeNext(nextActionTimes: Date[], timeZone: string): string {
  *
  * Not decoration: `catchupWindow` is the choice this whole design turns on, it
  * is the one the server may clamp, and nothing else in the system would show a
- * clamp or a changed SDK default. Printing it after every action makes a silent
- * revert to "queue the missed firings" visible on the next command an operator
- * runs.
+ * clamp or a changed SDK default. Printing it after every action makes either
+ * failure visible on the next command an operator runs — a widening to the SDK's
+ * one-year default, which would queue the missed firings, and a clamp or revert
+ * back down to near-zero, which would silently restore the discard behaviour.
+ * 23 hours reads as `82800000ms`; any other number is the server disagreeing
+ * with what the CLI sent.
  */
 function describePolicies(policies: {
   overlap: ScheduleOverlapPolicy;
