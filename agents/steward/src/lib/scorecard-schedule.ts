@@ -228,9 +228,12 @@ function describeNext(nextActionTimes: Date[], timeZone: string): string {
  *
  * Not decoration: `catchupWindow` is the choice this whole design turns on, it
  * is the one the server may clamp, and nothing else in the system would show a
- * clamp or a changed SDK default. Printing it after every action makes a silent
- * revert to "queue the missed firings" visible on the next command an operator
- * runs.
+ * clamp or a changed SDK default. Printing it after every action makes either
+ * failure visible on the next command an operator runs — a widening to the SDK's
+ * one-year default, which would queue the missed firings, and a clamp or revert
+ * back down to near-zero, which would silently restore the discard behaviour.
+ * 23 hours reads as `82800000ms`; any other number is the server disagreeing
+ * with what the CLI sent.
  */
 function describePolicies(policies: {
   overlap: ScheduleOverlapPolicy;

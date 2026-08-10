@@ -199,7 +199,10 @@ function fakeClient(behaviour: { createThrows?: Error; handleThrows?: Error } = 
         state: { paused },
         policies: {
           overlap: ScheduleOverlapPolicy.SKIP,
-          catchupWindow: 82_800_000,
+          // Derived from the constant rather than hardcoded, so a revert of the
+          // policy fails the echo assertion too rather than leaving this half of
+          // the suite reporting a healthy 23-hour window.
+          catchupWindow: msOf(SCORECARD_SCHEDULE_CATCHUP_WINDOW),
           pauseOnFailure: false,
         },
         info: { nextActionTimes: [new Date('2026-08-09T10:30:00Z')], numActionsTaken: 2 },
