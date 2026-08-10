@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
 import { REVIEWS_DIR, SITE_DIR, postRelPath } from '../config.js';
+import { parseFrontmatter } from './frontmatter.js';
 import { ReviewReport, type Collection } from './report.js';
 import {
   FORMAT_DRIVEN_TELLS,
@@ -120,7 +120,7 @@ async function wordCount(collection: Collection, slug: string): Promise<number |
     // Body only — frontmatter is metadata, and counting it would inflate short
     // changelog entries far more than long writing posts, which is precisely
     // the distortion this normalisation exists to remove.
-    const body = matter(raw).content;
+    const body = parseFrontmatter(raw).content;
     return body.split(/\s+/).filter(Boolean).length;
   } catch {
     // The post may have been renamed or unpublished since the review. That is

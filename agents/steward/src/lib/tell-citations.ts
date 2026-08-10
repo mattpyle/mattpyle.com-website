@@ -1,4 +1,4 @@
-import matter from 'gray-matter';
+import { parseFrontmatter } from './frontmatter.js';
 import { TELL_CATEGORIES, type DeterministicTellFinding, type TellCategory } from './tells.js';
 
 /**
@@ -36,7 +36,7 @@ export interface TellCitationGroup {
  * long post, which is the exact distortion a density is supposed to remove.
  */
 export function bodyWordCount(text: string): number {
-  return matter(text).content.split(/\s+/).filter(Boolean).length;
+  return parseFrontmatter(text).content.split(/\s+/).filter(Boolean).length;
 }
 
 /** Two decimal places, or `null` when there is nothing to divide by. */

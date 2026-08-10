@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ApplicationFailure } from '@temporalio/activity';
-import matter from 'gray-matter';
 // pino, not `@temporalio/activity`'s `log` — the latter needs an activity
 // context and would make this untestable as a plain function.
 import { log } from '../lib/logger.js';
+import { parseFrontmatter } from '../lib/frontmatter.js';
 import { GITHUB_REPO, SITE_DIR, WORKTREE_DIR, postRelPath, type Collection } from '../config.js';
 import { git, worktreeExists } from '../lib/git.js';
 import { withWorktreeLock } from '../lib/worktree-lock.js';
@@ -73,7 +73,7 @@ export function flipDraftFrontmatter(raw: string, todayIso: string): FlipResult 
     );
   }
 
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   const title = typeof parsed.data.title === 'string' ? parsed.data.title : '';
   if (!title) {
     throw ApplicationFailure.nonRetryable(

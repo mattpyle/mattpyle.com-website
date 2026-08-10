@@ -78,20 +78,26 @@ export function isAgentSurface(pathname) {
 }
 
 /**
- * One line, key=value, values JSON-quoted so a value containing spaces stays one field. Matches
- * the [a2a] line's shape on purpose: whatever reads these later (the store and page on the
- * agent-hit-counter card) should never have to parse prose.
+ * One line, `[tag] key=value ...`, every value JSON-quoted so a value containing a space, a quote,
+ * or a newline stays one field. Matches the [a2a] line's shape on purpose: whatever reads these
+ * later (the store and page on the agent-hit-counter card) should never have to parse prose.
  *
- * Three fields and no more, per the card's Done when: path, client, and what it asked for. No IP,
- * no headers beyond Accept, nothing that identifies a person.
+ * Every structured log line on the site goes through here. That is the point of the function
+ * rather than of any one call site: a request-controlled value reaching a hand-built line is how
+ * forged records get in, and a slug is request-controlled twice over — Astro decodes the pathname
+ * with `decodeURI` before deriving params, so `%0A` arrives as a real newline that a template
+ * literal would happily emit as a second, entirely fictional log line.
+ */
+export function formatLogLine(tag, fields) {
+  return `[${tag}] ${Object.entries(fields)
+    .map(([key, value]) => `${key}=${JSON.stringify(value ?? '')}`)
+    .join(' ')}`;
+}
+
+/**
+ * Three fields and no more, per the agent-hit-counter card's Done when: path, client, and what it
+ * asked for. No IP, no headers beyond Accept, nothing that identifies a person.
  */
 export function formatSurfaceLine({ path, ua, accept }) {
-  const fields = {
-    path,
-    ua: ua ?? '',
-    accept: accept ?? '',
-  };
-  return `[agent-surface] ${Object.entries(fields)
-    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
-    .join(' ')}`;
+  return formatLogLine('agent-surface', { path, ua: ua ?? '', accept: accept ?? '' });
 }

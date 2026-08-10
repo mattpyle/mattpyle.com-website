@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
 import { REVIEWS_DIR, SITE_DIR, postRelPath } from '../config.js';
+import { parseFrontmatter } from './frontmatter.js';
 import { AMBER, CYAN, DIM, GREEN, paint } from './render-report.js';
 import type { Collection } from './report.js';
 import { summariseTells, type TellSummary } from './stats.js';
@@ -72,7 +72,7 @@ export async function readPieceMeta(
   slug: string,
 ): Promise<{ words: number; draft: boolean }> {
   const raw = await fs.readFile(path.join(SITE_DIR, postRelPath(slug, collection)), 'utf8');
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   return {
     words: parsed.content.split(/\s+/).filter(Boolean).length,
     draft: parsed.data.draft === true,
