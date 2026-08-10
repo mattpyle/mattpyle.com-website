@@ -167,7 +167,7 @@ function shortMetricName(name: string): string {
             <dt>Tools</dt>
             <dd>{SCORECARD.tools.join(' · ')}</dd>
           </div>
-          <div>
+          <div class="verification-entry">
             <dt>Entry</dt>
             <dd>{SCORECARD.entry}</dd>
           </div>
@@ -1011,9 +1011,9 @@ function shortMetricName(name: string): string {
     .verification {
       grid-template-columns: 1fr 1.4fr;
     }
-    /* Entry, by position rather than :last-child — the coverage row is conditional and would
-       otherwise take the span away from it on the renders where it appears. */
-    .verification div:nth-child(3) { grid-column: 1 / -1; }
+    /* Entry, by name rather than :last-child or :nth-child — the coverage row is conditional, so
+       both positional selectors point at the wrong div on the renders where it appears. */
+    .verification-entry { grid-column: 1 / -1; }
     .current-commentary,
     .history-detail > p { padding: 16px 0 0; border-top: 1px solid var(--color-border); border-left: 0; }
 

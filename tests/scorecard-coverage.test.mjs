@@ -24,12 +24,18 @@ test('runPageCount refuses a scope that does not count pages', () => {
 test('a run that covers fewer pages than the site states the gap', () => {
   assert.equal(
     describeCoverageGap('22 live pages', 23),
-    "Covers 22 of the site's 23 current pages; 1 page has shipped since this run."
+    "Covers 22 of the site's 23 current pages. The other one is not in this run's scope."
   );
   assert.equal(
     describeCoverageGap('18 live pages', 22),
-    "Covers 18 of the site's 22 current pages; 4 pages have shipped since this run."
+    "Covers 18 of the site's 22 current pages. The other 4 are not in this run's scope."
   );
+});
+
+test('the gap states a fact, not a cause', () => {
+  // A page shipping after the run is the usual reason for a gap and not the only one, so the
+  // sentence must survive a targeted `--urls` audit having produced the smaller scope.
+  assert.doesNotMatch(describeCoverageGap('20 live pages', 22), /shipped|since|new/i);
 });
 
 test('a run that covers the site says nothing extra', () => {

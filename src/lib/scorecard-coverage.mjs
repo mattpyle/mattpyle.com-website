@@ -12,6 +12,17 @@
  * (`src/data/scorecard-runs.json`, written by the steward audit). Runs before
  * 2026-07-23 counted "5 live page types", a different unit, and the pattern
  * below deliberately does not match them: no count, no claim.
+ *
+ * Steward parses the same field with its own, looser pattern in
+ * `agents/steward/src/lib/scorecard-aggregate.ts` (a leading integer, whatever
+ * the unit). The two disagree on purpose. Steward is summarising its own runs
+ * and knows what it measured; this makes a public claim about the current site
+ * and must decline when the unit is not pages. Do not unify them without
+ * deciding which behaviour the public page should have.
+ *
+ * It compares counts, not sets. Remove one page and ship another between runs
+ * and the counts match while the audited set does not; catching that needs the
+ * run to record which URLs it visited, which it does not today.
  */
 
 // "22 live pages" and "19 live pages, excluding drafts" count pages. "5 live page types" counts
@@ -49,7 +60,10 @@ export function describeCoverageGap(scope, livePageCount) {
   if (covered === null || !Number.isInteger(livePageCount)) return null;
   if (covered >= livePageCount) return null;
 
-  const shipped = livePageCount - covered;
-  return `Covers ${covered} of the site's ${livePageCount} current pages; ` +
-    `${shipped} ${shipped === 1 ? 'page has' : 'pages have'} shipped since this run.`;
+  const uncovered = livePageCount - covered;
+  // "not in this run's scope" rather than "shipped since this run": a page shipping after the run
+  // is the usual cause and not the only one — a targeted `--urls` audit produces a smaller scope
+  // too — and the page must not assert a cause it cannot see from a count.
+  return `Covers ${covered} of the site's ${livePageCount} current pages. ` +
+    `The other ${uncovered === 1 ? 'one is' : `${uncovered} are`} not in this run's scope.`;
 }
