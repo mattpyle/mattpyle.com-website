@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
+import { formatLogLine } from '../../lib/agent-surfaces.mjs';
 import { showDrafts } from '../../lib/show-drafts';
 
 // On-demand, per-request — mirrors src/pages/writing/[slug].md.ts. middleware.ts
@@ -14,7 +15,9 @@ function yamlString(value: string): string {
 }
 
 export const GET: APIRoute = async ({ params, site, request }) => {
-  console.log(`[changelog.md] slug=${params.slug} accept="${request.headers.get('accept') ?? ''}"`);
+  // Through formatLogLine for the reason given in writing/[slug].md.ts: the slug is a live,
+  // `decodeURI`-decoded request path value, logged before the collection lookup rejects it.
+  console.log(formatLogLine('changelog.md', { slug: params.slug, accept: request.headers.get('accept') }));
 
   const entries = await getCollection('changelog', ({ data }) => showDrafts || !data.draft);
   const entry = entries.find((item) => item.id === params.slug);

@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
+import { formatLogLine } from '../../lib/agent-surfaces.mjs';
 import { showDrafts } from '../../lib/show-drafts';
 
 // On-demand: this is the one route on the site that needs to run per-request
@@ -15,7 +16,11 @@ function yamlString(value: string): string {
 export const GET: APIRoute = async ({ params, site, request }) => {
   // middleware.ts proxies negotiated Markdown requests to this explicit endpoint.
   // The direct /writing/<slug>.md URL also powers View and Copy in ArticleActions.
-  console.log(`[writing.md] slug=${params.slug} accept="${request.headers.get('accept') ?? ''}"`);
+  //
+  // Through formatLogLine, not a template literal: this runs before the collection lookup, so an
+  // unmatched slug is logged too, and the slug is a live request path value that Astro has already
+  // run through `decodeURI` — `%0A` reaches here as a real newline.
+  console.log(formatLogLine('writing.md', { slug: params.slug, accept: request.headers.get('accept') }));
 
   const articles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
   const article = articles.find((entry) => entry.id === params.slug);

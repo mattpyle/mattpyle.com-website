@@ -19,7 +19,7 @@
  * page lost its stylesheet, not like a stale server.
  *
  * Usage:
- *   node scripts/serve-built-site.mjs [--port 4321] [--root dist/client]
+ *   node scripts/serve-built-site.mjs [--port 4321] [--root dist/client] [--host 127.0.0.1]
  *
  * AGENT_TRAFFIC_FIXTURE=1 makes the traffic section render canned numbers instead of its
  * unavailable state, so the audits see the tables. See src/lib/agent-traffic.mjs.
@@ -39,6 +39,7 @@ function option(flag, fallback) {
 }
 
 const port = Number(option('--port', option('-l', '4321')));
+const host = option('--host', '127.0.0.1');
 const root = resolve(option('--root', join('dist', 'client')));
 const renderEntry = resolve('.vercel/output/functions/_render.func/dist/server/entry.mjs');
 
@@ -145,6 +146,11 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`serve-built-site: ${root} on http://localhost:${port} (on-demand routes rendered)`);
+// 127.0.0.1, not the wildcard bind, for the same reason agents/steward/src/lib/serve.ts:99 gives:
+// "this serves an unpublished draft. It should not be reachable from the network even for the
+// seconds the audit takes." Here it is a SHOW_DRAFTS build, whose index pages enumerate every
+// draft, so the wildcard bind hands the whole set to anyone scanning the subnet for the port.
+// --host exists for the rare case where a LAN device (a phone on the same wifi) must reach it.
+server.listen(port, host, () => {
+  console.log(`serve-built-site: ${root} on http://${host}:${port} (on-demand routes rendered)`);
 });
