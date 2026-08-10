@@ -173,7 +173,7 @@ export function buildScorecardScheduleOptions(params: ScorecardScheduleParams): 
 }
 
 // ---------------------------------------------------------------------------
-// The five actions
+// The six actions
 // ---------------------------------------------------------------------------
 
 /**
@@ -298,7 +298,7 @@ export async function runScorecardScheduleAction(
   action: ScorecardScheduleAction,
   deps: {
     schedule: ScorecardScheduleClientLike;
-    /** Required by `create`; ignored by the other four verbs. */
+    /** Required by `create`; ignored by the other five verbs. */
     options?: ScheduleOptions;
     note?: string;
     /** The zone firing times are reported in — `STEWARD_TIMEZONE`, resolved by the CLI. */

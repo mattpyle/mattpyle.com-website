@@ -70,18 +70,6 @@ export async function readArchivedReport(
 }
 
 /**
- * Reads the LATEST archived report for a slug directly off disk —
- * `reviews/<collection>/<slug>/latest.json` — with no live workflow involved.
- *
- * This is `steward report`'s path, distinct from `readArchivedReport` above:
- * that function starts from a workflow's `ReviewStateResult` (a live query),
- * which `report` deliberately does not need — the archive is the dataset, and
- * a slug that was reviewed once and then closed (approved, published,
- * rejected — the workflow long gone) must still be reportable. Same
- * design-rule-11 contract: absence is a legitimate `null`, a broken or
- * unparsable archive is not.
- */
-/**
  * What the file behind a slug turns out to be, which is what decides which verb
  * can actually review it. `missing` is its own state rather than an assumed
  * `published`, because a mistyped slug and a published post need different
@@ -127,16 +115,13 @@ export function describeMissingReport(
   const audit = `steward audit ${collection} ${slug}`;
   const review = `steward review ${slug}`;
 
-  if (state === 'missing') {
-    return (
-      `No report found for ${label}, and no post at \`${postRelPath(slug, collection)}\` either. ` +
-      `Check the slug and \`--collection\` (\`report\` defaults to writing; \`audit\` takes the ` +
-      `collection as a positional argument instead).`
-    );
-  }
-
   const lines =
-    state === 'draft'
+    state === 'missing'
+      ? [
+          `No report found for ${label}, and no post at \`${postRelPath(slug, collection)}\` either.`,
+          `Check the slug and \`--collection\` (\`report\` defaults to writing; \`audit\` takes the collection as a positional argument instead).`,
+        ]
+      : state === 'draft'
       ? [
           `No report found for ${label}. It is a draft, so review it with \`${review}\`.`,
           `(\`review\` is gate mode and only accepts \`draft: true\`. Once it is published, \`${audit}\` is the one that runs.)`,
@@ -155,6 +140,18 @@ export function describeMissingReport(
   return lines.join('\n  ');
 }
 
+/**
+ * Reads the LATEST archived report for a slug directly off disk —
+ * `reviews/<collection>/<slug>/latest.json` — with no live workflow involved.
+ *
+ * This is `steward report`'s path, distinct from `readArchivedReport` above:
+ * that function starts from a workflow's `ReviewStateResult` (a live query),
+ * which `report` deliberately does not need — the archive is the dataset, and
+ * a slug that was reviewed once and then closed (approved, published,
+ * rejected — the workflow long gone) must still be reportable. Same
+ * design-rule-11 contract: absence is a legitimate `null`, a broken or
+ * unparsable archive is not.
+ */
 export async function readLatestReport(
   collection: Collection,
   slug: string,

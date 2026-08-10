@@ -231,6 +231,63 @@ test('a long seoDescription is flagged, and a short one clears an over-long desc
   assert.match(flagged[0], /`seoDescription` is 190 chars/);
 });
 
+test('an out-of-bounds dek does not hide its own override from the SERP check', async () => {
+  // A 320-char `description` blocks on its bounds, and if it also carries a
+  // 250-char `seoDescription` then that override is still the string search
+  // results show. Chaining the two checks reported the first and skipped the
+  // second, which is the same "a present override turns the check off" shape the
+  // rest of this section exists to remove.
+  const messages = await serpFindings('serp-dek-out-of-bounds', {
+    title: '"A short title"',
+    description: `"${'d'.repeat(320)}"`,
+    seoDescription: `"${'s'.repeat(250)}"`,
+  });
+  assert.ok(
+    messages.some((m) => m.includes('expected 20–300')),
+    JSON.stringify(messages),
+  );
+  assert.ok(
+    messages.some((m) => m.includes('`seoDescription` is 250 chars')),
+    JSON.stringify(messages),
+  );
+});
+
+test('an out-of-bounds dek with no override is not told to shorten it twice', async () => {
+  // The one suppression left: the bounds block already names this exact string
+  // and already says to shorten it.
+  const flagged = overLimit(
+    await serpFindings('serp-dek-bounds-only', {
+      title: '"A short title"',
+      description: `"${'d'.repeat(320)}"`,
+    }),
+  );
+  assert.deepEqual(flagged, []);
+});
+
+test('a missing title does not hide an over-long override', async () => {
+  // `title` is Zod-required so this is near-unreachable, but the override is
+  // what `Layout.astro` renders and a missing `title` must not be a reason to
+  // stop measuring it.
+  const messages = await serpFindings('serp-no-title', {
+    seoTitle: '"An override that is itself far too long to fit inside a search result"',
+  });
+  assert.ok(messages.some((m) => m.includes('Missing `title`')), JSON.stringify(messages));
+  assert.ok(messages.some((m) => m.includes('`seoTitle` is 69 chars')), JSON.stringify(messages));
+});
+
+test('a whitespace-only override is measured as the string that renders, not as absent', async () => {
+  // `Layout.astro` uses `??`, so "   " renders. Falling back to `title` here
+  // would print a length for a string the page does not emit.
+  const messages = await serpFindings('serp-blank-override', {
+    title: '"A title that is comfortably over sixty characters all by itself"',
+    seoTitle: '"   "',
+  });
+  assert.ok(messages.some((m) => m.includes('`seoTitle` is empty')), JSON.stringify(messages));
+  // The bare title is over budget, but it is not what renders, so it must not be
+  // reported as the over-long string.
+  assert.deepEqual(overLimit(messages), []);
+});
+
 test('an empty override is a block, not a silently shorter title', async () => {
   // `seoTitle: ""` does not render as a short title. It renders as ` — Matt
   // Pyle`, with the post's name gone entirely.

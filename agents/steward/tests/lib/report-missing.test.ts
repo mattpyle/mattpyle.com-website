@@ -87,7 +87,9 @@ test('a slug with no post says so, rather than advising a command for a file tha
 test('every state explains that `score` archives somewhere else', async () => {
   // A piece can have been scored by the study and still have no report, which
   // looks exactly like a broken archive.
-  for (const state of ['draft', 'published'] as const) {
+  // Including `missing`: a mistyped slug is one of the places "the archive is
+  // broken" gets concluded, so it is the last place to leave the line out.
+  for (const state of ['draft', 'published', 'missing'] as const) {
     const message = describeMissingReport('writing', 'a-draft', state);
     assert.match(message, /_study/, state);
     assert.match(message, /reviews\/<collection>\/<slug>\//, state);
