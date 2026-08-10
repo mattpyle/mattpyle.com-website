@@ -75,6 +75,44 @@ test('quoted values are checked, and non-relative values are left alone', () => 
   }
 });
 
+test('a path running through a file reports cleanly instead of throwing ENOTDIR', () => {
+  const { root, contentRoot, cleanup } = fixture({
+    'through.md': entry('../../assets/tech-stack.png/nested.png'),
+  });
+  try {
+    const [failure, ...rest] = findBrokenContentReferences({ root, contentRoot });
+    assert.equal(rest.length, 0);
+    assert.match(failure, /no such file/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('the reported line survives a blank line opening the frontmatter', () => {
+  const { root, contentRoot, cleanup } = fixture({
+    'blank.md': `---\n\ntitle: "A change"\nhero: ../../assets/tech-stak.png\n---\n`,
+  });
+  try {
+    assert.match(findBrokenContentReferences({ root, contentRoot })[0], /blank\.md:4/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a hash inside a value is part of the path, not a comment', () => {
+  // YAML starts a comment at ` #`, not at any `#`. Truncating at the wrong one would invent a
+  // failure for a legitimate filename.
+  const { root, contentRoot, cleanup } = fixture(
+    { 'hash.md': entry('../../assets/plate#2.png') },
+    ['plate#2.png']
+  );
+  try {
+    assert.deepEqual(findBrokenContentReferences({ root, contentRoot }), []);
+  } finally {
+    cleanup();
+  }
+});
+
 test('every bad reference is reported, not just the first', () => {
   const { root, contentRoot, cleanup } = fixture({
     'one.md': entry('../../assets/missing-one.png'),

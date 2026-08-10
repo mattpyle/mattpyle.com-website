@@ -7,10 +7,19 @@ const CONTENT_EXTENSION = /\.(?:md|mdx)$/i;
  * `key: value`, with value optionally quoted. Frontmatter in this repo is flat; nested keys are
  * indented and are deliberately skipped rather than half-parsed.
  */
-const SCALAR_FIELD = /^([A-Za-z_][\w-]*):[ \t]+(?:"([^"]*)"|'([^']*)'|([^#\r\n]*?))[ \t]*(?:#.*)?$/;
+const SCALAR_FIELD =
+  /^([A-Za-z_][\w-]*):[ \t]+(?:"([^"]*)"|'([^']*)'|(.*?))[ \t]*(?:[ \t]#.*)?$/;
 
 /** Only relative paths are ours to resolve. Bare URLs and `/og/…` roots belong to Zod. */
 const RELATIVE_PATH = /^\.{1,2}\//;
+
+/**
+ * Known limit: column-0 scalars only. A sequence (`- ../../assets/x.png`) or a nested mapping
+ * value is skipped, so an array-of-images field would need this widened. No such field exists in
+ * src/content.config.ts today, and guessing at YAML shapes that are not in the schema would cost
+ * more than it caught.
+ */
+
 
 /** @param {string} directory */
 function contentFiles(directory) {
@@ -22,9 +31,17 @@ function contentFiles(directory) {
   });
 }
 
-/** @param {string} source */
+/**
+ * The frontmatter block's lines, in file order.
+ *
+ * `[ \t]*` after the opening fence rather than `\s*`: `\s` matches a newline, so a block that
+ * opens with a blank line would have it eaten and every reported line number would be one short.
+ * Reporting the wrong line in the file this script exists to point at would be a poor joke.
+ *
+ * @param {string} source
+ */
 function frontmatterLines(source) {
-  const block = source.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+  const block = source.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   return block === undefined ? [] : block.split(/\r?\n/);
 }
 
@@ -49,7 +66,21 @@ function realCasedPath(root, absolute) {
 
   for (const segment of segments) {
     if (segment === '..') return null; // Outside the tree: nothing here can vouch for it.
-    const match = readdirSync(current).find((name) => name.toLowerCase() === segment.toLowerCase());
+
+    // readdirSync throws ENOTDIR when a path runs through a file (`…/tech-stack.png/x`). A script
+    // whose whole job is a readable failure must not answer that with a raw Node stack.
+    let names;
+    try {
+      names = readdirSync(current);
+    } catch {
+      return null;
+    }
+
+    // Exact first: a case-sensitive filesystem can hold both `Tech-Stack.png` and
+    // `tech-stack.png`, and matching insensitively would call the correct one wrongly cased.
+    const match = names.includes(segment)
+      ? segment
+      : names.find((name) => name.toLowerCase() === segment.toLowerCase());
     if (match === undefined) return null;
     current = join(current, match);
   }
