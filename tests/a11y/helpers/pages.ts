@@ -125,11 +125,6 @@ export const PAGES: PageSpec[] = [
     // reads a live store per request. The suite serves it with AGENT_TRAFFIC_FIXTURE
     // set (see playwright.config.ts), so the row COUNT is deterministic and the
     // shape of a row is worth guarding — one row per table, with its cells redacted.
-    // The coverage row appears only while the published run covers fewer pages than the site
-    // does (src/lib/scorecard-coverage.mjs), so its presence tracks how long ago the last audit
-    // ran — a golden that recorded it would go red for a reason that is not a template change.
-    // Its own behaviour is covered by tests/scorecard-coverage.test.mjs instead.
-    snapshotDrop: ['.coverage-gap'],
     snapshotKeepFirst: [
       '.history-run',
       'table[aria-labelledby="traffic-surfaces-title"] tbody tr',

@@ -1,9 +1,6 @@
 import type { APIRoute } from 'astro';
-import { getCollection } from 'astro:content';
 import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
 import { flattenTraffic, readAgentTraffic, summarizeTraffic } from '../lib/agent-traffic.mjs';
-import { livePagePaths } from '../data/live-pages.mjs';
-import { describeCoverageGap } from '../lib/scorecard-coverage.mjs';
 
 /**
  * The Markdown representation of /scorecard.
@@ -62,20 +59,6 @@ export const GET: APIRoute = async ({ request }) => {
   const summary = traffic.ok ? summarizeTraffic(flattenTraffic(traffic), renderedAt) : null;
   const passes = SCORECARD.metrics.filter((metric) => metric.status === 'Pass').length;
 
-  // Same coverage line the HTML page states, from the same derivation. A model reading this
-  // document is exactly the reader who would otherwise quote a score against the wrong page set.
-  const [publishedWriting, publishedChangelog] = await Promise.all([
-    getCollection('writing', ({ data }) => !data.draft),
-    getCollection('changelog', ({ data }) => !data.draft),
-  ]);
-  const coverageGap = describeCoverageGap(
-    SCORECARD.scope,
-    livePagePaths({
-      writingSlugs: publishedWriting.map((entry) => entry.id),
-      changelogSlugs: publishedChangelog.map((entry) => entry.id),
-    }).length
-  );
-
   const sections: string[] = [
     [
       '---',
@@ -108,8 +91,6 @@ export const GET: APIRoute = async ({ request }) => {
       [[SCORECARD.scope, SCORECARD.tools.join(' · '), SCORECARD.entry]]
     ),
   ];
-
-  if (coverageGap) sections.push(`**Coverage:** ${coverageGap}`);
 
   if (SCORECARD.commentary?.trim()) sections.push(SCORECARD.commentary.trim());
 
