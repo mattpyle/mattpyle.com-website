@@ -19,6 +19,9 @@
  *   and Steward's review is the net for forgetting to replace it.
  * - updated is omitted on purpose: it is set on substantive edits after publish.
  * - seoTitle/seoDescription are omitted: only needed past SERP limits (~60/~155).
+ *
+ * The body ships with one comment, the answer-first reminder, marked REPLACE like the
+ * description placeholder and meant to be deleted with the first paragraph written over it.
  */
 
 import { existsSync, writeFileSync } from 'node:fs';
@@ -72,8 +75,13 @@ featured: false
 draft: true
 ---
 
+<!-- REPLACE: delete this comment. Lead each section with the answer, then support it. Models
+     read one section at a time and quote it out of context, so a section that opens with
+     build-up gets extracted without its point. Full house style is in CLAUDE.md. -->
+
 `;
 
 writeFileSync(file, frontmatter);
 console.log(`Created src/content/writing/${slug}.md (draft: true)`);
 console.log('Body headings start at h2; the template emits the h1 from title.');
+console.log('Lead each section with the answer; the scaffold repeats that in the body.');
