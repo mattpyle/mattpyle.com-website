@@ -41,9 +41,9 @@
     - link "RSS feed for Writing":
       - /url: /rss.xml
       - text: ""
-    - link "GitHub":
+    - link "GitHub (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn":
+    - link "LinkedIn (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
     - link "WebMCP":
       - /url: /webmcp/
