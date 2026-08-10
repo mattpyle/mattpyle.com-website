@@ -20,11 +20,16 @@ import type { ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js
 /**
  * The Schedule (scorecard-audit-spec.md §7, card `scorecard-nightly-schedule`).
  *
- * Two halves, and neither needs a server. The first pins the three policy
- * choices the card argues for — they are the decision, and a silent revert of
- * `catchupWindow` to the SDK's one-year default would publish fake time-series
- * points rather than fail visibly. The second drives the five verbs against a
- * fake `ScheduleClient`, which is where the CLI's behaviour actually lives.
+ * Two halves, and neither needs a server. The first pins the policy choices the
+ * cards argue for; the second drives the five verbs against a fake
+ * `ScheduleClient`, which is where the CLI's behaviour actually lives.
+ *
+ * `catchupWindow` is the value both halves guard, and it is guarded from two
+ * directions rather than one. The SDK's one-year default would drain a backlog
+ * of near-identical points into what reads as a time series; the near-zero
+ * window this originally shipped with discarded every firing the laptop slept
+ * through, which on this machine was most of them. 23 hours recovers exactly
+ * one missed firing per day, and a silent revert either way has to fail here.
  */
 
 const TZ = 'America/Vancouver';
@@ -47,6 +52,20 @@ function options(overrides: Partial<Parameters<typeof buildScorecardScheduleOpti
   });
 }
 
+/**
+ * The catchup window in milliseconds, so the "shorter than a day" property can
+ * be asserted as arithmetic rather than as string equality. Deliberately narrow
+ * — it parses the one duration shape this file uses and refuses anything else,
+ * rather than half-reimplementing the SDK's `ms` parser and quietly returning a
+ * wrong number for a form it does not really handle.
+ */
+function msOf(duration: string): number {
+  const match = /^(\d+) (seconds|minutes|hours)$/.exec(duration);
+  if (!match) throw new Error(`msOf does not parse "${duration}" — widen it deliberately`);
+  const unit = { seconds: 1000, minutes: 60_000, hours: 3_600_000 }[match[2] as 'seconds' | 'minutes' | 'hours'];
+  return Number(match[1]) * unit;
+}
+
 // ---------------------------------------------------------------------------
 // The spec construction
 // ---------------------------------------------------------------------------
@@ -58,10 +77,31 @@ test('the three policy choices are exactly the card\'s', () => {
   assert.equal(policies?.pauseOnFailure, false);
 });
 
-test('the catchup window is seconds, not the SDK default — missed firings must drop', () => {
-  // Pinned as a value, not just "not undefined": a run taken hours late measures
-  // the site as it is hours later, which is fake data in a time series.
-  assert.equal(SCORECARD_SCHEDULE_CATCHUP_WINDOW, '10 seconds');
+test('the catchup window is 23 hours — one missed firing recovers, a backlog cannot', () => {
+  // Pinned as a value, not just "not undefined". Two failure modes bracket it:
+  // the SDK's one-year default would drain days of missed firings at once, and
+  // the near-zero window this shipped with discarded every firing the laptop
+  // slept through. 23 hours recovers exactly one.
+  assert.equal(SCORECARD_SCHEDULE_CATCHUP_WINDOW, '23 hours');
+});
+
+test('the catchup window is strictly shorter than the daily firing interval', () => {
+  // The property that bounds it: a missed firing must expire before the next one
+  // is due, so at most one can ever be outstanding. Asserted in milliseconds
+  // because that is the unit the server echoes back.
+  assert.ok(
+    msOf(SCORECARD_SCHEDULE_CATCHUP_WINDOW) < 24 * 60 * 60 * 1000,
+    `${SCORECARD_SCHEDULE_CATCHUP_WINDOW} is not shorter than a day`,
+  );
+  assert.equal(msOf(SCORECARD_SCHEDULE_CATCHUP_WINDOW), 82_800_000);
+});
+
+test('the default firing time is 20:00 — evening, when this machine is actually on', () => {
+  // The morning default it replaces fired while the laptop was off at work,
+  // which is the usage pattern the catchup window exists alongside, not instead
+  // of: the default hour still decides whether recovery is the common case.
+  assert.equal(SCORECARD_SCHEDULE_DEFAULT_AT, '20:00');
+  assert.deepEqual(parseTimeOfDay(SCORECARD_SCHEDULE_DEFAULT_AT), { hour: 20, minute: 0 });
 });
 
 test('the spec is a daily calendar firing in the given timezone', () => {
@@ -98,10 +138,11 @@ test('a firing carries an execution timeout, so a wedged run cannot suppress eve
 });
 
 test('the default firing hour is one the stack is plausibly up for', () => {
-  // Not a style preference: a missed firing is discarded, so a 3am default on a
-  // sleeping laptop means the feature never fires at all.
+  // Not a style preference, and not made redundant by the catchup window: a 3am
+  // default on a sleeping laptop turns every single firing into a recovery, and
+  // recovery only ever produces the one late run per day.
   const { hour } = parseTimeOfDay(SCORECARD_SCHEDULE_DEFAULT_AT);
-  assert.ok(hour >= 8 && hour <= 20, `default ${SCORECARD_SCHEDULE_DEFAULT_AT} is outside waking hours`);
+  assert.ok(hour >= 8 && hour <= 22, `default ${SCORECARD_SCHEDULE_DEFAULT_AT} is outside waking hours`);
 });
 
 test('a dry-run schedule freezes dry-run into every firing', () => {
@@ -158,7 +199,7 @@ function fakeClient(behaviour: { createThrows?: Error; handleThrows?: Error } = 
         state: { paused },
         policies: {
           overlap: ScheduleOverlapPolicy.SKIP,
-          catchupWindow: 10_000,
+          catchupWindow: 82_800_000,
           pauseOnFailure: false,
         },
         info: { nextActionTimes: [new Date('2026-08-09T10:30:00Z')], numActionsTaken: 2 },
@@ -214,8 +255,10 @@ test('create sends the built options and reports the next firing', async () => {
     outcome.lines.join(' | '),
   );
   // The policies the server stored, echoed back — a clamped catchup window has
-  // to be visible somewhere, and this is the only place it can show up.
-  assert.ok(outcome.lines.some((l) => /catchup window 10000ms/.test(l) && /overlap SKIP/.test(l)));
+  // to be visible somewhere, and this is the only place it can show up. 23 hours
+  // is 82800000ms; a different number here means the server did not keep what
+  // the CLI sent.
+  assert.ok(outcome.lines.some((l) => /catchup window 82800000ms/.test(l) && /overlap SKIP/.test(l)));
   // The laptop-stack limit is stated by the tool itself, not only in the docs.
   assert.ok(outcome.lines.some((l) => /steward up/.test(l) && /not unattended/.test(l)));
 });
