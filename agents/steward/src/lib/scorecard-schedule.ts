@@ -72,8 +72,15 @@ export const SCORECARD_SCHEDULE_DEFAULT_AT = '20:00';
  */
 export const SCORECARD_SCHEDULE_CATCHUP_WINDOW = '23 hours';
 
-/** The five verbs `steward scorecard-schedule` accepts. */
-export const SCORECARD_SCHEDULE_ACTIONS = ['create', 'pause', 'unpause', 'trigger', 'delete'] as const;
+/**
+ * The six verbs `steward scorecard-schedule` accepts.
+ *
+ * `status` is first because it is the only one that changes nothing. The other
+ * five all mutate, which for a while made "is it still there, when does it fire
+ * next" a question you answered by running `unpause` and reading what it printed
+ * afterwards — a write chosen for its side effect of reporting.
+ */
+export const SCORECARD_SCHEDULE_ACTIONS = ['status', 'create', 'pause', 'unpause', 'trigger', 'delete'] as const;
 export type ScorecardScheduleAction = (typeof SCORECARD_SCHEDULE_ACTIONS)[number];
 
 export function isScorecardScheduleAction(value: string): value is ScorecardScheduleAction {
@@ -179,7 +186,14 @@ export interface ScorecardScheduleHandleLike {
   describe(): Promise<{
     state: { paused: boolean; note?: string };
     policies: { overlap: ScheduleOverlapPolicy; catchupWindow: number; pauseOnFailure: boolean };
-    info: { nextActionTimes: Date[]; numActionsTaken: number };
+    info: {
+      nextActionTimes: Date[];
+      numActionsTaken: number;
+      /** Firings the server dropped for landing outside {@link SCORECARD_SCHEDULE_CATCHUP_WINDOW}. */
+      numActionsMissedCatchupWindow: number;
+      /** Firings suppressed by `overlap: SKIP` because a run was still going. */
+      numActionsSkippedOverlap: number;
+    };
   }>;
   pause(note?: string): Promise<void>;
   unpause(note?: string): Promise<void>;
@@ -248,6 +262,32 @@ function describePolicies(policies: {
 }
 
 /**
+ * The two counters that measure the laptop limit, both straight from
+ * `describe()` and neither printed anywhere before this.
+ *
+ * `numActionsMissedCatchupWindow` is the one that matters. Since the window
+ * became 23 hours, it no longer counts every firing the machine slept through —
+ * a firing missed at 20:00 and taken the next morning is a *taken* action, not a
+ * missed one. What it counts now is firings the stack was down for more than 23
+ * hours, which is precisely the case the catchup window cannot rescue and
+ * precisely what the user guide's "a daily audit on this laptop, not unattended
+ * nightly auditing" caveat is about. A number climbing daily is the evidence for
+ * an always-on worker; a number sitting at zero says the caveat can shrink.
+ *
+ * `numActionsSkippedOverlap` sits beside it to say whether `overlap: SKIP` has
+ * ever dropped a real run or has never once fired in anger.
+ */
+function describeCounters(info: {
+  numActionsMissedCatchupWindow: number;
+  numActionsSkippedOverlap: number;
+}): string {
+  return (
+    `firings missed (down >23h): ${info.numActionsMissedCatchupWindow} · ` +
+    `skipped for overlap: ${info.numActionsSkippedOverlap}`
+  );
+}
+
+/**
  * Runs one verb against the Schedule.
  *
  * Every verb reports the Schedule's state afterwards rather than just saying
@@ -296,6 +336,12 @@ export async function runScorecardScheduleAction(
 
   try {
     switch (action) {
+      // Deliberately empty. `status` exists to reach the shared reporting block
+      // below without taking an action first, and the one thing it must never
+      // acquire is a side effect — a read-only verb that quietly unpauses is the
+      // bug it was written to remove.
+      case 'status':
+        break;
       case 'pause':
         await handle.pause(note);
         lines.push(`paused${note ? ` (${note})` : ''}`);
@@ -318,6 +364,20 @@ export async function runScorecardScheduleAction(
         lines.push('deleted');
         return { action, scheduleId: SCORECARD_SCHEDULE_ID, lines };
     }
+
+    // Inside the try, not after it, because `status` takes no action at all:
+    // for that verb `describe()` is the only call that can raise
+    // `ScheduleNotFoundError`, and a raw SDK error is not the answer to "does
+    // this schedule exist".
+    const description = await handle.describe();
+    if (action === 'status') lines.push('exists');
+    const pausedNote = description.state.note ? ` (${description.state.note})` : '';
+    lines.push(`paused: ${description.state.paused}${pausedNote}`);
+    lines.push(`actions taken so far: ${description.info.numActionsTaken}`);
+    lines.push(describeCounters(description.info));
+    lines.push(describePolicies(description.policies));
+    lines.push(describeNext(description.info.nextActionTimes, timeZone));
+    return { action, scheduleId: SCORECARD_SCHEDULE_ID, lines };
   } catch (err) {
     if (err instanceof ScheduleNotFoundError) {
       throw new Error(
@@ -327,11 +387,4 @@ export async function runScorecardScheduleAction(
     }
     throw err;
   }
-
-  const description = await handle.describe();
-  lines.push(`paused: ${description.state.paused}`);
-  lines.push(`actions taken so far: ${description.info.numActionsTaken}`);
-  lines.push(describePolicies(description.policies));
-  lines.push(describeNext(description.info.nextActionTimes, timeZone));
-  return { action, scheduleId: SCORECARD_SCHEDULE_ID, lines };
 }

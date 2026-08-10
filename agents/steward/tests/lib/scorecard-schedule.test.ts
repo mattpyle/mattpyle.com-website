@@ -165,8 +165,11 @@ test('parseTimeOfDay accepts HH:MM and rejects everything else', () => {
   }
 });
 
-test('the five actions are the five the spec names', () => {
-  assert.deepEqual([...SCORECARD_SCHEDULE_ACTIONS], ['create', 'pause', 'unpause', 'trigger', 'delete']);
+test('the six actions are the five the spec names plus the read-only one', () => {
+  assert.deepEqual(
+    [...SCORECARD_SCHEDULE_ACTIONS],
+    ['status', 'create', 'pause', 'unpause', 'trigger', 'delete'],
+  );
   for (const action of SCORECARD_SCHEDULE_ACTIONS) assert.ok(isScorecardScheduleAction(action));
   assert.equal(isScorecardScheduleAction('describe'), false);
   assert.equal(isScorecardScheduleAction('Create'), false);
@@ -181,12 +184,17 @@ interface Call {
   args: unknown[];
 }
 
-function fakeClient(behaviour: { createThrows?: Error; handleThrows?: Error } = {}) {
+function fakeClient(
+  behaviour: { createThrows?: Error; handleThrows?: Error; describeThrows?: Error } = {},
+) {
   const calls: Call[] = [];
   // Stateful on purpose: the verbs report the schedule's state *after* the
   // action, and a fake that always answers `paused: false` would let a verb
   // that reported the state it read before the call pass this suite.
   let paused = false;
+  // The server records the pause note on the schedule's state; the fake has to
+  // as well, or the verb that reads it back has nothing to read.
+  let note: string | undefined;
   const record = (method: string, ...args: unknown[]) => {
     calls.push({ method, args });
     if (behaviour.handleThrows && method !== 'describe') throw behaviour.handleThrows;
@@ -195,8 +203,11 @@ function fakeClient(behaviour: { createThrows?: Error; handleThrows?: Error } = 
   const handle: ScorecardScheduleHandleLike = {
     async describe() {
       calls.push({ method: 'describe', args: [] });
+      // `status` calls nothing else, so `describe` is the only place a missing
+      // schedule can surface for that verb.
+      if (behaviour.describeThrows) throw behaviour.describeThrows;
       return {
-        state: { paused },
+        state: { paused, note },
         policies: {
           overlap: ScheduleOverlapPolicy.SKIP,
           // Derived from the constant rather than hardcoded, so a revert of the
@@ -205,16 +216,23 @@ function fakeClient(behaviour: { createThrows?: Error; handleThrows?: Error } = 
           catchupWindow: msOf(SCORECARD_SCHEDULE_CATCHUP_WINDOW),
           pauseOnFailure: false,
         },
-        info: { nextActionTimes: [new Date('2026-08-09T10:30:00Z')], numActionsTaken: 2 },
+        info: {
+        nextActionTimes: [new Date('2026-08-09T10:30:00Z')],
+        numActionsTaken: 2,
+        numActionsMissedCatchupWindow: 4,
+        numActionsSkippedOverlap: 1,
+      },
       };
     },
-    async pause(note) {
-      record('pause', note);
+    async pause(pauseNote) {
+      record('pause', pauseNote);
       paused = true;
+      note = pauseNote;
     },
-    async unpause(note) {
-      record('unpause', note);
+    async unpause(unpauseNote) {
+      record('unpause', unpauseNote);
       paused = false;
+      note = unpauseNote;
     },
     async trigger(overlap) {
       record('trigger', overlap);
@@ -238,6 +256,69 @@ function fakeClient(behaviour: { createThrows?: Error; handleThrows?: Error } = 
 
   return { schedule, calls };
 }
+
+test('status reads everything and writes nothing', async () => {
+  const { schedule, calls } = fakeClient();
+  const outcome = await runScorecardScheduleAction('status', { schedule, timeZone: TZ });
+
+  // The whole point of the verb: the only call it may make is the read. A
+  // regression that reached the shared reporting block via `unpause` — which is
+  // literally how this state used to be inspected — has to fail here.
+  assert.deepEqual(
+    calls.map((c) => c.method),
+    ['getHandle', 'describe'],
+  );
+
+  assert.ok(outcome.lines.includes('exists'), outcome.lines.join(' | '));
+  assert.ok(outcome.lines.includes('paused: false'), outcome.lines.join(' | '));
+  assert.ok(outcome.lines.some((l) => l.includes('actions taken so far: 2')));
+  assert.ok(outcome.lines.some((l) => /catchup window 82800000ms/.test(l)));
+  assert.ok(outcome.lines.some((l) => l.includes('America/Vancouver')));
+});
+
+test('status prints the two counters that measure the laptop limit', async () => {
+  // Both come straight from `describe()` and neither was printed anywhere
+  // before. The missed-catchup count is the direct measurement of how often the
+  // stack being down for more than 23 hours actually costs a run — the number
+  // behind the user guide's "not unattended nightly auditing" caveat.
+  const { schedule } = fakeClient();
+  const outcome = await runScorecardScheduleAction('status', { schedule, timeZone: TZ });
+  const counters = outcome.lines.find((l) => l.includes('firings missed'));
+  assert.ok(counters, outcome.lines.join(' | '));
+  assert.match(counters, /firings missed \(down >23h\): 4/);
+  assert.match(counters, /skipped for overlap: 1/);
+});
+
+test('status carries the pause note, so "why is this paused" is answered where it is asked', async () => {
+  const { schedule } = fakeClient();
+  await runScorecardScheduleAction('pause', { schedule, note: 'travelling', timeZone: TZ });
+  const outcome = await runScorecardScheduleAction('status', { schedule, timeZone: TZ });
+  assert.ok(outcome.lines.some((l) => l === 'paused: true (travelling)'), outcome.lines.join(' | '));
+});
+
+test('status on a schedule that does not exist says so, not `ScheduleNotFoundError`', async () => {
+  const { schedule } = fakeClient({
+    describeThrows: new ScheduleNotFoundError('gone', SCORECARD_SCHEDULE_ID),
+  });
+  await assert.rejects(
+    () => runScorecardScheduleAction('status', { schedule, timeZone: TZ }),
+    /No schedule[\s\S]*create/,
+  );
+});
+
+test('every mutating verb now reports the counters too', async () => {
+  // The counters ride the shared reporting block rather than the status verb, so
+  // whichever verb an operator happens to run answers "has the laptop limit been
+  // biting" without a second command.
+  for (const action of ['pause', 'unpause', 'trigger'] as const) {
+    const { schedule } = fakeClient();
+    const outcome = await runScorecardScheduleAction(action, { schedule, timeZone: TZ });
+    assert.ok(
+      outcome.lines.some((l) => l.includes('firings missed')),
+      `${action}: ${outcome.lines.join(' | ')}`,
+    );
+  }
+});
 
 test('create sends the built options and reports the next firing', async () => {
   const { schedule, calls } = fakeClient();
@@ -291,7 +372,7 @@ test('pause and unpause report the state the action produced, not the one before
   });
   assert.deepEqual(calls.find((c) => c.method === 'pause')?.args, ['travelling']);
   assert.ok(paused.lines[0].includes('travelling'));
-  assert.ok(paused.lines.some((l) => l === 'paused: true'), paused.lines.join(' | '));
+  assert.ok(paused.lines.some((l) => l.startsWith('paused: true')), paused.lines.join(' | '));
   assert.ok(paused.lines.some((l) => l.includes('actions taken so far: 2')));
 
   const resumed = await runScorecardScheduleAction('unpause', { schedule, timeZone: TZ });
