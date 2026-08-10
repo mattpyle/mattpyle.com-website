@@ -6,10 +6,10 @@ import { SyntaxValidator } from 'fast-xml-validator';
 import { readWritingMetadata } from './lib/writing-metadata.mjs';
 import {
   ON_DEMAND_PAGES,
-  STATIC_ROUTE_LASTMOD,
   latestDate,
   resolveSitemapLastmod,
 } from '../src/data/sitemap-lastmod.mjs';
+import { livePagePaths } from '../src/data/live-pages.mjs';
 import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
@@ -49,19 +49,15 @@ const changelogDir = join(root, 'src', 'content', 'changelog');
 const changelogMetadata = readWritingMetadata(changelogDir);
 const expected = new Map();
 
-for (const pathname of Object.keys(STATIC_ROUTE_LASTMOD)) {
-  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
-}
+// The same helper /scorecard counts its coverage line from, so this validator and that page can
+// never disagree about how many pages the site publishes (src/data/live-pages.mjs).
+const publishedSlugs = (metadata) =>
+  [...metadata].filter(([, entry]) => !entry.draft).map(([slug]) => slug);
 
-for (const [slug, entry] of writingMetadata) {
-  if (entry.draft) continue;
-  const pathname = `/writing/${slug}/`;
-  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
-}
-
-for (const [slug, entry] of changelogMetadata) {
-  if (entry.draft) continue;
-  const pathname = `/changelog/${slug}/`;
+for (const pathname of livePagePaths({
+  writingSlugs: publishedSlugs(writingMetadata),
+  changelogSlugs: publishedSlugs(changelogMetadata),
+})) {
   expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
 }
 

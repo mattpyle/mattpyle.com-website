@@ -1,6 +1,9 @@
 ---
+import { getCollection } from 'astro:content';
 import Layout from '../layouts/Layout.astro';
 import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
+import { livePagePaths } from '../data/live-pages.mjs';
+import { describeCoverageGap } from '../lib/scorecard-coverage.mjs';
 import {
   MAX_TABLE_ROWS,
   flattenTraffic,
@@ -32,6 +35,27 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-r
 
 const currentPasses = SCORECARD.metrics.filter(metric => metric.status === 'Pass').length;
 const historyPageSize = 20;
+
+/**
+ * Does the published run still cover the whole site?
+ *
+ * The collections are baked into the deployed bundle at build, so this reads the content of the
+ * deploy that is serving the page rather than anything fetched per request: the line moves the
+ * moment a page ships and cannot go stale on its own. The page set comes from the same helper
+ * scripts/validate-sitemap.mjs builds its expected URL set from, so the two cannot disagree about
+ * what "a live page" is.
+ */
+const [publishedWriting, publishedChangelog] = await Promise.all([
+  getCollection('writing', ({ data }) => !data.draft),
+  getCollection('changelog', ({ data }) => !data.draft),
+]);
+const coverageGap = describeCoverageGap(
+  SCORECARD.scope,
+  livePagePaths({
+    writingSlugs: publishedWriting.map(entry => entry.id),
+    changelogSlugs: publishedChangelog.map(entry => entry.id),
+  }).length
+);
 
 // One clock for the whole render, so the windows and the "rendered at" stamp cannot disagree.
 const renderedAt = new Date();
@@ -147,6 +171,18 @@ function shortMetricName(name: string): string {
             <dt>Entry</dt>
             <dd>{SCORECARD.entry}</dd>
           </div>
+          {/*
+            Present only when the run no longer covers the whole site, which is the whole point:
+            a permanent "coverage: complete" row would be noise on every render but one. It is a
+            term/definition pair like its neighbours because that is what it is — a labelled fact
+            about the run — and it spans the row because it is a sentence, not a value.
+          */}
+          {coverageGap && (
+            <div class="coverage-gap">
+              <dt>Coverage</dt>
+              <dd>{coverageGap}</dd>
+            </div>
+          )}
         </dl>
         <p class="current-commentary">{currentCommentary}</p>
       </div>
@@ -605,6 +641,17 @@ function shortMetricName(name: string): string {
     line-height: 1.5;
   }
 
+  /* A sentence, not a value: it takes the whole row rather than the .8fr Scope column, where a
+     90-character line would wrap to six. The accent rule is the same one the page uses to mark a
+     caveat, at the weight of the metadata it qualifies. */
+  .coverage-gap {
+    grid-column: 1 / -1;
+    padding-left: 12px;
+    border-left: 2px solid var(--color-sig-minor);
+  }
+
+  .coverage-gap dd { color: var(--color-heading); }
+
   .current-commentary {
     margin: 0;
     padding-left: 18px;
@@ -964,7 +1011,9 @@ function shortMetricName(name: string): string {
     .verification {
       grid-template-columns: 1fr 1.4fr;
     }
-    .verification div:last-child { grid-column: 1 / -1; }
+    /* Entry, by position rather than :last-child — the coverage row is conditional and would
+       otherwise take the span away from it on the renders where it appears. */
+    .verification div:nth-child(3) { grid-column: 1 / -1; }
     .current-commentary,
     .history-detail > p { padding: 16px 0 0; border-top: 1px solid var(--color-border); border-left: 0; }
 
