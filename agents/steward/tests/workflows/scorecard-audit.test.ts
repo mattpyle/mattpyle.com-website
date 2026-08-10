@@ -223,6 +223,75 @@ test('commentary states the plain pass fact, with no delta language, when nothin
   assert.match(result.record.commentary, /^All \d+ pages? passed all four public metrics\.$/);
 });
 
+// ---------------------------------------------------------------------------
+// `--note`: run commentary supplied up front instead of hand-edited into the PR
+// afterwards. It rides in the input like every other decision (design rule 3).
+// ---------------------------------------------------------------------------
+
+const PUBLISHED_GREEN: PublishableRun = {
+  iso: '2000-01-01',
+  metrics: [
+    { name: 'Accessibility', value: '100', maximum: '100', status: 'Pass', description: '' },
+    { name: 'Performance', value: '98', maximum: '100', status: 'Pass', description: '' },
+    { name: 'SEO', value: '100', maximum: '100', status: 'Pass', description: '' },
+    { name: 'Agentic Browsing', value: '4', maximum: '4', status: 'Pass', description: '' },
+  ],
+};
+
+test('a note leads the commentary and the machine draft still follows it', async () => {
+  // Prefix, not replace: the note says why the run happened, the draft says what
+  // it measured, and losing the second to gain the first would be a worse entry
+  // than the hand-edit this replaces.
+  const { activities, archived } = mockActivities({ readPublishedScorecard: async () => PUBLISHED_GREEN });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-note-1',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000, note: 'Re-run by hand after the font subset landed' })],
+    }),
+  );
+  assert.match(
+    result.record.commentary,
+    /^Re-run by hand after the font subset landed\. All \d+ pages? passed all four public metrics\.$/,
+  );
+  // It reaches the archive as well as the return value — the archive is the only
+  // place the run survives on a no-op night.
+  const archivedRecord = archived[0] as { commentary: string };
+  assert.match(archivedRecord.commentary, /^Re-run by hand after the font subset landed\./);
+});
+
+test('a note that punctuates itself is not punctuated twice', async () => {
+  const { activities } = mockActivities({ readPublishedScorecard: async () => PUBLISHED_GREEN });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-note-2',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000, note: 'Did the CLS regression come back?' })],
+    }),
+  );
+  assert.match(result.record.commentary, /^Did the CLS regression come back\? All/);
+});
+
+test('no note leaves the commentary byte-identical to the machine draft', async () => {
+  // The property that makes this a safe input-only change: an execution without
+  // a note takes exactly the branch every execution before the field existed
+  // took, so replaying an old history cannot diverge.
+  const { activities } = mockActivities({ readPublishedScorecard: async () => PUBLISHED_GREEN });
+  const run = (note: string | undefined, workflowId: string) =>
+    withWorker(activities, () =>
+      env.client.workflow.execute(scorecardAuditWorkflow, {
+        workflowId,
+        taskQueue: QUEUE,
+        args: [baseInput({ maxAgeDays: 100_000, note })],
+      }),
+    );
+
+  const absent = await run(undefined, 'sc-note-3');
+  const blank = await run('   ', 'sc-note-4');
+  assert.match(absent.record.commentary, /^All \d+ pages? passed all four public metrics\.$/);
+  assert.equal(blank.record.commentary, absent.record.commentary);
+});
+
 test('the run date comes from resolveRunStamp, not a hardcoded workflow clock read', async () => {
   const { activities } = mockActivities({
     readPublishedScorecard: async () => undefined,

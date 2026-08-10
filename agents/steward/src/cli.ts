@@ -59,7 +59,7 @@ import {
   runScorecardScheduleAction,
   type TimeOfDay,
 } from './lib/scorecard-schedule.js';
-import type { ScorecardRunRecord } from './lib/scorecard-aggregate.js';
+import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 
 async function client(): Promise<Client> {
   const connection = await Connection.connect({ address: TEMPORAL_ADDRESS });
@@ -1256,14 +1256,36 @@ program
   .option('--max-age-days <n>', 'staleness threshold for the publish gate', String(SCORECARD_MAX_AGE_DAYS_DEFAULT))
   .option('--date <yyyy-mm-dd>', 'pin the run\'s date instead of using today in STEWARD_TIMEZONE — for backfilling a run to when the audit actually happened')
   .option('--allow-shrink', 'accept an audit set smaller than the previous published run — for when pages were genuinely unpublished')
+  .option(
+    '--note <text>',
+    "run commentary, placed ahead of the machine draft in the run-log entry and the PR body. Must read correctly forever — no \"currently\", \"latest\", \"now\", \"today\"",
+  )
   .description('Audit the live site (scorecard-audit-spec.md) and open a PR on change or staleness')
-  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string; date?: string; allowShrink?: boolean }) => {
+  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string; date?: string; allowShrink?: boolean; note?: string }) => {
     const maxAgeDays = Number(opts.maxAgeDays);
     if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
       fail(`--max-age-days must be a positive number, got "${opts.maxAgeDays}"`);
     }
     if (opts.date && !/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
       fail(`--date must be YYYY-MM-DD, got "${opts.date}"`);
+    }
+    // Checked here, before the workflow starts, rather than only in
+    // `publishScorecardRun`. The activity's `assertTimelessCommentary` is a hard
+    // block and stays the backstop, but reaching it costs a full ~12-minute
+    // audit first — for a typo the operator can fix in seconds.
+    const note = opts.note?.trim();
+    if (opts.note !== undefined && !note) {
+      fail('--note needs some text.');
+    }
+    if (note) {
+      const check = validateCommentary(note);
+      if (!check.ok) {
+        fail(
+          `--note reads as present-relative, not timeless (found: ${check.matches.join(', ')}). ` +
+            'A run-log entry is read years later, so it has to state what this run measured rather ' +
+            'than where it sits in the list.',
+        );
+      }
     }
     const urls = opts.urls
       ? opts.urls.split(',').map((s) => s.trim()).filter(Boolean)
@@ -1278,6 +1300,7 @@ program
     console.log(`\n  starting scorecard audit${opts.dryRun ? ' (dry run — will not publish)' : ''}...`);
     if (urls) console.log(`  URL override: ${urls.join(', ')}`);
     if (opts.allowShrink) console.log('  --allow-shrink: a smaller audit set than the last published run is accepted');
+    if (note) console.log(`  note: ${note}`);
     console.log('');
 
     const result = await c.workflow.execute(scorecardAuditWorkflow, {
@@ -1296,6 +1319,7 @@ program
           timeZone: STEWARD_TIMEZONE,
           date: opts.date,
           allowShrink: opts.allowShrink === true,
+          note,
         },
       ],
     });
