@@ -115,6 +115,136 @@ test('the over-long title advice names the override the schema actually has', as
 });
 
 // ---------------------------------------------------------------------------
+// SERP lengths measure the string that actually renders.
+//
+// Two holes this closes. `Layout.astro:63` renders `${seoTitle ?? title} — Matt
+// Pyle`, so a 60-char title Steward passed reached the SERP at 72 — the check
+// measured a string the site never emits. And the mere presence of an override
+// used to suppress the finding without measuring the override, so the fix the
+// finding recommended turned the check off rather than satisfying it.
+// ---------------------------------------------------------------------------
+
+const SERP_FIXTURES = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'fixtures',
+  'posts',
+);
+
+/**
+ * Writes a throwaway post with the given frontmatter and checks it in **audit**
+ * mode — the mode that skips the draft rule and the git-state note, so a
+ * generated, untracked fixture produces SERP findings and nothing else.
+ */
+async function serpFindings(name: string, extra: Record<string, string>): Promise<string[]> {
+  const file = path.join(SERP_FIXTURES, `${name}.md`);
+  const frontmatter = Object.entries({
+    date: '2026-07-18',
+    description: '"A description well inside every bound this pass checks, so only the title can fail."',
+    tags: '["testing"]',
+    ...extra,
+  })
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n');
+  await fs.writeFile(file, `---\n${frontmatter}\n---\n\n## Body\n\nNothing here.\n`, 'utf8');
+  try {
+    const result = await checkFrontmatter(`posts/${name}.md`, 'writing', 'audit');
+    return result.findings.map((f) => f.message);
+  } finally {
+    await fs.rm(file, { force: true }).catch(() => {});
+  }
+}
+
+const overLimit = (messages: string[]) => messages.filter((m) => m.includes('SERP limit'));
+
+test('a bare title over budget is flagged, with the rendered length and the real budget', async () => {
+  // 63 chars, so it fails on its own and would have failed before this change
+  // too — the regression guard for the case that already worked.
+  const title = 'A title that is comfortably over sixty characters all by itself';
+  assert.equal(title.length, 63);
+
+  const flagged = overLimit(await serpFindings('serp-bare-long', { title: `"${title}"` }));
+  assert.equal(flagged.length, 1, JSON.stringify(flagged));
+  assert.match(flagged[0], /`title` is 63 chars \+ the 12-char ` — Matt Pyle` suffix = 75 rendered/);
+  // The number the author has to hit, not the one the constant is named after.
+  assert.match(flagged[0], /48 chars or fewer/);
+  assert.match(flagged[0], /seoTitle/);
+});
+
+test('a title that only fails once the suffix is counted is flagged', async () => {
+  // 54 chars: comfortably under the bare 60-char limit the check used to apply,
+  // and 66 as rendered. This is the entire 12-character blind spot, in one case.
+  const title = 'A title under sixty bare, and over sixty once rendered';
+  assert.equal(title.length, 54);
+
+  const flagged = overLimit(await serpFindings('serp-suffix-only', { title: `"${title}"` }));
+  assert.equal(flagged.length, 1, JSON.stringify(flagged));
+  assert.match(flagged[0], /`title` is 54 chars \+ the 12-char ` — Matt Pyle` suffix = 66 rendered/);
+});
+
+test('a short override satisfies the check instead of suppressing it', async () => {
+  const flagged = overLimit(
+    await serpFindings('serp-short-override', {
+      title: '"A title that is comfortably over sixty characters all by itself"',
+      seoTitle: '"A short enough override"',
+    }),
+  );
+  assert.deepEqual(flagged, [], 'the override is the string that renders, and it fits');
+});
+
+test('a long override is flagged, rather than being accepted for existing', async () => {
+  // The hole with teeth: adding an override is exactly what the finding told the
+  // author to do, and before this it turned the check off whatever it contained.
+  const flagged = overLimit(
+    await serpFindings('serp-long-override', {
+      title: '"A short title"',
+      seoTitle: '"An override that is itself far too long to fit inside a search result"',
+    }),
+  );
+  assert.equal(flagged.length, 1, JSON.stringify(flagged));
+  assert.match(flagged[0], /`seoTitle` is 69 chars/);
+  assert.match(flagged[0], /reaches `<title>`/);
+  // It must not tell the author to add the field they already have.
+  assert.doesNotMatch(flagged[0], /Add a/);
+});
+
+test('a long seoDescription is flagged, and a short one clears an over-long description', async () => {
+  const longDek = `"${'d'.repeat(200)}"`;
+
+  const suppressed = overLimit(
+    await serpFindings('serp-dek-override-short', {
+      title: '"A short title"',
+      description: longDek,
+      seoDescription: `"${'s'.repeat(140)}"`,
+    }),
+  );
+  assert.deepEqual(suppressed, [], 'a 140-char override is what reaches the meta description');
+
+  const flagged = overLimit(
+    await serpFindings('serp-dek-override-long', {
+      title: '"A short title"',
+      description: longDek,
+      seoDescription: `"${'s'.repeat(190)}"`,
+    }),
+  );
+  assert.equal(flagged.length, 1, JSON.stringify(flagged));
+  assert.match(flagged[0], /`seoDescription` is 190 chars/);
+});
+
+test('an empty override is a block, not a silently shorter title', async () => {
+  // `seoTitle: ""` does not render as a short title. It renders as ` — Matt
+  // Pyle`, with the post's name gone entirely.
+  const messages = await serpFindings('serp-empty-override', {
+    title: '"A short title"',
+    seoTitle: '""',
+  });
+  assert.ok(
+    messages.some((m) => m.includes('`seoTitle` is empty')),
+    JSON.stringify(messages),
+  );
+});
+
+// ---------------------------------------------------------------------------
 // The uncommitted-draft note (design rule 9: a deterministically checkable
 // condition gets promoted into mechanical code).
 //
