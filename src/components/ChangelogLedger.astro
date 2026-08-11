@@ -53,15 +53,21 @@ for (const entry of entries) {
           <span class="year-label">{group.year}</span>
           <span class="year-line" aria-hidden="true"></span>
         </div>
+        {/* The anchor below wraps the title and nothing else, so its accessible name is the
+            title — the date, the significance, the type and the tags are context, not part of
+            the link's label. The whole row stays clickable through .lg-link::after, which
+            stretches over the row's positioning context. */}
         {group.items.map(entry => (
-          <a href={`/changelog/${entry.id}/`} class="lg-row" data-type={entry.data.type}>
+          <div class="lg-row" data-type={entry.data.type}>
             <div class="lg-when">
               <span class={`sig-dot sig-dot--${entry.data.significance}`} aria-hidden="true"></span>
               <span class="lg-date">{formatDate(entry.data.date)}</span>
               <span class="sr-only">{significanceLabel(entry.data.significance)}</span>
             </div>
             <div class="lg-main">
-              <h2 class="lg-title">{entry.data.title}</h2>
+              <h2 class="lg-title">
+                <a href={`/changelog/${entry.id}/`} class="lg-link">{entry.data.title}</a>
+              </h2>
               <p class="lg-summary">{entry.data.summary}</p>
             </div>
             {/* One copy, placed by CSS: third grid column on desktop, trailing child of the
@@ -74,7 +80,7 @@ for (const entry of entries) {
               {entry.data.tags.length > 0 && <span class="sr-only">Tags:</span>}
               {entry.data.tags.map(tag => <span class="tag-pill">{tag}</span>)}
             </div>
-          </a>
+          </div>
         ))}
       </>
     ))
@@ -137,7 +143,8 @@ for (const entry of entries) {
     padding: 13px 12px;
     margin: 0 -12px;
     border-radius: 6px;
-    text-decoration: none;
+    /* The positioning context .lg-link::after stretches into. */
+    position: relative;
     transition: background .12s ease;
   }
 
@@ -151,6 +158,13 @@ for (const entry of entries) {
 
   .lg-row:hover { background: var(--color-accent-wash); }
   .lg-row:hover .lg-title { color: var(--color-accent); }
+
+  /* Keyboard focus lands on the title link, which takes the site-wide ring. The row washes
+     with it — the same wash :hover paints — so the ring reads as marking the whole clickable
+     area rather than only the few words it encircles. `:has(… :focus-visible)` rather than
+     `:focus-within` so a mouse click does not light the row up; where :has is unsupported the
+     row simply does not wash and the ring on the link is unaffected. */
+  .lg-row:has(.lg-link:focus-visible) { background: var(--color-accent-wash); }
 
   .lg-when {
     display: flex;
@@ -189,6 +203,23 @@ for (const entry of entries) {
     color: var(--color-heading);
     transition: color .12s ease;
     margin: 0;
+  }
+
+  /* The link is the title, so it takes the heading's colour in both states rather than
+     the site-wide anchor accent — .lg-row:hover already tints the heading. */
+  .lg-link,
+  .lg-link:hover {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Stretched link: the row's whole box is the hit area, as it was when the row itself
+     was the anchor. Nothing else in the row is interactive, so there is nothing for the
+     overlay to cover up. */
+  .lg-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
   }
 
   .empty-state {

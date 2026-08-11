@@ -27,13 +27,12 @@
     - radio "INFRA"
     - radio "EXPERIMENT"
   - paragraph: ·
-  - text: /\d+/
-  - link "· · · · · · · · ·":
-    - /url: "#"
-    - text: ""
-    - heading "·" [level=2]
-    - paragraph: ·
-    - text: ""
+  - text: /\d+ · ·/
+  - heading "·" [level=2]:
+    - link "·":
+      - /url: "#"
+  - paragraph: ·
+  - text: · · · · ·
   - navigation "Changelog pagination": /showing \d+ of \d+/
 - contentinfo:
   - navigation "Social links":
