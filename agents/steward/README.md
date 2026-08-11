@@ -107,10 +107,13 @@ reports no composite score, only per-category counts and a ranked fix list.
 Two properties it is built around, both of which matter more than the checks themselves. It
 **verifies behaviour rather than presence**: a 200 from `/llms.txt` that is really the site's HTML
 catch-all fails, and so does a page that answers `Accept: text/markdown` with a different page. And
-it **cannot be pointed at your own network**: every hostname is resolved and classified before a
-socket opens and again on each redirect hop, refusing private, loopback, link-local, CGNAT and
-cloud-metadata ranges, with no flag to turn that off. It also obeys the target's robots.txt, because
-an agent-readiness auditor that ignores robots fails its own audit.
+it **refuses a target inside your own network**: every hostname is resolved and every address
+classified before a socket opens, and again on each redirect hop, allowing only globally-routable
+unicast addresses, with no flag to turn that off. One caveat, stated in `safe-fetch.ts` rather than
+only here: the name is resolved again by Node when it connects, so a hostile resolver answering
+differently the second time (DNS rebinding) is not covered, and closing that needs the connection
+pinned to the vetted address. It also obeys the target's robots.txt, because an agent-readiness
+auditor that ignores robots fails its own audit.
 
 > [!TIP]
 > Run any command with `npx tsx src/cli.ts <args>` instead of the `steward` shim if something fails

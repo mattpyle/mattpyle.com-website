@@ -140,10 +140,30 @@ export function rankedFixes(checks: CheckResult[]): CheckResult[] {
 }
 
 /**
- * Trims a response body down to a quotable excerpt: one line, bounded, with the
- * truncation visible rather than silent.
+ * Removes C0 and C1 control characters, and DEL, from a string that came off
+ * the network.
+ *
+ * Every string in this document is quoted back to somebody: into a terminal by
+ * the CLI, into a markdown file, and later into an HTML report. A response body
+ * or a header value is attacker-controlled text, and `ESC [` in it is enough to
+ * repaint a terminal, hide a line, or make a failing check print as a passing
+ * one. Collapsing whitespace does not help — `\x1b` is not whitespace.
+ *
+ * The tab/newline/carriage-return cases are removed here too rather than
+ * preserved: this runs on text that is about to be flattened onto one line
+ * anyway.
+ */
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+export function stripControlChars(text: string): string {
+  return text.replace(CONTROL_CHARS, '');
+}
+
+/**
+ * Trims a response body down to a quotable excerpt: one line, bounded, control
+ * characters removed, with the truncation visible rather than silent.
  */
 export function excerpt(text: string, max = 240): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
+  const flat = stripControlChars(text).replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
 }

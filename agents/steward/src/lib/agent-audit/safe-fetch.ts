@@ -210,61 +210,77 @@ export class SafeFetcher {
       if (remaining <= 0) throw new BudgetExhaustedError(current.href);
       await assertConnectable(current, this.policy);
 
+      // The timer covers the body read as well as the headers, and never
+      // outlives the audit's own budget. Clearing it as soon as `fetch`
+      // resolved — which is what this did first — left the body read
+      // unbounded: a server that answers headers instantly and then dribbles
+      // bytes forever would hold the audit open past every cap, which is the
+      // cheapest way to stall an auditor and the exact thing `perRequestTimeoutMs`
+      // claims to prevent. Aborting the signal after the response arrives
+      // errors the body stream, so one timer covers both halves.
       const controller = new AbortController();
+      const budgeted = Math.min(this.policy.perRequestTimeoutMs, remaining);
       const timeout = setTimeout(
-        () => controller.abort(new Error(`request timed out after ${this.policy.perRequestTimeoutMs}ms`)),
-        Math.min(this.policy.perRequestTimeoutMs, remaining),
+        () => controller.abort(new Error(`request exceeded ${budgeted}ms (headers and body)`)),
+        budgeted,
       );
-      let res: Response;
       try {
         this.requestCount++;
-        res = await fetch(current.href, {
+        const res = await fetch(current.href, {
           method: init.method ?? 'GET',
           redirect: 'manual',
           signal: controller.signal,
           headers: {
             'user-agent': AUDIT_USER_AGENT,
             accept: '*/*',
+            // Forwarded to every hop, cross-origin included. Safe *because of
+            // what is in here*: a product token and an Accept preference, and
+            // never a cookie, an Authorization header or anything else that
+            // would be a credential to leak to a redirect target. `fetch` is
+            // called without credentials and nothing in this file adds any, so
+            // there is no per-hop stripping to do. Adding a header that carries
+            // authority to this call would change that, and would need the
+            // same-origin filter this comment stands in for.
             ...init.headers,
           },
         });
+
+        const location = res.headers.get('location');
+        if (res.status >= 300 && res.status < 400 && location) {
+          // The body of a redirect is never read; cancel it rather than leaking
+          // the socket while we chase the Location.
+          await res.body?.cancel().catch(() => {});
+          if (hop >= this.policy.maxRedirects) {
+            throw new BlockedTargetError(requestedUrl, `more than ${this.policy.maxRedirects} redirects`);
+          }
+          let next: URL;
+          try {
+            next = new URL(location, current);
+          } catch {
+            throw new BlockedTargetError(current.href, `redirect to an unparseable Location: "${location}"`);
+          }
+          redirects.push(next.href);
+          current = next;
+          continue;
+        }
+
+        const headers: Record<string, string> = {};
+        for (const [key, value] of res.headers) headers[key.toLowerCase()] = value;
+        const { text, bytes, truncated } = await readCapped(res, this.policy.maxBytes);
+        return {
+          requestedUrl,
+          url: current.href,
+          status: res.status,
+          headers,
+          body: text,
+          truncated,
+          bytes,
+          redirects,
+          elapsedMs: Date.now() - started,
+        };
       } finally {
         clearTimeout(timeout);
       }
-
-      const location = res.headers.get('location');
-      if (res.status >= 300 && res.status < 400 && location) {
-        // The body of a redirect is never read; cancel it rather than leaking
-        // the socket while we chase the Location.
-        await res.body?.cancel().catch(() => {});
-        if (hop >= this.policy.maxRedirects) {
-          throw new BlockedTargetError(requestedUrl, `more than ${this.policy.maxRedirects} redirects`);
-        }
-        let next: URL;
-        try {
-          next = new URL(location, current);
-        } catch {
-          throw new BlockedTargetError(current.href, `redirect to an unparseable Location: "${location}"`);
-        }
-        redirects.push(next.href);
-        current = next;
-        continue;
-      }
-
-      const headers: Record<string, string> = {};
-      for (const [key, value] of res.headers) headers[key.toLowerCase()] = value;
-      const { text, bytes, truncated } = await readCapped(res, this.policy.maxBytes);
-      return {
-        requestedUrl,
-        url: current.href,
-        status: res.status,
-        headers,
-        body: text,
-        truncated,
-        bytes,
-        redirects,
-        elapsedMs: Date.now() - started,
-      };
     }
   }
 }

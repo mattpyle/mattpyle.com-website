@@ -160,16 +160,25 @@ export function classifyAddress(ip: string): BlockReason | null {
     return null;
   }
 
-  const blocked6: Array<[string, number, string]> = [
-    ['::', 128, 'unspecified address'],
-    ['::1', 128, 'loopback'],
-    ['100::', 64, 'discard-only prefix (RFC 6666)'],
+  // **Allowlist, not denylist** — the same rule the IPv4 half follows in spirit,
+  // and now in fact for v6 too. Global unicast is 2000::/3 and everything else
+  // (loopback, unspecified, ULA fc00::/7, link-local fe80::/10, multicast
+  // ff00::/8, the discard prefix, and every range IANA has not handed out yet)
+  // falls outside it. Listing the blocked prefixes instead, which is what this
+  // did first, quietly allowed anything IANA assigns next.
+  if (!inCidr6(groups, '2000::', 3)) {
+    return `${ip} is outside 2000::/3 — not a global unicast address`;
+  }
+
+  // The carve-outs *inside* global unicast: ranges that are routable in form
+  // but are not somebody's website.
+  const specialInsideGlobal: Array<[string, number, string]> = [
+    ['2001::', 32, 'Teredo tunnelling (RFC 4380) — reaches whatever is behind the tunnel'],
+    ['2001:2::', 48, 'benchmarking range (RFC 5180)'],
     ['2001:db8::', 32, 'documentation range'],
-    ['fc00::', 7, 'unique local address (RFC 4193)'],
-    ['fe80::', 10, 'link-local'],
-    ['ff00::', 8, 'multicast'],
+    ['2002::', 16, 'deprecated 6to4 (RFC 7526) — encapsulates an arbitrary IPv4 address'],
   ];
-  for (const [prefix, bits, reason] of blocked6) {
+  for (const [prefix, bits, reason] of specialInsideGlobal) {
     if (inCidr6(groups, prefix, bits)) return `${ip} is in ${prefix}/${bits} — ${reason}`;
   }
   return null;

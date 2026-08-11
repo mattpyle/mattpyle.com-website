@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import dns from 'node:dns/promises';
 import type { AddressInfo } from 'node:net';
 import {
   BlockedTargetError,
@@ -186,6 +187,80 @@ test('the total budget is shared across requests and refuses the next one', asyn
     (err: unknown) => err instanceof BudgetExhaustedError,
   );
   assert.equal(mock.connections, 0);
+});
+
+test('a name resolving to both a public and a private address is refused whole', async (t) => {
+  // The case the address table alone cannot cover, because it needs DNS to
+  // answer with two records. A resolver that returns one routable address and
+  // one internal one is the attack, not an invitation to connect to the
+  // routable one — and which record `fetch` would actually pick is not this
+  // code's decision to rely on.
+  t.mock.method(dns, 'lookup', async () => [
+    { address: '93.184.216.34', family: 4 },
+    { address: '10.0.0.7', family: 4 },
+  ]);
+  await assert.rejects(
+    () => new SafeFetcher().fetch('http://split-horizon.test/'),
+    (err: unknown) =>
+      err instanceof BlockedTargetError &&
+      /10\.0\.0\.7/.test(err.reason) &&
+      /RFC 1918/.test(err.reason),
+  );
+});
+
+test('an all-public DNS answer is allowed through the same path', async (t) => {
+  // The control for the test above: two records, both routable, and the guard
+  // gets out of the way. Without this, "refuses everything" would also pass.
+  t.mock.method(dns, 'lookup', async () => [
+    { address: '93.184.216.34', family: 4 },
+    { address: '2606:4700::1111', family: 6 },
+  ]);
+  const fetcher = new SafeFetcher();
+  // The connection itself fails (nothing is listening on a made-up name), which
+  // is the point: it got past the guard to a transport error.
+  await assert.rejects(
+    () => fetcher.fetch('http://both-public.test/'),
+    (err: unknown) => !(err instanceof BlockedTargetError),
+  );
+});
+
+test('the per-request timer covers the body read, not just the headers', async (t) => {
+  // A server that answers headers instantly and then dribbles forever. Clearing
+  // the timer once `fetch` resolves — which is what this did first — left this
+  // hanging until the process died, past every cap the policy declares.
+  const mock = await mockServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.write('start');
+    // Never ends. The interval keeps the socket alive without finishing.
+    const timer = setInterval(() => res.write('.'), 50);
+    res.on('close', () => clearInterval(timer));
+  });
+  t.after(() => mock.close());
+
+  const started = Date.now();
+  await assert.rejects(() =>
+    new SafeFetcher(testPolicy({ perRequestTimeoutMs: 400 })).fetch(`${mock.origin}/`),
+  );
+  assert.ok(Date.now() - started < 5000, 'the body read outlived the per-request timeout');
+});
+
+test('the per-request timer is capped by whatever is left of the audit budget', async (t) => {
+  const mock = await mockServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.write('start');
+    const timer = setInterval(() => res.write('.'), 50);
+    res.on('close', () => clearInterval(timer));
+  });
+  t.after(() => mock.close());
+
+  // Per-request allows 30s; the audit has ~500ms left. The shorter one wins.
+  const started = Date.now();
+  const fetcher = new SafeFetcher(
+    testPolicy({ perRequestTimeoutMs: 30_000, totalBudgetMs: 500 }),
+    Date.now(),
+  );
+  await assert.rejects(() => fetcher.fetch(`${mock.origin}/`));
+  assert.ok(Date.now() - started < 5000, 'the request outlived the remaining audit budget');
 });
 
 test('the auditor identifies itself', async (t) => {

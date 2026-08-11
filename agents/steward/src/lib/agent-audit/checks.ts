@@ -51,10 +51,19 @@ type GetOutcome =
   | { kind: 'error'; url: string; message: string; fatal: boolean };
 
 class AuditContext {
+  /** The audited origin's robots.txt. The checks that report on it read this. */
   robots: ParsedRobots | null = null;
   readonly notes: string[] = [];
   /** Set once the time budget or a fatal refusal ends the run early. */
   aborted: string | null = null;
+  /**
+   * robots.txt per origin, because llms.txt and a `Sitemap:` line may both point
+   * at another host. Judging an off-origin path against the *audited* site's
+   * robots.txt, which is what this did first, is wrong twice over: it applies
+   * rules the other host never wrote, and it fetches that host having consulted
+   * nothing it did write. Each origin is fetched at most once.
+   */
+  private readonly robotsByOrigin = new Map<string, ParsedRobots | null>();
 
   constructor(
     readonly origin: string,
@@ -65,8 +74,36 @@ class AuditContext {
     return new URL(pathOrUrl, this.origin).href;
   }
 
+  /** Records the audited origin's robots.txt, parsed by `checkRobots`. */
+  setRobots(robots: ParsedRobots | null): void {
+    this.robots = robots;
+    this.robotsByOrigin.set(this.origin, robots);
+  }
+
   /**
-   * Fetches a URL, obeying the target's robots.txt.
+   * The robots.txt governing `origin`, fetched if this is the first time it has
+   * come up. `null` means "could not be read", which this treats as no
+   * restrictions — see the note `checkRobots` pushes when that happens.
+   */
+  private async robotsFor(origin: string): Promise<ParsedRobots | null> {
+    const cached = this.robotsByOrigin.get(origin);
+    if (cached !== undefined) return cached;
+    let parsed: ParsedRobots | null = null;
+    try {
+      const res = await this.fetcher.fetch(new URL('/robots.txt', origin).href);
+      if (res.status === 200 && !(res.headers['content-type'] ?? '').toLowerCase().includes('text/html')) {
+        parsed = parseRobots(res.body);
+      }
+    } catch {
+      // Same posture as the audited origin's own unreadable robots.txt.
+      parsed = null;
+    }
+    this.robotsByOrigin.set(origin, parsed);
+    return parsed;
+  }
+
+  /**
+   * Fetches a URL, obeying the robots.txt **of the host being fetched**.
    *
    * Never throws: a refusal, a timeout and a dead socket are all outcomes the
    * checks report as evidence. `fatal` marks the ones that mean no later fetch
@@ -77,17 +114,20 @@ class AuditContext {
     const url = this.url(pathOrUrl);
     if (this.aborted) return { kind: 'error', url, message: this.aborted, fatal: true };
 
-    if (this.robots) {
-      const { pathname, search } = new URL(url);
-      const verdict = isAllowed(this.robots, AUDIT_AGENT_TOKEN, `${pathname}${search}`);
+    const target = new URL(url);
+    const robots =
+      target.origin === this.origin ? this.robots : await this.robotsFor(target.origin);
+    if (robots) {
+      const verdict = isAllowed(robots, AUDIT_AGENT_TOKEN, `${target.pathname}${target.search}`);
       if (!verdict.allowed) {
         const rule = verdict.rule;
+        const whose = target.origin === this.origin ? 'robots.txt' : `${target.origin}/robots.txt`;
         return {
           kind: 'robots',
           url,
           detail: rule
-            ? `robots.txt: "Disallow: ${rule.path}" under User-agent: ${rule.agents.join(', ')}`
-            : 'robots.txt disallows it',
+            ? `${whose}: "Disallow: ${rule.path}" under User-agent: ${rule.agents.join(', ')}`
+            : `${whose} disallows it`,
         };
       }
     }
@@ -234,7 +274,7 @@ async function checkRobots(ctx: AuditContext): Promise<CheckResult> {
   }
 
   const parsed = parseRobots(res.body);
-  ctx.robots = parsed;
+  ctx.setRobots(parsed);
   const ourVerdict = isAllowed(parsed, AUDIT_AGENT_TOKEN, '/');
   if (!ourVerdict.allowed) {
     ctx.notes.push(
@@ -365,13 +405,33 @@ function extractLocs(xml: string): string[] {
   return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].trim());
 }
 
+/**
+ * How many declared `Sitemap:` lines are actually fetched, the same way
+ * `LLMS_LINK_SAMPLE` caps llms.txt links.
+ *
+ * robots.txt is a file the audited site controls, and nothing in the standard
+ * limits how many sitemaps it may declare. Walking all of them turns one line
+ * in a stranger's robots.txt into an unbounded number of requests from this
+ * tool, which is the sort of thing a fast tier should not be talked into.
+ */
+const SITEMAP_CANDIDATE_LIMIT = 3;
+
 async function checkSitemap(ctx: AuditContext): Promise<SitemapOutcome> {
   const declared = ctx.robots?.sitemaps ?? [];
   // Conventional locations, probed only when robots.txt declared nothing —
   // finding one here is still a finding, because an agent that has only
   // robots.txt to go on will never look.
-  const candidates = declared.length > 0 ? declared : ['/sitemap-index.xml', '/sitemap.xml'];
+  const all = declared.length > 0 ? declared : ['/sitemap-index.xml', '/sitemap.xml'];
+  const candidates = all.slice(0, SITEMAP_CANDIDATE_LIMIT);
   const evidence: CheckEvidence[] = [];
+  if (all.length > candidates.length) {
+    // Said out loud rather than truncated silently: a check that stopped
+    // looking has to report that it stopped looking, or a pass reads as
+    // "all of them are fine".
+    evidence.push({
+      note: `robots.txt declares ${all.length} sitemaps; only the first ${candidates.length} were fetched`,
+    });
+  }
   // A check whose every candidate was refused by robots.txt has learned nothing
   // about the site, and must not report a finding against it.
   let blockedByRobots = 0;
@@ -618,10 +678,15 @@ async function checkLlmsLinks(
   const sample = links.slice(0, LLMS_LINK_SAMPLE);
   const evidence: CheckEvidence[] = [];
   const dead: string[] = [];
+  let fetched = 0;
+  let blockedByRobots = 0;
 
   for (const link of sample) {
+    // An llms.txt link may point at another host, and `ctx.get` consults *that*
+    // host's robots.txt for it rather than this site's.
     const outcome = await ctx.get(link.url);
     if (outcome.kind === 'robots') {
+      blockedByRobots++;
       evidence.push({ url: outcome.url, note: outcome.detail });
       continue;
     }
@@ -631,6 +696,7 @@ async function checkLlmsLinks(
       if (outcome.fatal) break;
       continue;
     }
+    fetched++;
     evidence.push(evidenceOf(outcome.res));
     if (outcome.res.status !== 200) dead.push(`${link.url} (${outcome.res.status})`);
   }
@@ -646,10 +712,22 @@ async function checkLlmsLinks(
         'was supposed to save it from. Generate the file from your published content at build time.',
     );
   }
+  if (fetched === 0) {
+    // Every sampled link was disallowed to this auditor by whichever host owns
+    // it. Nothing was learned, so nothing is claimed: reporting a pass here
+    // would say "the links resolve" about links that were never requested.
+    return result(
+      LLMS_LINKS,
+      'not-applicable',
+      `all ${blockedByRobots} sampled link(s) are disallowed to this auditor by robots.txt`,
+      evidence,
+    );
+  }
   return result(
     LLMS_LINKS,
     'pass',
-    `the first ${sample.length} of ${links.length} link(s) return 200`,
+    `${fetched} of ${links.length} link(s) return 200` +
+      (blockedByRobots > 0 ? `; ${blockedByRobots} not fetched, disallowed by robots.txt` : ''),
     evidence,
   );
 }

@@ -33,6 +33,12 @@ const BLOCKED = [
   ['::ffff:127.0.0.1', 'loopback smuggled inside a v4-mapped v6 address'],
   ['::ffff:169.254.169.254', 'the metadata service, v4-mapped'],
   ['64:ff9b::a00:1', 'a private v4 address behind NAT64'],
+  ['4000::1', 'an IPv6 range IANA has not assigned — outside global unicast'],
+  ['0100::1', 'the discard prefix, also outside global unicast'],
+  ['2001:db8::1', 'the v6 documentation range, inside global unicast'],
+  ['2001::1', 'Teredo, which tunnels to wherever the client says'],
+  ['2002:7f00:1::1', '6to4, which encapsulates an arbitrary IPv4 address'],
+  ['2001:2::1', 'the v6 benchmarking range'],
   ['not-an-address', 'anything that does not parse'],
 ] as const;
 
@@ -42,6 +48,8 @@ const ALLOWED = [
   ['172.32.0.1', 'just above the RFC 1918 /12'],
   ['172.15.255.255', 'just below it'],
   ['2606:4700::1111', 'a public v6 address'],
+  ['2600::1', 'the low end of global unicast'],
+  ['3fff:ffff::1', 'the high end of it'],
   ['::ffff:93.184.216.34', 'a public v4 address, v4-mapped'],
 ] as const;
 

@@ -135,13 +135,51 @@ export function groupFor(robots: ParsedRobots, agent: string): RobotsGroup | nul
   return best?.group ?? wildcard;
 }
 
-/** Does a robots path pattern (with `*` and `$`) match this URL path? */
+/**
+ * Does a robots path pattern (with `*` and `$`) match this URL path?
+ *
+ * Matched by hand rather than by compiling the pattern to a regex. The regex
+ * version was a denial-of-service surface pointed straight at the auditor: the
+ * pattern comes from the audited site's robots.txt, and `Disallow: /a*a*a*a*a*$`
+ * against a long path is catastrophic backtracking — the target hangs the tool
+ * that came to audit it, using a file it is required to read first.
+ *
+ * This is the standard iterative wildcard match: one pass forward, and on a
+ * mismatch it falls back to the last `*` and advances by one. Worst case is
+ * O(path × pattern) with no backtracking blowup, and it needs no escaping,
+ * because `*` and `$` are the only metacharacters robots.txt defines and every
+ * other character is a literal.
+ *
+ * An unanchored pattern is a prefix match, which is expressed by appending one
+ * implicit `*` rather than by a second code path.
+ */
 function patternMatches(pattern: string, path: string): boolean {
   if (pattern === '') return false; // An empty Disallow means "allow everything".
   const anchored = pattern.endsWith('$');
-  const body = anchored ? pattern.slice(0, -1) : pattern;
-  const escaped = body.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  return new RegExp(`^${escaped}${anchored ? '$' : ''}`).test(path);
+  // Runs of `*` are collapsed: they are equivalent, and each one is a fallback
+  // point the matcher would otherwise carry for nothing.
+  const body = (anchored ? pattern.slice(0, -1) : `${pattern}*`).replace(/\*+/g, '*');
+
+  let p = 0;
+  let s = 0;
+  let lastStar = -1;
+  let resumeAt = 0;
+  while (s < path.length) {
+    if (p < body.length && body[p] === '*') {
+      lastStar = p++;
+      resumeAt = s;
+    } else if (p < body.length && body[p] === path[s]) {
+      p++;
+      s++;
+    } else if (lastStar >= 0) {
+      p = lastStar + 1;
+      s = ++resumeAt;
+    } else {
+      return false;
+    }
+  }
+  while (p < body.length && body[p] === '*') p++;
+  return p === body.length;
 }
 
 export interface RobotsVerdict {

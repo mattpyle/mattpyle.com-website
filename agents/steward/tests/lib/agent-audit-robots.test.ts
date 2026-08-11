@@ -85,6 +85,20 @@ test('malformed lines are reported rather than silently dropped', () => {
   assert.equal(isAllowed(robots, 'x', '/admin').allowed, true);
 });
 
+test('a pathological wildcard pattern cannot hang the matcher', () => {
+  // The pattern comes from the audited site. Compiled to a regex, which is what
+  // this did first, `/a*a*a*…$` against a long non-matching path is
+  // catastrophic backtracking: the site being audited hangs the auditor with a
+  // file the auditor is obliged to read first.
+  // The trailing literal is what makes it pathological: every `*` has to be
+  // re-tried before the whole thing can fail.
+  const robots = parseRobots(`User-agent: *\nDisallow: /${'a*'.repeat(24)}b$\n`);
+  const path = `/${'a'.repeat(4000)}c`;
+  const started = Date.now();
+  assert.equal(isAllowed(robots, 'steward-audit-url', path).allowed, true);
+  assert.ok(Date.now() - started < 1000, 'the matcher took longer than a second on one path');
+});
+
 test('rules before any User-agent line are reported as malformed', () => {
   const robots = parseRobots('Disallow: /everything\n');
   assert.equal(robots.malformedLines.length, 1);

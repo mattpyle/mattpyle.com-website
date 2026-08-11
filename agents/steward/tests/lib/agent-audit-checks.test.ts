@@ -33,6 +33,7 @@ type Break =
   | 'llms-dead-link'
   | 'agent-card-legacy-url'
   | 'agent-card-no-endpoint'
+  | 'many-declared-sitemaps'
   | 'no-agents-md'
   | 'agents-md-html'
   | 'no-vary'
@@ -47,13 +48,22 @@ const HOME_TITLE = 'Example, an entirely fictional test site';
 
 interface Mock {
   origin: string;
+  /** Every path this server was asked for, in order. */
+  requests: string[];
   close: () => Promise<void>;
 }
 
-async function mockSite(broken?: Break): Promise<Mock> {
+interface SiteOptions {
+  /** An origin llms.txt should link to, for the cross-origin robots test. */
+  offsiteLinkOrigin?: string;
+}
+
+async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
+  const requests: string[] = [];
   const server = http.createServer((req, res) => {
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const url = (req.url ?? '/').split('?')[0];
+    requests.push(url);
     const accept = String(req.headers.accept ?? '');
     const wantsMarkdown = /text\/markdown/.test(accept);
 
@@ -70,7 +80,11 @@ async function mockSite(broken?: Break): Promise<Mock> {
       if (broken === 'robots-malformed') lines.push('Disallow /oops');
       if (broken === 'robots-blocks-claude-user') lines.push('', 'User-agent: Claude-User', 'Disallow: /');
       if (broken === 'robots-blocks-auditor') lines.push('', 'User-agent: steward-audit-url', 'Disallow: /');
-      if (broken !== 'sitemap-undeclared' && broken !== 'no-sitemap') {
+      if (broken === 'many-declared-sitemaps') {
+        // Five declarations, none of them a sitemap. Nothing in robots.txt
+        // limits how many of these a site may write down.
+        for (let i = 1; i <= 5; i++) lines.push('', `Sitemap: ${origin}/extra-sitemap-${i}.xml`);
+      } else if (broken !== 'sitemap-undeclared' && broken !== 'no-sitemap') {
         lines.push('', `Sitemap: ${origin}/sitemap-index.xml`);
       }
       if (broken !== 'no-content-signal') lines.push('Content-Signal: search=yes, ai-train=no');
@@ -92,13 +106,29 @@ async function mockSite(broken?: Break): Promise<Mock> {
         `<?xml version="1.0"?><urlset><url><loc>${origin}/</loc></url><url><loc>${origin}${POST_PATH}</loc></url></urlset>`,
       );
     }
-    if (url === '/sitemap.xml') return send(404, 'text/plain', 'nope');
+    if (url === '/sitemap.xml' || /^\/extra-sitemap-\d\.xml$/.test(url)) {
+      return send(404, 'text/plain', 'nope');
+    }
 
     if (url === '/llms.txt') {
       if (broken === 'no-llms') return send(404, 'text/plain', 'nope');
       if (broken === 'llms-html') return htmlCatchAll();
       if (broken === 'llms-unparseable') {
         return send(200, 'text/plain', 'just some prose, no headings and no links\n');
+      }
+      if (opts.offsiteLinkOrigin) {
+        return send(
+          200,
+          'text/plain',
+          `# Example
+
+> A fictional test site.
+
+## Elsewhere
+
+- [Off-site](${opts.offsiteLinkOrigin}/page): on another host
+`,
+        );
       }
       const target = broken === 'llms-dead-link' ? '/writing/deleted/' : POST_PATH;
       const extra = broken === 'llms-prose-bullet' ? '- **A thing with no URL**: prose only\n' : '';
@@ -170,6 +200,31 @@ async function mockSite(broken?: Break): Promise<Mock> {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   return {
     origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+/**
+ * A second origin, which llms.txt can link to. Its robots.txt disallows
+ * everything, and every other path would answer 200 if it were asked.
+ */
+async function mockThirdParty(): Promise<Mock> {
+  const requests: string[] = [];
+  const server = http.createServer((req, res) => {
+    const url = (req.url ?? '/').split('?')[0];
+    requests.push(url);
+    if (url === '/robots.txt') {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      return res.end(['User-agent: *', 'Disallow: /', ''].join('\n'));
+    }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<!doctype html><title>Off-site page</title>');
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
@@ -366,6 +421,49 @@ test('an A2A card with no endpoint at all is a fail', async (t) => {
   const card = check(result, 'a2a-agent-card');
   assert.equal(card.status, 'fail');
   assert.match(card.observed, /does not name the agent and an endpoint/);
+});
+
+test('only the first few declared sitemaps are fetched, and the summary says so', async (t) => {
+  // robots.txt is a file the audited site controls, and nothing limits how many
+  // `Sitemap:` lines it may hold. Following all of them turns one line in a
+  // stranger's robots.txt into unbounded requests from this tool.
+  const mock = await mockSite('many-declared-sitemaps');
+  t.after(() => mock.close());
+  const result = await runFastAudit(mock.origin, {
+    policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
+  });
+
+  const fetchedSitemaps = mock.requests.filter((u) => /^\/extra-sitemap-\d\.xml$/.test(u));
+  assert.equal(fetchedSitemaps.length, 3, 'more than the cap were fetched');
+  const sitemap = check(result, 'sitemap');
+  assert.equal(sitemap.status, 'fail');
+  assert.ok(
+    sitemap.evidence.some((e) => /declares 5 sitemaps; only the first 3 were fetched/.test(e.note ?? '')),
+    'the cap was applied silently',
+  );
+});
+
+test('an off-origin llms.txt link is judged by that host\'s robots.txt, not this one\'s', async (t) => {
+  // The audited site allows everything; the third party disallows everything.
+  // Reading the audited site's robots.txt for another host's path would both
+  // apply rules that host never wrote and fetch it having consulted nothing it did.
+  const third = await mockThirdParty();
+  t.after(() => third.close());
+  const mock = await mockSite(undefined, { offsiteLinkOrigin: third.origin });
+  t.after(() => mock.close());
+
+  const result = await runFastAudit(mock.origin, {
+    policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
+  });
+
+  const links = check(result, 'llms-txt-links');
+  assert.equal(links.status, 'not-applicable', 'a link that was never fetched was reported as resolving');
+  assert.ok(
+    links.evidence.some((e) => (e.note ?? '').includes(`${third.origin}/robots.txt`)),
+    'the evidence does not name whose robots.txt refused the link',
+  );
+  // The third party was asked for its robots.txt and then left alone.
+  assert.deepEqual(third.requests, ['/robots.txt']);
 });
 
 test('the optional surfaces are reported at low severity', async (t) => {

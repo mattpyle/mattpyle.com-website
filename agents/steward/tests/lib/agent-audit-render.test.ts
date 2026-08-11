@@ -1,7 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderMarkdownSummary } from '../../src/lib/agent-audit/render.js';
-import { countByCategory, rankedFixes, type AuditResult, type CheckResult } from '../../src/lib/agent-audit/result.js';
+import {
+  countByCategory,
+  excerpt,
+  rankedFixes,
+  stripControlChars,
+  type AuditResult,
+  type CheckResult,
+} from '../../src/lib/agent-audit/result.js';
+
+/**
+ * Written as escape sequences, never as literal bytes: a source file with a raw
+ * ESC in it is binary to git and unreadable in a diff.
+ */
+const ESC = '\u001b';
+const ANSI_RED = `${ESC}[31m`;
 
 /**
  * The markdown summary is a pure function of the canonical result, so it is
@@ -117,6 +131,52 @@ test('run-level notes are printed when there are any', () => {
   assert.match(renderMarkdownSummary(result), /## Notes on the run/);
   result.notes = [];
   assert.ok(!/## Notes on the run/.test(renderMarkdownSummary(result)));
+});
+
+test('excerpt strips the control characters that survive whitespace collapsing', () => {
+  // `\x1b` is not whitespace, so the old `\s+`-collapsing excerpt passed ANSI
+  // straight through to a terminal. A response body is the audited site's text.
+  const body = `${ANSI_RED}<!doctype html>${ESC}[0m\u0007 with a bell`;
+  const quoted = excerpt(body);
+  assert.ok(!quoted.includes(ESC), 'an ESC survived into the excerpt');
+  assert.ok(!quoted.includes('\u0007'), 'a BEL survived into the excerpt');
+  assert.match(quoted, /\[31m<!doctype html>\[0m with a bell/);
+});
+
+test('stripControlChars covers C0, C1 and DEL, and leaves real text alone', () => {
+  assert.equal(stripControlChars('a\u0000b\u001bc\u007fde'), 'abcde');
+  assert.equal(stripControlChars('plain — text, ünicode, 日本語'), 'plain — text, ünicode, 日本語');
+});
+
+test('the renderer strips control characters from every remote-derived string', () => {
+  // The second layer: `observed` lines interpolate site-chosen text (a page
+  // title, a header value) without going through `excerpt`.
+  const md = renderMarkdownSummary(
+    fixture([
+      check({
+        id: `id${ESC}[31m`,
+        title: `A title${ANSI_RED}`,
+        status: 'fail',
+        observed: `the page calls itself "${ANSI_RED}Not really"`,
+        fix: `do the thing${ESC}[0m`,
+        evidence: [
+          {
+            url: `https://example.com/${ESC}[2K`,
+            status: 200,
+            headers: { 'content-type': `text/html${ANSI_RED}` },
+            note: `a note${ESC}[1m`,
+            excerpt: `an excerpt${ESC}[0m`,
+          },
+        ],
+      }),
+    ]),
+  );
+  const result = fixture([check({ id: 'x' })]);
+  result.notes = [`a run note${ANSI_RED}`];
+  assert.ok(!md.includes(ESC), 'an ESC reached the rendered summary');
+  assert.ok(!renderMarkdownSummary(result).includes(ESC), 'an ESC reached a run note');
+  // The visible text is kept; only the control byte goes.
+  assert.match(md, /A title\[31m/);
 });
 
 test('rankedFixes returns only failures, worst first', () => {
