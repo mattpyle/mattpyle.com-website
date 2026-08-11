@@ -94,6 +94,24 @@ The same citations ride on every review and audit report under **MACHINE VOICE**
 `aiLikenessScore` is a separate thing and stays behind `--ai-tells`, because it failed its validation
 study (spec §9.2) — the citations did not.
 
+```bash
+steward audit-url example.com                  # agent-readiness checks against any site
+```
+
+`audit-url` points the agent-surface half of the scorecard methodology at a site that is not this
+one: robots.txt, sitemap, llms.txt, agents.md, markdown content negotiation, and the well-known
+discovery documents, twelve checks in about a dozen HTTP requests. No worker, no Temporal, no
+Chrome, no API key. It writes one canonical JSON result plus a markdown summary derived from it, and
+reports no composite score, only per-category counts and a ranked fix list.
+
+Two properties it is built around, both of which matter more than the checks themselves. It
+**verifies behaviour rather than presence**: a 200 from `/llms.txt` that is really the site's HTML
+catch-all fails, and so does a page that answers `Accept: text/markdown` with a different page. And
+it **cannot be pointed at your own network**: every hostname is resolved and classified before a
+socket opens and again on each redirect hop, refusing private, loopback, link-local, CGNAT and
+cloud-metadata ranges, with no flag to turn that off. It also obeys the target's robots.txt, because
+an agent-readiness auditor that ignores robots fails its own audit.
+
 > [!TIP]
 > Run any command with `npx tsx src/cli.ts <args>` instead of the `steward` shim if something fails
 > silently — the shim's process wrapping can swallow the CLI's own error output.

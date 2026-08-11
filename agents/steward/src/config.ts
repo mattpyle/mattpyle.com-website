@@ -148,6 +148,17 @@ export const REVIEWS_DIR = process.env.STEWARD_REVIEWS_DIR
 export const SCORECARD_ARCHIVE_DIR = path.join(REVIEWS_DIR, '_scorecard');
 
 /**
+ * Where `steward audit-url` writes its two artifacts by default.
+ *
+ * Under `.cache/`, which is gitignored — deliberately **not** a sibling of
+ * `reviews/_scorecard/`, which is committed. The scorecard is this site's own
+ * conformance record and belongs in the repo; an audit of somebody else's site
+ * is a report about a third party, and a default that quietly stages it for
+ * commit is the wrong default. Pass `--json`/`--out` to put one anywhere.
+ */
+export const AUDIT_OUT_DIR = path.join(STEWARD_DIR, '.cache', 'audits');
+
+/**
  * The shared spelling dictionary, at the REPO ROOT — not under `agents/steward`.
  *
  * One file, two consumers: this activity and the site's `npm run spellcheck`
