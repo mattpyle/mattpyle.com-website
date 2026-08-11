@@ -13,6 +13,27 @@ const SERP_DESCRIPTION = 155;
 const SERP_TITLE = 60;
 
 /**
+ * The suffix the page template appends to every entry title:
+ * `src/layouts/Layout.astro:63` renders `${seoTitle ?? title} — Matt Pyle`, and
+ * neither entry template passes `fullTitle`, so this applies to every entry in
+ * the two collections checked here. (That line also exempts the exact string
+ * `Matt Pyle`, which is the homepage's title and not reachable from a post.)
+ *
+ * **Hand-transcribed, like `RULES` below, and with the same failure mode**: if
+ * `Layout.astro` changes the suffix, change it here in the same commit or this
+ * check silently measures a string the site no longer renders. It is hard-coded
+ * rather than derived because deriving it means parsing an Astro template from
+ * an activity, and a wrong constant is a visible 12-character error while a
+ * template parser is a whole new way for the check to fail.
+ *
+ * 12 characters, which is why the effective budget for a bare `title` is ~48
+ * rather than the 60 `SERP_TITLE` names. `Layout.astro:22` already stated the
+ * rule correctly ("~60 chars incl. ` — Matt Pyle`"); this is the code catching
+ * up with its own comment.
+ */
+const TITLE_SUFFIX = ' — Matt Pyle';
+
+/**
  * Per-collection frontmatter shape, transcribed from the **real** Zod schema in
  * `src/content.config.ts` rather than from the spec's summary of it. The two
  * collections are genuinely different and the differences are not cosmetic:
@@ -45,6 +66,15 @@ interface CollectionRules {
   enums: { field: string; values: readonly string[] }[];
   /** Whether `updated` is required by the schema. */
   updatedRequired: boolean;
+  /**
+   * Whether this collection's entry template lets `Layout.astro` append
+   * {@link TITLE_SUFFIX}. True for both today, because neither entry page passes
+   * `fullTitle` (`src/pages/writing/[slug].astro:33`,
+   * `src/pages/changelog/[slug].astro:40`). A collection whose template did pass
+   * `fullTitle` would set this false rather than have the check add 12
+   * characters that never render.
+   */
+  rendersTitleSuffix: boolean;
 }
 
 const RULES: Record<Collection, CollectionRules> = {
@@ -54,6 +84,7 @@ const RULES: Record<Collection, CollectionRules> = {
     titleOverride: 'seoTitle',
     enums: [],
     updatedRequired: false,
+    rendersTitleSuffix: true,
   },
   changelog: {
     dekField: 'summary',
@@ -64,6 +95,7 @@ const RULES: Record<Collection, CollectionRules> = {
       { field: 'significance', values: ['major', 'minor', 'patch'] },
     ],
     updatedRequired: true,
+    rendersTitleSuffix: true,
   },
 };
 
@@ -115,46 +147,106 @@ export async function checkFrontmatter(
       findings.push({ id: `frontmatter-${n}`, pass: 'frontmatter', severity, message, file, ...extra });
     };
 
-    // dek — `description` on writing, `summary` on changelog
+    /**
+     * The override's value, or `undefined` when the field is absent or blank.
+     *
+     * A blank override counts as **present**, because `Layout.astro` uses `??`
+     * and so renders it: `seoTitle: ""` produces a `<title>` of ` — Matt Pyle`
+     * with the post's name gone. Measuring the title instead would print a
+     * length for a string the page does not emit, which is the exact failure
+     * this whole change exists to remove. It is reported separately below.
+     */
+    const overrideValue = (field: string | undefined): string | undefined => {
+      if (!field) return undefined;
+      const value = fm[field];
+      return typeof value === 'string' ? value : undefined;
+    };
+    for (const field of [rules.dekOverride, rules.titleOverride]) {
+      const value = overrideValue(field);
+      if (value !== undefined && value.trim() === '') {
+        add('block', `\`${field}\` is empty. Remove the field or give it a value; an empty override still replaces the string it overrides.`);
+      }
+    }
+
+    // dek — `description` on writing, `summary` on changelog.
+    //
+    // The SERP check measures whichever string reaches `<meta name="description">`
+    // (`Layout.astro:64`: `seoDescription ?? description`), not always the dek.
+    // Before, the mere *presence* of an override suppressed the finding without
+    // ever measuring it, so a 200-char `description` "fixed" with a 200-char
+    // `seoDescription` passed — and adding the override is exactly what the
+    // finding told the author to do.
     const dek = typeof fm[rules.dekField] === 'string' ? (fm[rules.dekField] as string) : '';
+    const dekOverrideValue = overrideValue(rules.dekOverride);
+    const dekOutOfBounds = dek.length < DESCRIPTION_MIN || dek.length > DESCRIPTION_MAX;
     if (!dek) {
       add(
         'block',
         `Missing \`${rules.dekField}\`. It drives the dek, OG, and the meta description, and the content schema requires it.`,
       );
-    } else if (dek.length < DESCRIPTION_MIN || dek.length > DESCRIPTION_MAX) {
+    } else if (dekOutOfBounds) {
+      // The on-page dek's own bounds, independent of any override: this one is
+      // rendered as visible page copy whatever the meta description says.
       add(
         'block',
         `\`${rules.dekField}\` is ${dek.length} chars; expected ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}.`,
       );
-    } else if (
-      dek.length > SERP_DESCRIPTION &&
-      !(rules.dekOverride && typeof fm[rules.dekOverride] === 'string')
-    ) {
+    }
+
+    // The SERP length, measured on whichever string reaches the meta
+    // description. Its own statement rather than another `else if` on the chain
+    // above, because a 320-char dek is out of bounds *and* may carry a 250-char
+    // override, and the override is the string search results show — chaining it
+    // would report the bounds violation and skip the string that renders.
+    //
+    // The one case that is still suppressed: an out-of-bounds dek with no
+    // override, where the block above already says to shorten this exact string
+    // and a second finding about it would be the same instruction twice.
+    const metaDescription = dekOverrideValue ?? (dek || undefined);
+    const dekAlreadySaid = dekOverrideValue === undefined && dekOutOfBounds;
+    if (!dekAlreadySaid && metaDescription !== undefined && metaDescription.length > SERP_DESCRIPTION) {
+      const field = dekOverrideValue !== undefined ? rules.dekOverride : rules.dekField;
       add(
         'flag',
-        rules.dekOverride
-          ? `\`${rules.dekField}\` is ${dek.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit. Add a short \`${rules.dekOverride}\` override.`
-          : // No override field exists in this collection's schema, so the only
-            // remedy is shortening the field itself. Suggesting an override that
-            // the schema would reject would be worse than saying nothing.
-            `\`${rules.dekField}\` is ${dek.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit. The ${collection} schema has no override field, so shorten it here.`,
+        dekOverrideValue !== undefined
+          ? `\`${field}\` is ${metaDescription.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit, and it is the string that reaches the meta description. Shorten the override itself.`
+          : rules.dekOverride
+            ? `\`${field}\` is ${metaDescription.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit. Add a \`${rules.dekOverride}\` override of ${SERP_DESCRIPTION} chars or fewer.`
+            : // No override field exists in this collection's schema, so the only
+              // remedy is shortening the field itself. Suggesting an override that
+              // the schema would reject would be worse than saying nothing.
+              `\`${field}\` is ${metaDescription.length} chars — over the ~${SERP_DESCRIPTION}-char SERP limit. The ${collection} schema has no override field, so shorten it here.`,
       );
     }
 
     // title
+    //
+    // Measured as rendered, not as written. `Layout.astro:63` builds the
+    // `<title>` from `${seoTitle ?? title}` plus a 12-character suffix (see
+    // `TITLE_SUFFIX`), so the budget for a bare `title` is ~48, and a 60-char
+    // title Steward used to pass reached the SERP at 72.
     const title = typeof fm.title === 'string' ? fm.title : '';
+    const titleOverrideValue = overrideValue(rules.titleOverride);
+    const suffix = rules.rendersTitleSuffix ? TITLE_SUFFIX : '';
+    /** Budget left for the frontmatter string once the suffix is spent. */
+    const titleBudget = SERP_TITLE - suffix.length;
     if (!title) {
       add('block', 'Missing `title`.');
-    } else if (
-      title.length > SERP_TITLE &&
-      !(rules.titleOverride && typeof fm[rules.titleOverride] === 'string')
-    ) {
+    }
+    // Measured outside that `if`, for the same reason the meta-description check
+    // stands on its own: with `title` missing the override still renders, and
+    // its length is still the one the SERP shows.
+    const headTitle = titleOverrideValue ?? (title || undefined);
+    const renderedLength = (headTitle?.length ?? 0) + suffix.length;
+    if (headTitle !== undefined && renderedLength > SERP_TITLE) {
+      const rendered = `${headTitle.length} chars + the ${suffix.length}-char \`${suffix}\` suffix = ${renderedLength} rendered`;
       add(
         'flag',
-        rules.titleOverride
-          ? `\`title\` is ${title.length} chars — over the ~${SERP_TITLE}-char SERP limit. Add a short \`${rules.titleOverride}\` override.`
-          : `\`title\` is ${title.length} chars — over the ~${SERP_TITLE}-char SERP limit. The ${collection} schema has no override field, so shorten it here.`,
+        titleOverrideValue !== undefined
+          ? `\`${rules.titleOverride}\` is ${rendered} — over the ~${SERP_TITLE}-char SERP limit, and it is the string that reaches \`<title>\`. Shorten the override to ${titleBudget} chars or fewer.`
+          : rules.titleOverride
+            ? `\`title\` is ${rendered} — over the ~${SERP_TITLE}-char SERP limit. Shorten it to ${titleBudget} chars or fewer, or add a \`${rules.titleOverride}\` override that short.`
+            : `\`title\` is ${rendered} — over the ~${SERP_TITLE}-char SERP limit. The ${collection} schema has no override field, so shorten it here to ${titleBudget} chars or fewer.`,
       );
     }
 

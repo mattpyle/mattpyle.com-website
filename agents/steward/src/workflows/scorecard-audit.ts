@@ -52,6 +52,24 @@ export interface ScorecardAuditInput {
    * and is frozen into history (design rule 3) — never read from config.
    */
   allowShrink?: boolean;
+  /**
+   * `--note`: run commentary supplied by the human who started the run, folded
+   * into `commentary` ahead of the machine draft so a manual run reads the way
+   * it would after a hand-edit of the PR, without the hand-edit.
+   *
+   * A decision about what this run *says*, so it rides in the input and is
+   * frozen into history like every other one (design rule 3). Optional and
+   * absent from every execution before it existed, so replay of an existing
+   * history takes the same branch it always took and no `patched()` is needed —
+   * that property is what keeps this a one-field change rather than a
+   * workflow-versioning exercise.
+   *
+   * Subject to the same timeless-commentary rule as the machine draft (spec
+   * §5.1 rule 7). The CLI checks it before starting the run so a present-relative
+   * note fails in milliseconds rather than after a twelve-minute audit;
+   * `publishScorecardRun`'s `assertTimelessCommentary` remains the backstop.
+   */
+  note?: string;
 }
 
 export interface ScorecardAuditResult {
@@ -239,7 +257,7 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
     scope,
     tools,
     entry: input.triggeredBy === 'schedule' ? 'Nightly · automated' : 'Manual · intentional',
-    commentary: buildCommentary(perPage, metrics, decision),
+    commentary: withNote(input.note, buildCommentary(perPage, metrics, decision)),
     metrics,
   };
 
@@ -328,6 +346,27 @@ function describeChangeDelta(decision: PublishDecision): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Puts a `--note` in front of the machine draft rather than in place of it.
+ *
+ * Replacing would lose the one thing the draft is good at — the delta and the
+ * pass summary, stated in the same words every run states them — and the note is
+ * commentary *about* the run, not a substitute for what it measured. Prefixing
+ * gives the reader the human sentence first and the facts immediately after,
+ * which is the shape a hand-edited PR ended up in anyway.
+ *
+ * Pure and inline (not an activity): the workflow already builds the machine
+ * draft itself, and this is string handling on a value already in the input.
+ */
+function withNote(note: string | undefined, draft: string): string {
+  const trimmed = note?.trim();
+  if (!trimmed) return draft;
+  // A note that already punctuates itself keeps its own ending; one that does
+  // not gets a period, so the two sentences do not run together.
+  const punctuated = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  return `${punctuated} ${draft}`;
 }
 
 /**

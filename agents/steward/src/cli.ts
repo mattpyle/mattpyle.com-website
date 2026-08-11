@@ -32,7 +32,12 @@ import {
   type Collection,
 } from './config.js';
 import type { ReviewStateResult, Verdict } from './lib/report.js';
-import { readArchivedReport, readLatestReport } from './lib/read-report.js';
+import {
+  describeMissingReport,
+  readArchivedReport,
+  readLatestReport,
+  readPostState,
+} from './lib/read-report.js';
 import { BOLD, DIM, GREEN, RED, RESET, paint, renderReport } from './lib/render-report.js';
 import { deriveInboxHint } from './lib/inbox.js';
 import { cleanupPublishedTwin } from './lib/cleanup.js';
@@ -54,7 +59,7 @@ import {
   runScorecardScheduleAction,
   type TimeOfDay,
 } from './lib/scorecard-schedule.js';
-import type { ScorecardRunRecord } from './lib/scorecard-aggregate.js';
+import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 
 async function client(): Promise<Client> {
   const connection = await Connection.connect({ address: TEMPORAL_ADDRESS });
@@ -365,14 +370,24 @@ program
 program
   .command('report')
   .argument('<slug>', SLUG_HELP, parseSlug)
-  .option('--collection <name>', `one of: ${COLLECTIONS.join(', ')}`, 'writing')
-  .description('Pretty-print the latest archived report for a slug — no live workflow needed')
+  .option(
+    '--collection <name>',
+    `one of: ${COLLECTIONS.join(', ')} (a flag here, a positional argument on \`review\`/\`audit\`)`,
+    'writing',
+  )
+  .description(
+    'Pretty-print the latest archived report for a slug — no live workflow needed. ' +
+      'Reads `reviews/<collection>/<slug>/`, which is where `review` and `audit` archive; ' +
+      '`score` writes elsewhere and produces no report.',
+  )
   .action(async (slug: string, opts: { collection: string }) => {
     const collection = parseCollection(opts.collection);
     const report = await readLatestReport(collection, slug);
     if (!report) {
-      const label = collection === 'writing' ? slug : `${collection}/${slug}`;
-      fail(`No report found for ${label} — run \`steward review ${slug}\` first.`);
+      // Which verb to name depends on the file, not on a guess: `review` is gate
+      // mode and refuses a published post, so the old unconditional "run
+      // `steward review`" sent the reader to a second refusal.
+      fail(describeMissingReport(collection, slug, await readPostState(collection, slug)));
     }
     console.log(renderReport(report));
   });
@@ -772,7 +787,11 @@ program
   .argument('<slug>', SLUG_HELP, parseSlug)
   .option('--runs <n>', 'how many times to score the piece', '2')
   .option('--provenance <label>', 'ai | human | mixed — recorded, never inferred', 'unknown')
-  .description('Score one piece with the ai-tells rubric (validation study). No workflow, no verdict.')
+  .description(
+    'Score one piece with the ai-tells rubric (validation study). No workflow, no verdict. ' +
+      'Writes to `reviews/_study/`, not `reviews/<collection>/<slug>/` — a scored piece still has ' +
+      'no report for `steward report` to print.',
+  )
   .action(async (collectionArg: string, slug: string, opts: { runs: string; provenance: string }) => {
     const collection = parseCollection(collectionArg);
     const runs = Number(opts.runs);
@@ -1237,14 +1256,36 @@ program
   .option('--max-age-days <n>', 'staleness threshold for the publish gate', String(SCORECARD_MAX_AGE_DAYS_DEFAULT))
   .option('--date <yyyy-mm-dd>', 'pin the run\'s date instead of using today in STEWARD_TIMEZONE — for backfilling a run to when the audit actually happened')
   .option('--allow-shrink', 'accept an audit set smaller than the previous published run — for when pages were genuinely unpublished')
+  .option(
+    '--note <text>',
+    "run commentary, placed ahead of the machine draft in the run-log entry and the PR body. Must read correctly forever — no \"currently\", \"latest\", \"now\", \"today\"",
+  )
   .description('Audit the live site (scorecard-audit-spec.md) and open a PR on change or staleness')
-  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string; date?: string; allowShrink?: boolean }) => {
+  .action(async (opts: { dryRun?: boolean; urls?: string; maxAgeDays: string; date?: string; allowShrink?: boolean; note?: string }) => {
     const maxAgeDays = Number(opts.maxAgeDays);
     if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
       fail(`--max-age-days must be a positive number, got "${opts.maxAgeDays}"`);
     }
     if (opts.date && !/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
       fail(`--date must be YYYY-MM-DD, got "${opts.date}"`);
+    }
+    // Checked here, before the workflow starts, rather than only in
+    // `publishScorecardRun`. The activity's `assertTimelessCommentary` is a hard
+    // block and stays the backstop, but reaching it costs a full ~12-minute
+    // audit first — for a typo the operator can fix in seconds.
+    const note = opts.note?.trim();
+    if (opts.note !== undefined && !note) {
+      fail('--note needs some text.');
+    }
+    if (note) {
+      const check = validateCommentary(note);
+      if (!check.ok) {
+        fail(
+          `--note reads as present-relative, not timeless (found: ${check.matches.join(', ')}). ` +
+            'A run-log entry is read years later, so it has to state what this run measured rather ' +
+            'than where it sits in the list.',
+        );
+      }
     }
     const urls = opts.urls
       ? opts.urls.split(',').map((s) => s.trim()).filter(Boolean)
@@ -1259,6 +1300,7 @@ program
     console.log(`\n  starting scorecard audit${opts.dryRun ? ' (dry run — will not publish)' : ''}...`);
     if (urls) console.log(`  URL override: ${urls.join(', ')}`);
     if (opts.allowShrink) console.log('  --allow-shrink: a smaller audit set than the last published run is accepted');
+    if (note) console.log(`  note: ${note}`);
     console.log('');
 
     const result = await c.workflow.execute(scorecardAuditWorkflow, {
@@ -1277,6 +1319,7 @@ program
           timeZone: STEWARD_TIMEZONE,
           date: opts.date,
           allowShrink: opts.allowShrink === true,
+          note,
         },
       ],
     });

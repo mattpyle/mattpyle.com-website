@@ -35,11 +35,17 @@ async function runCli(args: string[]): Promise<{ code: number; out: string }> {
   }
 }
 
-test('an unknown action is named, with the five that exist', async () => {
+test('an unknown action is named, with the six that exist', async () => {
   const { code, out } = await runCli(['scorecard-schedule', 'describe']);
   assert.equal(code, 1);
   assert.match(out, /Unknown action "describe"/);
-  assert.match(out, /create, pause, unpause, trigger, delete/);
+  assert.match(out, /status, create, pause, unpause, trigger, delete/);
+});
+
+test('a create-only option is refused on status too, so the read-only verb stays honest', async () => {
+  const { code, out } = await runCli(['scorecard-schedule', 'status', '--at', '09:00']);
+  assert.equal(code, 1);
+  assert.match(out, /--at applies to `create` only/);
 });
 
 test('a create-only option on another verb is refused, not ignored', async () => {
