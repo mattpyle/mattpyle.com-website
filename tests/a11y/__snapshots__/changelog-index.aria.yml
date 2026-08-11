@@ -19,7 +19,6 @@
   - paragraph: Changelog
   - heading "Changelog" [level=1]
   - paragraph: What's shipped on this site — launches, features, and the occasional experiment.
-  - group "Significance key": SIGNIFICANCE MAJOR MINOR PATCH
   - radiogroup "Filter by type":
     - radio "ALL" [checked]
     - radio "LAUNCH"
@@ -28,13 +27,12 @@
     - radio "INFRA"
     - radio "EXPERIMENT"
   - paragraph: ·
-  - text: /\d+/
-  - link "· · · · ·":
-    - /url: "#"
-    - text: ""
-    - heading "·" [level=2]
-    - paragraph: ·
-    - text: ""
+  - text: /\d+ ·/
+  - heading "·" [level=2]:
+    - link "·":
+      - /url: "#"
+  - paragraph: ·
+  - text: · · · · · ·
   - navigation "Changelog pagination": /showing \d+ of \d+/
 - contentinfo:
   - navigation "Social links":

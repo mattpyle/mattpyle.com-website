@@ -14,6 +14,13 @@ function yamlString(value: string): string {
   return JSON.stringify(value);
 }
 
+// Flow sequence, matching the quoting yamlString already uses. Omitted when empty: the
+// schema defaults tags to [], and an empty list tells a reader nothing the absent key
+// doesn't. Same rule in writing/[slug].md.ts.
+function yamlList(values: string[]): string {
+  return `[${values.map(yamlString).join(', ')}]`;
+}
+
 export const GET: APIRoute = async ({ params, site, request }) => {
   // Through formatLogLine for the reason given in writing/[slug].md.ts: the slug is a live,
   // `decodeURI`-decoded request path value, logged before the collection lookup rejects it.
@@ -28,7 +35,7 @@ export const GET: APIRoute = async ({ params, site, request }) => {
 
   const base = site!.toString().replace(/\/$/, '');
   const canonicalUrl = `${base}/changelog/${entry.id}/`;
-  const { title, date, publishedAt, summary, type, significance } = entry.data;
+  const { title, date, publishedAt, summary, type, significance, tags } = entry.data;
 
   const frontmatter = [
     '---',
@@ -39,6 +46,7 @@ export const GET: APIRoute = async ({ params, site, request }) => {
     `description: ${yamlString(summary)}`,
     `type: ${yamlString(type)}`,
     `significance: ${yamlString(significance)}`,
+    ...(tags.length > 0 ? [`tags: ${yamlList(tags)}`] : []),
     `canonical: ${canonicalUrl}`,
     `source: ${canonicalUrl}`,
     '---',

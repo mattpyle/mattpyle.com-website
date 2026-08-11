@@ -617,6 +617,13 @@ html[data-appearance='retro'] .lg-row:hover {
   background: var(--retro-sidebar-bg);
 }
 
+/* The focus wash the ledger paints under the focused title link, in retro's palette. Scoped
+   under the module because the component's own rule is Astro-scoped and would otherwise
+   outrank a bare `.lg-row` selector here. */
+html[data-appearance='retro'] [data-module='changelog-ledger'] .lg-row:has(.lg-link:focus-visible) {
+  background: var(--retro-sidebar-bg);
+}
+
 html[data-appearance='retro'] .lg-title {
   font-family: var(--retro-font-display);
   color: var(--retro-maroon);

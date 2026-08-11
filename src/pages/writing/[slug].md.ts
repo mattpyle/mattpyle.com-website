@@ -13,6 +13,13 @@ function yamlString(value: string): string {
   return JSON.stringify(value);
 }
 
+// Flow sequence, matching the quoting yamlString already uses. Omitted when empty: the
+// schema defaults tags to [], and an empty list tells a reader nothing the absent key
+// doesn't. Same rule in changelog/[slug].md.ts.
+function yamlList(values: string[]): string {
+  return `[${values.map(yamlString).join(', ')}]`;
+}
+
 export const GET: APIRoute = async ({ params, site, request }) => {
   // middleware.ts proxies negotiated Markdown requests to this explicit endpoint.
   // The direct /writing/<slug>.md URL also powers View and Copy in ArticleActions.
@@ -31,7 +38,7 @@ export const GET: APIRoute = async ({ params, site, request }) => {
 
   const base = site!.toString().replace(/\/$/, '');
   const canonicalUrl = `${base}/writing/${article.id}/`;
-  const { title, date, description } = article.data;
+  const { title, date, description, tags } = article.data;
 
   const frontmatter = [
     '---',
@@ -39,6 +46,7 @@ export const GET: APIRoute = async ({ params, site, request }) => {
     `author: ${yamlString(AUTHOR)}`,
     `datePublished: ${date.toISOString()}`,
     `description: ${yamlString(description)}`,
+    ...(tags.length > 0 ? [`tags: ${yamlList(tags)}`] : []),
     `canonical: ${canonicalUrl}`,
     `source: ${canonicalUrl}`,
     '---',
