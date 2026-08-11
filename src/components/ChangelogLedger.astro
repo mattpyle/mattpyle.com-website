@@ -17,13 +17,6 @@ interface Props {
 
 const { entries } = Astro.props;
 
-// The sig-dot is a colour-only signal and stays aria-hidden, so every consumer without the
-// stylesheet — screen readers, the markdown rendering — gets the significance as text on the
-// row instead. Same wording as ActivityLog on the homepage, which solved this first.
-function significanceLabel(significance: Entry['data']['significance']): string {
-  return `${significance[0].toUpperCase()}${significance.slice(1)} significance.`;
-}
-
 function formatDate(date: Date): string {
   const d = date.getUTCDate().toString().padStart(2, '0');
   const m = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
@@ -62,7 +55,6 @@ for (const entry of entries) {
             <div class="lg-when">
               <span class={`sig-dot sig-dot--${entry.data.significance}`} aria-hidden="true"></span>
               <span class="lg-date">{formatDate(entry.data.date)}</span>
-              <span class="sr-only">{significanceLabel(entry.data.significance)}</span>
             </div>
             <div class="lg-main">
               <h2 class="lg-title">
@@ -73,12 +65,15 @@ for (const entry of entries) {
             {/* One copy, placed by CSS: third grid column on desktop, trailing child of the
                 stack on mobile. Two copies differing only by a display rule read as duplicate
                 tag rows to anything without the stylesheet. The pills are bare words out of
-                context ("feature agents webmcp"), so each run gets a visually hidden label. */}
+                context ("feature agents webmcp"), so each run gets a visually hidden label —
+                and the significance, whose only visible form is the aria-hidden colour of the
+                sig-dot, joins them here so the row ends in one metadata line. */}
             <div class="lg-tags">
               <span class="sr-only">Type:</span>
               <span class="type-pill">{entry.data.type}</span>
               {entry.data.tags.length > 0 && <span class="sr-only">Tags:</span>}
               {entry.data.tags.map(tag => <span class="tag-pill">{tag}</span>)}
+              <span class="sr-only">Significance: {entry.data.significance}</span>
             </div>
           </div>
         ))}
