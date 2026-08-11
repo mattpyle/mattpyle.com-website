@@ -75,7 +75,11 @@ const breadcrumbUrl = isFirst ? '/changelog/' : `/changelog/${page.currentPage}/
       <p class="header-subtitle page-intro">{description}</p>
     </header>
 
-    <div class="legend" role="group" aria-label="Significance key">
+    {/* The key explains the sig-dot colours, which are themselves aria-hidden. Anything
+        without the stylesheet gets the key but never the thing it keys, so it reads as a
+        stranded "SIGNIFICANCE MAJOR MINOR PATCH" line. Hidden alongside what it explains;
+        each row carries its significance as text instead (see ChangelogLedger). */}
+    <div class="legend" aria-hidden="true">
       <span class="legend-label">SIGNIFICANCE</span>
       {legend.map(({ significance, label }) => (
         <span class="legend-item">
