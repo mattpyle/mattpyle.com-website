@@ -122,6 +122,22 @@ fixture with every status, every severity and evidence of every shape, then runs
 A script rather than a test, because it launches a browser and the suite has neither a browser nor a
 network in it. Pass a path to scan a real report instead.
 
+```bash
+steward mcp-serve                              # serve audit_site over MCP, backed by local Temporal
+```
+
+`mcp-serve` is the same audit behind an MCP server, so an agent that is not at this terminal can run
+one. Unlike `audit-url` it runs the audit as a Temporal workflow, so a worker has to be up or nothing
+executes. One tool, `audit_site(url, fast?)`, returns a workflow ID immediately rather than the
+result, and three resources serve the rest: `steward://audit/<id>/status` until `done` is true, then
+`/report` for the canonical JSON or `/summary` for the markdown digest. That shape is not a
+preference. A deep audit is minutes long, past what any MCP client will hold a call open for, and the
+handle is durable across a worker restart.
+
+It listens on `127.0.0.1:8765` by default and has no authentication, so reaching it from elsewhere
+means a tunnel, and a tunnel makes an unauthenticated audit runner reachable by anyone with the URL
+while the two SSRF gaps below are still open. Attended runs only, and take the tunnel down afterwards.
+
 The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
 120 with `--fast`, 420 without. A deep run against this site takes about a minute.
 

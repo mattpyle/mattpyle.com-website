@@ -17,6 +17,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.112.3",
     "@axe-core/cli": "4.12.1",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@temporalio/activity": "1.20.3",
     "@temporalio/client": "1.20.3",
     "@temporalio/worker": "1.20.3",

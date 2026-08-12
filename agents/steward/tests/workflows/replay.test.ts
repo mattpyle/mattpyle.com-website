@@ -120,7 +120,7 @@ test(
 /**
  * ## Stage 1: `auditSiteWorkflow`
  *
- * A real deep-tier execution started through the MCP server on 2026-08-12,
+ * A real deep-tier execution started through the MCP server on 2026-08-11,
  * against `https://www.mattpyle.com`: 11 events, one `auditSiteDeep` on the
  * heavy queue, through to completion with the canonical result document in the
  * history.

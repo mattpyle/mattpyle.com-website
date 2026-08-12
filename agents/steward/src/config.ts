@@ -334,6 +334,36 @@ export function workflowIdFor(slug: string, collection: Collection = 'writing'):
 }
 
 /**
+ * The workflow ID for one `auditSiteWorkflow` execution.
+ *
+ * Host, then tier, then a random suffix. The host and tier are there so the
+ * Temporal UI's workflow list is readable without opening anything — an audit's
+ * ID is the only label a poller ever sees — and the suffix is there because two
+ * audits of the same site are two runs, not one. Deliberately **not** derived
+ * from the URL alone: a re-audit must never collide with, or be mistaken for,
+ * the earlier run's result.
+ *
+ * `id` is supplied by the caller rather than generated here so this stays a pure
+ * function; the MCP tool passes `randomUUID().slice(0, 8)`.
+ */
+export function auditWorkflowIdFor(origin: string, tier: 'fast' | 'deep', id: string): string {
+  const host = new URL(origin).host.replace(/[^a-z0-9.-]/gi, '-');
+  return `steward-audit-${host}-${tier}-${id}`;
+}
+
+/**
+ * Where the MCP server listens.
+ *
+ * **Loopback by default, and that is a security property rather than a
+ * convenience.** The three SSRF gaps on the stage-2 card are open, so this
+ * server is only ever reachable through a tunnel a human started and is watching;
+ * binding to `0.0.0.0` would put it on the local network as well, which nothing
+ * about the demo needs. Override only with a reason.
+ */
+export const MCP_HOST = process.env.STEWARD_MCP_HOST ?? '127.0.0.1';
+export const MCP_PORT = Number(process.env.STEWARD_MCP_PORT ?? 8765);
+
+/**
  * Inverse of `workflowIdFor`. Only for read-only tooling that *discovers*
  * workflow IDs from Temporal's visibility store (`steward inbox`, which lists
  * open workflows rather than being told a slug directly) — everywhere else in

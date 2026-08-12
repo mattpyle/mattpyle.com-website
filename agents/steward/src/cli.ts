@@ -14,6 +14,8 @@ import {
   ENABLE_EPRIME_ALTERNATIVES,
   ENABLE_PUBLISH_LEG,
   ENABLE_TELL_CITATIONS,
+  MCP_HOST,
+  MCP_PORT,
   NAMESPACE,
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
@@ -1570,6 +1572,55 @@ program
       }
     },
   );
+
+program
+  .command('mcp-serve')
+  .description(
+    'Serves audit_site over MCP, backed by local Temporal. Needs a worker. Loopback only by ' +
+      'default; put a tunnel in front of it to let an agent elsewhere call it.',
+  )
+  .option('--port <n>', `TCP port to listen on (default: ${MCP_PORT})`)
+  .option('--host <host>', `address to bind (default: ${MCP_HOST})`)
+  .action(async (opts: { port?: string; host?: string }) => {
+    // Lazy: the MCP SDK is a large import graph and no other verb needs it.
+    const { startMcpHttpServer, MCP_PATH } = await import('./mcp/http.js');
+
+    const port = Number(opts.port ?? MCP_PORT);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      fail(`--port must be a TCP port number, got "${opts.port}".`);
+    }
+    const host = opts.host ?? MCP_HOST;
+
+    const c = await client();
+    const server = await startMcpHttpServer({ client: c, host, port });
+
+    console.log('');
+    console.log(`  ${BOLD}MCP server${RESET}  http://${host}:${server.port}${MCP_PATH}`);
+    console.log(`  ${paint('tool', DIM)}      audit_site(url, fast?) — returns a workflow ID, does not wait`);
+    console.log(`  ${paint('resources', DIM)} steward://audit/<workflowId>/{status,report,summary}`);
+    console.log(`  ${paint('health', DIM)}    http://${host}:${server.port}/healthz`);
+    console.log('');
+    console.log(`  ${paint('A worker must be running (`steward up`) or nothing executes.', DIM)}`);
+    console.log(
+      `  ${paint('Exposed through a tunnel this is unauthenticated and the SSRF gaps are open —', DIM)}`,
+    );
+    console.log(`  ${paint('run it attended, and take the tunnel down afterwards.', DIM)}`);
+    console.log('');
+    console.log(`  ${paint('Ctrl-C to stop.', DIM)}`);
+    console.log('');
+
+    // The verb is the server: it holds the process open until the operator stops
+    // it, and closes the Temporal connection on the way out so a repeated
+    // start/stop cycle does not leak one per run.
+    const stop = async () => {
+      await server.close();
+      await c.connection.close();
+      process.exit(0);
+    };
+    process.on('SIGINT', () => void stop());
+    process.on('SIGTERM', () => void stop());
+    await new Promise(() => {});
+  });
 
 /**
  * A failed workflow reaches the CLI as `WorkflowFailedError: Workflow
