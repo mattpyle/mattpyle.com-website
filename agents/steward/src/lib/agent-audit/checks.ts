@@ -382,31 +382,79 @@ function checkAiAgents(ctx: AuditContext): CheckResult {
 
 const CONTENT_SIGNALS: CheckSpec = {
   id: 'content-signals',
-  title: 'robots.txt declares Content Signals preferences',
+  // Not "robots.txt declares …" any more: the signal is also read off the
+  // response header, and a title that names one source misreports the other.
+  title: 'Content Signals preferences are declared',
   category: 'crawlability',
   severity: 'low',
 };
 
-function checkContentSignals(ctx: AuditContext): CheckResult {
+/**
+ * Content Signals live in robots.txt by the policy's own definition, and also
+ * arrive as a `Content-Signal` **response header** in the wild: Cloudflare sets
+ * one on the markdown responses it generates, and retool.com answers with
+ * `Content-Signal: ai-train=yes, search=yes, ai-input=yes` on every response
+ * while its robots.txt says nothing. Reading robots.txt alone reported that site
+ * as having expressed no preference, which is the opposite of what it did.
+ *
+ * So both places are read, and the two are not the same result. The signal is
+ * expressed either way — that is what makes a header-only site a pass rather
+ * than a finding — but only the robots.txt line is discoverable *before*
+ * fetching anything, and a crawler deciding whether to fetch at all reads
+ * robots.txt and stops there. Where the signal was found goes in the observed
+ * line, because that is the part a reader has to act on.
+ */
+function checkContentSignals(ctx: AuditContext, homepage: SafeResponse | null): CheckResult {
   const robots = ctx.robots;
-  if (!robots) return result(CONTENT_SIGNALS, 'not-applicable', 'no readable robots.txt');
-  if (robots.contentSignals.length === 0) {
+  const fromRobots = robots?.contentSignals ?? [];
+  const header = homepage?.headers['content-signal'];
+  const evidence: CheckEvidence[] = [
+    ...fromRobots.map((value) => ({ url: ctx.url('/robots.txt'), note: `Content-Signal: ${value}` })),
+    ...(header && homepage
+      ? [
+          {
+            url: homepage.url,
+            status: homepage.status,
+            headers: evidenceHeaders({ 'content-signal': header }),
+          },
+        ]
+      : []),
+  ];
+
+  if (fromRobots.length > 0) {
     return result(
       CONTENT_SIGNALS,
-      'fail',
-      'no Content-Signal directive',
-      [],
-      'Optional, and new. A "Content-Signal:" line in robots.txt states separately whether your ' +
-        'content may be used for search indexing, for AI input (answering a question with a ' +
-        'citation), and for AI training. Without it, an agent that wants to respect your wishes ' +
-        'only has Allow/Disallow, which cannot express "quote me, do not train on me".',
+      'pass',
+      `declares ${fromRobots.length} Content-Signal line(s) in robots.txt` +
+        (header ? ', and repeats the signal as a response header' : ''),
+      evidence,
+    );
+  }
+  if (header) {
+    return result(
+      CONTENT_SIGNALS,
+      'pass',
+      'the signal is expressed as a Content-Signal response header, but not in robots.txt, so a ' +
+        'crawler that reads robots.txt to decide whether to fetch at all never sees it',
+      evidence,
+    );
+  }
+  if (!robots) {
+    return result(
+      CONTENT_SIGNALS,
+      'not-applicable',
+      'no readable robots.txt, and no Content-Signal response header',
     );
   }
   return result(
     CONTENT_SIGNALS,
-    'pass',
-    `declares ${robots.contentSignals.length} Content-Signal line(s)`,
-    robots.contentSignals.map((value) => ({ note: `Content-Signal: ${value}` })),
+    'fail',
+    'no Content-Signal directive in robots.txt, and no Content-Signal response header',
+    [],
+    'Optional, and new. A "Content-Signal:" line in robots.txt states separately whether your ' +
+      'content may be used for search indexing, for AI input (answering a question with a ' +
+      'citation), and for AI training. Without it, an agent that wants to respect your wishes ' +
+      'only has Allow/Disallow, which cannot express "quote me, do not train on me".',
   );
 }
 
@@ -1306,7 +1354,11 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
   const checks: CheckResult[] = [];
   checks.push(await checkRobots(ctx));
   checks.push(checkAiAgents(ctx));
-  checks.push(checkContentSignals(ctx));
+  // Content Signals is decided last and reported here, because the signal may
+  // arrive as a response header and the homepage is not fetched until the
+  // negotiation check below. The slot is reserved at the position the check
+  // belongs in for a reader: with the other things robots.txt says.
+  const contentSignalsSlot = checks.length;
 
   const sitemap = await checkSitemap(ctx);
   checks.push(sitemap.check);
@@ -1343,9 +1395,10 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
         ),
   );
 
-  // Reads the homepage response the negotiation check already fetched rather
-  // than spending another request on the same URL.
+  // Both read the homepage response the negotiation check already fetched,
+  // rather than spending another request on the same URL.
   checks.push(checkLinkHeaders(home.html));
+  checks.splice(contentSignalsSlot, 0, checkContentSignals(ctx, home.html));
 
   let browserPages: number | undefined;
   if (opts.deep === false) {

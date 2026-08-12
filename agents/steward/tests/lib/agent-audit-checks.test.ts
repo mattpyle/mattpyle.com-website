@@ -24,6 +24,8 @@ type Break =
   | 'robots-blocks-claude-user'
   | 'robots-blocks-auditor'
   | 'no-content-signal'
+  | 'content-signal-header-only'
+  | 'content-signal-both'
   | 'sitemap-undeclared'
   | 'no-sitemap'
   | 'no-llms'
@@ -90,7 +92,9 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
       } else if (broken !== 'sitemap-undeclared' && broken !== 'no-sitemap') {
         lines.push('', `Sitemap: ${origin}/sitemap-index.xml`);
       }
-      if (broken !== 'no-content-signal') lines.push('Content-Signal: search=yes, ai-train=no');
+      if (broken !== 'no-content-signal' && broken !== 'content-signal-header-only') {
+        lines.push('Content-Signal: search=yes, ai-train=no');
+      }
       return send(200, 'text/plain', `${lines.join('\n')}\n`);
     }
 
@@ -194,12 +198,18 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
       // The headers that decide whether a missing `Vary` is actually poisoning
       // anything. Present on both variants, as they are on a real CDN.
       const caching = { 'cache-control': 'public, max-age=0, must-revalidate', age: '7', 'x-cache': 'HIT' };
+      // Cloudflare sets this response header on the markdown it generates, and
+      // retool.com sends it on every response with nothing in its robots.txt.
+      const signal: Record<string, string> =
+        broken === 'content-signal-header-only' || broken === 'content-signal-both'
+          ? { 'content-signal': 'ai-train=yes, search=yes, ai-input=yes' }
+          : {};
       if (wantsMarkdown && broken !== 'negotiation-ignored') {
         const body =
           broken === 'markdown-is-another-page'
             ? '---\ntitle: "Some other page entirely"\n---\n\nWrong content.\n'
             : `---\ntitle: "${title}"\n---\n\nBody of ${title}.\n`;
-        return send(200, 'text/markdown', body, { ...vary, ...caching });
+        return send(200, 'text/markdown', body, { ...vary, ...caching, ...signal });
       }
       const alternate = `<${origin}${url === '/' ? '/index.md' : `${url.replace(/\/$/, '')}.md`}>; rel="alternate"; type="text/markdown"`;
       const link: Record<string, string> =
@@ -216,6 +226,7 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
       return send(200, 'text/html', `<!doctype html><title>${title}</title><h1>${title}</h1>`, {
         ...vary,
         ...caching,
+        ...signal,
         ...link,
       });
     }
@@ -576,6 +587,39 @@ test('a bullet with links inside prose is reported differently from one with non
 
 test('a missing Content-Signal line is a low-severity finding', async (t) => {
   const result = await audit(t, 'no-content-signal');
-  assert.equal(check(result, 'content-signals').status, 'fail');
-  assert.equal(check(result, 'content-signals').severity, 'low');
+  const signals = check(result, 'content-signals');
+  assert.equal(signals.status, 'fail');
+  assert.equal(signals.severity, 'low');
+  // The observed line names both places that were looked at, so a site that
+  // sends the header can tell this was not simply missed.
+  assert.match(signals.observed, /no Content-Signal directive in robots\.txt, and no Content-Signal response header/);
+});
+
+test('a Content-Signal response header is an expressed signal, not an absent one', async (t) => {
+  // retool.com answers with `Content-Signal: ai-train=yes, search=yes,
+  // ai-input=yes` on every response and says nothing in robots.txt; reading
+  // robots.txt alone reported it as having expressed no preference.
+  const result = await audit(t, 'content-signal-header-only');
+  const signals = check(result, 'content-signals');
+  assert.equal(signals.status, 'pass');
+  assert.match(signals.observed, /expressed as a Content-Signal response header, but not in robots\.txt/);
+  assert.equal(signals.evidence[0].headers?.['content-signal'], 'ai-train=yes, search=yes, ai-input=yes');
+});
+
+test('both places carrying the signal is reported as both', async (t) => {
+  const result = await audit(t, 'content-signal-both');
+  const signals = check(result, 'content-signals');
+  assert.equal(signals.status, 'pass');
+  assert.match(signals.observed, /in robots\.txt, and repeats the signal as a response header/);
+  assert.equal(signals.evidence.length, 2);
+});
+
+test('the check keeps its place in the report even though it is decided last', async (t) => {
+  // It reads the homepage response, which is not fetched until the negotiation
+  // check; it still belongs next to the other things robots.txt says.
+  const result = await audit(t);
+  assert.deepEqual(
+    result.checks.slice(0, 3).map((c) => c.id),
+    ['robots-txt', 'robots-ai-agents', 'content-signals'],
+  );
 });
