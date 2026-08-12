@@ -683,6 +683,84 @@ program
   });
 
 program
+  .command('audit-url')
+  .argument('<url>', 'the site to audit — https://example.com, or just example.com')
+  .description(
+    'Fast agent-readiness checks against any site: robots, sitemap, llms.txt, agents.md, ' +
+      'markdown negotiation. No worker, no Temporal, no browser.',
+  )
+  .option('--json <path>', 'where to write the canonical JSON result')
+  .option('--out <path>', 'where to write the markdown summary')
+  .option('--budget <seconds>', 'total wall-clock budget for the whole audit', '120')
+  .option('--quiet', 'write the files without printing the summary')
+  .action(async (urlArg: string, opts: { json?: string; out?: string; budget: string; quiet?: boolean }) => {
+    // Lazy, like `tells`: this verb makes no Temporal connection and no API
+    // call, and keeping it out of the eager import graph is what makes that a
+    // property rather than a claim.
+    const { runFastAudit, normaliseTarget } = await import('./lib/agent-audit/checks.js');
+    const { renderMarkdownSummary } = await import('./lib/agent-audit/render.js');
+    const { BlockedTargetError } = await import('./lib/agent-audit/safe-fetch.js');
+    const { AUDIT_OUT_DIR } = await import('./config.js');
+
+    const budgetSeconds = Number(opts.budget);
+    if (!Number.isFinite(budgetSeconds) || budgetSeconds <= 0) {
+      fail(`--budget must be a positive number of seconds, got "${opts.budget}".`);
+    }
+
+    let origin: string;
+    try {
+      ({ origin } = normaliseTarget(urlArg));
+    } catch {
+      fail(`"${urlArg}" is not a URL. Try https://example.com, or just example.com.`);
+    }
+
+    // The audit's own date, in Matt's timezone rather than UTC — an evening run
+    // must not file itself under tomorrow (repo convention).
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: STEWARD_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const stem = `${new URL(origin).host.replace(/[:.]/g, '-')}-${today}`;
+    const jsonPath = path.resolve(opts.json ?? path.join(AUDIT_OUT_DIR, `${stem}.json`));
+    const mdPath = path.resolve(opts.out ?? path.join(AUDIT_OUT_DIR, `${stem}.md`));
+
+    if (!opts.quiet) console.log(`\n  auditing ${origin} …`);
+
+    let audit;
+    try {
+      audit = await runFastAudit(urlArg, { policy: { totalBudgetMs: budgetSeconds * 1000 } });
+    } catch (err) {
+      // A refused target is the guard doing its job, not a crash: say which
+      // rule refused it rather than printing a stack trace.
+      if (err instanceof BlockedTargetError) fail(`Refused to audit ${err.url}: ${err.reason}`);
+      throw err;
+    }
+
+    const summary = renderMarkdownSummary(audit);
+    await fs.mkdir(path.dirname(jsonPath), { recursive: true });
+    await fs.writeFile(jsonPath, `${JSON.stringify(audit, null, 2)}\n`, 'utf8');
+    await fs.mkdir(path.dirname(mdPath), { recursive: true });
+    await fs.writeFile(mdPath, `${summary}\n`, 'utf8');
+
+    if (!opts.quiet) {
+      console.log('');
+      console.log(summary);
+    }
+
+    const failed = audit.checks.filter((c) => c.status === 'fail').length;
+    const errored = audit.checks.filter((c) => c.status === 'error').length;
+    console.log('');
+    console.log(`  json:    ${jsonPath}`);
+    console.log(`  summary: ${mdPath}`);
+    console.log(
+      `  ${failed === 0 ? paint('no failures', GREEN) : paint(`${failed} failing check(s)`, RED)}` +
+        `${errored > 0 ? `, ${errored} the auditor could not judge` : ''}\n`,
+    );
+  });
+
+program
   .command('suggest')
   .argument('<collection>', `one of: ${COLLECTIONS.join(', ')}`)
   .argument('<slug>', SLUG_HELP, parseSlug)

@@ -1,0 +1,169 @@
+/**
+ * The canonical result of an `audit-url` run — one JSON document that every
+ * other rendering is derived from (hosted-mcp-server card, "Report format").
+ * The markdown summary in `render.ts` reads this and nothing else; the HTML
+ * renderer and the MCP tool in later slices will do the same, and the
+ * audit-agent-readiness-skill card shares the schema.
+ *
+ * Because those consumers are not all in this repo, the shape is versioned and
+ * treated as an interface rather than an internal type. `SCHEMA_VERSION` goes up
+ * when a consumer that understood the old document would misread the new one:
+ * a removed or re-typed field, or a `status` value that means something else.
+ * Adding a check id, or an optional field, does not.
+ */
+
+/** Bumped only for a change that breaks a reader of the previous version. */
+export const SCHEMA_VERSION = 1;
+
+/**
+ * A check's verdict.
+ *
+ * - `pass` — the surface exists and behaves.
+ * - `fail` — a finding. **Absence is a finding, not an error**: a site with no
+ *   llms.txt gets a `fail` with a fix, not a crash and not an `error`.
+ * - `not-applicable` — the check could not apply, and that is not the site's
+ *   fault: robots.txt disallows the path, or a prerequisite surface (a sitemap
+ *   to pick a content page from) is missing and already reported by its own
+ *   check. Never counted against a site.
+ * - `error` — the auditor could not reach a verdict: a transport failure, a
+ *   refused target, the time budget. A statement about the run, not the site.
+ */
+export type CheckStatus = 'pass' | 'fail' | 'not-applicable' | 'error';
+
+/** Fixed set; the markdown summary counts passes per category. */
+export const CATEGORIES = ['crawlability', 'discovery', 'content-access'] as const;
+export type CheckCategory = (typeof CATEGORIES)[number];
+
+/** Ranks the fix list. Not a score, and never summed — see the card. */
+export type Severity = 'high' | 'medium' | 'low';
+
+/**
+ * What was fetched and what it said. Every check carries its own evidence so a
+ * reader can disagree with the verdict without re-running the audit — the same
+ * rule the scorecard is built on.
+ */
+export interface CheckEvidence {
+  /** The URL fetched, if the evidence came from a request. */
+  url?: string;
+  status?: number;
+  /** Only the headers the check actually reasoned about. */
+  headers?: Record<string, string>;
+  /** A quoted excerpt of the response, truncated. Never the whole body. */
+  excerpt?: string;
+  /** A statement about the evidence when there is no response to quote. */
+  note?: string;
+}
+
+export interface CheckResult {
+  /** Stable across versions; consumers key on it. */
+  id: string;
+  /** Human-readable, present tense, states what a pass means. */
+  title: string;
+  category: CheckCategory;
+  severity: Severity;
+  status: CheckStatus;
+  /** One line: what was actually observed. Present for every status. */
+  observed: string;
+  /**
+   * What to do about it, written for a stranger who has never seen this tool
+   * and does not know the standard by name. Present whenever `status` is `fail`.
+   */
+  fix?: string;
+  evidence: CheckEvidence[];
+}
+
+export interface CategoryCount {
+  category: CheckCategory;
+  passed: number;
+  /** Checks that returned a verdict about the site: `pass` + `fail`. */
+  applicable: number;
+  notApplicable: number;
+  errors: number;
+}
+
+export interface AuditResult {
+  schemaVersion: number;
+  tool: { name: string; version: string };
+  target: {
+    /** Exactly what the caller typed. */
+    input: string;
+    /** The origin everything was fetched relative to. */
+    origin: string;
+  };
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  /** HTTP requests made, redirect hops included. */
+  requests: number;
+  /** Per-category pass counts. No composite score, by decision — see the card. */
+  categories: CategoryCount[];
+  checks: CheckResult[];
+  /**
+   * Run-level problems that are not about any one check: the time budget ran
+   * out, robots.txt could not be read so obedience was assumed strict.
+   */
+  notes: string[];
+}
+
+/** Rolls the per-check verdicts up into the per-category counts. */
+export function countByCategory(checks: CheckResult[]): CategoryCount[] {
+  return CATEGORIES.map((category) => {
+    const mine = checks.filter((c) => c.category === category);
+    return {
+      category,
+      passed: mine.filter((c) => c.status === 'pass').length,
+      applicable: mine.filter((c) => c.status === 'pass' || c.status === 'fail').length,
+      notApplicable: mine.filter((c) => c.status === 'not-applicable').length,
+      errors: mine.filter((c) => c.status === 'error').length,
+    };
+  });
+}
+
+const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
+
+/**
+ * The failed checks, worst first — the order the fix list is printed in.
+ *
+ * Severity, then the order the checks were declared in, which is roughly the
+ * order they depend on each other: robots before sitemap before the pages the
+ * sitemap named.
+ */
+export function rankedFixes(checks: CheckResult[]): CheckResult[] {
+  const declared = new Map(checks.map((c, i) => [c.id, i]));
+  return checks
+    .filter((c) => c.status === 'fail')
+    .sort(
+      (a, b) =>
+        SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
+        (declared.get(a.id) ?? 0) - (declared.get(b.id) ?? 0),
+    );
+}
+
+/**
+ * Removes C0 and C1 control characters, and DEL, from a string that came off
+ * the network.
+ *
+ * Every string in this document is quoted back to somebody: into a terminal by
+ * the CLI, into a markdown file, and later into an HTML report. A response body
+ * or a header value is attacker-controlled text, and `ESC [` in it is enough to
+ * repaint a terminal, hide a line, or make a failing check print as a passing
+ * one. Collapsing whitespace does not help — `\x1b` is not whitespace.
+ *
+ * The tab/newline/carriage-return cases are removed here too rather than
+ * preserved: this runs on text that is about to be flattened onto one line
+ * anyway.
+ */
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+export function stripControlChars(text: string): string {
+  return text.replace(CONTROL_CHARS, '');
+}
+
+/**
+ * Trims a response body down to a quotable excerpt: one line, bounded, control
+ * characters removed, with the truncation visible rather than silent.
+ */
+export function excerpt(text: string, max = 240): string {
+  const flat = stripControlChars(text).replace(/\s+/g, ' ').trim();
+  return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
+}
