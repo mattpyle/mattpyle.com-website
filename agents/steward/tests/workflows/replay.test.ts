@@ -82,6 +82,9 @@ const historyPath = fileURLToPath(
 const buildAuditHistoryPath = fileURLToPath(
   new URL('../fixtures/histories/phase1c-build-audit.json', import.meta.url),
 );
+const auditSiteHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/stage1-audit-site-deep.json', import.meta.url),
+);
 
 test(
   'the Phase 1b smoke-test history still replays against current workflow code',
@@ -110,6 +113,46 @@ test(
       { workflowsPath, bundlerOptions: {} },
       history,
       'steward-review-hello-world',
+    );
+  },
+);
+
+/**
+ * ## Stage 1: `auditSiteWorkflow`
+ *
+ * A real deep-tier execution started through the MCP server on 2026-08-12,
+ * against `https://www.mattpyle.com`: 11 events, one `auditSiteDeep` on the
+ * heavy queue, through to completion with the canonical result document in the
+ * history.
+ *
+ * The deep tier is the one worth guarding, because the tier is what picks the
+ * activity *and* the task queue, and both are recorded in the scheduling
+ * command. A history that ran deep must keep replaying deep — if the tier were
+ * ever read from config rather than from the input, this fixture is what would
+ * go red.
+ *
+ * **Verified able to fail** by the docblock's rule, on this fixture rather than
+ * on trust: swapping the workflow's tier branch so `deep` scheduled
+ * `auditSiteFast` produced
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'auditSiteDeep' does not match activity type of activity command
+ * 'auditSiteFast'
+ * ```
+ *
+ * The probe was reverted and this test re-run green.
+ */
+test(
+  'the stage-1 deep audit history replays against current workflow code',
+  { timeout: 120_000 },
+  async () => {
+    const history = JSON.parse(await fs.readFile(auditSiteHistoryPath, 'utf8'));
+
+    await Worker.runReplayHistory(
+      { workflowsPath, bundlerOptions: {} },
+      history,
+      'steward-audit-www.mattpyle.com-deep-b1a00612',
     );
   },
 );
