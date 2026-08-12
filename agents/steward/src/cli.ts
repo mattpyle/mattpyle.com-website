@@ -61,6 +61,17 @@ import {
 } from './lib/scorecard-schedule.js';
 import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 
+/**
+ * `audit-url`'s default time budgets, per tier.
+ *
+ * The fast tier is a dozen HTTP round trips and 120s is generous for it. The
+ * deep tier launches a browser per sampled page, and 120s would spend the whole
+ * budget before the second page started — the default has to match what the
+ * default run actually does.
+ */
+const FAST_BUDGET_SECONDS = 120;
+const DEEP_BUDGET_SECONDS = 420;
+
 async function client(): Promise<Client> {
   const connection = await Connection.connect({ address: TEMPORAL_ADDRESS });
   return new Client({ connection, namespace: NAMESPACE });
@@ -686,23 +697,34 @@ program
   .command('audit-url')
   .argument('<url>', 'the site to audit — https://example.com, or just example.com')
   .description(
-    'Fast agent-readiness checks against any site: robots, sitemap, llms.txt, agents.md, ' +
-      'markdown negotiation. No worker, no Temporal, no browser.',
+    'Agent-readiness checks against any site: robots, sitemap, llms.txt, agents.md, markdown ' +
+      'negotiation, then Lighthouse and axe over a few rendered pages. No worker, no Temporal.',
   )
   .option('--json <path>', 'where to write the canonical JSON result')
   .option('--out <path>', 'where to write the markdown summary')
-  .option('--budget <seconds>', 'total wall-clock budget for the whole audit', '120')
+  .option('--fast', 'skip the browser: HTTP checks only, in seconds')
+  .option(
+    '--budget <seconds>',
+    `total wall-clock budget for the whole audit (default: ${FAST_BUDGET_SECONDS} with --fast, ${DEEP_BUDGET_SECONDS} without)`,
+  )
   .option('--quiet', 'write the files without printing the summary')
-  .action(async (urlArg: string, opts: { json?: string; out?: string; budget: string; quiet?: boolean }) => {
+  .action(async (urlArg: string, opts: { json?: string; out?: string; budget?: string; fast?: boolean; quiet?: boolean }) => {
     // Lazy, like `tells`: this verb makes no Temporal connection and no API
     // call, and keeping it out of the eager import graph is what makes that a
-    // property rather than a claim.
-    const { runFastAudit, normaliseTarget } = await import('./lib/agent-audit/checks.js');
+    // property rather than a claim. The browser is one level lazier again —
+    // `checks.ts` imports the deep tier only when it is going to run it, so
+    // `--fast` never loads Lighthouse.
+    const { runAudit, normaliseTarget } = await import('./lib/agent-audit/checks.js');
     const { renderMarkdownSummary } = await import('./lib/agent-audit/render.js');
     const { BlockedTargetError } = await import('./lib/agent-audit/safe-fetch.js');
     const { AUDIT_OUT_DIR } = await import('./config.js');
 
-    const budgetSeconds = Number(opts.budget);
+    // The deep tier renders up to three pages and a browser is slower than a
+    // fetch by two orders of magnitude, so the default budget follows the mode
+    // rather than making every deep run pass a flag to be usable.
+    const budgetSeconds = Number(
+      opts.budget ?? (opts.fast ? FAST_BUDGET_SECONDS : DEEP_BUDGET_SECONDS),
+    );
     if (!Number.isFinite(budgetSeconds) || budgetSeconds <= 0) {
       fail(`--budget must be a positive number of seconds, got "${opts.budget}".`);
     }
@@ -726,11 +748,18 @@ program
     const jsonPath = path.resolve(opts.json ?? path.join(AUDIT_OUT_DIR, `${stem}.json`));
     const mdPath = path.resolve(opts.out ?? path.join(AUDIT_OUT_DIR, `${stem}.md`));
 
-    if (!opts.quiet) console.log(`\n  auditing ${origin} …`);
+    if (!opts.quiet) {
+      console.log(
+        `\n  auditing ${origin} …${opts.fast ? '' : ' (rendering pages; this takes a few minutes)'}`,
+      );
+    }
 
     let audit;
     try {
-      audit = await runFastAudit(urlArg, { policy: { totalBudgetMs: budgetSeconds * 1000 } });
+      audit = await runAudit(urlArg, {
+        policy: { totalBudgetMs: budgetSeconds * 1000 },
+        ...(opts.fast ? { deep: false as const } : {}),
+      });
     } catch (err) {
       // A refused target is the guard doing its job, not a crash: say which
       // rule refused it rather than printing a stack trace.

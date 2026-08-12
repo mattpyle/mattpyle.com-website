@@ -57,6 +57,7 @@ export function tempRunName(prefix: string): string {
 export async function runAxe(
   url: string,
   signal: AbortSignal,
+  opts: { userAgent?: string } = {},
 ): Promise<{ violations: AxeViolation[]; raw: AxeViolation[] }> {
   const outDir = os.tmpdir();
   const outName = `${tempRunName('steward-axe')}.json`;
@@ -65,9 +66,16 @@ export async function runAxe(
   const require = createRequire(import.meta.url);
   const axeCli = require.resolve('@axe-core/cli/dist/src/bin/cli.js');
 
+  // `--chrome-options` is one value split on `[,;]`, so every flag added here
+  // must contain neither. `userAgent` is set by the caller that audits somebody
+  // else's site, where being attributable matters; the two in-repo callers point
+  // at a local server they started and leave it at Chrome's own.
+  const chromeOptions = ['headless', 'no-sandbox', 'disable-gpu'];
+  if (opts.userAgent) chromeOptions.push(`user-agent=${opts.userAgent}`);
+
   const res = await runCancellable(
     process.execPath,
-    [axeCli, url, '--exit', '--save', outName, '--chrome-options', 'headless,no-sandbox,disable-gpu'],
+    [axeCli, url, '--exit', '--save', outName, '--chrome-options', chromeOptions.join(',')],
     { signal, cwd: outDir },
   );
 
@@ -95,12 +103,21 @@ export async function runAxe(
  * cancellable mid-run; cancellation was, and remains, cooperative via the
  * caller's own heartbeat/cleanup.
  */
-export async function runLighthouse(url: string, _signal: AbortSignal): Promise<LighthouseLike> {
+export async function runLighthouse(
+  url: string,
+  _signal: AbortSignal,
+  opts: { flags?: Record<string, unknown>; chromeFlags?: string[] } = {},
+): Promise<LighthouseLike> {
   const { launch } = await import('chrome-launcher');
   const userDataDir = path.join(CACHE_DIR, tempRunName('chrome'));
   await fs.mkdir(userDataDir, { recursive: true });
   const launched = await launch({
-    chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu'],
+    // Two places set a User-Agent, and a caller that wants one identity needs
+    // both. Lighthouse's `emulatedUserAgent` covers the page it renders; the
+    // requests Lighthouse's own gatherers make outside that page — robots.txt
+    // and llms.txt, for the SEO and agentic-browsing audits — come from the
+    // browser and carry whatever it was launched with.
+    chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu', ...(opts.chromeFlags ?? [])],
     userDataDir,
   });
   try {
@@ -109,6 +126,11 @@ export async function runLighthouse(url: string, _signal: AbortSignal): Promise<
       port: launched.port,
       output: 'json',
       logLevel: 'error',
+      // Callers auditing a site they do not control pass `maxWaitForLoad` here,
+      // so a page that never finishes loading is Lighthouse's problem rather
+      // than the caller's deadline. Empty for the two in-repo callers, whose
+      // target is a local server they just started.
+      ...(opts.flags ?? {}),
     });
     return (runnerResult?.lhr ?? {}) as LighthouseLike;
   } finally {

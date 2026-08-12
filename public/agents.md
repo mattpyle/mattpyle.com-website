@@ -126,6 +126,34 @@ const result = await document.modelContext.executeTool(tool, '{}');  // result i
 
 The tools require no authentication, expose no personal data beyond the public bio, and make no network requests beyond a same-origin fetch of the index.
 
+## Traffic from this site: the `steward-audit-url` auditor
+
+If you arrived here from a `steward-audit-url` line in your access log, this section is what you are looking for.
+
+`steward-audit-url` is an agent-readiness auditor run from this site. It checks whether a site is legible to an AI agent: robots.txt, the sitemap, `llms.txt`, `agents.md`, the well-known discovery documents, whether pages that claim to serve markdown actually do, and then Lighthouse and axe-core over a few rendered pages. It is a hand-run diagnostic rather than a crawler. Somebody types one URL and reads one report.
+
+| | |
+|---|---|
+| User-Agent | `steward-audit-url/0.1 (+https://www.mattpyle.com/agents.md)` |
+| Cost of one audit | Roughly a dozen HTTP requests, plus up to three of your pages loaded in a headless browser |
+| Frequency | Once, when a person asks for it. No schedule, no repeat visits, no crawl. |
+| Purpose | Producing a report for whoever ran it. Nothing is stored on this site or published anywhere. |
+
+The rendered pages are the expensive half: a headless browser loads the page and, like any browser, fetches that page's own images, scripts, and stylesheets. Those requests carry the same User-Agent as the rest of the audit, so everything one audit does is attributable to one visitor in your log.
+
+**It obeys your robots.txt.** Every URL the auditor requests is checked against your rules first, including each page it opens in the browser; only `/robots.txt` itself is fetched without asking. Anything you disallow is reported as "not checked", never as a finding against your site.
+
+One limit, stated rather than left for you to discover: once a page is open in the browser, the browser fetches things on that page's behalf — its images, scripts and stylesheets, and `/robots.txt` and `/llms.txt` for two of the checks — and those requests do not go back through your rules individually. Disallowing the page stops all of it, because the page is never opened.
+
+**To refuse it,** add this to your robots.txt:
+
+```
+User-agent: steward-audit-url
+Disallow: /
+```
+
+That stops both halves of an audit, and the whole thing then costs you exactly one request: robots.txt, read once, and nothing else. Blocking it changes nothing else about how this site treats you.
+
 ## Notes for agents
 
 - This site has no API. All content is public, static HTML — no authentication is required to read anything.

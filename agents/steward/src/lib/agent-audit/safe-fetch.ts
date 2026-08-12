@@ -31,8 +31,19 @@ import { classifyAddress } from './net.js';
  * revisit before stage 2 puts this behind a public endpoint.
  */
 
-export const AUDIT_USER_AGENT =
-  'steward-audit-url/0.1 (+https://www.mattpyle.com/agents.md; agent-readiness auditor)';
+/**
+ * The one identity every request of an audit carries, whichever client makes it:
+ * this fetcher, Lighthouse's Chrome, and axe's.
+ *
+ * **No commas and no semicolons in this string.** `@axe-core/cli` takes its
+ * Chrome flags through `--chrome-options` and splits that value on `[,;]`, so a
+ * UA comment in the conventional `(+url; description)` form arrives at Chrome as
+ * two mangled flags. The description that used to live here moved to the page
+ * the URL points at, which is where a person who looks this up in their logs is
+ * going anyway. A test holds the property, because the failure it prevents is
+ * silent: Chrome would start with a broken flag and the audit would still finish.
+ */
+export const AUDIT_USER_AGENT = 'steward-audit-url/0.1 (+https://www.mattpyle.com/agents.md)';
 
 export interface FetchPolicy {
   /** How many `Location` hops to follow before giving up. */
@@ -104,6 +115,24 @@ export interface SafeResponse {
 export interface SafeFetchInit {
   method?: 'GET' | 'HEAD';
   headers?: Record<string, string>;
+}
+
+/**
+ * Runs the address guard over a URL string, for a caller that is about to
+ * connect to it by some route other than this fetcher.
+ *
+ * The deep tier is that caller: Chrome navigates on its own, so the vetting the
+ * fetcher would have done has to be done explicitly first. Throws
+ * `BlockedTargetError` exactly as `fetch` would.
+ */
+export async function assertConnectableUrl(rawUrl: string, policy: FetchPolicy): Promise<void> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new BlockedTargetError(rawUrl, 'not a valid absolute URL');
+  }
+  await assertConnectable(url, policy);
 }
 
 /** Checks the scheme and resolves + classifies every address behind a URL. */

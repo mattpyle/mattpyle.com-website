@@ -12,8 +12,16 @@
  * Adding a check id, or an optional field, does not.
  */
 
-/** Bumped only for a change that breaks a reader of the previous version. */
-export const SCHEMA_VERSION = 1;
+/**
+ * Bumped only for a change that breaks a reader of the previous version.
+ *
+ * v2 (deep tier): `CATEGORIES` gained `rendered-experience`, so the `categories`
+ * array is four rows where it was three, and `check.category` can hold a value a
+ * v1 reader has never seen. A reader that switched over the three it knew — to
+ * label them, or to lay them out — misreads the new document rather than merely
+ * missing a row, which is the line this constant exists to mark.
+ */
+export const SCHEMA_VERSION = 2;
 
 /**
  * A check's verdict.
@@ -30,8 +38,20 @@ export const SCHEMA_VERSION = 1;
  */
 export type CheckStatus = 'pass' | 'fail' | 'not-applicable' | 'error';
 
-/** Fixed set; the markdown summary counts passes per category. */
-export const CATEGORIES = ['crawlability', 'discovery', 'content-access'] as const;
+/**
+ * Fixed set; the markdown summary counts passes per category.
+ *
+ * The first three are the fast tier: what the site says about itself over plain
+ * HTTP. `rendered-experience` is the deep tier — what a browser actually gets —
+ * and is kept separate because its checks cost a Chrome launch each and are the
+ * ones a `--fast` run does not have.
+ */
+export const CATEGORIES = [
+  'crawlability',
+  'discovery',
+  'content-access',
+  'rendered-experience',
+] as const;
 export type CheckCategory = (typeof CATEGORIES)[number];
 
 /** Ranks the fix list. Not a score, and never summed — see the card. */
@@ -93,8 +113,16 @@ export interface AuditResult {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
-  /** HTTP requests made, redirect hops included. */
+  /**
+   * HTTP requests the auditor made itself, redirect hops included.
+   *
+   * Not the whole cost of a deep run: a rendered page makes its own requests,
+   * from inside Chrome, and nothing here sees them. `browserPages` is the rest
+   * of that sentence.
+   */
   requests: number;
+  /** Pages rendered in a browser. Absent on a fast-only run. */
+  browserPages?: number;
   /** Per-category pass counts. No composite score, by decision — see the card. */
   categories: CategoryCount[];
   checks: CheckResult[];
@@ -166,4 +194,27 @@ export function stripControlChars(text: string): string {
 export function excerpt(text: string, max = 240): string {
   const flat = stripControlChars(text).replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
+}
+
+/** The bound on one header value in evidence. See `evidenceHeaders`. */
+export const HEADER_EXCERPT_MAX = 200;
+
+/**
+ * Bounds every header value on its way into evidence, the same way a response
+ * body is bounded.
+ *
+ * A header value is response text like any other, and nothing in HTTP limits how
+ * long one may be. Real runs found it: stripe.com and temporal.io both answer
+ * with a preload `Link` header of about six kilobytes, and quoting it verbatim
+ * put the whole thing in the JSON and then in the markdown summary, where it
+ * buried the finding it was evidence for. `excerpt` also strips the control
+ * characters, which matters more here than in a body: a header value reaches the
+ * terminal with less between it and the screen.
+ */
+export function evidenceHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    out[name.toLowerCase()] = excerpt(value, HEADER_EXCERPT_MAX);
+  }
+  return out;
 }

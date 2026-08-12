@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { runFastAudit } from '../../src/lib/agent-audit/checks.js';
-import type { AuditResult, CheckResult } from '../../src/lib/agent-audit/result.js';
+import { HEADER_EXCERPT_MAX, type AuditResult, type CheckResult } from '../../src/lib/agent-audit/result.js';
 
 /**
  * The fast tier against a mock site (no live network in the suite, per the
@@ -24,13 +24,18 @@ type Break =
   | 'robots-blocks-claude-user'
   | 'robots-blocks-auditor'
   | 'no-content-signal'
+  | 'content-signal-header-only'
+  | 'content-signal-both'
   | 'sitemap-undeclared'
   | 'no-sitemap'
   | 'no-llms'
   | 'llms-html'
   | 'llms-unparseable'
   | 'llms-prose-bullet'
+  | 'llms-links-inside-prose'
+  | 'llms-many-links'
   | 'llms-dead-link'
+  | 'huge-link-header'
   | 'agent-card-legacy-url'
   | 'agent-card-no-endpoint'
   | 'many-declared-sitemaps'
@@ -87,7 +92,9 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
       } else if (broken !== 'sitemap-undeclared' && broken !== 'no-sitemap') {
         lines.push('', `Sitemap: ${origin}/sitemap-index.xml`);
       }
-      if (broken !== 'no-content-signal') lines.push('Content-Signal: search=yes, ai-train=no');
+      if (broken !== 'no-content-signal' && broken !== 'content-signal-header-only') {
+        lines.push('Content-Signal: search=yes, ai-train=no');
+      }
       return send(200, 'text/plain', `${lines.join('\n')}\n`);
     }
 
@@ -131,7 +138,18 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
         );
       }
       const target = broken === 'llms-dead-link' ? '/writing/deleted/' : POST_PATH;
-      const extra = broken === 'llms-prose-bullet' ? '- **A thing with no URL**: prose only\n' : '';
+      let extra = '';
+      if (broken === 'llms-prose-bullet') extra = '- **A thing with no URL**: prose only\n';
+      if (broken === 'llms-links-inside-prose') {
+        // stripe.com's shape: a bullet that carries links, just not at the front.
+        extra =
+          `- Read the [changelog](${origin}${POST_PATH}) or the [archive](${origin}/) for more.\n`;
+      }
+      if (broken === 'llms-many-links') {
+        // More links than the sample, all of them live: the case whose pass line
+        // used to read "3 of 8 link(s) return 200".
+        for (let i = 1; i <= 7; i++) extra += `- [Extra ${i}](${origin}${POST_PATH}): a post\n`;
+      }
       return send(
         200,
         'text/plain',
@@ -177,19 +195,38 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
     if (url === '/' || url === POST_PATH) {
       const title = url === '/' ? HOME_TITLE : POST_TITLE;
       const vary: Record<string, string> = broken === 'no-vary' ? {} : { vary: 'Accept' };
+      // The headers that decide whether a missing `Vary` is actually poisoning
+      // anything. Present on both variants, as they are on a real CDN.
+      const caching = { 'cache-control': 'public, max-age=0, must-revalidate', age: '7', 'x-cache': 'HIT' };
+      // Cloudflare sets this response header on the markdown it generates, and
+      // retool.com sends it on every response with nothing in its robots.txt.
+      const signal: Record<string, string> =
+        broken === 'content-signal-header-only' || broken === 'content-signal-both'
+          ? { 'content-signal': 'ai-train=yes, search=yes, ai-input=yes' }
+          : {};
       if (wantsMarkdown && broken !== 'negotiation-ignored') {
         const body =
           broken === 'markdown-is-another-page'
             ? '---\ntitle: "Some other page entirely"\n---\n\nWrong content.\n'
             : `---\ntitle: "${title}"\n---\n\nBody of ${title}.\n`;
-        return send(200, 'text/markdown', body, vary);
+        return send(200, 'text/markdown', body, { ...vary, ...caching, ...signal });
       }
+      const alternate = `<${origin}${url === '/' ? '/index.md' : `${url.replace(/\/$/, '')}.md`}>; rel="alternate"; type="text/markdown"`;
       const link: Record<string, string> =
         broken === 'no-link-header'
           ? {}
-          : { link: `<${origin}${url === '/' ? '/index.md' : `${url.replace(/\/$/, '')}.md`}>; rel="alternate"; type="text/markdown"` };
+          : {
+              link:
+                broken === 'huge-link-header'
+                  ? // A real preload header, the shape stripe.com and temporal.io
+                    // both send: kilobytes of it, on the homepage.
+                    `${Array.from({ length: 120 }, (_, i) => `<${origin}/_astro/chunk-${i}.js>; rel=preload; as=script`).join(', ')}, ${alternate}`
+                  : alternate,
+            };
       return send(200, 'text/html', `<!doctype html><title>${title}</title><h1>${title}</h1>`, {
         ...vary,
+        ...caching,
+        ...signal,
         ...link,
       });
     }
@@ -251,10 +288,11 @@ test('a fully agent-ready site passes every check', async (t) => {
     failed.map((c) => `${c.id}: ${c.observed}`),
     [],
   );
-  assert.equal(result.schemaVersion, 1);
+  assert.equal(result.schemaVersion, 2);
   assert.ok(result.requests > 0);
-  // Per-category counts, no composite score anywhere in the document.
-  assert.equal(result.categories.length, 3);
+  // Per-category counts, no composite score anywhere in the document. The
+  // fourth category is the deep tier's, empty on a fast-only run.
+  assert.equal(result.categories.length, 4);
   assert.ok(!('score' in result));
 });
 
@@ -481,8 +519,107 @@ test('a missing Link header is a low-severity finding', async (t) => {
   assert.equal(link.severity, 'low');
 });
 
+// --- report quality, from the stage-0 validation runs ----------------------
+
+test('a kilobyte-long header value is bounded in the evidence', async (t) => {
+  // stripe.com and temporal.io both answer with a ~6KB preload Link header, and
+  // quoting it verbatim buried the finding it was evidence for.
+  const result = await audit(t, 'huge-link-header');
+  const link = check(result, 'link-headers');
+  const value = link.evidence[0].headers?.link ?? '';
+  assert.ok(value.length > 0, 'the Link header is not in the evidence at all');
+  assert.ok(value.length <= HEADER_EXCERPT_MAX + 1, `the header value was quoted at ${value.length} characters`);
+  assert.ok(value.endsWith('…'), 'the truncation is silent');
+});
+
+test('the two negotiation evidence lines say which request each came from', async (t) => {
+  // With Accept ignored, both responses are the same HTML from the same URL, so
+  // without the labels the two lines are identical text.
+  const result = await audit(t, 'negotiation-ignored');
+  const home = check(result, 'markdown-negotiation-home');
+  const notes = home.evidence.map((e) => e.note ?? '');
+  assert.ok(notes.some((n) => /plain request, Accept: text\/html/.test(n)), notes.join(' | '));
+  assert.ok(notes.some((n) => /markdown request, Accept: text\/markdown/.test(n)), notes.join(' | '));
+});
+
+test('the negotiation evidence records the cache headers the Vary finding depends on', async (t) => {
+  const result = await audit(t, 'no-vary');
+  const home = check(result, 'markdown-negotiation-home');
+  assert.equal(home.status, 'fail');
+  const headers = home.evidence[0].headers ?? {};
+  for (const name of ['cache-control', 'age', 'x-cache']) {
+    assert.ok(name in headers, `the evidence does not record ${name}`);
+  }
+  // The finding reads as conditional on a cache actually storing the response.
+  assert.match(home.observed, /shared cache that stores this response/);
+  assert.match(home.fix ?? '', /depends on whether/);
+});
+
+test('the llms.txt link check says how many links it sampled', async (t) => {
+  // "3 of 8 link(s) return 200" parses as five broken links. Three were sampled,
+  // and all three answered.
+  const result = await audit(t, 'llms-many-links');
+  const links = check(result, 'llms-txt-links');
+  assert.equal(links.status, 'pass');
+  assert.match(links.observed, /all 3 sampled link\(s\) return 200/);
+  assert.match(links.observed, /8 link\(s\) in the file/);
+});
+
+test('a bullet with links inside prose is reported differently from one with none', async (t) => {
+  // Two different problems: a bullet with no link is invisible to any parser; a
+  // bullet whose links sit mid-sentence is off-format, and its links are still
+  // collectable. The fix copy must not claim invisibility about the second.
+  const prose = await audit(t, 'llms-prose-bullet');
+  const proseItems = check(prose, 'llms-txt-list-items');
+  assert.equal(proseItems.status, 'fail');
+  assert.match(proseItems.observed, /contain no link at all/);
+  assert.match(proseItems.evidence[0].note ?? '', /^no link: /);
+  assert.match(proseItems.fix ?? '', /nothing for a client to collect/);
+
+  const inside = await audit(t, 'llms-links-inside-prose');
+  const insideItems = check(inside, 'llms-txt-list-items');
+  assert.equal(insideItems.status, 'fail');
+  assert.match(insideItems.observed, /carry 2 link\(s\) but do not lead with one/);
+  assert.match(insideItems.evidence[0].note ?? '', /^2 link\(s\), none leading: /);
+  assert.doesNotMatch(insideItems.fix ?? '', /nothing for a client to collect/);
+  assert.match(insideItems.fix ?? '', /not invisible/);
+});
+
 test('a missing Content-Signal line is a low-severity finding', async (t) => {
   const result = await audit(t, 'no-content-signal');
-  assert.equal(check(result, 'content-signals').status, 'fail');
-  assert.equal(check(result, 'content-signals').severity, 'low');
+  const signals = check(result, 'content-signals');
+  assert.equal(signals.status, 'fail');
+  assert.equal(signals.severity, 'low');
+  // The observed line names both places that were looked at, so a site that
+  // sends the header can tell this was not simply missed.
+  assert.match(signals.observed, /no Content-Signal directive in robots\.txt, and no Content-Signal response header/);
+});
+
+test('a Content-Signal response header is an expressed signal, not an absent one', async (t) => {
+  // retool.com answers with `Content-Signal: ai-train=yes, search=yes,
+  // ai-input=yes` on every response and says nothing in robots.txt; reading
+  // robots.txt alone reported it as having expressed no preference.
+  const result = await audit(t, 'content-signal-header-only');
+  const signals = check(result, 'content-signals');
+  assert.equal(signals.status, 'pass');
+  assert.match(signals.observed, /expressed as a Content-Signal response header, but not in robots\.txt/);
+  assert.equal(signals.evidence[0].headers?.['content-signal'], 'ai-train=yes, search=yes, ai-input=yes');
+});
+
+test('both places carrying the signal is reported as both', async (t) => {
+  const result = await audit(t, 'content-signal-both');
+  const signals = check(result, 'content-signals');
+  assert.equal(signals.status, 'pass');
+  assert.match(signals.observed, /in robots\.txt, and repeats the signal as a response header/);
+  assert.equal(signals.evidence.length, 2);
+});
+
+test('the check keeps its place in the report even though it is decided last', async (t) => {
+  // It reads the homepage response, which is not fetched until the negotiation
+  // check; it still belongs next to the other things robots.txt says.
+  const result = await audit(t);
+  assert.deepEqual(
+    result.checks.slice(0, 3).map((c) => c.id),
+    ['robots-txt', 'robots-ai-agents', 'content-signals'],
+  );
 });
