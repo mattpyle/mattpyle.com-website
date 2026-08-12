@@ -137,10 +137,10 @@ test('the counts are per category, and no composite score is printed', () => {
       check({ id: 'agents-md', category: 'discovery', status: 'not-applicable' }),
     ]),
   );
-  assert.match(html, /<th scope="row">Crawlability<\/th><td class="num">1<\/td><td class="num">2<\/td>/);
-  // "score" appears legitimately in the caption's reason for not printing one,
-  // and in a Lighthouse metric label; what must not appear is a total.
-  assert.ok(!/composite score of/i.test(html));
+  // Checked before passed: the denominator comes before the numerator.
+  assert.match(html, /<th scope="col" class="num">Checked<\/th><th scope="col" class="num">Passed<\/th>/);
+  assert.match(html, /<th scope="row">Crawlability<\/th><td class="num">2<\/td><td class="num">1<\/td>/);
+  assert.ok(!/composite score/i.test(html), 'the report printed something calling itself a composite score');
 });
 
 test('failures are ranked worst first and carry their fix and evidence', () => {

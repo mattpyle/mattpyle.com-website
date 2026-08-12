@@ -396,7 +396,7 @@ export async function runDeepChecks(ctx: DeepContext, opts: DeepOptions = {}): P
     // tier that stopped looking has to report that it stopped looking.
     notes.push(
       `Deep tier: ${ctx.candidates.length} page(s) were available to sample and the first ` +
-        `${sample.length} were rendered (the cap). The scores below describe those pages, not the site.`,
+        `${sample.length} were rendered (the cap).`,
     );
   }
 
