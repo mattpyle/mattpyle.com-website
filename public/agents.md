@@ -141,7 +141,9 @@ If you arrived here from a `steward-audit-url` line in your access log, this sec
 
 The rendered pages are the expensive half: a headless browser loads the page and, like any browser, fetches that page's own images, scripts, and stylesheets. Those requests carry the same User-Agent as the rest of the audit, so everything one audit does is attributable to one visitor in your log.
 
-**It obeys your robots.txt.** Only `/robots.txt` itself is fetched without asking first; every other URL, including the pages the browser renders, is checked against your rules first. Anything you disallow is reported as "not checked", never as a finding against your site.
+**It obeys your robots.txt.** Every URL the auditor requests is checked against your rules first, including each page it opens in the browser; only `/robots.txt` itself is fetched without asking. Anything you disallow is reported as "not checked", never as a finding against your site.
+
+One limit, stated rather than left for you to discover: once a page is open in the browser, the browser fetches things on that page's behalf — its images, scripts and stylesheets, and `/robots.txt` and `/llms.txt` for two of the checks — and those requests do not go back through your rules individually. Disallowing the page stops all of it, because the page is never opened.
 
 **To refuse it,** add this to your robots.txt:
 

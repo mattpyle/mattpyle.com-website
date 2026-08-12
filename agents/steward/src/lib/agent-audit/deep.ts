@@ -38,27 +38,40 @@ import type { AxeViolation, LighthouseLike } from '../audit-map.js';
  * arrived under Chrome's own UA for the expensive half would be unattributable
  * for exactly the requests that cost the site the most.
  *
- * ## The subresource gap in the SSRF guard
+ * ## What the address guard does not cover once Chrome has the URL
  *
  * Stated rather than papered over, the same way `safe-fetch.ts` states DNS
- * rebinding. **The address guard only covers the top-level URL.** Every page
- * this module hands to Chrome is resolved and classified first, by the same
+ * rebinding. **The guard covers the one URL handed over, at the moment it is
+ * handed over, and nothing Chrome does afterwards.** Every page this module
+ * hands to Chrome is resolved and classified first, by the same
  * `assertConnectableUrl` the fetcher uses, and a page inside a private range is
- * refused before Chrome is launched. But a rendered page pulls in subresources —
- * images, scripts, stylesheets, `fetch()` from its own JavaScript — and Chrome
- * requests those itself, having consulted nothing here. A page that references
- * `http://169.254.169.254/latest/meta-data/` will have Chrome fetch it, and a
- * page that then reads the response and reports it back into the DOM can put
- * whatever it found in front of whoever runs this.
+ * refused before Chrome is launched. Two things happen after that, neither of
+ * them checked:
  *
- * That is an acceptable risk for a local CLI a person points at a site they
+ * 1. **Subresources.** A rendered page pulls in images, scripts, stylesheets and
+ *    `fetch()` calls of its own, and Chrome requests those itself, having
+ *    consulted nothing here. A page that references
+ *    `http://169.254.169.254/latest/meta-data/` will have Chrome fetch it, and a
+ *    page that then reads the response into the DOM can put whatever it found in
+ *    front of whoever runs this.
+ * 2. **Top-level redirects.** The vetted URL may answer `302` to somewhere
+ *    private, and Chrome follows it. The fetcher does not have this hole — it
+ *    follows redirects by hand and re-runs the scheme, DNS and address checks on
+ *    every hop — but Chrome's navigation is Chrome's, so the address that was
+ *    vetted and the address that gets loaded need not be the same one. The
+ *    target's robots.txt is not re-consulted for the new URL either.
+ *
+ * Both are the same shape and both close the same way. That is an acceptable
+ * risk for a local CLI a person points at a site they
  * chose: the operator already trusts their own browser with the same URL, and
  * the audit runs on their machine, inside their own network, at their request.
  * It is **not** acceptable once stage 2 hosts this and the caller is a stranger,
- * because then the network being probed is the host's. Closing it means running
+ * because then the network being probed is the host's. Closing both means running
  * Chrome behind a proxy that classifies every request, or in a network namespace
- * with no route to anything private. Recorded on the `hosted-mcp-server` card as
- * a stage-2 precondition alongside DNS rebinding; a blocker for hosting, not for
+ * with no route to anything private — a proxy sees the redirect hop and the
+ * subresource alike, which is why one fix covers both and why neither is worth
+ * patching individually first. Recorded on the `hosted-mcp-server` card as
+ * stage-2 preconditions alongside DNS rebinding; blockers for hosting, not for
  * this slice.
  */
 
@@ -208,14 +221,44 @@ function defaultRunners(): DeepRunners {
     async axe(url, timeoutMs) {
       const { runAxe } = await import('../audit-engine.js');
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(new Error(`axe exceeded ${timeoutMs}ms`)), timeoutMs);
+      let expired = false;
+      const timer = setTimeout(() => {
+        expired = true;
+        controller.abort(new Error(`axe exceeded ${timeoutMs}ms`));
+      }, timeoutMs);
       try {
-        return (await runAxe(url, controller.signal, { userAgent: AUDIT_USER_AGENT })).violations;
+        return reportableViolations(await runAxe(url, controller.signal, { userAgent: AUDIT_USER_AGENT }));
+      } catch (err) {
+        // Our own abort, surfaced as the deadline it was, so the loop can tell a
+        // page that took too long from a browser that never started.
+        if (expired) throw new DeadlineExceededError(`axe exceeded ${Math.round(timeoutMs / 1000)}s`);
+        throw err;
       } finally {
         clearTimeout(timer);
       }
     },
   };
+}
+
+/**
+ * Which of `runAxe`'s two lists the deep tier reports: `raw`, every violation
+ * axe found.
+ *
+ * `runAxe` also returns a filtered list, and taking it — which this did first —
+ * applies `isExpectedDraftNonFinding` to a stranger's site. That filter exists
+ * for one narrow reason inside this repo: an unpublished draft of Matt's has no
+ * generated OG image yet, so its `og:image` points at a PNG that does not exist,
+ * and the `image-alt`/`meta-viewport` violations that follow are an artifact of
+ * auditing a draft rather than a defect in the post.
+ *
+ * Applied outward it is a rule that says "an `image-alt` violation whose markup
+ * mentions an OG image does not count", and somebody else's site can trip that
+ * on a real, live, broken image. Their audit would report a clean axe run while
+ * axe had found something. A filter written for one site's known non-issue must
+ * not silently edit another site's findings.
+ */
+export function reportableViolations(result: { violations: AxeViolation[]; raw: AxeViolation[] }): AxeViolation[] {
+  return result.raw;
 }
 
 /** The versions quoted in evidence. Read from the installed packages, not guessed. */
@@ -226,6 +269,22 @@ function toolVersions(): { axe: string } {
     return { axe: pkg.version ?? 'unknown version' };
   } catch {
     return { axe: 'unknown version' };
+  }
+}
+
+/**
+ * A tool run that was still going when its slice of the budget ran out.
+ *
+ * Distinct from every other failure on purpose: "this page took too long" and
+ * "no browser started" look identical in a stack trace and mean opposite things
+ * about what to do next. One is a fact about the page, and the next page may be
+ * fine; the other is a fact about this machine, and every remaining page will
+ * fail the same way.
+ */
+export class DeadlineExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DeadlineExceededError';
   }
 }
 
@@ -244,7 +303,10 @@ async function withDeadline<T>(work: Promise<T>, ms: number, what: string): Prom
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${what} exceeded ${Math.round(ms / 1000)}s`)), ms);
+        timer = setTimeout(
+          () => reject(new DeadlineExceededError(`${what} exceeded ${Math.round(ms / 1000)}s`)),
+          ms,
+        );
       }),
     ]);
   } finally {
@@ -263,6 +325,8 @@ interface PageResult {
   lighthouseError: string | null;
   violations: AxeViolation[] | null;
   axeError: string | null;
+  /** True when both tools failed and both failures were this page running out of time. */
+  timedOut: boolean;
 }
 
 /** A page that was never rendered, and why. */
@@ -340,9 +404,10 @@ export async function runDeepChecks(ctx: DeepContext, opts: DeepOptions = {}): P
       skipped.push({ url, reason: robots, robots: true });
       continue;
     }
-    // The top-level URL goes through the same resolve-and-classify path the
-    // fetcher uses, because Chrome is about to navigate to it on its own. The
-    // subresources it then pulls in are the documented gap — see the docblock.
+    // The URL goes through the same resolve-and-classify path the fetcher uses,
+    // because Chrome is about to navigate to it on its own. What Chrome does
+    // after that — following a redirect, fetching the page's subresources — is
+    // the documented gap; see the docblock.
     try {
       await assertConnectableUrl(url, ctx.policy);
     } catch (err) {
@@ -357,34 +422,61 @@ export async function runDeepChecks(ctx: DeepContext, opts: DeepOptions = {}): P
     // Both tools share the page's slice, and the slice never outlives the audit.
     const slice = Math.min(pageTimeoutMs, ctx.remainingMs());
 
-    const page: PageResult = { url, lhr: null, lighthouseError: null, violations: null, axeError: null };
+    const page: PageResult = {
+      url,
+      lhr: null,
+      lighthouseError: null,
+      violations: null,
+      axeError: null,
+      timedOut: false,
+    };
+    let axeExpired = false;
+    let lighthouseExpired = false;
     const started = Date.now();
     try {
       page.violations = await withDeadline(runners.axe(url, slice), slice, 'axe');
     } catch (err) {
       page.axeError = err instanceof Error ? err.message : String(err);
+      axeExpired = err instanceof DeadlineExceededError;
     }
     const left = Math.max(0, slice - (Date.now() - started));
     if (left <= 0) {
       page.lighthouseError = 'no time left in this page\'s slice of the budget after axe';
+      lighthouseExpired = true;
     } else {
       try {
         page.lhr = await withDeadline(runners.lighthouse(url, left), left, 'Lighthouse');
       } catch (err) {
         page.lighthouseError = err instanceof Error ? err.message : String(err);
+        lighthouseExpired = err instanceof DeadlineExceededError;
       }
     }
+    const producedNothing = !page.lhr && page.violations === null;
+    page.timedOut = producedNothing && axeExpired && lighthouseExpired;
     results.push(page);
 
     // A browser that will not start fails identically on every page, so trying
     // the other two spends the budget to learn the same thing three times.
-    if (results.length === 1 && !page.lhr && page.violations === null) {
+    //
+    // A page that merely ran out of its slice is the opposite case and is not
+    // grounds to stop: the slice is bounded, the next page gets its own, and one
+    // pathological page says nothing about the next one. Conflating the two —
+    // which this did first — reported "the browser did not produce a result"
+    // about a browser that was working fine.
+    if (results.length === 1 && producedNothing && !page.timedOut) {
       browserFailure = page.lighthouseError ?? page.axeError ?? 'the browser produced no result';
       notes.push(
         `Deep tier: neither tool produced a result for the first sampled page (${excerpt(browserFailure, 160)}), ` +
           'so the remaining pages were not attempted. The fast-tier checks above are unaffected.',
       );
       break;
+    }
+    if (page.timedOut) {
+      notes.push(
+        `Deep tier: ${url} did not finish rendering inside its ${Math.round(slice / 1000)}s slice of ` +
+          'the budget. That is a fact about this page, not about the browser, so the remaining ' +
+          'pages were still attempted.',
+      );
     }
   }
 
@@ -445,6 +537,20 @@ function noVerdict(
   ]);
 }
 
+/**
+ * The "nothing was measured" line, worded from what actually happened.
+ *
+ * Every rendered page timing out and the tool dying on every page are both "no
+ * result", and a reader deciding whether to re-run with a longer budget or to go
+ * and fix their machine needs to be told which one it was.
+ */
+function nothingMeasured(results: PageResult[], tool: string): string {
+  if (results.length > 0 && results.every((r) => r.timedOut)) {
+    return `not measured — every rendered page ran out of its slice of the time budget before ${tool} finished`;
+  }
+  return `not measured — ${tool} produced no result for any rendered page`;
+}
+
 function axisCheck(
   axis: AxisSpec,
   results: PageResult[],
@@ -464,7 +570,7 @@ function axisCheck(
   const failedToRun = results.filter((r) => !r.lhr);
   if (scored.length === 0) {
     return noVerdict(spec, skipped, browserFailure, sampled, {
-      observed: 'not measured — Lighthouse produced no result for any rendered page',
+      observed: nothingMeasured(results, 'Lighthouse'),
       evidence: failedToRun.map((r) => ({
         url: r.url,
         note: r.lighthouseError ?? 'Lighthouse produced no result',
@@ -565,7 +671,7 @@ function axeCheck(
   const ran = results.filter((r) => r.violations !== null);
   if (ran.length === 0) {
     return noVerdict(AXE_CHECK, skipped, browserFailure, sampled, {
-      observed: 'not measured — axe produced no result for any rendered page',
+      observed: nothingMeasured(results, 'axe'),
       evidence: results.map((r) => ({ url: r.url, note: r.axeError ?? 'axe produced no result' })),
     });
   }

@@ -3,11 +3,16 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { runAudit, samplePages } from '../../src/lib/agent-audit/checks.js';
-import { runDeepChecks, type DeepContext, type DeepRunners } from '../../src/lib/agent-audit/deep.js';
+import {
+  reportableViolations,
+  runDeepChecks,
+  type DeepContext,
+  type DeepRunners,
+} from '../../src/lib/agent-audit/deep.js';
 import { renderMarkdownSummary } from '../../src/lib/agent-audit/render.js';
 import { DEFAULT_POLICY } from '../../src/lib/agent-audit/safe-fetch.js';
 import type { AuditResult, CheckResult } from '../../src/lib/agent-audit/result.js';
-import type { AxeViolation, LighthouseLike } from '../../src/lib/audit-map.js';
+import { isExpectedDraftNonFinding, type AxeViolation, type LighthouseLike } from '../../src/lib/audit-map.js';
 
 /**
  * The deep tier, with the two tool invocations injected.
@@ -174,18 +179,67 @@ test('a page that never finishes rendering cannot hold the tier past its slice',
     axe: () => new Promise<AxeViolation[]>(() => {}),
   });
   const started = Date.now();
-  const { checks, renderedPages } = await runDeepChecks(context(), {
+  const { checks, notes, renderedPages } = await runDeepChecks(context(), {
     runners: tools,
     maxPages: 3,
     pageTimeoutMs: 300,
   });
   const elapsed = Date.now() - started;
 
-  assert.ok(elapsed < 5_000, `the tier took ${elapsed}ms against a 300ms page slice`);
-  assert.equal(renderedPages, 1, 'the other pages were attempted after the browser produced nothing');
+  assert.ok(elapsed < 10_000, `the tier took ${elapsed}ms against a 300ms page slice`);
+  // A page running out of time says nothing about the next page, so the rest of
+  // the sample is still attempted — each on its own bounded slice.
+  assert.equal(renderedPages, 3);
   const perf = check(checks, 'lighthouse-performance');
   assert.equal(perf.status, 'error');
-  assert.match(perf.observed, /the browser did not produce a result/);
+  assert.match(perf.observed, /ran out of its slice of the time budget/);
+  assert.doesNotMatch(perf.observed, /the browser did not produce a result/);
+  assert.ok(notes.some((n) => /did not finish rendering inside its/.test(n)), notes.join(' | '));
+});
+
+test('a timeout on the first page is not reported as the browser failing', async () => {
+  // The two states look identical in a stack trace and mean opposite things: one
+  // is a fact about the page, the other is a fact about the machine. A reader
+  // deciding between "re-run with a longer budget" and "go and fix Chrome" is
+  // reading this line.
+  const slow = { url: 'https://example.test/' };
+  const tools = runners({
+    lighthouse: (url) =>
+      url === slow.url ? new Promise<LighthouseLike>(() => {}) : Promise.resolve(GOOD),
+    axe: (url) => (url === slow.url ? new Promise<AxeViolation[]>(() => {}) : Promise.resolve([])),
+  });
+  const { checks } = await runDeepChecks(context(), { runners: tools, maxPages: 2, pageTimeoutMs: 300 });
+
+  // The second page rendered fine, so there is a real score to report.
+  const perf = check(checks, 'lighthouse-performance');
+  assert.equal(perf.status, 'pass');
+  assert.match(perf.observed, /on all 1 rendered page\(s\): \/writing\/hello\//);
+  // The page that ran out of time is still in the evidence, with what happened
+  // to it, so a pass over one page is not read as a pass over two.
+  const timedOut = perf.evidence.find((e) => e.url === slow.url);
+  assert.ok(timedOut, 'the timed-out page is missing from the evidence');
+  assert.match(timedOut.note ?? '', /exceeded|no time left/);
+});
+
+test('axe findings are reported unfiltered — the draft-OG filter is this repo\'s, not a stranger\'s', () => {
+  // `runAxe` returns both lists, and taking the filtered one applies
+  // `isExpectedDraftNonFinding` — written for an unpublished draft of this
+  // site's, whose OG image does not exist yet — to somebody else's live page.
+  // Their broken image would be quietly dropped and their audit would report a
+  // clean axe run.
+  const ogImageViolation: AxeViolation = {
+    id: 'image-alt',
+    impact: 'critical',
+    nodes: [{ html: '<img src="/og/writing/hello.png">' }],
+  };
+  assert.ok(isExpectedDraftNonFinding(ogImageViolation), 'the fixture no longer trips the filter');
+
+  const fromRunAxe = {
+    raw: [ogImageViolation],
+    violations: [ogImageViolation].filter((v) => !isExpectedDraftNonFinding(v)),
+  };
+  assert.equal(fromRunAxe.violations.length, 0, 'the filtered list is what the bug reported');
+  assert.deepEqual(reportableViolations(fromRunAxe), [ogImageViolation]);
 });
 
 test('a budget too small to buy a page skips it and says so', async () => {
