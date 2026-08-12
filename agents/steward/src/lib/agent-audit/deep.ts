@@ -1,5 +1,10 @@
 import { createRequire } from 'node:module';
-import { assertConnectableUrl, BlockedTargetError, type FetchPolicy } from './safe-fetch.js';
+import {
+  assertConnectableUrl,
+  AUDIT_USER_AGENT,
+  BlockedTargetError,
+  type FetchPolicy,
+} from './safe-fetch.js';
 import {
   excerpt,
   type CheckCategory,
@@ -22,6 +27,16 @@ import type { AxeViolation, LighthouseLike } from '../audit-map.js';
  * site to a floor of 100 because it is this site, and holding a stranger's site
  * to that would report every site on the internet as failing. Lighthouse's own
  * published boundary for "good", 90, is the floor here.
+ *
+ * ## One identity across three clients
+ *
+ * Both browsers send `AUDIT_USER_AGENT`, the same string the fast tier's fetcher
+ * sends. Three different HTTP clients make the requests of one audit, and from
+ * the audited site's logs they are one visitor: a person looking at their access
+ * log sees a single product token, and the `steward-audit-url` robots.txt token
+ * that refuses the fast tier refuses the rendered pages too. An auditor that
+ * arrived under Chrome's own UA for the expensive half would be unattributable
+ * for exactly the requests that cost the site the most.
  *
  * ## The subresource gap in the SSRF guard
  *
@@ -173,14 +188,29 @@ function defaultRunners(): DeepRunners {
       // `maxWaitForLoad` is Lighthouse's own give-up timer. It is what keeps a
       // page that never finishes loading from holding the run open: the outer
       // race below reports the timeout, but only this stops Chrome waiting.
-      return runLighthouse(url, new AbortController().signal, { maxWaitForLoad: timeoutMs });
+      //
+      // The identity goes on twice, because Lighthouse sends requests from two
+      // places: `emulatedUserAgent` for the page it renders, and the launch flag
+      // for the fetches its own gatherers make (robots.txt and llms.txt, for the
+      // SEO and agentic-browsing audits). Setting only the first left those two
+      // arriving as `HeadlessChrome`, which was found by pointing this at a
+      // server that logged what it was asked by whom.
+      //
+      // It costs something real — a site that serves a different page to a
+      // non-browser UA is measured on that page — and that is the right trade
+      // here. An agent arriving at the site gets the same treatment, so the page
+      // the auditor is shown is the page the audit is about.
+      return runLighthouse(url, new AbortController().signal, {
+        flags: { maxWaitForLoad: timeoutMs, emulatedUserAgent: AUDIT_USER_AGENT },
+        chromeFlags: [`--user-agent=${AUDIT_USER_AGENT}`],
+      });
     },
     async axe(url, timeoutMs) {
       const { runAxe } = await import('../audit-engine.js');
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(new Error(`axe exceeded ${timeoutMs}ms`)), timeoutMs);
       try {
-        return (await runAxe(url, controller.signal)).violations;
+        return (await runAxe(url, controller.signal, { userAgent: AUDIT_USER_AGENT })).violations;
       } finally {
         clearTimeout(timer);
       }

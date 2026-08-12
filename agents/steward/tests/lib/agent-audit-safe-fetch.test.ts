@@ -4,6 +4,7 @@ import http from 'node:http';
 import dns from 'node:dns/promises';
 import type { AddressInfo } from 'node:net';
 import {
+  AUDIT_USER_AGENT,
   BlockedTargetError,
   BudgetExhaustedError,
   SafeFetcher,
@@ -274,4 +275,14 @@ test('the auditor identifies itself', async (t) => {
   await new SafeFetcher(testPolicy()).fetch(`${mock.origin}/`);
   assert.match(seen, /^steward-audit-url\//);
   assert.match(seen, /https:\/\/www\.mattpyle\.com\/agents\.md/);
+  assert.equal(seen, AUDIT_USER_AGENT);
+});
+
+test('the User-Agent survives being passed to Chrome as a flag', () => {
+  // The deep tier sends the same identity from Lighthouse's browser and axe's,
+  // and `@axe-core/cli` takes its Chrome flags as one `--chrome-options` value
+  // split on `[,;]`. A comma or a semicolon in here — the conventional
+  // `(+url; description)` UA comment has one — reaches Chrome as two mangled
+  // flags, and the audit still finishes, so nothing else would catch it.
+  assert.doesNotMatch(AUDIT_USER_AGENT, /[,;]/);
 });
