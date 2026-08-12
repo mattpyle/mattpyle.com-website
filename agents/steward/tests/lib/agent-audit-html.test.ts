@@ -273,6 +273,40 @@ test('the document is a well-formed page a browser will not quirks-mode', () => 
   assert.ok(firstH2 > 0 && (firstH3 === -1 || firstH3 > firstH2), 'an h3 appeared before any h2');
 });
 
+test('a status or severity from a newer document renders as itself, not as "undefined"', () => {
+  // The result document is an interface: a newer auditor, or a hand-written
+  // file, can carry a value this renderer has never seen. Printing `undefined`
+  // next to a check would be the report inventing a verdict.
+  const html = renderHtmlReport(
+    fixture([
+      check({
+        id: 'future-check',
+        status: 'inconclusive' as CheckResult['status'],
+        severity: 'critical' as CheckResult['severity'],
+        observed: 'from a newer tool',
+      }),
+    ]),
+  );
+  assert.ok(!html.includes('undefined'), 'the report printed the word undefined');
+  assert.match(html, />inconclusive<\/span>/);
+});
+
+test('an unknown status or severity cannot write its own class attribute', () => {
+  const html = renderHtmlReport(
+    fixture([
+      check({
+        id: 'hostile',
+        status: 'pass" onmouseover="alert(1)' as CheckResult['status'],
+        severity: 'high" onmouseover="alert(1)' as CheckResult['severity'],
+        metric: { label: 'Performance', value: 62, unit: 'score', pages: 3 },
+      }),
+    ]),
+  );
+  assert.ok(!html.includes('onmouseover="alert'), 'a status escaped its class attribute');
+  assert.match(html, /class="pill status-unknown"/);
+  assert.match(html, /class="tile status-unknown"/);
+});
+
 test('a timestamp the document cannot parse is shown rather than dropped', () => {
   const html = renderHtmlReport(fixture([check({ id: 'a' })], { startedAt: 'some time on Tuesday' }));
   assert.match(html, /<dt>Run<\/dt><dd>some time on Tuesday<\/dd>/);

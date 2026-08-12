@@ -117,6 +117,11 @@ stylesheet, and nothing from the site it is a report about. Every value in it is
 every value is HTML-escaped on the way in and any URL that is not `http(s)` is printed as text rather
 than linked. `--html <path>` puts it somewhere specific, the way `--json` and `--out` do.
 
+`npm run check:html-report -w @mattpyle/steward` is the accessibility claim's evidence: it renders a
+fixture with every status, every severity and evidence of every shape, then runs `runAxe` over it.
+A script rather than a test, because it launches a browser and the suite has neither a browser nor a
+network in it. Pass a path to scan a real report instead.
+
 The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
 120 with `--fast`, 420 without. A deep run against this site takes about a minute.
 

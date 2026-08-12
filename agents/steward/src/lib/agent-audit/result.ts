@@ -1,9 +1,9 @@
 /**
  * The canonical result of an `audit-url` run — one JSON document that every
  * other rendering is derived from (hosted-mcp-server card, "Report format").
- * The markdown summary in `render.ts` reads this and nothing else; the HTML
- * renderer and the MCP tool in later slices will do the same, and the
- * audit-agent-readiness-skill card shares the schema.
+ * The markdown summary in `render.ts` and the HTML report in `render-html.ts`
+ * each read this and nothing else; the MCP tool in a later stage will do the
+ * same, and the audit-agent-readiness-skill card shares the schema.
  *
  * Because those consumers are not all in this repo, the shape is versioned and
  * treated as an interface rather than an internal type. `SCHEMA_VERSION` goes up

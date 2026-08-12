@@ -8,7 +8,7 @@ import {
 
 /**
  * The markdown summary — the second of the report's three renderings (the JSON
- * itself is the first; the interactive HTML file is a later slice).
+ * itself is the first; the interactive HTML file is `render-html.ts`).
  *
  * A pure function of the canonical result and nothing else. That is the point
  * of the schema: if this renderer ever needs a fact the JSON does not carry,

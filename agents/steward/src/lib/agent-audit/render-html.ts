@@ -30,7 +30,12 @@ import {
  *   somebody clicks them.
  * - **It passes an accessibility scan.** An agent-readiness report that fails
  *   axe argues against its own tool: heading order, native disclosure widgets,
- *   real table headers, and contrast that holds in both colour schemes.
+ *   real table headers, and contrast that holds in both colour schemes. That is
+ *   a claim with a command behind it — `npm run check:html-report -w
+ *   @mattpyle/steward` renders a fixture worse than any real report and runs
+ *   `runAxe` over it, the same runner the audit itself uses. It is a script
+ *   rather than a test because it launches a browser, and the Steward suite has
+ *   no browser and no network in it.
  *
  * ## Escaping
  *
@@ -46,7 +51,16 @@ import {
  * bytes that repaint a *terminal*, and `<` is not one of them.
  */
 
-const STATUS_LABEL: Record<CheckResult['status'], string> = {
+/**
+ * Every lookup in this file is `Record<string, string>` rather than a record over
+ * the union, and every one of them has a fallback.
+ *
+ * The result document is an interface, not an internal type: it can be written
+ * by a newer version of the auditor, or by hand. A `status` this file has never
+ * seen used to render the word `undefined` next to a check, which is a report
+ * lying about a verdict rather than admitting it does not know the word.
+ */
+const STATUS_LABEL: Record<string, string> = {
   pass: 'Pass',
   fail: 'Fail',
   'not-applicable': 'Not applicable',
@@ -60,11 +74,34 @@ const CATEGORY_LABEL: Record<string, string> = {
   'rendered-experience': 'Rendered experience',
 };
 
-const SEVERITY_LABEL: Record<CheckResult['severity'], string> = {
+const SEVERITY_LABEL: Record<string, string> = {
   high: 'High',
   medium: 'Medium',
   low: 'Low',
 };
+
+/** The status as a word, or the raw value escaped when it is not one we know. */
+function statusLabel(status: string): string {
+  return STATUS_LABEL[status] ?? esc(status);
+}
+
+/** The severity as a word, on the same terms. */
+function severityLabel(severity: string): string {
+  return SEVERITY_LABEL[severity] ?? esc(severity);
+}
+
+/**
+ * A value on its way into a `class` attribute, reduced to a bare CSS token.
+ *
+ * `status` and `severity` come out of the same document as everything else, so
+ * they get the same treatment `category` already gets. Escaping alone would keep
+ * a hostile value inside its quotes, but a class name has no business holding
+ * anything but a token, and an unknown status styles as no status rather than as
+ * a class of the document's choosing.
+ */
+function cssToken(value: string): string {
+  return /^[a-z][a-z0-9-]*$/.test(value) ? value : 'unknown';
+}
 
 /**
  * The one way a value gets into this document.
@@ -154,10 +191,10 @@ function metricTile(check: CheckResult, metric: CheckMetric): string {
       ? ''
       : `<p class="tile-sample">over ${metric.pages} rendered page${metric.pages === 1 ? '' : 's'}</p>`;
   return [
-    `<li class="tile status-${check.status}">`,
+    `<li class="tile status-${cssToken(check.status)}">`,
     `<p class="tile-label">${esc(metric.label)}</p>`,
     `<p class="tile-value">${esc(String(metric.value))}${outOf}</p>`,
-    `<p class="tile-status">${STATUS_LABEL[check.status]}</p>`,
+    `<p class="tile-status">${statusLabel(check.status)}</p>`,
     over,
     '</li>',
   ].join('');
@@ -196,7 +233,7 @@ function fixHtml(check: CheckResult, index: number): string {
     '<li class="fix">',
     `<h3><span class="fix-n">${index + 1}.</span> ${esc(check.title)}</h3>`,
     '<p class="fix-meta">',
-    `<span class="sev sev-${check.severity}">${SEVERITY_LABEL[check.severity]} severity</span> `,
+    `<span class="sev sev-${cssToken(check.severity)}">${severityLabel(check.severity)} severity</span> `,
     `<span class="cat">${esc(CATEGORY_LABEL[check.category] ?? check.category)}</span> `,
     `<code class="cid">${esc(check.id)}</code>`,
     '</p>',
@@ -210,7 +247,7 @@ function fixHtml(check: CheckResult, index: number): string {
 function checkRowHtml(check: CheckResult): string {
   return [
     '<tr>',
-    `<td><span class="pill status-${check.status}">${STATUS_LABEL[check.status]}</span></td>`,
+    `<td><span class="pill status-${cssToken(check.status)}">${statusLabel(check.status)}</span></td>`,
     `<td>${esc(check.title)}<br><code class="cid">${esc(check.id)}</code></td>`,
     `<td>${esc(CATEGORY_LABEL[check.category] ?? check.category)}</td>`,
     `<td>${esc(check.observed)}${evidenceHtml(check.evidence)}</td>`,
