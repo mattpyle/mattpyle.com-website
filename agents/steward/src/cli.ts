@@ -702,13 +702,14 @@ program
   )
   .option('--json <path>', 'where to write the canonical JSON result')
   .option('--out <path>', 'where to write the markdown summary')
+  .option('--html <path>', 'where to write the interactive HTML report')
   .option('--fast', 'skip the browser: HTTP checks only, in seconds')
   .option(
     '--budget <seconds>',
     `total wall-clock budget for the whole audit (default: ${FAST_BUDGET_SECONDS} with --fast, ${DEEP_BUDGET_SECONDS} without)`,
   )
   .option('--quiet', 'write the files without printing the summary')
-  .action(async (urlArg: string, opts: { json?: string; out?: string; budget?: string; fast?: boolean; quiet?: boolean }) => {
+  .action(async (urlArg: string, opts: { json?: string; out?: string; html?: string; budget?: string; fast?: boolean; quiet?: boolean }) => {
     // Lazy, like `tells`: this verb makes no Temporal connection and no API
     // call, and keeping it out of the eager import graph is what makes that a
     // property rather than a claim. The browser is one level lazier again —
@@ -716,6 +717,7 @@ program
     // `--fast` never loads Lighthouse.
     const { runAudit, normaliseTarget } = await import('./lib/agent-audit/checks.js');
     const { renderMarkdownSummary } = await import('./lib/agent-audit/render.js');
+    const { renderHtmlReport } = await import('./lib/agent-audit/render-html.js');
     const { BlockedTargetError } = await import('./lib/agent-audit/safe-fetch.js');
     const { AUDIT_OUT_DIR } = await import('./config.js');
 
@@ -747,6 +749,7 @@ program
     const stem = `${new URL(origin).host.replace(/[:.]/g, '-')}-${today}`;
     const jsonPath = path.resolve(opts.json ?? path.join(AUDIT_OUT_DIR, `${stem}.json`));
     const mdPath = path.resolve(opts.out ?? path.join(AUDIT_OUT_DIR, `${stem}.md`));
+    const htmlPath = path.resolve(opts.html ?? path.join(AUDIT_OUT_DIR, `${stem}.html`));
 
     if (!opts.quiet) {
       console.log(
@@ -767,11 +770,18 @@ program
       throw err;
     }
 
+    // Three renderings, one result. The JSON is the source of truth and the
+    // other two are pure functions of it, written from the same object in the
+    // same breath — an artifact that disagrees with its siblings is not a state
+    // this verb can reach.
     const summary = renderMarkdownSummary(audit);
+    const html = renderHtmlReport(audit);
     await fs.mkdir(path.dirname(jsonPath), { recursive: true });
     await fs.writeFile(jsonPath, `${JSON.stringify(audit, null, 2)}\n`, 'utf8');
     await fs.mkdir(path.dirname(mdPath), { recursive: true });
     await fs.writeFile(mdPath, `${summary}\n`, 'utf8');
+    await fs.mkdir(path.dirname(htmlPath), { recursive: true });
+    await fs.writeFile(htmlPath, `${html}\n`, 'utf8');
 
     if (!opts.quiet) {
       console.log('');
@@ -783,6 +793,7 @@ program
     console.log('');
     console.log(`  json:    ${jsonPath}`);
     console.log(`  summary: ${mdPath}`);
+    console.log(`  report:  ${htmlPath}`);
     console.log(
       `  ${failed === 0 ? paint('no failures', GREEN) : paint(`${failed} failing check(s)`, RED)}` +
         `${errored > 0 ? `, ${errored} the auditor could not judge` : ''}\n`,

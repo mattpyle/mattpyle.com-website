@@ -105,8 +105,17 @@ content negotiation, and the well-known discovery documents, twelve checks in ab
 requests. The deep tier renders up to three of the site's own pages and reports Lighthouse's
 per-axis scores and axe-core's violation counts across them, using the same runners the scorecard
 uses so the numbers mean the same thing. Deep runs by default; `--fast` skips it. No worker, no
-Temporal, no API key. It writes one canonical JSON result plus a markdown summary derived from it,
-and reports no composite score, only per-category counts and a ranked fix list.
+Temporal, no API key. It writes one canonical JSON result plus two
+renderings derived from it — a markdown summary for a chat window and a self-contained HTML report
+for a person — and reports no composite score, only per-category counts and a ranked fix list.
+
+The HTML report is the one to send somebody. Open the `.html` file in a browser: headline tiles for
+the rendered-experience numbers with the sample size beside each one, the per-category counts, the
+ranked fix list with every finding's evidence behind a `<details>`, and every check further down. It
+carries no script element at all and requests nothing from the network — not a font, not a
+stylesheet, and nothing from the site it is a report about. Every value in it is site-chosen text, so
+every value is HTML-escaped on the way in and any URL that is not `http(s)` is printed as text rather
+than linked. `--html <path>` puts it somewhere specific, the way `--json` and `--out` do.
 
 The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
 120 with `--fast`, 420 without. A deep run against this site takes about a minute.
