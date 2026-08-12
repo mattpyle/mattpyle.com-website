@@ -9,6 +9,7 @@ import { AI_AGENTS, isAllowed, parseRobots, type ParsedRobots } from './robots.j
 import {
   SCHEMA_VERSION,
   countByCategory,
+  evidenceHeaders,
   excerpt,
   type AuditResult,
   type CheckCategory,
@@ -152,18 +153,31 @@ class AuditContext {
   }
 }
 
-/** Evidence from a response, quoting only the headers a check reasoned about. */
-function evidenceOf(res: SafeResponse, headerNames: string[] = ['content-type']): CheckEvidence {
+/**
+ * Evidence from a response, quoting only the headers a check reasoned about.
+ *
+ * `label` names the request this line came from, for the checks that make more
+ * than one. Without it, the two evidence lines of a failed negotiation check —
+ * the plain request and the `Accept: text/markdown` one — are indistinguishable,
+ * and when both return HTML they are identical text.
+ */
+function evidenceOf(
+  res: SafeResponse,
+  headerNames: string[] = ['content-type'],
+  label?: string,
+): CheckEvidence {
   const headers: Record<string, string> = {};
   for (const name of headerNames) {
     const value = res.headers[name];
     if (value !== undefined) headers[name] = value;
   }
-  const ev: CheckEvidence = { url: res.url, status: res.status, headers };
+  const ev: CheckEvidence = { url: res.url, status: res.status, headers: evidenceHeaders(headers) };
   if (res.body) ev.excerpt = excerpt(res.body);
-  if (res.redirects.length) {
-    ev.note = `redirected via ${res.redirects.join(' → ')}`;
-  }
+  const notes = [
+    label,
+    res.redirects.length ? `redirected via ${res.redirects.join(' → ')}` : null,
+  ].filter(Boolean);
+  if (notes.length) ev.note = notes.join('; ');
   return ev;
 }
 
@@ -540,13 +554,34 @@ const LLMS_TXT: CheckSpec = {
   severity: 'medium',
 };
 
+/** A list item under a `##` heading that is not in the form the format asks for. */
+export interface OffFormatListItem {
+  /** The bullet, truncated. */
+  text: string;
+  /**
+   * Markdown links found anywhere in the bullet. Empty means prose only: there
+   * is nothing in the line for any parser to collect. Non-empty means the links
+   * are there but the bullet does not lead with one, which is a different
+   * problem with a different consequence — see `checkLlmsListItems`.
+   */
+  links: Array<{ title: string; url: string }>;
+}
+
 interface LlmsOutcome {
   check: CheckResult;
   links: Array<{ title: string; url: string }>;
-  /** List items under a section heading that are not markdown links. */
-  badListItems: string[];
+  /** List items under a section heading that are not in the canonical form. */
+  offFormatItems: OffFormatListItem[];
   /** False when there was no parseable llms.txt to form an opinion about. */
   parsed: boolean;
+}
+
+/** Every `[title](url)` in a line, wherever it sits. */
+function markdownLinksIn(line: string): Array<{ title: string; url: string }> {
+  return [...line.matchAll(/\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)].map((m) => ({
+    title: m[1].trim(),
+    url: m[2].trim(),
+  }));
 }
 
 /**
@@ -558,13 +593,13 @@ export function parseLlmsTxt(text: string): {
   summary: string | null;
   sections: string[];
   links: Array<{ title: string; url: string }>;
-  badListItems: string[];
+  offFormatItems: OffFormatListItem[];
 } {
   let title: string | null = null;
   let summary: string | null = null;
   const sections: string[] = [];
   const links: Array<{ title: string; url: string }> = [];
-  const badListItems: string[] = [];
+  const offFormatItems: OffFormatListItem[] = [];
   let inSection = false;
 
   for (const raw of text.split(/\r?\n/)) {
@@ -586,15 +621,15 @@ export function parseLlmsTxt(text: string): {
     if (inSection && /^[-*]\s/.test(line)) {
       const m = /^[-*]\s+\[([^\]]*)\]\(([^)]+)\)/.exec(line);
       if (m) links.push({ title: m[1].trim(), url: m[2].trim() });
-      else badListItems.push(line.slice(0, 120));
+      else offFormatItems.push({ text: line.slice(0, 120), links: markdownLinksIn(line) });
     }
   }
-  return { title, summary, sections, links, badListItems };
+  return { title, summary, sections, links, offFormatItems };
 }
 
 async function checkLlmsTxt(ctx: AuditContext): Promise<LlmsOutcome> {
   const outcome = await ctx.get('/llms.txt');
-  const nothing = { links: [], badListItems: [], parsed: false };
+  const nothing = { links: [], offFormatItems: [], parsed: false };
   if (outcome.kind !== 'ok') return { check: fromFailedGet(LLMS_TXT, outcome), ...nothing };
   const res = outcome.res;
   const ev = [evidenceOf(res)];
@@ -640,7 +675,7 @@ async function checkLlmsTxt(ctx: AuditContext): Promise<LlmsOutcome> {
           'a "##" heading in the form "- [Name](https://…): note".',
       ),
       links: parsed.links,
-      badListItems: parsed.badListItems,
+      offFormatItems: parsed.offFormatItems,
       parsed: true,
     };
   }
@@ -653,7 +688,7 @@ async function checkLlmsTxt(ctx: AuditContext): Promise<LlmsOutcome> {
       ev,
     ),
     links: parsed.links,
-    badListItems: parsed.badListItems,
+    offFormatItems: parsed.offFormatItems,
     parsed: true,
   };
 }
@@ -723,44 +758,90 @@ async function checkLlmsLinks(
       evidence,
     );
   }
+  // "3 of 43 link(s) return 200" reads as forty broken links. Only three were
+  // ever requested, and all three answered: the sentence has to say which number
+  // is the sample and which is the file.
   return result(
     LLMS_LINKS,
     'pass',
-    `${fetched} of ${links.length} link(s) return 200` +
-      (blockedByRobots > 0 ? `; ${blockedByRobots} not fetched, disallowed by robots.txt` : ''),
+    `all ${fetched} sampled link(s) return 200 (${links.length} link(s) in the file, ` +
+      `${sample.length} sampled)` +
+      (blockedByRobots > 0 ? `; ${blockedByRobots} of the sample was disallowed by robots.txt` : ''),
     evidence,
   );
 }
 
 const LLMS_LIST_ITEMS: CheckSpec = {
   id: 'llms-txt-list-items',
-  title: 'Every llms.txt list item is a markdown link',
+  title: 'Every llms.txt list item leads with a markdown link',
   category: 'discovery',
   severity: 'low',
 };
 
 /**
  * Separate from `llms-txt` on purpose. The format says a section's list items
- * are links to somewhere with more detail; a bullet that is only prose parses
- * as nothing, so a client reading the file structurally never sees it. That is
- * worth saying, and it is not the same kind of problem as a file that is
+ * lead with a link to somewhere with more detail, and this check is about the
+ * ones that do not. It is not the same kind of problem as a file that is
  * missing, is HTML, or has no links at all — which is why it does not fail the
  * check those share.
+ *
+ * Two different problems live under "not in the form", and the first draft of
+ * this check reported both as "invisible to a parser", which was wrong about the
+ * second. A bullet with **no link at all** really is invisible: there is nothing
+ * in the line to collect. A bullet that **contains links but does not lead with
+ * one** — stripe.com's llms.txt has one, with two links inside a prose sentence
+ * — is off-format rather than invisible, and how much of it survives depends
+ * entirely on how strict the reader is. The check says which of the two it
+ * found, and the fix copy only claims invisibility about the first.
  */
 function checkLlmsListItems(llms: LlmsOutcome): CheckResult {
   if (!llms.parsed) return result(LLMS_LIST_ITEMS, 'not-applicable', 'no llms.txt to read');
-  if (llms.badListItems.length === 0) {
-    return result(LLMS_LIST_ITEMS, 'pass', `all ${llms.links.length} list item(s) are markdown links`);
+  if (llms.offFormatItems.length === 0) {
+    return result(LLMS_LIST_ITEMS, 'pass', `all ${llms.links.length} list item(s) lead with a markdown link`);
   }
+
+  const proseOnly = llms.offFormatItems.filter((item) => item.links.length === 0);
+  const linksNotLeading = llms.offFormatItems.filter((item) => item.links.length > 0);
+  const observed = [
+    proseOnly.length > 0 ? `${proseOnly.length} list item(s) contain no link at all` : null,
+    linksNotLeading.length > 0
+      ? `${linksNotLeading.length} list item(s) carry ${linksNotLeading.reduce(
+          (n, item) => n + item.links.length,
+          0,
+        )} link(s) but do not lead with one`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('; ');
+
+  const fix = [
+    'Put a link at the front of every bullet under a "##" heading, in the form ' +
+      '"- [Name](https://…): note", which is the shape the format specifies.',
+    proseOnly.length > 0
+      ? 'A bullet with no link in it has nothing for a client to collect, so it is invisible to the ' +
+        'reader the file was written for. If the thing has no URL of its own, either link to the ' +
+        "page that describes it or move the line into the section's intro prose."
+      : null,
+    linksNotLeading.length > 0
+      ? 'A bullet whose links sit inside a sentence is not invisible — a lenient reader will still ' +
+        'find them — but which link is the item, and which is an aside, is left to the reader to ' +
+        'guess, and a strict reader that takes the leading link as the item finds none.'
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return result(
     LLMS_LIST_ITEMS,
     'fail',
-    `${llms.badListItems.length} list item(s) under a section heading are prose, not links`,
-    llms.badListItems.map((text) => ({ note: text })),
-    'Give every bullet under a "##" heading a link, in the form "- [Name](https://…): note". A ' +
-      'client parsing llms.txt collects the links and ignores everything else, so a prose-only ' +
-      'bullet is invisible to the reader the file was written for. If the thing has no URL of its ' +
-      'own, either link to the page that describes it or move the line into the section\'s intro prose.',
+    observed,
+    llms.offFormatItems.map((item) => ({
+      note:
+        item.links.length === 0
+          ? `no link: ${item.text}`
+          : `${item.links.length} link(s), none leading: ${item.text}`,
+    })),
+    fix,
   );
 }
 
@@ -974,6 +1055,32 @@ interface NegotiationOutcome {
   html: SafeResponse | null;
 }
 
+/**
+ * The headers the negotiation checks quote.
+ *
+ * `vary` is the one the check reasons about; the caching headers after it are
+ * recorded because the `Vary: Accept` finding is conditional on them. Whether a
+ * missing `Vary` actually poisons anything depends on whether a shared cache
+ * stores the response, and this audit cannot see the caches between it and the
+ * origin. What it can do is write down what the response said about being
+ * cached, so the reader can settle the question the finding leaves open.
+ * `age` and the vendor `*-cache*` headers are the ones that prove a cache *did*
+ * store it, rather than merely that it was allowed to.
+ */
+const NEGOTIATION_HEADERS = [
+  'content-type',
+  'vary',
+  'cache-control',
+  'cdn-cache-control',
+  'surrogate-control',
+  'age',
+  'cache-status',
+  'x-cache',
+  'cf-cache-status',
+  'x-vercel-cache',
+  'x-nextjs-cache',
+];
+
 async function checkNegotiation(
   spec: CheckSpec,
   ctx: AuditContext,
@@ -982,7 +1089,7 @@ async function checkNegotiation(
   const htmlOutcome = await ctx.get(pageUrl, { accept: 'text/html' });
   if (htmlOutcome.kind !== 'ok') return { check: fromFailedGet(spec, htmlOutcome), html: null };
   const html = htmlOutcome.res;
-  const htmlEv = evidenceOf(html, ['content-type', 'vary']);
+  const htmlEv = evidenceOf(html, NEGOTIATION_HEADERS, 'the plain request, Accept: text/html');
   const fix =
     'Serve the same page as markdown when the request says "Accept: text/markdown", and set ' +
     '"Vary: Accept" on both responses. An agent reading HTML spends most of its context on ' +
@@ -999,7 +1106,7 @@ async function checkNegotiation(
   const mdOutcome = await ctx.get(pageUrl, { accept: 'text/markdown' });
   if (mdOutcome.kind !== 'ok') return { check: fromFailedGet(spec, mdOutcome), html };
   const md = mdOutcome.res;
-  const mdEv = evidenceOf(md, ['content-type', 'vary']);
+  const mdEv = evidenceOf(md, NEGOTIATION_HEADERS, 'the markdown request, Accept: text/markdown');
   const evidence = [htmlEv, mdEv];
 
   if (md.status !== 200) {
@@ -1045,11 +1152,16 @@ async function checkNegotiation(
       check: result(
         spec,
         'fail',
-        `markdown was served, but the HTML response's Vary header is "${vary || '(absent)'}"`,
+        `markdown was served, but the HTML response's Vary header is "${vary || '(absent)'}", so a ` +
+          'shared cache that stores this response has no way to know the two variants exist',
         evidence,
-        'Add "Vary: Accept" to the responses. Without it a shared cache stores whichever variant it ' +
-          'saw first and serves it to everyone, so a browser can get markdown and an agent can get ' +
-          'HTML — intermittently, which is the hardest kind of bug to be told about.',
+        'Add "Vary: Accept" to both responses. Whether this is biting right now depends on whether ' +
+          'a shared cache (a CDN, a proxy) actually stores the response, which this audit cannot ' +
+          "see from outside — the response's own cache-control, age and CDN cache-status headers " +
+          'are in the evidence above, and they are what settles it. Where one does store it, the ' +
+          'cache keeps whichever variant it saw first and serves it to everyone: a browser can get ' +
+          'markdown and an agent can get HTML, intermittently, which is the hardest kind of bug to ' +
+          'be told about. Setting the header costs nothing and closes the case either way.',
       ),
       html,
     };
@@ -1087,7 +1199,7 @@ function checkLinkHeaders(homepage: SafeResponse | null): CheckResult {
       { url: homepage.url, status: homepage.status, headers: {} },
     ], fix);
   }
-  const ev = [{ url: homepage.url, status: homepage.status, headers: { link } }];
+  const ev = [{ url: homepage.url, status: homepage.status, headers: evidenceHeaders({ link }) }];
   if (!/rel\s*=\s*"?alternate"?/i.test(link)) {
     return result(
       LINK_HEADERS,

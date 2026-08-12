@@ -167,3 +167,26 @@ export function excerpt(text: string, max = 240): string {
   const flat = stripControlChars(text).replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
 }
+
+/** The bound on one header value in evidence. See `evidenceHeaders`. */
+export const HEADER_EXCERPT_MAX = 200;
+
+/**
+ * Bounds every header value on its way into evidence, the same way a response
+ * body is bounded.
+ *
+ * A header value is response text like any other, and nothing in HTTP limits how
+ * long one may be. Real runs found it: stripe.com and temporal.io both answer
+ * with a preload `Link` header of about six kilobytes, and quoting it verbatim
+ * put the whole thing in the JSON and then in the markdown summary, where it
+ * buried the finding it was evidence for. `excerpt` also strips the control
+ * characters, which matters more here than in a body: a header value reaches the
+ * terminal with less between it and the screen.
+ */
+export function evidenceHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    out[name.toLowerCase()] = excerpt(value, HEADER_EXCERPT_MAX);
+  }
+  return out;
+}
