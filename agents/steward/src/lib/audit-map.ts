@@ -84,6 +84,8 @@ export function axeFindings(violations: AxeViolation[], file: string, url: strin
 // --- Lighthouse ------------------------------------------------------------
 
 export interface LighthouseLike {
+  /** The version string Lighthouse stamps on its own result; quoted as evidence. */
+  lighthouseVersion?: string;
   categories?: Record<
     string,
     { title?: string; score?: number | null; auditRefs?: Array<{ id: string; weight?: number }> }

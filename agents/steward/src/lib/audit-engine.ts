@@ -95,7 +95,11 @@ export async function runAxe(
  * cancellable mid-run; cancellation was, and remains, cooperative via the
  * caller's own heartbeat/cleanup.
  */
-export async function runLighthouse(url: string, _signal: AbortSignal): Promise<LighthouseLike> {
+export async function runLighthouse(
+  url: string,
+  _signal: AbortSignal,
+  flags: Record<string, unknown> = {},
+): Promise<LighthouseLike> {
   const { launch } = await import('chrome-launcher');
   const userDataDir = path.join(CACHE_DIR, tempRunName('chrome'));
   await fs.mkdir(userDataDir, { recursive: true });
@@ -109,6 +113,11 @@ export async function runLighthouse(url: string, _signal: AbortSignal): Promise<
       port: launched.port,
       output: 'json',
       logLevel: 'error',
+      // Callers auditing a site they do not control pass `maxWaitForLoad` here,
+      // so a page that never finishes loading is Lighthouse's problem rather
+      // than the caller's deadline. Empty for the two in-repo callers, whose
+      // target is a local server they just started.
+      ...flags,
     });
     return (runnerResult?.lhr ?? {}) as LighthouseLike;
   } finally {

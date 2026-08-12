@@ -6,6 +6,7 @@ import {
   type SafeResponse,
 } from './safe-fetch.js';
 import { AI_AGENTS, isAllowed, parseRobots, type ParsedRobots } from './robots.js';
+import type { DeepOptions } from './deep.js';
 import {
   SCHEMA_VERSION,
   countByCategory,
@@ -111,27 +112,34 @@ class AuditContext {
    * will work either (the budget is spent), so the run can stop early instead of
    * grinding through a dozen identical failures.
    */
+  /**
+   * `null` when this auditor may fetch `url`, and the deciding rule when it may
+   * not — the robots.txt of the host being asked for, not of the audited site.
+   *
+   * Public because the deep tier needs the same verdict about a page it is about
+   * to hand to Chrome rather than fetch: robots.txt governs what the auditor
+   * looks at, not which library does the looking.
+   */
+  async robotsDetail(url: string): Promise<string | null> {
+    const target = new URL(url);
+    const robots =
+      target.origin === this.origin ? this.robots : await this.robotsFor(target.origin);
+    if (!robots) return null;
+    const verdict = isAllowed(robots, AUDIT_AGENT_TOKEN, `${target.pathname}${target.search}`);
+    if (verdict.allowed) return null;
+    const rule = verdict.rule;
+    const whose = target.origin === this.origin ? 'robots.txt' : `${target.origin}/robots.txt`;
+    return rule
+      ? `${whose}: "Disallow: ${rule.path}" under User-agent: ${rule.agents.join(', ')}`
+      : `${whose} disallows it`;
+  }
+
   async get(pathOrUrl: string, headers?: Record<string, string>): Promise<GetOutcome> {
     const url = this.url(pathOrUrl);
     if (this.aborted) return { kind: 'error', url, message: this.aborted, fatal: true };
 
-    const target = new URL(url);
-    const robots =
-      target.origin === this.origin ? this.robots : await this.robotsFor(target.origin);
-    if (robots) {
-      const verdict = isAllowed(robots, AUDIT_AGENT_TOKEN, `${target.pathname}${target.search}`);
-      if (!verdict.allowed) {
-        const rule = verdict.rule;
-        const whose = target.origin === this.origin ? 'robots.txt' : `${target.origin}/robots.txt`;
-        return {
-          kind: 'robots',
-          url,
-          detail: rule
-            ? `${whose}: "Disallow: ${rule.path}" under User-agent: ${rule.agents.join(', ')}`
-            : `${whose} disallows it`,
-        };
-      }
-    }
+    const detail = await this.robotsDetail(url);
+    if (detail) return { kind: 'robots', url, detail };
 
     try {
       return { kind: 'ok', res: await this.fetcher.fetch(url, { headers }) };
@@ -1217,6 +1225,37 @@ function checkLinkHeaders(homepage: SafeResponse | null): CheckResult {
 // ---------------------------------------------------------------------------
 
 /**
+ * The pages the deep tier may render: the homepage, then the site's own content
+ * pages in the order its sitemap lists them.
+ *
+ * Homepage first because it is the one page every site has and the one an agent
+ * arrives at; the rest come from the sitemap for the same reason the negotiation
+ * check does — an arbitrary site has no path this tool may assume exists. Only
+ * this origin, only distinct URLs, and no query strings, which are usually the
+ * same page in a different order. The cap is `deep.ts`'s to apply and to report:
+ * this returns everything eligible so the count can be said out loud.
+ */
+export function samplePages(origin: string, sitemapUrls: string[]): string[] {
+  const pages = [`${origin}/`];
+  const seen = new Set(pages);
+  for (const raw of sitemapUrls) {
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      continue;
+    }
+    if (url.origin !== origin || url.search) continue;
+    if (url.pathname.replace(/\/+$/, '') === '') continue;
+    const href = url.href;
+    if (seen.has(href)) continue;
+    seen.add(href);
+    pages.push(href);
+  }
+  return pages;
+}
+
+/**
  * Normalises what a human typed into the origin everything is fetched relative
  * to. A bare hostname gets https, and any path is dropped: the unit audited is
  * a site, not a page.
@@ -1232,16 +1271,32 @@ export interface RunAuditOptions {
   policy?: Partial<FetchPolicy>;
   /** Injected so a test can produce a byte-stable result document. */
   now?: () => Date;
+  /**
+   * The deep tier: Chrome, Lighthouse and axe over a sample of the site's pages.
+   * `false` is `--fast`. Omitted means on, with its own defaults.
+   */
+  deep?: false | DeepOptions;
 }
 
 /**
- * Runs the fast tier against one site and returns the canonical result.
+ * Runs the fast tier only — no browser, no Chrome, seconds rather than minutes.
+ *
+ * Kept as its own export because "this verb makes no browser launch" is a
+ * property callers rely on, and a boolean buried in an options object is a
+ * weaker way to say it.
+ */
+export function runFastAudit(input: string, opts: Omit<RunAuditOptions, 'deep'> = {}): Promise<AuditResult> {
+  return runAudit(input, { ...opts, deep: false });
+}
+
+/**
+ * Runs both tiers against one site and returns the canonical result.
  *
  * Throws only for a target that cannot be audited at all — an unparseable URL,
  * or an address the guard refuses. Everything a site does or fails to do comes
- * back as a check.
+ * back as a check, and so does everything the auditor could not do about it.
  */
-export async function runFastAudit(input: string, opts: RunAuditOptions = {}): Promise<AuditResult> {
+export async function runAudit(input: string, opts: RunAuditOptions = {}): Promise<AuditResult> {
   const now = opts.now ?? (() => new Date());
   const { origin } = normaliseTarget(input);
   const started = now();
@@ -1292,6 +1347,28 @@ export async function runFastAudit(input: string, opts: RunAuditOptions = {}): P
   // than spending another request on the same URL.
   checks.push(checkLinkHeaders(home.html));
 
+  let browserPages: number | undefined;
+  if (opts.deep === false) {
+    ctx.notes.push(
+      'Run with --fast: the rendered-experience checks (Lighthouse, axe) were skipped, so that ' +
+        'category is empty rather than clean.',
+    );
+  } else {
+    const { runDeepChecks } = await import('./deep.js');
+    const deep = await runDeepChecks(
+      {
+        candidates: samplePages(origin, sitemap.urls),
+        remainingMs: () => fetcher.remainingMs(),
+        policy: fetcher.policy,
+        robotsDetail: (url) => ctx.robotsDetail(url),
+      },
+      opts.deep ?? {},
+    );
+    checks.push(...deep.checks);
+    ctx.notes.push(...deep.notes);
+    browserPages = deep.renderedPages;
+  }
+
   const finished = now();
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -1301,6 +1378,7 @@ export async function runFastAudit(input: string, opts: RunAuditOptions = {}): P
     finishedAt: finished.toISOString(),
     durationMs: finished.getTime() - started.getTime(),
     requests: fetcher.requests,
+    ...(browserPages === undefined ? {} : { browserPages }),
     categories: countByCategory(checks),
     checks,
     notes: ctx.notes,

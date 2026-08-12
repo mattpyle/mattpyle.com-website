@@ -40,6 +40,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   crawlability: 'Crawlability',
   discovery: 'Discovery',
   'content-access': 'Content access',
+  'rendered-experience': 'Rendered experience',
 };
 
 /** Anything interpolated into the output passes through here. See the docblock. */
@@ -76,7 +77,11 @@ export function renderMarkdownSummary(audit: AuditResult): string {
     `- **Tool:** ${safe(audit.tool.name)} ${safe(audit.tool.version)}, result schema v${audit.schemaVersion}`,
   );
   out.push(
-    `- **Cost:** ${audit.requests} HTTP request(s) in ${(audit.durationMs / 1000).toFixed(1)}s`,
+    `- **Cost:** ${audit.requests} HTTP request(s)` +
+      (audit.browserPages === undefined
+        ? ''
+        : ` and ${audit.browserPages} page(s) rendered in a browser, whose own requests are not counted here`) +
+      ` in ${(audit.durationMs / 1000).toFixed(1)}s`,
   );
   out.push('');
 

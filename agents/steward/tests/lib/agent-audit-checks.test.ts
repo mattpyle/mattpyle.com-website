@@ -277,10 +277,11 @@ test('a fully agent-ready site passes every check', async (t) => {
     failed.map((c) => `${c.id}: ${c.observed}`),
     [],
   );
-  assert.equal(result.schemaVersion, 1);
+  assert.equal(result.schemaVersion, 2);
   assert.ok(result.requests > 0);
-  // Per-category counts, no composite score anywhere in the document.
-  assert.equal(result.categories.length, 3);
+  // Per-category counts, no composite score anywhere in the document. The
+  // fourth category is the deep tier's, empty on a fast-only run.
+  assert.equal(result.categories.length, 4);
   assert.ok(!('score' in result));
 });
 

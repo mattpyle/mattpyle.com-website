@@ -96,13 +96,20 @@ study (spec §9.2) — the citations did not.
 
 ```bash
 steward audit-url example.com                  # agent-readiness checks against any site
+steward audit-url example.com --fast           # HTTP checks only: no browser, seconds not minutes
 ```
 
-`audit-url` points the agent-surface half of the scorecard methodology at a site that is not this
-one: robots.txt, sitemap, llms.txt, agents.md, markdown content negotiation, and the well-known
-discovery documents, twelve checks in about a dozen HTTP requests. No worker, no Temporal, no
-Chrome, no API key. It writes one canonical JSON result plus a markdown summary derived from it, and
-reports no composite score, only per-category counts and a ranked fix list.
+`audit-url` points the scorecard methodology at a site that is not this one, in two tiers. The fast
+tier is the agent surfaces over plain HTTP: robots.txt, sitemap, llms.txt, agents.md, markdown
+content negotiation, and the well-known discovery documents, twelve checks in about a dozen
+requests. The deep tier renders up to three of the site's own pages and reports Lighthouse's
+per-axis scores and axe-core's violation counts across them, using the same runners the scorecard
+uses so the numbers mean the same thing. Deep runs by default; `--fast` skips it. No worker, no
+Temporal, no API key. It writes one canonical JSON result plus a markdown summary derived from it,
+and reports no composite score, only per-category counts and a ranked fix list.
+
+The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
+120 with `--fast`, 420 without. A deep run against this site takes about a minute.
 
 Two properties it is built around, both of which matter more than the checks themselves. It
 **verifies behaviour rather than presence**: a 200 from `/llms.txt` that is really the site's HTML
@@ -112,8 +119,12 @@ classified before a socket opens, and again on each redirect hop, allowing only 
 unicast addresses, with no flag to turn that off. One caveat, stated in `safe-fetch.ts` rather than
 only here: the name is resolved again by Node when it connects, so a hostile resolver answering
 differently the second time (DNS rebinding) is not covered, and closing that needs the connection
-pinned to the vetted address. It also obeys the target's robots.txt, because an agent-readiness
-auditor that ignores robots fails its own audit.
+pinned to the vetted address. A second caveat arrives with the deep tier and is stated in `deep.ts`:
+the page Chrome is sent to goes through the same address check first, but the subresources that page
+then pulls in are requested by Chrome, which consulted nothing. Both gaps are recorded on the
+`hosted-mcp-server` card as things to close before stage 2 hosts this. It also obeys the target's
+robots.txt — including for the pages the deep tier renders — because an agent-readiness auditor that
+ignores robots fails its own audit.
 
 > [!TIP]
 > Run any command with `npx tsx src/cli.ts <args>` instead of the `steward` shim if something fails

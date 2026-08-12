@@ -106,6 +106,24 @@ export interface SafeFetchInit {
   headers?: Record<string, string>;
 }
 
+/**
+ * Runs the address guard over a URL string, for a caller that is about to
+ * connect to it by some route other than this fetcher.
+ *
+ * The deep tier is that caller: Chrome navigates on its own, so the vetting the
+ * fetcher would have done has to be done explicitly first. Throws
+ * `BlockedTargetError` exactly as `fetch` would.
+ */
+export async function assertConnectableUrl(rawUrl: string, policy: FetchPolicy): Promise<void> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new BlockedTargetError(rawUrl, 'not a valid absolute URL');
+  }
+  await assertConnectable(url, policy);
+}
+
 /** Checks the scheme and resolves + classifies every address behind a URL. */
 async function assertConnectable(url: URL, policy: FetchPolicy): Promise<void> {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
