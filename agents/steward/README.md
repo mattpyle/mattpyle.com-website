@@ -126,6 +126,12 @@ then pulls in are requested by Chrome, which consulted nothing. Both gaps are re
 robots.txt — including for the pages the deep tier renders — because an agent-readiness auditor that
 ignores robots fails its own audit.
 
+**One identity across three clients.** The fetcher, Lighthouse's Chrome and axe's all send
+`AUDIT_USER_AGENT`, so an audit is one visitor in the target's access log and the one robots.txt
+token refuses all of it. The User-Agent points at `/agents.md`, which explains the auditor and how to
+refuse it. It must stay free of commas and semicolons: `@axe-core/cli` splits its `--chrome-options`
+value on both.
+
 > [!TIP]
 > Run any command with `npx tsx src/cli.ts <args>` instead of the `steward` shim if something fails
 > silently — the shim's process wrapping can swallow the CLI's own error output.
