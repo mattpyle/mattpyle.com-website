@@ -123,6 +123,25 @@ test('the headline is the measured numbers, each with the sample it covers', () 
   assert.match(html, /class="tile status-pass"/);
 });
 
+test('a check that carries a number and still failed to reach a verdict gets an error tile', () => {
+  // The third tile state. `deep.ts` does not emit this combination today — a
+  // tier that reached no verdict attaches no metric — but the renderer styles it
+  // and the schema allows it, so the axe fixture renders one too.
+  const html = renderHtmlReport(
+    fixture([
+      check({
+        id: 'lighthouse-best-practices',
+        category: 'rendered-experience',
+        status: 'error',
+        metric: { label: 'Best practices', value: 88, unit: 'score', pages: 1 },
+      }),
+    ]),
+  );
+  assert.match(html, /<li class="tile status-error">/);
+  assert.match(html, /<p class="tile-status">Not judged<\/p>/);
+  assert.match(html, /over 1 rendered page</);
+});
+
 test('a fast-only run renders without a headline section rather than with an empty one', () => {
   const html = renderHtmlReport(fixture([check({ id: 'llms-txt' })]));
   assert.ok(!html.includes('The numbers'), 'a headline section was rendered with nothing to put in it');
@@ -292,19 +311,31 @@ test('a status or severity from a newer document renders as itself, not as "unde
 });
 
 test('an unknown status or severity cannot write its own class attribute', () => {
+  // Two checks, because one cannot exercise both paths: `rankedFixes` selects on
+  // `status === 'fail'` exactly, so a check with a hostile status never reaches
+  // the fix list, and the `sev-` class is only written there.
   const html = renderHtmlReport(
     fixture([
       check({
-        id: 'hostile',
+        id: 'hostile-status',
         status: 'pass" onmouseover="alert(1)' as CheckResult['status'],
-        severity: 'high" onmouseover="alert(1)' as CheckResult['severity'],
         metric: { label: 'Performance', value: 62, unit: 'score', pages: 3 },
+      }),
+      check({
+        id: 'hostile-severity',
+        status: 'fail',
+        severity: 'high" onmouseover="alert(2)' as CheckResult['severity'],
+        fix: 'do the thing',
       }),
     ]),
   );
-  assert.ok(!html.includes('onmouseover="alert'), 'a status escaped its class attribute');
+  assert.ok(!html.includes('onmouseover="alert'), 'a status or severity escaped its class attribute');
   assert.match(html, /class="pill status-unknown"/);
   assert.match(html, /class="tile status-unknown"/);
+  // The severity path really rendered, rather than being skipped along with the
+  // fix list — assert the class it wrote and the label it fell back to.
+  assert.match(html, /class="sev sev-unknown"/);
+  assert.match(html, /high&quot; onmouseover=&quot;alert\(2\) severity/);
 });
 
 test('a timestamp the document cannot parse is shown rather than dropped', () => {

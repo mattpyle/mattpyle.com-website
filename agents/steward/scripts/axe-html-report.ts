@@ -135,6 +135,24 @@ const CHECKS: CheckResult[] = [
     observed: 'not measured — the browser did not produce a result: connect ECONNREFUSED 127.0.0.1:9222',
     evidence: [{ note: 'connect ECONNREFUSED 127.0.0.1:9222' }],
   },
+  // An error that still carries a number, which puts the third tile state on the
+  // page. `deep.ts` does not emit this combination — a tier that reached no
+  // verdict attaches no metric — but the renderer styles `status-error` on a
+  // tile, and a state nothing renders is a state nothing scans. The schema
+  // allows it, so a newer check may yet produce it.
+  {
+    id: 'lighthouse-best-practices',
+    title: 'Lighthouse best-practices clears 90 on the sampled pages',
+    category: 'rendered-experience',
+    severity: 'low',
+    status: 'error',
+    observed: 'one page scored 88 and the other two ran out of their slice of the time budget',
+    metric: { label: 'Best practices', value: 88, unit: 'score', pages: 1 },
+    evidence: [
+      { url: 'https://example.com/', note: 'Lighthouse 13.4.1: best-practices 88' },
+      { url: 'https://example.com/about/', note: 'ran out of its slice of the time budget' },
+    ],
+  },
   {
     id: 'axe-violations',
     title: 'axe-core finds no accessibility violations on the sampled pages',

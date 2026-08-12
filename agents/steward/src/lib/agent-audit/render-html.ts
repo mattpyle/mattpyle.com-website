@@ -263,8 +263,10 @@ function checkRowHtml(check: CheckResult): string {
  * are the generic families every platform already has.
  *
  * Both colour schemes are defined, and every foreground/background pair in both
- * clears WCAG AA for its size — the report is scanned by axe as part of the
- * build that produced it.
+ * clears WCAG AA for its size. `npm run check:html-report -w @mattpyle/steward`
+ * scans a rendered fixture with axe, and the axe job in `.github/workflows/
+ * a11y.yml` runs that command on every pull request, so a contrast regression
+ * here fails a check rather than waiting for somebody to look.
  */
 const STYLE = `
 :root {
