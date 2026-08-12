@@ -1,9 +1,9 @@
 /**
  * The canonical result of an `audit-url` run — one JSON document that every
  * other rendering is derived from (hosted-mcp-server card, "Report format").
- * The markdown summary in `render.ts` reads this and nothing else; the HTML
- * renderer and the MCP tool in later slices will do the same, and the
- * audit-agent-readiness-skill card shares the schema.
+ * The markdown summary in `render.ts` and the HTML report in `render-html.ts`
+ * each read this and nothing else; the MCP tool in a later stage will do the
+ * same, and the audit-agent-readiness-skill card shares the schema.
  *
  * Because those consumers are not all in this repo, the shape is versioned and
  * treated as an interface rather than an internal type. `SCHEMA_VERSION` goes up
@@ -74,6 +74,39 @@ export interface CheckEvidence {
   note?: string;
 }
 
+/**
+ * The one number a check is about, when it has one.
+ *
+ * Exists because the HTML report leads with the rendered-experience numbers, and
+ * a renderer that had to recover `96` by regex out of an `observed` sentence
+ * would be reading prose as data — the failure mode `render.ts`'s docblock names.
+ * The number is in the document, so the headline is a lookup.
+ *
+ * Optional and additive: a check without a measurable number omits it, and a
+ * consumer that has never heard of it reads the document exactly as before,
+ * which is why this did not move `SCHEMA_VERSION`.
+ */
+export interface CheckMetric {
+  /** Two or three words, for a headline tile: "Performance", "axe violations". */
+  label: string;
+  /** The number, already rounded to what should be displayed. */
+  value: number;
+  /**
+   * What the number is. `score` is 0–100 and higher is better; `count` is a
+   * tally of findings, where zero is the good end. A renderer needs the
+   * direction before it can say anything about the number.
+   */
+  unit: 'score' | 'count';
+  /**
+   * How many pages the number covers, when it is an aggregate over a sample.
+   *
+   * The deep tier renders three pages of a site that may have three hundred, and
+   * a headline number with no sample size beside it reads as a verdict on the
+   * whole site (build-log entry 21, recommendation 3).
+   */
+  pages?: number;
+}
+
 export interface CheckResult {
   /** Stable across versions; consumers key on it. */
   id: string;
@@ -89,6 +122,8 @@ export interface CheckResult {
    * and does not know the standard by name. Present whenever `status` is `fail`.
    */
   fix?: string;
+  /** The headline number, for the checks that measure one. See `CheckMetric`. */
+  metric?: CheckMetric;
   evidence: CheckEvidence[];
 }
 

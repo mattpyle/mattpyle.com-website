@@ -151,3 +151,16 @@ jobs:
         env:
           A11Y_REUSE_SERVER: '1'
         run: npm run --silent a11y:run -- --grep-invert "@golden|@axe"
+
+      # Steward's `audit-url` HTML report is a page this repo ships too, and an
+      # agent-readiness report that fails an accessibility scan argues against
+      # its own tool. The script renders a fixture carrying every status, every
+      # severity, all three tile states and evidence of every shape, then runs it
+      # through the same @axe-core/cli the steps above use.
+      #
+      # No server and no build: the report is a self-contained file, scanned over
+      # file://. Gating, like the other real axe runs here. if: always() for the
+      # same reason they have it — a red step above must not hide this one.
+      - name: Run axe over the audit-url HTML report
+        if: always()
+        run: npm run --silent check:html-report -w @mattpyle/steward

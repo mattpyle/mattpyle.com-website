@@ -11,6 +11,7 @@
     "steward": "tsx src/cli.ts",
     "setup:vale": "node scripts/setup-vale.mjs",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "check:html-report": "tsx scripts/axe-html-report.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

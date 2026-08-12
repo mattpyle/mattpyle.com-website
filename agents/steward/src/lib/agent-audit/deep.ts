@@ -9,6 +9,7 @@ import {
   excerpt,
   type CheckCategory,
   type CheckEvidence,
+  type CheckMetric,
   type CheckResult,
   type CheckStatus,
   type Severity,
@@ -110,6 +111,8 @@ interface AxisSpec {
   key: string;
   id: string;
   title: string;
+  /** Two or three words for the headline tile the HTML report leads with. */
+  label: string;
   severity: Severity;
 }
 
@@ -128,30 +131,35 @@ const AXES: AxisSpec[] = [
     key: 'agentic-browsing',
     id: 'lighthouse-agentic-browsing',
     title: "Lighthouse's Agentic Browsing score clears 90 on the sampled pages",
+    label: 'Agentic browsing',
     severity: 'high',
   },
   {
     key: 'accessibility',
     id: 'lighthouse-accessibility',
     title: 'Lighthouse accessibility clears 90 on the sampled pages',
+    label: 'Accessibility',
     severity: 'high',
   },
   {
     key: 'seo',
     id: 'lighthouse-seo',
     title: 'Lighthouse SEO clears 90 on the sampled pages',
+    label: 'SEO',
     severity: 'medium',
   },
   {
     key: 'performance',
     id: 'lighthouse-performance',
     title: 'Lighthouse performance clears 90 on the sampled pages',
+    label: 'Performance',
     severity: 'medium',
   },
   {
     key: 'best-practices',
     id: 'lighthouse-best-practices',
     title: 'Lighthouse best-practices clears 90 on the sampled pages',
+    label: 'Best practices',
     severity: 'low',
   },
 ];
@@ -343,8 +351,20 @@ function check(
   observed: string,
   evidence: CheckEvidence[] = [],
   fix?: string,
+  metric?: CheckMetric,
 ): CheckResult {
-  return { ...spec, category: CATEGORY, status, observed, evidence, ...(fix ? { fix } : {}) };
+  return {
+    ...spec,
+    category: CATEGORY,
+    status,
+    observed,
+    evidence,
+    ...(fix ? { fix } : {}),
+    // Only the branches that actually measured something carry a number. An
+    // `error` or a `not-applicable` has none, and inventing a zero would put a
+    // failing-looking tile at the top of a report about a browser that never ran.
+    ...(metric ? { metric } : {}),
+  };
 }
 
 export interface DeepOutcome {
@@ -376,7 +396,7 @@ export async function runDeepChecks(ctx: DeepContext, opts: DeepOptions = {}): P
     // tier that stopped looking has to report that it stopped looking.
     notes.push(
       `Deep tier: ${ctx.candidates.length} page(s) were available to sample and the first ` +
-        `${sample.length} were rendered (the cap). The scores below describe those pages, not the site.`,
+        `${sample.length} were rendered (the cap).`,
     );
   }
 
@@ -559,6 +579,12 @@ function axisCheck(
   sampled: number,
 ): CheckResult {
   const spec = { id: axis.id, title: axis.title, severity: axis.severity };
+  const metricOf = (value: number, pages: number): CheckMetric => ({
+    label: axis.label,
+    value,
+    unit: 'score',
+    pages,
+  });
   const scored = results
     .filter((r) => r.lhr)
     .map((r) => ({
@@ -609,6 +635,10 @@ function axisCheck(
       'pass',
       `${axis.key} ${worst.score} or better on all ${withScores.length} rendered page(s): ${listing}`,
       evidence,
+      undefined,
+      // The worst page, not the mean: the headline answers "what does an agent
+      // get here at its worst", which is the same question the pass/fail asks.
+      metricOf(worst.score, withScores.length),
     );
   }
   return check(
@@ -618,6 +648,7 @@ function axisCheck(
       `(${withScores.length} page(s) rendered: ${listing})`,
     evidence,
     axisFix(axis.key),
+    metricOf(worst.score, withScores.length),
   );
 }
 
@@ -694,8 +725,23 @@ function axeCheck(
   ];
 
   const total = ran.reduce((n, r) => n + (r.violations as AxeViolation[]).length, 0);
+  // A count, not a score: zero is the good end of this one, and a renderer that
+  // colours it needs to be told that rather than to guess from the name.
+  const metric: CheckMetric = {
+    label: 'axe violations',
+    value: total,
+    unit: 'count',
+    pages: ran.length,
+  };
   if (total === 0) {
-    return check(AXE_CHECK, 'pass', `axe-core ${axeVersion} found no violations on ${ran.length} rendered page(s)`, evidence);
+    return check(
+      AXE_CHECK,
+      'pass',
+      `axe-core ${axeVersion} found no violations on ${ran.length} rendered page(s)`,
+      evidence,
+      undefined,
+      metric,
+    );
   }
   const pagesWith = ran.filter((r) => (r.violations as AxeViolation[]).length > 0).length;
   return check(
@@ -708,5 +754,6 @@ function axeCheck(
       'WCAG, so a clean run is a floor rather than a pass mark — but a violation here is a fact ' +
       'about the page, not a judgement call, and an agent reading the page through the ' +
       'accessibility tree hits the same missing names and labels a screen reader does.',
+    metric,
   );
 }
