@@ -2,11 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import dns from 'node:dns/promises';
+import dnsCallback from 'node:dns';
 import type { AddressInfo } from 'node:net';
 import {
+  assertConnectableUrl,
   AUDIT_USER_AGENT,
   BlockedTargetError,
   BudgetExhaustedError,
+  DEFAULT_POLICY,
   SafeFetcher,
 } from '../../src/lib/agent-audit/safe-fetch.js';
 
@@ -23,26 +26,73 @@ import {
 interface Mock {
   origin: string;
   host: string;
+  port: number;
   connections: number;
   close: () => Promise<void>;
 }
 
-async function mockServer(handler: http.RequestListener): Promise<Mock> {
+async function mockServerOn(host: string, port: number, handler: http.RequestListener): Promise<Mock> {
   const server = http.createServer(handler);
   const state = { connections: 0 };
   server.on('connection', () => {
     state.connections++;
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const port = (server.address() as AddressInfo).port;
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, () => {
+      server.removeListener('error', reject);
+      resolve();
+    });
+  });
+  const bound = (server.address() as AddressInfo).port;
   return {
-    origin: `http://127.0.0.1:${port}`,
-    host: '127.0.0.1',
+    origin: `http://${host}:${bound}`,
+    host,
+    port: bound,
     get connections() {
       return state.connections;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
+}
+
+const mockServer = (handler: http.RequestListener): Promise<Mock> => mockServerOn('127.0.0.1', 0, handler);
+
+interface AddressPair {
+  port: number;
+  vetted: Mock;
+  rebound: Mock;
+  close: () => Promise<void>;
+}
+
+/**
+ * Two servers on the same port and different loopback addresses.
+ *
+ * The port has to match, because a pin carries an address and the URL carries
+ * the port: if the two servers differed by port, a connection reaching the wrong
+ * one would be impossible for reasons that have nothing to do with pinning and
+ * the test would pass without testing anything. Binding the second one can lose
+ * a race against an unrelated process taking the port, so it retries.
+ */
+async function addressPair(handler: http.RequestListener = (_req, res) => res.end('vetted')): Promise<AddressPair> {
+  for (let attempt = 0; ; attempt++) {
+    const vetted = await mockServerOn('127.0.0.2', 0, handler);
+    try {
+      const rebound = await mockServerOn('127.0.0.1', vetted.port, (_req, res) => res.end('rebound'));
+      return {
+        port: vetted.port,
+        vetted,
+        rebound,
+        close: async () => {
+          await vetted.close();
+          await rebound.close();
+        },
+      };
+    } catch (err) {
+      await vetted.close();
+      if (attempt >= 4) throw err;
+    }
+  }
 }
 
 /** The policy the check tests run under: this one mock host, nothing else. */
@@ -212,17 +262,75 @@ test('a name resolving to both a public and a private address is refused whole',
 test('an all-public DNS answer is allowed through the same path', async (t) => {
   // The control for the test above: two records, both routable, and the guard
   // gets out of the way. Without this, "refuses everything" would also pass.
+  //
+  // The guard is called on its own rather than through `fetch`, and that is a
+  // consequence of pinning. This used to assert that `fetch` got past the guard
+  // and died on a transport error, which worked only because `both-public.test`
+  // does not resolve. Now the connection is pinned to whatever this mock
+  // returns, so the same test would open a real socket to 93.184.216.34 — a
+  // live request to somebody else's server, from a unit test. The property
+  // under test is the guard's verdict, so the guard is what is called.
   t.mock.method(dns, 'lookup', async () => [
     { address: '93.184.216.34', family: 4 },
     { address: '2606:4700::1111', family: 6 },
   ]);
-  const fetcher = new SafeFetcher();
-  // The connection itself fails (nothing is listening on a made-up name), which
-  // is the point: it got past the guard to a transport error.
-  await assert.rejects(
-    () => fetcher.fetch('http://both-public.test/'),
-    (err: unknown) => !(err instanceof BlockedTargetError),
-  );
+  await assert.doesNotReject(() => assertConnectableUrl('http://both-public.test/', DEFAULT_POLICY));
+});
+
+test('the connection goes to the address that was vetted, not to a swapped second answer', async (t) => {
+  // DNS rebinding, closed. Two servers on the same port and different loopback
+  // addresses: 127.0.0.2 is what the vetting lookup returns, 127.0.0.1 is what
+  // the resolver answers the *second* time — the answer an unpinned connect
+  // would use, because `net.connect` resolves the name again on its own.
+  //
+  // Loopback on both sides on purpose. The property is "the socket goes to the
+  // address that was judged", and demonstrating it needs two addresses this
+  // test can actually listen on; the exemption covers the classification, and
+  // the pin is what is being measured.
+  const pair = await addressPair();
+  t.after(() => pair.close());
+
+  t.mock.method(dns, 'lookup', async () => [{ address: '127.0.0.2', family: 4 }]);
+  const swapped = t.mock.method(dnsCallback, 'lookup', ((
+    _host: string,
+    _opts: unknown,
+    cb: (err: null, addresses: Array<{ address: string; family: number }>) => void,
+  ) => {
+    cb(null, [{ address: '127.0.0.1', family: 4 }]);
+  }) as typeof dnsCallback.lookup);
+
+  const fetcher = new SafeFetcher({ allowedPrivateHosts: ['rebind.test'] });
+  const res = await fetcher.fetch(`http://rebind.test:${pair.port}/`);
+
+  assert.equal(res.body, 'vetted', 'the request landed on the rebound address');
+  assert.equal(pair.rebound.connections, 0, 'the swapped answer was connected to');
+  assert.equal(swapped.mock.callCount(), 0, 'the connect consulted a resolver a second time');
+});
+
+test('a swapped answer cannot reach a private address on a redirect hop either', async (t) => {
+  // The same pin, on the hop the fetcher follows by hand. The first hop is
+  // vetted and pinned; so is the second, from its own single lookup.
+  const pair = await addressPair((req, res) => {
+    if (req.url === '/start') {
+      res.writeHead(302, { location: '/moved' });
+      return res.end();
+    }
+    res.end('vetted');
+  });
+  t.after(() => pair.close());
+
+  t.mock.method(dns, 'lookup', async () => [{ address: '127.0.0.2', family: 4 }]);
+  t.mock.method(dnsCallback, 'lookup', ((
+    _host: string,
+    _opts: unknown,
+    cb: (err: null, addresses: Array<{ address: string; family: number }>) => void,
+  ) => {
+    cb(null, [{ address: '127.0.0.1', family: 4 }]);
+  }) as typeof dnsCallback.lookup);
+
+  const fetcher = new SafeFetcher({ allowedPrivateHosts: ['rebind.test'] });
+  await fetcher.fetch(`http://rebind.test:${pair.port}/start`);
+  assert.equal(pair.rebound.connections, 0, 'a redirect hop escaped the pin');
 });
 
 test('the per-request timer covers the body read, not just the headers', async (t) => {
