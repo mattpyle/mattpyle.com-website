@@ -715,9 +715,9 @@ program
   .action(async (urlArg: string, opts: { json?: string; out?: string; html?: string; budget?: string; fast?: boolean; quiet?: boolean }) => {
     // Lazy, like `tells`: this verb makes no Temporal connection and no API
     // call, and keeping it out of the eager import graph is what makes that a
-    // property rather than a claim. The browser is one level lazier again —
-    // `checks.ts` imports the deep tier only when it is going to run it, so
-    // `--fast` never loads Lighthouse.
+    // property rather than a claim. The browser is one level lazier again — the
+    // deep tier is loaded by the `loadDeep` thunk below, which `--fast` never
+    // passes, so `--fast` never loads Lighthouse.
     const { runAudit, normaliseTarget } = await import('./lib/agent-audit/checks.js');
     const { renderMarkdownSummary } = await import('./lib/agent-audit/render.js');
     const { renderHtmlReport } = await import('./lib/agent-audit/render-html.js');
@@ -764,7 +764,9 @@ program
     try {
       audit = await runAudit(urlArg, {
         policy: { totalBudgetMs: budgetSeconds * 1000 },
-        ...(opts.fast ? { deep: false as const } : {}),
+        ...(opts.fast
+          ? { deep: false as const }
+          : { loadDeep: () => import('./lib/agent-audit/deep.js') }),
       });
     } catch (err) {
       // A refused target is the guard doing its job, not a crash: say which

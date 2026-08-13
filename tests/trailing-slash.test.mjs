@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { trailingSlashRedirectFor } from '../src/lib/trailing-slash.mjs';
 import { AGENT_SURFACE_PATHS, WELL_KNOWN_SURFACE_PATHS } from '../src/lib/agent-surfaces.mjs';
+import { ON_DEMAND_PATHS } from '../src/lib/on-demand-routes.mjs';
 
 // Slash normalisation. The rule itself is three lines; these tests are mostly about the paths it
 // must NOT rewrite, because this runs in front of every page on the site and a false positive is
@@ -90,14 +91,28 @@ test('the redirect runs after the markdown negotiation branch', () => {
   );
 });
 
-test('/a2a is absent from the matcher, so the redirect can never reach it', () => {
-  // A POST endpoint with no extension. If it were matched, a JSON-RPC call to the slash-less form
-  // would 308, and a client that does not follow redirects on POST loses the endpoint the Agent
-  // Card and the DNS record publish. The rule would rewrite it happily — the matcher is the guard.
+test('the JSON-RPC POST endpoints are absent from the matcher, so the redirect can never reach them', () => {
+  // Two POST endpoints with no extension. If either were matched, a JSON-RPC call to the slash-less
+  // form would 308, and a client that does not follow redirects on POST loses the endpoint: for
+  // /a2a the URL the Agent Card and the DNS record publish, for /mcp the URL the MCP discovery
+  // document and the registry listing publish. The rule would rewrite both happily — the matcher is
+  // the only guard, which is why this is asserted against the source rather than against the rule.
   const block = middlewareSource.match(/matcher:\s*\[([\s\S]*?)\]/);
   assert.ok(block, 'middleware.ts must export a config.matcher array');
   const matcher = [...block[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
-  assert.ok(!matcher.includes('/a2a'), 'config.matcher must not include /a2a');
-  assert.ok(!matcher.includes('/a2a/'), 'config.matcher must not include /a2a/');
-  assert.equal(trailingSlashRedirectFor('/a2a'), '/a2a/');
+  for (const path of ['/a2a', '/mcp']) {
+    assert.ok(!matcher.includes(path), `config.matcher must not include ${path}`);
+    assert.ok(!matcher.includes(`${path}/`), `config.matcher must not include ${path}/`);
+    assert.equal(trailingSlashRedirectFor(path), `${path}/`);
+  }
+});
+
+test('neither POST endpoint is in a list that the matcher mirrors', () => {
+  // ON_DEMAND_PATHS and AGENT_SURFACE_PATHS are both diffed into the matcher by a test, so adding
+  // /mcp to either would put it in the matcher by the back door and 308 the endpoint — a failure
+  // that would appear two files away from the edit that caused it.
+  for (const path of ['/a2a', '/mcp']) {
+    assert.ok(!ON_DEMAND_PATHS.includes(path), `${path} must not be an on-demand path`);
+    assert.ok(!AGENT_SURFACE_PATHS.includes(path), `${path} must not be an agent surface`);
+  }
 });

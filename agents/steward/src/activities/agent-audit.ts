@@ -109,5 +109,10 @@ export async function auditSiteDeep(
   input: string,
   options: AuditActivityOptions = {},
 ): Promise<AuditResult> {
-  return withHeartbeat('deep', input, () => runAudit(input, engineOptions(options)));
+  return withHeartbeat('deep', input, () =>
+    // The deep tier is loaded from here rather than from inside `checks.ts`, so
+    // that file's import graph never reaches Chrome, Lighthouse or axe. See the
+    // `loadDeep` docblock in checks.ts for why that property is load-bearing.
+    runAudit(input, { ...engineOptions(options), loadDeep: () => import('../lib/agent-audit/deep.js') }),
+  );
 }

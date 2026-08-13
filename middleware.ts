@@ -208,11 +208,20 @@ export default async function middleware(request: Request) {
 // whole subtrees is safe. Fronting every page with a function is the accepted cost of the
 // no-whitelist rule; the pass-through design keeps it cheap.
 //
-// What is NOT here matters just as much now. `/a2a` is absent on purpose: it is an
-// extension-less POST endpoint, so any slash rule that reached it would 308 a JSON-RPC call,
-// and a client that does not follow redirects on POST would lose the endpoint the Agent
-// Card, agents.md, and the `_a2a._agents` DNS record all publish. Leaving it unmatched is
-// what keeps it answering at both shapes. Do not add it.
+// What is NOT here matters just as much now. `/a2a` and `/mcp` are absent on purpose: both are
+// extension-less POST endpoints, so any slash rule that reached them would 308 a JSON-RPC call,
+// and a client that does not follow redirects on POST would lose the endpoint. For `/a2a` that
+// is the URL the Agent Card, agents.md, and the `_a2a._agents` DNS record all publish; for
+// `/mcp` it is the URL `/.well-known/mcp-server` and the registry listing will publish, and an
+// MCP client is the population least likely to re-issue a POST after a redirect. Leaving them
+// unmatched is what keeps them answering at both shapes. Do not add either.
+//
+// That also settles where `/mcp` is registered: nowhere. ON_DEMAND_PATHS and AGENT_SURFACE_PATHS
+// are both mirrored into the matcher by a test, so listing it in either would put it there by
+// the back door. It needs neither — query-string canonicalisation exists to protect a cached
+// render, and this route is a POST that is never cached; the agent-surface log exists to make a
+// *static file* fetch visible, and this route is a function that logs its own line. The
+// absent-from-matcher assertion in tests/trailing-slash.test.mjs is the registration.
 //
 // Then the agent-surface list from src/lib/agent-surfaces.mjs.
 //

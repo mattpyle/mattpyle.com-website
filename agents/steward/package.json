@@ -6,6 +6,13 @@
   "bin": {
     "steward": "./scripts/steward.mjs"
   },
+  "//exports": "One entry, and only one: the fast-tier audit the site's /mcp function serves. Steward has no build step, so this points at TypeScript source and the site's Vite build transpiles it (astro.config.mjs lists the package in ssr.noExternal). Adding an entry here is adding a public surface, and every new one is a new import graph the site's function bundle inherits — see the docblock in src/lib/agent-audit/fast.ts and tests/steward-fast-audit-packaging.test.mjs in the site repo.",
+  "exports": {
+    "./agent-audit/fast": {
+      "types": "./src/lib/agent-audit/fast.ts",
+      "default": "./src/lib/agent-audit/fast.ts"
+    }
+  },
   "scripts": {
     "worker": "tsx src/worker.ts",
     "steward": "tsx src/cli.ts",
