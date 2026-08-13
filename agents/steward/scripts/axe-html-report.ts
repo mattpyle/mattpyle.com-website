@@ -82,7 +82,7 @@ const CHECKS: CheckResult[] = [
     severity: 'low',
     status: 'not-applicable',
     observed: 'robots.txt disallows this auditor at /.well-known/',
-    evidence: [{ url: 'https://example.com/.well-known/agent.json', note: 'disallowed to steward-audit-url' }],
+    evidence: [{ url: 'https://example.com/.well-known/agent.json', note: 'disallowed to steward-audit' }],
   },
   {
     id: 'markdown-negotiation-home',

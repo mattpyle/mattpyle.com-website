@@ -30,8 +30,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-export const SERVER_NAME = 'mattpyle-com-audit';
-export const SERVER_VERSION = '0.1.0';
+/**
+ * The name a client sees after `initialize`, and the name the registry listing carries.
+ *
+ * `steward-audit`, matching the auditor's User-Agent product token exactly. One identity: the
+ * server a client connects to, the visitor a target site sees in its access log, and the page
+ * `/steward` that explains both are the same thing under the same name. The previous name,
+ * `mattpyle-com-audit`, described where the endpoint is hosted rather than what is doing the
+ * auditing, and would have left a site owner with two names to connect by hand.
+ */
+export const SERVER_NAME = 'steward-audit';
+export const SERVER_VERSION = '0.2.0';
 
 /** The one tool. Named here so the endpoint's GET help and the tests read it from one place. */
 export const TOOL_NAME = 'audit_site';
@@ -78,8 +87,9 @@ const INSTRUCTIONS =
   'the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A ' +
   'discovery documents, and whether the homepage and a content page actually serve markdown when ' +
   'asked for it. It checks behaviour rather than presence — a 200 from /llms.txt that is really ' +
-  "the site's HTML 404 page is a failure here. It obeys the target's robots.txt, identifies " +
-  'itself honestly, and takes seconds. Rendered-page checks (Lighthouse, axe) are not part of this ' +
+  "the site's HTML 404 page is a failure here. It obeys the target's robots.txt, arrives as " +
+  '`steward-audit/0.2 (+https://www.mattpyle.com/steward)` so one audit is one visitor in the ' +
+  'target log, and takes seconds. Rendered-page checks (Lighthouse, axe) are not part of this ' +
   'endpoint.';
 
 const TOOL_DESCRIPTION =

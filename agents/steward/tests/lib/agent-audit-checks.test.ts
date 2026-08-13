@@ -84,7 +84,7 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
       const lines = ['User-agent: *', 'Disallow: /admin/'];
       if (broken === 'robots-malformed') lines.push('Disallow /oops');
       if (broken === 'robots-blocks-claude-user') lines.push('', 'User-agent: Claude-User', 'Disallow: /');
-      if (broken === 'robots-blocks-auditor') lines.push('', 'User-agent: steward-audit-url', 'Disallow: /');
+      if (broken === 'robots-blocks-auditor') lines.push('', 'User-agent: steward-audit', 'Disallow: /');
       if (broken === 'many-declared-sitemaps') {
         // Five declarations, none of them a sitemap. Nothing in robots.txt
         // limits how many of these a site may write down.

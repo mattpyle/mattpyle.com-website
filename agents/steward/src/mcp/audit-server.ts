@@ -226,7 +226,7 @@ export function createAuditMcpServer(client: Client): McpServer {
         '"report" for the JSON or "summary" for markdown. The same three documents are also served ' +
         'as steward://audit/<workflowId>/{status,report,summary} resources, for clients that read ' +
         "resources; get_audit is the path that works in every client. It obeys the target's " +
-        'robots.txt and identifies itself as steward-audit-url.',
+        'robots.txt and identifies itself as steward-audit.',
     },
   );
 
