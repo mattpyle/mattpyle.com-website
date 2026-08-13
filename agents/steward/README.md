@@ -136,9 +136,15 @@ handle is durable across a worker restart.
 
 It listens on `127.0.0.1:8765` by default and has no authentication, so reaching it from elsewhere
 means a tunnel, and a tunnel makes an unauthenticated audit runner reachable by anyone with the URL.
-The listener itself still has no Host-header check and no DNS-rebinding protection, so a web page in
-your own browser can POST to the loopback port. Attended runs only, and take the tunnel down
-afterwards.
+Attended runs only, and take the tunnel down afterwards.
+
+The listener answers only requests whose `Host` header names a loopback address — `localhost`,
+`127.0.0.1` or `[::1]`, on any port — and refuses everything else with a 403 before routing, the
+health probe included. That is the DNS-rebinding defence: a page in your own browser can POST to the
+loopback port without CORS having a say, but it cannot forge the Host header, and a name an attacker
+resolves to 127.0.0.1 is not one of the three. A tunnel forwards the public request's Host, so a
+tunnelled session has to name that hostname: `--allow-host <hostname>`, repeatable, or
+`STEWARD_MCP_ALLOWED_HOSTS` as a comma-separated list. Nothing beyond loopback is ever a default.
 
 The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
 120 with `--fast`, 420 without. A deep run against this site takes about a minute.

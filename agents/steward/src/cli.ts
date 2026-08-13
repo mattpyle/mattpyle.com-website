@@ -14,6 +14,7 @@ import {
   ENABLE_EPRIME_ALTERNATIVES,
   ENABLE_PUBLISH_LEG,
   ENABLE_TELL_CITATIONS,
+  MCP_ALLOWED_HOSTS,
   MCP_HOST,
   MCP_PORT,
   NAMESPACE,
@@ -1581,7 +1582,14 @@ program
   )
   .option('--port <n>', `TCP port to listen on (default: ${MCP_PORT})`)
   .option('--host <host>', `address to bind (default: ${MCP_HOST})`)
-  .action(async (opts: { port?: string; host?: string }) => {
+  .option(
+    '--allow-host <hostname>',
+    'accept requests carrying this Host header, on top of loopback — the tunnel hostname for a ' +
+      'tunnelled session. Repeatable.',
+    (value: string, previous: string[]) => [...previous, value],
+    [] as string[],
+  )
+  .action(async (opts: { port?: string; host?: string; allowHost: string[] }) => {
     // Lazy: the MCP SDK is a large import graph and no other verb needs it.
     const { startMcpHttpServer, MCP_PATH } = await import('./mcp/http.js');
 
@@ -1590,19 +1598,24 @@ program
       fail(`--port must be a TCP port number, got "${opts.port}".`);
     }
     const host = opts.host ?? MCP_HOST;
+    const allowedHosts = [...MCP_ALLOWED_HOSTS, ...opts.allowHost];
 
     const c = await client();
-    const server = await startMcpHttpServer({ client: c, host, port });
+    const server = await startMcpHttpServer({ client: c, host, port, allowedHosts });
 
     console.log('');
     console.log(`  ${BOLD}MCP server${RESET}  http://${host}:${server.port}${MCP_PATH}`);
-    console.log(`  ${paint('tool', DIM)}      audit_site(url, fast?) — returns a workflow ID, does not wait`);
+    console.log(`  ${paint('tools', DIM)}     audit_site(url, fast?) — returns a workflow ID, does not wait`);
+    console.log(`  ${paint('', DIM)}          get_audit(workflowId, view) — status, report or summary`);
     console.log(`  ${paint('resources', DIM)} steward://audit/<workflowId>/{status,report,summary}`);
     console.log(`  ${paint('health', DIM)}    http://${host}:${server.port}/healthz`);
+    console.log(
+      `  ${paint('hosts', DIM)}     ${allowedHosts.length ? `loopback plus ${allowedHosts.join(', ')}` : 'loopback only — a tunnel needs --allow-host <hostname>'}`,
+    );
     console.log('');
     console.log(`  ${paint('A worker must be running (`steward up`) or nothing executes.', DIM)}`);
     console.log(
-      `  ${paint('Exposed through a tunnel this is unauthenticated and the SSRF gaps are open —', DIM)}`,
+      `  ${paint('Exposed through a tunnel this is unauthenticated and rate-limited by nothing —', DIM)}`,
     );
     console.log(`  ${paint('run it attended, and take the tunnel down afterwards.', DIM)}`);
     console.log('');

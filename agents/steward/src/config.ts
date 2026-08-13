@@ -364,6 +364,20 @@ export const MCP_HOST = process.env.STEWARD_MCP_HOST ?? '127.0.0.1';
 export const MCP_PORT = Number(process.env.STEWARD_MCP_PORT ?? 8765);
 
 /**
+ * Extra Host headers the MCP listener answers to, beyond loopback.
+ *
+ * The listener refuses any other Host, which is what stops a page in the
+ * operator's browser from POSTing to the port. A tunnel breaks that on its own:
+ * cloudflared forwards the public request's Host, so a tunnel session has to name
+ * its hostname here or in `--allow-host`. Comma-separated, hostnames only — the
+ * port is not compared.
+ */
+export const MCP_ALLOWED_HOSTS = (process.env.STEWARD_MCP_ALLOWED_HOSTS ?? '')
+  .split(',')
+  .map((host) => host.trim())
+  .filter(Boolean);
+
+/**
  * Inverse of `workflowIdFor`. Only for read-only tooling that *discovers*
  * workflow IDs from Temporal's visibility store (`steward inbox`, which lists
  * open workflows rather than being told a slug directly) — everywhere else in
