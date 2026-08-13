@@ -136,7 +136,7 @@ handle is durable across a worker restart.
 
 It listens on `127.0.0.1:8765` by default and has no authentication, so reaching it from elsewhere
 means a tunnel, and a tunnel makes an unauthenticated audit runner reachable by anyone with the URL
-while the two SSRF gaps below are still open. Attended runs only, and take the tunnel down afterwards.
+while the three SSRF gaps below are still open. Attended runs only, and take the tunnel down afterwards.
 
 The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
 120 with `--fast`, 420 without. A deep run against this site takes about a minute.
@@ -151,8 +151,10 @@ only here: the name is resolved again by Node when it connects, so a hostile res
 differently the second time (DNS rebinding) is not covered, and closing that needs the connection
 pinned to the vetted address. A second caveat arrives with the deep tier and is stated in `deep.ts`:
 the page Chrome is sent to goes through the same address check first, but the subresources that page
-then pulls in are requested by Chrome, which consulted nothing. Both gaps are recorded on the
-`hosted-mcp-server` card as things to close before stage 2 hosts this. It also obeys the target's
+then pulls in are requested by Chrome, which consulted nothing. A third is the same class: a sampled
+page that answers with a 302 is navigated to the new target by Chrome, with no address re-vetting and
+no robots re-check. All three gaps are recorded on the `hosted-mcp-stage-2-public-fast-tier` card as
+things to close before stage 2 hosts this. It also obeys the target's
 robots.txt — including for the pages the deep tier renders — because an agent-readiness auditor that
 ignores robots fails its own audit.
 

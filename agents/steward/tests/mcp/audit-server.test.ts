@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { ApplicationFailure } from '@temporalio/common';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
@@ -65,8 +66,20 @@ const AUDIT: AuditResult = {
   notes: [],
 };
 
+/**
+ * The one target whose audit fails, so the failure path is exercised over the
+ * same transport as the happy one. The message is the shape the real activity
+ * produces when the address check refuses a target, which is what the status
+ * resource has to carry through rather than flatten into "it ended FAILED".
+ */
+const REFUSED_HOST = 'refused.example';
+const REFUSAL = 'refused to audit https://refused.example/: resolves to a private address';
+
 const activities = {
-  auditSiteFast: async () => AUDIT,
+  auditSiteFast: async (url: string) => {
+    if (url.includes(REFUSED_HOST)) throw ApplicationFailure.nonRetryable(REFUSAL, 'BlockedTarget');
+    return AUDIT;
+  },
   auditSiteDeep: async () => ({ ...AUDIT, browserPages: 3 }),
 };
 
@@ -203,6 +216,32 @@ test('a target that is not a URL is refused by the tool, not by a started workfl
     const call = await client.callTool({ name: 'audit_site', arguments: { url: 'not a url' } });
     assert.equal(call.isError, true);
     assert.match(String((call.content as Array<{ text: string }>)[0].text), /is not a URL/);
+  } finally {
+    await client.close();
+  }
+});
+
+test('a failed audit ends the polling loop and says what stopped it', async () => {
+  const client = await connect();
+  try {
+    const call = await client.callTool({
+      name: 'audit_site',
+      arguments: { url: REFUSED_HOST, fast: true },
+    });
+    const out = call.structuredContent as Record<string, string>;
+
+    // The whole point: the caller is told to poll until `done`, and a run that
+    // failed is a run that is over. A `done` meaning COMPLETED alone would spin
+    // here until the poll budget ran out.
+    const status = await pollUntilDone(client, out.statusUri);
+    assert.equal(status.done, true);
+    assert.equal(status.succeeded, false);
+    assert.equal(status.execution, 'FAILED');
+    // The activity's own words, not "the audit ended FAILED": a refused target,
+    // a heartbeat timeout and a crashed browser have to be distinguishable here.
+    assert.equal(status.error, REFUSAL);
+
+    await assert.rejects(() => client.readResource({ uri: out.reportUri }), new RegExp(REFUSAL));
   } finally {
     await client.close();
   }

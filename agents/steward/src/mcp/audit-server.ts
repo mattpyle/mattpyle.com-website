@@ -47,8 +47,9 @@ function uriFor(workflowId: string, view: 'status' | 'report' | 'summary'): stri
  * Two notions of "how is it going" side by side, deliberately. `execution` is
  * Temporal's own answer — RUNNING, COMPLETED, FAILED, TIMED_OUT — and is the one
  * that can say the run died. `phase` is the workflow's account of itself and is
- * the one that says what it was doing. A poller needs `done` and nothing else;
- * the rest is for a human reading over its shoulder.
+ * the one that says what it was doing. A poller needs `done` to stop and
+ * `succeeded` to know what it stopped on; the rest is for a human reading over
+ * its shoulder.
  */
 interface AuditStatus {
   workflowId: string;
@@ -57,13 +58,49 @@ interface AuditStatus {
   execution: string;
   phase: AuditSiteState['phase'] | 'unknown';
   note: string;
+  /**
+   * The run is over, whatever way it ended. **Terminal, not successful**: an
+   * audit that fails is a designed outcome here (one attempt, no retry), so a
+   * `done` that meant COMPLETED alone would leave every failed run's poller
+   * looping until it gave up.
+   */
   done: boolean;
+  /** Whether the run that ended produced a report. Meaningless while `done` is false. */
+  succeeded: boolean;
   startedAt?: string;
   finishedAt?: string;
   reportUri: string;
   summaryUri: string;
   /** Present only when the execution ended without a report. */
   error?: string;
+}
+
+/**
+ * Why one audit ended without a report, in the words of whatever actually
+ * stopped it.
+ *
+ * A closed execution's failure reaches the client as `WorkflowFailedError:
+ * Workflow execution failed`, with the reason buried on `.cause` — the same
+ * shape `describeCliError` in cli.ts walks for the operator at the terminal.
+ * The innermost specific message is what distinguishes a heartbeat timeout from
+ * a wedged Chrome from a refused target, which is the whole point of the
+ * activity converting a `BlockedTargetError` into a non-retryable failure with
+ * its own text.
+ */
+async function failureMessage(handle: WorkflowHandle, execution: string): Promise<string> {
+  const GENERIC = ['Workflow execution failed', 'Activity task failed'];
+  try {
+    await handle.result();
+  } catch (err) {
+    let current: unknown = err;
+    let best = '';
+    for (let depth = 0; current instanceof Error && depth < 6; depth++) {
+      if (current.message && !GENERIC.includes(current.message)) best = current.message;
+      current = (current as Error).cause;
+    }
+    if (best) return best;
+  }
+  return `the audit ended ${execution}`;
 }
 
 /** JSON with a trailing newline, the way every other artifact this project writes is shaped. */
@@ -107,22 +144,25 @@ async function readState(
     queryError = err instanceof Error ? err.message : String(err);
   }
 
-  const done = description.status.name === 'COMPLETED';
+  const execution = description.status.name;
+  const done = execution !== 'RUNNING';
+  const succeeded = execution === 'COMPLETED';
   const status: AuditStatus = {
     workflowId,
     url: state?.url ?? 'unknown',
     tier: state?.tier ?? 'fast',
-    execution: description.status.name,
+    execution,
     phase: state?.phase ?? 'unknown',
     note: state?.note ?? queryError ?? 'no state — the run may have ended before it reported any',
     done,
+    succeeded,
     startedAt: description.startTime?.toISOString(),
     finishedAt: description.closeTime?.toISOString(),
     reportUri: uriFor(workflowId, 'report'),
     summaryUri: uriFor(workflowId, 'summary'),
   };
-  if (description.status.name !== 'RUNNING' && !done) {
-    status.error = queryError ?? `the audit ended ${description.status.name}`;
+  if (done && !succeeded) {
+    status.error = await failureMessage(handle, execution);
   }
   return { status, result: state?.result, handle };
 }
@@ -158,7 +198,8 @@ export function createAuditMcpServer(client: Client): McpServer {
         'markdown content negotiation, the well-known discovery documents, and — on the deep ' +
         'tier — Lighthouse and axe over pages rendered in a real browser. audit_site returns a ' +
         'workflow ID immediately; the audit itself takes seconds (fast) to minutes (deep). Read ' +
-        'the status resource until done is true, then read the report resource. It obeys the ' +
+        'the status resource until done is true: succeeded then says whether there is a report to ' +
+        'read, and error says why if there is not. It obeys the ' +
         "target's robots.txt and identifies itself as steward-audit-url.",
     },
   );
@@ -170,7 +211,8 @@ export function createAuditMcpServer(client: Client): McpServer {
       description:
         'Starts an agent-readiness audit of one site and returns its workflow ID straight away — ' +
         'it does not wait for the result. Poll steward://audit/<workflowId>/status until done is ' +
-        'true, then read steward://audit/<workflowId>/report for the canonical JSON, or ' +
+        'true (done means the run ended, and succeeded says whether it ended with a report), then ' +
+        'read steward://audit/<workflowId>/report for the canonical JSON, or ' +
         '/summary for a markdown digest of the same document. The deep tier renders up to three ' +
         'pages in a browser and takes minutes; pass fast: true for the HTTP checks alone, which ' +
         'take seconds.',
@@ -250,7 +292,7 @@ export function createAuditMcpServer(client: Client): McpServer {
               `Auditing ${origin} (${tier} tier). This is running now and is not finished.\n` +
               `Workflow ID: ${workflowId}\n` +
               `Read ${structuredContent.statusUri} until "done" is true (expect ${structuredContent.expectedDuration}), ` +
-              `then read ${structuredContent.reportUri}.`,
+              `then read ${structuredContent.reportUri} if "succeeded" is true; if it is false, "error" says why.`,
           },
         ],
       };
@@ -270,7 +312,9 @@ export function createAuditMcpServer(client: Client): McpServer {
     {
       title: 'Audit status',
       description:
-        'Whether one audit has finished, and what it is doing if not. Poll this until "done" is true.',
+        'Whether one audit has finished, and what it is doing if not. Poll this until "done" is ' +
+        'true — that means the run ended, either way — then read "succeeded" to learn whether ' +
+        'there is a report, and "error" for why there is not.',
       mimeType: 'application/json',
     },
     async (uri, { workflowId }) => {
