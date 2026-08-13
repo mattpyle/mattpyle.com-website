@@ -76,17 +76,28 @@ test('a malformed limit falls back to its default rather than throwing', () => {
   }
 });
 
-test('the client address is the first hop of x-forwarded-for', () => {
-  // The last entry is Vercel's own edge. Keying on it would put every caller in one bucket, which
-  // is a limiter that either blocks everybody or nobody.
+test('x-real-ip is preferred, because it is one value with nothing to parse', () => {
+  // Both headers are set by Vercel, which overwrites them rather than appending to what the caller
+  // sent — the guarantee this whole limit rests on. Between two platform-set values, the one that
+  // needs no parsing and carries no ambiguity about which entry is the client wins.
+  const headers = new Headers({ 'x-real-ip': IP, 'x-forwarded-for': '198.51.100.1' });
+  assert.equal(clientIpFrom(headers), IP);
+});
+
+test('x-forwarded-for is the fallback, and its first entry is the client', () => {
+  // Reading the last entry, the other common spelling, would key every caller behind the edge into
+  // one bucket: a limiter that blocks the whole site's callers as one or none of them.
   const headers = new Headers({ 'x-forwarded-for': `${IP}, 198.51.100.1, 198.51.100.2` });
   assert.equal(clientIpFrom(headers), IP);
 });
 
-test('x-real-ip is the fallback, and no address at all is null', () => {
-  assert.equal(clientIpFrom(new Headers({ 'x-real-ip': IP })), IP);
+test('no usable address at all is null, which refuses upstream', () => {
+  // Never a free pass: "the platform sent no address" must not be the cheapest unlimited audit.
   assert.equal(clientIpFrom(new Headers()), null);
   assert.equal(clientIpFrom(new Headers({ 'x-forwarded-for': '  ' })), null);
+  assert.equal(clientIpFrom(new Headers({ 'x-real-ip': '  ' })), null);
+  // An empty x-real-ip falls through to x-forwarded-for rather than swallowing the request.
+  assert.equal(clientIpFrom(new Headers({ 'x-real-ip': '  ', 'x-forwarded-for': IP })), IP);
 });
 
 test('the stored key is the HMAC, and the address does not appear in it', () => {

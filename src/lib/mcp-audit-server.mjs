@@ -90,6 +90,49 @@ const TOOL_DESCRIPTION =
   'page: any path in the URL is ignored.';
 
 /**
+ * Request shapes this endpoint refuses outright, before the rate limiter and before the transport.
+ *
+ * Exactly one of them: a JSON-RPC **batch**. The endpoint's whole cost model is one audit per POST
+ * — that is what the rate limiter counts and what the 429 promises — and an array body silently
+ * breaks the arithmetic. The SDK's transport parses an array into N messages and dispatches every
+ * one, so a batch of ten `tools/call` members is ten audits at a stranger's origin against a single
+ * increment: a 10x bypass of both the per-caller and the global limit, and a way to drain the day's
+ * budget for everyone else in one request.
+ *
+ * Counting the members instead was the obvious alternative and is worse: it makes the limiter's
+ * unit ambiguous (is a refused batch one strike or ten?), it has to stay in step with a fan-out
+ * happening inside the SDK, and it buys a client nothing. **Batching was removed from the MCP
+ * protocol in 2025-06-18**, the version this server speaks, so nothing conformant sends one; a
+ * client old enough to try is one that would also be sending a protocol version this server does
+ * not negotiate.
+ *
+ * A non-array body is returned as `null` even when it is plainly invalid — a string, a number,
+ * `null` itself. This guard has one job, and the SDK's own schema parse produces a better error for
+ * those than a second opinion here would.
+ *
+ * @param {unknown} body the parsed request body
+ * @returns {{ status: number, payload: object } | null} the refusal, or null to carry on
+ */
+export function refusalForBody(body) {
+  if (!Array.isArray(body)) return null;
+  return {
+    status: 400,
+    payload: {
+      jsonrpc: '2.0',
+      // A batch has no single id to answer under, which is the case the spec reserves null for.
+      id: null,
+      error: {
+        code: -32600,
+        message:
+          'Invalid Request: this endpoint takes one request per POST, not a JSON-RPC batch. ' +
+          'Batching was removed from the MCP specification in version 2025-06-18. Send each ' +
+          'request as its own POST.',
+      },
+    },
+  };
+}
+
+/**
  * The one refusal the tool makes before doing any work: a target it cannot audit at all.
  *
  * Separate from the checks, because "this is not a URL" and "this site has no llms.txt" are

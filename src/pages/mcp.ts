@@ -4,7 +4,7 @@ import {
   renderMarkdownSummary,
   runFastAudit,
 } from '@mattpyle/steward/agent-audit/fast';
-import { createAuditServer, TOOL_NAME } from '../lib/mcp-audit-server.mjs';
+import { createAuditServer, refusalForBody, TOOL_NAME } from '../lib/mcp-audit-server.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
@@ -68,13 +68,11 @@ function log(fields: Record<string, string | number>) {
 /**
  * The JSON-RPC id of a parsed request body, for an error answered before the SDK ever sees it.
  *
- * A batch gets `null`: the spec's answer to a batch is an array of responses, and this refusal is
- * about the whole request rather than about one member of it. `null` is the id the spec reserves
- * for exactly that — an error the server could not attribute to a single call.
+ * Anything without a usable id gets `null`, which is the id the spec reserves for an error the
+ * server could not attribute to a single call.
  */
 function idOf(body: unknown): string | number | null {
-  if (Array.isArray(body)) return null;
-  if (body && typeof body === 'object') {
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
     const id = (body as { id?: unknown }).id;
     if (typeof id === 'string' || typeof id === 'number') return id;
   }
@@ -86,15 +84,16 @@ function idOf(body: unknown): string | number | null {
  *
  * The limiter counts audits, not handshakes: `initialize` and `tools/list` are a static answer out
  * of this function's own memory with no outbound request in them, and counting them against a
- * caller's ten would mean a client that connects, lists, and calls once had spent three. A batch
- * counts if any member is a `tools/call`, which is the conservative reading.
+ * caller's ten would mean a client that connects, lists, and calls once had spent three.
+ *
+ * One message, because `refusalForBody` has already turned every array body away. That ordering is
+ * what makes this function's answer a *count* rather than a guess: while batches were admitted,
+ * "any member is a tools/call" read as one audit and bought as many as the array had members.
  */
 function wantsAudit(body: unknown): boolean {
-  const isCall = (message: unknown) =>
-    !!message &&
-    typeof message === 'object' &&
-    (message as { method?: unknown }).method === 'tools/call';
-  return Array.isArray(body) ? body.some(isCall) : isCall(body);
+  return (
+    !!body && typeof body === 'object' && (body as { method?: unknown }).method === 'tools/call'
+  );
 }
 
 function jsonResponse(payload: unknown, status: number, headers: Record<string, string> = {}) {
@@ -121,6 +120,15 @@ export const POST: APIRoute = async ({ request }) => {
       { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error: the request body is not JSON.' } },
       400
     );
+  }
+
+  // Batches are refused before anything is counted or run. The endpoint's cost model is one audit
+  // per POST, and the SDK dispatches every member of an array body, so admitting one would buy N
+  // audits for a single rate-limit increment. See refusalForBody for why refusing beats counting.
+  const refusal = refusalForBody(body);
+  if (refusal) {
+    log({ path: '/mcp', http: 'POST', outcome: 'batch-refused', status: refusal.status, bytes: raw.length, ua });
+    return jsonResponse(refusal.payload, refusal.status);
   }
 
   // Before the audit, never after: a refused caller must cost this site nothing at the target's

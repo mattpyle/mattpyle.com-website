@@ -104,11 +104,29 @@ export function readLimits(env) {
 /**
  * The client's address, from the headers the platform sets.
  *
- * `x-forwarded-for` is a list and the **first** entry is the client; the rest are proxies. Reading
- * the last entry, which is the other common spelling, would key every caller behind Vercel's own
- * edge to the same bucket. A caller can forge the header, but not what Vercel prepends to it, so
- * the first entry is attacker-controlled — that is a reason to treat this as a coarse limit rather
- * than an identity, not a reason to key on something worse.
+ * **This function's correctness rests on one platform guarantee, and it is load-bearing.** Vercel
+ * *overwrites* `x-forwarded-for` and `x-real-ip` on every inbound request with the address it
+ * accepted the connection from; it does not append to whatever the caller sent. So these headers
+ * are set by the infrastructure, not by the caller, and the address they carry is one a caller
+ * cannot choose.
+ *
+ * That guarantee is the whole limit. If a caller could set their own address, they could mint a
+ * fresh one per request: the per-caller counter would never reach 10, every request would go
+ * straight through to the global counter, and 500 requests would drain the day's budget and lock
+ * out everyone else — a denial of service costing one loop. The per-caller limit would not be weak,
+ * it would be decorative, and the global limit would become the attacker's weapon.
+ *
+ * **Deploying this code anywhere but Vercel means deciding this header again**, and deciding it
+ * wrong is silent: the limiter still counts, still expires, still returns clean 429s, and stops
+ * bounding anything. Behind a proxy that appends rather than overwrites, the trustworthy value is
+ * the Nth entry from the *right*, where N is the number of proxies you control — never the first
+ * from the left, which is then the one part of the header the caller wrote.
+ *
+ * `x-real-ip` is preferred because it is a single value with no parsing and no ambiguity about
+ * which entry is the client. `x-forwarded-for`'s first entry is the fallback for the same address:
+ * on Vercel the header is the client alone, and where a proxy chain does exist the client is
+ * conventionally first. Reading the *last* entry, the other common spelling, would key every caller
+ * behind the edge into one bucket and block the site's own callers as one.
  *
  * Returns null when nothing usable is present, which is a refusal upstream rather than a free pass:
  * "the platform sent no address" must not be the cheapest way to get an unlimited audit.
@@ -117,13 +135,14 @@ export function readLimits(env) {
  * @returns {string | null}
  */
 export function clientIpFrom(headers) {
+  const real = headers.get('x-real-ip')?.trim();
+  if (real) return real;
   const forwarded = headers.get('x-forwarded-for');
   if (forwarded) {
     const first = forwarded.split(',')[0]?.trim();
     if (first) return first;
   }
-  const real = headers.get('x-real-ip')?.trim();
-  return real || null;
+  return null;
 }
 
 /**
