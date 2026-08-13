@@ -16,10 +16,10 @@ import { BlockedTargetError, vetConnectableUrl, type FetchPolicy } from './safe-
  * sampled URL answering `302` to a private address, reached inside the network
  * the auditor runs in.
  *
- * A forward proxy is the mechanism because it is the one place *every* request
- * a browser makes has to pass through, whatever made it and whatever it is for.
- * Chrome is launched with `--proxy-server` pointed here and with the loopback
- * bypass removed, so there is no category of request that goes around it:
+ * A forward proxy is the mechanism because it is the one place every HTTP-shaped
+ * request a browser makes has to pass through, whatever made it and whatever it
+ * is for. Chrome is launched with `--proxy-server` pointed here and with the
+ * loopback bypass removed, so no HTTP-shaped request goes around it:
  *
  * - **Plain HTTP** arrives as an absolute-URI request. The URL is vetted with
  *   the same `net.ts` classification the fetcher uses, and the upstream socket
@@ -32,6 +32,16 @@ import { BlockedTargetError, vetConnectableUrl, type FetchPolicy } from './safe-
  *   verbatim, and the request Chrome then makes for the new target comes back
  *   through this proxy and is vetted on its own terms. Following the hop inside
  *   the proxy would put the guard back in the position of trusting a `Location`.
+ *
+ * **WebRTC is the traffic a proxy does not see**, and it is why the sentence
+ * above says HTTP-shaped rather than everything. A page can open a peer
+ * connection and send STUN over UDP, which `--proxy-server` does not govern at
+ * all; the addresses it reaches are private ones by design, since host discovery
+ * is what STUN is for. `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`
+ * is on the launch flags for that: it confines WebRTC to transports the proxy
+ * carries, and TURN over TCP then arrives here as an ordinary `CONNECT` and is
+ * vetted like any other. What that leaves is a browser setting rather than a
+ * boundary this code enforces, so the flag is asserted by a test.
  *
  * What it deliberately does not do: re-check robots.txt for a redirect target.
  * robots is a courtesy protocol the deep tier honours for the pages it *chooses*
@@ -124,11 +134,24 @@ export async function startVettingProxy(policy: FetchPolicy): Promise<VettingPro
   });
   const port = (server.address() as AddressInfo).port;
 
+  // The three flags that make this proxy inescapable, undashed because that is
+  // the form `@axe-core/cli` wants; none of them may contain a comma or a
+  // semicolon, which is what that CLI splits its `--chrome-options` value on.
+  //
   // `<-loopback>` *removes* loopback from Chrome's default bypass list, which is
   // the whole point: without it Chrome reaches 127.0.0.1 and ::1 directly and
   // the guard never sees the request. Chrome's own connection to the proxy is
   // not subject to the bypass list, so there is no loop.
-  const flags = [`proxy-server=http://127.0.0.1:${port}`, 'proxy-bypass-list=<-loopback>'];
+  //
+  // `disable_non_proxied_udp` is the WebRTC half, and it belongs on this object
+  // rather than beside the audit's identity flag because it exists only because
+  // a proxy exists: it takes away the one transport a peer connection could use
+  // to reach a private address without passing through here. See the docblock.
+  const flags = [
+    `proxy-server=http://127.0.0.1:${port}`,
+    'proxy-bypass-list=<-loopback>',
+    'force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+  ];
 
   return {
     port,

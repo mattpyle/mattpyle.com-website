@@ -156,7 +156,7 @@ The guard binds in three places, and each one exists because the previous one ha
 |---|---|
 | `safe-fetch.ts` | Every fetch the fast tier makes, and every redirect hop, followed by hand. The connection is **pinned** to the address that was classified, on a per-hop undici dispatcher whose `connect.lookup` consults no resolver, so a resolver answering differently between the check and the connect (DNS rebinding) has nothing to answer. |
 | `deep.ts` | The sampled page, vetted before Chrome is launched, so a refusal costs no browser. |
-| `vetting-proxy.ts` | Every request Chrome makes for itself. Chrome runs behind a local forward proxy (`--proxy-server`, with the loopback bypass removed) that classifies and pins each one: subresources, `fetch()` calls, and the target of any redirect a sampled page answers with. Refusals come back to the page as a 403 and to the reader as a note on the run. |
+| `vetting-proxy.ts` | Every HTTP-shaped request Chrome makes for itself. Chrome runs behind a local forward proxy (`--proxy-server`, with the loopback bypass removed) that classifies and pins each one: subresources, `fetch()` calls, and the target of any redirect a sampled page answers with. Refusals come back to the page as a 403 and to the reader as a note on the run. WebRTC is the exception a proxy cannot cover, so the launch flags also carry `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`, which confines a peer connection to transports the proxy carries. |
 
 The proxy does not re-check robots.txt for a redirect target; robots governs which pages the deep
 tier chooses to sample, and it is not what stands between a URL and your network. Running Chrome in a

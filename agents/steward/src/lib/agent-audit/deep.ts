@@ -49,12 +49,14 @@ import type { AxeViolation, LighthouseLike } from '../audit-map.js';
  *    same `assertConnectableUrl` the fetcher uses, so a page inside a private
  *    range is refused without spending a browser launch and the refusal reads as
  *    a fact about that page.
- * 2. Chrome runs behind `vetting-proxy.ts` and cannot go around it: launched
- *    with `--proxy-server` and with the loopback bypass removed, every request
- *    it makes — subresources, `fetch()` calls, and the target of any redirect
- *    the page answers with — arrives at a proxy that classifies the address and
- *    pins the upstream socket to it. A refused request comes back as a 403 to
- *    the page and as a line in the audit's notes.
+ * 2. Chrome runs behind `vetting-proxy.ts`: launched with `--proxy-server`, with
+ *    the loopback bypass removed, and with non-proxied WebRTC UDP disabled,
+ *    every request it makes — subresources, `fetch()` calls, and the target of
+ *    any redirect the page answers with — arrives at a proxy that classifies the
+ *    address and pins the upstream socket to it. A refused request comes back as
+ *    a 403 to the page and as a line in the audit's notes. The proxy's docblock
+ *    is the place that says precisely what "every request" covers and what the
+ *    WebRTC flag is doing there.
  *
  * Those were two separate open gaps (subresources, and top-level redirects) and
  * they closed together, which was always the expectation: a proxy sees the
@@ -472,9 +474,11 @@ async function renderSample(ctx: DeepContext, opts: DeepOptions, proxy: VettingP
       continue;
     }
     // The URL goes through the same resolve-and-classify path the fetcher uses,
-    // because Chrome is about to navigate to it on its own. What Chrome does
-    // after that — following a redirect, fetching the page's subresources — is
-    // the documented gap; see the docblock.
+    // before a browser is spent on it. What Chrome does after that — following a
+    // redirect, fetching the page's subresources — is covered by the vetting
+    // proxy rather than here; see the docblock. This check earns its place by
+    // being cheap and by wording the refusal as a fact about the sampled page,
+    // which a 403 from the proxy could not.
     try {
       await assertConnectableUrl(url, ctx.policy);
     } catch (err) {

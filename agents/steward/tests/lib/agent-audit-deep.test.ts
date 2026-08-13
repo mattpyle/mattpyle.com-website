@@ -192,9 +192,19 @@ test('both tools are launched through one vetting proxy, and it does not outlive
   );
   // Without this, Chrome reaches loopback directly and the guard never sees it.
   assert.ok(proxy.chromeFlags.includes('--proxy-bypass-list=<-loopback>'));
+  // `--proxy-server` does not govern WebRTC, and a page can open a peer
+  // connection and send STUN over UDP to private addresses without the proxy
+  // ever seeing it. This flag confines WebRTC to transports the proxy carries,
+  // and it is a browser setting rather than something this code enforces, so a
+  // test is the only thing holding it on.
+  assert.ok(proxy.chromeFlags.includes('--force-webrtc-ip-handling-policy=disable_non_proxied_udp'));
   // axe's CLI splits `--chrome-options` on commas and semicolons and wants the
-  // flags undashed; the same two flags have to survive that form.
-  assert.deepEqual(proxy.chromeOptions, ['proxy-server', 'proxy-bypass-list'].map((k, i) => proxy.chromeFlags[i].slice(2)));
+  // flags undashed; all three have to survive that form.
+  assert.deepEqual(
+    proxy.chromeOptions,
+    proxy.chromeFlags.map((f) => f.slice(2)),
+  );
+  assert.equal(proxy.chromeOptions.length, 3);
   for (const option of proxy.chromeOptions) assert.doesNotMatch(option, /[,;]/);
 
   await assert.rejects(
