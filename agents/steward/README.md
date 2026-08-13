@@ -135,8 +135,10 @@ preference. A deep audit is minutes long, past what any MCP client will hold a c
 handle is durable across a worker restart.
 
 It listens on `127.0.0.1:8765` by default and has no authentication, so reaching it from elsewhere
-means a tunnel, and a tunnel makes an unauthenticated audit runner reachable by anyone with the URL
-while the three SSRF gaps below are still open. Attended runs only, and take the tunnel down afterwards.
+means a tunnel, and a tunnel makes an unauthenticated audit runner reachable by anyone with the URL.
+The listener itself still has no Host-header check and no DNS-rebinding protection, so a web page in
+your own browser can POST to the loopback port. Attended runs only, and take the tunnel down
+afterwards.
 
 The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
 120 with `--fast`, 420 without. A deep run against this site takes about a minute.
@@ -146,17 +148,25 @@ Two properties it is built around, both of which matter more than the checks the
 catch-all fails, and so does a page that answers `Accept: text/markdown` with a different page. And
 it **refuses a target inside your own network**: every hostname is resolved and every address
 classified before a socket opens, and again on each redirect hop, allowing only globally-routable
-unicast addresses, with no flag to turn that off. One caveat, stated in `safe-fetch.ts` rather than
-only here: the name is resolved again by Node when it connects, so a hostile resolver answering
-differently the second time (DNS rebinding) is not covered, and closing that needs the connection
-pinned to the vetted address. A second caveat arrives with the deep tier and is stated in `deep.ts`:
-the page Chrome is sent to goes through the same address check first, but the subresources that page
-then pulls in are requested by Chrome, which consulted nothing. A third is the same class: a sampled
-page that answers with a 302 is navigated to the new target by Chrome, with no address re-vetting and
-no robots re-check. All three gaps are recorded on the `hosted-mcp-stage-2-public-fast-tier` card as
-things to close before stage 2 hosts this. It also obeys the target's
-robots.txt — including for the pages the deep tier renders — because an agent-readiness auditor that
-ignores robots fails its own audit.
+unicast addresses, with no flag to turn that off.
+
+The guard binds in three places, and each one exists because the previous one had a way around it:
+
+| Where | What it covers |
+|---|---|
+| `safe-fetch.ts` | Every fetch the fast tier makes, and every redirect hop, followed by hand. The connection is **pinned** to the address that was classified, on a per-hop undici dispatcher whose `connect.lookup` consults no resolver, so a resolver answering differently between the check and the connect (DNS rebinding) has nothing to answer. |
+| `deep.ts` | The sampled page, vetted before Chrome is launched, so a refusal costs no browser. |
+| `vetting-proxy.ts` | Every request Chrome makes for itself. Chrome runs behind a local forward proxy (`--proxy-server`, with the loopback bypass removed) that classifies and pins each one: subresources, `fetch()` calls, and the target of any redirect a sampled page answers with. Refusals come back to the page as a 403 and to the reader as a note on the run. |
+
+The proxy does not re-check robots.txt for a redirect target; robots governs which pages the deep
+tier chooses to sample, and it is not what stands between a URL and your network. Running Chrome in a
+network namespace with no route to anything private is the other way to do this and is Linux-only, so
+it does not fit the Windows desktop the worker runs on. The proxy's measured cost to a Lighthouse run
+is nothing: three interleaved runs on `https://www.mattpyle.com/` and three on
+`https://developer.mozilla.org/en-US/` moved no category score and no wall-clock median.
+
+It also obeys the target's robots.txt — including for the pages the deep tier renders — because an
+agent-readiness auditor that ignores robots fails its own audit.
 
 **One identity across three clients.** The fetcher, Lighthouse's Chrome and axe's all send
 `AUDIT_USER_AGENT`, so an audit is one visitor in the target's access log and the one robots.txt

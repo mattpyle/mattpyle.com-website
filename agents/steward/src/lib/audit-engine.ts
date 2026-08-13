@@ -57,7 +57,7 @@ export function tempRunName(prefix: string): string {
 export async function runAxe(
   url: string,
   signal: AbortSignal,
-  opts: { userAgent?: string } = {},
+  opts: { userAgent?: string; chromeOptions?: string[] } = {},
 ): Promise<{ violations: AxeViolation[]; raw: AxeViolation[] }> {
   const outDir = os.tmpdir();
   const outName = `${tempRunName('steward-axe')}.json`;
@@ -67,10 +67,13 @@ export async function runAxe(
   const axeCli = require.resolve('@axe-core/cli/dist/src/bin/cli.js');
 
   // `--chrome-options` is one value split on `[,;]`, so every flag added here
-  // must contain neither. `userAgent` is set by the caller that audits somebody
-  // else's site, where being attributable matters; the two in-repo callers point
-  // at a local server they started and leave it at Chrome's own.
-  const chromeOptions = ['headless', 'no-sandbox', 'disable-gpu'];
+  // must contain neither — `opts.chromeOptions` included, and the audit's proxy
+  // flags are written to satisfy that. Flags arrive undashed because selenium's
+  // `addArguments` is what receives them. `userAgent` and `chromeOptions` are
+  // set by the caller that audits somebody else's site, where being attributable
+  // and being unable to reach that caller's network both matter; the two in-repo
+  // callers point at a local server they started and leave Chrome at its own.
+  const chromeOptions = ['headless', 'no-sandbox', 'disable-gpu', ...(opts.chromeOptions ?? [])];
   if (opts.userAgent) chromeOptions.push(`user-agent=${opts.userAgent}`);
 
   const res = await runCancellable(

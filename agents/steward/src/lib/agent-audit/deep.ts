@@ -5,6 +5,7 @@ import {
   BlockedTargetError,
   type FetchPolicy,
 } from './safe-fetch.js';
+import { startVettingProxy, type VettingProxy } from './vetting-proxy.js';
 import {
   excerpt,
   type CheckCategory,
@@ -39,41 +40,36 @@ import type { AxeViolation, LighthouseLike } from '../audit-map.js';
  * arrived under Chrome's own UA for the expensive half would be unattributable
  * for exactly the requests that cost the site the most.
  *
- * ## What the address guard does not cover once Chrome has the URL
+ * ## How the address guard reaches the requests Chrome makes
  *
- * Stated rather than papered over, the same way `safe-fetch.ts` states DNS
- * rebinding. **The guard covers the one URL handed over, at the moment it is
- * handed over, and nothing Chrome does afterwards.** Every page this module
- * hands to Chrome is resolved and classified first, by the same
- * `assertConnectableUrl` the fetcher uses, and a page inside a private range is
- * refused before Chrome is launched. Two things happen after that, neither of
- * them checked:
+ * **Every request of a rendered page is vetted, not only the URL handed over.**
+ * That takes two things, because they cover different moments:
  *
- * 1. **Subresources.** A rendered page pulls in images, scripts, stylesheets and
- *    `fetch()` calls of its own, and Chrome requests those itself, having
- *    consulted nothing here. A page that references
- *    `http://169.254.169.254/latest/meta-data/` will have Chrome fetch it, and a
- *    page that then reads the response into the DOM can put whatever it found in
- *    front of whoever runs this.
- * 2. **Top-level redirects.** The vetted URL may answer `302` to somewhere
- *    private, and Chrome follows it. The fetcher does not have this hole — it
- *    follows redirects by hand and re-runs the scheme, DNS and address checks on
- *    every hop — but Chrome's navigation is Chrome's, so the address that was
- *    vetted and the address that gets loaded need not be the same one. The
- *    target's robots.txt is not re-consulted for the new URL either.
+ * 1. The sampled page is resolved and classified before Chrome starts, by the
+ *    same `assertConnectableUrl` the fetcher uses, so a page inside a private
+ *    range is refused without spending a browser launch and the refusal reads as
+ *    a fact about that page.
+ * 2. Chrome runs behind `vetting-proxy.ts` and cannot go around it: launched
+ *    with `--proxy-server` and with the loopback bypass removed, every request
+ *    it makes — subresources, `fetch()` calls, and the target of any redirect
+ *    the page answers with — arrives at a proxy that classifies the address and
+ *    pins the upstream socket to it. A refused request comes back as a 403 to
+ *    the page and as a line in the audit's notes.
  *
- * Both are the same shape and both close the same way. That is an acceptable
- * risk for a local CLI a person points at a site they
- * chose: the operator already trusts their own browser with the same URL, and
- * the audit runs on their machine, inside their own network, at their request.
- * It is **not** acceptable once stage 2 hosts this and the caller is a stranger,
- * because then the network being probed is the host's. Closing both means running
- * Chrome behind a proxy that classifies every request, or in a network namespace
- * with no route to anything private — a proxy sees the redirect hop and the
- * subresource alike, which is why one fix covers both and why neither is worth
- * patching individually first. Recorded on the `hosted-mcp-server` card as
- * stage-2 preconditions alongside DNS rebinding; blockers for hosting, not for
- * this slice.
+ * Those were two separate open gaps (subresources, and top-level redirects) and
+ * they closed together, which was always the expectation: a proxy sees the
+ * redirect hop and the subresource alike, because both are just requests.
+ *
+ * The proxy is what fits the machine this runs on. A Linux network namespace
+ * with no route to anything private is the other way to do it and is not
+ * available on the Windows desktop the worker uses. The cost is that a proxy
+ * sits in the path of every request Lighthouse measures; the delta that adds to
+ * the scores is measured and recorded in the build log rather than assumed to be
+ * nothing.
+ *
+ * What the proxy does not do is re-check robots.txt for a redirect target. See
+ * its docblock: robots governs which pages this tier chooses to sample, and it
+ * is not the thing standing between a stranger's URL and the host's network.
  */
 
 // ---------------------------------------------------------------------------
@@ -178,10 +174,14 @@ const AXE_CHECK = {
  * The two tool invocations, injectable so the tests can run the whole tier — the
  * sampling, the caps, the budget, the Chrome-unavailable path — without a
  * browser. The default implementation is the scorecard's.
+ *
+ * `proxy` is not optional to either real runner: a browser launched without
+ * those flags reaches the network directly, which is the gap this tier closed.
+ * A test runner ignores it, or asserts on it to hold the wiring in place.
  */
 export interface DeepRunners {
-  lighthouse(url: string, timeoutMs: number): Promise<LighthouseLike>;
-  axe(url: string, timeoutMs: number): Promise<AxeViolation[]>;
+  lighthouse(url: string, timeoutMs: number, proxy: VettingProxy): Promise<LighthouseLike>;
+  axe(url: string, timeoutMs: number, proxy: VettingProxy): Promise<AxeViolation[]>;
 }
 
 export interface DeepOptions {
@@ -204,7 +204,7 @@ export interface DeepContext {
 
 function defaultRunners(): DeepRunners {
   return {
-    async lighthouse(url, timeoutMs) {
+    async lighthouse(url, timeoutMs, proxy) {
       const { runLighthouse } = await import('../audit-engine.js');
       // `maxWaitForLoad` is Lighthouse's own give-up timer. It is what keeps a
       // page that never finishes loading from holding the run open: the outer
@@ -223,10 +223,13 @@ function defaultRunners(): DeepRunners {
       // the auditor is shown is the page the audit is about.
       return runLighthouse(url, new AbortController().signal, {
         flags: { maxWaitForLoad: timeoutMs, emulatedUserAgent: AUDIT_USER_AGENT },
-        chromeFlags: [`--user-agent=${AUDIT_USER_AGENT}`],
+        // The proxy flags ride alongside the identity flag, and for the same
+        // reason: what Chrome does off its own bat has to carry the audit's
+        // rules, not the browser's defaults.
+        chromeFlags: [`--user-agent=${AUDIT_USER_AGENT}`, ...proxy.chromeFlags],
       });
     },
-    async axe(url, timeoutMs) {
+    async axe(url, timeoutMs, proxy) {
       const { runAxe } = await import('../audit-engine.js');
       const controller = new AbortController();
       let expired = false;
@@ -235,7 +238,12 @@ function defaultRunners(): DeepRunners {
         controller.abort(new Error(`axe exceeded ${timeoutMs}ms`));
       }, timeoutMs);
       try {
-        return reportableViolations(await runAxe(url, controller.signal, { userAgent: AUDIT_USER_AGENT }));
+        return reportableViolations(
+          await runAxe(url, controller.signal, {
+            userAgent: AUDIT_USER_AGENT,
+            chromeOptions: proxy.chromeOptions,
+          }),
+        );
       } catch (err) {
         // Our own abort, surfaced as the deadline it was, so the loop can tell a
         // page that took too long from a browser that never started.
@@ -382,8 +390,47 @@ export interface DeepOutcome {
  * `not-applicable` for a page the site told it not to look at. The fast tier's
  * results are already written by the time this runs and are never disturbed by
  * anything in here.
+ *
+ * The vetting proxy's lifetime is this call. It is started before the first page
+ * and closed in a `finally`, including on the paths where no browser ever ran:
+ * a listening socket left behind by a failed audit is a socket somebody else's
+ * page could later be pointed at.
  */
 export async function runDeepChecks(ctx: DeepContext, opts: DeepOptions = {}): Promise<DeepOutcome> {
+  const proxy = await startVettingProxy(ctx.policy);
+  try {
+    const outcome = await renderSample(ctx, opts, proxy);
+    return { ...outcome, notes: [...outcome.notes, ...blockedNotes(proxy)] };
+  } finally {
+    await proxy.close();
+  }
+}
+
+/** How many refused requests are named individually before the note summarises. */
+const MAX_BLOCKED_LISTED = 10;
+
+/**
+ * What the proxy stopped, as run-level notes.
+ *
+ * Reported rather than swallowed, for the same reason the page cap is: a page
+ * whose subresources were refused rendered differently from the page its owner
+ * sees, and a score measured on it means something slightly different. The
+ * reader is owed both facts.
+ */
+function blockedNotes(proxy: VettingProxy): string[] {
+  if (proxy.blocked.length === 0) return [];
+  const listed = proxy.blocked.slice(0, MAX_BLOCKED_LISTED);
+  const lines = listed.map((b) => `Deep tier: the browser was refused ${b.url} — ${b.reason}`);
+  if (proxy.blocked.length > listed.length) {
+    lines.push(
+      `Deep tier: ${proxy.blocked.length - listed.length} further request(s) from the rendered ` +
+        'pages were refused by the address guard and are not listed individually.',
+    );
+  }
+  return lines;
+}
+
+async function renderSample(ctx: DeepContext, opts: DeepOptions, proxy: VettingProxy): Promise<DeepOutcome> {
   const maxPages = opts.maxPages ?? DEFAULT_MAX_PAGES;
   const pageTimeoutMs = opts.pageTimeoutMs ?? DEFAULT_PAGE_TIMEOUT_MS;
   const runners = opts.runners ?? defaultRunners();
@@ -454,7 +501,7 @@ export async function runDeepChecks(ctx: DeepContext, opts: DeepOptions = {}): P
     let lighthouseExpired = false;
     const started = Date.now();
     try {
-      page.violations = await withDeadline(runners.axe(url, slice), slice, 'axe');
+      page.violations = await withDeadline(runners.axe(url, slice, proxy), slice, 'axe');
     } catch (err) {
       page.axeError = err instanceof Error ? err.message : String(err);
       axeExpired = err instanceof DeadlineExceededError;
@@ -465,7 +512,7 @@ export async function runDeepChecks(ctx: DeepContext, opts: DeepOptions = {}): P
       lighthouseExpired = true;
     } else {
       try {
-        page.lhr = await withDeadline(runners.lighthouse(url, left), left, 'Lighthouse');
+        page.lhr = await withDeadline(runners.lighthouse(url, left, proxy), left, 'Lighthouse');
       } catch (err) {
         page.lighthouseError = err instanceof Error ? err.message : String(err);
         lighthouseExpired = err instanceof DeadlineExceededError;

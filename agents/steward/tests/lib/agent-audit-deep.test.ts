@@ -11,6 +11,7 @@ import {
 } from '../../src/lib/agent-audit/deep.js';
 import { renderMarkdownSummary } from '../../src/lib/agent-audit/render.js';
 import { DEFAULT_POLICY } from '../../src/lib/agent-audit/safe-fetch.js';
+import type { VettingProxy } from '../../src/lib/agent-audit/vetting-proxy.js';
 import type { AuditResult, CheckResult } from '../../src/lib/agent-audit/result.js';
 import { isExpectedDraftNonFinding, type AxeViolation, type LighthouseLike } from '../../src/lib/audit-map.js';
 
@@ -38,17 +39,21 @@ function lhr(scores: Record<string, number>): LighthouseLike {
 
 const GOOD = lhr({ performance: 98, accessibility: 100, seo: 100, 'best-practices': 96, 'agentic-browsing': 100 });
 
-function runners(over: Partial<DeepRunners> = {}): DeepRunners & { calls: string[] } {
+function runners(over: Partial<DeepRunners> = {}): DeepRunners & { calls: string[]; proxies: VettingProxy[] } {
   const calls: string[] = [];
+  const proxies: VettingProxy[] = [];
   return {
     calls,
-    async lighthouse(url, timeoutMs) {
+    proxies,
+    async lighthouse(url, timeoutMs, proxy) {
       calls.push(`lighthouse ${url}`);
-      return over.lighthouse ? over.lighthouse(url, timeoutMs) : GOOD;
+      proxies.push(proxy);
+      return over.lighthouse ? over.lighthouse(url, timeoutMs, proxy) : GOOD;
     },
-    async axe(url, timeoutMs) {
+    async axe(url, timeoutMs, proxy) {
       calls.push(`axe ${url}`);
-      return over.axe ? over.axe(url, timeoutMs) : [];
+      proxies.push(proxy);
+      return over.axe ? over.axe(url, timeoutMs, proxy) : [];
     },
   };
 }
@@ -170,6 +175,66 @@ test('a page inside a private range is refused before the browser is launched', 
   assert.equal(perf.status, 'error');
   assert.match(perf.evidence.map((e) => e.note).join(' '), /link-local/);
 });
+
+test('both tools are launched through one vetting proxy, and it does not outlive the run', async () => {
+  // The wiring, held in place by a test because the failure it prevents is
+  // silent: a Chrome launched without these flags reaches the network directly
+  // and every deep check still produces a perfectly ordinary-looking score.
+  const tools = runners();
+  await runDeepChecks(context(), { runners: tools, maxPages: 1 });
+
+  const distinct = new Set(tools.proxies);
+  assert.equal(distinct.size, 1, 'axe and Lighthouse were pointed at different proxies');
+  const [proxy] = [...distinct];
+  assert.ok(
+    proxy.chromeFlags.some((f) => new RegExp(`^--proxy-server=http://127\\.0\\.0\\.1:${proxy.port}$`).test(f)),
+    proxy.chromeFlags.join(' '),
+  );
+  // Without this, Chrome reaches loopback directly and the guard never sees it.
+  assert.ok(proxy.chromeFlags.includes('--proxy-bypass-list=<-loopback>'));
+  // axe's CLI splits `--chrome-options` on commas and semicolons and wants the
+  // flags undashed; the same two flags have to survive that form.
+  assert.deepEqual(proxy.chromeOptions, ['proxy-server', 'proxy-bypass-list'].map((k, i) => proxy.chromeFlags[i].slice(2)));
+  for (const option of proxy.chromeOptions) assert.doesNotMatch(option, /[,;]/);
+
+  await assert.rejects(
+    () => fetch(`http://127.0.0.1:${proxy.port}/`),
+    'the proxy was still listening after the run finished',
+  );
+});
+
+test("what the browser was refused is reported in the run's notes", async () => {
+  // The injected runner stands in for Chrome and makes exactly the request a
+  // rendered page makes for a subresource — through the proxy it was handed,
+  // because that is the only route out.
+  const tools = runners({
+    async axe(_url, _ms, proxy) {
+      await proxiedGet(proxy.port, 'http://169.254.169.254/latest/meta-data/');
+      return [];
+    },
+  });
+  const { notes } = await runDeepChecks(context(), { runners: tools, maxPages: 1 });
+
+  assert.ok(
+    notes.some((n) => /the browser was refused http:\/\/169\.254\.169\.254\/.*link-local/.test(n)),
+    notes.join(' | '),
+  );
+});
+
+/** One absolute-URI request through a proxy, the way a browser sends it. */
+function proxiedGet(port: number, url: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      { host: '127.0.0.1', port, method: 'GET', path: url, headers: { host: new URL(url).host }, agent: false },
+      (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode ?? 0));
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 test('a page that never finishes rendering cannot hold the tier past its slice', async () => {
   // The pathological target: both tools hang forever. Without a deadline of its
