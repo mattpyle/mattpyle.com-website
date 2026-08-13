@@ -128,17 +128,29 @@ steward mcp-serve                              # serve audit_site over MCP, back
 
 `mcp-serve` is the same audit behind an MCP server, so an agent that is not at this terminal can run
 one. Unlike `audit-url` it runs the audit as a Temporal workflow, so a worker has to be up or nothing
-executes. One tool, `audit_site(url, fast?)`, returns a workflow ID immediately rather than the
-result, and three resources serve the rest: `steward://audit/<id>/status` until `done` is true, then
-`/report` for the canonical JSON or `/summary` for the markdown digest. That shape is not a
-preference. A deep audit is minutes long, past what any MCP client will hold a call open for, and the
-handle is durable across a worker restart.
+executes. `audit_site(url, fast?)` returns a workflow ID immediately rather than the result, and
+`get_audit(workflowId, view)` reads it back: `status` until `done` is true, then `report` for the
+canonical JSON or `summary` for the markdown digest. That shape is not a preference. A deep audit is
+minutes long, past what any MCP client will hold a call open for, and the handle is durable across a
+worker restart.
+
+The same three documents are also `steward://audit/<id>/{status,report,summary}` resources, and both
+surfaces render through one function, so they cannot disagree. `get_audit` exists because the chat
+clients — claude.ai, Claude desktop, Cowork — call tools but do not read resources: behind a resource
+alone, the report is unreachable from the largest population of agents, and `audit_site` hands those
+callers an ID they can do nothing with.
 
 It listens on `127.0.0.1:8765` by default and has no authentication, so reaching it from elsewhere
 means a tunnel, and a tunnel makes an unauthenticated audit runner reachable by anyone with the URL.
-The listener itself still has no Host-header check and no DNS-rebinding protection, so a web page in
-your own browser can POST to the loopback port. Attended runs only, and take the tunnel down
-afterwards.
+Attended runs only, and take the tunnel down afterwards.
+
+The listener answers only requests whose `Host` header names a loopback address — `localhost`,
+`127.0.0.1` or `[::1]`, on any port — and refuses everything else with a 403 before routing, the
+health probe included. That is the DNS-rebinding defence: a page in your own browser can POST to the
+loopback port without CORS having a say, but it cannot forge the Host header, and a name an attacker
+resolves to 127.0.0.1 is not one of the three. A tunnel forwards the public request's Host, so a
+tunnelled session has to name that hostname: `--allow-host <hostname>`, repeatable, or
+`STEWARD_MCP_ALLOWED_HOSTS` as a comma-separated list. Nothing beyond loopback is ever a default.
 
 The two tiers have different budgets, and `--budget <seconds>` defaults to whichever one is running:
 120 with `--fast`, 420 without. A deep run against this site takes about a minute.

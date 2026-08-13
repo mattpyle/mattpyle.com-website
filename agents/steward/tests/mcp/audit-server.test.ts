@@ -133,13 +133,13 @@ async function pollUntilDone(client: McpClient, statusUri: string): Promise<Reco
   throw new Error(`audit never reported done: ${statusUri}`);
 }
 
-test('the tool and both resource templates are advertised', async () => {
+test('both tools and all three resource templates are advertised', async () => {
   const client = await connect();
   try {
     const { tools } = await client.listTools();
     assert.deepEqual(
-      tools.map((t) => t.name),
-      ['audit_site'],
+      tools.map((t) => t.name).sort(),
+      ['audit_site', 'get_audit'],
     );
     const { resourceTemplates } = await client.listResourceTemplates();
     assert.deepEqual(
@@ -242,6 +242,80 @@ test('a failed audit ends the polling loop and says what stopped it', async () =
     assert.equal(status.error, REFUSAL);
 
     await assert.rejects(() => client.readResource({ uri: out.reportUri }), new RegExp(REFUSAL));
+  } finally {
+    await client.close();
+  }
+});
+
+/** The text of a tool call's one content block. */
+function toolText(call: Record<string, unknown>): string {
+  const [block] = call.content as Array<{ type: string; text?: string }>;
+  assert.equal(block.type, 'text', 'tool content was not text');
+  assert.equal(typeof block.text, 'string');
+  return block.text as string;
+}
+
+test('get_audit serves the same three documents as the resources, byte for byte', async () => {
+  const client = await connect();
+  try {
+    const call = await client.callTool({ name: 'audit_site', arguments: { url: 'example.com', fast: true } });
+    const out = call.structuredContent as Record<string, string>;
+    await pollUntilDone(client, out.statusUri);
+
+    // The rule this enforces: a tool-only client (claude.ai, Claude desktop,
+    // Cowork) must be able to reach exactly what a resource-capable one reads.
+    // Not "equivalent" — identical, because the two go through one renderer.
+    for (const view of ['status', 'report', 'summary'] as const) {
+      const viaTool = await client.callTool({
+        name: 'get_audit',
+        arguments: { workflowId: out.workflowId, view },
+      });
+      const viaResource = await client.readResource({ uri: `steward://audit/${out.workflowId}/${view}` });
+      assert.equal(toolText(viaTool), textOf(viaResource), `${view} differs between tool and resource`);
+    }
+  } finally {
+    await client.close();
+  }
+});
+
+test('get_audit defaults to the status view — the one that is always readable', async () => {
+  const client = await connect();
+  try {
+    const call = await client.callTool({ name: 'audit_site', arguments: { url: 'example.com', fast: true } });
+    const out = call.structuredContent as Record<string, string>;
+
+    const first = await client.callTool({ name: 'get_audit', arguments: { workflowId: out.workflowId } });
+    const status = JSON.parse(toolText(first)) as Record<string, unknown>;
+    assert.equal(status.workflowId, out.workflowId);
+    assert.equal(typeof status.done, 'boolean');
+  } finally {
+    await client.close();
+  }
+});
+
+test('get_audit refuses a report that does not exist rather than inventing an empty one', async () => {
+  const client = await connect();
+  try {
+    const call = await client.callTool({
+      name: 'audit_site',
+      arguments: { url: REFUSED_HOST, fast: true },
+    });
+    const out = call.structuredContent as Record<string, string>;
+    await pollUntilDone(client, out.statusUri);
+
+    const report = await client.callTool({
+      name: 'get_audit',
+      arguments: { workflowId: out.workflowId, view: 'report' },
+    });
+    assert.equal(report.isError, true);
+    assert.match(toolText(report), new RegExp(REFUSAL));
+
+    const unknown = await client.callTool({
+      name: 'get_audit',
+      arguments: { workflowId: 'steward-audit-nope-fast-0000', view: 'status' },
+    });
+    assert.equal(unknown.isError, true);
+    assert.match(toolText(unknown), /No audit with workflow ID/);
   } finally {
     await client.close();
   }
