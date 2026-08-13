@@ -185,6 +185,29 @@ async function readReport(client: Client, workflowId: string): Promise<AuditResu
   throw new Error(`Audit ${workflowId} produced no report: ${status.error ?? status.execution}.`);
 }
 
+type AuditView = 'status' | 'report' | 'summary';
+
+/**
+ * One document per view, rendered once.
+ *
+ * Both surfaces go through here — the three resources and the `get_audit` tool —
+ * because a tool-only client (claude.ai, Claude desktop, Cowork calls tools but
+ * cannot read resources) has to be able to reach exactly what a resource-capable
+ * one reads. Two code paths rendering "the same" document is how the two
+ * populations end up being told different things about one audit.
+ */
+async function readView(client: Client, workflowId: string, view: AuditView): Promise<string> {
+  if (view === 'status') {
+    const { status } = await readState(client, workflowId);
+    return json(status);
+  }
+  // A pure function of the document the report view serves — the same rule
+  // `audit-url` writes its three artifacts under. The two renderings cannot
+  // disagree, because there is only one measurement.
+  const result = await readReport(client, workflowId);
+  return view === 'summary' ? `${renderMarkdownSummary(result)}\n` : json(result);
+}
+
 /**
  * Builds the server. Takes a `Client` rather than making one, so the CLI owns the
  * connection's lifetime and a test can hand in its own.
@@ -197,10 +220,13 @@ export function createAuditMcpServer(client: Client): McpServer {
         'Audits any website for agent-readiness: robots.txt, sitemap, llms.txt, agents.md, ' +
         'markdown content negotiation, the well-known discovery documents, and — on the deep ' +
         'tier — Lighthouse and axe over pages rendered in a real browser. audit_site returns a ' +
-        'workflow ID immediately; the audit itself takes seconds (fast) to minutes (deep). Read ' +
-        'the status resource until done is true: succeeded then says whether there is a report to ' +
-        'read, and error says why if there is not. It obeys the ' +
-        "target's robots.txt and identifies itself as steward-audit-url.",
+        'workflow ID immediately; the audit itself takes seconds (fast) to minutes (deep). Then ' +
+        'call get_audit(workflowId, view) — view "status" until done is true, at which point ' +
+        'succeeded says whether there is a report and error says why if there is not, then view ' +
+        '"report" for the JSON or "summary" for markdown. The same three documents are also served ' +
+        'as steward://audit/<workflowId>/{status,report,summary} resources, for clients that read ' +
+        "resources; get_audit is the path that works in every client. It obeys the target's " +
+        'robots.txt and identifies itself as steward-audit-url.',
     },
   );
 
@@ -210,10 +236,10 @@ export function createAuditMcpServer(client: Client): McpServer {
       title: 'Audit a site for agent-readiness',
       description:
         'Starts an agent-readiness audit of one site and returns its workflow ID straight away — ' +
-        'it does not wait for the result. Poll steward://audit/<workflowId>/status until done is ' +
+        'it does not wait for the result. Poll get_audit(workflowId, view: "status") until done is ' +
         'true (done means the run ended, and succeeded says whether it ended with a report), then ' +
-        'read steward://audit/<workflowId>/report for the canonical JSON, or ' +
-        '/summary for a markdown digest of the same document. The deep tier renders up to three ' +
+        'call get_audit with view "report" for the canonical JSON, or "summary" for a markdown ' +
+        'digest of the same document. The deep tier renders up to three ' +
         'pages in a browser and takes minutes; pass fast: true for the HTTP checks alone, which ' +
         'take seconds.',
       inputSchema: {
@@ -291,11 +317,51 @@ export function createAuditMcpServer(client: Client): McpServer {
             text:
               `Auditing ${origin} (${tier} tier). This is running now and is not finished.\n` +
               `Workflow ID: ${workflowId}\n` +
-              `Read ${structuredContent.statusUri} until "done" is true (expect ${structuredContent.expectedDuration}), ` +
-              `then read ${structuredContent.reportUri} if "succeeded" is true; if it is false, "error" says why.`,
+              `Call get_audit("${workflowId}", "status") until "done" is true (expect ${structuredContent.expectedDuration}), ` +
+              'then get_audit with view "report" if "succeeded" is true; if it is false, "error" says why.\n' +
+              `The same documents are at ${structuredContent.statusUri} and ${structuredContent.reportUri} ` +
+              'for clients that read resources.',
           },
         ],
       };
+    },
+  );
+
+  server.registerTool(
+    'get_audit',
+    {
+      title: 'Read one audit',
+      description:
+        'Reads one started audit: view "status" for whether it has finished, "report" for the ' +
+        'canonical JSON of a finished one, "summary" for the same report as markdown. Poll status ' +
+        'until done is true — done means the run ended, either way — then succeeded says whether ' +
+        'there is a report to read, and error says why if there is not. Reading report or summary ' +
+        'before then is an error rather than a partial document. Takes the workflowId audit_site ' +
+        'returned.',
+      inputSchema: {
+        workflowId: z
+          .string()
+          .min(1)
+          .describe('The ID audit_site returned, e.g. steward-audit-example.com-fast-1a2b3c4d.'),
+        view: z
+          .enum(['status', 'report', 'summary'])
+          .optional()
+          .describe('Which document to read. Defaults to status, the one that is always readable.'),
+      },
+      annotations: {
+        // A read of this server's own state, and the same read twice is the same
+        // answer once the run has ended.
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ workflowId, view }) => {
+      // The same three calls the resources make, so the two surfaces serve one
+      // document each and cannot drift into disagreeing.
+      const text = await readView(client, workflowId, view ?? 'status');
+      return { content: [{ type: 'text' as const, text }] };
     },
   );
 
@@ -318,8 +384,8 @@ export function createAuditMcpServer(client: Client): McpServer {
       mimeType: 'application/json',
     },
     async (uri, { workflowId }) => {
-      const { status } = await readState(client, String(workflowId));
-      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: json(status) }] };
+      const text = await readView(client, String(workflowId), 'status');
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text }] };
     },
   );
 
@@ -334,8 +400,8 @@ export function createAuditMcpServer(client: Client): McpServer {
       mimeType: 'application/json',
     },
     async (uri, { workflowId }) => {
-      const result = await readReport(client, String(workflowId));
-      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: json(result) }] };
+      const text = await readView(client, String(workflowId), 'report');
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text }] };
     },
   );
 
@@ -350,13 +416,8 @@ export function createAuditMcpServer(client: Client): McpServer {
       mimeType: 'text/markdown',
     },
     async (uri, { workflowId }) => {
-      // A pure function of the document the report resource serves — the same
-      // rule `audit-url` writes its three artifacts under. The two renderings
-      // cannot disagree, because there is only one measurement.
-      const result = await readReport(client, String(workflowId));
-      return {
-        contents: [{ uri: uri.href, mimeType: 'text/markdown', text: `${renderMarkdownSummary(result)}\n` }],
-      };
+      const text = await readView(client, String(workflowId), 'summary');
+      return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text }] };
     },
   );
 
