@@ -109,6 +109,14 @@ Temporal, no API key. It writes one canonical JSON result plus two
 renderings derived from it — a markdown summary for a chat window and a self-contained HTML report
 for a person — and reports no composite score, only per-category counts and a ranked fix list.
 
+The fast tier has a second consumer: the site's public `/mcp` endpoint (`src/pages/mcp.ts`) runs it
+inside a Vercel function to answer an `audit_site` tool call synchronously. It reaches it through
+the one entry `package.json`'s exports map publishes, `@mattpyle/steward/agent-audit/fast`. That
+entry's import graph must never reach `@temporalio/*`, `chrome-launcher`, `lighthouse` or the axe
+CLI, which is why `runAudit` takes the deep tier as an injected `loadDeep` thunk rather than
+importing it: a dynamic import is lazy for Node and eager for every bundler. The site's
+`tests/steward-fast-audit-packaging.test.mjs` walks the graph and fails if any of them appears.
+
 The HTML report is the one to send somebody. Open the `.html` file in a browser: headline tiles for
 the rendered-experience numbers with the sample size beside each one, the per-category counts, the
 ranked fix list with every finding's evidence behind a `<details>`, and every check further down. It

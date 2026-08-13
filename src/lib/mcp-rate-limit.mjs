@@ -16,6 +16,19 @@
  * | Per caller | 10 audits | rolling hour, aligned to the epoch | `mcp:v1:caller:<hmac>:<window>` |
  * | Global | 500 audits | UTC day | `mcp:v1:global:<utc-day>` |
  *
+ * The environment it reads, all of it optional except the first:
+ *
+ * | Variable | Effect |
+ * |---|---|
+ * | `MCP_AUDIT_RATE_SECRET` | The HMAC key. **Required** — absent, every audit is refused. |
+ * | `MCP_AUDIT_RATE_PER_CALLER` | Audits one caller may run per window. Default 10. |
+ * | `MCP_AUDIT_RATE_WINDOW_SECONDS` | The per-caller window. Default 3600. |
+ * | `MCP_AUDIT_RATE_GLOBAL_PER_DAY` | Audits the endpoint runs per UTC day. Default 500. |
+ * | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | The store. `KV_REST_API_URL` / `_TOKEN` is read too. |
+ *
+ * Setting the secret is what turns the endpoint on, which is the right way round: a deploy that
+ * forgets it serves 429s rather than unlimited audits.
+ *
  * Three properties are load-bearing, and every change here has to keep them.
  *
  * 1. **The stored key is an HMAC of the client IP, never the IP.** This site's counters have never

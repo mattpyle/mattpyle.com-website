@@ -123,7 +123,7 @@ export function originFor(url, normalise) {
  * Builds the server.
  *
  * @param {{
- *   runAudit: (url: string) => Promise<Record<string, unknown>>,
+ *   runAudit: (url: string) => Promise<any>,
  *   renderSummary: (audit: any) => string,
  *   normaliseTarget: (input: string) => { origin: string, url: URL },
  * }} engine
