@@ -20,9 +20,9 @@ export { archiveReport } from './archive.js';
 export { publishPost } from './publish.js';
 export { verifyDeploy } from './verify-deploy.js';
 export { checkPrChecks } from './publish.js';
-// Registered ahead of its first caller: `audit-url` is a CLI verb in stage 0 and
-// a workflow in stage 1 (hosted-mcp-server card). See the file's docblock.
-export { auditSiteFast } from './agent-audit.js';
+// `auditSiteWorkflow`'s two tiers, one per task queue: the fast tier is HTTP and
+// runs light, the deep tier launches Chrome and runs heavy.
+export { auditSiteFast, auditSiteDeep } from './agent-audit.js';
 export {
   resolveAuditUrls,
   resolveRunStamp,
