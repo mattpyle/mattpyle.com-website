@@ -1,5 +1,7 @@
 import dns from 'node:dns/promises';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { classifyAddress } from './net.js';
+import { pinnedLookup, type PinnedAddress } from './pinning.js';
 
 /**
  * The fetch layer every tier of `audit-url` rides on.
@@ -8,27 +10,36 @@ import { classifyAddress } from './net.js';
  * a stranger, so the fetcher — not the checks — is where the safety properties
  * live (hosted-mcp-server card, "Security, binding from stage 0"):
  *
- * 1. **Resolve, then judge, then connect.** Every hostname is resolved with
- *    `dns.lookup` and *all* returned addresses are classified before a socket is
- *    opened. One private address in the set refuses the whole request: a name
- *    that resolves to both a public and a private address is exactly the shape
- *    of the attack, not a reason to try the public one.
+ * 1. **Resolve, judge, then connect to the address that was judged.** Every
+ *    hostname is resolved once with `dns.lookup` and *all* returned addresses
+ *    are classified before a socket is opened. One private address in the set
+ *    refuses the whole request: a name that resolves to both a public and a
+ *    private address is exactly the shape of the attack, not a reason to try the
+ *    public one. The surviving addresses are then *pinned*: the request runs on
+ *    an undici `Agent` whose `connect.lookup` answers from that vetted set and
+ *    consults no resolver, so the address that was judged is the address the
+ *    socket goes to. This is what closes DNS rebinding — see `pinning.ts` for
+ *    the mechanism and why one lookup rather than two is the whole fix. SNI and
+ *    certificate validation are unaffected, because undici sets `servername`
+ *    from the URL and only the address resolution is overridden.
  * 2. **Every redirect hop is a new request.** Redirects are followed manually
  *    (`redirect: 'manual'`) so each `Location` goes through the same scheme,
- *    DNS and address checks. Automatic following would hand the guard's job to
- *    undici, which does not do it.
+ *    DNS, address and pinning path. Automatic following would hand the guard's
+ *    job to undici, which does not do it.
  * 3. **Caps, all of them.** Redirect count, response bytes, per-request time,
  *    and a whole-audit time budget shared by every request.
  * 4. **It says who it is.** One honest User-Agent, pointing at a page that
  *    explains the traffic.
  *
- * Known residual risk, stated rather than papered over: DNS rebinding. The
- * address is checked, then Node resolves the name again when it connects, and
- * a hostile resolver can answer differently the second time. Closing that
- * requires pinning the connection to the vetted IP with a custom undici
- * dispatcher (and carrying the SNI/Host header by hand), which is a bigger
- * change than this slice needs. It is a real gap for a *hosted* auditor —
- * revisit before stage 2 puts this behind a public endpoint.
+ * The fetch used here is `undici`'s own rather than the global one, because a
+ * dispatcher only applies to the client that created it: handing an `Agent`
+ * built by the `undici` package to Node's built-in `fetch` mixes two copies of
+ * the library. One import of both keeps the dispatcher and the fetch that reads
+ * it the same code.
+ *
+ * The one connection this does *not* pin is a host in `allowedPrivateHosts`
+ * whose name does not resolve, which is the tests' `example.test` and nothing
+ * else. There is no flag that reaches that path from the CLI.
  */
 
 /**
@@ -126,17 +137,38 @@ export interface SafeFetchInit {
  * `BlockedTargetError` exactly as `fetch` would.
  */
 export async function assertConnectableUrl(rawUrl: string, policy: FetchPolicy): Promise<void> {
+  await vetConnectableUrl(rawUrl, policy);
+}
+
+/**
+ * The same guard, handing back the addresses the connection must be pinned to.
+ *
+ * `null` means "connect without pinning", which happens for one case only: a
+ * host in `allowedPrivateHosts` whose name does not resolve. That is the deep
+ * tier's `example.test` fixture and nothing a caller can reach.
+ *
+ * `vetting-proxy.ts` uses this rather than `assertConnectableUrl`, because a
+ * proxy that vetted an address and then let Chrome's socket resolve the name
+ * again would have the same rebinding hole this fetcher just closed.
+ */
+export async function vetConnectableUrl(
+  rawUrl: string,
+  policy: FetchPolicy,
+): Promise<PinnedAddress[] | null> {
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
     throw new BlockedTargetError(rawUrl, 'not a valid absolute URL');
   }
-  await assertConnectable(url, policy);
+  return vetAndResolve(url, policy);
 }
 
-/** Checks the scheme and resolves + classifies every address behind a URL. */
-async function assertConnectable(url: URL, policy: FetchPolicy): Promise<void> {
+/**
+ * Checks the scheme, resolves the name once, and classifies every address it
+ * returned. What comes back is the pin for the connection that follows.
+ */
+async function vetAndResolve(url: URL, policy: FetchPolicy): Promise<PinnedAddress[] | null> {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new BlockedTargetError(url.href, `unsupported scheme "${url.protocol}" — only http and https are fetched`);
   }
@@ -146,25 +178,41 @@ async function assertConnectable(url: URL, policy: FetchPolicy): Promise<void> {
     throw new BlockedTargetError(url.href, 'the URL carries embedded credentials');
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
-  if (policy.allowedPrivateHosts.includes(hostname)) return;
+  const exempt = policy.allowedPrivateHosts.includes(hostname);
 
-  let addresses: Array<{ address: string }>;
+  let addresses: PinnedAddress[];
   try {
     addresses = await dns.lookup(hostname, { all: true, verbatim: true });
   } catch (err) {
+    // An exempt host that does not resolve is the mock-origin fixture, which is
+    // vetted and never actually connected to. Everything else is refused: a name
+    // this process cannot resolve is not a name it should be opening a socket to.
+    if (exempt) return null;
     throw new BlockedTargetError(url.href, `DNS lookup failed: ${err instanceof Error ? err.message : String(err)}`);
   }
-  if (addresses.length === 0) throw new BlockedTargetError(url.href, 'DNS returned no addresses');
-
-  for (const { address } of addresses) {
-    const reason = classifyAddress(address);
-    // One bad address refuses the whole name — see the docblock.
-    if (reason) throw new BlockedTargetError(url.href, `${hostname} resolves to ${reason}`);
+  if (addresses.length === 0) {
+    if (exempt) return null;
+    throw new BlockedTargetError(url.href, 'DNS returned no addresses');
   }
+
+  if (!exempt) {
+    for (const { address } of addresses) {
+      const reason = classifyAddress(address);
+      // One bad address refuses the whole name — see the docblock.
+      if (reason) throw new BlockedTargetError(url.href, `${hostname} resolves to ${reason}`);
+    }
+  }
+  // Exempt or not, the connection is pinned to what this lookup returned. The
+  // exemption is about which addresses are *allowed*, never about whether the
+  // socket may go somewhere other than the one that was looked at.
+  return addresses;
 }
 
+/** The response type of the undici `fetch` this module uses; not the DOM one. */
+type UndiciResponse = Awaited<ReturnType<typeof undiciFetch>>;
+
 /** Reads a response body with a hard byte cap, without buffering past it. */
-async function readCapped(res: Response, maxBytes: number): Promise<{ text: string; bytes: number; truncated: boolean }> {
+async function readCapped(res: UndiciResponse, maxBytes: number): Promise<{ text: string; bytes: number; truncated: boolean }> {
   if (!res.body) return { text: '', bytes: 0, truncated: false };
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -237,7 +285,7 @@ export class SafeFetcher {
     for (let hop = 0; ; hop++) {
       const remaining = this.remainingMs();
       if (remaining <= 0) throw new BudgetExhaustedError(current.href);
-      await assertConnectable(current, this.policy);
+      const pinned = await vetAndResolve(current, this.policy);
 
       // The timer covers the body read as well as the headers, and never
       // outlives the audit's own budget. Clearing it as soon as `fetch`
@@ -253,12 +301,17 @@ export class SafeFetcher {
         () => controller.abort(new Error(`request exceeded ${budgeted}ms (headers and body)`)),
         budgeted,
       );
+      // One dispatcher per hop, because the pin is per hop: the addresses vetted
+      // for this URL say nothing about the next `Location`, and a pooled agent
+      // would carry one hop's pin into another hop's connection.
+      const dispatcher = pinned ? new Agent({ connect: { lookup: pinnedLookup(pinned) } }) : undefined;
       try {
         this.requestCount++;
-        const res = await fetch(current.href, {
+        const res = await undiciFetch(current.href, {
           method: init.method ?? 'GET',
           redirect: 'manual',
           signal: controller.signal,
+          ...(dispatcher ? { dispatcher } : {}),
           headers: {
             'user-agent': AUDIT_USER_AGENT,
             accept: '*/*',
@@ -309,6 +362,11 @@ export class SafeFetcher {
         };
       } finally {
         clearTimeout(timeout);
+        // After the body has been read, which it has: the `return` above builds
+        // its value before this runs. `destroy` rather than `close` so a
+        // truncated body — cancelled mid-stream by the byte cap — does not leave
+        // this waiting for a request that will never finish.
+        if (dispatcher) await dispatcher.destroy().catch(() => {});
       }
     }
   }
