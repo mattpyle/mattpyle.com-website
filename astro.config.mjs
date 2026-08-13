@@ -73,6 +73,20 @@ export default defineConfig({
   // default), so every page is emitted as <route>/index.html and every canonical, sitemap
   // entry, and OG URL already carries the slash.
   markdown: { syntaxHighlight: false },
+  vite: {
+    ssr: {
+      // @mattpyle/steward is a workspace package that ships TypeScript source
+      // with no build step, so the /mcp function's one import of it has to be
+      // transpiled rather than left as a runtime `import` of a .ts file. Vite
+      // usually infers this for a linked package; declaring it means the build
+      // does not depend on that inference, which is the same reasoning that puts
+      // the package in the root dependency list rather than relying on hoisting.
+      //
+      // Only the package itself. Its transitive `undici` stays external and is
+      // traced into the function by the adapter like any other dependency.
+      noExternal: ['@mattpyle/steward'],
+    },
+  },
   // 'never': keep CSS in external files. Astro's default ('auto') inlines small
   // bundles as <style> tags, which a strict style-src CSP (no 'unsafe-inline')
   // blocks outright.

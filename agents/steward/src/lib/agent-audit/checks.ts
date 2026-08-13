@@ -1324,6 +1324,24 @@ export interface RunAuditOptions {
    * `false` is `--fast`. Omitted means on, with its own defaults.
    */
   deep?: false | DeepOptions;
+  /**
+   * How the deep tier is loaded. Required whenever `deep` is not `false`, and
+   * that is deliberate: this file has **no value reference to `deep.js` at all**,
+   * only the type-only import above, so nothing that reads this module's import
+   * graph can reach Chrome, Lighthouse or axe.
+   *
+   * It used to be a plain `await import('./deep.js')` right where the deep tier
+   * runs, which is correct for Node — the specifier is only resolved when the
+   * branch is taken — and wrong for a bundler, which follows a dynamic import
+   * statically and pulls the whole browser stack into the chunk. That is what
+   * made the fast tier unshippable to a serverless function: see
+   * `tests/steward-fast-audit-packaging.test.mjs` in the site repo, which walks
+   * this graph and fails if any of those three names appears in it.
+   *
+   * Every caller that wants the deep tier passes `() => import('./deep.js')` and
+   * pays for it in its own import graph, where the cost is visible.
+   */
+  loadDeep?: () => Promise<{ runDeepChecks: typeof import('./deep.js').runDeepChecks }>;
 }
 
 /**
@@ -1333,7 +1351,10 @@ export interface RunAuditOptions {
  * property callers rely on, and a boolean buried in an options object is a
  * weaker way to say it.
  */
-export function runFastAudit(input: string, opts: Omit<RunAuditOptions, 'deep'> = {}): Promise<AuditResult> {
+export function runFastAudit(
+  input: string,
+  opts: Omit<RunAuditOptions, 'deep' | 'loadDeep'> = {},
+): Promise<AuditResult> {
   return runAudit(input, { ...opts, deep: false });
 }
 
@@ -1407,7 +1428,13 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
         'category is empty rather than clean.',
     );
   } else {
-    const { runDeepChecks } = await import('./deep.js');
+    if (!opts.loadDeep) {
+      throw new Error(
+        'the deep tier was requested without a loadDeep option; pass ' +
+          "loadDeep: () => import('./deep.js'), or call runFastAudit",
+      );
+    }
+    const { runDeepChecks } = await opts.loadDeep();
     const deep = await runDeepChecks(
       {
         candidates: samplePages(origin, sitemap.urls),

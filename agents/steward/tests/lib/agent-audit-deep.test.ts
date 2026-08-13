@@ -387,6 +387,7 @@ async function bothTiers(
   return runAudit(mock.origin, {
     policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 60_000 },
     deep: { runners: runners(over), maxPages: 2 },
+    loadDeep: () => import('../../src/lib/agent-audit/deep.js'),
   });
 }
 
@@ -416,6 +417,23 @@ test('--fast completes with no browser and says the category is empty rather tha
   assert.equal(result.browserPages, undefined);
   assert.ok(result.notes.some((n) => /--fast/.test(n)), result.notes.join(' | '));
   assert.doesNotMatch(renderMarkdownSummary(result), /rendered in a browser/);
+});
+
+test('the deep tier refuses to run without a loader rather than importing one', async (t) => {
+  // The property this protects is a packaging one, and it is invisible at
+  // runtime: `checks.ts` holds no value reference to `deep.js`, so a bundler
+  // reading its import graph cannot reach Chrome, Lighthouse or axe, and the
+  // site's /mcp function can carry the fast tier alone. A default loader here
+  // would restore the reference and undo it silently.
+  const mock = await mockSite();
+  t.after(() => mock.close());
+  await assert.rejects(
+    runAudit(mock.origin, {
+      policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
+      deep: { runners: runners(), maxPages: 1 },
+    }),
+    /loadDeep/,
+  );
 });
 
 test('with the browser unavailable the fast tier still completes and the deep checks error', async (t) => {
