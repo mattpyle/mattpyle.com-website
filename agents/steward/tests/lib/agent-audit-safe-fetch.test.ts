@@ -4,10 +4,11 @@ import http from 'node:http';
 import dns from 'node:dns/promises';
 import dnsCallback from 'node:dns';
 import type { AddressInfo } from 'node:net';
-import { AUDIT_AGENT_TOKEN } from '../../src/lib/agent-audit/checks.js';
+import { AUDIT_AGENT_TOKEN, TOOL_VERSION } from '../../src/lib/agent-audit/checks.js';
 import {
   assertConnectableUrl,
   AUDIT_USER_AGENT,
+  AUDIT_VERSION,
   BlockedTargetError,
   BudgetExhaustedError,
   DEFAULT_POLICY,
@@ -393,6 +394,18 @@ test('the robots.txt token is the User-Agent product token', () => {
   // the site owner has no way to tell — the auditor keeps arriving and keeps reporting itself as
   // allowed. Two constants in two files, so nothing but this holds them together.
   assert.equal(AUDIT_USER_AGENT.split('/')[0], AUDIT_AGENT_TOKEN);
+});
+
+test('one version describes the auditor everywhere it says so', () => {
+  // The number in the User-Agent, the number stamped on every report, and the number both MCP
+  // servers announce are one auditor's version. They were three different strings for a day after
+  // the 0.2 rename, which sent a reader looking through a report headed 0.1.0 for the 0.2 the wire
+  // had carried. `AUDIT_VERSION` is the source, and the User-Agent interpolates it, so what this
+  // holds is that the interpolation is still there: a hand-edit back to a literal string is exactly
+  // how the drift happened the first time. The site's copies are pinned by
+  // tests/steward-page.test.mjs in the site repo.
+  assert.equal(AUDIT_USER_AGENT.split('/')[1].split(' ')[0], AUDIT_VERSION);
+  assert.equal(TOOL_VERSION, AUDIT_VERSION);
 });
 
 test('the User-Agent survives being passed to Chrome as a flag', () => {

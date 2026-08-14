@@ -25,10 +25,10 @@
     - table "What one Steward request is":
       - caption: What one Steward request is
       - rowgroup:
-        - row "User-Agent steward-audit/0.2 (+https://www.mattpyle.com/steward)":
+        - row "User-Agent steward-audit/0.2.0 (+https://www.mattpyle.com/steward)":
           - rowheader "User-Agent"
-          - cell "steward-audit/0.2 (+https://www.mattpyle.com/steward)":
-            - code: steward-audit/0.2 (+https://www.mattpyle.com/steward)
+          - cell "steward-audit/0.2.0 (+https://www.mattpyle.com/steward)":
+            - code: steward-audit/0.2.0 (+https://www.mattpyle.com/steward)
         - row "robots.txt token steward-audit":
           - rowheader "robots.txt token"
           - cell "steward-audit":

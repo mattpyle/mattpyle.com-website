@@ -4,6 +4,7 @@ import { WorkflowNotFoundError, type Client, type WorkflowHandle } from '@tempor
 import { z } from 'zod';
 import { auditWorkflowIdFor, QUEUE_LIGHT } from '../config.js';
 import { normaliseTarget } from '../lib/agent-audit/checks.js';
+import { AUDIT_VERSION } from '../lib/agent-audit/safe-fetch.js';
 import { renderMarkdownSummary } from '../lib/agent-audit/render.js';
 import type { AuditResult } from '../lib/agent-audit/result.js';
 import {
@@ -34,7 +35,13 @@ const FAST_BUDGET_SECONDS = 120;
 const DEEP_BUDGET_SECONDS = 420;
 
 export const SERVER_NAME = 'steward-audit';
-export const SERVER_VERSION = '0.1.0';
+
+/**
+ * The auditor's version, not this server's. A client that connects here and a
+ * site that sees the traffic are looking at one thing, so they get one number;
+ * `AUDIT_VERSION` in the audit library is where it is defined.
+ */
+export const SERVER_VERSION = AUDIT_VERSION;
 
 /** `steward://audit/<workflowId>/<view>` — the one URI shape this server serves. */
 function uriFor(workflowId: string, view: 'status' | 'report' | 'summary'): string {

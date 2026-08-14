@@ -39,7 +39,7 @@ function check(partial: Partial<CheckResult> & Pick<CheckResult, 'id'>): CheckRe
 function fixture(checks: CheckResult[]): AuditResult {
   return {
     schemaVersion: 1,
-    tool: { name: 'steward audit-url', version: '0.1.0' },
+    tool: { name: 'steward audit-url', version: '0.2.0' },
     target: { input: 'example.com', origin: 'https://example.com' },
     startedAt: '2026-08-10T19:00:00.000Z',
     finishedAt: '2026-08-10T19:00:04.000Z',
@@ -57,6 +57,19 @@ test('the summary leads with the target, the date and the cost', () => {
   assert.match(md, /https:\/\/example\.com/);
   assert.match(md, /2026-08-10T19:00:00/);
   assert.match(md, /11 HTTP request\(s\) in 4\.0s/);
+});
+
+test('the header carries the User-Agent the audit was sent under, when the document has one', () => {
+  // The report is what a site owner reads after finding the traffic, so the string they have to
+  // match in a log or name in robots.txt belongs in it. A document written before `tool.userAgent`
+  // existed is still valid and simply has no such line, which is the second case here.
+  const audit = fixture([check({ id: 'llms-txt' })]);
+  const withUa = renderMarkdownSummary({
+    ...audit,
+    tool: { ...audit.tool, userAgent: 'steward-audit/0.2.0 (+https://www.mattpyle.com/steward)' },
+  });
+  assert.match(withUa, /- \*\*Sent as:\*\* `steward-audit\/0\.2\.0 \(\+https:\/\/www\.mattpyle\.com\/steward\)`/);
+  assert.ok(!/Sent as/.test(renderMarkdownSummary(audit)));
 });
 
 test('the counts are per category, and no composite score is printed', () => {

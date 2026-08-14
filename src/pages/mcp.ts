@@ -1,5 +1,7 @@
 import type { APIRoute } from 'astro';
 import {
+  AUDIT_USER_AGENT,
+  AUDIT_VERSION,
   normaliseTarget,
   renderMarkdownSummary,
   runFastAudit,
@@ -170,6 +172,10 @@ export const POST: APIRoute = async ({ request }) => {
     runAudit: (url: string) => runFastAudit(url, { policy: { totalBudgetMs: AUDIT_BUDGET_MS } }),
     renderSummary: renderMarkdownSummary,
     normaliseTarget,
+    // The auditor's own version and User-Agent, carried through rather than restated: this endpoint
+    // is a way to run that auditor, so it announces the same number a report header does.
+    version: AUDIT_VERSION,
+    userAgent: AUDIT_USER_AGENT,
   });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,

@@ -26,6 +26,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runAxe } from '../src/lib/audit-engine.js';
 import { renderHtmlReport } from '../src/lib/agent-audit/render-html.js';
+import { TOOL_NAME, TOOL_VERSION } from '../src/lib/agent-audit/checks.js';
+import { AUDIT_USER_AGENT } from '../src/lib/agent-audit/safe-fetch.js';
 import { countByCategory, type AuditResult, type CheckResult } from '../src/lib/agent-audit/result.js';
 
 const CHECKS: CheckResult[] = [
@@ -181,7 +183,8 @@ const CHECKS: CheckResult[] = [
 
 const FIXTURE: AuditResult = {
   schemaVersion: 2,
-  tool: { name: 'steward audit-url', version: '0.1.0' },
+  // The real constants, so the fixture report is scanned with the header a real one carries.
+  tool: { name: TOOL_NAME, version: TOOL_VERSION, userAgent: AUDIT_USER_AGENT },
   target: { input: 'example.com', origin: 'https://example.com' },
   startedAt: '2026-08-11T19:00:00.000Z',
   finishedAt: '2026-08-11T19:00:30.000Z',

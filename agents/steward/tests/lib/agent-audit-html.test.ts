@@ -34,7 +34,7 @@ function check(partial: Partial<CheckResult> & Pick<CheckResult, 'id'>): CheckRe
 function fixture(checks: CheckResult[], extra: Partial<AuditResult> = {}): AuditResult {
   return {
     schemaVersion: 2,
-    tool: { name: 'steward audit-url', version: '0.1.0' },
+    tool: { name: 'steward audit-url', version: '0.2.0' },
     target: { input: 'example.com', origin: 'https://example.com' },
     startedAt: '2026-08-11T19:00:00.000Z',
     finishedAt: '2026-08-11T19:00:04.000Z',
@@ -76,7 +76,7 @@ function hostile(): AuditResult {
     ],
     {
       target: { input: `example.com"><script>`, origin: 'https://example.com' },
-      tool: { name: 'steward audit-url<script>', version: '0.1.0"' },
+      tool: { name: 'steward audit-url<script>', version: '0.2.0"' },
       notes: [`a run note ${payload}`],
     },
   );
@@ -95,6 +95,21 @@ test('the report leads with the target, the run, the tool and the cost', () => {
   assert.match(html, /result schema v2/);
   assert.match(html, /14 HTTP request\(s\) and 3 page\(s\) rendered in a browser/);
   assert.match(html, /in 30\.0s/);
+  // No `Sent as` row: this document has no `tool.userAgent`, which is what a report written before
+  // that field existed looks like, and the row is skipped rather than rendered empty.
+  assert.ok(!/Sent as/.test(html));
+});
+
+test('the header carries the User-Agent the audit was sent under, when the document has one', () => {
+  const base = fixture([check({ id: 'llms-txt' })]);
+  const html = renderHtmlReport({
+    ...base,
+    tool: { ...base.tool, userAgent: 'steward-audit/0.2.0 (+https://www.mattpyle.com/steward)' },
+  });
+  assert.match(
+    html,
+    /<dt>Sent as<\/dt><dd><code>steward-audit\/0\.2\.0 \(\+https:\/\/www\.mattpyle\.com\/steward\)<\/code><\/dd>/,
+  );
 });
 
 test('the headline is the measured numbers, each with the sample it covers', () => {

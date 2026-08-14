@@ -40,7 +40,6 @@ import { z } from 'zod';
  * auditing, and would have left a site owner with two names to connect by hand.
  */
 export const SERVER_NAME = 'steward-audit';
-export const SERVER_VERSION = '0.2.0';
 
 /** The one tool. Named here so the endpoint's GET help and the tests read it from one place. */
 export const TOOL_NAME = 'audit_site';
@@ -81,16 +80,29 @@ const AUDIT_OUTPUT_SHAPE = {
   notes: z.array(z.string()).describe('What the audit could not do, in its own words.'),
 };
 
-const INSTRUCTIONS =
-  'Audits any website for agent-readiness and returns the report in the same call. It checks what ' +
-  'a site says about itself over plain HTTP: robots.txt and its AI-agent rules, Content Signals, ' +
-  'the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A ' +
-  'discovery documents, and whether the homepage and a content page actually serve markdown when ' +
-  'asked for it. It checks behaviour rather than presence — a 200 from /llms.txt that is really ' +
-  "the site's HTML 404 page is a failure here. It obeys the target's robots.txt, arrives as " +
-  '`steward-audit/0.2 (+https://www.mattpyle.com/steward)` so one audit is one visitor in the ' +
-  'target log, and takes seconds. Rendered-page checks (Lighthouse, axe) are not part of this ' +
-  'endpoint.';
+/**
+ * What a client is told this server is, before it calls anything.
+ *
+ * The User-Agent is interpolated rather than written out, because it is the auditor's and this file
+ * is not where the auditor is defined. Every number and string describing the auditor comes in from
+ * `AUDIT_VERSION` and `AUDIT_USER_AGENT` in the Steward workspace, through the one exports entry the
+ * transport already imports; nothing here is a copy that can go stale.
+ *
+ * @param {string} userAgent the string the audit's requests actually carry
+ * @returns {string}
+ */
+function instructionsFor(userAgent) {
+  return (
+    'Audits any website for agent-readiness and returns the report in the same call. It checks what ' +
+    'a site says about itself over plain HTTP: robots.txt and its AI-agent rules, Content Signals, ' +
+    'the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A ' +
+    'discovery documents, and whether the homepage and a content page actually serve markdown when ' +
+    'asked for it. It checks behaviour rather than presence — a 200 from /llms.txt that is really ' +
+    "the site's HTML 404 page is a failure here. It obeys the target's robots.txt, arrives as " +
+    `\`${userAgent}\` so one audit is one visitor in the target log, and takes seconds. ` +
+    'Rendered-page checks (Lighthouse, axe) are not part of this endpoint.'
+  );
+}
 
 const TOOL_DESCRIPTION =
   'Audits one site for agent-readiness and returns the finished report in this call — there is ' +
@@ -175,17 +187,24 @@ export function originFor(url, normalise) {
 /**
  * Builds the server.
  *
+ * `version` and `userAgent` are injected for the same reason `runAudit` is: they belong to the
+ * auditor, which lives in the Steward workspace, and this file imports nothing of it. The transport
+ * (src/pages/mcp.ts) already imports that workspace and passes them straight through, so the server
+ * a client connects to and the visitor the target site logs cannot announce different versions.
+ *
  * @param {{
  *   runAudit: (url: string) => Promise<any>,
  *   renderSummary: (audit: any) => string,
  *   normaliseTarget: (input: string) => { origin: string, url: URL },
+ *   version: string,
+ *   userAgent: string,
  * }} engine
  * @returns {McpServer}
  */
-export function createAuditServer({ runAudit, renderSummary, normaliseTarget }) {
+export function createAuditServer({ runAudit, renderSummary, normaliseTarget, version, userAgent }) {
   const server = new McpServer(
-    { name: SERVER_NAME, version: SERVER_VERSION },
-    { instructions: INSTRUCTIONS },
+    { name: SERVER_NAME, version },
+    { instructions: instructionsFor(userAgent) },
   );
 
   server.registerTool(
