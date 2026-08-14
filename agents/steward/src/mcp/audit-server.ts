@@ -10,6 +10,7 @@ import type { AuditResult } from '../lib/agent-audit/result.js';
 import {
   auditSiteWorkflow,
   getAuditState,
+  type AuditProgress,
   type AuditSiteState,
   type AuditTier,
 } from '../workflows/audit-site.js';
@@ -78,6 +79,12 @@ interface AuditStatus {
   finishedAt?: string;
   reportUri: string;
   summaryUri: string;
+  /**
+   * Per-step and per-check detail, from the workflow's own query (stage 3).
+   * Absent when the query could not be answered — a run that ended before it
+   * reported any state.
+   */
+  progress?: AuditProgress;
   /** Present only when the execution ended without a report. */
   error?: string;
 }
@@ -167,6 +174,7 @@ async function readState(
     finishedAt: description.closeTime?.toISOString(),
     reportUri: uriFor(workflowId, 'report'),
     summaryUri: uriFor(workflowId, 'summary'),
+    ...(state?.progress ? { progress: state.progress } : {}),
   };
   if (done && !succeeded) {
     status.error = await failureMessage(handle, execution);

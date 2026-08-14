@@ -83,7 +83,7 @@ const buildAuditHistoryPath = fileURLToPath(
   new URL('../fixtures/histories/phase1c-build-audit.json', import.meta.url),
 );
 const auditSiteHistoryPath = fileURLToPath(
-  new URL('../fixtures/histories/stage1-audit-site-deep.json', import.meta.url),
+  new URL('../fixtures/histories/stage3-audit-site-fanout.json', import.meta.url),
 );
 
 test(
@@ -118,33 +118,43 @@ test(
 );
 
 /**
- * ## Stage 1: `auditSiteWorkflow`
+ * ## `auditSiteWorkflow`: the stage-1 fixture was retired, deliberately
  *
- * A real deep-tier execution started through the MCP server on 2026-08-11,
- * against `https://www.mattpyle.com`: 11 events, one `auditSiteDeep` on the
- * heavy queue, through to completion with the canonical result document in the
- * history.
- *
- * The deep tier is the one worth guarding, because the tier is what picks the
- * activity *and* the task queue, and both are recorded in the scheduling
- * command. A history that ran deep must keep replaying deep — if the tier were
- * ever read from config rather than from the input, this fixture is what would
- * go red.
- *
- * **Verified able to fail** by the docblock's rule, on this fixture rather than
- * on trust: swapping the workflow's tier branch so `deep` scheduled
- * `auditSiteFast` produced
+ * The stage-1 fixture was a deep audit run as **one** `auditSiteDeep` activity.
+ * Stage 3 replaced that with a fan-out — `auditSiteFetchChecks`, one
+ * `auditRenderedPage` per sampled page, then `assembleDeepAudit` — which is the
+ * canonical unsafe change: a history whose first activity command was
+ * `auditSiteDeep` cannot replay against code that now schedules
+ * `auditSiteFetchChecks`, and it duly failed with
  *
  * ```
  * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
  * 'auditSiteDeep' does not match activity type of activity command
- * 'auditSiteFast'
+ * 'auditSiteFetchChecks'
  * ```
  *
- * The probe was reverted and this test re-run green.
+ * That break was accepted rather than patched around. `auditSiteWorkflow` never
+ * parks: it runs for seconds to a few minutes and nothing about it waits on a
+ * human, so the window in which an open execution could be stranded is the
+ * length of one audit. The pre-flight for the change confirmed the window was
+ * empty — no running audits in either namespace — and `patched()` would have
+ * bought a permanent branch in the workflow to protect a history that no live
+ * execution had. The old fixture is not kept alongside this one for the same
+ * reason the Phase 1a fixture was not: a guard for a history shape nothing can
+ * produce any more is a decoration.
+ *
+ * The fixture below is a real fan-out execution against `https://www.mattpyle.com`
+ * on 2026-08-14, on the Temporal Cloud namespace: 35 events, the fetch pass,
+ * three per-page activities, and assembly, all on `steward-audit`, through to
+ * completion with the canonical result document in the history. It is a strictly
+ * better guard than the stage-1 run, because it pins the whole fan-out order
+ * rather than a single activity.
+ *
+ * **Verified able to fail** by the docblock's rule, on this fixture rather than
+ * on trust — see the build-log entry for the probe and its output.
  */
 test(
-  'the stage-1 deep audit history replays against current workflow code',
+  'the stage-3 fan-out audit history replays against current workflow code',
   { timeout: 120_000 },
   async () => {
     const history = JSON.parse(await fs.readFile(auditSiteHistoryPath, 'utf8'));
@@ -152,7 +162,7 @@ test(
     await Worker.runReplayHistory(
       { workflowsPath, bundlerOptions: {} },
       history,
-      'steward-audit-www.mattpyle.com-deep-b1a00612',
+      'steward-audit-www.mattpyle.com-deep-fanout1',
     );
   },
 );

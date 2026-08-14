@@ -74,12 +74,36 @@ const AUDIT: AuditResult = {
 const REFUSED_HOST = 'refused.example';
 const REFUSAL = 'refused to audit https://refused.example/: resolves to a private address';
 
+/**
+ * The deep tier's three activities, mocked at the same boundary the fast tier is
+ * mocked at. The fan-out itself is real: the workflow schedules the fetch pass,
+ * one page, and assembly exactly as it would in production, so what this suite
+ * exercises over the transport is the shape a client actually meets.
+ */
 const activities = {
   auditSiteFast: async (url: string) => {
     if (url.includes(REFUSED_HOST)) throw ApplicationFailure.nonRetryable(REFUSAL, 'BlockedTarget');
     return AUDIT;
   },
-  auditSiteDeep: async () => ({ ...AUDIT, browserPages: 3 }),
+  auditSiteFetchChecks: async (url: string) => {
+    if (url.includes(REFUSED_HOST)) throw ApplicationFailure.nonRetryable(REFUSAL, 'BlockedTarget');
+    return {
+      result: AUDIT,
+      sample: [{ url: 'https://example.com/', disallowedBy: null }],
+      available: 1,
+    };
+  },
+  auditRenderedPage: async (input: { url: string }) => ({
+    url: input.url,
+    scores: { 'agentic-browsing': 96, accessibility: 100, seo: 100, performance: 99, 'best-practices': 100 },
+    lighthouseVersion: '13.4.0',
+    lighthouseError: null,
+    violations: [],
+    axeError: null,
+    timedOut: false,
+    blocked: { listed: [], total: 0 },
+  }),
+  assembleDeepAudit: async () => ({ ...AUDIT, browserPages: 3 }),
 };
 
 let workers: Worker[] = [];

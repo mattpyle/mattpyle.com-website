@@ -20,9 +20,15 @@ export { archiveReport } from './archive.js';
 export { publishPost } from './publish.js';
 export { verifyDeploy } from './verify-deploy.js';
 export { checkPrChecks } from './publish.js';
-// `auditSiteWorkflow`'s two tiers, one per task queue: the fast tier is HTTP and
-// runs light, the deep tier launches Chrome and runs heavy.
-export { auditSiteFast, auditSiteDeep } from './agent-audit.js';
+// `auditSiteWorkflow`, all on the audit queue: the fast tier is one activity,
+// and the deep tier is the fetch pass, one activity per rendered page, and
+// assembly (stage 3's fan-out).
+export {
+  auditSiteFast,
+  auditSiteFetchChecks,
+  auditRenderedPage,
+  assembleDeepAudit,
+} from './agent-audit.js';
 export {
   resolveAuditUrls,
   resolveRunStamp,

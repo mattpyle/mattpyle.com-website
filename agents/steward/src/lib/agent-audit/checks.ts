@@ -1380,7 +1380,27 @@ export function runFastAudit(
  * or an address the guard refuses. Everything a site does or fails to do comes
  * back as a check, and so does everything the auditor could not do about it.
  */
-export async function runAudit(input: string, opts: RunAuditOptions = {}): Promise<AuditResult> {
+/** What the fast tier leaves behind for whatever runs after it. */
+interface FastPass {
+  ctx: AuditContext;
+  fetcher: SafeFetcher;
+  checks: CheckResult[];
+  /** Every URL the sitemap listed, for the deep tier's sampling. */
+  sitemapUrls: string[];
+  origin: string;
+  started: Date;
+}
+
+/**
+ * The fast tier's checks, run in order, with nothing decided about what comes
+ * after them.
+ *
+ * Split out of `runAudit` so the same sequence can end three ways: as a `--fast`
+ * document, as the first half of an in-process deep run, or as the first
+ * activity of a fanned-out one (`runFetchChecks`). All three must make the same
+ * requests in the same order, which is why there is one copy of them.
+ */
+async function runFastPass(input: string, opts: RunAuditOptions): Promise<FastPass> {
   const now = opts.now ?? (() => new Date());
   const { origin } = normaliseTarget(input);
   const started = now();
@@ -1436,6 +1456,46 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
   checks.push(checkLinkHeaders(home.html));
   checks.splice(contentSignalsSlot, 0, checkContentSignals(ctx, home.html));
 
+  return { ctx, fetcher, checks, sitemapUrls: sitemap.urls, origin, started };
+}
+
+/**
+ * Assembles the canonical document. Exported so the assembly activity of a
+ * fanned-out deep run writes the same header the in-process run does, from the
+ * same code, rather than reconstructing it field by field.
+ */
+export function assembleResult(args: {
+  input: string;
+  origin: string;
+  startedAt: string;
+  finishedAt: string;
+  requests: number;
+  browserPages?: number;
+  checks: CheckResult[];
+  notes: string[];
+}): AuditResult {
+  const started = Date.parse(args.startedAt);
+  const finished = Date.parse(args.finishedAt);
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    tool: { name: TOOL_NAME, version: TOOL_VERSION, userAgent: AUDIT_USER_AGENT },
+    target: { input: args.input, origin: args.origin },
+    startedAt: args.startedAt,
+    finishedAt: args.finishedAt,
+    durationMs: finished - started,
+    requests: args.requests,
+    ...(args.browserPages === undefined ? {} : { browserPages: args.browserPages }),
+    categories: countByCategory(args.checks),
+    checks: args.checks,
+    notes: args.notes,
+  };
+}
+
+export async function runAudit(input: string, opts: RunAuditOptions = {}): Promise<AuditResult> {
+  const now = opts.now ?? (() => new Date());
+  const pass = await runFastPass(input, opts);
+  const { ctx, fetcher, checks, origin, started } = pass;
+
   let browserPages: number | undefined;
   if (opts.deep === false) {
     ctx.notes.push(
@@ -1452,7 +1512,7 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
     const { runDeepChecks } = await opts.loadDeep();
     const deep = await runDeepChecks(
       {
-        candidates: samplePages(origin, sitemap.urls),
+        candidates: samplePages(origin, pass.sitemapUrls),
         remainingMs: () => fetcher.remainingMs(),
         policy: fetcher.policy,
         robotsDetail: (url) => ctx.robotsDetail(url),
@@ -1464,18 +1524,88 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
     browserPages = deep.renderedPages;
   }
 
-  const finished = now();
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    tool: { name: TOOL_NAME, version: TOOL_VERSION, userAgent: AUDIT_USER_AGENT },
-    target: { input, origin },
+  return assembleResult({
+    input,
+    origin,
     startedAt: started.toISOString(),
-    finishedAt: finished.toISOString(),
-    durationMs: finished.getTime() - started.getTime(),
+    finishedAt: now().toISOString(),
     requests: fetcher.requests,
-    ...(browserPages === undefined ? {} : { browserPages }),
-    categories: countByCategory(checks),
+    browserPages,
     checks,
     notes: ctx.notes,
+  });
+}
+
+/**
+ * One page of a deep run's sample, with the site's own verdict on it already
+ * decided.
+ *
+ * `disallowedBy` is resolved here rather than by whatever renders the page,
+ * because robots.txt has already been fetched and parsed by the checks above:
+ * asking again per page would spend extra requests at a stranger's origin to
+ * re-learn something this run already knows. It also puts the refusal in the
+ * fetch activity's result, which means it is in workflow history and the
+ * decision replays.
+ */
+export interface DeepCandidate {
+  url: string;
+  /** `null` when this auditor may render the page; the deciding rule when it may not. */
+  disallowedBy: string | null;
+}
+
+export interface FetchChecksOutcome {
+  /**
+   * The fast tier's document, complete but for the rendered-experience checks.
+   * Its `finishedAt` marks the end of the fetch pass, not of the audit.
+   */
+  result: AuditResult;
+  /** The pages to render, already capped. Homepage first. */
+  sample: DeepCandidate[];
+  /** How many pages were eligible before the cap, for the "N available" note. */
+  available: number;
+}
+
+/**
+ * The fast tier plus the deep tier's sampling decision, and nothing else.
+ *
+ * The first activity of a fanned-out deep audit (`workflows/audit-site.ts`).
+ * It makes every request the fast tier makes and no browser request at all, so
+ * it is the same cost to the audited site as a `--fast` run — the difference is
+ * that it hands back what the deep tier needs to decide next instead of closing
+ * the document.
+ *
+ * Deliberately not `runFastAudit` with an extra return value: this omits the
+ * "run with --fast" note, because the rendered-experience checks are coming and
+ * a document that says they were skipped would be wrong by the time it is
+ * assembled.
+ */
+export async function runFetchChecks(
+  input: string,
+  opts: Omit<RunAuditOptions, 'deep' | 'loadDeep'> & { maxPages: number },
+): Promise<FetchChecksOutcome> {
+  const now = opts.now ?? (() => new Date());
+  const pass = await runFastPass(input, opts);
+  const candidates = samplePages(pass.origin, pass.sitemapUrls);
+  // Capped before the robots check, not after, so a disallowed page consumes a
+  // slot exactly as it does in the in-process tier. The cap is about how many
+  // pages this tool is willing to look at, not how many it is allowed to.
+  const capped = candidates.slice(0, opts.maxPages);
+  const sample: DeepCandidate[] = [];
+  for (const url of capped) {
+    sample.push({ url, disallowedBy: await pass.ctx.robotsDetail(url) });
+  }
+
+  return {
+    result: assembleResult({
+      input,
+      origin: pass.origin,
+      startedAt: pass.started.toISOString(),
+      finishedAt: now().toISOString(),
+      requests: pass.fetcher.requests,
+      checks: pass.checks,
+      notes: pass.ctx.notes,
+    }),
+    sample,
+    available: candidates.length,
   };
 }
