@@ -21,8 +21,7 @@ import type { AuditResult } from '../../src/lib/agent-audit/result.js';
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
-const QUEUE_LIGHT = 'steward-light';
-const QUEUE_HEAVY = 'steward-heavy';
+const QUEUE_AUDIT = 'steward-audit';
 
 let env: TestWorkflowEnvironment;
 let server: McpHttpServer;
@@ -88,10 +87,7 @@ let workers: Worker[] = [];
 before(async () => {
   env = await createTestEnv();
   const common = { connection: env.nativeConnection, workflowsPath, activities, bundlerOptions: {} };
-  workers = [
-    await Worker.create({ ...common, taskQueue: QUEUE_LIGHT }),
-    await Worker.create({ ...common, taskQueue: QUEUE_HEAVY }),
-  ];
+  workers = [await Worker.create({ ...common, taskQueue: QUEUE_AUDIT })];
   for (const worker of workers) void worker.run();
   // Port 0: the OS picks a free one, so the suite cannot collide with a real
   // `steward mcp-serve` on the default port.

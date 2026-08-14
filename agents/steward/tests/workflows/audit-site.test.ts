@@ -13,16 +13,15 @@ import type { AuditResult } from '../../src/lib/agent-audit/result.js';
 
 /**
  * Workflow-level tests: both activities mocked, asserting the routing (which
- * tier runs, on which queue), what the query serves before and after the run,
- * and that the budget reaches the activity in milliseconds.
+ * tier runs), what the query serves before and after the run, and that the
+ * budget reaches the activity in milliseconds.
  *
  * What the real checks find is `agent-audit-*.test.ts`'s job and is not
  * re-tested here.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
-const QUEUE_LIGHT = 'steward-light';
-const QUEUE_HEAVY = 'steward-heavy';
+const QUEUE_AUDIT = 'steward-audit';
 
 let env: TestWorkflowEnvironment;
 
@@ -86,22 +85,26 @@ function mockActivities(overrides: MockOverrides = {}) {
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
-  const common = { connection: env.nativeConnection, workflowsPath, activities, bundlerOptions: {} };
-  const light = await Worker.create({ ...common, taskQueue: QUEUE_LIGHT });
-  const heavy = await Worker.create({ ...common, taskQueue: QUEUE_HEAVY });
-  return await light.runUntil(heavy.runUntil(fn()));
+  const worker = await Worker.create({
+    connection: env.nativeConnection,
+    workflowsPath,
+    activities,
+    bundlerOptions: {},
+    taskQueue: QUEUE_AUDIT,
+  });
+  return await worker.runUntil(fn());
 }
 
 function baseInput(overrides: Partial<AuditSiteInput> = {}): AuditSiteInput {
   return { url: 'example.com', tier: 'fast', budgetSeconds: 120, ...overrides };
 }
 
-test('the fast tier runs the light-queue activity and returns the canonical document', async () => {
+test('the fast tier runs its activity and returns the canonical document', async () => {
   const { activities, calls } = mockActivities();
   const result = await withWorker(activities, () =>
     env.client.workflow.execute(auditSiteWorkflow, {
       workflowId: 'audit-fast-1',
-      taskQueue: QUEUE_LIGHT,
+      taskQueue: QUEUE_AUDIT,
       args: [baseInput()],
     }),
   );
@@ -113,12 +116,12 @@ test('the fast tier runs the light-queue activity and returns the canonical docu
   assert.equal(result.schemaVersion, 2);
 });
 
-test('the deep tier runs the heavy-queue activity instead — the tier picks the activity', async () => {
+test('the deep tier runs the other activity instead — the tier picks the activity', async () => {
   const { activities, calls } = mockActivities();
   const result = await withWorker(activities, () =>
     env.client.workflow.execute(auditSiteWorkflow, {
       workflowId: 'audit-deep-1',
-      taskQueue: QUEUE_LIGHT,
+      taskQueue: QUEUE_AUDIT,
       args: [baseInput({ tier: 'deep', budgetSeconds: 420 })],
     }),
   );
@@ -134,7 +137,7 @@ test("the input's budget reaches the activity, in milliseconds", async () => {
   await withWorker(activities, () =>
     env.client.workflow.execute(auditSiteWorkflow, {
       workflowId: 'audit-budget-1',
-      taskQueue: QUEUE_LIGHT,
+      taskQueue: QUEUE_AUDIT,
       args: [baseInput({ budgetSeconds: 45 })],
     }),
   );
@@ -158,7 +161,7 @@ test('the query serves progress while running and the whole document once comple
   await withWorker(activities, async () => {
     const handle = await env.client.workflow.start(auditSiteWorkflow, {
       workflowId: 'audit-query-1',
-      taskQueue: QUEUE_LIGHT,
+      taskQueue: QUEUE_AUDIT,
       args: [baseInput()],
     });
 

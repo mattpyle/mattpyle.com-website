@@ -205,6 +205,24 @@ export const QUEUE_LIGHT = 'steward-light';
 export const QUEUE_HEAVY = 'steward-heavy';
 
 /**
+ * The agent-readiness audit's own queue (always-on-audit-worker card).
+ *
+ * The split is by **locality**, which is what task queues are for. `reviewPost`
+ * reads drafts out of the working copy and applies patches to local files, and
+ * the scorecard's publish leg drives git in a local worktree, so their workers
+ * have to be where those files are — they stay on `steward-light` and
+ * `steward-heavy`. `auditSiteWorkflow` touches nothing local: it fetches a
+ * stranger's origin and renders a stranger's pages. Putting it on a queue of its
+ * own is what lets one hosted worker poll that queue alone, so a deep audit
+ * finishes without Matt's desktop being on.
+ *
+ * A Chrome-capable image is therefore this queue's requirement, not the light
+ * queue's, and the hosted worker's set of registered activities is exactly the
+ * ones `workflows/audit-site.ts` names.
+ */
+export const QUEUE_AUDIT = 'steward-audit';
+
+/**
  * The exact line the worker logs once both queues are polling. `steward up`
  * health-gates on this string (lib/stack.ts), so the worker and the stack share
  * this one constant — a reworded log line can no longer silently break startup.

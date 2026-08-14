@@ -16,11 +16,18 @@ import type { AuditResult } from '../lib/agent-audit/result.js';
  * waits on a human. The whole workflow is one activity plus a query.
  */
 
-// Queue names duplicated here rather than imported from config.ts — the same
+// Queue name duplicated here rather than imported from config.ts — the same
 // reason review-post.ts and scorecard-audit.ts do it: config.ts touches
 // `node:path` and `process.env`, neither available in the workflow sandbox.
-const QUEUE_LIGHT = 'steward-light';
-const QUEUE_HEAVY = 'steward-heavy';
+//
+// One queue for the whole audit, and it is the audit's own
+// (always-on-audit-worker card). The split is by locality: `reviewPost` reads
+// the working copy and writes local files, and the scorecard's publish leg
+// drives git in a local worktree, so they stay on the queues a laptop serves.
+// This workflow fetches a stranger's origin and renders a stranger's pages and
+// depends on nothing local, so a hosted worker can poll `steward-audit` alone
+// and finish an audit end to end with nothing else registered.
+const QUEUE_AUDIT = 'steward-audit';
 
 export type AuditTier = 'fast' | 'deep';
 
@@ -31,9 +38,9 @@ export interface AuditSiteInput {
    * Which tier to run.
    *
    * **In the input, never in config** (design rule 10, spec §2). It picks which
-   * activity is scheduled and on which task queue, both of which are recorded in
-   * history as part of the command; a config-driven tier would send every open
-   * execution's replay down the other branch the moment it flipped.
+   * activity is scheduled, which is recorded in history as part of the command;
+   * a config-driven tier would send every open execution's replay down the other
+   * branch the moment it flipped.
    */
   tier: AuditTier;
   /**
@@ -93,6 +100,11 @@ const FAST_TIMEOUT = '6 minutes';
  * so a 30-second heartbeat timeout detects a wedged Chrome long before either
  * `startToCloseTimeout` above.
  *
+ * Both stubs name the same queue. The tier still picks the *activity*, which is
+ * what history records and what the fixture in `tests/workflows/replay.test.ts`
+ * guards; it no longer picks the queue, because a hosted worker that polls only
+ * the audit queue has to be able to serve both tiers.
+ *
  * **One attempt, both tiers.** A retry would re-run the whole audit against
  * somebody else's origin from the beginning, which is a dozen-plus requests and,
  * on the deep tier, three more browser page loads. The audit is already built so
@@ -103,14 +115,14 @@ const FAST_TIMEOUT = '6 minutes';
  * synchronously for.
  */
 const deep = wf.proxyActivities<Pick<typeof activities, 'auditSiteDeep'>>({
-  taskQueue: QUEUE_HEAVY,
+  taskQueue: QUEUE_AUDIT,
   startToCloseTimeout: DEEP_TIMEOUT,
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 1 },
 });
 
 const fast = wf.proxyActivities<Pick<typeof activities, 'auditSiteFast'>>({
-  taskQueue: QUEUE_LIGHT,
+  taskQueue: QUEUE_AUDIT,
   startToCloseTimeout: FAST_TIMEOUT,
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 1 },
