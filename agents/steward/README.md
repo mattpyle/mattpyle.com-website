@@ -69,8 +69,43 @@ npm install                  # from the repo root — this is an npm workspace
 cd agents/steward
 npm link                     # optional: makes `steward` a real command on PATH
 
-steward up                   # starts the Temporal dev server + worker together
+steward up                   # starts the worker, and the dev server if that's the target
 ```
+
+### Which Temporal service it talks to
+
+Three environment variables decide, read from `agents/steward/.env`:
+
+```bash
+TEMPORAL_ADDRESS=<namespace>.<account>.tmprl.cloud:7233
+TEMPORAL_NAMESPACE=<namespace>.<account>
+TEMPORAL_API_KEY=<key>
+```
+
+**The API key is the switch.** Set, and the client and the worker both connect to Temporal Cloud over
+TLS. Absent or empty, and both fall back to the local dev server at `localhost:7233` in the `default`
+namespace, which is how this ran before and how it still runs with no `.env` at all. Task queues,
+workflow IDs and every workflow are identical either way; only the connection changes.
+
+The address and the namespace cannot be the switch, because both have local defaults that a Cloud
+setup must also override — keying off either would read a half-configured environment as a complete
+one. A non-loopback address with no key is refused at connect time rather than left to fail later as
+a transport error that names neither cause.
+
+`resolveTemporalConnection` in `config.ts` is the single place this is decided, and both
+`Connection.connect` (the CLI) and `NativeConnection.connect` (the worker) build from it, so the two
+halves of the stack cannot end up on different services.
+
+Use the **namespace** endpoint (`<namespace>.<account>.tmprl.cloud:7233`) rather than the regional
+one. It is a CNAME that follows the active region, so enabling High Availability later moves a
+failover under the connection with no config change.
+
+`steward up` follows the same switch: against Cloud it starts the worker alone, since there is no
+local server to run, and its ready banner names the service either way.
+
+Two things Cloud does not change. The worker still runs wherever you start it, so nothing advances
+while it is down. And the daily Scorecard Schedule is server-side state that did not migrate: it
+remains in the dev server's database and fires only under a local `steward up`.
 
 In another terminal:
 
