@@ -1,6 +1,9 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
-import type { AuditResult } from '../lib/agent-audit/result.js';
+import type { AuditResult, CheckStatus } from '../lib/agent-audit/result.js';
+// Type-only, so the sandbox never loads that module — it reads the installed
+// axe-core version off disk, which a workflow may not do.
+import type { RenderedPageOutcome, SkippedPage } from '../lib/agent-audit/deep-assemble.js';
 
 /**
  * `auditSiteWorkflow` — one agent-readiness audit of one site, run durably.
@@ -13,14 +16,46 @@ import type { AuditResult } from '../lib/agent-audit/result.js';
  * `src/mcp/` fronts (hosted-mcp-stage-1 card).
  *
  * No signals and no park: an audit takes the time it takes and nothing about it
- * waits on a human. The whole workflow is one activity plus a query.
+ * waits on a human.
+ *
+ * ## The deep tier is a fan-out (stage 3)
+ *
+ * Stage 1 ran the whole deep tier as one activity with one attempt, which was
+ * fine on Matt's desktop and wrong for a hosted worker serving strangers: a
+ * worker that died three minutes in lost every page it had already rendered.
+ * The deep tier is now
+ *
+ *   `auditSiteFetchChecks` → `auditRenderedPage` × N (serially) → `assembleDeepAudit`
+ *
+ * so a restarted worker resumes at the page it was on, and each page is its own
+ * retry unit. **Not parallelism**: Lighthouse is serial per worker process
+ * (`marky`, see `scorecard-audit.ts`'s concurrency docblock), so the pages run
+ * one at a time and the fan-out buys durability and progress rather than speed.
+ *
+ * The fast tier is unchanged and is still one activity, because a dozen HTTP
+ * round trips is not a thing worth checkpointing.
  */
 
 // Queue names duplicated here rather than imported from config.ts — the same
 // reason review-post.ts and scorecard-audit.ts do it: config.ts touches
 // `node:path` and `process.env`, neither available in the workflow sandbox.
-const QUEUE_LIGHT = 'steward-light';
-const QUEUE_HEAVY = 'steward-heavy';
+// `steward-audit` is the audit's own queue (always-on-audit-worker card): the
+// hosted worker polls it and nothing else, and `reviewPost`, which reads the
+// working copy and writes local files, stays on the queues a laptop serves.
+const QUEUE_AUDIT = 'steward-audit';
+
+/**
+ * The three deep-tier constants, duplicated from `lib/agent-audit/deep-assemble.ts`
+ * for the same sandbox reason as the queue name — that module reads the
+ * installed axe-core version off disk and cannot be imported here.
+ *
+ * `tests/workflows/audit-site.test.ts` asserts the two copies are equal, so a
+ * change to one that is not made to the other fails a test rather than quietly
+ * giving the workflow a different budget from the tier it is driving.
+ */
+const MAX_PAGES = 3;
+const PAGE_TIMEOUT_MS = 90_000;
+const MIN_PAGE_BUDGET_MS = 20_000;
 
 export type AuditTier = 'fast' | 'deep';
 
@@ -31,9 +66,9 @@ export interface AuditSiteInput {
    * Which tier to run.
    *
    * **In the input, never in config** (design rule 10, spec §2). It picks which
-   * activity is scheduled and on which task queue, both of which are recorded in
-   * history as part of the command; a config-driven tier would send every open
-   * execution's replay down the other branch the moment it flipped.
+   * activities are scheduled, all of which are recorded in history as part of
+   * the command; a config-driven tier would send every open execution's replay
+   * down the other branch the moment it flipped.
    */
   tier: AuditTier;
   /**
@@ -44,10 +79,57 @@ export interface AuditSiteInput {
    * It rides in the input for the same reason the tier does, one step weaker:
    * it does not change *which* activity runs, but it does change what the
    * finished document says — a run that exhausts its budget reports the
-   * remaining checks as `error`, and that verdict has to be reproducible from
-   * history rather than from whatever the constant says today.
+   * remaining checks as `error` and its unrendered pages as skipped, and that
+   * verdict has to be reproducible from history rather than from whatever the
+   * constant says today.
    */
   budgetSeconds: number;
+}
+
+/**
+ * What one unit of durable work is doing.
+ *
+ * `pending` and `running` are the workflow's own account; `done` and `failed`
+ * are what it observed the activity return or throw. Nothing here is inferred
+ * from a timer, and nothing here is a retry count — an attempt number lives in
+ * `DescribeWorkflowExecution`'s pending-activity info, which is the server's to
+ * report and a client's to combine with this (stage-3 card, "Per-check status").
+ */
+export type StepState = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+
+export interface AuditStep {
+  /** Stable within one run: `fetch`, `page:<url>`, `assembly`. */
+  id: string;
+  kind: 'fetch' | 'page' | 'assembly';
+  /** One line naming what this step covers, for a human reading the status. */
+  label: string;
+  state: StepState;
+  /** Why a step is `failed` or `skipped`. Absent otherwise. */
+  detail?: string;
+}
+
+/**
+ * The progress contract, designed to be served to strangers by leg 3's
+ * `get_audit(view: status)`.
+ *
+ * Two granularities, from two different sources, deliberately kept apart:
+ *
+ * - `steps` is the durable work — the fetch pass, each rendered page, assembly.
+ *   One step is one activity, so this is exactly what workflow history knows and
+ *   nothing more.
+ * - `checks` is the audit's own verdicts, and it fills in as they are decided:
+ *   empty while the fetch pass runs, then every fast-tier check with its status,
+ *   then nothing further until the finished report supersedes it.
+ *
+ * A caller wanting "which check are we on" reads `checks`; a caller wanting
+ * "how much is left" reads `steps`. Merging them into one list would mean
+ * inventing a `pending` row per fast-tier check, which would be a guess about a
+ * check list the workflow has not been told yet.
+ */
+export interface AuditProgress {
+  phase: 'fetching' | 'rendering' | 'assembling' | 'complete' | 'failed';
+  steps: AuditStep[];
+  checks: Array<{ id: string; title: string; status: CheckStatus }>;
 }
 
 /**
@@ -62,6 +144,8 @@ export interface AuditSiteState {
   phase: 'auditing' | 'complete';
   /** One line for a human watching: what the run is doing, or what it found. */
   note: string;
+  /** Per-step and per-check detail. Additive since stage 3; see `AuditProgress`. */
+  progress: AuditProgress;
   /** The canonical result document. Present once `phase` is `complete`. */
   result?: AuditResult;
 }
@@ -77,42 +161,76 @@ export interface AuditSiteState {
  */
 export const getAuditState = wf.defineQuery<AuditSiteState>('getAuditState');
 
-/**
- * The deep tier's `startToCloseTimeout`. Generously past `DEEP_BUDGET_SECONDS`
- * (420) because the budget bounds the audit's own checks, not the Chrome
- * launches and teardowns around them, and an activity killed at its deadline
- * loses a document the budget would have returned.
- */
-const DEEP_TIMEOUT = '20 minutes';
-
-/** The fast tier's. Past `FAST_BUDGET_SECONDS` (120) by the same reasoning. */
+/** The fast tier's `startToCloseTimeout`. Past `FAST_BUDGET_SECONDS` (120). */
 const FAST_TIMEOUT = '6 minutes';
 
 /**
- * Heartbeats every 5s from inside the activity (see `activities/agent-audit.ts`),
- * so a 30-second heartbeat timeout detects a wedged Chrome long before either
- * `startToCloseTimeout` above.
- *
- * **One attempt, both tiers.** A retry would re-run the whole audit against
- * somebody else's origin from the beginning, which is a dozen-plus requests and,
- * on the deep tier, three more browser page loads. The audit is already built so
- * that a failure it can describe comes back as a check rather than a throw
- * (`result.ts`'s `error` status), so an activity that actually threw hit
- * something a second identical run would hit too — and being polite to a
- * stranger's server outranks a second chance at a document nobody is waiting
- * synchronously for.
+ * The fetch pass's. Past the deep budget's fetch half with room for the sampling
+ * loop, and nowhere near the 20 minutes the whole deep tier used to need — the
+ * pages have their own deadlines now.
  */
-const deep = wf.proxyActivities<Pick<typeof activities, 'auditSiteDeep'>>({
-  taskQueue: QUEUE_HEAVY,
-  startToCloseTimeout: DEEP_TIMEOUT,
+const FETCH_TIMEOUT = '8 minutes';
+
+/**
+ * One page's. `PAGE_TIMEOUT_MS` is 90s and the activity enforces it itself; this
+ * is the outer bound that catches a page which wedged before its own deadline
+ * could fire, plus the Chrome launch and teardown around it.
+ */
+const PAGE_TIMEOUT = '5 minutes';
+
+/**
+ * Heartbeats every 5s from inside the activity (see `activities/agent-audit.ts`),
+ * so a 30-second heartbeat timeout detects a wedged Chrome long before any
+ * `startToCloseTimeout`.
+ *
+ * **One attempt for anything that fetches the site's own surfaces.** A retry
+ * there re-runs a dozen-plus requests against a stranger's origin from the
+ * beginning, and the audit is already built so that a failure it can describe
+ * comes back as a check rather than a throw (`result.ts`'s `error` status) — an
+ * activity that actually threw hit something a second identical run would hit
+ * too, and being polite to a stranger's server outranks a second chance at a
+ * document nobody is waiting synchronously for.
+ */
+const fetching = wf.proxyActivities<Pick<typeof activities, 'auditSiteFetchChecks'>>({
+  taskQueue: QUEUE_AUDIT,
+  startToCloseTimeout: FETCH_TIMEOUT,
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 1 },
 });
 
 const fast = wf.proxyActivities<Pick<typeof activities, 'auditSiteFast'>>({
-  taskQueue: QUEUE_LIGHT,
+  taskQueue: QUEUE_AUDIT,
   startToCloseTimeout: FAST_TIMEOUT,
   heartbeatTimeout: '30 seconds',
+  retry: { maximumAttempts: 1 },
+});
+
+/**
+ * **Two attempts, and this is the one place in the audit that retries.**
+ *
+ * The card's rule: an infrastructure failure retries the smallest unit that owns
+ * its own network work, and a site failing a check never retries. One page is
+ * that smallest unit. The activity is written so those are different *kinds* of
+ * outcome rather than different messages — everything it can describe about a
+ * page comes back on the return value, and the only throw is
+ * `BrowserUnavailable`, meaning no browser started. So the retry can only ever
+ * fire on a wedged Chrome, which is exactly what a second attempt is for.
+ *
+ * `BlockedTarget` is listed non-retryable even though the same reasoning already
+ * makes it a `nonRetryable` failure at the throw site: this is the policy a
+ * reader checks first, and it should not depend on the activity to be right.
+ */
+const rendering = wf.proxyActivities<Pick<typeof activities, 'auditRenderedPage'>>({
+  taskQueue: QUEUE_AUDIT,
+  startToCloseTimeout: PAGE_TIMEOUT,
+  heartbeatTimeout: '30 seconds',
+  retry: { maximumAttempts: 2, nonRetryableErrorTypes: ['BlockedTarget'] },
+});
+
+/** Assembly touches no network. One attempt because a second would be identical. */
+const assembling = wf.proxyActivities<Pick<typeof activities, 'assembleDeepAudit'>>({
+  taskQueue: QUEUE_AUDIT,
+  startToCloseTimeout: '2 minutes',
   retry: { maximumAttempts: 1 },
 });
 
@@ -125,6 +243,34 @@ function summarise(audit: AuditResult): string {
   return `${audit.target.origin}: ${findings}${unjudged}`;
 }
 
+/** Digs the real error out of a failed activity — same helper `reviewPost` uses. */
+function describeActivityError(err: unknown): string {
+  let current: unknown = err;
+  let best = '';
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    if (current.message && current.message !== 'Activity task failed') best = current.message;
+    current = (current as Error).cause;
+  }
+  return best || (err instanceof Error ? err.message : String(err));
+}
+
+/**
+ * The failure's own type, from the `ApplicationFailure` the activity raised.
+ *
+ * The card's rule made concrete: "a page this auditor may not open" and "no
+ * browser started" are told apart by `BlockedTarget` vs `BrowserUnavailable`,
+ * never by matching on message text. A message is prose that gets reworded; a
+ * type is a contract, and it is what the retry policy above already keys on.
+ */
+function failureType(err: unknown): string | undefined {
+  let current: unknown = err;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    if (current instanceof wf.ApplicationFailure && current.type) return current.type;
+    current = (current as Error).cause;
+  }
+  return undefined;
+}
+
 export async function auditSiteWorkflow(input: AuditSiteInput): Promise<AuditResult> {
   const state: AuditSiteState = {
     url: input.url,
@@ -134,16 +280,18 @@ export async function auditSiteWorkflow(input: AuditSiteInput): Promise<AuditRes
       input.tier === 'deep'
         ? `rendering pages of ${input.url} — this takes minutes`
         : `checking ${input.url} over HTTP`,
+    progress: { phase: 'fetching', steps: [], checks: [] },
   };
   wf.setHandler(getAuditState, () => state);
 
-  const options = { budgetMs: input.budgetSeconds * 1000 };
+  const budgetMs = input.budgetSeconds * 1000;
   const audit =
     input.tier === 'deep'
-      ? await deep.auditSiteDeep(input.url, options)
-      : await fast.auditSiteFast(input.url, options);
+      ? await runDeep(input, budgetMs, state)
+      : await runFast(input, budgetMs, state);
 
   state.phase = 'complete';
+  state.progress.phase = 'complete';
   state.note = summarise(audit);
   state.result = audit;
 
@@ -155,5 +303,172 @@ export async function auditSiteWorkflow(input: AuditSiteInput): Promise<AuditRes
     durationMs: audit.durationMs,
   });
 
+  return audit;
+}
+
+/** The fast tier: one activity, one step. */
+async function runFast(
+  input: AuditSiteInput,
+  budgetMs: number,
+  state: AuditSiteState,
+): Promise<AuditResult> {
+  const step: AuditStep = {
+    id: 'fetch',
+    kind: 'fetch',
+    label: 'the fetch-based checks',
+    state: 'running',
+  };
+  state.progress.steps.push(step);
+  const audit = await fast.auditSiteFast(input.url, { budgetMs });
+  step.state = 'done';
+  state.progress.checks = audit.checks.map((c) => ({ id: c.id, title: c.title, status: c.status }));
+  return audit;
+}
+
+/**
+ * The deep tier: fetch pass, then one activity per sampled page, then assembly.
+ *
+ * The pages run **serially**, and the loop is a plain `for` rather than a capped
+ * `Promise.all` because the cap would be 1: Lighthouse corrupts its own timing
+ * marks when two runs share a Node process (`scorecard-audit.ts`'s
+ * `AUDIT_CONCURRENCY` docblock has the failure and the evidence). A hosted worker
+ * running two strangers' deep audits contends for the same reason, which is why
+ * the deep tier gets its own rate limits rather than a higher concurrency.
+ *
+ * Every per-page failure is guarded into a skip rather than failing the run
+ * (design rule 4), so a site that breaks one page still gets a report about the
+ * rest.
+ */
+async function runDeep(
+  input: AuditSiteInput,
+  budgetMs: number,
+  state: AuditSiteState,
+): Promise<AuditResult> {
+  const startedMs = Date.now();
+  const fetchStep: AuditStep = {
+    id: 'fetch',
+    kind: 'fetch',
+    label: 'the fetch-based checks',
+    state: 'running',
+  };
+  state.progress.steps.push(fetchStep);
+
+  const fetched = await fetching.auditSiteFetchChecks(input.url, {
+    budgetMs,
+    maxPages: MAX_PAGES,
+  });
+  fetchStep.state = 'done';
+  state.progress.checks = fetched.result.checks.map((c) => ({
+    id: c.id,
+    title: c.title,
+    status: c.status,
+  }));
+  state.progress.phase = 'rendering';
+
+  const pageSteps = fetched.sample.map(
+    (candidate): AuditStep => ({
+      id: `page:${candidate.url}`,
+      kind: 'page',
+      label: `${candidate.url} rendered in a browser`,
+      state: 'pending',
+    }),
+  );
+  state.progress.steps.push(...pageSteps);
+  state.note = `rendering ${fetched.sample.length} page(s) of ${fetched.result.target.origin}`;
+
+  const pages: RenderedPageOutcome[] = [];
+  const skipped: SkippedPage[] = [];
+  const progressNotes: string[] = [];
+  let browserFailure: string | null = null;
+
+  for (let i = 0; i < fetched.sample.length; i++) {
+    const candidate = fetched.sample[i];
+    const step = pageSteps[i];
+
+    if (candidate.disallowedBy) {
+      skipped.push({ url: candidate.url, reason: candidate.disallowedBy, robots: true });
+      step.state = 'skipped';
+      step.detail = candidate.disallowedBy;
+      continue;
+    }
+
+    // The audit's one shared budget, read across activity boundaries rather than
+    // from a fetcher this workflow does not have. `Date.now()` is the workflow
+    // task's timestamp, which replay reproduces exactly, so this decision is
+    // deterministic even though it is about elapsed time.
+    const remaining = budgetMs - (Date.now() - startedMs);
+    if (remaining < MIN_PAGE_BUDGET_MS) {
+      const reason =
+        `the audit's shared time budget had ${(remaining / 1000).toFixed(1)}s left, ` +
+        `less than the ${MIN_PAGE_BUDGET_MS / 1000}s a page needs`;
+      skipped.push({ url: candidate.url, reason, robots: false });
+      step.state = 'skipped';
+      step.detail = reason;
+      continue;
+    }
+
+    const slice = Math.min(PAGE_TIMEOUT_MS, remaining);
+    step.state = 'running';
+    try {
+      pages.push(await rendering.auditRenderedPage({ url: candidate.url, timeoutMs: slice }));
+      step.state = 'done';
+    } catch (err) {
+      const detail = describeActivityError(err);
+      step.state = 'failed';
+      step.detail = detail;
+      // A page the address guard would not open is a fact about that page, and
+      // the next one may be fine. Read off the failure's type, never its wording.
+      if (failureType(err) === 'BlockedTarget') {
+        skipped.push({ url: candidate.url, reason: detail, robots: false });
+        continue;
+      }
+      // A browser that will not start fails identically on every page, so trying
+      // the rest spends the budget to learn the same thing three times. The
+      // activity retried it already — this is the second attempt's verdict.
+      browserFailure = detail;
+      progressNotes.push(
+        `Deep tier: neither tool produced a result for ${candidate.url} (${detail}), so the ` +
+          'remaining pages were not attempted. The fast-tier checks above are unaffected.',
+      );
+      // Marked on the steps, not pushed into `skipped`: the report's skip list is
+      // for pages this run made a decision about, and these were simply never
+      // reached. `browserFailure` is what the checks report instead.
+      for (const later of pageSteps.slice(i + 1)) {
+        later.state = 'skipped';
+        later.detail = 'the browser did not produce a result for an earlier page';
+      }
+      break;
+    }
+
+    const rendered = pages[pages.length - 1];
+    if (rendered.timedOut) {
+      progressNotes.push(
+        `Deep tier: ${candidate.url} did not finish rendering inside its ${Math.round(slice / 1000)}s slice of ` +
+          'the budget. That is a fact about this page, not about the browser, so the remaining ' +
+          'pages were still attempted.',
+      );
+    }
+  }
+
+  const assemblyStep: AuditStep = {
+    id: 'assembly',
+    kind: 'assembly',
+    label: 'assembling the report',
+    state: 'running',
+  };
+  state.progress.steps.push(assemblyStep);
+  state.progress.phase = 'assembling';
+
+  const audit = await assembling.assembleDeepAudit({
+    fast: fetched.result,
+    pages,
+    skipped,
+    sample: fetched.sample.map((c) => c.url),
+    available: fetched.available,
+    browserFailure,
+    progressNotes,
+  });
+  assemblyStep.state = 'done';
+  state.progress.checks = audit.checks.map((c) => ({ id: c.id, title: c.title, status: c.status }));
   return audit;
 }

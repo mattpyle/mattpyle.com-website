@@ -4,6 +4,7 @@ import * as activities from './activities/index.js';
 import {
   IS_TEMPORAL_CLOUD,
   NAMESPACE,
+  QUEUE_AUDIT,
   QUEUE_HEAVY,
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
@@ -40,9 +41,13 @@ process.on('unhandledRejection', (reason) => {
 });
 
 /**
- * One process, both queues (spec §3). The split exists so a future local/cloud
- * worker separation is a config change rather than a rewrite; today the heavy
- * queue has no activities registered against it beyond the shared set.
+ * One process, all three queues (spec §3).
+ *
+ * The laptop worker polls everything, which is what keeps `steward up` a single
+ * command. The split is about who *else* may poll: `steward-audit` carries work
+ * with no local dependency, so a hosted worker can serve that queue alone
+ * (always-on-audit-worker card) while `reviewPost` and the scorecard's publish
+ * leg stay here, where the working copy is.
  */
 async function main() {
   const connection = await NativeConnection.connect(temporalConnectionOptions());
@@ -52,11 +57,12 @@ async function main() {
   const workers = await Promise.all([
     Worker.create({ ...common, taskQueue: QUEUE_LIGHT }),
     Worker.create({ ...common, taskQueue: QUEUE_HEAVY }),
+    Worker.create({ ...common, taskQueue: QUEUE_AUDIT }),
   ]);
 
   log.info(
     {
-      queues: [QUEUE_LIGHT, QUEUE_HEAVY],
+      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT],
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',

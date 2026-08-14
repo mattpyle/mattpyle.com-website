@@ -14,7 +14,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
 
 ## How it works
 
-**Two independent workflows**, both orchestrated by one Temporal worker:
+**Three independent workflows**, all orchestrated by one Temporal worker:
 
 - **`reviewPost`** — reviews one piece of content: mechanical checks (spelling, frontmatter), prose
   linting ([Vale](https://vale.sh)), an LLM editorial pass, and — for unpublished drafts — a real
@@ -29,6 +29,25 @@ that's the property being dogfooded here, on a low-stakes, real target.
   only while this local stack is up, so it is a daily audit on a laptop rather than unattended nightly
   auditing. It fires at 20:00 local, or on the next `steward up` within 23 hours of a missed firing, at
   most once a day.
+- **`auditSiteWorkflow`** — one agent-readiness audit of *any* site, run durably: the fetch-based
+  checks, and on the deep tier one browser-rendered page per activity, then assembly. Started by the
+  MCP server (`steward mcp-serve`), which hands back a workflow ID immediately and serves the report
+  by polling. `steward audit-url` runs the same engine in-process with no worker and no Temporal.
+
+### Task queues
+
+Three, split by **locality** — which worker is allowed to do the work, not how heavy it is:
+
+| Queue | Carries | Why it is where it is |
+|---|---|---|
+| `steward-light` | `reviewPost`'s passes, the scorecard's resolve/read/publish/archive | Reads the working copy, applies patches to local files, drives git in a local worktree |
+| `steward-heavy` | `buildAndAuditDraft`, `auditLiveUrl` | Same working copy, plus a browser |
+| `steward-audit` | `auditSiteWorkflow` and all of its activities | Depends on nothing local: it fetches a stranger's origin and renders a stranger's pages |
+
+`steward up` starts one worker process registering all three, so nothing about day-to-day use
+changes. The split exists so that a single hosted worker can poll `steward-audit` alone and finish an
+audit end to end while this laptop is off, which is what the always-on audit worker needs. A worker
+polling that queue needs Chrome and needs no checkout.
 
 ### The publish leg
 

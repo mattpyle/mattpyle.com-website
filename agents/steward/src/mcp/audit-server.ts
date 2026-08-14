@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WorkflowNotFoundError, type Client, type WorkflowHandle } from '@temporalio/client';
 import { z } from 'zod';
-import { auditWorkflowIdFor, QUEUE_LIGHT } from '../config.js';
+import { auditWorkflowIdFor, QUEUE_AUDIT } from '../config.js';
 import { normaliseTarget } from '../lib/agent-audit/checks.js';
 import { AUDIT_VERSION } from '../lib/agent-audit/safe-fetch.js';
 import { renderMarkdownSummary } from '../lib/agent-audit/render.js';
@@ -10,6 +10,7 @@ import type { AuditResult } from '../lib/agent-audit/result.js';
 import {
   auditSiteWorkflow,
   getAuditState,
+  type AuditProgress,
   type AuditSiteState,
   type AuditTier,
 } from '../workflows/audit-site.js';
@@ -78,6 +79,12 @@ interface AuditStatus {
   finishedAt?: string;
   reportUri: string;
   summaryUri: string;
+  /**
+   * Per-step and per-check detail, from the workflow's own query (stage 3).
+   * Absent when the query could not be answered — a run that ended before it
+   * reported any state.
+   */
+  progress?: AuditProgress;
   /** Present only when the execution ended without a report. */
   error?: string;
 }
@@ -167,6 +174,7 @@ async function readState(
     finishedAt: description.closeTime?.toISOString(),
     reportUri: uriFor(workflowId, 'report'),
     summaryUri: uriFor(workflowId, 'summary'),
+    ...(state?.progress ? { progress: state.progress } : {}),
   };
   if (done && !succeeded) {
     status.error = await failureMessage(handle, execution);
@@ -291,13 +299,12 @@ export function createAuditMcpServer(client: Client): McpServer {
       const tier: AuditTier = fast === true ? 'fast' : 'deep';
       const workflowId = auditWorkflowIdFor(origin, tier, randomUUID().slice(0, 8));
 
-      // Started on the light queue, whichever tier this is: the task queue in
-      // `start` routes the *workflow* task, and the workflow's own stubs route
-      // each activity. The deep tier's Chrome work still lands on the heavy
-      // queue, decided inside the workflow where history records it.
+      // The audit queue, for the workflow task and — through the workflow's own
+      // stubs — every activity it schedules. One queue, so a worker that polls
+      // it can run an audit end to end with nothing else registered.
       await client.workflow.start(auditSiteWorkflow, {
         workflowId,
-        taskQueue: QUEUE_LIGHT,
+        taskQueue: QUEUE_AUDIT,
         args: [
           {
             url,
