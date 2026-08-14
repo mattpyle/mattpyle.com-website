@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Connection } from '@temporalio/client';
-import { REPO_ROOT, TEMPORAL_ADDRESS, WEB_UI, WORKER_READY_LOG } from '../config.js';
+import { IS_TEMPORAL_CLOUD, NAMESPACE, REPO_ROOT, TEMPORAL_ADDRESS, WEB_UI, WORKER_READY_LOG } from '../config.js';
 import { killTree, tsxCommand } from './proc.js';
 
 const execFileAsync = promisify(execFile);
@@ -152,43 +152,60 @@ async function waitForWorker(worker: ChildProcess, timeoutMs = 30_000): Promise<
 }
 
 export interface RunningStack {
-  server: ChildProcess;
+  /**
+   * The local dev server, or `null` against Temporal Cloud — there is no server
+   * of ours to start or to kill, only a worker pointed at somebody else's.
+   */
+  server: ChildProcess | null;
   worker: ChildProcess;
-  dbPath: string;
+  dbPath: string | null;
   dbExisted: boolean;
 }
 
 /**
- * Starts the Temporal dev server and the worker together, and does not resolve
- * until the server is reachable AND the worker has registered on both queues —
- * a ready banner that lies is worse than none.
+ * Starts the worker, and the local dev server too when that is what Steward is
+ * pointed at. Does not resolve until the server is reachable AND the worker has
+ * registered on both queues — a ready banner that lies is worse than none.
+ *
+ * Against Cloud the server half is skipped rather than started and ignored.
+ * Starting a dev server nobody connects to would bind 7233 and leave the next
+ * local run tripping the orphan guard for a process that was never used.
  */
 export async function startStack(): Promise<RunningStack> {
   await refuseIfOrphaned();
 
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const dbExisted = fs.existsSync(DB_PATH);
+  let server: ChildProcess | null = null;
+  let dbExisted = false;
 
-  console.log(`\n  starting temporal server  →  ${DB_PATH}${dbExisted ? ' (existing)' : ' (new)'}`);
-  const server = spawn('temporal', ['server', 'start-dev', '--db-filename', DB_PATH], {
-    cwd: REPO_ROOT,
-    windowsHide: true,
-    shell: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  server.stdout?.on('data', (c: Buffer) => prefixLines('server', c, console.log));
-  server.stderr?.on('data', (c: Buffer) => prefixLines('server', c, console.error));
-  const serverExitedEarly = new Promise<never>((_, reject) => {
-    server.once('exit', (code) => reject(new Error(`temporal server exited early (code ${code})`)));
-  });
+  if (IS_TEMPORAL_CLOUD) {
+    console.log(`\n  using temporal cloud  →  ${NAMESPACE} at ${TEMPORAL_ADDRESS}`);
+    console.log('  no local server to start');
+  } else {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    dbExisted = fs.existsSync(DB_PATH);
 
-  try {
-    await Promise.race([waitForServer(), serverExitedEarly]);
-  } catch (err) {
-    killTree(server.pid);
-    throw err;
+    console.log(`\n  starting temporal server  →  ${DB_PATH}${dbExisted ? ' (existing)' : ' (new)'}`);
+    const child = spawn('temporal', ['server', 'start-dev', '--db-filename', DB_PATH], {
+      cwd: REPO_ROOT,
+      windowsHide: true,
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout?.on('data', (c: Buffer) => prefixLines('server', c, console.log));
+    child.stderr?.on('data', (c: Buffer) => prefixLines('server', c, console.error));
+    const serverExitedEarly = new Promise<never>((_, reject) => {
+      child.once('exit', (code) => reject(new Error(`temporal server exited early (code ${code})`)));
+    });
+
+    try {
+      await Promise.race([waitForServer(), serverExitedEarly]);
+    } catch (err) {
+      killTree(child.pid);
+      throw err;
+    }
+    console.log(`  server reachable at ${TEMPORAL_ADDRESS}`);
+    server = child;
   }
-  console.log(`  server reachable at ${TEMPORAL_ADDRESS}`);
 
   const { binary, args } = tsxCommand('src/worker.ts');
   const stewardDir = path.join(REPO_ROOT, 'agents', 'steward');
@@ -206,25 +223,33 @@ export async function startStack(): Promise<RunningStack> {
   try {
     await waitForWorker(worker);
   } catch (err) {
-    killTree(server.pid);
+    if (server) killTree(server.pid);
     killTree(worker.pid);
     throw err;
   }
 
-  return { server, worker, dbPath: DB_PATH, dbExisted };
+  return { server, worker, dbPath: server ? DB_PATH : null, dbExisted };
 }
 
 export function printReadyBanner(stack: RunningStack): void {
   console.log('');
   console.log('  ── steward up: ready ──────────────────────────────────────────');
-  console.log(`  db      ${stack.dbPath}${stack.dbExisted ? '  (existing history)' : '  (created — empty history)'}`);
+  if (stack.dbPath) {
+    console.log(`  service local dev server`);
+    console.log(`  db      ${stack.dbPath}${stack.dbExisted ? '  (existing history)' : '  (created — empty history)'}`);
+  } else {
+    console.log(`  service temporal cloud`);
+    console.log(`  ns      ${NAMESPACE} at ${TEMPORAL_ADDRESS}`);
+  }
   console.log(`  ui      ${WEB_UI}`);
-  console.log('  stop    Ctrl+C  (tears down server + worker), or `steward down` from another terminal');
+  console.log(
+    `  stop    Ctrl+C  (tears down ${stack.server ? 'server + worker' : 'the worker'}), or \`steward down\` from another terminal`,
+  );
   console.log('  ───────────────────────────────────────────────────────────────\n');
 }
 
 export function teardownStack(stack: RunningStack): void {
-  console.log('\n  tearing down worker + server…');
+  console.log(`\n  tearing down ${stack.server ? 'worker + server' : 'worker'}…`);
   killTree(stack.worker.pid);
-  killTree(stack.server.pid);
+  if (stack.server) killTree(stack.server.pid);
 }

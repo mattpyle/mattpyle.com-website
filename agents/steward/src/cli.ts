@@ -19,7 +19,7 @@ import {
   MCP_PORT,
   NAMESPACE,
   QUEUE_LIGHT,
-  TEMPORAL_ADDRESS,
+  temporalConnectionOptions,
   WEB_UI,
   SITEMAP_URL,
   SCORECARD_MAX_AGE_DAYS_DEFAULT,
@@ -76,7 +76,7 @@ const FAST_BUDGET_SECONDS = 120;
 const DEEP_BUDGET_SECONDS = 420;
 
 async function client(): Promise<Client> {
-  const connection = await Connection.connect({ address: TEMPORAL_ADDRESS });
+  const connection = await Connection.connect(temporalConnectionOptions());
   return new Client({ connection, namespace: NAMESPACE });
 }
 
@@ -1328,7 +1328,10 @@ program
 
 program
   .command('up')
-  .description('Start the Temporal dev server + worker together, health-gated, one foreground terminal')
+  .description(
+    'Start the worker, plus the Temporal dev server when Steward is pointed at it, ' +
+      'health-gated, one foreground terminal',
+  )
   .action(async () => {
     const { startStack, printReadyBanner, teardownStack } = await import('./lib/stack.js');
     const stack = await startStack();
@@ -1347,7 +1350,7 @@ program
     // Either child dying on its own takes the other down with it — a lone
     // worker with no server, or a server with no worker polling it, is not a
     // stack worth staying up for.
-    stack.server.once('exit', (code) => {
+    stack.server?.once('exit', (code) => {
       if (tearingDown) return;
       tearingDown = true;
       console.error(`\n  server exited unexpectedly (code ${code})`);

@@ -1,7 +1,16 @@
 import { fileURLToPath } from 'node:url';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import * as activities from './activities/index.js';
-import { NAMESPACE, QUEUE_HEAVY, QUEUE_LIGHT, TEMPORAL_ADDRESS, SITE_DIR, WORKER_READY_LOG } from './config.js';
+import {
+  IS_TEMPORAL_CLOUD,
+  NAMESPACE,
+  QUEUE_HEAVY,
+  QUEUE_LIGHT,
+  TEMPORAL_ADDRESS,
+  SITE_DIR,
+  WORKER_READY_LOG,
+  temporalConnectionOptions,
+} from './config.js';
 import { log } from './lib/logger.js';
 
 const workflowsPath = fileURLToPath(new URL('./workflows/index.ts', import.meta.url));
@@ -36,7 +45,7 @@ process.on('unhandledRejection', (reason) => {
  * queue has no activities registered against it beyond the shared set.
  */
 async function main() {
-  const connection = await NativeConnection.connect({ address: TEMPORAL_ADDRESS });
+  const connection = await NativeConnection.connect(temporalConnectionOptions());
 
   const common = { connection, namespace: NAMESPACE, workflowsPath, activities };
 
@@ -46,7 +55,13 @@ async function main() {
   ]);
 
   log.info(
-    { queues: [QUEUE_LIGHT, QUEUE_HEAVY], namespace: NAMESPACE, address: TEMPORAL_ADDRESS, siteDir: SITE_DIR },
+    {
+      queues: [QUEUE_LIGHT, QUEUE_HEAVY],
+      namespace: NAMESPACE,
+      address: TEMPORAL_ADDRESS,
+      service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
+      siteDir: SITE_DIR,
+    },
     WORKER_READY_LOG,
   );
 

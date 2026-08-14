@@ -120,6 +120,87 @@ export const MODEL = process.env.STEWARD_MODEL ?? 'claude-sonnet-4-6';
 export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
 export const NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
 
+/**
+ * The Temporal Cloud API key, read from `agents/steward/.env` and nowhere else.
+ *
+ * Never logged, never put into a workflow input or result, and never passed as
+ * an argv — the same rule the other two secrets in that file follow (spec §13).
+ */
+const TEMPORAL_API_KEY = process.env.TEMPORAL_API_KEY ?? '';
+
+/**
+ * Which service Steward talks to. The API key is the switch: Cloud refuses an
+ * unauthenticated connection, and the local dev server has no use for one, so
+ * "a key is present" and "we mean Cloud" are the same condition. Address and
+ * namespace alone cannot decide it — both have local defaults that a Cloud
+ * setup also has to override, so keying off either would make a half-configured
+ * environment look like a complete one.
+ */
+export const IS_TEMPORAL_CLOUD = TEMPORAL_API_KEY !== '';
+
+/** Loopback forms the dev server binds. Anything else is a remote service. */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+function isLoopbackAddress(address: string): boolean {
+  const host = address.startsWith('[')
+    ? address.slice(0, address.indexOf(']') + 1)
+    : address.split(':')[0];
+  return LOOPBACK_HOSTS.has(host);
+}
+
+/**
+ * The one connection shape both the client (`@temporalio/client`) and the
+ * worker (`@temporalio/worker`) build from, so the two can never drift into
+ * talking to different services. Structural, with no `@temporalio` import: this
+ * module is on the import path of surfaces that must not pull the SDK in.
+ *
+ * `metadata['temporal-namespace']` is redundant against the namespace endpoint
+ * but not free to omit: API-key auth against a regional endpoint fails with a
+ * bare `Request unauthorized` without it, and that error names nothing useful.
+ * Sending it always costs one header and removes a failure mode that a future
+ * endpoint change would otherwise reintroduce.
+ */
+export interface TemporalConnectionOptions {
+  address: string;
+  tls?: boolean;
+  apiKey?: string;
+  metadata?: Record<string, string>;
+}
+
+/**
+ * The decision itself, taking its three inputs as arguments rather than reading
+ * the module's constants, so it is testable without a child process: the
+ * constants above are resolved once at import and cannot be re-read per case.
+ */
+export function resolveTemporalConnection(
+  address: string,
+  namespace: string,
+  apiKey: string,
+): TemporalConnectionOptions {
+  if (apiKey === '') {
+    if (!isLoopbackAddress(address)) {
+      throw new Error(
+        `TEMPORAL_ADDRESS is ${address}, which is not the local dev server, but TEMPORAL_API_KEY ` +
+          'is unset. Set the key in agents/steward/.env, or point the address back at ' +
+          'localhost:7233. Connecting to a remote service without credentials fails later with ' +
+          'an error that names neither cause.',
+      );
+    }
+    return { address };
+  }
+  return {
+    address,
+    tls: true,
+    apiKey,
+    metadata: { 'temporal-namespace': namespace },
+  };
+}
+
+/** The live connection options for this process. */
+export function temporalConnectionOptions(): TemporalConnectionOptions {
+  return resolveTemporalConnection(TEMPORAL_ADDRESS, NAMESPACE, TEMPORAL_API_KEY);
+}
+
 export const QUEUE_LIGHT = 'steward-light';
 export const QUEUE_HEAVY = 'steward-heavy';
 
@@ -183,7 +264,12 @@ export const CSPELL_CONFIG = process.env.STEWARD_CSPELL_CONFIG
   : path.join(REPO_ROOT, 'cspell.shared.yaml');
 export const RUBRICS_DIR = path.join(STEWARD_DIR, 'src', 'rubrics');
 
-export const WEB_UI = 'http://localhost:8233';
+/**
+ * Where a workflow deep-link points. Both UIs take the same
+ * `/namespaces/<ns>/workflows/<id>` path, so only the origin moves — a link
+ * built against the wrong one is a 404 rather than a wrong workflow.
+ */
+export const WEB_UI = IS_TEMPORAL_CLOUD ? 'https://cloud.temporal.io' : 'http://localhost:8233';
 
 /**
  * Phase gates (spec §12). Every incomplete surface is off, so each phase ships
