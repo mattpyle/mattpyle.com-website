@@ -189,7 +189,7 @@ It also obeys the target's robots.txt — including for the pages the deep tier 
 agent-readiness auditor that ignores robots fails its own audit.
 
 **One identity across three clients.** The fetcher, Lighthouse's Chrome and axe's all send
-`AUDIT_USER_AGENT`, `steward-audit/0.2 (+https://www.mattpyle.com/steward)`, so an audit is one
+`AUDIT_USER_AGENT`, `steward-audit/0.2.0 (+https://www.mattpyle.com/steward)`, so an audit is one
 visitor in the target's access log and the one robots.txt token, `steward-audit`, refuses all of it.
 The token is the User-Agent's first product token and a test holds the two together, because a
 robots.txt rule naming a token the auditor does not send is a refusal that silently does nothing.

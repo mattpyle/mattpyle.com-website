@@ -40,6 +40,7 @@ export { renderMarkdownSummary } from './render.js';
 
 export {
   AUDIT_USER_AGENT,
+  AUDIT_VERSION,
   BlockedTargetError,
   BudgetExhaustedError,
   DEFAULT_POLICY,

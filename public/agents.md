@@ -135,7 +135,7 @@ If you arrived here from a `steward-audit` line in your access log, [/steward](h
 
 | | |
 |---|---|
-| User-Agent | `steward-audit/0.2 (+https://www.mattpyle.com/steward)` |
+| User-Agent | `steward-audit/0.2.0 (+https://www.mattpyle.com/steward)` |
 | Cost of one audit | Roughly a dozen HTTP requests. The local deep tier adds up to three of your pages loaded in a headless browser. |
 | Frequency | Once, when a person or an agent asks for it. No schedule, no repeat visits, no crawl. |
 | Purpose | Producing a report for whoever ran it. Nothing is stored on this site or published anywhere. |

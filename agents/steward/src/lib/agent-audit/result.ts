@@ -138,7 +138,17 @@ export interface CategoryCount {
 
 export interface AuditResult {
   schemaVersion: number;
-  tool: { name: string; version: string };
+  /**
+   * What ran the audit, and the string it arrived under.
+   *
+   * `userAgent` is optional because a document written before it existed is
+   * still a valid document (adding an optional field does not move
+   * `SCHEMA_VERSION`); every report this code produces carries it. It is here so
+   * that the report is a place a site owner can read the exact string to match
+   * in their access log or refuse in robots.txt, which is the question a report
+   * gets read for after the checks themselves.
+   */
+  tool: { name: string; version: string; userAgent?: string };
   target: {
     /** Exactly what the caller typed. */
     input: string;

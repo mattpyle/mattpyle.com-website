@@ -29,16 +29,25 @@ const read = relative =>
 const safeFetch = read('agents/steward/src/lib/agent-audit/safe-fetch.ts');
 const checks = read('agents/steward/src/lib/agent-audit/checks.ts');
 
-const userAgent = safeFetch.match(/export const AUDIT_USER_AGENT = '([^']+)'/)?.[1];
+// The User-Agent is a template literal over `AUDIT_VERSION`, the one place the auditor's version is
+// written down, so it is rebuilt here the way the workspace builds it rather than read as a string.
+const version = safeFetch.match(/export const AUDIT_VERSION = '([^']+)'/)?.[1];
+const userAgentTemplate = safeFetch.match(/export const AUDIT_USER_AGENT = `([^`]+)`/)?.[1];
+const userAgent = userAgentTemplate?.replace('${AUDIT_VERSION}', version ?? '');
 const token = checks.match(/export const AUDIT_AGENT_TOKEN = '([^']+)'/)?.[1];
 
 test('the constants this test pins are still where it looks for them', () => {
   // Read by regex rather than imported: these are TypeScript, and this suite is plain `node --test`
   // with no loader. A rename that moves either constant has to fail here loudly rather than leave
   // every assertion below quietly comparing undefined to undefined.
-  assert.ok(userAgent, 'AUDIT_USER_AGENT not found in agents/steward/src/lib/agent-audit/safe-fetch.ts');
+  assert.ok(version, 'AUDIT_VERSION not found in agents/steward/src/lib/agent-audit/safe-fetch.ts');
+  assert.ok(
+    userAgentTemplate,
+    'AUDIT_USER_AGENT is not a template literal in agents/steward/src/lib/agent-audit/safe-fetch.ts'
+  );
   assert.ok(token, 'AUDIT_AGENT_TOKEN not found in agents/steward/src/lib/agent-audit/checks.ts');
   assert.equal(userAgent.split('/')[0], token);
+  assert.equal(userAgent.split('/')[1].split(' ')[0], version);
 });
 
 test('the /steward page quotes the User-Agent and the token exactly', () => {

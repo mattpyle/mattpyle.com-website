@@ -81,8 +81,15 @@ export const GET: APIRoute = async ({ site }) => {
 
   lines.push('## Builds');
   lines.push('');
+  // Builds have no detail pages, so each bullet leads with the anchor of its card on /builds/
+  // (BuildsGrid.astro puts the id on the card's heading). The llms.txt format says a list item leads
+  // with a link to somewhere with more detail, and a bullet that is only bold text is a dead end for
+  // a parser collecting links — Steward's own `llms-txt-list-items` check reports these, and this
+  // section was the site's one failure against it.
   for (const build of builds) {
-    lines.push(`- **${build.data.title}** (${build.data.status}): ${build.data.description}`);
+    lines.push(
+      `- [${build.data.title}](${base}/builds/#build-${build.id}) (${build.data.status}): ${build.data.description}`
+    );
   }
   lines.push('');
 

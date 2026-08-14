@@ -76,6 +76,9 @@ export function renderMarkdownSummary(audit: AuditResult): string {
   out.push(
     `- **Tool:** ${safe(audit.tool.name)} ${safe(audit.tool.version)}, result schema v${audit.schemaVersion}`,
   );
+  if (audit.tool.userAgent) {
+    out.push(`- **Sent as:** \`${safe(audit.tool.userAgent)}\``);
+  }
   out.push(
     `- **Cost:** ${audit.requests} HTTP request(s)` +
       (audit.browserPages === undefined

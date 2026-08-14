@@ -1,4 +1,6 @@
 import {
+  AUDIT_USER_AGENT,
+  AUDIT_VERSION,
   BlockedTargetError,
   BudgetExhaustedError,
   SafeFetcher,
@@ -38,7 +40,13 @@ import {
  */
 
 export const TOOL_NAME = 'steward audit-url';
-export const TOOL_VERSION = '0.1.0';
+
+/**
+ * The version stamped on every report, which is the auditor's version and not a
+ * second number. `AUDIT_VERSION` in safe-fetch.ts is the source; see its
+ * docblock for why there is exactly one.
+ */
+export const TOOL_VERSION = AUDIT_VERSION;
 
 /**
  * The product token the auditor identifies as, and obeys robots.txt under.
@@ -1459,7 +1467,7 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
   const finished = now();
   return {
     schemaVersion: SCHEMA_VERSION,
-    tool: { name: TOOL_NAME, version: TOOL_VERSION },
+    tool: { name: TOOL_NAME, version: TOOL_VERSION, userAgent: AUDIT_USER_AGENT },
     target: { input, origin },
     startedAt: started.toISOString(),
     finishedAt: finished.toISOString(),

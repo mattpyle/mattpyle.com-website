@@ -37,7 +37,7 @@ after(async () => {
 function auditFixture(overrides: Partial<AuditResult> = {}): AuditResult {
   return {
     schemaVersion: 2,
-    tool: { name: 'steward audit-url', version: '0.1.0' },
+    tool: { name: 'steward audit-url', version: '0.2.0' },
     target: { input: 'example.com', origin: 'https://example.com' },
     startedAt: '2026-08-11T00:00:00.000Z',
     finishedAt: '2026-08-11T00:00:04.000Z',

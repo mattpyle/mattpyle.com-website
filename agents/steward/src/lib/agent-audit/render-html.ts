@@ -412,6 +412,11 @@ export function renderHtmlReport(audit: AuditResult): string {
   out.push(
     `<dt>Tool</dt><dd>${esc(audit.tool.name)} ${esc(audit.tool.version)}, result schema v${esc(String(audit.schemaVersion))}</dd>`,
   );
+  if (audit.tool.userAgent) {
+    // The string a site owner matches in their access log or names in robots.txt. It belongs in the
+    // report because the report is what they are already reading.
+    out.push(`<dt>Sent as</dt><dd><code>${esc(audit.tool.userAgent)}</code></dd>`);
+  }
   out.push(`<dt>Cost</dt><dd>${esc(cost)}</dd>`);
   out.push('</dl>');
   out.push('</header>');

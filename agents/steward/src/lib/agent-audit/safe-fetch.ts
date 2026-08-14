@@ -43,6 +43,19 @@ import { pinnedLookup, type PinnedAddress } from './pinning.js';
  */
 
 /**
+ * The auditor's version, and the only place it is written down.
+ *
+ * One auditor, one number: the User-Agent below renders it, `TOOL_VERSION` in
+ * checks.ts is it, every report header carries it, and both MCP servers — the
+ * local one in src/mcp/audit-server.ts and the site's public endpoint — announce
+ * it. They drifted to three different numbers between the 0.2 rename and
+ * 2026-08-13, which cost a reader a hunt through a report for the 0.2 the wire
+ * had actually carried. Anything that cannot import this (a prerendered page, a
+ * static file) is pinned against it by a test rather than left to agree by hand.
+ */
+export const AUDIT_VERSION = '0.2.0';
+
+/**
  * The one identity every request of an audit carries, whichever client makes it:
  * this fetcher, Lighthouse's Chrome, and axe's.
  *
@@ -54,7 +67,7 @@ import { pinnedLookup, type PinnedAddress } from './pinning.js';
  * going anyway. A test holds the property, because the failure it prevents is
  * silent: Chrome would start with a broken flag and the audit would still finish.
  */
-export const AUDIT_USER_AGENT = 'steward-audit/0.2 (+https://www.mattpyle.com/steward)';
+export const AUDIT_USER_AGENT = `steward-audit/${AUDIT_VERSION} (+https://www.mattpyle.com/steward)`;
 
 export interface FetchPolicy {
   /** How many `Location` hops to follow before giving up. */

@@ -2,6 +2,14 @@
 import FilterPills from './FilterPills.astro';
 
 interface Build {
+  /**
+   * The content collection's slug, which becomes the card's anchor.
+   *
+   * There are no per-build detail pages, so `/builds/#build-<id>` is the address a build has. It is
+   * what llms.txt links each build bullet to (src/pages/llms.txt.ts), so an agent reading the list
+   * has somewhere to follow — the anchor has to land on the card rather than at the top of a page.
+   */
+  id: string;
   data: {
     title: string;
     description: string;
@@ -64,7 +72,7 @@ const pills = [
               {formatDate(build.data.date)}
             </time>
           </header>
-          <h2>{build.data.title}</h2>
+          <h2 id={`build-${build.id}`}>{build.data.title}</h2>
           <p class="card-desc">{build.data.description}</p>
           <ul role="list" class="card-tags">
             {build.data.tags.map(tag => <li class="tag-pill">{tag}</li>)}

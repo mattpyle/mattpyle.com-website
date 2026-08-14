@@ -15,7 +15,7 @@ import { createAuditServer, originFor, SERVER_NAME, TOOL_NAME } from '../src/lib
 function auditFor(url) {
   return {
     schemaVersion: 2,
-    tool: { name: 'steward audit-url', version: '0.1.0' },
+    tool: { name: 'steward audit-url', version: '0.2.0' },
     target: { input: url, origin: new URL(url.includes('://') ? url : `https://${url}`).origin },
     startedAt: '2026-08-12T15:00:00.000Z',
     finishedAt: '2026-08-12T15:00:04.000Z',
@@ -53,6 +53,12 @@ async function connect({ runAudit } = {}) {
       const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`);
       return { origin: url.origin, url };
     },
+    // Injected the same way the audit itself is, and for the same reason: they belong to the
+    // auditor in the Steward workspace, which this file does not import. src/pages/mcp.ts passes
+    // the real ones. The values here are deliberately not the real ones, so a test that asserts on
+    // them is asserting that the server used what it was given.
+    version: '9.9.9',
+    userAgent: 'test-audit/9.9.9 (+https://example.test/steward)',
   });
   const client = new Client({ name: 'test', version: '0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -65,7 +71,15 @@ test('the server announces itself and its instructions on initialize', async (t)
   t.after(close);
 
   assert.equal(client.getServerVersion()?.name, SERVER_NAME);
+  // The version and the User-Agent both come from the auditor, through the transport. A client asks
+  // "what am I connected to" and a site owner asks "what arrived in my log", and one number answers
+  // both — see AUDIT_VERSION in the Steward workspace's safe-fetch.ts.
+  assert.equal(client.getServerVersion()?.version, '9.9.9');
   assert.match(client.getInstructions() ?? '', /agent-readiness/);
+  assert.match(
+    client.getInstructions() ?? '',
+    /`test-audit\/9\.9\.9 \(\+https:\/\/example\.test\/steward\)`/
+  );
 });
 
 test('exactly one tool is listed, and it is audit_site', async (t) => {
