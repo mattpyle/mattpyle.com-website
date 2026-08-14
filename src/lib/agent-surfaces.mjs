@@ -53,6 +53,11 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  * these by name across a deploy, and tests/agent-surfaces.test.mjs asserts each is recognised, so
  * a regression in the prefix rule fails against real paths instead of hypothetical ones.
  *
+ * `/.well-known/mcp-server` is the one whose log line says the most per fetch. Nothing on this site
+ * links it and no page renders it: a client that asks for it has gone looking for an MCP server
+ * without being told the URL, which is the entire behaviour the discovery draft exists to enable.
+ * Whether anything does that is a question the log can answer and nothing else here can.
+ *
  * The Agent Skills entries are the instrument for that card's hypothesis. The index and each skill
  * are separate lines in the log on purpose: "something fetched the index" and "something that
  * fetched the index went on to fetch the skill" are different findings, and only the second one
@@ -61,6 +66,7 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  */
 export const WELL_KNOWN_SURFACE_PATHS = [
   '/.well-known/agent-card.json',
+  '/.well-known/mcp-server',
   '/.well-known/agent-skills/index.json',
   '/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md',
   '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',

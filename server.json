@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.mattpyle/steward-audit",
+  "title": "Steward",
+  "description": "Audits any website for agent-readiness and returns the report in the same call: robots.txt and its AI-agent rules, Content Signals, the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A discovery documents, and whether the homepage and a content page actually serve markdown when asked for it. Checks behaviour rather than presence, obeys the target's robots.txt, and takes seconds.",
+  "version": "0.2.0",
+  "websiteUrl": "https://www.mattpyle.com/steward",
+  "repository": {
+    "url": "https://github.com/mattpyle/mattpyle.com-website",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.mattpyle.com/mcp"
+    }
+  ]
+}

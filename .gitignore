@@ -31,6 +31,12 @@ skills-lock.json
 # Local feature worktrees
 .worktrees/
 
+# The MCP registry publisher, downloaded into the repo root to publish server.json.
+# A platform binary, not source; it is meant to be deleted after a publish, and this is
+# here so a `git add -A` before that never commits it.
+mcp-publisher.exe
+key.pem
+
 # Impeccable skill local state — not production code
 .impeccable/
 

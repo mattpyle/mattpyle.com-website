@@ -236,7 +236,8 @@ const extraJsonLd = [
         Two renderings ship in the one response: the canonical JSON in
         <code>structuredContent</code>, one entry per check with its evidence, and the same report as
         a markdown summary in the text content. A <code>GET</code> on <a href={ENDPOINT}>the endpoint
-        itself</a> answers <code>405</code> with this example rather than a bare status.
+        itself</a> answers <code>405</code> with this example rather than a bare status. The site's
+        own discovery document is at <a href="/.well-known/mcp-server">/.well-known/mcp-server</a>.
       </p>
       <p>
         The unit audited is a site, not a page: any path in the URL is ignored. Only

@@ -44,6 +44,7 @@ Every representation is also fetchable directly, at the page's own path with `.m
 - `/webmcp/index.json` — the JSON index backing the WebMCP tools below. A plain static file; any agent can fetch it directly, no tool call required.
 - `/webmcp/tools.json` — the tool manifest: name, description, input schema, return summary, and an example call for every tool below. Generated at build time from the live tool objects, so it cannot drift from what an agent actually receives.
 - `/.well-known/agent-card.json`: the A2A Agent Card (`application/a2a+json`). See below.
+- `/.well-known/mcp-server` — the MCP discovery document, per `draft-serra-mcp-discovery-uri-04` (`application/json`). It names the endpoint below.
 - `/.well-known/agent-skills/index.json` — the Agent Skills discovery index, per the Agent Skills Discovery RFC v0.2.0 (`$schema` `https://schemas.agentskills.io/discovery/0.2.0/schema.json`). It lists two skills, each served at `/.well-known/agent-skills/<name>/SKILL.md` as `text/markdown`. `using-mattpyle-com` is the workflow version of this file: which surface answers which question, how to negotiate markdown, how to call the A2A endpoint and the WebMCP tools. `implement-markdown-negotiation` is portable instructions for building this site's markdown negotiation on another site, distilled from shipping and measuring it here. Each entry's `digest` is the SHA-256 of the artifact's bytes, generated at build and verified against the built file, so it is safe to check.
 - DNS discovery (DNS-AID): DNSSEC-signed `SVCB` and `HTTPS` records at `_index._agents.mattpyle.com` and `_a2a._agents.mattpyle.com` point agents at this origin, per `draft-mozleywilliams-dnsop-dnsaid-02`. `_a2a._agents` is the DNS-side pointer to the A2A endpoint below.
 
@@ -81,6 +82,35 @@ Notes for anyone calling it:
 - **Not implemented:** streaming, `Task` objects, push notifications, the extended Agent Card, and authentication. The Agent Card declares all of these as false rather than leaving you to find out.
 - **A `GET`** returns `405` with a worked example, rather than a bare status.
 - This is an experiment on a personal site, not a supported API, and it may be withdrawn without notice.
+
+## MCP endpoint: this site will audit yours
+
+This site runs a public MCP server. It does one thing: it audits any site for agent-readiness and hands back the report in the same call.
+
+| | |
+|---|---|
+| Endpoint | `https://www.mattpyle.com/mcp` |
+| Discovery | `https://www.mattpyle.com/.well-known/mcp-server` |
+| Transport | Streamable HTTP over POST, stateless — no session ID, one request per POST |
+| Protocol version | MCP 2025-06-18. JSON-RPC batches are refused; they were removed from the spec in that version. |
+| Tool | `audit_site(url)`, and nothing else |
+| Auth | None. It reads public documents on a third-party site and writes nothing anywhere. |
+| Limits | 10 audits per caller per hour, 500 per UTC day. A refusal is a JSON-RPC error with `Retry-After`. |
+| Write-up | [/steward](https://www.mattpyle.com/steward) |
+
+The report comes back in the tool call itself: the canonical JSON in `structuredContent`, one entry per check with evidence and a fix, and the same report as a markdown summary in the text content. There is nothing to poll and no resource to read afterwards, which is deliberate — chat clients call tools but cannot read resources, so a report reachable only through a resource is unreachable from most agents.
+
+A minimal call:
+
+```bash
+curl -sS https://www.mattpyle.com/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"audit_site","arguments":{"url":"example.com"}}}'
+```
+
+A `GET` returns `405` with that example rather than a bare status. The unit audited is a site, not a page: any path in the URL is ignored.
 
 ## WebMCP tools (experimental)
 
@@ -140,7 +170,7 @@ If you arrived here from a `steward-audit` line in your access log, [/steward](h
 | Frequency | Once, when a person or an agent asks for it. No schedule, no repeat visits, no crawl. |
 | Purpose | Producing a report for whoever ran it. Nothing is stored on this site or published anywhere. |
 
-The rendered pages are the expensive half, and they are the local deep tier only. When they do run, a headless browser loads the page and, like any browser, fetches that page's own images, scripts, and stylesheets. Those requests carry the same User-Agent as the rest of the audit, so everything one audit does is attributable to one visitor in your log.
+The rendered pages are the expensive half, and they are the local tier only — the public endpoint above never opens a browser. When they do run, a headless browser loads the page and, like any browser, fetches that page's own images, scripts, and stylesheets. Those requests carry the same User-Agent as the rest of the audit, so everything one audit does is attributable to one visitor in your log.
 
 **It obeys your robots.txt.** Every URL the auditor requests is checked against your rules first, including each page it opens in the browser; only `/robots.txt` itself is fetched without asking. Anything you disallow is reported as "not checked", never as a finding against your site.
 

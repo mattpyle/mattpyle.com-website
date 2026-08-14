@@ -66,3 +66,14 @@ test('the User-Agent points at a page this site actually serves', () => {
     readFileSync(fileURLToPath(new URL('../src/pages/steward.astro', import.meta.url))).length > 0
   );
 });
+
+test('the discovery document names the endpoint and the server', () => {
+  const manifest = JSON.parse(read('public/.well-known/mcp-server'));
+  assert.equal(manifest.endpoint, 'https://www.mattpyle.com/mcp');
+  assert.equal(manifest.docs, 'https://www.mattpyle.com/steward');
+  // The same required fields scripts/validate-mcp-discovery.mjs enforces in the build chain,
+  // asserted here too so a broken document fails a test run and not only a build.
+  for (const field of ['mcp_version', 'name', 'endpoint', 'transport']) {
+    assert.equal(typeof manifest[field], 'string', `${field} must be a string`);
+  }
+});

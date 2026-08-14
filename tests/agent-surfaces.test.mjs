@@ -47,10 +47,19 @@ test('the named well-known surfaces are the ones the site actually publishes', (
   // second skill and the list fails here rather than going unlogged forever.
   const expected = [
     '/.well-known/agent-card.json',
+    '/.well-known/mcp-server',
     SKILLS_INDEX_PATH,
     ...readSkills().map((skill) => skillUrlFor(skill.name)),
   ];
   assert.deepEqual([...WELL_KNOWN_SURFACE_PATHS].sort(), expected.sort());
+
+  // The two hand-written documents are asserted to exist as files, which is what "actually
+  // publishes" means for them: neither is generated, so nothing else in the build would notice a
+  // listed path that serves a 404. The skills are covered by readSkills() reading their source.
+  for (const path of ['/.well-known/agent-card.json', '/.well-known/mcp-server']) {
+    const file = fileURLToPath(new URL(`../public${path}`, import.meta.url));
+    assert.doesNotThrow(() => readFileSync(file), `${path} is listed as a surface but public${path} does not exist`);
+  }
 });
 
 test('ordinary pages and reader furniture are not surfaces', () => {

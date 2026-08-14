@@ -139,7 +139,10 @@
         - /url: https://www.mattpyle.com/mcp
       - text: answers
       - code: /\d+/
-      - text: with this example rather than a bare status.
+      - text: with this example rather than a bare status. The site's own discovery document is at
+      - link "/.well-known/mcp-server":
+        - /url: /.well-known/mcp-server
+      - text: .
     - paragraph:
       - text: "The unit audited is a site, not a page: any path in the URL is ignored. Only"
       - code: http
