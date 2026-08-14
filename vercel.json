@@ -72,6 +72,14 @@
       "headers": [{ "key": "Vary", "value": "Accept" }]
     },
     {
+      "source": "/steward",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/steward/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
       "source": "/webmcp",
       "headers": [{ "key": "Vary", "value": "Accept" }]
     },

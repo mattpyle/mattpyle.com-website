@@ -189,10 +189,13 @@ It also obeys the target's robots.txt — including for the pages the deep tier 
 agent-readiness auditor that ignores robots fails its own audit.
 
 **One identity across three clients.** The fetcher, Lighthouse's Chrome and axe's all send
-`AUDIT_USER_AGENT`, so an audit is one visitor in the target's access log and the one robots.txt
-token refuses all of it. The User-Agent points at `/agents.md`, which explains the auditor and how to
-refuse it. It must stay free of commas and semicolons: `@axe-core/cli` splits its `--chrome-options`
-value on both.
+`AUDIT_USER_AGENT`, `steward-audit/0.2 (+https://www.mattpyle.com/steward)`, so an audit is one
+visitor in the target's access log and the one robots.txt token, `steward-audit`, refuses all of it.
+The token is the User-Agent's first product token and a test holds the two together, because a
+robots.txt rule naming a token the auditor does not send is a refusal that silently does nothing.
+The URL points at `/steward`, which explains the auditor, what one audit costs a site, and how to
+refuse it. The string must stay free of commas and semicolons: `@axe-core/cli` splits its
+`--chrome-options` value on both.
 
 > [!TIP]
 > Run any command with `npx tsx src/cli.ts <args>` instead of the `steward` shim if something fails

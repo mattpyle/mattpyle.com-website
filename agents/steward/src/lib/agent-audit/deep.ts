@@ -35,7 +35,7 @@ import type { AxeViolation, LighthouseLike } from '../audit-map.js';
  * Both browsers send `AUDIT_USER_AGENT`, the same string the fast tier's fetcher
  * sends. Three different HTTP clients make the requests of one audit, and from
  * the audited site's logs they are one visitor: a person looking at their access
- * log sees a single product token, and the `steward-audit-url` robots.txt token
+ * log sees a single product token, and the `steward-audit` robots.txt token
  * that refuses the fast tier refuses the rendered pages too. An auditor that
  * arrived under Chrome's own UA for the expensive half would be unattributable
  * for exactly the requests that cost the site the most.

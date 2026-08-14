@@ -54,7 +54,7 @@ import { pinnedLookup, type PinnedAddress } from './pinning.js';
  * going anyway. A test holds the property, because the failure it prevents is
  * silent: Chrome would start with a broken flag and the audit would still finish.
  */
-export const AUDIT_USER_AGENT = 'steward-audit-url/0.1 (+https://www.mattpyle.com/agents.md)';
+export const AUDIT_USER_AGENT = 'steward-audit/0.2 (+https://www.mattpyle.com/steward)';
 
 export interface FetchPolicy {
   /** How many `Location` hops to follow before giving up. */

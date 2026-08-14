@@ -40,8 +40,15 @@ import {
 export const TOOL_NAME = 'steward audit-url';
 export const TOOL_VERSION = '0.1.0';
 
-/** The product token the auditor identifies as, and obeys robots.txt under. */
-export const AUDIT_AGENT_TOKEN = 'steward-audit-url';
+/**
+ * The product token the auditor identifies as, and obeys robots.txt under.
+ *
+ * It is the first token of `AUDIT_USER_AGENT` and has to stay that way: a site owner reads the
+ * product token out of their access log and writes it into robots.txt, so a token that does not
+ * match the User-Agent is a refusal that silently does nothing. A test in
+ * tests/lib/agent-audit-safe-fetch.test.ts holds the two together.
+ */
+export const AUDIT_AGENT_TOKEN = 'steward-audit';
 
 // ---------------------------------------------------------------------------
 // Fetch plumbing shared by the checks

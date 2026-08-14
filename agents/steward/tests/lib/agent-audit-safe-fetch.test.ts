@@ -4,6 +4,7 @@ import http from 'node:http';
 import dns from 'node:dns/promises';
 import dnsCallback from 'node:dns';
 import type { AddressInfo } from 'node:net';
+import { AUDIT_AGENT_TOKEN } from '../../src/lib/agent-audit/checks.js';
 import {
   assertConnectableUrl,
   AUDIT_USER_AGENT,
@@ -381,9 +382,17 @@ test('the auditor identifies itself', async (t) => {
   t.after(() => mock.close());
 
   await new SafeFetcher(testPolicy()).fetch(`${mock.origin}/`);
-  assert.match(seen, /^steward-audit-url\//);
-  assert.match(seen, /https:\/\/www\.mattpyle\.com\/agents\.md/);
+  assert.match(seen, /^steward-audit\//);
+  assert.match(seen, /https:\/\/www\.mattpyle\.com\/steward/);
   assert.equal(seen, AUDIT_USER_AGENT);
+});
+
+test('the robots.txt token is the User-Agent product token', () => {
+  // A site owner reads the product token out of an access log and writes it into robots.txt. If the
+  // token the auditor obeys robots under is not the token it sends, that refusal does nothing and
+  // the site owner has no way to tell — the auditor keeps arriving and keeps reporting itself as
+  // allowed. Two constants in two files, so nothing but this holds them together.
+  assert.equal(AUDIT_USER_AGENT.split('/')[0], AUDIT_AGENT_TOKEN);
 });
 
 test('the User-Agent survives being passed to Chrome as a flag', () => {

@@ -37,9 +37,9 @@ test('parses groups, sitemaps and Content-Signal', () => {
 
 test('the longest matching rule wins, and Allow wins a tie', () => {
   const robots = parseRobots(SAMPLE);
-  assert.equal(isAllowed(robots, 'steward-audit-url', '/admin/secret').allowed, false);
-  assert.equal(isAllowed(robots, 'steward-audit-url', '/admin/public/x').allowed, true);
-  assert.equal(isAllowed(robots, 'steward-audit-url', '/writing/hello/').allowed, true);
+  assert.equal(isAllowed(robots, 'steward-audit', '/admin/secret').allowed, false);
+  assert.equal(isAllowed(robots, 'steward-audit', '/admin/public/x').allowed, true);
+  assert.equal(isAllowed(robots, 'steward-audit', '/writing/hello/').allowed, true);
 
   const tie = parseRobots('User-agent: *\nDisallow: /x\nAllow: /x\n');
   assert.equal(isAllowed(tie, 'anyone', '/x').allowed, true);
@@ -95,7 +95,7 @@ test('a pathological wildcard pattern cannot hang the matcher', () => {
   const robots = parseRobots(`User-agent: *\nDisallow: /${'a*'.repeat(24)}b$\n`);
   const path = `/${'a'.repeat(4000)}c`;
   const started = Date.now();
-  assert.equal(isAllowed(robots, 'steward-audit-url', path).allowed, true);
+  assert.equal(isAllowed(robots, 'steward-audit', path).allowed, true);
   assert.ok(Date.now() - started < 1000, 'the matcher took longer than a second on one path');
 });
 

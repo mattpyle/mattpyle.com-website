@@ -149,6 +149,16 @@ export const PAGES: PageSpec[] = [
     ],
   },
   {
+    name: 'steward',
+    path: '/steward',
+    why: 'Steward template: the check list, the log-identity and limits tables, and two code blocks that must not wrap mid-token',
+    // The one-sentence gloss on each check is editorial copy; the check titles beside it are
+    // Steward's own words, and agents/steward/tests/lib/agent-audit-checks.test.ts already fails if
+    // the list drifts from the audit. Redacting the gloss keeps this golden a guard on the
+    // template's shape rather than a second, weaker copy of that assertion.
+    snapshotRedact: ['.check-plain'],
+  },
+  {
     name: 'webmcp',
     path: '/webmcp',
     why: 'The most interactive page: per-tool radiogroups, inputs, run buttons, focusable scroll regions',
