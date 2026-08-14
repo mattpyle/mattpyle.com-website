@@ -4,7 +4,7 @@ import {
   renderMarkdownSummary,
   runFastAudit,
 } from '@mattpyle/steward/agent-audit/fast';
-import { createAuditServer, refusalForBody, TOOL_NAME } from '../lib/mcp-audit-server.mjs';
+import { createAuditServer, refusalForBody, SERVER_NAME, TOOL_NAME } from '../lib/mcp-audit-server.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
@@ -221,6 +221,11 @@ export const GET: APIRoute = ({ request }) => {
         error: 'This is an MCP endpoint. It speaks the Streamable HTTP transport over POST, not GET.',
         transport: 'streamable-http',
         stateless: true,
+        server: SERVER_NAME,
+        // Whoever is reading this is either an agent that found the URL in a discovery document or
+        // a person who followed it out of their access log. Both are one hop from the page that
+        // explains the auditor, what one audit costs a site, and how to refuse it.
+        docs: 'https://www.mattpyle.com/steward',
         tools: [TOOL_NAME],
         example: {
           method: 'POST',

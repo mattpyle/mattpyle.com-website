@@ -237,6 +237,8 @@ export const config = {
     '/scorecard',
     '/scorecard/',
     '/scorecard.md',
+    '/steward',
+    '/steward/',
     '/builds/:path*',
     '/webmcp/:path*',
     '/writing/:path*',

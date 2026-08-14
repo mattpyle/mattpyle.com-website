@@ -19,6 +19,7 @@ test('a slash-less page path redirects to the slash form', () => {
     ['/changelog', '/changelog/'],
     ['/scorecard', '/scorecard/'],
     ['/webmcp', '/webmcp/'],
+    ['/steward', '/steward/'],
     ['/builds', '/builds/'],
     ['/writing/accessibility-and-ai', '/writing/accessibility-and-ai/'],
     ['/changelog/astro-rebuild', '/changelog/astro-rebuild/'],

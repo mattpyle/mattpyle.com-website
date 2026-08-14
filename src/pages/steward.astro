@@ -1,0 +1,407 @@
+---
+/**
+ * /steward — the page the auditor's User-Agent points at.
+ *
+ * Who this page is for, in the order they arrive: a site owner who found `steward-audit` in an
+ * access log and followed the URL in the string; an agent or a person deciding whether to call the
+ * public endpoint; and Matt. The first of those decides the running order — the log identity comes
+ * before what Steward is, because somebody who is mid-investigation should not have to read a
+ * paragraph of positioning before finding the row that says what fetched their site.
+ *
+ * Nothing on this page restates a number that code already holds, except where it cannot. The rate
+ * limits are imported from src/lib/mcp-rate-limit.mjs. The check list is
+ * src/data/steward-audit-checks.mjs, a copy of Steward's own specs guarded by a test on the
+ * workspace side; that file's docblock explains why a copy is the only option. The User-Agent is
+ * the one string typed out here, for the reason its own comment gives, and it is pinned by
+ * tests/steward-page.test.mjs.
+ */
+import Layout from '../layouts/Layout.astro';
+import PageHeader from '../components/PageHeader.astro';
+import { STEWARD_FAST_CHECKS, STEWARD_CHECK_CATEGORIES } from '../data/steward-audit-checks.mjs';
+import {
+  DEFAULT_PER_CALLER,
+  DEFAULT_GLOBAL_PER_DAY,
+  DEFAULT_WINDOW_SECONDS,
+} from '../lib/mcp-rate-limit.mjs';
+
+/**
+ * The User-Agent verbatim, character for character, including the version.
+ *
+ * This is the string a site owner will paste into a search box or match against a log line, so a
+ * paraphrase or a stale version number here is the one error on this page that actively wastes
+ * somebody's time. It cannot be imported: the constant lives in `@mattpyle/steward`, whose exports
+ * map publishes exactly one entry for exactly one consumer (src/pages/mcp.ts), and a prerendered
+ * page importing the workspace would put it in the static build's graph. tests/steward-page.test.mjs
+ * reads both files and fails if they disagree.
+ */
+const USER_AGENT = 'steward-audit/0.2 (+https://www.mattpyle.com/steward)';
+const AGENT_TOKEN = 'steward-audit';
+const ENDPOINT = 'https://www.mattpyle.com/mcp';
+const ISSUES_URL = 'https://github.com/mattpyle/mattpyle.com-website/issues';
+
+const windowHours = DEFAULT_WINDOW_SECONDS / 3600;
+
+const byCategory = STEWARD_CHECK_CATEGORIES.map(category => ({
+  ...category,
+  checks: STEWARD_FAST_CHECKS.filter(check => check.category === category.id),
+}));
+
+const refusalSnippet = `User-agent: ${AGENT_TOKEN}\nDisallow: /`;
+
+const callSnippet = `curl -sS ${ENDPOINT} \\
+  -H 'Content-Type: application/json' \\
+  -H 'Accept: application/json, text/event-stream' \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"audit_site","arguments":{"url":"example.com"}}}'`;
+
+const title = 'Steward';
+const seoTitle = 'Steward, the auditor that fetched your site';
+const description =
+  'Steward is the agent-readiness auditor behind the steward-audit User-Agent: what it checks, ' +
+  'what one audit costs your site, how to refuse it, and how to run one yourself.';
+
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const personId = `${new URL('/', Astro.site).toString()}#person`;
+
+const extraJsonLd = [
+  {
+    '@type': 'TechArticle',
+    '@id': `${canonical}#techarticle`,
+    headline: seoTitle,
+    name: title,
+    description,
+    url: canonical,
+    dateModified: '2026-08-12',
+    author: { '@id': personId },
+    publisher: { '@id': personId },
+    mainEntityOfPage: canonical,
+  },
+  {
+    '@type': 'FAQPage',
+    '@id': `${canonical}#faq`,
+    mainEntity: [
+      {
+        '@type': 'Question',
+        name: 'What is the steward-audit User-Agent?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text:
+            `${USER_AGENT} is an agent-readiness auditor run from mattpyle.com. Somebody asked it ` +
+            'for a report on one site; it is not a crawler and it does not come back on a schedule.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'How do I block the steward-audit auditor?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text:
+            `Add "User-agent: ${AGENT_TOKEN}" and "Disallow: /" to your robots.txt. The auditor ` +
+            'checks every URL against your rules before requesting it, so one audit then costs you ' +
+            'a single robots.txt fetch and nothing else.',
+        },
+      },
+    ],
+  },
+];
+---
+
+<Layout title={title} seoTitle={seoTitle} description={description} extraJsonLd={extraJsonLd}>
+  <PageHeader
+    eyebrow="Agent · Auditor"
+    title="Steward"
+    subtitle="The agent-readiness auditor behind the steward-audit User-Agent, and the editorial agent that publishes this site."
+  />
+
+  <div class="steward-shell" data-module="steward">
+    <section class="prose" aria-labelledby="in-your-logs">
+      <h2 id="in-your-logs">Did Steward just fetch your site?</h2>
+      <p>
+        Then somebody asked for a report on it. Steward is an agent-readiness auditor: it reads what
+        a site says about itself over plain HTTP, writes a report for whoever ran it, and leaves. It
+        is not a crawler, it does not index anything, and it does not come back on a schedule.
+      </p>
+
+      <table>
+        <caption class="sr-only">What one Steward request is</caption>
+        <tbody>
+          <tr>
+            <th scope="row">User-Agent</th>
+            <td><code>{USER_AGENT}</code></td>
+          </tr>
+          <tr>
+            <th scope="row">robots.txt token</th>
+            <td><code>{AGENT_TOKEN}</code></td>
+          </tr>
+          <tr>
+            <th scope="row">Cost of one audit</th>
+            <td>Roughly a dozen HTTP requests, spread over a few seconds.</td>
+          </tr>
+          <tr>
+            <th scope="row">Frequency</th>
+            <td>Once, when a person or an agent asks. No schedule, no repeat visits, no crawl.</td>
+          </tr>
+          <tr>
+            <th scope="row">What it collects</th>
+            <td>
+              Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known
+              discovery documents — and the headers of a couple of pages. Nothing is stored here and
+              nothing is published anywhere.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        <strong>It obeys your robots.txt.</strong> Every URL is checked against your rules before it
+        is requested; only <code>/robots.txt</code> itself is fetched without asking. Anything you
+        disallow is reported as “not checked”, never as a finding against your site.
+      </p>
+
+      <h3>How do I refuse it?</h3>
+      <p>Add this to your robots.txt:</p>
+      <pre><code>{refusalSnippet}</code></pre>
+      <p>
+        One audit then costs you exactly one request — robots.txt, read once — and nothing else
+        about how this site treats you changes.
+      </p>
+    </section>
+
+    <section class="prose" aria-labelledby="what-is-steward">
+      <h2 id="what-is-steward">What is Steward?</h2>
+      <p>
+        Steward is this site's editorial agent. It reviews a draft — spelling, prose linting, an
+        editorial pass, a real production build with accessibility and performance audits — waits
+        for Matt to approve it, then publishes by pull request and verifies production. The
+        agent-readiness audit started as one step of that review, checking this site against the
+        conventions it writes about, and it turned out to be the half worth pointing at other
+        people's sites.
+      </p>
+      <p>
+        So there are two tiers. The <strong>fast tier</strong> is the {STEWARD_FAST_CHECKS.length}
+        checks below: plain HTTP, seconds, and the tier behind the public endpoint. The
+        <strong>deep tier</strong> renders pages in a real browser and runs Lighthouse and axe over
+        them; it stays local and hand-run, because it costs a site far more than a dozen requests.
+      </p>
+      <p>
+        It checks behaviour rather than presence. A <code>200</code> from <code>/llms.txt</code> that
+        is really the site's HTML 404 page is a failure here, which is the single most common way a
+        site passes a presence check while giving an agent nothing.
+      </p>
+    </section>
+
+    <section aria-labelledby="what-it-checks">
+      <div class="prose">
+        <h2 id="what-it-checks">What does the audit check?</h2>
+        <p>
+          {STEWARD_FAST_CHECKS.length} checks in three categories. Each one comes back with its
+          verdict, the evidence behind it, and — where it failed — what to do about it. There is
+          deliberately no composite score: a single number would hide which of these is broken.
+        </p>
+      </div>
+
+      {byCategory.map(category => (
+        <section class="check-group" aria-labelledby={`category-${category.id}`}>
+          <h3 id={`category-${category.id}`} class="check-group-title">
+            {category.label}
+            <span class="check-group-count">{category.checks.length} checks</span>
+          </h3>
+          <p class="check-group-summary">{category.summary}</p>
+          <ul class="check-list">
+            {category.checks.map(check => (
+              <li class="check-item">
+                <p class="check-title">
+                  {check.title}
+                  <span class:list={['check-severity', `check-severity--${check.severity}`]}>
+                    {check.severity}
+                  </span>
+                </p>
+                <p class="check-plain">{check.plain}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </section>
+
+    <section class="prose" aria-labelledby="run-one">
+      <h2 id="run-one">How do I run an audit myself?</h2>
+      <p>
+        Point an MCP client at <code>{ENDPOINT}</code>. It is a stateless streamable-HTTP server
+        with one tool, <code>audit_site(url)</code>, and the report comes back in the call — there is
+        nothing to poll and no second request to make. No account and no key.
+      </p>
+      <pre><code>{callSnippet}</code></pre>
+      <p>
+        Two renderings ship in the one response: the canonical JSON in
+        <code>structuredContent</code>, one entry per check with its evidence, and the same report as
+        a markdown summary in the text content. A <code>GET</code> on <a href={ENDPOINT}>the endpoint
+        itself</a> answers <code>405</code> with this example rather than a bare status.
+      </p>
+      <p>
+        The unit audited is a site, not a page: any path in the URL is ignored. Only
+        <code>http</code> and <code>https</code> targets are accepted, and addresses on private
+        networks are refused before a connection is opened.
+      </p>
+
+      <h3>What are the limits?</h3>
+      <table>
+        <caption class="sr-only">Rate limits on the public endpoint</caption>
+        <thead>
+          <tr>
+            <th scope="col">Limit</th>
+            <th scope="col">Default</th>
+            <th scope="col">Window</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Per caller</td>
+            <td>{DEFAULT_PER_CALLER} audits</td>
+            <td>{windowHours === 1 ? 'One hour' : `${windowHours} hours`}</td>
+          </tr>
+          <tr>
+            <td>Everyone together</td>
+            <td>{DEFAULT_GLOBAL_PER_DAY} audits</td>
+            <td>One UTC day</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        A refusal is a JSON-RPC error with a <code>Retry-After</code> header, naming which limit was
+        hit and how long to wait. The limits exist because every accepted call spends a dozen
+        requests at a third party's origin under this site's name; an unbounded endpoint would be an
+        open relay with an honest User-Agent. The counter holds a keyed hash of the caller's address
+        with a lifetime no longer than the window, never the address itself.
+      </p>
+    </section>
+
+    <section class="prose" aria-labelledby="contact">
+      <h2 id="contact">Contact</h2>
+      <p>
+        If Steward misbehaved on your site — ignored a rule, requested something it should not have,
+        or reported something that is not true — <a href={ISSUES_URL} rel="noopener">open an issue
+        on the repository</a>. It is the same repository the auditor's code lives in, and it is read.
+      </p>
+      <p>
+        Steward is an experiment on a personal site, not a supported service. It may change or be
+        withdrawn without notice.
+      </p>
+    </section>
+  </div>
+</Layout>
+
+<style>
+  .steward-shell {
+    max-width: var(--width-content);
+    margin: 0 auto;
+    padding: 0 var(--gutter) 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  /* The prose sections size themselves; only the check list needs its own rules. */
+  .check-group {
+    margin-top: 40px;
+  }
+
+  .check-group-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--color-text);
+    margin: 0 0 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .check-group-count {
+    font-size: 11px;
+    letter-spacing: .08em;
+    color: var(--color-label);
+  }
+
+  .check-group-summary {
+    margin: 0 0 20px;
+    color: var(--color-muted);
+    font-size: 15px;
+  }
+
+  .check-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .check-item {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .check-title {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .check-severity {
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--color-label);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+
+  /* Severity is carried by the word itself, never by colour alone (WCAG 1.4.1); the border weight
+     is a second, non-colour cue for the one that matters most. */
+  .check-severity--high {
+    border-color: var(--color-text);
+    color: var(--color-text);
+  }
+
+  .check-plain {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 15px;
+    line-height: 1.65;
+    max-width: 62ch;
+  }
+
+  /* Long, unbreakable tokens in the log-identity table (the User-Agent) must wrap rather than push
+     the document sideways at 320px — see tests/a11y/reflow.spec.ts. */
+  .steward-shell :global(table code) {
+    overflow-wrap: anywhere;
+  }
+
+  .steward-shell :global(pre) {
+    overflow-x: auto;
+  }
+
+  /* Table captions name each table for a screen reader without repeating a heading on screen.
+     Defined here rather than pulled from a utility: this site has no global .sr-only, every
+     component that needs one carries its own copy. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>

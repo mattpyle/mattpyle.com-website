@@ -41,6 +41,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Scorecard](${base}/scorecard/): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
   lines.push(`- [About](${base}/about/): full bio, interests, contact links.`);
   lines.push(`- [WebMCP](${base}/webmcp/): the six WebMCP tools this site registers for in-browser AI agents (four read, two write), what they return, and how to test them.`);
+  lines.push(`- [Steward](${base}/steward/): the agent-readiness auditor this site runs, the identity it arrives under in your logs, how to refuse it, and how to run an audit yourself.`);
   lines.push('');
 
   lines.push('## Machine-readable resources');

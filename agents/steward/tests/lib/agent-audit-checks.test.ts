@@ -296,6 +296,34 @@ test('a fully agent-ready site passes every check', async (t) => {
   assert.ok(!('score' in result));
 });
 
+test('the /steward page lists exactly the checks this tier runs, in order', async (t) => {
+  // The site's public page about the auditor enumerates the fast checks, and it has to keep its own
+  // copy of them: only src/pages/mcp.ts may import from this workspace, through the one entry the
+  // exports map publishes, and that entry publishes the audit rather than the specs behind it. A
+  // prerendered page importing Steward would pull the whole workspace into the static build's
+  // graph, which is the packaging rule the /mcp docblock states.
+  //
+  // The copy is guarded from this side instead, because a test can reach across a boundary a build
+  // must not. A check added, removed, renamed or reordered here fails this until the page is
+  // updated — which is the direction the failure should point, since the page is the promise and
+  // the audit is the thing promised.
+  // Imported through a URL rather than a literal specifier, and not by accident: the site's data
+  // file is plain JavaScript with no declarations, and a literal specifier makes this workspace's
+  // `tsc --noEmit` fail with TS7016 on a module that is not its to type. The URL form resolves the
+  // path the same way at runtime and leaves the module `any`, which is all this test needs — the
+  // shape is what it is asserting.
+  const specifier = new URL('../../../../src/data/steward-audit-checks.mjs', import.meta.url).href;
+  const { STEWARD_FAST_CHECKS } = (await import(specifier)) as {
+    STEWARD_FAST_CHECKS: { id: string; title: string; category: string; severity: string }[];
+  };
+
+  const result = await audit(t);
+  assert.deepEqual(
+    STEWARD_FAST_CHECKS.map(({ id, title, category, severity }) => ({ id, title, category, severity })),
+    result.checks.map(({ id, title, category, severity }) => ({ id, title, category, severity })),
+  );
+});
+
 test('every check carries evidence and every failure carries a fix', async (t) => {
   const result = await audit(t, 'no-llms');
   for (const c of result.checks) {

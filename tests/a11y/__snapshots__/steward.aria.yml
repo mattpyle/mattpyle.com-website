@@ -1,0 +1,191 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: MATT PYLE
+  - navigation "Main navigation":
+    - link "Writing":
+      - /url: /writing/
+    - link "Builds":
+      - /url: /builds/
+    - link "Changelog":
+      - /url: /changelog/
+    - link "Scorecard":
+      - /url: /scorecard/
+    - link "About":
+      - /url: /about/
+- main:
+  - paragraph: Agent · Auditor
+  - heading "Steward" [level=1]
+  - paragraph: The agent-readiness auditor behind the steward-audit User-Agent, and the editorial agent that publishes this site.
+  - region "Did Steward just fetch your site?":
+    - heading "Did Steward just fetch your site?" [level=2]
+    - paragraph: "Then somebody asked for a report on it. Steward is an agent-readiness auditor: it reads what a site says about itself over plain HTTP, writes a report for whoever ran it, and leaves. It is not a crawler, it does not index anything, and it does not come back on a schedule."
+    - table "What one Steward request is":
+      - caption: What one Steward request is
+      - rowgroup:
+        - row "User-Agent steward-audit/0.2 (+https://www.mattpyle.com/steward)":
+          - rowheader "User-Agent"
+          - cell "steward-audit/0.2 (+https://www.mattpyle.com/steward)":
+            - code: steward-audit/0.2 (+https://www.mattpyle.com/steward)
+        - row "robots.txt token steward-audit":
+          - rowheader "robots.txt token"
+          - cell "steward-audit":
+            - code: steward-audit
+        - row "Cost of one audit Roughly a dozen HTTP requests, spread over a few seconds.":
+          - rowheader "Cost of one audit"
+          - cell "Roughly a dozen HTTP requests, spread over a few seconds."
+        - row "Frequency Once, when a person or an agent asks. No schedule, no repeat visits, no crawl.":
+          - rowheader "Frequency"
+          - cell "Once, when a person or an agent asks. No schedule, no repeat visits, no crawl."
+        - row "What it collects Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known discovery documents — and the headers of a couple of pages. Nothing is stored here and nothing is published anywhere.":
+          - rowheader "What it collects"
+          - cell "Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known discovery documents — and the headers of a couple of pages. Nothing is stored here and nothing is published anywhere."
+    - paragraph:
+      - strong: It obeys your robots.txt.
+      - text: Every URL is checked against your rules before it is requested; only
+      - code: /robots.txt
+      - text: itself is fetched without asking. Anything you disallow is reported as “not checked”, never as a finding against your site.
+    - heading "How do I refuse it?" [level=3]
+    - paragraph: "Add this to your robots.txt:"
+    - code: "User-agent: steward-audit Disallow: /"
+    - paragraph: One audit then costs you exactly one request — robots.txt, read once — and nothing else about how this site treats you changes.
+  - region "What is Steward?":
+    - heading "What is Steward?" [level=2]
+    - paragraph: Steward is this site's editorial agent. It reviews a draft — spelling, prose linting, an editorial pass, a real production build with accessibility and performance audits — waits for Matt to approve it, then publishes by pull request and verifies production. The agent-readiness audit started as one step of that review, checking this site against the conventions it writes about, and it turned out to be the half worth pointing at other people's sites.
+    - paragraph:
+      - text: So there are two tiers. The
+      - strong: fast tier
+      - text: "is the 13checks below: plain HTTP, seconds, and the tier behind the public endpoint. The"
+      - strong: deep tier
+      - text: renders pages in a real browser and runs Lighthouse and axe over them; it stays local and hand-run, because it costs a site far more than a dozen requests.
+    - paragraph:
+      - text: It checks behaviour rather than presence. A
+      - code: /\d+/
+      - text: from
+      - code: /llms.txt
+      - text: /that is really the site's HTML \d+ page is a failure here, which is the single most common way a site passes a presence check while giving an agent nothing\./
+  - region "What does the audit check?":
+    - heading "What does the audit check?" [level=2]
+    - paragraph: "/\\d+ checks in three categories\\. Each one comes back with its verdict, the evidence behind it, and — where it failed — what to do about it\\. There is deliberately no composite score: a single number would hide which of these is broken\\./"
+    - region "Crawlability 4 checks":
+      - heading "Crawlability 4 checks" [level=3]
+      - paragraph: What the site says an agent may do.
+      - list:
+        - listitem:
+          - paragraph: robots.txt exists and parses medium
+          - paragraph: ·
+        - listitem:
+          - paragraph: robots.txt lets user-triggered AI agents read the site high
+          - paragraph: ·
+        - listitem:
+          - paragraph: Content Signals preferences are declared low
+          - paragraph: ·
+        - listitem:
+          - paragraph: A sitemap is declared in robots.txt and fetchable high
+          - paragraph: ·
+    - region "Discovery 6 checks":
+      - heading "Discovery 6 checks" [level=3]
+      - paragraph: What an agent can find without being told where to look.
+      - list:
+        - listitem:
+          - paragraph: llms.txt exists and follows the spec medium
+          - paragraph: ·
+        - listitem:
+          - paragraph: The links in llms.txt resolve medium
+          - paragraph: ·
+        - listitem:
+          - paragraph: Every llms.txt list item leads with a markdown link low
+          - paragraph: ·
+        - listitem:
+          - paragraph: agents.md exists and is markdown medium
+          - paragraph: ·
+        - listitem:
+          - paragraph: An MCP server is discoverable at /.well-known/mcp-server low
+          - paragraph: ·
+        - listitem:
+          - paragraph: An A2A agent card is published low
+          - paragraph: ·
+    - region "Content access 3 checks":
+      - heading "Content access 3 checks" [level=3]
+      - paragraph: Whether the content comes back in a form a model can read.
+      - list:
+        - listitem:
+          - paragraph: The homepage serves markdown when asked for it high
+          - paragraph: ·
+        - listitem:
+          - paragraph: A content page serves markdown when asked for it high
+          - paragraph: ·
+        - listitem:
+          - paragraph: The homepage advertises its alternates in a Link header low
+          - paragraph: ·
+  - region "How do I run an audit myself?":
+    - heading "How do I run an audit myself?" [level=2]
+    - paragraph:
+      - text: Point an MCP client at
+      - code: https://www.mattpyle.com/mcp
+      - text: . It is a stateless streamable-HTTP server with one tool,
+      - code: audit_site(url)
+      - text: ", and the report comes back in the call — there is nothing to poll and no second request to make. No account and no key."
+    - code: "curl -sS https://www.mattpyle.com/mcp \\ -H 'Content-Type: application/json' \\ -H 'Accept: application/json, text/event-stream' \\ -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\", \"params\":{\"name\":\"audit_site\",\"arguments\":{\"url\":\"example.com\"}}}'"
+    - paragraph:
+      - text: "Two renderings ship in the one response: the canonical JSON in"
+      - code: structuredContent
+      - text: ", one entry per check with its evidence, and the same report as a markdown summary in the text content. A"
+      - code: GET
+      - text: "on"
+      - link "the endpoint itself":
+        - /url: https://www.mattpyle.com/mcp
+      - text: answers
+      - code: /\d+/
+      - text: with this example rather than a bare status.
+    - paragraph:
+      - text: "The unit audited is a site, not a page: any path in the URL is ignored. Only"
+      - code: http
+      - text: and
+      - code: https
+      - text: targets are accepted, and addresses on private networks are refused before a connection is opened.
+    - heading "What are the limits?" [level=3]
+    - table "Rate limits on the public endpoint":
+      - caption: Rate limits on the public endpoint
+      - rowgroup:
+        - row "Limit Default Window":
+          - columnheader "Limit"
+          - columnheader "Default"
+          - columnheader "Window"
+      - rowgroup:
+        - row /Per caller \d+ audits One hour/:
+          - cell "Per caller"
+          - cell /\d+ audits/
+          - cell "One hour"
+        - row /Everyone together \d+ audits One UTC day/:
+          - cell "Everyone together"
+          - cell /\d+ audits/
+          - cell "One UTC day"
+    - paragraph:
+      - text: A refusal is a JSON-RPC error with a
+      - code: Retry-After
+      - text: header, naming which limit was hit and how long to wait. The limits exist because every accepted call spends a dozen requests at a third party's origin under this site's name; an unbounded endpoint would be an open relay with an honest User-Agent. The counter holds a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself.
+  - region "Contact":
+    - heading "Contact" [level=2]
+    - paragraph:
+      - text: If Steward misbehaved on your site — ignored a rule, requested something it should not have, or reported something that is not true —
+      - link "open an issue on the repository":
+        - /url: https://github.com/mattpyle/mattpyle.com-website/issues
+      - text: . It is the same repository the auditor's code lives in, and it is read.
+    - paragraph: Steward is an experiment on a personal site, not a supported service. It may change or be withdrawn without notice.
+- contentinfo:
+  - navigation "Social links":
+    - link "RSS feed for Writing":
+      - /url: /rss.xml
+      - text: ""
+    - link "GitHub (opens in a new tab)":
+      - /url: https://github.com/mattpyle
+    - link "LinkedIn (opens in a new tab)":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "WebMCP":
+      - /url: /webmcp/
+    - button "Switch to retro mode"
+  - paragraph: /© \d+ Matt Pyle/
+- status
