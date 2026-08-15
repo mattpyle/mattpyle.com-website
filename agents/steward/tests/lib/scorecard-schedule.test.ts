@@ -307,7 +307,9 @@ test('status prints the two counters that measure whether firings are being lost
   const outcome = await runScorecardScheduleAction('status', { schedule, timeZone: TZ });
   const counters = outcome.lines.find((l) => l.includes('firings missed'));
   assert.ok(counters, outcome.lines.join(' | '));
-  assert.match(counters, /firings missed \(down >23h\): 4/);
+  // The window, not a hardcoded number: this assertion passed while the label
+  // said "23h" and the policy said one hour, which is the drift it now catches.
+  assert.match(counters, /firings missed \(unreachable >1 hour\): 4/);
   assert.match(counters, /skipped for overlap: 1/);
 });
 
