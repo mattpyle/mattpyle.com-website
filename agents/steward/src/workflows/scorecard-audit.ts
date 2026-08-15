@@ -21,11 +21,23 @@ import {
  * self-merges (design rule 2).
  */
 
-// Queue names duplicated here rather than imported from config.ts — the same
+// Queue name duplicated here rather than imported from config.ts — the same
 // reason review-post.ts does it: config.ts touches `node:path` and
 // `process.env`, neither available in the workflow sandbox.
-const QUEUE_LIGHT = 'steward-light';
-const QUEUE_HEAVY = 'steward-heavy';
+//
+// **One queue, and it is the hosted one** (2026-08-14, always-on-audit-worker
+// card leg 2b). Every activity this workflow schedules now reaches the site over
+// the network and the repository over the GitHub API, so none of them needs a
+// checkout, so all of them can run in a container. That is the whole point: the
+// Schedule moved to Temporal Cloud, where the server never misses a firing, and
+// a firing the laptop has to advance is a run that dies on its execution
+// timeout rather than one that catches up later.
+//
+// The split is still by locality (config.ts's `QUEUE_AUDIT` docblock). What
+// changed is which side of it the scorecard falls on, and it changed because
+// `activities/scorecard.ts` stopped touching the filesystem — not because the
+// rule was relaxed.
+const QUEUE_AUDIT = 'steward-audit';
 
 export interface ScorecardAuditInput {
   /** Manual `--urls` override. Omitted -> resolved from the live sitemap (spec §4.2 step 0). */
@@ -81,45 +93,64 @@ export interface ScorecardAuditResult {
 }
 
 const light = {
+  // A minute rather than thirty seconds: this fetches the live sitemap index and
+  // every sitemap under it, which is a handful of round trips rather than one.
   resolving: wf.proxyActivities<Pick<typeof activities, 'resolveAuditUrls' | 'resolveRunStamp'>>({
-    taskQueue: QUEUE_LIGHT,
+    taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '1 minute',
     retry: { maximumAttempts: 3 },
   }),
+  // Was 30 seconds when this read a local file. It is two GitHub calls now, so
+  // it gets a network-shaped deadline and keeps its three attempts — a 5xx from
+  // the API here would otherwise fail the run before it measured anything.
   reading: wf.proxyActivities<Pick<typeof activities, 'readPublishedScorecard'>>({
-    taskQueue: QUEUE_LIGHT,
-    startToCloseTimeout: '30 seconds',
+    taskQueue: QUEUE_AUDIT,
+    startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 3 },
   }),
-  // 20 minutes for the same reason `reviewPost`'s publish stub carries it: this
-  // activity takes the shared worktree lock, and `buildAndAuditDraft` can hold
-  // that lock for its full 15 minutes. This is the contention the lock's own
-  // docblock is about — a nightly scorecard publishing into the tree an
-  // interactive review is mid-build in — so the scorecard's publish leg has to be
-  // able to wait the build out rather than dying on a deadline it cannot meet.
-  // The lock waits unbounded, so this is the only deadline in play.
+  // **Two minutes, down from twenty.** The old figure was not about how long
+  // publishing takes; it was about how long publishing might have to *wait*.
+  // The activity took the shared worktree lock, `buildAndAuditDraft` could hold
+  // that lock for its full 15 minutes, and the publish leg had to be able to
+  // wait a build out rather than die on a deadline it could not meet.
+  //
+  // There is no worktree and no lock any more (`activities/scorecard.ts`), so
+  // there is nothing to wait behind: this is four GitHub calls. Leaving it at 20
+  // minutes would mean a wedged publish sat undetected for twenty minutes of a
+  // run whose whole point is to be finished overnight.
+  //
+  // One attempt still, and the same non-retryable set: a rejected credential or
+  // a 422 fails identically on a second try, and the retry that matters here is
+  // the operator re-running the scorecard.
   publishing: wf.proxyActivities<Pick<typeof activities, 'publishScorecardRun'>>({
-    taskQueue: QUEUE_LIGHT,
-    startToCloseTimeout: '20 minutes',
+    taskQueue: QUEUE_AUDIT,
+    startToCloseTimeout: '2 minutes',
     retry: {
       maximumAttempts: 1,
       nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'],
     },
   }),
+  // Three attempts, and that is safe to keep now for a reason worth stating: the
+  // archive write is a *create* with no `sha`, so a retry that follows a commit
+  // the workflow never saw succeed collides, is caught, and takes the next
+  // filename rather than overwriting the record it just wrote.
   archiving: wf.proxyActivities<Pick<typeof activities, 'archiveScorecardRun'>>({
-    taskQueue: QUEUE_LIGHT,
-    startToCloseTimeout: '30 seconds',
+    taskQueue: QUEUE_AUDIT,
+    startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 3 },
   }),
 };
 
 /**
- * Same heavy-queue shape `reviewPost` uses for `buildAndAuditDraft`: a
- * background heartbeat pump inside the activity keeps the channel alive
- * through a multi-ten-second Chrome + Lighthouse + axe run.
+ * The per-page audit. A background heartbeat pump inside the activity keeps the
+ * channel alive through a multi-ten-second Chrome + Lighthouse + axe run.
+ *
+ * On the audit queue rather than `steward-heavy` since 2026-08-14. It always
+ * measured the *live* site rather than the working copy, so the only thing it
+ * ever needed from the laptop was a browser, and the hosted image has one.
  */
 const heavy = wf.proxyActivities<Pick<typeof activities, 'auditLiveUrl'>>({
-  taskQueue: QUEUE_HEAVY,
+  taskQueue: QUEUE_AUDIT,
   startToCloseTimeout: '5 minutes',
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 2 },
@@ -285,6 +316,10 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
     decision: decision.decision,
     reason: decision.reason,
     prUrl,
+    // Carried explicitly rather than inferred: the archive commits through the
+    // GitHub API now, so this is what keeps spec §4.2 step 4's "a dry run never
+    // touches GitHub" true of the archive as well as the publish leg.
+    dryRun: input.publishMode === 'dry-run',
   });
 
   return { decision: decision.decision, reason: decision.reason, prUrl, record, perPage: perPageSummary };

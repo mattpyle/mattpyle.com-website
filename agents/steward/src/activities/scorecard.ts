@@ -1,17 +1,19 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { Context } from '@temporalio/activity';
+import { ApplicationFailure, Context } from '@temporalio/activity';
 import {
-  REPO_ROOT,
-  SITE_DIR,
-  WORKTREE_DIR,
-  GITHUB_REPO,
+  SCORECARD_ARCHIVE_BRANCH,
+  SCORECARD_ARCHIVE_REL,
   SCORECARD_RUNS_PATH,
-  SCORECARD_ARCHIVE_DIR,
 } from '../config.js';
-import { git, worktreeExists } from '../lib/git.js';
-import { withWorktreeLock } from '../lib/worktree-lock.js';
-import { gh } from '../lib/github.js';
+import {
+  branchSha,
+  defaultBranch,
+  ensureBranch,
+  isAlreadyExists,
+  openOrUpdatePr,
+  readRepoFile,
+  resetBranch,
+  writeRepoFile,
+} from '../lib/github-contents.js';
 import { auditUrl } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
 import { parsePageCount, validateCommentary } from '../lib/scorecard-aggregate.js';
@@ -22,6 +24,26 @@ import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRec
  * of Steward's own activities, not a variant of them — see the spec §2
  * table for why `auditLiveUrl` must never be confused with
  * `buildAndAuditDraft`, even though both call the same `audit-engine.ts`.
+ *
+ * ## None of these touch the local filesystem any more (2026-08-14)
+ *
+ * Every activity in this file used to be a *local* activity: the run-log was
+ * read out of `SITE_DIR`, the publish leg drove git in `WORKTREE_DIR`, and the
+ * archive was a `writeFile` under `SCORECARD_ARCHIVE_DIR`. That is what pinned
+ * the whole scorecard run to Matt's laptop, and therefore what kept the daily
+ * Schedule laptop-bound no matter where the Schedule itself lived
+ * (always-on-audit-worker card, leg 2b).
+ *
+ * They now read and write the repository through the GitHub API
+ * (`lib/github-contents.ts`), so the entire workflow runs on `steward-audit`
+ * and finishes end to end on the hosted worker with the laptop off. What the
+ * activities *mean* is unchanged: same run-log entry, same PR, same archive
+ * record, same never-merges-its-own-PR rule.
+ *
+ * The cost is that this file now needs `GITHUB_TOKEN` for reads as well as
+ * writes, where before only the publish leg did. A run whose token is missing
+ * fails at step 0.5 rather than twelve minutes in at the publish step, which is
+ * the better of the two.
  */
 
 // ---------------------------------------------------------------------------
@@ -182,20 +204,29 @@ export interface PublishedScorecard extends PublishableRun {
 }
 
 /**
- * Reads the currently-published run-log from the primary checkout
- * (`SITE_DIR`, not the worktree — this is a read of what's actually live on
- * `master`, before any publish work has started). `undefined` only if the
- * file is missing or empty, which should never happen once Phase 1 seeds it.
+ * Reads the currently-published run-log **from the default branch on GitHub**,
+ * before any publish work has started. `undefined` only if the file is missing
+ * or empty, which should never happen once Phase 1 seeds it.
+ *
+ * This used to read `SITE_DIR`, and the change is a correction rather than a
+ * compromise. The docblock always said what it wanted — "what's actually live
+ * on `master`" — and a working copy is only ever a *proxy* for that: a checkout
+ * Matt has not pulled reports a stale baseline, and one carrying local commits
+ * reports a baseline that is not published at all. Either way the publish gate
+ * (spec §6) and the audit-set guard (spec §5.4) compare this run against
+ * something other than the run the site is actually serving. Asking the branch
+ * removes the proxy.
+ *
+ * It is also what lets this activity run on `steward-audit`, which matters more
+ * than it sounds: this is step 0.5, *before* the fan-out, so an activity that
+ * needs the laptop here parks the run before it measures anything and there is
+ * no such thing as a partially-hosted scorecard.
  */
 export async function readPublishedScorecard(): Promise<PublishedScorecard | undefined> {
-  const absPath = path.join(SITE_DIR, SCORECARD_RUNS_PATH);
-  let raw: string;
-  try {
-    raw = await fs.readFile(absPath, 'utf8');
-  } catch {
-    return undefined;
-  }
-  const runs = JSON.parse(raw) as ScorecardRunRecord[];
+  const base = await defaultBranch();
+  const file = await readRepoFile(SCORECARD_RUNS_PATH, base);
+  if (!file) return undefined;
+  const runs = JSON.parse(file.text) as ScorecardRunRecord[];
   if (runs.length === 0) return undefined;
   // `scope` and `tools` come back too: they are half the publish gate (§6's
   // third trigger), not just display fields.
@@ -283,10 +314,19 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
 
 /**
  * `publishScorecardRun` (spec §4.3) — appends the candidate run to
- * `src/data/scorecard-runs.json` in a worktree, commits, pushes, and opens
- * (or updates) a PR. Mirrors `activities/publish.ts`'s `publishPost` in
- * shape: same worktree-reset-to-base pattern, same idempotent
- * open-or-update-existing-PR check, same `git`/`gh` libs.
+ * `src/data/scorecard-runs.json` on a branch and opens (or updates) a PR.
+ *
+ * **No longer a worktree activity** (2026-08-14). It keeps the same two
+ * properties the worktree version was built around — reset-to-base rather than
+ * append-to-whatever-is-there, and an idempotent open-or-update PR check — but
+ * makes them API calls, so the activity has no local dependency and runs on
+ * `steward-audit`. `publishPost` still uses the worktree, deliberately: a post
+ * is a multi-file change that wants to be one commit, and this is one file.
+ *
+ * Dropping the worktree also drops the shared `withWorktreeLock`, and with it
+ * the contention the 20-minute `startToCloseTimeout` in `scorecard-audit.ts`
+ * existed to survive. A scorecard publish can no longer be blocked behind a
+ * `buildAndAuditDraft` holding the tree.
  *
  * **The workflow never calls this in `dry-run` mode** (spec §4.2 step 4) —
  * this function itself does not gate on `dryRun` beyond labelling the PR, so
@@ -317,76 +357,53 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
   assertTimelessCommentary(input.record);
   const branch = `steward/scorecard-${input.record.iso}`;
 
-  const repoInfo = await gh(`/repos/${GITHUB_REPO}`);
-  const base: string = repoInfo.default_branch;
+  const base = await defaultBranch();
+  const baseSha = await branchSha(base);
 
-  await git(SITE_DIR, ['fetch', 'origin', base]);
+  // Reset the branch to base rather than appending to whatever a previous failed
+  // attempt left on it — the API translation of the old `checkout -B branch
+  // origin/base` plus `push --force-with-lease`. Without it a retried publish
+  // stacks a second run entry on top of the first.
+  await resetBranch(branch, baseSha);
 
-  // Same reasoning as `publishPost` (design rule 3): the worktree does the git
-  // work, never the primary checkout, which may be mid-edit under the human.
-  //
-  // And, like `publishPost`, the whole worktree section runs under the shared
-  // lock (`worktree-lock.ts`). This is the activity the card's scenario is
-  // actually about: a nightly scorecard publishing into the same tree an
-  // interactive review is mid-build in.
-  const { record, id, committed } = await withWorktreeLock(
-    `publishScorecardRun:${input.record.iso}`,
-    async () => {
-      if (!(await worktreeExists(SITE_DIR, WORKTREE_DIR))) {
-        await git(SITE_DIR, ['worktree', 'add', '--detach', WORKTREE_DIR, `origin/${base}`]);
-      }
-      await git(WORKTREE_DIR, ['fetch', 'origin', base]);
-      await git(WORKTREE_DIR, ['checkout', '-B', branch, `origin/${base}`]);
-      await git(WORKTREE_DIR, ['clean', '-fd', '-e', 'node_modules', '-e', 'dist']);
-
-      const runsPath = path.join(WORKTREE_DIR, SCORECARD_RUNS_PATH);
-      const existing = JSON.parse(await fs.readFile(runsPath, 'utf8')) as ScorecardRunRecord[];
-
-      const id = uniqueId(input.record.iso, existing);
-      const record: ScorecardRunRecord = { ...input.record, id };
-      const updated = [record, ...existing];
-      await fs.writeFile(runsPath, JSON.stringify(updated, null, 2) + '\n', 'utf8');
-
-      let committed = false;
-      await git(WORKTREE_DIR, ['add', '--', SCORECARD_RUNS_PATH]);
-      const staged = await git(WORKTREE_DIR, ['status', '--porcelain', '--', SCORECARD_RUNS_PATH]);
-      if (staged.trim()) {
-        await git(WORKTREE_DIR, ['commit', '-m', `chore(scorecard): publish ${id} run`]);
-        committed = true;
-      } else {
-        log.info({ activity: 'publishScorecardRun', id, branch }, 'nothing to commit — base already carries this run');
-      }
-      await git(WORKTREE_DIR, ['push', '--force-with-lease', '-u', 'origin', branch]);
-      await git(WORKTREE_DIR, ['checkout', '--detach']).catch(() => {});
-
-      return { record, id, committed };
-    },
-  );
-
-  const owner = GITHUB_REPO.split('/')[0];
-  const title = `${input.dryRun ? '[dry run] ' : ''}Scorecard: ${id}`;
-  const body = buildScorecardPrBody(record, input.perPage, input.dryRun === true);
-
-  const existingPrs = await gh(
-    `/repos/${GITHUB_REPO}/pulls?head=${encodeURIComponent(`${owner}:${branch}`)}&state=open`,
-  );
-
-  let prUrl: string;
-  if (Array.isArray(existingPrs) && existingPrs.length > 0) {
-    const updatedPr = await gh(`/repos/${GITHUB_REPO}/pulls/${existingPrs[0].number}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ title, body }),
-    });
-    prUrl = updatedPr.html_url;
-    log.info({ activity: 'publishScorecardRun', id, prUrl }, 'updated existing PR');
-  } else {
-    const created = await gh(`/repos/${GITHUB_REPO}/pulls`, {
-      method: 'POST',
-      body: JSON.stringify({ title, body, head: branch, base, draft: input.dryRun === true }),
-    });
-    prUrl = created.html_url;
-    log.info({ activity: 'publishScorecardRun', id, prUrl, committed }, 'opened PR');
+  const runsFile = await readRepoFile(SCORECARD_RUNS_PATH, base);
+  if (!runsFile) {
+    throw ApplicationFailure.nonRetryable(
+      `${SCORECARD_RUNS_PATH} does not exist on ${base}. The run-log is seeded, not created here.`,
+      'NotFound',
+    );
   }
+  const existing = JSON.parse(runsFile.text) as ScorecardRunRecord[];
+
+  const id = uniqueId(input.record.iso, existing);
+  const record: ScorecardRunRecord = { ...input.record, id };
+  const updated = JSON.stringify([record, ...existing], null, 2) + '\n';
+
+  // The "nothing to commit" case the worktree version handled with `git status
+  // --porcelain`: base already carries this exact run, so a commit would be
+  // empty and the API would answer 409 rather than no-op.
+  let committed = false;
+  if (updated !== runsFile.text) {
+    await writeRepoFile({
+      path: SCORECARD_RUNS_PATH,
+      text: updated,
+      message: `chore(scorecard): publish ${id} run`,
+      branch,
+      sha: runsFile.sha,
+    });
+    committed = true;
+  } else {
+    log.info({ activity: 'publishScorecardRun', id, branch }, 'nothing to commit — base already carries this run');
+  }
+
+  const prUrl = await openOrUpdatePr({
+    branch,
+    base,
+    title: `${input.dryRun ? '[dry run] ' : ''}Scorecard: ${id}`,
+    body: buildScorecardPrBody(record, input.perPage, input.dryRun === true),
+    draft: input.dryRun === true,
+  });
+  log.info({ activity: 'publishScorecardRun', id, prUrl, branch, committed }, 'scorecard PR open');
 
   return { branch, prUrl, id };
 }
@@ -420,81 +437,131 @@ export interface ScorecardArchiveRecord {
   decision: 'open-pr' | 'no-op';
   reason: string;
   prUrl?: string;
+  /**
+   * Set by the workflow from `publishMode`, and the reason this activity can
+   * still honour spec §4.2 step 4.
+   *
+   * The archive used to be a local file write, so "dry-run never touches
+   * GitHub" cost nothing to promise: archiving and publishing used different
+   * machinery entirely. Now that the archive commits through the API, the two
+   * share it, and a `--dry-run` that quietly pushed a commit would break a
+   * guarantee the operator relies on to run one casually. So a dry run computes
+   * the record, logs it, and writes nothing.
+   *
+   * The cost is that `--dry-run` no longer leaves a per-page record behind. The
+   * numbers it exists to validate come back on the workflow result and the CLI
+   * prints them, so nothing that dry-run is *for* was lost.
+   */
+  dryRun?: boolean;
 }
 
 export interface ArchiveScorecardRunResult {
+  /** Repo-relative path of the record. Empty on a dry run, which writes nothing. */
   archivePath: string;
   /** The filename stem actually used — `id`, or `<id>-n` if that was taken. */
   archiveId: string;
-}
-
-/**
- * Resolves an archive filename stem that is not already on disk: `<id>`, then
- * `<id>-2`, `<id>-3`, … .
- *
- * `publishScorecardRun`'s `uniqueId` does the same job against the *run-log*,
- * and deliberately stays separate: the two namespaces genuinely diverge. A
- * `no-op` or `--dry-run` run never touches the run-log, so it can archive an
- * `<iso>` the run-log has never heard of; and a later run that *does* publish
- * resolves `<iso>` from the run-log while that name is already taken on disk.
- * Sharing one helper across both would only be correct if both stores always
- * held the same set of runs, which is exactly what a no-op breaks.
- *
- * `writeFile` with `flag: 'wx'` does the final check, not this function's
- * `access` loop, because a check-then-write is a race — two runs finishing in
- * the same instant would both see `<iso>` free. The loop finds the candidate;
- * the exclusive write is what makes claiming it atomic.
- */
-async function nextFreeArchiveId(dir: string, id: string): Promise<string> {
-  for (let n = 1; ; n++) {
-    const candidate = n === 1 ? id : `${id}-${n}`;
-    try {
-      await fs.access(path.join(dir, `${candidate}.json`));
-    } catch {
-      return candidate;
-    }
-  }
+  /** False on a dry run. True whenever a commit was actually made. */
+  committed: boolean;
 }
 
 /**
  * Writes the full run — public metrics plus per-page raw detail — to the
  * private archive (spec §5.2). **Runs on every execution, published or not**
  * (spec §4.2 step 5): a no-op night is still a fact worth keeping, and the
- * archive is the only place that per-page detail survives at all — the
- * public run-log never carries it.
+ * archive is the only place that per-page detail survives at all — the public
+ * run-log never carries it.
+ *
+ * ## It commits to a standing branch, not to the run's PR (2026-08-14)
+ *
+ * The archive used to be a `writeFile` into the checkout, which left the record
+ * untracked until somebody remembered to commit it. It now commits through the
+ * GitHub API, which raises a question the filesystem never posed: *which
+ * branch*.
+ *
+ * Not the run's own PR branch. `publishScorecardRun` only runs when the result
+ * changed or went stale, so a run-log PR appearing **means something changed**
+ * (spec §6) — and it would stop meaning that the moment every no-op night
+ * opened one to carry an archive record. One standing branch and one standing
+ * PR keeps the signal where it belongs and gives the no-op nights somewhere to
+ * accumulate. `SCORECARD_ARCHIVE_BRANCH` is created off the default branch once
+ * and then only ever appended to; it is never reset, because unlike the run-log
+ * branch its whole content is history nobody has merged yet.
  *
  * **The archive is append-only** (spec §5.2), which it was not until this
  * resolved a filename: a second run on a day already archived overwrote
  * `<iso>.json` outright, silently destroying the earlier run's per-page detail.
  * That is easy to hit — two manual runs in a day, or a `--dry-run` followed by
- * the real thing — and the destroyed record is the *only* copy, since the
- * public run-log never carried per-page rows.
+ * the real thing — and the destroyed record is the *only* copy.
+ *
+ * The atomic claim survives the move intact, in a nicer form. The filesystem
+ * version needed `writeFile` with `flag: 'wx'` because a check-then-write is a
+ * race; here, a Contents API `PUT` **with no `sha`** means "create, and fail if
+ * this path exists", so the create is the claim and the retry loop walks
+ * `<id>`, `<id>-2`, `<id>-3` exactly as before.
  *
  * `latest.json` is still overwritten every run. It is a pointer at the newest
- * record, not a record of its own.
+ * record, not a record of its own, so it is written with the sha it is
+ * replacing.
  */
 export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promise<ArchiveScorecardRunResult> {
-  await fs.mkdir(SCORECARD_ARCHIVE_DIR, { recursive: true });
-  const latest = path.join(SCORECARD_ARCHIVE_DIR, 'latest.json');
+  if (record.dryRun) {
+    log.info(
+      { activity: 'archiveScorecardRun', id: record.id, decision: record.decision, record },
+      'dry run — the archive record was computed and logged, not committed (spec §4.2 step 4)',
+    );
+    return { archivePath: '', archiveId: record.id, committed: false };
+  }
 
-  let archiveId: string;
-  let file: string;
-  for (;;) {
-    archiveId = await nextFreeArchiveId(SCORECARD_ARCHIVE_DIR, record.id);
-    file = path.join(SCORECARD_ARCHIVE_DIR, `${archiveId}.json`);
+  const base = await defaultBranch();
+  await ensureBranch(SCORECARD_ARCHIVE_BRANCH, await branchSha(base));
+
+  let archiveId = record.id;
+  let archivePath = '';
+  for (let n = 1; ; n++) {
+    archiveId = n === 1 ? record.id : `${record.id}-${n}`;
+    archivePath = `${SCORECARD_ARCHIVE_REL}/${archiveId}.json`;
     const json = JSON.stringify({ ...record, archiveId }, null, 2) + '\n';
     try {
-      await fs.writeFile(file, json, { encoding: 'utf8', flag: 'wx' });
-      await fs.writeFile(latest, json, 'utf8');
+      // No `sha`: this must be a create. A collision comes back 422 rather than
+      // overwriting the earlier run's only copy of its per-page detail.
+      await writeRepoFile({
+        path: archivePath,
+        text: json,
+        message: `chore(scorecard): archive ${archiveId}`,
+        branch: SCORECARD_ARCHIVE_BRANCH,
+      });
       break;
     } catch (err) {
-      // Lost the race for this name to a concurrent run — take the next one.
-      // Any other failure is a real write error and must surface.
-      if ((err as NodeJS.ErrnoException)?.code !== 'EEXIST') throw err;
+      if (!isAlreadyExists(err)) throw err;
     }
   }
 
-  const archivePath = path.relative(REPO_ROOT, file).split(path.sep).join('/');
+  const latestPath = `${SCORECARD_ARCHIVE_REL}/latest.json`;
+  const latest = await readRepoFile(latestPath, SCORECARD_ARCHIVE_BRANCH);
+  await writeRepoFile({
+    path: latestPath,
+    text: JSON.stringify({ ...record, archiveId }, null, 2) + '\n',
+    message: `chore(scorecard): point latest at ${archiveId}`,
+    branch: SCORECARD_ARCHIVE_BRANCH,
+    sha: latest?.sha,
+  });
+
+  await openOrUpdatePr({
+    branch: SCORECARD_ARCHIVE_BRANCH,
+    base,
+    title: 'Scorecard archive: per-run detail',
+    body:
+      'Per-run Scorecard records — public metrics plus the per-page raw scores the ' +
+      'public run-log never carries (spec §5.2).\n\n' +
+      'This branch is **standing**: every run appends to it, including the no-op nights ' +
+      'that open no run-log PR of their own. That is the point — a `Scorecard: <id>` PR ' +
+      'appearing means a number moved, and it would stop meaning that if the archive rode ' +
+      'in it. Merge this whenever; nothing waits on it.\n\n' +
+      `Most recent record: \`${archiveId}\` (${record.decision}).\n\n` +
+      '---\n\n' +
+      '*Opened by the Scorecard workflow. It never merges — that is deliberately a human act (design rule 2).*',
+  });
+
   log.info(
     {
       activity: 'archiveScorecardRun',
@@ -502,10 +569,11 @@ export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promi
       archiveId,
       decision: record.decision,
       archivePath,
+      branch: SCORECARD_ARCHIVE_BRANCH,
     },
     archiveId === record.id
       ? 'scorecard run archived'
       : 'scorecard run archived under a suffixed id — the day was already taken',
   );
-  return { archivePath, archiveId };
+  return { archivePath, archiveId, committed: true };
 }

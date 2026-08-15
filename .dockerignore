@@ -1,0 +1,52 @@
+# Build context filter for agents/steward/Dockerfile.
+#
+# The context is the repo root (the Dockerfile says why), so this file decides
+# what the hosted audit worker's image is allowed to see. Docker does NOT read
+# .gitignore, so every private path has to be named here as well as there —
+# `agents/steward/.env` is the one that matters most, because a `COPY
+# agents/steward/` would otherwise bake three secrets into an image layer.
+
+# --- Secrets. Never, under any circumstance. -------------------------------
+**/.env
+**/.env.*
+
+# --- The private vault and working docs ------------------------------------
+# Gitignored, present locally, and none of it is reachable from the worker.
+# Copying it in would put a corpus of private prose inside a deployed container
+# for no reason at all.
+docs/
+steward/
+design_handoff_*/
+.claude/
+.agents/
+.impeccable/
+CLAUDE.md
+AGENTS.md
+
+# --- Never useful in an image ----------------------------------------------
+node_modules/
+**/node_modules/
+.git/
+.github/
+dist/
+.astro/
+public/og/
+agents/steward/.cache/
+agents/steward/.temporal/
+agents/steward/bin/
+
+# --- The site. The worker audits it over HTTP; it does not build it. --------
+# `src/`, `scripts/` and `tests/` at the root are the website's, not Steward's.
+# Leaving them out is what makes "no site working copy at runtime" a property of
+# the image rather than a promise about how the code behaves.
+src/
+scripts/
+tests/
+public/
+
+# --- Steward's own bulk ----------------------------------------------------
+# `reviews/` is a committed dataset, not code. The hosted worker registers
+# neither `archiveReport` nor anything else that reads it — the scorecard's
+# archive writes through the GitHub API now — so it is weight with no reader.
+agents/steward/reviews/
+agents/steward/vale/
