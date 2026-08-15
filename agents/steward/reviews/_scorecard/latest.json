@@ -1,5 +1,5 @@
 {
-  "id": "published-day",
+  "id": "latest-check",
   "iso": "2026-07-25",
   "timestamp": "2026-07-25T09:00:00-07:00",
   "scope": "19 live pages",
@@ -19,8 +19,7 @@
       "axeViolations": 0
     }
   ],
-  "decision": "open-pr",
-  "reason": "unchanged",
-  "prUrl": "https://github.com/o/r/pull/1",
-  "archiveId": "published-day-2"
+  "decision": "no-op",
+  "reason": "older",
+  "archiveId": "latest-check"
 }
