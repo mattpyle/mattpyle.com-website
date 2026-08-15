@@ -1,0 +1,25 @@
+{
+  "id": "published-day",
+  "iso": "2026-07-25",
+  "timestamp": "2026-07-25T09:00:00-07:00",
+  "scope": "19 live pages",
+  "tools": [
+    "Lighthouse 13.4",
+    "axe-core 4.12"
+  ],
+  "entry": "Manual · intentional",
+  "commentary": "All 19 pages passed all four public metrics.",
+  "metrics": [],
+  "perPage": [
+    {
+      "url": "https://www.mattpyle.com/",
+      "scores": {
+        "performance": 100
+      },
+      "axeViolations": 0
+    }
+  ],
+  "decision": "no-op",
+  "reason": "unchanged",
+  "archiveId": "published-day"
+}
