@@ -1,5 +1,5 @@
 {
-  "id": "many",
+  "id": "racy",
   "iso": "2026-07-25",
   "timestamp": "2026-07-25T09:00:00-07:00",
   "scope": "19 live pages",
@@ -20,6 +20,6 @@
     }
   ],
   "decision": "no-op",
-  "reason": "run 3",
-  "archiveId": "many-4"
+  "reason": "racer 1",
+  "archiveId": "racy"
 }
