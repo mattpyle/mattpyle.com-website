@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import dns from 'node:dns/promises';
 import dnsCallback from 'node:dns';
-import type { AddressInfo } from 'node:net';
+import net, { type AddressInfo } from 'node:net';
 import { DEFAULT_POLICY, type FetchPolicy } from '../../src/lib/agent-audit/safe-fetch.js';
 import { startVettingProxy, type VettingProxy } from '../../src/lib/agent-audit/vetting-proxy.js';
 
@@ -266,3 +266,69 @@ async function listenOn(host: string, port: number, body: string): Promise<Bound
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Shutdown
+// ---------------------------------------------------------------------------
+
+/**
+ * The regression test for the 2026-08-15 hosted-worker failure.
+ *
+ * `close()` runs in `auditRenderedPage`'s `finally`, so a `close()` that never
+ * resolves is an activity that never returns. The first deep audit on Railway
+ * rendered its page, logged the result, and was then timed out and retried by
+ * the server; the second attempt succeeded and was discarded the same way. The
+ * finished report carried `browserPages=0` after ten minutes.
+ *
+ * The cause was an open `CONNECT` tunnel: the hijacked client socket and the
+ * upstream socket spliced to it were both untracked, and the upstream half was
+ * torn down only on `error`, so a tunnel that ended *cleanly* — which is what
+ * killing a browser does — left a live socket for `server.close()` to wait on.
+ *
+ * This test holds a real tunnel open across `close()`, which is the state Chrome
+ * leaves behind, and asserts the promise settles well inside the activity's
+ * deadline.
+ */
+test('close resolves promptly with a CONNECT tunnel still open', { timeout: 15_000 }, async (t) => {
+  const site = http.createServer((_req, res) => res.end('ok'));
+  await new Promise<void>((r) => site.listen(0, '127.0.0.1', () => r()));
+  // `closeAllConnections` first: the tunnel this test opens is a live connection
+  // to this server, and a bare `close()` would wait for it and hang the suite.
+  t.after(() => {
+    site.closeAllConnections();
+    site.close();
+  });
+  const sitePort = (site.address() as AddressInfo).port;
+
+  const proxy = await startVettingProxy(policy({ allowedPrivateHosts: ['127.0.0.1'] }));
+
+  // Open a tunnel and deliberately leave it open, exactly as a browser that is
+  // about to be killed does. CRLF built with explicit escapes: a bare LF request
+  // line is not a CONNECT the proxy will answer, and a test that silently fails
+  // to open a tunnel would "pass" this assertion for the wrong reason.
+  const request =
+    `CONNECT 127.0.0.1:${sitePort} HTTP/1.1\r\n` +
+    `Host: 127.0.0.1:${sitePort}\r\n` +
+    '\r\n';
+
+  const tunnel = await new Promise<net.Socket>((resolve, reject) => {
+    const socket = net.connect(proxy.port, '127.0.0.1', () => socket.write(request));
+    socket.once('data', (chunk) => {
+      // Assert the tunnel actually opened. Without this the test would still
+      // pass if the proxy answered 403, which exercises none of what it guards.
+      assert.match(chunk.toString(), /^HTTP\/1\.1 200 /, 'the CONNECT tunnel did not open');
+      resolve(socket);
+    });
+    socket.once('error', reject);
+  });
+  t.after(() => tunnel.destroy());
+
+  const started = Date.now();
+  await proxy.close();
+  const elapsed = Date.now() - started;
+
+  assert.ok(
+    elapsed < 5_000,
+    `close() took ${elapsed}ms with a tunnel open — it must not wait on sockets the server cannot reach`,
+  );
+});
