@@ -78,8 +78,28 @@ COPY agents/steward/ ./agents/steward/
 RUN chown -R node:node /app
 USER node
 
-# `dumb-init` as PID 1 so signals reach Node rather than being swallowed.
-# Without it the worker never sees SIGTERM, never drains, and every redeploy
-# looks to Temporal like a worker that vanished mid-activity.
+# `dumb-init` as PID 1, doing two jobs that both failed silently without it.
+#
+# **Signals.** Without an init, SIGTERM lands on `npm`, which does not forward
+# it, so the worker never drains and every redeploy looks to Temporal like a
+# worker that vanished mid-activity.
+#
+# **Reaping, which is the one that actually bit.** Chrome forks renderer and
+# crashpad processes, and Lighthouse and axe each launch a browser per page.
+# When those children are orphaned they are reparented to PID 1, and PID 1 has
+# to `wait()` on them or they stay as zombies forever. `npm` never does. The
+# first hosted deploy reached **773 zombies** in about two hours of auditing —
+# 595 `chromium`, 140 `chrome_crashpad`, 36 `chromedriver` — and once the
+# process table was that full, new chromedriver launches were killed on spawn.
+# The symptom was `axe produced no result file (exit -1)` / `Server was killed
+# with SIGTRAP`, on a container that had audited fine an hour earlier. Anything
+# that gets slower or flakier the longer the container lives should be checked
+# against `ps -e -o stat= | cut -c1 | sort | uniq -c` first.
+#
+# **DO NOT SET A START COMMAND ON THE HOST.** Railway's `deploy.startCommand`,
+# and the equivalent on any other platform, replaces this ENTRYPOINT and makes
+# `npm` PID 1 again — which reintroduces both failures with no error and no log
+# line saying so. `railway.json` deliberately carries no `startCommand` for
+# exactly this reason. The CMD below is the start command.
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["npm", "run", "worker:hosted", "--workspace", "@mattpyle/steward"]
