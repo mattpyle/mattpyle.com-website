@@ -2,7 +2,14 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "agents/steward/Dockerfile"
+    "dockerfilePath": "agents/steward/Dockerfile",
+    "watchPatterns": [
+      "agents/steward/**",
+      "package.json",
+      "package-lock.json",
+      "railway.json",
+      ".dockerignore"
+    ]
   },
   "deploy": {
     "startCommand": "npm run worker:hosted --workspace @mattpyle/steward",
