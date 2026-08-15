@@ -19,7 +19,8 @@
       "axeViolations": 0
     }
   ],
-  "decision": "no-op",
+  "decision": "open-pr",
   "reason": "unchanged",
-  "archiveId": "published-day"
+  "prUrl": "https://github.com/o/r/pull/1",
+  "archiveId": "published-day-2"
 }
