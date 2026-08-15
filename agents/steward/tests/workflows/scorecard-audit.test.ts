@@ -16,8 +16,14 @@ import type { PublishedScorecard } from '../../src/activities/scorecard.js';
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
-const QUEUE = 'steward-light';
-const QUEUE_HEAVY = 'steward-heavy';
+/**
+ * One queue, since 2026-08-14. Every activity this workflow schedules moved to
+ * `steward-audit` when `activities/scorecard.ts` stopped touching the
+ * filesystem, so the two-worker arrangement this file used to need — a light
+ * worker and a heavy one, because the proxies pointed at both — collapsed into
+ * one. See `workflows/scorecard-audit.ts`.
+ */
+const QUEUE = 'steward-audit';
 
 let env: TestWorkflowEnvironment;
 
@@ -85,9 +91,8 @@ function mockActivities(overrides: MockOverrides = {}) {
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
   const common = { connection: env.nativeConnection, workflowsPath, activities, bundlerOptions: {} };
-  const light = await Worker.create({ ...common, taskQueue: QUEUE });
-  const heavy = await Worker.create({ ...common, taskQueue: QUEUE_HEAVY });
-  return await light.runUntil(heavy.runUntil(fn()));
+  const worker = await Worker.create({ ...common, taskQueue: QUEUE });
+  return await worker.runUntil(fn());
 }
 
 function baseInput(overrides: Partial<ScorecardAuditInput> = {}): ScorecardAuditInput {

@@ -24,12 +24,15 @@ import type { ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js
  * cards argue for; the second drives the five verbs against a fake
  * `ScheduleClient`, which is where the CLI's behaviour actually lives.
  *
- * `catchupWindow` is the value both halves guard, and it is guarded from two
- * directions rather than one. The SDK's one-year default would drain a backlog
- * of near-identical points into what reads as a time series; the near-zero
- * window this originally shipped with discarded every firing the laptop slept
- * through, which on this machine was most of them. 23 hours recovers exactly
- * one missed firing per day, and a silent revert either way has to fail here.
+ * `catchupWindow` is the value both halves guard, and what it is guarding
+ * against changed on 2026-08-14 with the move to Cloud and the hosted worker.
+ * The old danger was a laptop that slept through most firings, so the window was
+ * sized to recover one of them. The server is always up now, so the window's
+ * only remaining job is to absorb a Temporal Cloud outage at the firing hour —
+ * and a *long* window became the hazard rather than the safeguard, because a
+ * firing recovered many hours late gets stamped as that night's run. One hour
+ * keeps a recovered firing on the same night. The SDK's one-year default is
+ * still the other bracket, and a silent revert either way has to fail here.
  */
 
 const TZ = 'America/Vancouver';
@@ -46,7 +49,7 @@ function options(overrides: Partial<Parameters<typeof buildScorecardScheduleOpti
   return buildScorecardScheduleOptions({
     at: { hour: 3, minute: 30 },
     timeZone: 'America/Vancouver',
-    taskQueue: 'steward-light',
+    taskQueue: 'steward-audit',
     input: INPUT,
     ...overrides,
   });
@@ -60,9 +63,13 @@ function options(overrides: Partial<Parameters<typeof buildScorecardScheduleOpti
  * wrong number for a form it does not really handle.
  */
 function msOf(duration: string): number {
-  const match = /^(\d+) (seconds|minutes|hours)$/.exec(duration);
+  // The singular forms were added on 2026-08-14, when the window became
+  // `'1 hour'` — the SDK's `ms` parser has always taken both, and this helper
+  // refusing one of them failed eight tests for a grammar reason rather than a
+  // policy one.
+  const match = /^(\d+) (seconds?|minutes?|hours?)$/.exec(duration);
   if (!match) throw new Error(`msOf does not parse "${duration}" — widen it deliberately`);
-  const unit = { seconds: 1000, minutes: 60_000, hours: 3_600_000 }[match[2] as 'seconds' | 'minutes' | 'hours'];
+  const unit = { second: 1000, minute: 60_000, hour: 3_600_000 }[match[2].replace(/s$/, '') as 'second' | 'minute' | 'hour'];
   return Number(match[1]) * unit;
 }
 
@@ -77,12 +84,15 @@ test('the three policy choices are exactly the card\'s', () => {
   assert.equal(policies?.pauseOnFailure, false);
 });
 
-test('the catchup window is 23 hours — one missed firing recovers, a backlog cannot', () => {
-  // Pinned as a value, not just "not undefined". Two failure modes bracket it:
-  // the SDK's one-year default would drain days of missed firings at once, and
-  // the near-zero window this shipped with discarded every firing the laptop
-  // slept through. 23 hours recovers exactly one.
-  assert.equal(SCORECARD_SCHEDULE_CATCHUP_WINDOW, '23 hours');
+test('the catchup window is one hour — an outage recovers, a late run cannot pose as on-time', () => {
+  // Pinned as a value, not just "not undefined". Two failure modes bracket it.
+  // The SDK's one-year default would drain days of missed firings at once. And
+  // — the bracket that only appeared once the Schedule moved to Cloud — a long
+  // window now recovers a firing in the middle of the following afternoon and
+  // stamps it as that night's run, which is the fake-data failure the original
+  // 23-hour reasoning was itself written against. An hour absorbs a Cloud
+  // outage at 03:30 and keeps the recovered run on the same night.
+  assert.equal(SCORECARD_SCHEDULE_CATCHUP_WINDOW, '1 hour');
 });
 
 test('the catchup window is strictly shorter than the daily firing interval', () => {
@@ -93,15 +103,16 @@ test('the catchup window is strictly shorter than the daily firing interval', ()
     msOf(SCORECARD_SCHEDULE_CATCHUP_WINDOW) < 24 * 60 * 60 * 1000,
     `${SCORECARD_SCHEDULE_CATCHUP_WINDOW} is not shorter than a day`,
   );
-  assert.equal(msOf(SCORECARD_SCHEDULE_CATCHUP_WINDOW), 82_800_000);
+  assert.equal(msOf(SCORECARD_SCHEDULE_CATCHUP_WINDOW), 3_600_000);
 });
 
-test('the default firing time is 20:00 — evening, when this machine is actually on', () => {
-  // The morning default it replaces fired while the laptop was off at work,
-  // which is the usage pattern the catchup window exists alongside, not instead
-  // of: the default hour still decides whether recovery is the common case.
-  assert.equal(SCORECARD_SCHEDULE_DEFAULT_AT, '20:00');
-  assert.deepEqual(parseTimeOfDay(SCORECARD_SCHEDULE_DEFAULT_AT), { hour: 20, minute: 0 });
+test('the default firing time is 03:30 — the quiet hour, now that nothing local has to be awake', () => {
+  // This replaced 20:00, and the swap is the clearest single marker of what the
+  // hosted worker changed. The evening default existed because the stack had to
+  // be up, which meant sampling the site mid-evening, sometimes mid-deploy.
+  // 03:30 measures it settled, which is what makes consecutive runs comparable.
+  assert.equal(SCORECARD_SCHEDULE_DEFAULT_AT, '03:30');
+  assert.deepEqual(parseTimeOfDay(SCORECARD_SCHEDULE_DEFAULT_AT), { hour: 3, minute: 30 });
 });
 
 test('the spec is a daily calendar firing in the given timezone', () => {
@@ -113,11 +124,17 @@ test('the spec is a daily calendar firing in the given timezone', () => {
   assert.equal(spec.cronExpressions, undefined);
 });
 
-test('the action starts the audit workflow on the light queue with a stable base id', () => {
+test('the action starts the audit workflow on the hosted queue with a stable base id', () => {
+  // `steward-audit`, and this assertion is load-bearing rather than descriptive.
+  // A Schedule in Cloud fires whether or not the laptop is on, so an action
+  // pointed at `steward-light` would start a workflow nothing polls; it would
+  // sit until `workflowExecutionTimeout` killed it and produce no run at all.
+  // Reverting this line silently converts the nightly scorecard into a nightly
+  // timeout, which is why it is pinned by name.
   const action = options().action;
   assert.equal(action.type, 'startWorkflow');
   assert.equal((action.workflowType as { name: string }).name, 'scorecardAuditWorkflow');
-  assert.equal(action.taskQueue, 'steward-light');
+  assert.equal(action.taskQueue, 'steward-audit');
   assert.equal(action.workflowId, SCORECARD_SCHEDULE_WORKFLOW_ID);
 });
 
@@ -137,12 +154,16 @@ test('a firing carries an execution timeout, so a wedged run cannot suppress eve
   assert.equal(options().action.workflowExecutionTimeout, '2 hours');
 });
 
-test('the default firing hour is one the stack is plausibly up for', () => {
-  // Not a style preference, and not made redundant by the catchup window: a 3am
-  // default on a sleeping laptop turns every single firing into a recovery, and
-  // recovery only ever produces the one late run per day.
-  const { hour } = parseTimeOfDay(SCORECARD_SCHEDULE_DEFAULT_AT);
-  assert.ok(hour >= 8 && hour <= 22, `default ${SCORECARD_SCHEDULE_DEFAULT_AT} is outside waking hours`);
+test('the default firing hour is a quiet one, and off the top of the hour', () => {
+  // This test used to assert the opposite — `hour >= 8 && hour <= 22`, on the
+  // grounds that a 3am default on a sleeping laptop turned every firing into a
+  // recovery. The hosted worker removed the premise, so the guard inverts: the
+  // audit should now sample the site when nothing else is touching it.
+  const { hour, minute } = parseTimeOfDay(SCORECARD_SCHEDULE_DEFAULT_AT);
+  assert.ok(hour >= 1 && hour <= 5, `default ${SCORECARD_SCHEDULE_DEFAULT_AT} is not a quiet hour`);
+  // Off the hour, because every cron on the internet picks :00 and both GitHub's
+  // API and Vercel's edge are measurably quieter between the peaks.
+  assert.notEqual(minute, 0);
 });
 
 test('a dry-run schedule freezes dry-run into every firing', () => {
@@ -272,15 +293,16 @@ test('status reads everything and writes nothing', async () => {
   assert.ok(outcome.lines.includes('exists'), outcome.lines.join(' | '));
   assert.ok(outcome.lines.includes('paused: false'), outcome.lines.join(' | '));
   assert.ok(outcome.lines.some((l) => l.includes('actions taken so far: 2')));
-  assert.ok(outcome.lines.some((l) => /catchup window 82800000ms/.test(l)));
+  assert.ok(outcome.lines.some((l) => /catchup window 3600000ms/.test(l)));
   assert.ok(outcome.lines.some((l) => l.includes('America/Vancouver')));
 });
 
-test('status prints the two counters that measure the laptop limit', async () => {
+test('status prints the two counters that measure whether firings are being lost', async () => {
   // Both come straight from `describe()` and neither was printed anywhere
-  // before. The missed-catchup count is the direct measurement of how often the
-  // stack being down for more than 23 hours actually costs a run — the number
-  // behind the user guide's "not unattended nightly auditing" caveat.
+  // before. The missed-catchup count used to measure how often the laptop being
+  // asleep cost a run. Against Cloud it should sit at zero permanently, so a
+  // non-zero value now reports a Temporal outage at the firing hour rather than
+  // a habit — a rarer and more interesting signal from the same number.
   const { schedule } = fakeClient();
   const outcome = await runScorecardScheduleAction('status', { schedule, timeZone: TZ });
   const counters = outcome.lines.find((l) => l.includes('firings missed'));
@@ -308,8 +330,8 @@ test('status on a schedule that does not exist says so, not `ScheduleNotFoundErr
 
 test('every mutating verb now reports the counters too', async () => {
   // The counters ride the shared reporting block rather than the status verb, so
-  // whichever verb an operator happens to run answers "has the laptop limit been
-  // biting" without a second command.
+  // whichever verb an operator happens to run answers "have any firings been
+  // lost" without a second command.
   for (const action of ['pause', 'unpause', 'trigger'] as const) {
     const { schedule } = fakeClient();
     const outcome = await runScorecardScheduleAction(action, { schedule, timeZone: TZ });
@@ -339,12 +361,14 @@ test('create sends the built options and reports the next firing', async () => {
     outcome.lines.join(' | '),
   );
   // The policies the server stored, echoed back — a clamped catchup window has
-  // to be visible somewhere, and this is the only place it can show up. 23 hours
-  // is 82800000ms; a different number here means the server did not keep what
+  // to be visible somewhere, and this is the only place it can show up. 1 hour
+  // is 3600000ms; a different number here means the server did not keep what
   // the CLI sent.
-  assert.ok(outcome.lines.some((l) => /catchup window 82800000ms/.test(l) && /overlap SKIP/.test(l)));
-  // The laptop-stack limit is stated by the tool itself, not only in the docs.
-  assert.ok(outcome.lines.some((l) => /steward up/.test(l) && /not unattended/.test(l)));
+  assert.ok(outcome.lines.some((l) => /catchup window 3600000ms/.test(l) && /overlap SKIP/.test(l)));
+  // The remaining limit is stated by the tool itself, not only in the docs. It
+  // is no longer "this needs `steward up`" — it is "this needs the hosted
+  // container, and nothing alerts on that yet".
+  assert.ok(outcome.lines.some((l) => /Railway container/.test(l) && /nothing alerts/.test(l)));
 });
 
 test('create refuses to guess when the options are missing', async () => {

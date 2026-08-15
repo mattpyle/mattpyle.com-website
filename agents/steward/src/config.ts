@@ -247,6 +247,31 @@ export const REVIEWS_DIR = process.env.STEWARD_REVIEWS_DIR
 export const SCORECARD_ARCHIVE_DIR = path.join(REVIEWS_DIR, '_scorecard');
 
 /**
+ * The same directory as {@link SCORECARD_ARCHIVE_DIR}, addressed the way GitHub
+ * addresses it: repo-relative, forward slashes, no host filesystem involved.
+ *
+ * Two constants rather than one derived from the other because they are not the
+ * same fact. `SCORECARD_ARCHIVE_DIR` answers "where does this machine keep the
+ * archive", follows `STEWARD_REVIEWS_DIR` into a temp directory under test, and
+ * is meaningless in a container with no checkout. This answers "where does the
+ * archive live in the repository", which is fixed for every reader and every
+ * writer, and is what `archiveScorecardRun` commits against now that it writes
+ * through the GitHub API instead of the filesystem.
+ */
+export const SCORECARD_ARCHIVE_REL = 'agents/steward/reviews/_scorecard';
+
+/**
+ * The standing branch `archiveScorecardRun` appends to.
+ *
+ * One long-lived branch and one long-lived PR, not one per run, and that split
+ * is the point: the run-log PR appearing *means something changed* (spec §6),
+ * and it would stop meaning that if every no-op night opened one too. The
+ * archive is written on every execution including no-ops (spec §5.2), so it
+ * needs somewhere to accumulate that carries no signal. Matt merges it whenever.
+ */
+export const SCORECARD_ARCHIVE_BRANCH = 'steward/scorecard-archive';
+
+/**
  * Where `steward audit-url` writes its two artifacts by default.
  *
  * Under `.cache/`, which is gitignored — deliberately **not** a sibling of

@@ -15,13 +15,24 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
  * changes no workflow history. The three policy choices below are the design
  * (the card argues them at length); the code is the easy part.
  *
- * **The honest limit, restated because it is the whole point (§7):** Steward's
- * server and worker are local. A Schedule only takes an action while that stack
- * is up, so this is a daily audit on a laptop, not unattended nightly auditing.
- * The catchup window narrows that gap — a firing missed while the stack was
- * down runs on the next `steward up` within 23 hours — but it does not close
- * it: a machine off for a week still produces no runs for that week.
- * `steward/user-guide.md` says so to the operator; do not describe it otherwise.
+ * **The limit this file used to open with is gone (2026-08-14).** It read: the
+ * server and worker are local, a Schedule only acts while that stack is up, so
+ * this is a daily audit on a laptop rather than unattended nightly auditing.
+ * Both halves of that moved. The Schedule lives in Temporal Cloud, and the
+ * hosted Railway worker polls `steward-audit` continuously, so a firing is taken
+ * on time and advanced to completion with the laptop shut
+ * (always-on-audit-worker card).
+ *
+ * That is also why the two policy values below changed. They were both written
+ * to compensate for a stack that was usually down, and compensating for it now
+ * makes the run *worse* rather than safer — see each constant.
+ *
+ * The remaining honest limit is narrower and worth stating plainly: the run
+ * depends on Temporal Cloud, on the Railway container, and on GitHub. None of
+ * those is Matt's laptop, and none of them is monitored yet
+ * (audit-stack-alerting-and-monitoring card). A silently dead container
+ * produces no runs and, today, no alarm — `numActionsMissedCatchupWindow` and
+ * the run-log's own dates are the only tells.
  */
 
 /** The one Schedule this system owns. Singular by design — one site, one audit. */
@@ -41,36 +52,47 @@ export const SCORECARD_SCHEDULE_WORKFLOW_ID = 'steward-scorecard-scheduled';
 /**
  * Default firing time, local to {@link ScorecardScheduleParams.timeZone}.
  *
- * **Evening, not mid-morning and not a quiet 3am hour.** The default has to be
- * an hour the stack is plausibly up, and on this machine that is the evening:
- * Matt is at work at 10am with the laptop off, so a morning default produced
- * close to zero firings. The catchup window below recovers a missed evening
- * firing on the next `steward up`, but the default hour is still the one that
- * decides whether the common case needs recovering at all.
+ * **03:30, and the reasoning inverted on 2026-08-14.** The old value was 20:00,
+ * and its docblock said so explicitly: "the default has to be an hour the stack
+ * is plausibly up, and on this machine that is the evening". That was a
+ * constraint about Matt's laptop, not about the site, and the hosted worker
+ * removed it.
+ *
+ * Freed of it, the right hour is the quiet one this comment used to rule out.
+ * The audit measures the live site, so it should measure it settled: 03:30
+ * Pacific is after any evening merge has deployed and long before the next
+ * day's work starts, which makes consecutive runs comparable in a way an
+ * evening sample taken mid-deploy is not.
+ *
+ * Not 03:00 or 04:00 exactly. Those are the hours every cron on the internet
+ * picks, and GitHub's API and Vercel's edge are both quieter at :30.
  */
-export const SCORECARD_SCHEDULE_DEFAULT_AT = '20:00';
+export const SCORECARD_SCHEDULE_DEFAULT_AT = '03:30';
 
 /**
- * 23 hours, not the SDK's one-year default and no longer the near-zero window
- * this shipped with — the single most consequential line in this file.
+ * **One hour, down from 23 on 2026-08-14.** The window shrank because the thing
+ * it was compensating for stopped existing.
  *
- * The original reasoning was written for **unbounded** queueing: a firing
- * missed on Monday and drained on Thursday alongside Tuesday's and Wednesday's
- * writes several near-identical points into what is supposed to be a time
- * series, which is fake data rather than late data. That argument does not
- * survive a bounded window. With `overlap: SKIP` and a window under 24 hours,
- * at most one missed firing can run late per day; the audit measures the live
- * site at execution time and the archive stamps the actual execution time, so a
- * catchup run is a real observation that happens to be late.
+ * 23 hours was sized for a laptop: the dev server hosting the Schedule was off
+ * most of the day, firings were missed routinely rather than exceptionally, and
+ * a window nearly as long as the firing interval meant a missed evening run
+ * could still be recovered on the next `steward up`. The trade it bought was
+ * stated as "a late run or no run, and a late run is the more useful record".
  *
- * 23 rather than 24 keeps the window strictly shorter than the firing interval,
- * so a missed firing expires before the next one is due and no two firings can
- * ever be outstanding at once.
+ * In Cloud the premise is gone. The server is always up, so it never misses a
+ * firing, and the hosted worker claims the task immediately. The window now
+ * covers exactly one case: Temporal Cloud itself being unreachable at 03:30. An
+ * hour absorbs that and keeps a recovered firing on the same night, which is
+ * what makes it the same data point. A 23-hour window in Cloud would only ever
+ * fire in a scenario where the outage lasted most of a day, and it would then
+ * run the audit in the middle of the following afternoon and stamp it as that
+ * night's — a late run masquerading as an on-time one, which is the fake-data
+ * failure the original 23-hour reasoning was itself written against.
  *
- * The trade this buys: on a laptop that is off at 20:00 and on later, the
- * choice is a late run or no run, and a late run is the more useful record.
+ * Still strictly shorter than the firing interval, so no two firings can ever be
+ * outstanding at once. `overlap: SKIP` remains the backstop.
  */
-export const SCORECARD_SCHEDULE_CATCHUP_WINDOW = '23 hours';
+export const SCORECARD_SCHEDULE_CATCHUP_WINDOW = '1 hour';
 
 /**
  * The six verbs `steward scorecard-schedule` accepts.
@@ -150,12 +172,21 @@ export function buildScorecardScheduleOptions(params: ScorecardScheduleParams): 
       args: [params.input],
       // The stop against the one way this design can fail silently. `SKIP`
       // suppresses a firing while the previous execution is still Running, and
-      // an execution nobody ever completes — a firing started with the server
-      // up but the worker dead, which is a routine state here — would stay
-      // Running forever and suppress every firing after it. `pauseOnFailure`
-      // cannot catch that, because nothing fails. A timeout well above a real
-      // run (~12 min audit, 20 min publish deadline) turns the wedge into a
-      // failed action the next firing recovers from.
+      // an execution nobody ever completes — a firing taken with the server up
+      // but no worker polling `steward-audit`, which is now exactly what a dead
+      // Railway container looks like — would stay Running forever and suppress
+      // every firing after it. `pauseOnFailure` cannot catch that, because
+      // nothing fails. The timeout turns the wedge into a failed action the
+      // next firing recovers from.
+      //
+      // **Kept at 2 hours even though the publish leg's own deadline fell from
+      // 20 minutes to 2.** A healthy run is ~15 minutes, so 2 hours looks
+      // generous, but the figure that has to fit here is the pathological one:
+      // ~18 pages each allowed two attempts at a 5-minute `auditLiveUrl`. That
+      // worst case already exceeded the old 2 hours and tightening toward the
+      // healthy run would start killing real, slow runs to detect a wedge a few
+      // minutes sooner. Detection is the alerting card's job, not this
+      // constant's.
       workflowExecutionTimeout: '2 hours',
     },
     policies: {
@@ -265,14 +296,16 @@ function describePolicies(policies: {
  * The two counters that measure the laptop limit, both straight from
  * `describe()` and neither printed anywhere before this.
  *
- * `numActionsMissedCatchupWindow` is the one that matters. Since the window
- * became 23 hours, it no longer counts every firing the machine slept through —
- * a firing missed at 20:00 and taken the next morning is a *taken* action, not a
- * missed one. What it counts now is firings the stack was down for more than 23
- * hours, which is precisely the case the catchup window cannot rescue and
- * precisely what the user guide's "a daily audit on this laptop, not unattended
- * nightly auditing" caveat is about. A number climbing daily is the evidence for
- * an always-on worker; a number sitting at zero says the caveat can shrink.
+ * `numActionsMissedCatchupWindow` is the one that matters, and what it measures
+ * changed on 2026-08-14 along with everything else here. It used to count the
+ * nights the laptop slept through, and a number climbing daily was the evidence
+ * that argued for the always-on worker in the first place.
+ *
+ * In Cloud, with a one-hour window, it should sit at zero permanently: the
+ * server never misses a firing. So any non-zero value now means Temporal Cloud
+ * itself was unreachable for over an hour at 03:30 — a much rarer and much more
+ * interesting event than the one this counter used to report. Read a rising
+ * number as an outage, not as a habit.
  *
  * `numActionsSkippedOverlap` sits beside it to say whether `overlap: SKIP` has
  * ever dropped a real run or has never once fired in anger.
@@ -326,8 +359,8 @@ export async function runScorecardScheduleAction(
     lines.push(describePolicies(description.policies));
     lines.push(describeNext(description.info.nextActionTimes, timeZone));
     lines.push(
-      'It fires only while the Temporal dev server and worker are up (`steward up`) — ' +
-        'a daily audit on this laptop, not unattended nightly auditing.',
+      'It fires in Temporal Cloud and runs on the hosted worker, so it does not need this ' +
+        'machine. It does need the Railway container to be alive — nothing alerts on that yet.',
     );
     return { action, scheduleId: SCORECARD_SCHEDULE_ID, lines };
   }

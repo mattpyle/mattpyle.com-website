@@ -18,6 +18,7 @@ import {
   MCP_HOST,
   MCP_PORT,
   NAMESPACE,
+  QUEUE_AUDIT,
   QUEUE_LIGHT,
   temporalConnectionOptions,
   WEB_UI,
@@ -1431,7 +1432,11 @@ program
 
     const result = await c.workflow.execute(scorecardAuditWorkflow, {
       workflowId,
-      taskQueue: QUEUE_LIGHT,
+      // The audit queue, not the light one, since 2026-08-14: the scorecard's
+      // activities have no local dependency left, so a manual run is served by
+      // whichever worker is up — the laptop's, which registers all three
+      // queues, or the hosted one.
+      taskQueue: QUEUE_AUDIT,
       // Decisions resolved HERE, by the CLI, and frozen into the workflow
       // input (design rule 3) — the sitemap URL, publish mode, and staleness
       // threshold are never re-read from config once the workflow starts.
@@ -1546,7 +1551,10 @@ program
         options = buildScorecardScheduleOptions({
           at,
           timeZone: STEWARD_TIMEZONE,
-          taskQueue: QUEUE_LIGHT,
+          // The queue the hosted worker polls. A Schedule in Cloud fires whether
+          // or not the laptop is on, so its action has to land somewhere a
+          // container can claim it — see `scorecard-schedule.ts`.
+          taskQueue: QUEUE_AUDIT,
           // Resolved HERE and frozen into the Schedule's action, exactly as the
           // manual verb resolves them into the workflow input (design rule 3) —
           // a scheduled run must not pick up a config change made months after
