@@ -156,6 +156,13 @@ To redeploy: push to the branch Railway watches, or `railway up` again. The work
 SIGTERM, drains for 20 seconds, and exits; anything still in flight is retried by Temporal, and pages
 already rendered are in workflow history rather than being re-run.
 
+The restart policy is `ALWAYS` with no retry cap, which is a deliberate choice about *silent* death
+rather than about crashes. `ON_FAILURE` does not restart a process that exited 0, and this worker's
+`main()` returns normally once `worker.run()` resolves, so a clean exit would leave the container
+stopped. A retry cap has the same shape: after N failures Railway stops trying and the service sits
+dead. Either way the nightly Scorecard would stop producing runs with nothing to notice it, because
+there is no alerting yet. A visible crash loop in the Railway dashboard is the better failure.
+
 The image is deliberately host-agnostic — nothing in the Dockerfile knows what Railway is, and
 everything Railway-specific lives in `railway.json` — so the Serverless Workers migration can reuse
 it unchanged.
