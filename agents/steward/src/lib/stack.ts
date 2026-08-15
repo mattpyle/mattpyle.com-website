@@ -3,7 +3,17 @@ import path from 'node:path';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Connection } from '@temporalio/client';
-import { IS_TEMPORAL_CLOUD, NAMESPACE, REPO_ROOT, TEMPORAL_ADDRESS, WEB_UI, WORKER_READY_LOG } from '../config.js';
+import {
+  IS_TEMPORAL_CLOUD,
+  NAMESPACE,
+  QUEUE_AUDIT,
+  QUEUE_HEAVY,
+  QUEUE_LIGHT,
+  REPO_ROOT,
+  TEMPORAL_ADDRESS,
+  WEB_UI,
+  WORKER_READY_LOG,
+} from '../config.js';
 import { killTree, tsxCommand } from './proc.js';
 
 const execFileAsync = promisify(execFile);
@@ -209,7 +219,11 @@ export async function startStack(): Promise<RunningStack> {
 
   const { binary, args } = tsxCommand('src/worker.ts');
   const stewardDir = path.join(REPO_ROOT, 'agents', 'steward');
-  console.log('  starting worker (queues: steward-light, steward-heavy)');
+  // Built from the constants, not written out. This line said "steward-light,
+  // steward-heavy" from the moment `worker.ts` gained the audit queue until
+  // 2026-08-15, so `steward up` under-reported what it was actually serving —
+  // which reads as "the audit queue is hosted-only" and is the opposite of true.
+  console.log(`  starting worker (queues: ${[QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT].join(', ')})`);
   const worker = spawn(binary, args, {
     cwd: stewardDir,
     windowsHide: true,
