@@ -1,5 +1,5 @@
 {
-  "id": "first-day",
+  "id": "twice",
   "iso": "2026-07-25",
   "timestamp": "2026-07-25T09:00:00-07:00",
   "scope": "19 live pages",
@@ -20,6 +20,6 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged",
-  "archiveId": "first-day"
+  "reason": "the first run",
+  "archiveId": "twice"
 }
