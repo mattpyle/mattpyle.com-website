@@ -315,7 +315,11 @@ function describeCounters(info: {
   numActionsSkippedOverlap: number;
 }): string {
   return (
-    `firings missed (down >23h): ${info.numActionsMissedCatchupWindow} · ` +
+    // Interpolated from the constant rather than written out. This line read
+    // "down >23h" for the first hours the one-hour window was live, because the
+    // policy moved and the label did not — a stale number in the one place an
+    // operator reads to decide whether firings are being lost.
+    `firings missed (unreachable >${SCORECARD_SCHEDULE_CATCHUP_WINDOW}): ${info.numActionsMissedCatchupWindow} · ` +
     `skipped for overlap: ${info.numActionsSkippedOverlap}`
   );
 }
