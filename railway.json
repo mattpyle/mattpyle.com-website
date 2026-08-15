@@ -6,8 +6,7 @@
   },
   "deploy": {
     "startCommand": "npm run worker:hosted --workspace @mattpyle/steward",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10,
+    "restartPolicyType": "ALWAYS",
     "numReplicas": 1
   }
 }
