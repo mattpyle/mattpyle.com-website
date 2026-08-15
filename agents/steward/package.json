@@ -15,6 +15,7 @@
   },
   "scripts": {
     "worker": "tsx src/worker.ts",
+    "worker:hosted": "tsx src/worker-hosted.ts",
     "steward": "tsx src/cli.ts",
     "setup:vale": "node scripts/setup-vale.mjs",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",

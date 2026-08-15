@@ -25,10 +25,10 @@ that's the property being dogfooded here, on a low-stakes, real target.
 - **`scorecardAuditWorkflow`** — a separate, scheduled-or-manual sweep of the *live* site (not a
   draft) against a fixed set of public conformance metrics (axe violations, Lighthouse categories,
   agentic-browsing checks). It opens a PR when the result changed or the last run is stale, and never
-  self-merges. `steward scorecard-schedule create` puts it on a daily Temporal Schedule — which fires
-  only while this local stack is up, so it is a daily audit on a laptop rather than unattended nightly
-  auditing. It fires at 20:00 local, or on the next `steward up` within 23 hours of a missed firing, at
-  most once a day.
+  self-merges. `steward scorecard-schedule create` puts it on a daily Temporal Schedule at 03:30
+  local. Since 2026-08-14 that is genuinely unattended: the Schedule lives in Temporal Cloud and the
+  hosted worker advances it, so a firing produces a run with this laptop shut. It still depends on
+  the Railway container being alive, and nothing alerts on that yet.
 - **`auditSiteWorkflow`** — one agent-readiness audit of *any* site, run durably: the fetch-based
   checks, and on the deep tier one browser-rendered page per activity, then assembly. Started by the
   MCP server (`steward mcp-serve`), which hands back a workflow ID immediately and serves the report
@@ -40,14 +40,27 @@ Three, split by **locality** — which worker is allowed to do the work, not how
 
 | Queue | Carries | Why it is where it is |
 |---|---|---|
-| `steward-light` | `reviewPost`'s passes, the scorecard's resolve/read/publish/archive | Reads the working copy, applies patches to local files, drives git in a local worktree |
-| `steward-heavy` | `buildAndAuditDraft`, `auditLiveUrl` | Same working copy, plus a browser |
-| `steward-audit` | `auditSiteWorkflow` and all of its activities | Depends on nothing local: it fetches a stranger's origin and renders a stranger's pages |
+| `steward-light` | `reviewPost`'s passes | Reads the working copy and applies patches to local files |
+| `steward-heavy` | `buildAndAuditDraft` | Same working copy, plus a browser |
+| `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 
-`steward up` starts one worker process registering all three, so nothing about day-to-day use
-changes. The split exists so that a single hosted worker can poll `steward-audit` alone and finish an
-audit end to end while this laptop is off, which is what the always-on audit worker needs. A worker
-polling that queue needs Chrome and needs no checkout.
+The scorecard moved onto `steward-audit` on 2026-08-14. It used to be split across the first two
+queues because its publish leg drove git in a local worktree and its archive wrote a local file;
+both now go through the GitHub API, so nothing it does needs a checkout. That is what made the
+nightly Schedule able to leave this laptop.
+
+There are two workers:
+
+- **The laptop worker** (`steward up`, `src/worker.ts`) registers all three queues, so nothing about
+  day-to-day use changes and a manual `steward scorecard` works whether or not the hosted worker is
+  up.
+- **The hosted worker** (`src/worker-hosted.ts`, the Railway container) registers `steward-audit`
+  alone, and registers exactly the ten activities those two workflows name. It deliberately does not
+  register `reviewPost`'s: a worker that claimed `snapshotDraft` would fail it, because the container
+  has no drafts, and a failed task is worse than an unclaimed one.
+
+The two never compete, because they claim different queues. A worker polling `steward-audit` needs
+Chrome, a `GITHUB_TOKEN`, and no checkout.
 
 ### The publish leg
 
@@ -122,9 +135,33 @@ failover under the connection with no config change.
 `steward up` follows the same switch: against Cloud it starts the worker alone, since there is no
 local server to run, and its ready banner names the service either way.
 
-Two things Cloud does not change. The worker still runs wherever you start it, so nothing advances
-while it is down. And the daily Scorecard Schedule is server-side state that did not migrate: it
-remains in the dev server's database and fires only under a local `steward up`.
+### The hosted worker
+
+A Railway container runs `src/worker-hosted.ts` against the Cloud namespace, polling `steward-audit`
+continuously. It is what makes the nightly Scorecard and any deep audit finish without this machine.
+
+It takes exactly four environment variables, all set in Railway's own Variables tab and none of them
+in the image: the three connection variables above, plus a `GITHUB_TOKEN` (a fine-grained PAT scoped
+to this one repository, contents and pull-requests write) that the scorecard's publish and archive
+legs need. The worker refuses to start without the token rather than discovering it is missing at
+03:30.
+
+```bash
+docker build -f agents/steward/Dockerfile -t steward-audit-worker .   # context is the REPO ROOT
+railway up                                                            # from the repo root
+railway logs                                                          # look for `steward worker polling`
+```
+
+To redeploy: push to the branch Railway watches, or `railway up` again. The worker stops polling on
+SIGTERM, drains for 20 seconds, and exits; anything still in flight is retried by Temporal, and pages
+already rendered are in workflow history rather than being re-run.
+
+The image is deliberately host-agnostic — nothing in the Dockerfile knows what Railway is, and
+everything Railway-specific lives in `railway.json` — so the Serverless Workers migration can reuse
+it unchanged.
+
+One thing Cloud does not change: a workflow only advances while *some* worker polls its queue. For
+`steward-audit` that is the container; for `reviewPost` it is still `steward up` on this machine.
 
 In another terminal:
 
