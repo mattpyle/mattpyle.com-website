@@ -57,6 +57,17 @@ import { BlockedTargetError, vetConnectableUrl, type FetchPolicy } from './safe-
  */
 
 /** One request the proxy refused, kept so the audit can report what it stopped. */
+/**
+ * How long {@link VettingProxy.close} will wait for a graceful shutdown before
+ * destroying whatever is left and resolving anyway.
+ *
+ * Short on purpose. By the time this runs the page is rendered and the result
+ * is in hand, so every millisecond here is spent tidying up after work that
+ * already succeeded. Five seconds is far past a healthy close and far inside the
+ * activity's 5-minute deadline.
+ */
+const CLOSE_TIMEOUT_MS = 5_000;
+
 export interface BlockedRequest {
   /** The absolute URL for a plain request, or `https://host:port` for a tunnel. */
   url: string;
@@ -115,11 +126,30 @@ export async function startVettingProxy(policy: FetchPolicy): Promise<VettingPro
   // has gone away must not keep the proxy's sockets alive.
   server.keepAliveTimeout = 5_000;
 
+  /**
+   * Every socket this proxy is responsible for, client side and upstream alike.
+   *
+   * `server.close()` waits for the server's connections to end, and
+   * `closeAllConnections()` reaches the ones the HTTP server still tracks. A
+   * `CONNECT` tunnel is neither: the socket is hijacked out of the server by the
+   * `connect` event, and the upstream socket it is spliced to was never the
+   * server's at all. Without this set, `close()` waits on sockets it has no way
+   * to reach — which is exactly what wedged the first hosted deep audit
+   * (2026-08-15, see `close` below).
+   */
+  const sockets = new Set<stream.Duplex>();
+  const track = (socket: stream.Duplex): void => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  };
+
   server.on('request', (req, res) => {
+    track(req.socket);
     void handlePlain(req, res, policy, blocked);
   });
   server.on('connect', (req, socket, head) => {
-    void handleTunnel(req, socket, head, policy, blocked);
+    track(socket);
+    void handleTunnel(req, socket, head, policy, blocked, track);
   });
   // A socket erroring after the client walked away is ordinary here and must not
   // become an unhandled exception in the worker.
@@ -158,10 +188,57 @@ export async function startVettingProxy(policy: FetchPolicy): Promise<VettingPro
     chromeFlags: flags.map((f) => `--${f}`),
     chromeOptions: flags,
     blocked,
+    /**
+     * **A cleanup step must never be able to hang the work it is cleaning up
+     * after.** This one could, and did.
+     *
+     * The first deep audit on the hosted worker (2026-08-15) rendered its page
+     * successfully, logged the result, and then never returned: `close()` runs
+     * in the activity's `finally`, and the promise below never resolved. The
+     * server timed the activity out after its 5-minute `startToCloseTimeout`,
+     * retried it, rendered the same page successfully a second time, and threw
+     * that away too. The finished report carried `browserPages=0` after ten
+     * minutes of work — a total failure of the deep tier reported as a
+     * completed run.
+     *
+     * Two causes, both fixed above. The tunnel sockets were untracked, so
+     * `closeAllConnections()` could not reach them; and `handleTunnel` tore the
+     * upstream socket down only on `error`, so a browser that closed its
+     * tunnels *cleanly* on exit — which is what killing Chrome does — leaked
+     * one live upstream socket per tunnel for `server.close()` to wait on
+     * forever. It did not reproduce on Windows, where the sockets were already
+     * gone by the time this ran.
+     *
+     * Destroying the tracked sockets is the fix. The timeout is the belt: no
+     * future socket this set fails to cover can cost more than
+     * `CLOSE_TIMEOUT_MS`, because a proxy that will not shut down must not be
+     * able to fail an audit that already succeeded.
+     */
     close: () =>
       new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = (): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+
+        const destroyAll = (): void => {
+          for (const socket of sockets) socket.destroy();
+          sockets.clear();
+        };
+
+        const timer = setTimeout(() => {
+          destroyAll();
+          finish();
+        }, CLOSE_TIMEOUT_MS);
+        // Never hold the process open on the backstop itself.
+        timer.unref();
+
+        destroyAll();
         server.closeAllConnections();
-        server.close(() => resolve());
+        server.close(() => finish());
       }),
   };
 }
@@ -223,6 +300,7 @@ async function handleTunnel(
   head: Buffer,
   policy: FetchPolicy,
   blocked: BlockedRequest[],
+  track: (socket: stream.Duplex) => void,
 ): Promise<void> {
   // `CONNECT` carries `host:port` and no scheme. The scheme is supplied only so
   // the guard has a URL to parse; nothing about the check depends on it.
@@ -248,14 +326,23 @@ async function handleTunnel(
     port: Number(url.port || 443),
     ...(pinned ? { lookup: pinnedLookup(pinned) } : {}),
   });
+  // The upstream half belongs to this proxy too, and `close()` has to be able to
+  // reach it — the server never knew about it.
+  track(upstream);
   upstream.on('connect', () => {
     socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
     if (head.length > 0) upstream.write(head);
     upstream.pipe(socket);
     socket.pipe(upstream);
   });
+  // **`close`, not just `error`.** Tearing the peer down only on `error` leaks
+  // the other half of every tunnel that ends cleanly, and killing a browser ends
+  // its tunnels cleanly. Each leaked upstream socket was one more thing
+  // `server.close()` waited on forever.
   upstream.on('error', () => socket.destroy());
+  upstream.on('close', () => socket.destroy());
   socket.on('error', () => upstream.destroy());
+  socket.on('close', () => upstream.destroy());
 }
 
 function refuse(res: http.ServerResponse, url: string, reason: string, blocked: BlockedRequest[]): void {
