@@ -1,6 +1,48 @@
 [
   {
     "iso": "2026-08-15",
+    "timestamp": "2026-08-15T20:22:14-07:00",
+    "scope": "23 live pages",
+    "tools": [
+      "Lighthouse 13.4",
+      "axe-core 4.12"
+    ],
+    "entry": "Nightly · automated",
+    "commentary": "Performance moved from Pass to Partial; Performance: 94/100 (Partial).",
+    "metrics": [
+      {
+        "name": "Accessibility",
+        "value": "100",
+        "maximum": "100",
+        "status": "Pass",
+        "description": "The lowest Lighthouse accessibility score across 23 tested pages. No automated WCAG violations."
+      },
+      {
+        "name": "Performance",
+        "value": "94",
+        "maximum": "100",
+        "status": "Partial",
+        "description": "The lowest Lighthouse performance score across 23 tested pages."
+      },
+      {
+        "name": "SEO",
+        "value": "100",
+        "maximum": "100",
+        "status": "Pass",
+        "description": "The lowest Lighthouse SEO score across 23 tested pages."
+      },
+      {
+        "name": "Agentic Browsing",
+        "value": "4",
+        "maximum": "4",
+        "status": "Pass",
+        "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
+      }
+    ],
+    "id": "2026-08-15-2"
+  },
+  {
+    "iso": "2026-08-15",
     "timestamp": "2026-08-15T00:37:28-07:00",
     "scope": "23 live pages",
     "tools": [
