@@ -17,6 +17,7 @@ import {
 } from './activities/scorecard.js';
 import {
   HEALTHCHECK_BASE,
+  HOSTED_ACTIVITY_CONCURRENCY,
   IS_TEMPORAL_CLOUD,
   NAMESPACE,
   QUEUE_AUDIT,
@@ -155,6 +156,17 @@ async function main() {
     workflowsPath,
     activities,
     taskQueue: QUEUE_AUDIT,
+    // One activity at a time, and never more. The SDK's default is 100, which is
+    // how two strangers' deep audits came to render simultaneously and corrupt
+    // each other's Lighthouse timing marks. `config.ts`'s docblock carries the
+    // evidence and the cost this accepts; the short version is that serialising
+    // the cheap activities behind a page render is the price of the render
+    // activities working at all.
+    //
+    // Workflow tasks are a separate budget (`maxConcurrentWorkflowTaskExecutions`,
+    // untouched), so a queued run's workflow still progresses and still answers
+    // the progress query while somebody else's render holds the activity slot.
+    maxConcurrentActivityTaskExecutions: HOSTED_ACTIVITY_CONCURRENCY,
     // Stop polling on SIGTERM, then give in-flight work 20 seconds before
     // cancelling it. **No `process.on('SIGTERM')` handler here on purpose**: the
     // SDK Runtime already installs one for SIGINT/SIGTERM/SIGQUIT/SIGUSR2, and a
@@ -182,6 +194,10 @@ async function main() {
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
       activities: Object.keys(activities),
       hosted: true,
+      // In the ready line for the same reason `alerting` is: it is a fact a
+      // deploy can change, and the operator reading this line after a deploy is
+      // the person who would otherwise find out from a corrupted report.
+      activityConcurrency: HOSTED_ACTIVITY_CONCURRENCY,
       // Named in the ready line because the operator reads this line after every
       // deploy, and "alerting is off" is precisely the fact a deploy can change
       // by accident (a variable dropped from the Variables tab) and that nothing

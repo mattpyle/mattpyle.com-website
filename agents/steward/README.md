@@ -57,7 +57,7 @@ There are two workers:
   day-to-day use changes and a manual `steward scorecard` works whether or not the hosted worker is
   up.
 - **The hosted worker** (`src/worker-hosted.ts`, the Railway container) registers `steward-audit`
-  alone, and registers exactly the ten activities those two workflows name. It deliberately does not
+  alone, and registers exactly the twelve activities those two workflows name. It deliberately does not
   register `reviewPost`'s: a worker that claimed `snapshotDraft` would fail it, because the container
   has no drafts, and a failed task is worse than an unclaimed one.
 
@@ -153,6 +153,14 @@ only **warns** about a missing ping base, and the difference is deliberate: a mi
 nightly run throws its work away, a missing ping base means it works unwatched, and a monitoring
 variable must never be able to take down the thing it watches. The ready line names which it is
 (`alerting: configured` / `alerting: OFF`).
+
+It runs **one activity at a time** (`maxConcurrentActivityTaskExecutions: 1`, from
+`HOSTED_ACTIVITY_CONCURRENCY` in `config.ts`, and named in the ready line as `activityConcurrency`).
+Lighthouse cannot run twice in one Node process without the two runs corrupting each other's timing
+marks, and before this the container took as many activity tasks as Temporal offered it — two deep
+audits started seconds apart both rendered at once. The cap is worker-wide, so a cheap fetch check
+can wait behind somebody else's page render; a run waiting for the worker answers `queued: true`
+with a queue position rather than looking stalled.
 
 ```bash
 docker build -f agents/steward/Dockerfile -t steward-audit-worker .   # context is the REPO ROOT

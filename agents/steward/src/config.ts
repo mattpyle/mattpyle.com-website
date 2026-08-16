@@ -247,6 +247,40 @@ export const QUEUE_HEAVY = 'steward-heavy';
 export { AUDIT_TASK_QUEUE as QUEUE_AUDIT } from './lib/agent-audit/deep-contract.js';
 
 /**
+ * How many activities the **hosted** worker runs at once. One, and it is a
+ * correctness rule rather than a tuning preference.
+ *
+ * Lighthouse is not safe to run twice in one Node process: `marky`, the timing
+ * library `lighthouse-logger` uses, keys its marks off Node's *global*
+ * `performance.mark`/`measure` namespace, so two concurrent runs corrupt each
+ * other's marks. That failed 100% of render activities at concurrency 2 in Phase
+ * 1.5/1.6, and `scorecard-audit.ts`'s `AUDIT_CONCURRENCY` docblock is where the
+ * evidence lives. That constant serialises the pages *inside one workflow*;
+ * nothing serialised anything *across* workflows until this option existed, so
+ * two workflows could do what one workflow is forbidden to do. Measured twice on
+ * 2026-08-15 while verifying the public deep tier: two deep audits started
+ * seconds apart through `/mcp` both rendered at once.
+ *
+ * **The accepted cost.** This is a worker-wide cap, so every activity on
+ * `steward-audit` serialises — one run's cheap fetch checks can wait behind
+ * another run's 90-second page render. That wait is honest to callers rather
+ * than hidden: `get_audit` answers `queued: true` with a queue position for a run
+ * nothing has picked up (`src/lib/mcp-temporal.mjs`), which is exactly this
+ * state. Per-activity-type limits or a browser-only queue stay out until queue
+ * depth argues for them, which is also the signal for a second replica.
+ *
+ * Not env-configurable on purpose. An operator raising this from a dashboard
+ * field would not be tuning throughput, they would be turning the render
+ * activities off, and the failure reads as a wedged Chrome rather than as a
+ * setting.
+ *
+ * Only the hosted worker sets it. `worker.ts` on the laptop is unchanged and
+ * operator-attended; its cross-workflow contention is pre-existing and is carried
+ * on its own card.
+ */
+export const HOSTED_ACTIVITY_CONCURRENCY = 1;
+
+/**
  * The exact line the worker logs once both queues are polling. `steward up`
  * health-gates on this string (lib/stack.ts), so the worker and the stack share
  * this one constant — a reworded log line can no longer silently break startup.
