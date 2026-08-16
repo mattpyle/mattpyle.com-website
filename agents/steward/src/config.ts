@@ -275,8 +275,8 @@ export { AUDIT_TASK_QUEUE as QUEUE_AUDIT } from './lib/agent-audit/deep-contract
  * setting.
  *
  * Only the hosted worker sets it. `worker.ts` on the laptop is unchanged and
- * operator-attended; its cross-workflow contention is pre-existing and is carried
- * on its own card.
+ * operator-attended; its cross-workflow contention is pre-existing and out of
+ * scope here.
  */
 export const HOSTED_ACTIVITY_CONCURRENCY = 1;
 
