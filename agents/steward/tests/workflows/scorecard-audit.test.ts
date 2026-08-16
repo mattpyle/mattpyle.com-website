@@ -57,9 +57,17 @@ interface MockOverrides {
   archiveScorecardRun?: (record: unknown) => Promise<{ archivePath: string }>;
 }
 
+/** What the alerting leg was asked to send, in order. */
+interface SentSignal {
+  signal: string;
+  ok: boolean;
+  summary: string;
+}
+
 function mockActivities(overrides: MockOverrides = {}) {
   const calls: string[] = [];
   const archived: unknown[] = [];
+  const signals: SentSignal[] = [];
   const activities = {
     resolveAuditUrls: overrides.resolveAuditUrls ?? (async () => ['https://www.mattpyle.com/']),
     resolveRunStamp:
@@ -85,8 +93,27 @@ function mockActivities(overrides: MockOverrides = {}) {
         archived.push(record);
         return { archivePath: 'agents/steward/reviews/_scorecard/2026-07-22.json' };
       }),
+    // The alerting leg, recorded rather than sent. Both are mocked in every
+    // case, including the ones that never call them, so a test asserting
+    // silence fails on an unexpected *call* rather than on "activity not
+    // registered", which is the same red for two very different reasons.
+    reportRunHealth: async (input: { signal: string; shape: { ok: boolean; summary: string } }) => {
+      calls.push(`reportRunHealth:${input.signal}`);
+      signals.push({ signal: input.signal, ok: input.shape.ok, summary: input.shape.summary });
+      return { signal: input.signal, ok: input.shape.ok, sent: true };
+    },
+    checkCredentialExpiry: async () => {
+      calls.push('checkCredentialExpiry');
+      return {
+        signal: 'credential-expiry',
+        ok: true,
+        sent: true,
+        summary: '2 tracked credential(s); the nearest is a test one.',
+        dueCount: 0,
+      };
+    },
   };
-  return { activities, calls, archived };
+  return { activities, calls, archived, signals };
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
@@ -558,4 +585,121 @@ test('an unchanged page count with unchanged metrics still no-ops', async () => 
 
   assert.equal(result.decision, 'no-op');
   assert.ok(!calls.includes('publishScorecardRun'));
+});
+
+/**
+ * The alerting leg (audit-stack-alerting-and-monitoring card).
+ *
+ * These assert the *routing* — which signal a run sends, and whether it sends
+ * one at all. What makes a shape good or bad is `run-health.test.ts`'s job, and
+ * the two suites deliberately do not restate each other's rule.
+ */
+
+test('a healthy scheduled run signals the nightly check and checks credentials first', async () => {
+  const { activities, calls, signals } = mockActivities();
+  await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-alert-1',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'schedule' })],
+    }),
+  );
+
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', true]]);
+  // Before the fan-out, so a run that later dies on an expired token has
+  // already said which token it was.
+  assert.equal(calls[0], 'checkCredentialExpiry');
+});
+
+test('a healthy manual run signals nothing — it must not hold the dead-man\'s switch down', async () => {
+  const { activities, calls, signals } = mockActivities();
+  await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-alert-2',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'manual' })],
+    }),
+  );
+
+  assert.deepEqual(signals, []);
+  assert.ok(!calls.includes('checkCredentialExpiry'));
+});
+
+test('a completed run with one failed page fails its check, naming the page', async () => {
+  const { activities, signals } = mockActivities({
+    auditLiveUrl: async (url: string) =>
+      url.includes('broken') ? { url, ok: false, error: 'Lighthouse timed out' } : { ...GREEN_PAGE, url },
+    resolveAuditUrls: async () => ['https://www.mattpyle.com/', 'https://www.mattpyle.com/broken'],
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-alert-3',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'schedule' })],
+    }),
+  );
+
+  // The run still completed and still published: the alert reads the record,
+  // it does not change how the run reports itself.
+  assert.equal(result.decision, 'open-pr');
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', false]]);
+  assert.match(signals[0].summary, /1 of 2 page\(s\) could not be audited/);
+  assert.match(signals[0].summary, /broken \(Lighthouse timed out\)/);
+});
+
+test('a bad-shaped manual run fails run-shape rather than the nightly check', async () => {
+  const { activities, signals } = mockActivities({
+    auditLiveUrl: async (url: string) => ({ url, ok: false, error: 'Lighthouse timed out' }),
+  });
+  await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-alert-4',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'manual' })],
+    }),
+  );
+
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['run-shape', false]]);
+});
+
+test('a run that throws still signals, and still fails', async () => {
+  const { activities, signals } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(3),
+    readPublishedScorecard: async () => PUBLISHED_18,
+  });
+  await assertWorkflowFails(
+    () =>
+      withWorker(activities, () =>
+        env.client.workflow.execute(scorecardAuditWorkflow, {
+          workflowId: 'sc-alert-5',
+          taskQueue: QUEUE,
+          args: [baseInput({ maxAgeDays: 100_000, triggeredBy: 'schedule' })],
+        }),
+      ),
+    /shrank: 3 URL\(s\) vs 18/,
+  );
+
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', false]]);
+  assert.match(signals[0].summary, /shrank: 3 URL\(s\) vs 18/);
+});
+
+test('a monitoring service that cannot be reached does not fail the run', async () => {
+  const { activities } = mockActivities();
+  const withDeadAlerting = {
+    ...activities,
+    reportRunHealth: async () => {
+      // What the real activity returns when every attempt failed: an outcome
+      // saying so, never a throw. This test is the workflow's half of that
+      // contract — it must not treat `sent: false` as a reason to fail.
+      return { signal: 'nightly-scorecard', ok: true, sent: false, reason: 'ECONNREFUSED' };
+    },
+  };
+  const result = await withWorker(withDeadAlerting, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-alert-6',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'schedule' })],
+    }),
+  );
+  assert.equal(result.decision, 'open-pr');
 });

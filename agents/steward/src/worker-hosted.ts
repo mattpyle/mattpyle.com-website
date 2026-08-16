@@ -6,6 +6,7 @@ import {
   auditSiteFast,
   auditSiteFetchChecks,
 } from './activities/agent-audit.js';
+import { checkCredentialExpiry, reportRunHealth } from './activities/health.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -15,6 +16,7 @@ import {
   resolveRunStamp,
 } from './activities/scorecard.js';
 import {
+  HEALTHCHECK_BASE,
   IS_TEMPORAL_CLOUD,
   NAMESPACE,
   QUEUE_AUDIT,
@@ -81,6 +83,11 @@ const activities = {
   readPublishedScorecard,
   publishScorecardRun,
   archiveScorecardRun,
+  // The scorecard's alerting leg. Both are one HTTPS POST to the alerting
+  // service and read `STEWARD_HEALTHCHECK_BASE` from the host's environment, so
+  // they satisfy the "nothing local" rule this list enforces.
+  reportRunHealth,
+  checkCredentialExpiry,
 };
 
 /**
@@ -117,8 +124,28 @@ function assertPublishCredentials(): void {
   );
 }
 
+/**
+ * Warn, never refuse.
+ *
+ * A missing `GITHUB_TOKEN` means the nightly run throws its work away, so the
+ * worker refuses to start. A missing ping base means the nightly run still works
+ * and nobody hears about it if it stops — bad, but strictly better than a
+ * monitoring variable being able to take the whole audit tier down. The
+ * asymmetry is the point: alerting must never be load-bearing for the thing it
+ * watches.
+ */
+function warnIfUnmonitored(): void {
+  if (HEALTHCHECK_BASE) return;
+  log.warn(
+    'STEWARD_HEALTHCHECK_BASE is unset — no run-health signals will be sent, so a failed or ' +
+      'bad-shaped nightly scorecard, and a dead worker, will pass unnoticed. Set it in the ' +
+      "host's environment (on Railway: the service's Variables tab).",
+  );
+}
+
 async function main() {
   assertPublishCredentials();
+  warnIfUnmonitored();
 
   const connection = await NativeConnection.connect(temporalConnectionOptions());
 
@@ -155,6 +182,11 @@ async function main() {
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
       activities: Object.keys(activities),
       hosted: true,
+      // Named in the ready line because the operator reads this line after every
+      // deploy, and "alerting is off" is precisely the fact a deploy can change
+      // by accident (a variable dropped from the Variables tab) and that nothing
+      // else would ever announce.
+      alerting: HEALTHCHECK_BASE ? 'configured' : 'OFF',
     },
     WORKER_READY_LOG,
   );

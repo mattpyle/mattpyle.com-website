@@ -23,6 +23,8 @@ import {
   type RenderedPageOutcome,
   type SkippedPage,
 } from '../lib/agent-audit/deep-assemble.js';
+import { sendHealthPing } from '../lib/health-ping.js';
+import { deepAuditShape } from '../lib/run-health.js';
 import { startVettingProxy } from '../lib/agent-audit/vetting-proxy.js';
 import { BlockedTargetError, DEFAULT_POLICY } from '../lib/agent-audit/safe-fetch.js';
 import type { AuditResult } from '../lib/agent-audit/result.js';
@@ -315,5 +317,23 @@ export async function assembleDeepAudit(input: AssembleDeepAuditInput): Promise<
     notes,
   });
   logAudit('assembleDeepAudit', audit, 'deep');
+
+  // The deep tier's result-shape alert (audit-stack-alerting-and-monitoring
+  // card). Fail-only: a healthy audit sends nothing, because a deep audit is ad
+  // hoc and "none ran today" is not news the way a missing nightly run is.
+  //
+  // **Here rather than in the workflow**, which is where the scorecard's
+  // equivalent lives, for one reason: `auditSiteWorkflow` has a committed replay
+  // fixture and scheduling another activity after assembly would strand it,
+  // buying a fixture re-export to move a call one frame up the stack. This is
+  // the frame where the record takes its final shape either way, and the alert
+  // reads that record without changing it.
+  const shape = deepAuditShape({
+    origin: audit.target.origin,
+    sampled: input.sample.length,
+    rendered: pages.length,
+  });
+  if (!shape.ok) await sendHealthPing('run-shape', shape);
+
   return audit;
 }

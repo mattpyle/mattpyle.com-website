@@ -115,6 +115,23 @@ export const SCORECARD_RUNS_PATH = 'src/data/scorecard-runs.json';
 
 export const GITHUB_REPO = process.env.STEWARD_GITHUB_REPO ?? 'mattpyle/mattpyle.com-website';
 
+/**
+ * Where run-health signals are sent: the project ping base of the external
+ * dead-man's-switch service, e.g. `https://hc-ping.com/<ping-key>`.
+ *
+ * **One value for every signal.** `lib/run-health.ts` appends a per-check slug,
+ * so a new signal is a code constant rather than another variable to set in two
+ * places and forget in one. Unset means alerting is off, which is the state of a
+ * fresh clone and of every test process, and every send path treats it as a
+ * no-op rather than an error (`lib/health-ping.ts`).
+ *
+ * Configuration, not a secret in the sense the other three are — but it is still
+ * read from the environment at execution time inside an activity and never put
+ * into a workflow input, because a URL frozen into history is a URL that cannot
+ * be changed for runs already open (spec §13).
+ */
+export const HEALTHCHECK_BASE = (process.env.STEWARD_HEALTHCHECK_BASE ?? '').replace(/\/+$/, '');
+
 export const MODEL = process.env.STEWARD_MODEL ?? 'claude-sonnet-4-6';
 
 export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
