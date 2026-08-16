@@ -228,8 +228,8 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
  * The alerting leg (audit-stack-alerting-and-monitoring card, 2026-08-15).
  *
  * Wrapped around the run rather than appended to it, because the failure this
- * exists to catch is not only a bad result — it is *no* result. Three paths, and
- * every one of them ends in a signal:
+ * exists to catch is not only a bad result: it is *no* result. Three paths, and
+ * the only one that stays quiet is the healthy manual run:
  *
  * 1. A **scheduled** run signals `nightly-scorecard`, success or failure. That
  *    check is a dead-man's switch: a worker that never runs sends nothing, its
@@ -274,8 +274,9 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
         ok: false,
         summary:
           `Scorecard run (${input.triggeredBy}) failed: ${describeActivityError(err)}. ` +
-          'No run-log PR and no archive record were written. The workflow history in Temporal ' +
-          'Cloud carries the failing activity.',
+          'How much of the run survived depends on where it died: a failure before step 4 wrote ' +
+          'nothing at all, and one at the archive leg may have opened a run-log PR already. The ' +
+          'workflow history in Temporal Cloud names the failing activity.',
       },
     });
     throw err;
