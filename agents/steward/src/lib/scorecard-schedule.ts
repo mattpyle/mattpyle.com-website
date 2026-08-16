@@ -29,10 +29,10 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
  *
  * The remaining honest limit is narrower and worth stating plainly: the run
  * depends on Temporal Cloud, on the Railway container, and on GitHub. None of
- * those is Matt's laptop, and none of them is monitored yet
- * (audit-stack-alerting-and-monitoring card). A silently dead container
- * produces no runs and, today, no alarm — `numActionsMissedCatchupWindow` and
- * the run-log's own dates are the only tells.
+ * those is Matt's laptop. All three are watched since 2026-08-15
+ * (audit-stack-alerting-and-monitoring card): the run pings a dead-man's-switch
+ * check on success and fails it on a bad result, so a silently dead container
+ * is an email rather than a gap somebody notices in the run-log's dates.
  */
 
 /** The one Schedule this system owns. Singular by design — one site, one audit. */
@@ -364,7 +364,8 @@ export async function runScorecardScheduleAction(
     lines.push(describeNext(description.info.nextActionTimes, timeZone));
     lines.push(
       'It fires in Temporal Cloud and runs on the hosted worker, so it does not need this ' +
-        'machine. It does need the Railway container to be alive — nothing alerts on that yet.',
+        'machine. It does need the Railway container to be alive; a run that fails, comes out ' +
+        'wrong-shaped, or never happens raises an email (steward-nightly-scorecard).',
     );
     return { action, scheduleId: SCORECARD_SCHEDULE_ID, lines };
   }

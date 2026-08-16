@@ -29,6 +29,10 @@ export {
   auditRenderedPage,
   assembleDeepAudit,
 } from './agent-audit.js';
+// Alerting (audit-stack-alerting-and-monitoring card). On the audit queue with
+// the workflows that schedule them: both make one HTTP call and touch nothing
+// local.
+export { reportRunHealth, checkCredentialExpiry } from './health.js';
 export {
   resolveAuditUrls,
   resolveRunStamp,

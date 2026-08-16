@@ -8,6 +8,10 @@ import {
   type PublishDecision,
   type ScorecardRunRecord,
 } from '../lib/scorecard-aggregate.js';
+// Pure, and imported into the sandbox on purpose: it has no imports of its own,
+// reads no clock and touches no environment, so the rule that defines a bad run
+// is the same object the workflow and its tests both hold.
+import { scorecardRunShape, type RunShape } from '../lib/run-health.js';
 
 /**
  * `scorecardAuditWorkflow` (scorecard-audit-spec.md §4.2) — audits the live
@@ -139,6 +143,15 @@ const light = {
     startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 3 },
   }),
+  // Alerting. One attempt and a short deadline, because the activity retries the
+  // HTTP call itself and never throws — a second *activity* attempt would only
+  // repeat a decision that already gave up, and a long deadline would let a
+  // hanging monitoring service hold a finished run open.
+  alerting: wf.proxyActivities<Pick<typeof activities, 'reportRunHealth' | 'checkCredentialExpiry'>>({
+    taskQueue: QUEUE_AUDIT,
+    startToCloseTimeout: '1 minute',
+    retry: { maximumAttempts: 1 },
+  }),
 };
 
 /**
@@ -211,7 +224,91 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
   return results;
 }
 
+/**
+ * The alerting leg (audit-stack-alerting-and-monitoring card, 2026-08-15).
+ *
+ * Wrapped around the run rather than appended to it, because the failure this
+ * exists to catch is not only a bad result: it is *no* result. Three paths, and
+ * the only one that stays quiet is the healthy manual run:
+ *
+ * 1. A **scheduled** run signals `nightly-scorecard`, success or failure. That
+ *    check is a dead-man's switch: a worker that never runs sends nothing, its
+ *    period lapses, and the alerting service emails about the silence. This is
+ *    the only path that resets it, which is why a manual run must not.
+ * 2. A **manual** run signals nothing when it is healthy and fails `run-shape`
+ *    when it is not. A `--dry-run` smoke test at two in the afternoon is not
+ *    evidence that the nightly job is alive, and letting it say so would be a
+ *    dead-man's switch that a human can hold down by accident.
+ * 3. Either kind, on a **bad shape**, fails its check explicitly rather than
+ *    waiting for the window to lapse. `scorecardRunShape` is the rule, and the
+ *    run reports itself exactly as it always did — the alert reads the record,
+ *    it does not change it.
+ *
+ * The credential check rides on the scheduled run (task 4): a daily job that
+ * already exists, for a warning window measured in weeks. It runs **first**, so
+ * a run that later dies on an expired token has already said so.
+ */
 export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promise<ScorecardAuditResult> {
+  const scheduled = input.triggeredBy === 'schedule';
+
+  if (scheduled) {
+    const expiry = await light.alerting.checkCredentialExpiry();
+    wf.log.info('credential expiry checked', {
+      due: expiry.dueCount,
+      sent: expiry.sent,
+      summary: expiry.summary,
+    });
+  }
+
+  let ran: { result: ScorecardAuditResult; shape: RunShape };
+  try {
+    ran = await runScorecardAudit(input);
+  } catch (err) {
+    // A run that threw produced no record to read a shape off, so the summary is
+    // the failure itself. The signal is the scheduled check when there is one:
+    // "the nightly run did not happen" is the same news whether it never started
+    // or died at step 3.
+    await light.alerting.reportRunHealth({
+      signal: scheduled ? 'nightly-scorecard' : 'run-shape',
+      shape: {
+        ok: false,
+        summary:
+          `Scorecard run (${input.triggeredBy}) failed: ${describeActivityError(err)}. ` +
+          'How much of the run survived depends on where it died: a failure before step 4 wrote ' +
+          'nothing at all, and one at the archive leg may have opened a run-log PR already. The ' +
+          'workflow history in Temporal Cloud names the failing activity.',
+      },
+    });
+    throw err;
+  }
+
+  if (scheduled || !ran.shape.ok) {
+    const outcome = await light.alerting.reportRunHealth({
+      signal: scheduled ? 'nightly-scorecard' : 'run-shape',
+      shape: ran.shape,
+    });
+    wf.log.info('run health reported', {
+      ok: ran.shape.ok,
+      signal: outcome.signal,
+      sent: outcome.sent,
+    });
+  }
+
+  return ran.result;
+}
+
+/**
+ * The run itself, unchanged by the alerting leg above it.
+ *
+ * It returns the verdict alongside the result rather than letting the caller
+ * derive one, because the caller cannot: `perPage` on the result flattens a
+ * failed page to empty scores and zero violations, which is indistinguishable
+ * from a page that genuinely scored zero. `PageAuditOutcome` still knows, and it
+ * only exists in here.
+ */
+async function runScorecardAudit(
+  input: ScorecardAuditInput,
+): Promise<{ result: ScorecardAuditResult; shape: RunShape }> {
   // --- Step 0: resolve the audit set --------------------------------------
   const overridden = Boolean(input.urls && input.urls.length > 0);
   const resolved = overridden
@@ -322,7 +419,16 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
     dryRun: input.publishMode === 'dry-run',
   });
 
-  return { decision: decision.decision, reason: decision.reason, prUrl, record, perPage: perPageSummary };
+  return {
+    result: { decision: decision.decision, reason: decision.reason, prUrl, record, perPage: perPageSummary },
+    // Read off `perPage`, which still carries each page's `ok`, before the
+    // summary above flattens it.
+    shape: scorecardRunShape({
+      pages: perPage.map((p) => ({ url: p.url, ok: p.ok, error: p.ok ? undefined : p.error })),
+      decision: decision.decision,
+      iso,
+    }),
+  };
 }
 
 /**
