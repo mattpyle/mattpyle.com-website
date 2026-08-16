@@ -9,21 +9,56 @@
  * stage-2 card's blocker list, and it is enforced from the first request the endpoint ever answers.
  * There is no unlimited window, not even a day of one.
  *
- * Two limits, both fixed-window, both env-configurable:
+ * Two tiers, two limits each, all fixed-window and all env-configurable:
  *
- * | Limit | Default | Window | Key |
- * |---|---|---|---|
- * | Per caller | 10 audits | rolling hour, aligned to the epoch | `mcp:v1:caller:<hmac>:<window>` |
- * | Global | 500 audits | UTC day | `mcp:v1:global:<utc-day>` |
+ * | Tier | Limit | Default | Window | Key |
+ * |---|---|---|---|---|
+ * | fast | Per caller | 10 audits | rolling hour, aligned to the epoch | `mcp:v1:caller:<hmac>:<window>` |
+ * | fast | Global | 500 audits | UTC day | `mcp:v1:global:<utc-day>` |
+ * | deep | Per caller | 2 audits | UTC day | `mcp:v1:deep:caller:<hmac>:<utc-day>` |
+ * | deep | Global | 10 audits | UTC day | `mcp:v1:deep:global:<utc-day>` |
+ *
+ * **Why the deep numbers are two orders of magnitude smaller.** A fast audit is a
+ * dozen HTTP round trips inside the function that answered the request: it prices
+ * seconds of function time, and the cost that bounds it is the target's origin
+ * rather than this site's bill. A deep audit starts a durable workflow that
+ * renders up to three of the target's pages in a real browser on a paid always-on
+ * worker. It prices minutes of worker and Temporal Cloud time, and it is the first
+ * thing on this site a stranger can spend real money on. Ten a day is the ceiling
+ * that makes the worst case — somebody finds the endpoint and loops it — a number
+ * Matt can look at rather than an incident. Two per caller is enough to try it,
+ * read the report, and try a second site.
+ *
+ * The cap is also standing in for a concurrency limit the worker does not have.
+ * Measured 2026-08-15: two deep audits started a second apart both rendered at
+ * once on the one hosted worker, because nothing sets
+ * `maxConcurrentActivityTaskExecutions` on it. That is the `marky` contention the
+ * scorecard's `AUDIT_CONCURRENCY` docblock warns about, reachable by strangers for
+ * the first time. Ten a day bounds how bad that can get; it does not fix it.
+ *
+ * **The two tiers count separately, and neither spends the other's budget.** A
+ * deep call touches only the deep counters. That is deliberate: charging a deep
+ * audit against the fast tier's hourly allowance would let one deep run lock a
+ * caller out of the cheap tier, and the two costs have nothing to do with each
+ * other.
+ *
+ * **No operator bypass, decided 2026-08-15.** There is no header, token or
+ * allowlist that skips these counters, because a bypass on a public surface is an
+ * authentication story the endpoint would then have to keep. Matt's own runs go
+ * through the CLI or a direct workflow start, both of which never touch this file;
+ * for testing the endpoint itself, the user guide documents deleting the day's
+ * counter keys from the Upstash console.
  *
  * The environment it reads, all of it optional except the first:
  *
  * | Variable | Effect |
  * |---|---|
  * | `MCP_AUDIT_RATE_SECRET` | The HMAC key. **Required** — absent, every audit is refused. |
- * | `MCP_AUDIT_RATE_PER_CALLER` | Audits one caller may run per window. Default 10. |
- * | `MCP_AUDIT_RATE_WINDOW_SECONDS` | The per-caller window. Default 3600. |
- * | `MCP_AUDIT_RATE_GLOBAL_PER_DAY` | Audits the endpoint runs per UTC day. Default 500. |
+ * | `MCP_AUDIT_RATE_PER_CALLER` | Fast audits one caller may run per window. Default 10. |
+ * | `MCP_AUDIT_RATE_WINDOW_SECONDS` | The fast per-caller window. Default 3600. |
+ * | `MCP_AUDIT_RATE_GLOBAL_PER_DAY` | Fast audits the endpoint runs per UTC day. Default 500. |
+ * | `MCP_DEEP_RATE_PER_CALLER` | Deep audits one caller may start per UTC day. Default 2. |
+ * | `MCP_DEEP_RATE_GLOBAL_PER_DAY` | Deep audits the endpoint starts per UTC day. Default 10. |
  * | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | The store. `KV_REST_API_URL` / `_TOKEN` is read too. |
  *
  * Setting the secret is what turns the endpoint on, which is the right way round: a deploy that
@@ -70,6 +105,15 @@ export const DEFAULT_PER_CALLER = 10;
 export const DEFAULT_WINDOW_SECONDS = 3600;
 export const DEFAULT_GLOBAL_PER_DAY = 500;
 
+/**
+ * The deep tier's, both per UTC day. See the module docblock for why they are
+ * this much smaller than the fast tier's; the short version is that a deep audit
+ * spends minutes of paid worker time where a fast one spends seconds of function
+ * time.
+ */
+export const DEFAULT_DEEP_PER_CALLER = 2;
+export const DEFAULT_DEEP_GLOBAL_PER_DAY = 10;
+
 /** One request's worth of budget against the store. Past this the audit is refused, not admitted. */
 const STORE_TIMEOUT_MS = 1500;
 
@@ -98,6 +142,28 @@ export function readLimits(env) {
     perCaller: positive(env.MCP_AUDIT_RATE_PER_CALLER, DEFAULT_PER_CALLER),
     windowSeconds: positive(env.MCP_AUDIT_RATE_WINDOW_SECONDS, DEFAULT_WINDOW_SECONDS),
     globalPerDay: positive(env.MCP_AUDIT_RATE_GLOBAL_PER_DAY, DEFAULT_GLOBAL_PER_DAY),
+  };
+}
+
+/**
+ * The deep tier's limits, from the environment, with the same
+ * malformed-falls-back-to-the-default rule as `readLimits`.
+ *
+ * There is no window variable: both deep limits are the UTC day, and that is a
+ * design choice rather than a default. An hourly deep allowance would let one
+ * caller spend the day's global cap in a few hours of patient looping, and the
+ * cost being bounded here is a daily bill.
+ *
+ * @param {Record<string, string | undefined>} env
+ */
+export function readDeepLimits(env) {
+  const positive = (raw, fallback) => {
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+  };
+  return {
+    perCaller: positive(env.MCP_DEEP_RATE_PER_CALLER, DEFAULT_DEEP_PER_CALLER),
+    globalPerDay: positive(env.MCP_DEEP_RATE_GLOBAL_PER_DAY, DEFAULT_DEEP_GLOBAL_PER_DAY),
   };
 }
 
@@ -198,6 +264,23 @@ export function globalKeyFor(day) {
 }
 
 /**
+ * `mcp:v1:deep:caller:<hmac>:<utc-day>` — one caller, one UTC day, deep tier.
+ *
+ * A separate key space rather than a shared counter with a different limit, so
+ * the two tiers' arithmetic cannot interfere: a fast audit can never consume a
+ * deep slot, and the operator reset documented in the user guide can drop the
+ * day's deep counters without touching the fast tier's.
+ */
+export function deepCallerKeyFor(hash, day) {
+  return `mcp:${KEY_VERSION}:deep:caller:${hash}:${day}`;
+}
+
+/** `mcp:v1:deep:global:<utc-day>` — everyone, one UTC day, deep tier. */
+export function deepGlobalKeyFor(day) {
+  return `mcp:${KEY_VERSION}:deep:global:${day}`;
+}
+
+/**
  * One counter's worth of Redis: increment it, then set its TTL to the time left in its window.
  *
  * `EXPIRE` unconditionally rather than `EXPIRE … NX`, and that is safe precisely because the window
@@ -248,19 +331,34 @@ async function increment(store, fetchImpl, key, ttlSeconds) {
  * Counted before the audit rather than after, so a caller cannot hold ten slow audits open at once
  * by never letting any of them finish.
  *
+ * `tier` picks which pair of counters is touched, and nothing else about the
+ * function changes: the secret, the store, the fail-closed posture and the
+ * caller-before-global ordering are the same for both, because the properties
+ * they hold are the same for both.
+ *
  * @param {{
  *   ip: string | null,
+ *   tier?: 'fast' | 'deep',
  *   env?: Record<string, string | undefined>,
  *   now?: Date,
  *   fetchImpl?: typeof fetch,
  * }} input
- * @returns {Promise<{ allowed: true, caller: { used: number, limit: number },
+ * @returns {Promise<{ allowed: true, tier: 'fast' | 'deep',
+ *                     caller: { used: number, limit: number },
  *                     global: { used: number, limit: number } }
- *                 | { allowed: false, scope: string, reason: string, retryAfterSeconds: number,
- *                     used?: number, limit?: number }>}
+ *                 | { allowed: false, tier: 'fast' | 'deep', scope: string, reason: string,
+ *                     retryAfterSeconds: number, used?: number, limit?: number }>}
  */
-export async function checkRateLimit({ ip, env = process.env, now = new Date(), fetchImpl = fetch }) {
-  const limits = readLimits(env);
+export async function checkRateLimit({
+  ip,
+  tier = 'fast',
+  env = process.env,
+  now = new Date(),
+  fetchImpl = fetch,
+}) {
+  const fast = readLimits(env);
+  const deep = readDeepLimits(env);
+  const limits = tier === 'deep' ? deep : fast;
   const secret = env.MCP_AUDIT_RATE_SECRET;
 
   // The three refusals that are the endpoint's own fault. Each says which, because an operator
@@ -268,6 +366,7 @@ export async function checkRateLimit({ ip, env = process.env, now = new Date(), 
   if (!secret) {
     return {
       allowed: false,
+      tier,
       scope: 'config',
       reason: 'the endpoint has no rate-limit secret configured, so it cannot tell callers apart',
       retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,
@@ -277,6 +376,7 @@ export async function checkRateLimit({ ip, env = process.env, now = new Date(), 
   if (!store) {
     return {
       allowed: false,
+      tier,
       scope: 'store',
       reason: 'the endpoint has no rate-limit store configured',
       retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,
@@ -285,41 +385,48 @@ export async function checkRateLimit({ ip, env = process.env, now = new Date(), 
   if (!ip) {
     return {
       allowed: false,
+      tier,
       scope: 'caller-unknown',
       reason: 'the request carried no client address, so it cannot be rate limited',
       retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,
     };
   }
 
-  const window = windowFor(now, limits.windowSeconds);
   const day = utcDayFor(now);
+  const hash = callerHash(ip, secret);
+  // The two tiers differ in exactly two places: which keys are incremented, and
+  // how long the per-caller window is. The deep tier's per-caller window is the
+  // UTC day, so both of its counters expire together.
+  const window = tier === 'deep' ? day : windowFor(now, fast.windowSeconds);
+  const callerKey =
+    tier === 'deep' ? deepCallerKeyFor(hash, day.day) : callerKeyFor(hash, window.index);
+  const globalKey = tier === 'deep' ? deepGlobalKeyFor(day.day) : globalKeyFor(day.day);
+  const unit = tier === 'deep' ? 'deep audits' : 'audits';
+  const per = tier === 'deep' ? 'today' : 'in the current window';
 
   try {
     // Caller first, and only then global: a caller past their own limit must not spend the day's
     // allowance on the way to being refused.
-    const callerUsed = await increment(
-      store,
-      fetchImpl,
-      callerKeyFor(callerHash(ip, secret), window.index),
-      window.secondsRemaining,
-    );
+    const callerUsed = await increment(store, fetchImpl, callerKey, window.secondsRemaining);
     if (callerUsed > limits.perCaller) {
       return {
         allowed: false,
+        tier,
         scope: 'caller',
-        reason: `this caller has used ${limits.perCaller} audits in the current window`,
+        reason: `this caller has used ${limits.perCaller} ${unit} ${per}`,
         retryAfterSeconds: window.secondsRemaining,
         used: callerUsed,
         limit: limits.perCaller,
       };
     }
 
-    const globalUsed = await increment(store, fetchImpl, globalKeyFor(day.day), day.secondsRemaining);
+    const globalUsed = await increment(store, fetchImpl, globalKey, day.secondsRemaining);
     if (globalUsed > limits.globalPerDay) {
       return {
         allowed: false,
+        tier,
         scope: 'global',
-        reason: `this endpoint has run ${limits.globalPerDay} audits today`,
+        reason: `this endpoint has run ${limits.globalPerDay} ${unit} today`,
         retryAfterSeconds: day.secondsRemaining,
         used: globalUsed,
         limit: limits.globalPerDay,
@@ -328,6 +435,7 @@ export async function checkRateLimit({ ip, env = process.env, now = new Date(), 
 
     return {
       allowed: true,
+      tier,
       caller: { used: callerUsed, limit: limits.perCaller },
       global: { used: globalUsed, limit: limits.globalPerDay },
     };
@@ -335,6 +443,7 @@ export async function checkRateLimit({ ip, env = process.env, now = new Date(), 
     // The whole posture of this module, in one branch. An audit that cannot be counted does not run.
     return {
       allowed: false,
+      tier,
       scope: 'store',
       reason: `the rate-limit store could not be reached: ${error instanceof Error ? error.name : 'error'}`,
       retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,

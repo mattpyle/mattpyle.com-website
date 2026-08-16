@@ -22,6 +22,8 @@ import {
   DEFAULT_PER_CALLER,
   DEFAULT_GLOBAL_PER_DAY,
   DEFAULT_WINDOW_SECONDS,
+  DEFAULT_DEEP_PER_CALLER,
+  DEFAULT_DEEP_GLOBAL_PER_DAY,
 } from '../lib/mcp-rate-limit.mjs';
 
 /**
@@ -54,6 +56,12 @@ const callSnippet = `curl -sS ${ENDPOINT} \\
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
        "params":{"name":"audit_site","arguments":{"url":"example.com"}}}'`;
 
+const deepCallSnippet = `curl -sS ${ENDPOINT} \\
+  -H 'Content-Type: application/json' \\
+  -H 'Accept: application/json, text/event-stream' \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"deep_audit","arguments":{"url":"example.com"}}}'`;
+
 const title = 'Steward';
 const seoTitle = 'Steward, the auditor that fetched your site';
 const description =
@@ -71,7 +79,7 @@ const extraJsonLd = [
     name: title,
     description,
     url: canonical,
-    dateModified: '2026-08-12',
+    dateModified: '2026-08-15',
     author: { '@id': personId },
     publisher: { '@id': personId },
     mainEntityOfPage: canonical,
@@ -135,7 +143,11 @@ const extraJsonLd = [
           </tr>
           <tr>
             <th scope="row">Cost of one audit</th>
-            <td>Roughly a dozen HTTP requests, spread over a few seconds.</td>
+            <td>
+              Roughly a dozen HTTP requests, spread over a few seconds. A deep audit adds up to
+              three of your pages opened in a real browser, which fetch their own subresources the
+              way any visitor's browser does.
+            </td>
           </tr>
           <tr>
             <th scope="row">Frequency</th>
@@ -179,9 +191,11 @@ const extraJsonLd = [
       </p>
       <p>
         So there are two tiers. The <strong>fast tier</strong> is the {STEWARD_FAST_CHECKS.length}
-        checks below: plain HTTP, seconds, and the tier behind the public endpoint. The
-        <strong>deep tier</strong> renders pages in a real browser and runs Lighthouse and axe over
-        them; it stays local and hand-run, because it costs a site far more than a dozen requests.
+        checks below: plain HTTP, seconds, and the report comes back in the call. The
+        <strong>deep tier</strong> opens up to three of the site's own pages in a real browser and
+        reports Lighthouse's per-axis scores and axe-core's violation counts across them. It costs
+        a site far more than a dozen requests, so it is capped much harder and it takes minutes
+        rather than seconds.
       </p>
       <p>
         It checks behaviour rather than presence. A <code>200</code> from <code>/llms.txt</code> that
@@ -228,8 +242,9 @@ const extraJsonLd = [
       <h2 id="run-one">How do I run an audit myself?</h2>
       <p>
         Point an MCP client at <code>{ENDPOINT}</code>. It is a stateless streamable-HTTP server
-        with one tool, <code>audit_site(url)</code>, and the report comes back in the call — there is
-        nothing to poll and no second request to make. No account and no key.
+        with three tools. Start with <code>audit_site(url)</code>: it runs the fast checks and the
+        report comes back in the call — there is nothing to poll and no second request to make. No
+        account and no key.
       </p>
       <pre><code>{callSnippet}</code></pre>
       <p>
@@ -244,11 +259,45 @@ const extraJsonLd = [
         networks are refused before a connection is opened.
       </p>
 
+      <h3>The deep tier: <code>deep_audit</code> and <code>get_audit</code></h3>
+      <p>
+        The same endpoint carries the browser-rendered tier, and it has a different shape because it
+        has a different cost. A deep audit takes minutes, which is longer than any MCP client holds
+        a tool call open, so <code>deep_audit(url)</code> returns a workflow ID straight away and
+        <code>get_audit(workflowId, view)</code> reads it back. There are no findings in the
+        <code>deep_audit</code> response, and it says so.
+      </p>
+      <pre><code>{deepCallSnippet}</code></pre>
+      <p>
+        Poll <code>get_audit</code> with <code>view: "status"</code> until <code>done</code> is
+        true, then read <code>view: "report"</code> for the canonical JSON or
+        <code>"summary"</code> for markdown. While it runs, the status view lists each unit of work
+        with its state, and anything being retried carries its attempt number, straight from
+        Temporal rather than from a count kept by hand.
+      </p>
+      <p>
+        <strong>If your audit says it is queued, it is.</strong> There is one worker behind this
+        endpoint, so a busy moment is a real wait rather than a slow site. The status view answers
+        <code>queued: true</code> with a <code>queuePosition</code> when nothing has picked your run
+        up yet, and it says so plainly rather than leaving you to guess. Either way the audit is
+        durable: it survives a worker restart, and the workflow ID keeps answering.
+      </p>
+      <p>
+        <strong>If a finished report is incomplete, it says so.</strong> A deep audit that sampled
+        pages and rendered none of them comes back marked <code>integrity: degraded</code>, in the
+        report and in the status view, with a line saying which half is missing and which half can
+        still be read. A report that quietly reads as clean when the browser produced nothing is the
+        one failure mode worth building a rule against.
+      </p>
+      <p><strong>Powered by <a href="https://temporal.io" rel="noopener">Temporal</a>.</strong> Matt
+        works at Temporal, so that is disclosure as much as it is a credit.</p>
+
       <h3>What are the limits?</h3>
       <table>
         <caption class="sr-only">Rate limits on the public endpoint</caption>
         <thead>
           <tr>
+            <th scope="col">Tier</th>
             <th scope="col">Limit</th>
             <th scope="col">Default</th>
             <th scope="col">Window</th>
@@ -256,23 +305,45 @@ const extraJsonLd = [
         </thead>
         <tbody>
           <tr>
+            <td>Fast</td>
             <td>Per caller</td>
             <td>{DEFAULT_PER_CALLER} audits</td>
             <td>{windowHours === 1 ? 'One hour' : `${windowHours} hours`}</td>
           </tr>
           <tr>
+            <td>Fast</td>
             <td>Everyone together</td>
             <td>{DEFAULT_GLOBAL_PER_DAY} audits</td>
+            <td>One UTC day</td>
+          </tr>
+          <tr>
+            <td>Deep</td>
+            <td>Per caller</td>
+            <td>{DEFAULT_DEEP_PER_CALLER} audits</td>
+            <td>One UTC day</td>
+          </tr>
+          <tr>
+            <td>Deep</td>
+            <td>Everyone together</td>
+            <td>{DEFAULT_DEEP_GLOBAL_PER_DAY} audits</td>
             <td>One UTC day</td>
           </tr>
         </tbody>
       </table>
       <p>
         A refusal is a JSON-RPC error with a <code>Retry-After</code> header, naming which limit was
-        hit and how long to wait. The limits exist because every accepted call spends a dozen
+        hit and how long to wait. The fast limits exist because every accepted call spends a dozen
         requests at a third party's origin under this site's name; an unbounded endpoint would be an
-        open relay with an honest User-Agent. The counter holds a keyed hash of the caller's address
-        with a lifetime no longer than the window, never the address itself.
+        open relay with an honest User-Agent. The deep limits are two orders of magnitude smaller
+        because a deep audit spends minutes of browser time on a machine somebody pays for, where a
+        fast one spends seconds inside the function that answered you. The counters hold a keyed
+        hash of the caller's address with a lifetime no longer than the window, never the address
+        itself.
+      </p>
+      <p>
+        There is no key, no account, and no way to ask for more. <code>get_audit</code> is free to
+        call as often as you like: it reads a run you already paid for and makes no request at
+        anybody's origin.
       </p>
     </section>
 

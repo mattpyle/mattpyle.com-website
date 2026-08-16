@@ -23,6 +23,7 @@ import {
   type RenderedPageOutcome,
   type SkippedPage,
 } from '../lib/agent-audit/deep-assemble.js';
+import { reportIntegrity } from '../lib/agent-audit/report-shape.js';
 import { sendHealthPing } from '../lib/health-ping.js';
 import { deepAuditShape } from '../lib/run-health.js';
 import { startVettingProxy } from '../lib/agent-audit/vetting-proxy.js';
@@ -306,6 +307,12 @@ export async function assembleDeepAudit(input: AssembleDeepAuditInput): Promise<
     ...blockedNotes(mergeBlocked(pages)),
   ];
 
+  // The report-shape invariant, stamped on the document rather than only alerted
+  // on: a deep audit that rendered zero of a nonzero sample must not be able to
+  // hand a caller a report that reads as clean. `get_audit`'s views serve this
+  // field, and the alert below reads the same predicate.
+  const integrity = reportIntegrity({ sampled: input.sample.length, rendered: pages.length });
+
   const audit = assembleResult({
     input: fast.target.input,
     origin: fast.target.origin,
@@ -313,6 +320,7 @@ export async function assembleDeepAudit(input: AssembleDeepAuditInput): Promise<
     finishedAt: new Date().toISOString(),
     requests: fast.requests,
     browserPages: pages.length,
+    integrity,
     checks,
     notes,
   });

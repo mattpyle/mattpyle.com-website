@@ -127,10 +127,18 @@ function walk(entry) {
 const entry = path.join(stewardRoot, stewardPackage.exports['./agent-audit/fast'].default);
 const graph = walk(entry);
 
-test('the package publishes the fast-tier entry and nothing else', () => {
-  // One entry is the whole design: every additional one is an import graph the site's function
-  // bundle inherits, and none of the rest of Steward is meant to leave the workspace.
-  assert.deepEqual(Object.keys(stewardPackage.exports), ['./agent-audit/fast']);
+test('the package publishes exactly the two entries the /mcp function needs', () => {
+  // Every entry is an import graph the site's function bundle inherits, and none of the rest of
+  // Steward is meant to leave the workspace. The list is asserted rather than bounded so that
+  // adding a third is a deliberate act with an argument attached, per the root CLAUDE.md rule.
+  //
+  // The second entry, added 2026-08-15 for the public deep tier, is affordable because its graph
+  // is empty of value imports — it publishes names and types, not code. That is checked by
+  // tests/steward-deep-contract-packaging.test.mjs rather than assumed here.
+  assert.deepEqual(Object.keys(stewardPackage.exports), [
+    './agent-audit/fast',
+    './agent-audit/deep-contract',
+  ]);
 });
 
 test('nothing in the fast tier reaches Temporal, Chrome, Lighthouse or axe', () => {

@@ -6,11 +6,15 @@
   "bin": {
     "steward": "./scripts/steward.mjs"
   },
-  "//exports": "One entry, and only one: the fast-tier audit the site's /mcp function serves. Steward has no build step, so this points at TypeScript source and the site's Vite build transpiles it (astro.config.mjs lists the package in ssr.noExternal). Adding an entry here is adding a public surface, and every new one is a new import graph the site's function bundle inherits — see the docblock in src/lib/agent-audit/fast.ts and tests/steward-fast-audit-packaging.test.mjs in the site repo.",
+  "//exports": "Two entries, both for the site's /mcp function, both guarded by a packaging test in the site repo. './agent-audit/fast' is the fast-tier audit the function runs in-process; its graph may reach undici and node: and nothing else. './agent-audit/deep-contract' is the deep tier's names and types — workflow type, task queue, query name, ID scheme, budgets, state shape — and its graph is required to be EMPTY of value imports, so it adds nothing to the function bundle at all. Steward has no build step, so both point at TypeScript source and the site's Vite build transpiles them (astro.config.mjs lists the package in ssr.noExternal). Adding a third entry is adding a public surface and a new import graph the function bundle inherits — make the argument in the change, per the root CLAUDE.md rule. See src/lib/agent-audit/fast.ts, src/lib/agent-audit/deep-contract.ts, and tests/steward-*-packaging.test.mjs in the site repo.",
   "exports": {
     "./agent-audit/fast": {
       "types": "./src/lib/agent-audit/fast.ts",
       "default": "./src/lib/agent-audit/fast.ts"
+    },
+    "./agent-audit/deep-contract": {
+      "types": "./src/lib/agent-audit/deep-contract.ts",
+      "default": "./src/lib/agent-audit/deep-contract.ts"
     }
   },
   "scripts": {

@@ -1,5 +1,5 @@
 /**
- * The MCP server the /mcp endpoint serves: one tool, and the shape of what it hands back.
+ * The MCP server the /mcp endpoint serves: its tools, and the shape of what they hand back.
  *
  * Pure in the sense that matters here — it imports the MCP SDK and zod and nothing of this site's,
  * and the audit itself arrives as an injected function. That is what lets tests/mcp-audit-server
@@ -8,23 +8,32 @@
  * transpiles, and a plain `node --test` run cannot load it. The transport file makes the import and
  * passes the function in. Same split as src/lib/a2a-responder.mjs and src/pages/a2a.ts.
  *
- * **One tool, and the report comes back in the call.** The stage-1 local server's `audit_site`
- * starts a Temporal workflow and returns an ID, because a deep audit is minutes long and no MCP
- * client holds a tool call open that long. The public tier is the fast checks only, which is
- * seconds, so it answers synchronously — and that is not merely convenient. Chat clients
- * (claude.ai, Claude desktop, Cowork) call tools but cannot read resources, so a report reachable
- * only through a resource is unreachable from the largest population of agents; the stage-2 card's
- * design-input rule is that every document a caller needs is reachable through a tool. A
- * synchronous call satisfies it by construction: there is nothing to fetch afterwards.
+ * **Two tiers, two shapes, and the shape follows from the cost.** `audit_site` is the fast checks —
+ * a dozen HTTP round trips, seconds — so it runs inside the function that answered the request and
+ * the report comes back in the call. `deep_audit` renders pages in a real browser on a hosted
+ * worker and takes minutes, past what any MCP client holds a tool call open for, so it returns a
+ * durable handle and `get_audit` reads it back. Neither shape is a preference; each is the only one
+ * its tier can have.
+ *
+ * The deep half is registered only when the transport hands this file a Temporal connection, so a
+ * deployment without one serves the fast tool alone and a test can drive that tool with no Temporal
+ * anywhere.
+ *
+ * **Every document is reachable through a tool, and this server registers no resources at all.**
+ * Chat clients (claude.ai, Claude desktop, Cowork) call tools but cannot read resources, so a report
+ * reachable only through a resource is unreachable from the largest population of agents. That is
+ * the stage-2 card's design-input rule; the fast tool satisfies it by construction, and `get_audit`
+ * is what satisfies it for the deep tier.
  *
  * Both renderings ship in the one response. The canonical JSON goes in `structuredContent`, for a
  * caller that wants to reason about individual checks; the markdown summary goes in the text
  * content, for a caller that is going to read it to a person. They are the same measurement — the
  * markdown is a pure function of the JSON — so the two cannot disagree.
  *
- * There is no tier switch on the tool. The deep tier renders pages in a real browser and stays CLI
- * and local (stage-2 card); an argument that can only take one value is a promise the endpoint
- * would have to keep later.
+ * There is no tier switch argument on either tool, and there are two tool names instead. A `deep:
+ * true` flag on `audit_site` would make one tool answer synchronously sometimes and asynchronously
+ * otherwise, which is two contracts wearing one name — and a client that passed the flag by
+ * accident would get a workflow ID where it expected findings.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -41,8 +50,28 @@ import { z } from 'zod';
  */
 export const SERVER_NAME = 'steward-audit';
 
-/** The one tool. Named here so the endpoint's GET help and the tests read it from one place. */
+/** The fast tool. Named here so the endpoint's GET help and the tests read it from one place. */
 export const TOOL_NAME = 'audit_site';
+
+/**
+ * The deep tier's two tools, registered only when the endpoint has a Temporal
+ * connection to hand them (`createAuditServer`'s `deep` argument).
+ *
+ * Two rather than one for the reason stage 1 established and nothing since has
+ * changed: a deep audit renders pages in a real browser and takes minutes, which
+ * is longer than any MCP client holds a tool call open, so `deep_audit` hands back
+ * a durable handle and `get_audit` reads it. That is not a convenience — it is the
+ * only shape in which this tool can exist at all.
+ *
+ * **Tools, not resources.** The chat clients that make up the largest population
+ * of agents — claude.ai, Claude desktop, Cowork — call tools and do not read
+ * resources, so a report reachable only through a resource is unreachable from
+ * most of the callers this endpoint exists for. The stage-2 rule stands: every
+ * document a caller needs is reachable through a tool. This endpoint registers no
+ * resources at all, which is the same rule with nothing left over.
+ */
+export const DEEP_TOOL_NAME = 'deep_audit';
+export const GET_AUDIT_TOOL_NAME = 'get_audit';
 
 /**
  * The output schema, mirroring the audit document's top level and going no deeper.
@@ -89,18 +118,33 @@ const AUDIT_OUTPUT_SHAPE = {
  * transport already imports; nothing here is a copy that can go stale.
  *
  * @param {string} userAgent the string the audit's requests actually carry
+ * @param {boolean} withDeep whether the deep tools are registered on this server
  * @returns {string}
  */
-function instructionsFor(userAgent) {
+function instructionsFor(userAgent, withDeep) {
+  const base =
+    'Audits any website for agent-readiness. It checks what a site says about itself over plain ' +
+    'HTTP: robots.txt and its AI-agent rules, Content Signals, the sitemap, llms.txt and whether ' +
+    'its links resolve, agents.md, the well-known MCP and A2A discovery documents, and whether the ' +
+    'homepage and a content page actually serve markdown when asked for it. It checks behaviour ' +
+    'rather than presence — a 200 from /llms.txt that is really the site\'s HTML 404 page is a ' +
+    `failure here. It obeys the target's robots.txt and arrives as \`${userAgent}\`, so one audit ` +
+    'is one visitor in the target log. ';
+  const fast =
+    `\`${TOOL_NAME}\` runs those checks and returns the finished report in the same call, in ` +
+    'seconds — there is nothing to poll.';
+  if (!withDeep) {
+    return `${base}${fast} Rendered-page checks (Lighthouse, axe) are not part of this endpoint.`;
+  }
   return (
-    'Audits any website for agent-readiness and returns the report in the same call. It checks what ' +
-    'a site says about itself over plain HTTP: robots.txt and its AI-agent rules, Content Signals, ' +
-    'the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A ' +
-    'discovery documents, and whether the homepage and a content page actually serve markdown when ' +
-    'asked for it. It checks behaviour rather than presence — a 200 from /llms.txt that is really ' +
-    "the site's HTML 404 page is a failure here. It obeys the target's robots.txt, arrives as " +
-    `\`${userAgent}\` so one audit is one visitor in the target log, and takes seconds. ` +
-    'Rendered-page checks (Lighthouse, axe) are not part of this endpoint.'
+    `${base}${fast} ` +
+    `\`${DEEP_TOOL_NAME}\` adds the rendered half: it opens up to three of the site's own pages in ` +
+    'a real browser and reports Lighthouse per-axis scores and axe-core violation counts across ' +
+    'them. That takes minutes rather than seconds, so it returns a workflow ID immediately and ' +
+    `\`${GET_AUDIT_TOOL_NAME}(workflowId, view)\` reads it back: view "status" until "done" is ` +
+    'true, then "report" for the canonical JSON or "summary" for markdown. Deep audits are capped ' +
+    'per caller and in total per day, because each one costs real browser time on a hosted worker. ' +
+    'Powered by Temporal: a started audit is durable and survives a worker restart.'
   );
 }
 
@@ -192,19 +236,36 @@ export function originFor(url, normalise) {
  * (src/pages/mcp.ts) already imports that workspace and passes them straight through, so the server
  * a client connects to and the visitor the target site logs cannot announce different versions.
  *
+ * `deep` is optional and is the whole of the deep tier's presence here: absent,
+ * the two deep tools are not registered and the endpoint is exactly the
+ * synchronous one-tool server it was. That is what keeps a test able to drive the
+ * fast tool with no Temporal anywhere, and it is also the endpoint's degradation
+ * story stated structurally rather than in a catch block.
+ *
  * @param {{
  *   runAudit: (url: string) => Promise<any>,
  *   renderSummary: (audit: any) => string,
  *   normaliseTarget: (input: string) => { origin: string, url: URL },
  *   version: string,
  *   userAgent: string,
+ *   deep?: {
+ *     startAudit: (origin: string, url: string) => Promise<{ workflowId: string }>,
+ *     readView: (workflowId: string, view: 'status' | 'report' | 'summary') => Promise<string>,
+ *   },
  * }} engine
  * @returns {McpServer}
  */
-export function createAuditServer({ runAudit, renderSummary, normaliseTarget, version, userAgent }) {
+export function createAuditServer({
+  runAudit,
+  renderSummary,
+  normaliseTarget,
+  version,
+  userAgent,
+  deep,
+}) {
   const server = new McpServer(
     { name: SERVER_NAME, version },
-    { instructions: instructionsFor(userAgent) },
+    { instructions: instructionsFor(userAgent, Boolean(deep)) },
   );
 
   server.registerTool(
@@ -244,5 +305,130 @@ export function createAuditServer({ runAudit, renderSummary, normaliseTarget, ve
     },
   );
 
+  if (deep) registerDeepTools(server, deep, normaliseTarget);
+
   return server;
+}
+
+/**
+ * The deep tier's two tools.
+ *
+ * Split into its own function rather than inlined, so the fast half above reads
+ * as it did before this existed and the whole deep surface is one block a reader
+ * can skip or scrutinise.
+ *
+ * @param {McpServer} server
+ * @param {{ startAudit: Function, readView: Function }} deep
+ * @param {(input: string) => { origin: string, url: URL }} normaliseTarget
+ */
+function registerDeepTools(server, deep, normaliseTarget) {
+  server.registerTool(
+    DEEP_TOOL_NAME,
+    {
+      title: 'Start a deep, browser-rendered audit of a site',
+      description:
+        'Starts a deep agent-readiness audit and returns its workflow ID straight away — it does ' +
+        'NOT wait for the result and there is no report in this response. The deep tier opens up ' +
+        "to three of the site's own pages in a real browser and reports Lighthouse's per-axis " +
+        'scores and axe-core violation counts across them, on top of everything audit_site ' +
+        `checks. It takes minutes. Poll ${GET_AUDIT_TOOL_NAME}(workflowId, view: "status") until ` +
+        '"done" is true, then read view "report" or "summary". Deep audits are strictly capped ' +
+        'per caller and per day; if you only need the HTTP-level checks, call audit_site instead ' +
+        'and get the whole report in one call.',
+      inputSchema: {
+        url: z
+          .string()
+          .min(1)
+          .describe(
+            'The site to audit: https://example.com, or just example.com. Any path is ignored — ' +
+              'the unit audited is a site.',
+          ),
+      },
+      outputSchema: {
+        workflowId: z.string().describe('Pass this to get_audit. Valid while Temporal keeps the run.'),
+        origin: z.string(),
+        tier: z.literal('deep'),
+        expectedDuration: z.string(),
+        nextStep: z.string(),
+      },
+      annotations: {
+        // It starts a durable run against a third party's origin and spends real
+        // browser time doing it. Not a read of this server's own state, and two
+        // calls are two audits.
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async ({ url }) => {
+      const origin = originFor(url, normaliseTarget);
+      const { workflowId } = await deep.startAudit(origin, url);
+      const structuredContent = {
+        workflowId,
+        origin,
+        tier: 'deep',
+        expectedDuration: 'a few minutes',
+        nextStep: `${GET_AUDIT_TOOL_NAME}("${workflowId}", "status")`,
+      };
+      return {
+        structuredContent,
+        content: [
+          {
+            // Said in words as well as in the structured half, because the
+            // failure this guards against is a model reading a successful tool
+            // result as a finished audit and summarising an empty report as a
+            // clean site.
+            type: 'text',
+            text:
+              `Started a deep audit of ${origin}. **This is running now and is not finished, and ` +
+              'there are no findings in this response.**\n' +
+              `Workflow ID: ${workflowId}\n` +
+              `Call ${GET_AUDIT_TOOL_NAME}("${workflowId}", "status") until "done" is true — ` +
+              'expect a few minutes — then call it with view "report" if "succeeded" is true. If ' +
+              '"queued" is true the audit is durable and waiting for the worker, and ' +
+              '"queuePosition" says where it stands.',
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    GET_AUDIT_TOOL_NAME,
+    {
+      title: 'Read one deep audit',
+      description:
+        'Reads one audit started by deep_audit: view "status" for whether it has finished, ' +
+        '"report" for the canonical JSON of a finished one, "summary" for the same report as ' +
+        'markdown. Poll status until "done" is true — done means the run ended, either way — then ' +
+        '"succeeded" says whether there is a report to read and "error" says why if there is not. ' +
+        'While it runs, "progress" lists each unit of work and "pending" carries the attempt ' +
+        'number of anything being retried. If the finished report is incomplete, "integrity" says ' +
+        'so and says which half can still be read. Reading report or summary before the run ends ' +
+        'is an error rather than a partial document.',
+      inputSchema: {
+        workflowId: z
+          .string()
+          .min(1)
+          .describe('The ID deep_audit returned, e.g. steward-audit-example.com-deep-1a2b3c4d.'),
+        view: z
+          .enum(['status', 'report', 'summary'])
+          .optional()
+          .describe('Which document to read. Defaults to status, the one that is always readable.'),
+      },
+      annotations: {
+        // A read of a run's own state. The same read twice is the same answer
+        // once the run has ended.
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ workflowId, view }) => {
+      const text = await deep.readView(workflowId, view ?? 'status');
+      return { content: [{ type: 'text', text }] };
+    },
+  );
 }

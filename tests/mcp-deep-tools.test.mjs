@@ -1,0 +1,213 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import {
+  createAuditServer,
+  DEEP_TOOL_NAME,
+  GET_AUDIT_TOOL_NAME,
+  TOOL_NAME,
+} from '../src/lib/mcp-audit-server.mjs';
+
+// The deep tier's two tools, driven by a real MCP client over an in-memory transport pair, with a
+// fake Temporal in place of the real one.
+//
+// The questions here are protocol questions, and the reason `createAuditServer` takes the deep
+// engine as an argument is that none of them need Temporal Cloud: is the async shape actually
+// async, does a caller learn the audit is unfinished, does a failing read come back as a tool error
+// a client can see rather than as a transport failure, and does the fast tier keep working when
+// the deep half is broken. What a real deep audit finds is Steward's suite's job.
+
+function connect({ startAudit, readView, deep = true } = {}) {
+  const started = [];
+  const reads = [];
+  const server = createAuditServer({
+    runAudit: async (url) => ({
+      schemaVersion: 2,
+      tool: { name: 'steward audit-url', version: '0.2.0' },
+      target: { input: url, origin: 'https://example.com' },
+      startedAt: '2026-08-15T15:00:00.000Z',
+      finishedAt: '2026-08-15T15:00:04.000Z',
+      durationMs: 4000,
+      requests: 11,
+      categories: [],
+      checks: [],
+      notes: [],
+    }),
+    renderSummary: (audit) => `# Audit of ${audit.target.origin}`,
+    normaliseTarget: (input) => {
+      const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`);
+      return { origin: url.origin, url };
+    },
+    version: '9.9.9',
+    userAgent: 'test-audit/9.9.9 (+https://example.test/steward)',
+    ...(deep
+      ? {
+          deep: {
+            startAudit:
+              startAudit ??
+              (async (origin, url) => {
+                started.push({ origin, url });
+                return { workflowId: 'steward-audit-example.com-deep-1a2b3c4d' };
+              }),
+            readView:
+              readView ??
+              (async (workflowId, view) => {
+                reads.push({ workflowId, view });
+                return `{"workflowId":"${workflowId}","view":"${view}"}\n`;
+              }),
+          },
+        }
+      : {}),
+  });
+  const client = new Client({ name: 'test', version: '0' });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  return Promise.all([client.connect(clientTransport), server.connect(serverTransport)]).then(
+    () => ({ client, started, reads, close: () => Promise.all([client.close(), server.close()]) }),
+  );
+}
+
+test('with a connection, three tools are listed: the fast one and the deep pair', async (t) => {
+  const { client, close } = await connect();
+  t.after(close);
+
+  const { tools } = await client.listTools();
+  assert.deepEqual(tools.map((tool) => tool.name), [TOOL_NAME, DEEP_TOOL_NAME, GET_AUDIT_TOOL_NAME]);
+});
+
+test('deep_audit is annotated as a write, and get_audit as an idempotent read', async (t) => {
+  const { client, close } = await connect();
+  t.after(close);
+
+  const { tools } = await client.listTools();
+  const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
+
+  // It starts a durable run against a third party's origin and spends real browser time doing it.
+  // Two calls are two audits, so it is not idempotent either.
+  assert.equal(byName[DEEP_TOOL_NAME].annotations?.readOnlyHint, false);
+  assert.equal(byName[DEEP_TOOL_NAME].annotations?.idempotentHint, false);
+  assert.equal(byName[DEEP_TOOL_NAME].annotations?.openWorldHint, true);
+
+  // A read of a run's own state, which reaches nothing outside this system.
+  assert.equal(byName[GET_AUDIT_TOOL_NAME].annotations?.readOnlyHint, true);
+  assert.equal(byName[GET_AUDIT_TOOL_NAME].annotations?.idempotentHint, true);
+  assert.equal(byName[GET_AUDIT_TOOL_NAME].annotations?.openWorldHint, false);
+});
+
+test('deep_audit returns a handle and says in words that there are no findings in it', async (t) => {
+  const { client, started, close } = await connect();
+  t.after(close);
+
+  const result = await client.callTool({
+    name: DEEP_TOOL_NAME,
+    arguments: { url: 'example.com' },
+  });
+
+  // The origin is normalised before the workflow is started, and the caller's exact input rides
+  // along — the workflow input records what was typed, the ID records what was audited.
+  assert.deepEqual(started, [{ origin: 'https://example.com', url: 'example.com' }]);
+  assert.equal(result.structuredContent.workflowId, 'steward-audit-example.com-deep-1a2b3c4d');
+  assert.equal(result.structuredContent.tier, 'deep');
+  assert.match(result.structuredContent.nextStep, /get_audit/);
+
+  // The text half matters more than the structured half here. A model reading a successful tool
+  // result as a finished audit will summarise an empty report as a clean site, which is the exact
+  // failure the report-shape invariant exists for on the other end.
+  const text = result.content.map((part) => part.text).join('\n');
+  assert.match(text, /not finished/);
+  assert.match(text, /no findings in this response/);
+  assert.match(text, /steward-audit-example\.com-deep-1a2b3c4d/);
+});
+
+test('a target that is not a URL is refused before any workflow is started', async (t) => {
+  const { client, started, close } = await connect();
+  t.after(close);
+
+  const result = await client.callTool({ name: DEEP_TOOL_NAME, arguments: { url: 'not a url' } });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /is not a URL/);
+  assert.deepEqual(started, [], 'a malformed target must cost no workflow start');
+});
+
+test('a private address is refused before any workflow is started', async (t) => {
+  const { client, started, close } = await connect();
+  t.after(close);
+
+  const result = await client.callTool({
+    name: DEEP_TOOL_NAME,
+    arguments: { url: 'file:///etc/passwd' },
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /http and https/);
+  assert.deepEqual(started, []);
+});
+
+test('get_audit defaults to status and passes the view straight through', async (t) => {
+  const { client, reads, close } = await connect();
+  t.after(close);
+
+  await client.callTool({ name: GET_AUDIT_TOOL_NAME, arguments: { workflowId: 'wf-1' } });
+  await client.callTool({
+    name: GET_AUDIT_TOOL_NAME,
+    arguments: { workflowId: 'wf-1', view: 'report' },
+  });
+  await client.callTool({
+    name: GET_AUDIT_TOOL_NAME,
+    arguments: { workflowId: 'wf-1', view: 'summary' },
+  });
+
+  // Status is the default because it is the one view that is always readable — report and summary
+  // are an error until the run ends.
+  assert.deepEqual(reads, [
+    { workflowId: 'wf-1', view: 'status' },
+    { workflowId: 'wf-1', view: 'report' },
+    { workflowId: 'wf-1', view: 'summary' },
+  ]);
+});
+
+test('an unreachable Temporal is a tool error, never a dropped request', async (t) => {
+  // The stage-3 card's degradation line. An agent can act on a JSON-RPC error that names the
+  // cause; it can only guess at a gateway timeout with no body.
+  const { client, close } = await connect({
+    startAudit: async () => {
+      throw new Error('The deep tier could not reach Temporal: Temporal Cloud did not answer within 8s.');
+    },
+    readView: async () => {
+      throw new Error('The deep tier could not reach Temporal: Temporal Cloud did not answer within 8s.');
+    },
+  });
+  t.after(close);
+
+  for (const call of [
+    { name: DEEP_TOOL_NAME, arguments: { url: 'example.com' } },
+    { name: GET_AUDIT_TOOL_NAME, arguments: { workflowId: 'wf-1' } },
+  ]) {
+    const result = await client.callTool(call);
+    assert.equal(result.isError, true, call.name);
+    assert.match(result.content[0].text, /could not reach Temporal/, call.name);
+  }
+
+  // And the fast tier, in the same server, is untouched by any of it.
+  const fast = await client.callTool({ name: TOOL_NAME, arguments: { url: 'example.com' } });
+  assert.notEqual(fast.isError, true);
+  assert.equal(fast.structuredContent.target.origin, 'https://example.com');
+});
+
+test('the instructions describe the deep tier only when it is there', async (t) => {
+  const withDeep = await connect();
+  t.after(withDeep.close);
+  const withoutDeep = await connect({ deep: false });
+  t.after(withoutDeep.close);
+
+  const deepInstructions = withDeep.client.getInstructions() ?? '';
+  const fastInstructions = withoutDeep.client.getInstructions() ?? '';
+
+  assert.match(deepInstructions, /deep_audit/);
+  assert.match(deepInstructions, /Powered by Temporal/);
+  assert.doesNotMatch(fastInstructions, /deep_audit/);
+  // The fast-only server has to say what it does *not* do, or a caller reads the missing category
+  // as a clean one.
+  assert.match(fastInstructions, /Lighthouse, axe\) are not part of this endpoint/);
+});
