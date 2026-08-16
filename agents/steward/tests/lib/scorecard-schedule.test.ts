@@ -368,9 +368,12 @@ test('create sends the built options and reports the next firing', async () => {
   // the CLI sent.
   assert.ok(outcome.lines.some((l) => /catchup window 3600000ms/.test(l) && /overlap SKIP/.test(l)));
   // The remaining limit is stated by the tool itself, not only in the docs. It
-  // is no longer "this needs `steward up`" — it is "this needs the hosted
-  // container, and nothing alerts on that yet".
-  assert.ok(outcome.lines.some((l) => /Railway container/.test(l) && /nothing alerts/.test(l)));
+  // is no longer "this needs `steward up`", and since 2026-08-15 it is no
+  // longer "and nothing alerts on that yet" either — it is "this needs the
+  // hosted container, and you will hear about it when that stops being true".
+  assert.ok(
+    outcome.lines.some((l) => /Railway container/.test(l) && /steward-nightly-scorecard/.test(l)),
+  );
 });
 
 test('create refuses to guess when the options are missing', async () => {

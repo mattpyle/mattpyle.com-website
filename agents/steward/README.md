@@ -27,8 +27,9 @@ that's the property being dogfooded here, on a low-stakes, real target.
   agentic-browsing checks). It opens a PR when the result changed or the last run is stale, and never
   self-merges. `steward scorecard-schedule create` puts it on a daily Temporal Schedule at 03:30
   local. Since 2026-08-14 that is genuinely unattended: the Schedule lives in Temporal Cloud and the
-  hosted worker advances it, so a firing produces a run with this laptop shut. It still depends on
-  the Railway container being alive, and nothing alerts on that yet.
+  hosted worker advances it, so a firing produces a run with this laptop shut. Since 2026-08-15 it is
+  also watched: the run signals a dead-man's-switch check on success, fails it explicitly on a bad
+  result, and a run that never happens lets the check's own window lapse.
 - **`auditSiteWorkflow`** — one agent-readiness audit of *any* site, run durably: the fetch-based
   checks, and on the deep tier one browser-rendered page per activity, then assembly. Started by the
   MCP server (`steward mcp-serve`), which hands back a workflow ID immediately and serves the report
@@ -140,11 +141,17 @@ local server to run, and its ready banner names the service either way.
 A Railway container runs `src/worker-hosted.ts` against the Cloud namespace, polling `steward-audit`
 continuously. It is what makes the nightly Scorecard and any deep audit finish without this machine.
 
-It takes exactly four environment variables, all set in Railway's own Variables tab and none of them
-in the image: the three connection variables above, plus a `GITHUB_TOKEN` (a fine-grained PAT scoped
-to this one repository, contents and pull-requests write) that the scorecard's publish and archive
-legs need. The worker refuses to start without the token rather than discovering it is missing at
-03:30.
+It takes five environment variables, all set in Railway's own Variables tab and none of them in the
+image: the three connection variables above, a `GITHUB_TOKEN` (a fine-grained PAT scoped to this one
+repository, contents and pull-requests write) that the scorecard's publish and archive legs need, and
+`STEWARD_HEALTHCHECK_BASE`, the ping base of the dead-man's-switch service the run-health signals go
+to.
+
+The worker **refuses to start** without the token, rather than discovering it is missing at 03:30. It
+only **warns** about a missing ping base, and the difference is deliberate: a missing token means the
+nightly run throws its work away, a missing ping base means it works unwatched, and a monitoring
+variable must never be able to take down the thing it watches. The ready line names which it is
+(`alerting: configured` / `alerting: OFF`).
 
 ```bash
 docker build -f agents/steward/Dockerfile -t steward-audit-worker .   # context is the REPO ROOT
@@ -160,8 +167,10 @@ The restart policy is `ALWAYS` with no retry cap, which is a deliberate choice a
 rather than about crashes. `ON_FAILURE` does not restart a process that exited 0, and this worker's
 `main()` returns normally once `worker.run()` resolves, so a clean exit would leave the container
 stopped. A retry cap has the same shape: after N failures Railway stops trying and the service sits
-dead. Either way the nightly Scorecard would stop producing runs with nothing to notice it, because
-there is no alerting yet. A visible crash loop in the Railway dashboard is the better failure.
+dead. Either way the nightly Scorecard would stop producing runs, and a crash loop visible in the
+Railway dashboard is the better failure. Since 2026-08-15 a stopped worker is also an email: the
+nightly run's check goes unpinged and the alerting service reports the silence. The restart policy is
+still the first line of defence, because recovering beats reporting.
 
 The image is deliberately host-agnostic — nothing in the Dockerfile knows what Railway is, and
 everything Railway-specific lives in `railway.json` — so the Serverless Workers migration can reuse
