@@ -6,8 +6,16 @@ import {
   renderMarkdownSummary,
   runFastAudit,
 } from '@mattpyle/steward/agent-audit/fast';
-import { createAuditServer, refusalForBody, SERVER_NAME, TOOL_NAME } from '../lib/mcp-audit-server.mjs';
+import {
+  createAuditServer,
+  DEEP_TOOL_NAME,
+  GET_AUDIT_TOOL_NAME,
+  refusalForBody,
+  SERVER_NAME,
+  TOOL_NAME,
+} from '../lib/mcp-audit-server.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
+import { readAuditView, readTemporalConfig, startDeepAudit } from '../lib/mcp-temporal.mjs';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
 /**
@@ -19,10 +27,21 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
  * decide whether the audit may run, hand the request to the SDK, log the outcome. Same split as
  * src/pages/a2a.ts, and for the same reason: the interesting half never needs a deploy to exercise.
  *
- * **Delete src/pages/mcp.ts and the exports entry in agents/steward/package.json, and the built
- * site is unchanged.** Not one byte of any prerendered page depends on this route, no page links to
- * it, and nothing in the build reads it. That is the progressive-enhancement rule this whole
- * experiment runs under, made checkable, exactly as the /a2a docblock states it.
+ * **Delete src/pages/mcp.ts and the two exports entries in agents/steward/package.json, and the
+ * built site is unchanged.** Not one byte of any prerendered page depends on this route, no page
+ * links to it, and nothing in the build reads it. That is the progressive-enhancement rule this
+ * whole experiment runs under, made checkable, exactly as the /a2a docblock states it.
+ *
+ * **Two tiers on one endpoint, per the stage-3 card's transport decision.** `audit_site` runs the
+ * fast checks here, in this function, and answers in the call. `deep_audit` starts a durable
+ * `auditSiteWorkflow` on Temporal Cloud and `get_audit` reads it back; the hosted worker does the
+ * rendering. A second endpoint would be a second identity to explain to every site owner who found
+ * the User-Agent in a log.
+ *
+ * **The two tiers fail independently, and that is a property of the call graph.** Nothing in
+ * `audit_site`'s path touches src/lib/mcp-temporal.mjs, so Temporal Cloud being unreachable leaves
+ * the fast tier answering exactly as before while the deep tools return a JSON-RPC error saying so.
+ * The deep tools are not even registered when the deployment carries no Temporal configuration.
  *
  * **Stateless, per the stage-2 card's transport decision.** `sessionIdGenerator: undefined`, so
  * every POST is self-contained: no session ID, no server-side session state, nothing for a second
@@ -54,6 +73,16 @@ const AUDIT_BUDGET_MS = 45_000;
 const RATE_LIMITED_CODE = -32000;
 
 /**
+ * Whether this deployment can run a deep audit at all.
+ *
+ * Read once at module scope, because the answer is a property of the deployment rather than of a
+ * request — the variables are set in Vercel's environment variable store and do not change under a
+ * running instance. A deployment without them (a local `npm run dev`, a preview) serves the fast
+ * tool alone rather than advertising two tools of which one always errors.
+ */
+const DEEP_ENABLED = readTemporalConfig() !== null;
+
+/**
  * Every call, one line, with the outcome as a token rather than as prose — the same shape the
  * `[a2a]` and `[agent-surface]` lines take, so whatever eventually reads these never has to parse a
  * sentence. No IP: the limiter above holds a keyed hash of it for an hour and nothing else on this
@@ -82,20 +111,34 @@ function idOf(body: unknown): string | number | null {
 }
 
 /**
- * Does this body ask for an audit?
+ * Which tier's budget this body spends, or `null` for a request that spends none.
  *
  * The limiter counts audits, not handshakes: `initialize` and `tools/list` are a static answer out
  * of this function's own memory with no outbound request in them, and counting them against a
  * caller's ten would mean a client that connects, lists, and calls once had spent three.
  *
+ * `get_audit` is deliberately free. It is a read of a run the caller already paid for, it makes no
+ * request at anybody's origin, and charging it would mean a caller who polls politely every five
+ * seconds is refused before their own audit finishes — turning the limiter into a reason not to use
+ * the tool correctly. Its cost ceiling is the deep cap it sits behind: nobody has a workflow ID to
+ * poll without having spent a deep slot to get one.
+ *
  * One message, because `refusalForBody` has already turned every array body away. That ordering is
  * what makes this function's answer a *count* rather than a guess: while batches were admitted,
  * "any member is a tools/call" read as one audit and bought as many as the array had members.
  */
-function wantsAudit(body: unknown): boolean {
-  return (
-    !!body && typeof body === 'object' && (body as { method?: unknown }).method === 'tools/call'
-  );
+function tierFor(body: unknown): 'fast' | 'deep' | null {
+  if (!body || typeof body !== 'object') return null;
+  const message = body as { method?: unknown; params?: { name?: unknown } };
+  if (message.method !== 'tools/call') return null;
+  const name = message.params?.name;
+  if (name === DEEP_TOOL_NAME) return 'deep';
+  if (name === GET_AUDIT_TOOL_NAME) return null;
+  // Everything else, including an unknown tool name, is counted as a fast audit. Counting an
+  // unknown name costs a caller one slot for a call that was going to fail anyway, and the
+  // alternative — trusting the name to decide whether to count — is a free-audit oracle for
+  // anything the SDK later dispatches that this function has not been taught about.
+  return 'fast';
 }
 
 function jsonResponse(payload: unknown, status: number, headers: Record<string, string> = {}) {
@@ -134,14 +177,17 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   // Before the audit, never after: a refused caller must cost this site nothing at the target's
-  // origin, and a caller cannot hold ten slow audits open by never letting one finish.
-  if (wantsAudit(body)) {
-    const verdict = await checkRateLimit({ ip: clientIpFrom(request.headers) });
+  // origin, and a caller cannot hold ten slow audits open by never letting one finish. For the deep
+  // tier the same rule matters more — the count happens before the workflow is started, so a
+  // refused deep call costs no worker time, no Cloud action and no queue slot.
+  const tier = tierFor(body);
+  if (tier) {
+    const verdict = await checkRateLimit({ ip: clientIpFrom(request.headers), tier });
     if (!verdict.allowed) {
       log({
         path: '/mcp',
         http: 'POST',
-        outcome: `rate-limited/${verdict.scope}`,
+        outcome: `rate-limited/${tier}/${verdict.scope}`,
         status: 429,
         retryAfter: verdict.retryAfterSeconds,
         ua,
@@ -154,6 +200,7 @@ export const POST: APIRoute = async ({ request }) => {
             code: RATE_LIMITED_CODE,
             message: `Rate limited: ${verdict.reason}. Try again in ${verdict.retryAfterSeconds} seconds.`,
             data: {
+              tier,
               scope: verdict.scope,
               retryAfterSeconds: verdict.retryAfterSeconds,
               ...(verdict.limit === undefined ? {} : { limit: verdict.limit }),
@@ -176,6 +223,18 @@ export const POST: APIRoute = async ({ request }) => {
     // is a way to run that auditor, so it announces the same number a report header does.
     version: AUDIT_VERSION,
     userAgent: AUDIT_USER_AGENT,
+    // Registered only where the deployment has a Temporal connection to use. A preview deploy
+    // without the variables serves the fast tool alone, which is a better answer than advertising
+    // two tools of which one always errors.
+    ...(DEEP_ENABLED
+      ? {
+          deep: {
+            startAudit: startDeepAudit,
+            readView: (workflowId: string, view: string) =>
+              readAuditView(workflowId, view, renderMarkdownSummary),
+          },
+        }
+      : {}),
   });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -232,7 +291,7 @@ export const GET: APIRoute = ({ request }) => {
         // a person who followed it out of their access log. Both are one hop from the page that
         // explains the auditor, what one audit costs a site, and how to refuse it.
         docs: 'https://www.mattpyle.com/steward',
-        tools: [TOOL_NAME],
+        tools: DEEP_ENABLED ? [TOOL_NAME, DEEP_TOOL_NAME, GET_AUDIT_TOOL_NAME] : [TOOL_NAME],
         example: {
           method: 'POST',
           url: 'https://www.mattpyle.com/mcp',
@@ -247,7 +306,10 @@ export const GET: APIRoute = ({ request }) => {
             params: { name: TOOL_NAME, arguments: { url: 'https://example.com' } },
           },
         },
-        note: 'Audits are rate limited per caller and in total. A refusal is a 429 with a Retry-After header.',
+        note:
+          'Audits are rate limited per caller and in total, with a separate and much smaller ' +
+          'budget for the deep tier, which renders pages in a browser and takes minutes. A refusal ' +
+          'is a 429 with a Retry-After header naming which limit was hit.',
       },
       null,
       2

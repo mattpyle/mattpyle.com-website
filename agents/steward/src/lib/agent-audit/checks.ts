@@ -19,8 +19,10 @@ import {
   type CheckEvidence,
   type CheckResult,
   type CheckStatus,
+  type ReportIntegrity,
   type Severity,
 } from './result.js';
+import { reportIntegrity } from './report-shape.js';
 
 /**
  * The fast tier's checks: what a stranger's site says about itself over plain
@@ -1471,6 +1473,13 @@ export function assembleResult(args: {
   finishedAt: string;
   requests: number;
   browserPages?: number;
+  /**
+   * The deep tier's verdict on its own completeness. Omitted by the fast tier,
+   * which has no browser half to lose — see `ReportIntegrity` in result.ts.
+   * Computed by the caller from `report-shape.ts`, so this file stays arithmetic
+   * over checks and never becomes a second place the rule is written.
+   */
+  integrity?: ReportIntegrity;
   checks: CheckResult[];
   notes: string[];
 }): AuditResult {
@@ -1485,6 +1494,7 @@ export function assembleResult(args: {
     durationMs: finished - started,
     requests: args.requests,
     ...(args.browserPages === undefined ? {} : { browserPages: args.browserPages }),
+    ...(args.integrity === undefined ? {} : { integrity: args.integrity }),
     categories: countByCategory(args.checks),
     checks: args.checks,
     notes: args.notes,
@@ -1497,6 +1507,7 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
   const { ctx, fetcher, checks, origin, started } = pass;
 
   let browserPages: number | undefined;
+  let integrity: ReportIntegrity | undefined;
   if (opts.deep === false) {
     ctx.notes.push(
       'Run with --fast: the rendered-experience checks (Lighthouse, axe) were skipped, so that ' +
@@ -1522,6 +1533,11 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
     checks.push(...deep.checks);
     ctx.notes.push(...deep.notes);
     browserPages = deep.renderedPages;
+    // The in-process tier stamps the same verdict the fanned-out tier does, from
+    // the same predicate. `steward audit-url` and a hosted deep audit reporting
+    // differently on their own completeness is exactly the drift `deep-assemble`
+    // exists to prevent for the checks.
+    integrity = reportIntegrity({ sampled: deep.sampledPages, rendered: deep.renderedPages });
   }
 
   return assembleResult({
@@ -1531,6 +1547,7 @@ export async function runAudit(input: string, opts: RunAuditOptions = {}): Promi
     finishedAt: now().toISOString(),
     requests: fetcher.requests,
     browserPages,
+    integrity,
     checks,
     notes: ctx.notes,
   });

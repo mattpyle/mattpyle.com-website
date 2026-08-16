@@ -244,7 +244,7 @@ export const QUEUE_HEAVY = 'steward-heavy';
  * queue's, and the hosted worker's set of registered activities is exactly the
  * ones `workflows/audit-site.ts` names.
  */
-export const QUEUE_AUDIT = 'steward-audit';
+export { AUDIT_TASK_QUEUE as QUEUE_AUDIT } from './lib/agent-audit/deep-contract.js';
 
 /**
  * The exact line the worker logs once both queues are polling. `steward up`
@@ -489,20 +489,12 @@ export function workflowIdFor(slug: string, collection: Collection = 'writing'):
 /**
  * The workflow ID for one `auditSiteWorkflow` execution.
  *
- * Host, then tier, then a random suffix. The host and tier are there so the
- * Temporal UI's workflow list is readable without opening anything — an audit's
- * ID is the only label a poller ever sees — and the suffix is there because two
- * audits of the same site are two runs, not one. Deliberately **not** derived
- * from the URL alone: a re-audit must never collide with, or be mistaken for,
- * the earlier run's result.
- *
- * `id` is supplied by the caller rather than generated here so this stays a pure
- * function; the MCP tool passes `randomUUID().slice(0, 8)`.
+ * Re-exported rather than defined here since 2026-08-15: the site's `/mcp`
+ * function has to build the same IDs, and it may not import this module, which
+ * reads `.env` off disk at load. `lib/agent-audit/deep-contract.ts` is the copy
+ * both surfaces share; see its docblock for why that entry was affordable.
  */
-export function auditWorkflowIdFor(origin: string, tier: 'fast' | 'deep', id: string): string {
-  const host = new URL(origin).host.replace(/[^a-z0-9.-]/gi, '-');
-  return `steward-audit-${host}-${tier}-${id}`;
-}
+export { auditWorkflowIdFor } from './lib/agent-audit/deep-contract.js';
 
 /**
  * Where the MCP server listens.

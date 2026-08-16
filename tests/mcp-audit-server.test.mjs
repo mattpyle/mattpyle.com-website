@@ -82,9 +82,11 @@ test('the server announces itself and its instructions on initialize', async (t)
   );
 });
 
-test('exactly one tool is listed, and it is audit_site', async (t) => {
-  // The deep tier stays CLI and local, so there is no tier argument and no second tool. A tool that
-  // appeared here would be a promise to strangers that this endpoint would then have to keep.
+test('without a Temporal connection, audit_site is the only tool', async (t) => {
+  // The deep tools are registered only when the transport hands this module a connection to use.
+  // A deployment without one — a local dev run, a preview — advertises the fast tool alone, rather
+  // than two tools of which one always errors. That is the endpoint's degradation story stated
+  // structurally instead of in a catch block.
   const { client, close } = await connect();
   t.after(close);
 

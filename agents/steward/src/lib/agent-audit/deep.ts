@@ -354,6 +354,13 @@ export interface DeepOutcome {
   notes: string[];
   /** Pages a browser was actually launched against. Part of the run's cost line. */
   renderedPages: number;
+  /**
+   * Pages the sampler chose, rendered and skipped alike. Reported alongside
+   * `renderedPages` because the pair is the report-shape predicate's whole input
+   * (`report-shape.ts`): zero rendered means nothing on its own, and means a
+   * degraded report when the sample was not empty.
+   */
+  sampledPages: number;
 }
 
 /**
@@ -461,5 +468,5 @@ async function renderSample(ctx: DeepContext, opts: DeepOptions, proxy: VettingP
     browserFailure,
     axeVersion: versions.axe,
   });
-  return { checks, notes, renderedPages: results.length };
+  return { checks, notes, renderedPages: results.length, sampledPages: sample.length };
 }

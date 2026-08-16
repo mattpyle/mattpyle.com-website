@@ -2,7 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WorkflowNotFoundError, type Client, type WorkflowHandle } from '@temporalio/client';
 import { z } from 'zod';
-import { auditWorkflowIdFor, QUEUE_AUDIT } from '../config.js';
+import { QUEUE_AUDIT } from '../config.js';
+// The per-tier budgets and the ID scheme come from the wire contract, which the
+// public endpoint reads too — one copy, so the local server and the hosted one
+// cannot start the same workflow with different budgets.
+import {
+  auditWorkflowIdFor,
+  DEEP_BUDGET_SECONDS,
+  FAST_BUDGET_SECONDS,
+} from '../lib/agent-audit/deep-contract.js';
 import { normaliseTarget } from '../lib/agent-audit/checks.js';
 import { AUDIT_VERSION } from '../lib/agent-audit/safe-fetch.js';
 import { renderMarkdownSummary } from '../lib/agent-audit/render.js';
@@ -30,10 +38,6 @@ import {
  * in one artifact: the run survives a worker restart, and the handle keeps
  * answering.
  */
-
-/** The tool's own budgets, matching `audit-url`'s per-tier defaults in cli.ts. */
-const FAST_BUDGET_SECONDS = 120;
-const DEEP_BUDGET_SECONDS = 420;
 
 export const SERVER_NAME = 'steward-audit';
 

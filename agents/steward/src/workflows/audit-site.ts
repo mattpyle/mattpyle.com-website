@@ -1,6 +1,15 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
-import type { AuditResult, CheckStatus } from '../lib/agent-audit/result.js';
+import type { AuditResult } from '../lib/agent-audit/result.js';
+// The wire contract, declared once and shared with the site's /mcp function.
+// Safe to import here despite the sandbox: `deep-contract.ts` has no runtime
+// import of its own, touches no `node:` API and reads no clock.
+import type {
+  AuditSiteInput,
+  AuditSiteState,
+  AuditStep,
+  AuditTier,
+} from '../lib/agent-audit/deep-contract.js';
 // Type-only, so the sandbox never loads that module — it reads the installed
 // axe-core version off disk, which a workflow may not do.
 import type { RenderedPageOutcome, SkippedPage } from '../lib/agent-audit/deep-assemble.js';
@@ -57,98 +66,25 @@ const MAX_PAGES = 3;
 const PAGE_TIMEOUT_MS = 90_000;
 const MIN_PAGE_BUDGET_MS = 20_000;
 
-export type AuditTier = 'fast' | 'deep';
-
-export interface AuditSiteInput {
-  /** Exactly what the caller typed — `https://example.com`, or just `example.com`. */
-  url: string;
-  /**
-   * Which tier to run.
-   *
-   * **In the input, never in config** (design rule 10, spec §2). It picks which
-   * activities are scheduled, all of which are recorded in history as part of
-   * the command; a config-driven tier would send every open execution's replay
-   * down the other branch the moment it flipped.
-   */
-  tier: AuditTier;
-  /**
-   * Total wall-clock budget for the audit, in seconds. Resolved by the caller
-   * from the tier's default (`FAST_BUDGET_SECONDS` / `DEEP_BUDGET_SECONDS` in
-   * cli.ts), never re-read here.
-   *
-   * It rides in the input for the same reason the tier does, one step weaker:
-   * it does not change *which* activity runs, but it does change what the
-   * finished document says — a run that exhausts its budget reports the
-   * remaining checks as `error` and its unrendered pages as skipped, and that
-   * verdict has to be reproducible from history rather than from whatever the
-   * constant says today.
-   */
-  budgetSeconds: number;
-}
-
 /**
- * What one unit of durable work is doing.
+ * The input, the progress shape and the state a query answers with all live in
+ * `lib/agent-audit/deep-contract.ts` since 2026-08-15, and are re-exported here
+ * so every existing importer of this module is unchanged.
  *
- * `pending` and `running` are the workflow's own account; `done` and `failed`
- * are what it observed the activity return or throw. Nothing here is inferred
- * from a timer, and nothing here is a retry count — an attempt number lives in
- * `DescribeWorkflowExecution`'s pending-activity info, which is the server's to
- * report and a client's to combine with this (stage-3 card, "Per-check status").
+ * They moved because they stopped being this workflow's private business: the
+ * site's `/mcp` function polls this query from a Vercel function and has to hold
+ * the same types, and it may not import a workflow module. Declaring them where
+ * both sides can read them is the alternative to a hand-copy on the site that
+ * drifts the day a field is added.
  */
-export type StepState = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
-
-export interface AuditStep {
-  /** Stable within one run: `fetch`, `page:<url>`, `assembly`. */
-  id: string;
-  kind: 'fetch' | 'page' | 'assembly';
-  /** One line naming what this step covers, for a human reading the status. */
-  label: string;
-  state: StepState;
-  /** Why a step is `failed` or `skipped`. Absent otherwise. */
-  detail?: string;
-}
-
-/**
- * The progress contract, designed to be served to strangers by leg 3's
- * `get_audit(view: status)`.
- *
- * Two granularities, from two different sources, deliberately kept apart:
- *
- * - `steps` is the durable work — the fetch pass, each rendered page, assembly.
- *   One step is one activity, so this is exactly what workflow history knows and
- *   nothing more.
- * - `checks` is the audit's own verdicts, and it fills in as they are decided:
- *   empty while the fetch pass runs, then every fast-tier check with its status,
- *   then nothing further until the finished report supersedes it.
- *
- * A caller wanting "which check are we on" reads `checks`; a caller wanting
- * "how much is left" reads `steps`. Merging them into one list would mean
- * inventing a `pending` row per fast-tier check, which would be a guess about a
- * check list the workflow has not been told yet.
- */
-export interface AuditProgress {
-  phase: 'fetching' | 'rendering' | 'assembling' | 'complete' | 'failed';
-  steps: AuditStep[];
-  checks: Array<{ id: string; title: string; status: CheckStatus }>;
-}
-
-/**
- * What a poller sees. `phase` is the workflow's own account of itself; the
- * execution status a caller gets from `describe()` is the server's, and the two
- * answer different questions — `describe()` knows the workflow failed, this
- * knows the audit was mid-render when it did.
- */
-export interface AuditSiteState {
-  url: string;
-  tier: AuditTier;
-  phase: 'auditing' | 'complete';
-  /** One line for a human watching: what the run is doing, or what it found. */
-  note: string;
-  /** Per-step and per-check detail. Additive since stage 3; see `AuditProgress`. */
-  progress: AuditProgress;
-  /** The canonical result document. Present once `phase` is `complete`. */
-  result?: AuditResult;
-}
+export type {
+  AuditProgress,
+  AuditSiteInput,
+  AuditSiteState,
+  AuditStep,
+  AuditTier,
+  StepState,
+} from '../lib/agent-audit/deep-contract.js';
 
 /**
  * The whole status-and-report contract in one query.

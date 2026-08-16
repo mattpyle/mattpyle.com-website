@@ -36,6 +36,8 @@
  * is ad hoc, so "no deep audit today" is not news.
  */
 
+import { renderedNothing } from './agent-audit/report-shape.js';
+
 /** One check at the alerting service. */
 export type HealthSignal = 'nightly-scorecard' | 'credential-expiry' | 'run-shape';
 
@@ -133,9 +135,16 @@ export interface DeepAuditShapeInput {
  * so. Zero rendered from a sample the run chose means the browser half of the
  * audit produced nothing while the document still reads as finished, which is
  * exactly the 2026-08-15 failure.
+ *
+ * **The predicate is `report-shape.ts`'s, not a second copy of it.** Since
+ * 2026-08-15 the assembled document stamps its own `integrity` from that same
+ * function, and the alert and the report must not be able to disagree about one
+ * run: an email saying a run went wrong beside a report calling itself clean is
+ * worse than either signal on its own. This function owns the wording of the
+ * email and nothing else.
  */
 export function deepAuditShape(input: DeepAuditShapeInput): RunShape {
-  if (input.sampled === 0 || input.rendered > 0) {
+  if (!renderedNothing(input.sampled, input.rendered)) {
     return {
       ok: true,
       summary: `Deep audit of ${input.origin}: ${input.rendered}/${input.sampled} page(s) rendered.`,

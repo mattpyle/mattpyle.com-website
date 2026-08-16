@@ -127,6 +127,35 @@ export interface CheckResult {
   evidence: CheckEvidence[];
 }
 
+/**
+ * Whether the run that produced this document produced a whole one.
+ *
+ * A verdict about the **audit**, never about the site: every statement about the
+ * site is a check. It exists because a deep audit can complete, and can be
+ * assembled into a document that reads as finished, while the browser half of it
+ * produced nothing — observed 2026-08-15, and the reason `report-shape.ts` holds
+ * the predicate rather than assembly holding it inline.
+ *
+ * - `clean` — the run produced what it set out to produce.
+ * - `degraded` — the document is real and part of it is missing. `reason` says
+ *   which part, and which part can still be read.
+ *
+ * There is no `failed` member, and that is not an omission. A run that fails
+ * hard throws and assembles no document at all, so there is nothing to stamp; the
+ * caller learns it from the workflow's own failure, which is a different channel
+ * with a different error.
+ *
+ * Optional and additive, exactly like `metric`: a consumer that has never heard
+ * of this field reads the document as before, which is why `SCHEMA_VERSION` did
+ * not move. Absent means a document written before the field existed, **not**
+ * clean — a reader that needs the distinction should treat absence as unknown.
+ */
+export interface ReportIntegrity {
+  status: 'clean' | 'degraded';
+  /** Present whenever `status` is not `clean`. Written to be read out of context. */
+  reason?: string;
+}
+
 export interface CategoryCount {
   category: CheckCategory;
   passed: number;
@@ -168,6 +197,11 @@ export interface AuditResult {
   requests: number;
   /** Pages rendered in a browser. Absent on a fast-only run. */
   browserPages?: number;
+  /**
+   * Whether this run produced a whole document. Absent on a fast-only run, which
+   * has no browser half to lose. See `ReportIntegrity`.
+   */
+  integrity?: ReportIntegrity;
   /** Per-category pass counts. No composite score, by decision — see the card. */
   categories: CategoryCount[];
   checks: CheckResult[];

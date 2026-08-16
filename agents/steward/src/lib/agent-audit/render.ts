@@ -88,6 +88,15 @@ export function renderMarkdownSummary(audit: AuditResult): string {
   );
   out.push('');
 
+  // Above the counts, not below the fix list. A reader who is going to act on
+  // this report has to be told the report is missing a half before they read the
+  // half that is there — and a model summarising it will lead with whatever came
+  // first. See `ReportIntegrity` in result.ts.
+  if (audit.integrity && audit.integrity.status !== 'clean') {
+    out.push(`> **This report is ${safe(audit.integrity.status)}.** ${safe(audit.integrity.reason ?? '')}`);
+    out.push('');
+  }
+
   out.push('## Checks passed');
   out.push('');
   out.push('| Category | Passed | Checked | Not applicable | Errors |');

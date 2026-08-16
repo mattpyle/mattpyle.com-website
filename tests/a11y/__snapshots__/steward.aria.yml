@@ -33,9 +33,9 @@
           - rowheader "robots.txt token"
           - cell "steward-audit":
             - code: steward-audit
-        - row "Cost of one audit Roughly a dozen HTTP requests, spread over a few seconds.":
+        - row "Cost of one audit Roughly a dozen HTTP requests, spread over a few seconds. A deep audit adds up to three of your pages opened in a real browser, which fetch their own subresources the way any visitor's browser does.":
           - rowheader "Cost of one audit"
-          - cell "Roughly a dozen HTTP requests, spread over a few seconds."
+          - cell "Roughly a dozen HTTP requests, spread over a few seconds. A deep audit adds up to three of your pages opened in a real browser, which fetch their own subresources the way any visitor's browser does."
         - row "Frequency Once, when a person or an agent asks. No schedule, no repeat visits, no crawl.":
           - rowheader "Frequency"
           - cell "Once, when a person or an agent asks. No schedule, no repeat visits, no crawl."
@@ -57,9 +57,9 @@
     - paragraph:
       - text: So there are two tiers. The
       - strong: fast tier
-      - text: "is the 13checks below: plain HTTP, seconds, and the tier behind the public endpoint. The"
+      - text: "is the 13checks below: plain HTTP, seconds, and the report comes back in the call. The"
       - strong: deep tier
-      - text: renders pages in a real browser and runs Lighthouse and axe over them; it stays local and hand-run, because it costs a site far more than a dozen requests.
+      - text: opens up to three of the site's own pages in a real browser and reports Lighthouse's per-axis scores and axe-core's violation counts across them. It costs a site far more than a dozen requests, so it is capped much harder and it takes minutes rather than seconds.
     - paragraph:
       - text: It checks behaviour rather than presence. A
       - code: /\d+/
@@ -125,9 +125,9 @@
     - paragraph:
       - text: Point an MCP client at
       - code: https://www.mattpyle.com/mcp
-      - text: . It is a stateless streamable-HTTP server with one tool,
+      - text: . It is a stateless streamable-HTTP server with three tools. Start with
       - code: audit_site(url)
-      - text: ", and the report comes back in the call — there is nothing to poll and no second request to make. No account and no key."
+      - text: ": it runs the fast checks and the report comes back in the call — there is nothing to poll and no second request to make. No account and no key."
     - code: "curl -sS https://www.mattpyle.com/mcp \\ -H 'Content-Type: application/json' \\ -H 'Accept: application/json, text/event-stream' \\ -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\", \"params\":{\"name\":\"audit_site\",\"arguments\":{\"url\":\"example.com\"}}}'"
     - paragraph:
       - text: "Two renderings ship in the one response: the canonical JSON in"
@@ -146,27 +146,89 @@
       - text: and
       - code: https
       - text: targets are accepted, and addresses on private networks are refused before a connection is opened.
+    - 'heading "The deep tier: deep_audit and get_audit" [level=3]':
+      - text: ""
+      - code: deep_audit
+      - text: ""
+      - code: get_audit
+    - paragraph:
+      - text: The same endpoint carries the browser-rendered tier, and it has a different shape because it has a different cost. A deep audit takes minutes, which is longer than any MCP client holds a tool call open, so
+      - code: deep_audit(url)
+      - text: returns a workflow ID straight away and
+      - code: get_audit(workflowId, view)
+      - text: reads it back. There are no findings in the
+      - code: deep_audit
+      - text: response, and it says so.
+    - code: "curl -sS https://www.mattpyle.com/mcp \\ -H 'Content-Type: application/json' \\ -H 'Accept: application/json, text/event-stream' \\ -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\", \"params\":{\"name\":\"deep_audit\",\"arguments\":{\"url\":\"example.com\"}}}'"
+    - paragraph:
+      - text: Poll
+      - code: get_audit
+      - text: with
+      - code: "view: \"status\""
+      - text: until
+      - code: done
+      - text: is true, then read
+      - code: "view: \"report\""
+      - text: for the canonical JSON or
+      - code: "\"summary\""
+      - text: for markdown. While it runs, the status view lists each unit of work with its state, and anything being retried carries its attempt number, straight from Temporal rather than from a count kept by hand.
+    - paragraph:
+      - strong: If your audit says it is queued, it is.
+      - text: There is one worker behind this endpoint, so a busy moment is a real wait rather than a slow site. The status view answers
+      - code: "queued: true"
+      - text: with a
+      - code: queuePosition
+      - text: "when nothing has picked your run up yet, and it says so plainly rather than leaving you to guess. Either way the audit is durable: it survives a worker restart, and the workflow ID keeps answering."
+    - paragraph:
+      - strong: If a finished report is incomplete, it says so.
+      - text: A deep audit that sampled pages and rendered none of them comes back marked
+      - code: "integrity: degraded"
+      - text: ", in the report and in the status view, with a line saying which half is missing and which half can still be read. A report that quietly reads as clean when the browser produced nothing is the one failure mode worth building a rule against."
+    - paragraph:
+      - strong:
+        - text: Powered by
+        - link "Temporal":
+          - /url: https://temporal.io
+        - text: .
+      - text: Matt works at Temporal, so that is disclosure as much as it is a credit.
     - heading "What are the limits?" [level=3]
     - table "Rate limits on the public endpoint":
       - caption: Rate limits on the public endpoint
       - rowgroup:
-        - row "Limit Default Window":
+        - row "Tier Limit Default Window":
+          - columnheader "Tier"
           - columnheader "Limit"
           - columnheader "Default"
           - columnheader "Window"
       - rowgroup:
-        - row /Per caller \d+ audits One hour/:
+        - row /Fast Per caller \d+ audits One hour/:
+          - cell "Fast"
           - cell "Per caller"
           - cell /\d+ audits/
           - cell "One hour"
-        - row /Everyone together \d+ audits One UTC day/:
+        - row /Fast Everyone together \d+ audits One UTC day/:
+          - cell "Fast"
+          - cell "Everyone together"
+          - cell /\d+ audits/
+          - cell "One UTC day"
+        - row "Deep Per caller 2 audits One UTC day":
+          - cell "Deep"
+          - cell "Per caller"
+          - cell "2 audits"
+          - cell "One UTC day"
+        - row /Deep Everyone together \d+ audits One UTC day/:
+          - cell "Deep"
           - cell "Everyone together"
           - cell /\d+ audits/
           - cell "One UTC day"
     - paragraph:
       - text: A refusal is a JSON-RPC error with a
       - code: Retry-After
-      - text: header, naming which limit was hit and how long to wait. The limits exist because every accepted call spends a dozen requests at a third party's origin under this site's name; an unbounded endpoint would be an open relay with an honest User-Agent. The counter holds a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself.
+      - text: header, naming which limit was hit and how long to wait. The fast limits exist because every accepted call spends a dozen requests at a third party's origin under this site's name; an unbounded endpoint would be an open relay with an honest User-Agent. The deep limits are two orders of magnitude smaller because a deep audit spends minutes of browser time on a machine somebody pays for, where a fast one spends seconds inside the function that answered you. The counters hold a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself.
+    - paragraph:
+      - text: There is no key, no account, and no way to ask for more.
+      - code: get_audit
+      - text: "is free to call as often as you like: it reads a run you already paid for and makes no request at anybody's origin."
   - region "Contact":
     - heading "Contact" [level=2]
     - paragraph:
