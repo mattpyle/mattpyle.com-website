@@ -29,12 +29,15 @@
  * Matt can look at rather than an incident. Two per caller is enough to try it,
  * read the report, and try a second site.
  *
- * The cap is also standing in for a concurrency limit the worker does not have.
- * Measured 2026-08-15: two deep audits started a second apart both rendered at
- * once on the one hosted worker, because nothing sets
- * `maxConcurrentActivityTaskExecutions` on it. That is the `marky` contention the
- * scorecard's `AUDIT_CONCURRENCY` docblock warns about, reachable by strangers for
- * the first time. Ten a day bounds how bad that can get; it does not fix it.
+ * The cap is a spend limit and nothing more, and it is worth saying so because it
+ * briefly stood in for a concurrency limit the worker did not have. Measured
+ * 2026-08-15: two deep audits started a second apart both rendered at once on the
+ * one hosted worker, because nothing set `maxConcurrentActivityTaskExecutions` on
+ * it — the `marky` contention the scorecard's `AUDIT_CONCURRENCY` docblock warns
+ * about, reachable by strangers for the first time. The worker now sets it to 1
+ * (`HOSTED_ACTIVITY_CONCURRENCY` in `agents/steward/src/config.ts`), so concurrent
+ * deep audits serialise and the second one reports `queued: true` with a position.
+ * These counters bound the day's bill; the worker option bounds what runs at once.
  *
  * **The two tiers count separately, and neither spends the other's budget.** A
  * deep call touches only the deep counters. That is deliberate: charging a deep
