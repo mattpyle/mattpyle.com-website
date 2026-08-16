@@ -87,14 +87,21 @@ export const SITEMAP_URL = `${PROD_ORIGIN}/sitemap-index.xml`;
  * Used only for `--urls` overrides and offline tests — never a fallback the
  * workflow reaches for on its own. The live audit set always comes from the
  * sitemap; this exists so a manual run or a test can skip the network fetch.
+ *
+ * **Trailing slashes, because the site's canonical page shape has them**
+ * (`build.format: 'directory'`, and `middleware.ts` 308s the slash-less form).
+ * They were missing until 2026-08-15. Nothing was measuring a redirect, because
+ * nothing imports this — it is specified in `scorecard-audit-spec.md` §5.4 and
+ * has never had a caller — but a slash-less list here is a list that would
+ * quietly audit six redirects the first time somebody reached for it.
  */
 export const SCORECARD_URLS_FALLBACK = [
   '/',
-  '/about',
-  '/writing',
-  '/builds',
-  '/changelog',
-  '/scorecard',
+  '/about/',
+  '/writing/',
+  '/builds/',
+  '/changelog/',
+  '/scorecard/',
 ] as const;
 
 /** Default staleness threshold for the publish gate (spec §6), CLI-overridable via `--max-age-days`. */

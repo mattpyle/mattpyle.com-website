@@ -46,7 +46,7 @@ test('one failed page out of many is a bad shape — the rule is a count, not a 
   // published-shaped, and every axe run had failed. A ratio rule would have
   // called 1-of-23 healthy.
   const pages = Array.from({ length: 23 }, (_, i) => ({
-    url: `https://www.mattpyle.com/p${i}`,
+    url: `https://www.mattpyle.com/p${i}/`,
     ok: i !== 7,
     error: i === 7 ? 'axe produced no result file (exit -1)' : undefined,
   }));

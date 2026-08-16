@@ -629,7 +629,10 @@ test('a completed run with one failed page fails its check, naming the page', as
   const { activities, signals } = mockActivities({
     auditLiveUrl: async (url: string) =>
       url.includes('broken') ? { url, ok: false, error: 'Lighthouse timed out' } : { ...GREEN_PAGE, url },
-    resolveAuditUrls: async () => ['https://www.mattpyle.com/', 'https://www.mattpyle.com/broken'],
+    // Trailing slash, like every other URL fixture in this file and like every
+    // URL the live sitemap emits. A slash-less page URL is a 308 here, so a
+    // fixture in that shape is a fixture of something the audit never sees.
+    resolveAuditUrls: async () => ['https://www.mattpyle.com/', 'https://www.mattpyle.com/broken/'],
   });
   const result = await withWorker(activities, () =>
     env.client.workflow.execute(scorecardAuditWorkflow, {
@@ -644,7 +647,7 @@ test('a completed run with one failed page fails its check, naming the page', as
   assert.equal(result.decision, 'open-pr');
   assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', false]]);
   assert.match(signals[0].summary, /1 of 2 page\(s\) could not be audited/);
-  assert.match(signals[0].summary, /broken \(Lighthouse timed out\)/);
+  assert.match(signals[0].summary, /broken\/ \(Lighthouse timed out\)/);
 });
 
 test('a bad-shaped manual run fails run-shape rather than the nightly check', async () => {
