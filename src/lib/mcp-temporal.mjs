@@ -429,7 +429,7 @@ async function readReport(workflowId) {
  *
  * @param {string} workflowId
  * @param {'status' | 'report' | 'summary'} view
- * @param {(audit: unknown) => string} renderSummary injected, for the same reason
+ * @param {(audit: any) => string} renderSummary injected, for the same reason
  *   the fast tier's auditor is: this file is imported by tests with no Temporal.
  */
 export async function readAuditView(workflowId, view, renderSummary) {

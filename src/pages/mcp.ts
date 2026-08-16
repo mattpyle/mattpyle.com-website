@@ -230,7 +230,7 @@ export const POST: APIRoute = async ({ request }) => {
       ? {
           deep: {
             startAudit: startDeepAudit,
-            readView: (workflowId: string, view: string) =>
+            readView: (workflowId: string, view: 'status' | 'report' | 'summary') =>
               readAuditView(workflowId, view, renderMarkdownSummary),
           },
         }

@@ -250,7 +250,7 @@ export function originFor(url, normalise) {
  *   userAgent: string,
  *   deep?: {
  *     startAudit: (origin: string, url: string) => Promise<{ workflowId: string }>,
- *     readView: (workflowId: string, view: string) => Promise<string>,
+ *     readView: (workflowId: string, view: 'status' | 'report' | 'summary') => Promise<string>,
  *   },
  * }} engine
  * @returns {McpServer}
