@@ -169,8 +169,8 @@ export function deepAuditShape(input: DeepAuditShapeInput): RunShape {
  * where his own secrets are. The boundary rule, on the secret-management card:
  * credential metadata defaults private, and public code carries only what an
  * alert body needs. What an alert body needs is which credential, when it goes,
- * and what breaks — the rotation locations live in the private user guide, and
- * the alert points there by name.
+ * and what breaks — the rotation locations live in the private operator docs,
+ * in `steward/docs/rotate-a-credential.md`, and the alert points there by name.
  */
 export interface TrackedCredential {
   /** What it is, in the words the operator would use. */
@@ -295,8 +295,8 @@ export function credentialExpiryShape(
       // Named rather than listed. The alert is an email leaving this system, and
       // where each copy of a credential lives is not something it needs to
       // carry — see `TrackedCredential`.
-      'Every copy that has to be replaced is listed under "Rotating a credential" in the ' +
-      'steward user guide. Re-issue each one, update every copy listed there, then update ' +
+      'Every copy that has to be replaced is listed in steward/docs/rotate-a-credential.md, ' +
+      'in the private operator docs. Re-issue each one, update every copy listed there, then update ' +
       'TRACKED_CREDENTIALS in agents/steward/src/lib/run-health.ts with the new date.',
   };
 }
