@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { REVIEWS_DIR, SITE_DIR, postRelPath } from '../config.js';
+import { DRAFT_REVIEWS_DIR, REVIEWS_DIR, SITE_DIR, postRelPath } from '../config.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { ReviewReport, type Collection } from './report.js';
 import {
@@ -132,8 +132,16 @@ async function wordCount(collection: Collection, slug: string): Promise<number |
 export async function collectStats(): Promise<ReviewStat[]> {
   const stats: ReviewStat[] = [];
 
-  for (const collection of ['writing', 'changelog'] as const) {
-    const dir = path.join(REVIEWS_DIR, collection);
+  // Both archive roots. The gitignored holding path is where an unpublished
+  // post's review lives (config.ts, DRAFT_REVIEWS_DIR); this is a local research
+  // count that never leaves the machine, and omitting held reviews would
+  // undercount exactly the gate reviews README rule 4 is asking about. A slug
+  // present in both — published, then re-reviewed for a rewrite — is counted
+  // once, from the public copy, since `seen` is filled in root order.
+  const seen = new Set<string>();
+  for (const root of [REVIEWS_DIR, DRAFT_REVIEWS_DIR]) {
+   for (const collection of ['writing', 'changelog'] as const) {
+    const dir = path.join(root, collection);
     let slugs: string[];
     try {
       slugs = await fs.readdir(dir);
@@ -142,6 +150,7 @@ export async function collectStats(): Promise<ReviewStat[]> {
     }
 
     for (const slug of slugs) {
+      if (seen.has(`${collection}/${slug}`)) continue;
       const latest = path.join(dir, slug, 'latest.json');
       let parsed;
       try {
@@ -153,6 +162,9 @@ export async function collectStats(): Promise<ReviewStat[]> {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
         throw new Error(`Could not read the archived report at ${latest}: ${(err as Error).message}`);
       }
+      // Marked only once a report has actually been read, so a slug with an
+      // empty public directory does not shadow its held counterpart.
+      seen.add(`${collection}/${slug}`);
 
       const ePrimeHits = parsed.passes
         .filter((p) => p.pass === 'vale')
@@ -192,6 +204,7 @@ export async function collectStats(): Promise<ReviewStat[]> {
         ...tells,
       });
     }
+   }
   }
 
   return stats.sort((a, b) => a.slug.localeCompare(b.slug));

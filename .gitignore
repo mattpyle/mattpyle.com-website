@@ -62,6 +62,13 @@ agents/steward/.temporal/
 agents/steward/.cache/
 agents/steward/.env
 agents/steward/bin/
+# Reviews of posts that have NOT published yet. A review file quotes the post
+# line by line and carries its critique, so committing one publishes an
+# unpublished draft and its criticism into history, which cannot be recalled.
+# Steward archives here while the post says `draft: true` and moves the files
+# into `reviews/` once it ships (`steward promote-reviews`, and `steward
+# cleanup` after a merge). Not scratch: this is the dataset, waiting.
+agents/steward/.reviews-drafts/
 
 # Playwright a11y suite (npm run a11y) run artifacts — traces, screenshots, HTML
 # report. The committed part of the suite is tests/a11y/ plus its aria goldens in

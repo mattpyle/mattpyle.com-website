@@ -63,12 +63,16 @@ test('currentContentHash returns null for a missing file', async () => {
   assert.equal(await currentContentHash('does-not-exist'), null);
 });
 
+// `draft: false` throughout the archive tests below, so they keep exercising the
+// public `reviews/` root the way they always have. The draft half of the split
+// has its own test file (`draft-review-archive.test.ts`).
 function report(sha: string): ReviewReport {
   return {
     schemaVersion: 1,
     slug: 'archive-test',
     collection: 'writing',
     mode: 'gate',
+    draft: false,
     file: 'src/content/writing/archive-test.md',
     contentSha256: sha,
     reviewedAt: new Date().toISOString(),

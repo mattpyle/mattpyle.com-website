@@ -87,6 +87,14 @@ sitting in your checkout afterwards, a stale twin of the post that just went liv
 refuses to move past it. `steward cleanup <slug>` is the reconciliation step for that, guarded so
 it deletes only a file that is provably recoverable from `origin` and refuses rather than guesses.
 
+The review archive is split by the same publication line. `reviews/` is the committed dataset, but a
+review file quotes the post line by line and carries its critique, so while the post says
+`draft: true` its review is archived to `.reviews-drafts/`, which is gitignored — an unpublished
+draft and its criticism must not reach public history, which cannot be recalled any more than a
+cached RSS entry can. `steward cleanup` promotes the held review into `reviews/` as its last step,
+once the checkout has caught up with the merge; `steward promote-reviews` does the same sweep on
+demand for a post that shipped without a cleanup.
+
 "Published" means verified against the live origin — not "the PR merged," not "the build succeeded."
 The workflow checks the real page (HTML, negotiated and direct markdown variants, `llms.txt`, the
 sitemap, the OG image) on `www.mattpyle.com` itself before it calls anything done.
@@ -194,7 +202,9 @@ In another terminal:
 steward review my-draft-slug     # runs the checks, parks on your verdict
 steward status my-draft-slug     # see where it's at
 steward approve my-draft-slug    # opens the publish PR, then verifies once merged
-steward cleanup my-draft-slug    # after the merge: drop the local draft twin, fast-forward
+steward cleanup my-draft-slug    # after the merge: drop the local draft twin, fast-forward,
+                                 #   and promote the held review into reviews/
+steward promote-reviews          # the promotion sweep on its own, for a slug that skipped cleanup
 ```
 
 `steward inbox` lists every review waiting on you, across every slug, with a plain-language hint for

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { REPO_ROOT, REVIEWS_DIR } from '../config.js';
-import { ReviewReport } from '../lib/report.js';
+import { DRAFT_REVIEWS_DIR, REPO_ROOT, REVIEWS_DIR } from '../config.js';
+import { ReviewReport, reviewIsUnpublished } from '../lib/report.js';
 import { log, timed } from '../lib/logger.js';
 
 export interface ArchiveResult {
@@ -11,12 +11,19 @@ export interface ArchiveResult {
 }
 
 /**
- * Spec §8.9. Writes `reviews/<slug>/<hash12>.json` plus a `latest.json` **copy**
- * (not a symlink — Windows, and design rule 8).
+ * Spec §8.9. Writes `<root>/<collection>/<slug>/<hash12>.json` plus a
+ * `latest.json` **copy** (not a symlink — Windows, and design rule 8).
  *
  * The report is validated against the Zod schema on the way out. An archive that
  * doesn't match the contract is worse than no archive: the whole point is that
  * `reviews/` is a dataset.
+ *
+ * **Two roots, chosen by the post's draft flag.** A published post's review goes
+ * to `reviews/`, the committed dataset. An unpublished post's review goes to the
+ * gitignored holding path, because the file quotes the unpublished draft and its
+ * critique line by line and a commit would publish both before the author did.
+ * The layout below the root is identical, so promotion on publish is a move, and
+ * every reader takes the same shape either way. See {@link DRAFT_REVIEWS_DIR}.
  *
  * Phase 1a does not git-commit the archive from inside the activity. See
  * "Deviations from spec" in the README.
@@ -24,11 +31,12 @@ export interface ArchiveResult {
 export async function archiveReport(report: ReviewReport): Promise<ArchiveResult> {
   const { result } = await timed('archiveReport', async () => {
     const parsed = ReviewReport.parse(report);
-    // reviews/<collection>/<slug>/ — the slug alone is not unique across
+    const held = reviewIsUnpublished(parsed);
+    // <root>/<collection>/<slug>/ — the slug alone is not unique across
     // collections, and a writing post and a changelog entry sharing one would
     // otherwise interleave their archives in a single directory and fight over
     // `latest.json`.
-    const dir = path.join(REVIEWS_DIR, parsed.collection, parsed.slug);
+    const dir = path.join(held ? DRAFT_REVIEWS_DIR : REVIEWS_DIR, parsed.collection, parsed.slug);
     await fs.mkdir(dir, { recursive: true });
 
     const hash12 = parsed.contentSha256.slice(0, 12);
@@ -45,8 +53,9 @@ export async function archiveReport(report: ReviewReport): Promise<ArchiveResult
         mode: parsed.mode,
         hash12,
         overall: parsed.overall,
+        held,
       },
-      'review archived',
+      held ? 'review archived (held: post is unpublished)' : 'review archived',
     );
     // Anchored on REPO_ROOT, not SITE_DIR: archives live under the steward tree
     // regardless of which content root is under review, so a redirected SITE_DIR

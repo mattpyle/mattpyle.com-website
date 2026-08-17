@@ -298,6 +298,36 @@ export const REVIEWS_DIR = process.env.STEWARD_REVIEWS_DIR
   : path.join(STEWARD_DIR, 'reviews');
 
 /**
+ * Where a review of an **unpublished** post is archived: gitignored, and never
+ * one `git add -A` from public history.
+ *
+ * A review file quotes the post line by line — `excerpt` fields, the Vale hits,
+ * the editorial critique. For a `draft: true` post that is unpublished writing
+ * plus its criticism, and committing it publishes both before the author chose
+ * to. Git history has the same property the site's draft rules already respect
+ * for RSS: what is pushed cannot be recalled.
+ *
+ * So the archive is split by the post's own draft flag rather than by anything
+ * about the review (`archiveReport`, and {@link REVIEWS_DIR} for the published
+ * half). A held review moves into the public dataset when the post ships —
+ * `promoteReviews` in `lib/promote-reviews.ts`, run by `steward cleanup` and by
+ * `steward promote-reviews`.
+ *
+ * Derived from `REVIEWS_DIR` rather than given its own env var, so the one
+ * `STEWARD_REVIEWS_DIR` override tests already use redirects **both** halves of
+ * the archive into the temp directory. A test that redirected only one of them
+ * would write real draft reviews into the real holding path. Derived from the
+ * basename, not just the parent, so two tests with different temp roots do not
+ * share a holding directory.
+ *
+ * Production: `agents/steward/.reviews-drafts/`.
+ */
+export const DRAFT_REVIEWS_DIR = path.join(
+  path.dirname(REVIEWS_DIR),
+  `.${path.basename(REVIEWS_DIR)}-drafts`,
+);
+
+/**
  * Where full per-run Scorecard records (including per-page raw scores) are
  * archived (spec §5.2) — a sibling of the review archive, same dataset
  * convention: committed on purpose, not scratch (spec §11).
