@@ -367,6 +367,59 @@ test('an unrecognised question says so and hands over the orientation answer', (
   assert.doesNotMatch(said(ask('What is this site about?')), /did not recognise/);
 });
 
+test('the question a real caller missed routes to the surfaces answer', () => {
+  // The first recorded outside miss, 2026-08-15: a correct A2A 1.0 SendMessage call whose question
+  // scored zero surfaces keywords and got the front desk answer without even the apology, because
+  // "site" read as an oriented question. Verbatim, then the near neighbours it would arrive as.
+  for (const question of [
+    'What experiments on agent-facing web standards does this site run?',
+    'What agent standards is this site experimenting with?',
+    'Is this site a testbed for agentic web standards?',
+    'What emerging standards do you experiment with here?',
+    'What agentic experiments run here?',
+  ]) {
+    assert.equal(classify(question)?.id, 'surfaces', `"${question}" should route to surfaces`);
+  }
+
+  const reply = said(ask('What experiments on agent-facing web standards does this site run?'));
+  assert.match(reply, /What this site hands to agents/);
+  assert.doesNotMatch(reply, /did not recognise the question/);
+});
+
+test('the surfaces vocabulary does not pull questions that route correctly today', () => {
+  // Surfaces is ranked first for ties, so every word added to it can take a tie win from every
+  // other intent. These are the routings the new words came closest to.
+  for (const [question, expected] of [
+    ['What shipped recently?', 'changelog'],
+    ['What articles has he written about standards?', 'writing'],
+    ['What experimental builds are on the shelf?', 'builds'],
+    ['What is the accessibility score?', 'scorecard'],
+    ['Who is Matt Pyle and what is his background?', 'person'],
+  ]) {
+    assert.equal(classify(question)?.id, expected, `"${question}" should stay ${expected}`);
+  }
+
+  // Orientation is a fallback, not an intent, so it has no classification at all.
+  assert.equal(classify('What is this site about?'), null);
+});
+
+test('a missed intent is countable in the log line, separately from an oriented one', () => {
+  // Both fallbacks answer with the same orientation text. Without the split, the miss rate the
+  // vocabulary work is measured by is invisible in the function log.
+  assert.equal(ask('zzzz qqqq').outcome, 'ok/site-unrecognised');
+  assert.equal(ask('What is this site about?').outcome, 'ok/site');
+  assert.equal(legacyAsk('zzzz qqqq').outcome, 'legacy/ok/site-unrecognised');
+
+  // The token splits into the same two fields as every other one, and a real intent is untouched.
+  assert.equal(ask('zzzz qqqq').outcome.split('/').length, 2);
+  assert.equal(ask('What agent-readable surfaces does this site expose?').outcome, 'ok/surfaces');
+
+  // Both still answer, and only the unrecognised one apologises first.
+  assert.match(said(ask('zzzz qqqq')), /Sections/);
+  assert.match(said(ask('zzzz qqqq')), /did not recognise the question/);
+  assert.doesNotMatch(said(ask('What is this site about?')), /did not recognise/);
+});
+
 test('keyword matching does not fire on substrings', () => {
   // "blog" contains "log", "newest" contains "new": unpadded matching would make the changelog
   // intent win almost everything.

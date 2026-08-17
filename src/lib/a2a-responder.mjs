@@ -270,11 +270,17 @@ const INTENTS = [
   {
     id: 'surfaces',
     answer: surfaces,
+    // The second block is the vocabulary the first recorded outside caller used and missed with
+    // (2026-08-15): "What experiments on agent-facing web standards does this site run?" scored
+    // zero here and fell through to orientation. Deliberately not "trying" or "testing": surfaces
+    // is ranked first for ties, so every broad word added here takes tie wins from every other
+    // intent.
     keywords: [
       'agents.md', 'llms.txt', 'llms-full', 'llms', 'webmcp', 'mcp', 'a2a', 'agent card',
       'agent-readable', 'agent readable', 'machine-readable', 'machine readable', 'protocol',
       'endpoint', 'api', 'tool', 'tools', 'sitemap', 'robots', 'structured data', 'json-ld',
       'schema', 'crawl', 'scrape', 'markdown', 'surface', 'surfaces', 'expose', 'exposes',
+      'experiment', 'experiments', 'standard', 'standards', 'agent-facing', 'agentic', 'testbed',
     ],
   },
   {
@@ -372,12 +378,18 @@ export function classify(question) {
 /**
  * The webmaster's answer to one question.
  *
+ * `unrecognised` is the distinction the reply already makes in prose, handed back so the caller
+ * can log it. Both fallbacks answer with the orientation text, so without it a missed intent and
+ * a genuine "what is this site?" are the same line in the function log, and the miss rate is
+ * invisible.
+ *
  * @param {string} question
  * @param {object} digest
+ * @returns {{ intent: string, text: string, unrecognised: boolean }}
  */
 export function answer(question, digest) {
   const intent = classify(question);
-  if (intent) return { intent: intent.id, text: intent.answer(digest) };
+  if (intent) return { intent: intent.id, text: intent.answer(digest), unrecognised: false };
 
   const text = normalize(question);
   // Nothing specific matched. Either the question was a general one about the site, which the
@@ -385,7 +397,8 @@ export function answer(question, digest) {
   // should admit before giving it.
   const oriented = score(text, ORIENTATION_KEYWORDS) > 0;
   const asked = /[a-z0-9]/i.test(String(question ?? ''));
-  return { intent: 'site', text: describe(digest, { unrecognised: asked && !oriented }) };
+  const unrecognised = asked && !oriented;
+  return { intent: 'site', text: describe(digest, { unrecognised }), unrecognised };
 }
 
 /* ------------------------------------------------------------------ the JSON-RPC envelope */
@@ -522,7 +535,12 @@ function handleRequest(request, { digest, newId }) {
     };
   }
 
-  const { intent, text: reply } = answer(text, digest);
+  const { intent, text: reply, unrecognised } = answer(text, digest);
+  // The two fallbacks give the same answer and mean opposite things: one is the front desk doing
+  // its job, the other is a question this vocabulary could not place. Suffixed rather than made a
+  // slash segment, so `ok/site-unrecognised` still splits into the same two fields as every other
+  // token.
+  const outcomeIntent = unrecognised ? `${intent}-unrecognised` : intent;
 
   const messageId = newId();
   // Servers must set contextId. An inbound one is echoed so a client threading a conversation
@@ -533,7 +551,7 @@ function handleRequest(request, { digest, newId }) {
       : newId();
 
   return {
-    outcome: `${dialect}ok/${intent}`,
+    outcome: `${dialect}ok/${outcomeIntent}`,
     notification: isNotification,
     payload: {
       jsonrpc: '2.0',

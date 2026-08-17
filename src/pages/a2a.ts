@@ -27,6 +27,11 @@ const CARD_URL = 'https://www.mattpyle.com/.well-known/agent-card.json';
  * agent-hit-counter work), so the function log is the entire dataset for now — which is exactly
  * why the outcome is recorded as a token like `ok/surfaces` or `method-not-found/tasks/get`
  * rather than as prose: whatever eventually reads these should not have to parse a sentence.
+ *
+ * `ok/site` and `ok/site-unrecognised` are the same reply and opposite outcomes: the front desk
+ * answering a general question, and a question the responder's vocabulary could not place. Counting
+ * the second one is the only way the miss rate is visible at all. The question text is never
+ * logged.
  */
 function log(fields: Record<string, string | number>) {
   console.log(
