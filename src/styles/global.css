@@ -117,9 +117,11 @@
   --json-bracket-1:  #7d2a6b;
   --json-bracket-2:  #0431fa;
   /* Changelog significance dots (see /changelog). major reuses the accent so the
-     palette stays two-hue; minor is amber, patch is a muted parchment grey. */
+     palette stays two-hue; minor is amber, patch is a muted parchment grey.
+     minor doubles as the partial-status text colour on /scorecard, so it has to clear
+     AA as text and not only as a dot: 5.1:1 on --color-bg, 5.3:1 on retro's #fffdf5. */
   --color-sig-major: var(--color-accent);
-  --color-sig-minor: #c08a2d;
+  --color-sig-minor: #8a6320;
   --color-sig-patch: #b0a68f;
   --font-mono:   'JetBrains Mono', 'JetBrains Mono Fallback', monospace;
   --font-serif:  'Source Serif 4', 'Source Serif 4 Fallback', Georgia, serif;
