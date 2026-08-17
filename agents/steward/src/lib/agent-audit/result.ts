@@ -257,8 +257,9 @@ export function rankedFixes(checks: CheckResult[]): CheckResult[] {
  * one. Collapsing whitespace does not help — `\x1b` is not whitespace.
  *
  * The tab/newline/carriage-return cases are removed here too rather than
- * preserved: this runs on text that is about to be flattened onto one line
- * anyway.
+ * preserved, so a caller that wants a line break to survive as a space has to
+ * collapse whitespace before calling this rather than after. `excerpt` does, and
+ * its docblock says why.
  */
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
 
@@ -269,9 +270,23 @@ export function stripControlChars(text: string): string {
 /**
  * Trims a response body down to a quotable excerpt: one line, bounded, control
  * characters removed, with the truncation visible rather than silent.
+ *
+ * The whitespace collapse runs **before** the control-character strip, and the
+ * order is the whole correctness of this function. `stripControlChars` deletes
+ * `\n` and `\r` outright, so stripping first left nothing for the collapse to
+ * turn into a space and the text on either side of a line break fused:
+ * temporal.io's two-line robots.txt was quoted as one malformed line in the
+ * 2026-08-16 deep report. Collapsing first turns each run of whitespace into one
+ * space, and the strip then has only the genuinely dangerous characters left to
+ * remove — `\x1b` is not whitespace, which is why it still has to run at all.
+ *
+ * The collapse runs once more afterwards because removing a non-whitespace
+ * control character leaves the spaces that surrounded it side by side.
  */
 export function excerpt(text: string, max = 240): string {
-  const flat = stripControlChars(text).replace(/\s+/g, ' ').trim();
+  const flat = stripControlChars(text.replace(/\s+/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
 }
 
