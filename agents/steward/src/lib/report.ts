@@ -130,6 +130,16 @@ export const ReviewReport = z.object({
   collection: Collection.default('writing'),
   /** Defaulted for the same reason: every pre-audit-mode review was a gate. */
   mode: ReviewMode.default('gate'),
+  /**
+   * The reviewed post's own `draft` frontmatter value, recorded because it
+   * decides where the review is archived: an unpublished post's review is held
+   * out of the public repo until the post ships (`DRAFT_REVIEWS_DIR`).
+   *
+   * Optional, not defaulted, so archives written before this field existed still
+   * parse — and so the fallback is a decision rather than a silent `false`. Read
+   * it through {@link reviewIsUnpublished}, never directly.
+   */
+  draft: z.boolean().optional(),
   file: z.string(),
   contentSha256: z.string(),
   reviewedAt: z.iso.datetime(),
@@ -162,6 +172,24 @@ export const ReviewReport = z.object({
   }),
 });
 export type ReviewReport = z.infer<typeof ReviewReport>;
+
+/**
+ * Does this review quote a post that is not published yet?
+ *
+ * The one question the archive split turns on. It reads the recorded `draft`
+ * flag when there is one, and otherwise falls back to the mode, which carries
+ * the same fact for every archive written before the flag existed: `gate` mode
+ * refuses anything that is not `draft: true` (`checkFrontmatter`, and the
+ * workflow's own guard), so a gate review is by construction a draft's review.
+ *
+ * The fallback is deliberately the cautious direction. A report with neither
+ * field readable is treated as a draft's, because holding a published post's
+ * review back costs a `steward promote-reviews` run, and getting it wrong the
+ * other way is unrecallable.
+ */
+export function reviewIsUnpublished(report: Pick<ReviewReport, 'draft' | 'mode'>): boolean {
+  return report.draft ?? report.mode !== 'audit';
+}
 
 export interface DraftSnapshot {
   slug: string;

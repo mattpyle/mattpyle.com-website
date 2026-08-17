@@ -45,6 +45,7 @@ import {
 import { BOLD, DIM, GREEN, RED, RESET, paint, renderReport } from './lib/render-report.js';
 import { deriveInboxHint } from './lib/inbox.js';
 import { cleanupPublishedTwin } from './lib/cleanup.js';
+import { promoteReviews } from './lib/promote-reviews.js';
 import {
   reviewPost,
   approve as approveSignal,
@@ -1305,6 +1306,48 @@ program
         ? `      fast-forwarded ${result.base}: ${result.from.slice(0, 8)} → ${result.to.slice(0, 8)}`
         : `      ${result.base} was already at origin's tip (${result.to.slice(0, 8)})`,
     );
+
+    // The checkout has just caught up with the merge, so the post file now says
+    // `draft: false` and its held review has become publishable. This is the one
+    // moment in the routine where that is reliably true, which is why promotion
+    // rides here rather than anywhere in the workflow.
+    const { promoted } = await promoteReviews();
+    for (const p of promoted) {
+      console.log(`      promoted the held review into the dataset: ${p.to}/`);
+    }
+    console.log('');
+  });
+
+/**
+ * `steward promote-reviews` — the same move, on demand.
+ *
+ * `cleanup` covers the normal path, but it is a per-slug verb with three guards
+ * and a human can reasonably skip it (a draft that was committed rather than
+ * left untracked has no twin to reconcile). Without a standalone verb, a review
+ * held for a post that shipped months ago would stay held forever with nothing
+ * to say so.
+ */
+program
+  .command('promote-reviews')
+  .description('Move held reviews of now-published posts into the committed dataset')
+  .action(async () => {
+    const { promoted, held } = await promoteReviews();
+    console.log('');
+    if (promoted.length === 0) {
+      console.log('  Nothing to promote.');
+    } else {
+      console.log(`  ${paint(`Promoted ${promoted.length}.`, GREEN)}`);
+      console.log('');
+      for (const p of promoted) {
+        console.log(`      ${p.collection}/${p.slug} → ${p.to}/ (${p.files.length} files)`);
+      }
+    }
+    if (held.length > 0) {
+      console.log('');
+      console.log('  Still held:');
+      console.log('');
+      for (const h of held) console.log(`      ${h.collection}/${h.slug} — ${h.reason}`);
+    }
     console.log('');
   });
 

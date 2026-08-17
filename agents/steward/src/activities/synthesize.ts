@@ -180,6 +180,11 @@ export async function synthesizeReport(input: SynthesizeInput): Promise<ReviewRe
       slug: input.snapshot.slug,
       collection: input.snapshot.collection ?? 'writing',
       mode: input.mode ?? 'gate',
+      // Read off the snapshot's frontmatter, which is the bytes that were
+      // actually reviewed — not off the mode, and not re-read from disk later.
+      // It decides where the report is archived (`archiveReport`), so it has to
+      // describe the same file the excerpts came from.
+      draft: input.snapshot.frontmatter?.draft === true,
       file: input.snapshot.file,
       contentSha256: input.snapshot.contentSha256,
       reviewedAt: new Date().toISOString(),

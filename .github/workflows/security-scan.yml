@@ -211,8 +211,13 @@ jobs:
           # friends are unanchored in .gitignore and so match at any depth
           # (agents/steward/CLAUDE.md is one of them); `/docs/`, `/steward/`
           # and `/public/og/` are root-anchored and matched as such.
+          #
+          # `agents/steward/.reviews-drafts/` holds reviews of posts that have
+          # not published yet: the review quotes the unpublished draft and its
+          # critique, so a tracked file there is the leak this job exists to
+          # catch, not a stale artifact.
           # ---------------------------------------------------------------
-          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/'
+          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/'
 
           tracked_private=$(git ls-files | grep -E "$private")
 

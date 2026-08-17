@@ -1,6 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { REVIEWS_DIR, SITE_DIR, postRelPath, resolveArchivePath, type Collection } from '../config.js';
+import {
+  DRAFT_REVIEWS_DIR,
+  REVIEWS_DIR,
+  SITE_DIR,
+  postRelPath,
+  resolveArchivePath,
+  type Collection,
+} from '../config.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { ReviewReport as ReviewReportSchema, type ReviewReport, type ReviewStateResult } from './report.js';
 
@@ -156,19 +163,31 @@ export async function readLatestReport(
   collection: Collection,
   slug: string,
 ): Promise<ReviewReport | null> {
-  const resolved = path.join(REVIEWS_DIR, collection, slug, 'latest.json');
-  let raw: string;
-  try {
-    raw = await readFile(resolved, 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw new Error(`Could not read the archived report at ${resolved}: ${(err as Error).message}`);
+  // Both archive roots, public first. A draft's review is held out of the repo
+  // (config.ts, DRAFT_REVIEWS_DIR) and `steward report` must still find it —
+  // where the file sits is a git question, not a readability one. Public first
+  // so that after a promotion the moved copy wins over any stale holding-path
+  // leftover rather than the other way round.
+  for (const root of [REVIEWS_DIR, DRAFT_REVIEWS_DIR]) {
+    const resolved = path.join(root, collection, slug, 'latest.json');
+    let raw: string;
+    try {
+      raw = await readFile(resolved, 'utf8');
+    } catch (err) {
+      // Same rule as `readArchivedReport`: only "not there" moves on. Design
+      // rule 11 — a file that exists but will not read is a bug, not an absence.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw new Error(
+        `Could not read the archived report at ${resolved}: ${(err as Error).message}`,
+      );
+    }
+    try {
+      return ReviewReportSchema.parse(JSON.parse(raw));
+    } catch (err) {
+      throw new Error(
+        `The archived report at ${resolved} exists but is not valid JSON, or fails the ReviewReport schema: ${(err as Error).message}`,
+      );
+    }
   }
-  try {
-    return ReviewReportSchema.parse(JSON.parse(raw));
-  } catch (err) {
-    throw new Error(
-      `The archived report at ${resolved} exists but is not valid JSON, or fails the ReviewReport schema: ${(err as Error).message}`,
-    );
-  }
+  return null;
 }
