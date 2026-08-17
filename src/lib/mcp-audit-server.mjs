@@ -406,7 +406,9 @@ function registerDeepTools(server, deep, normaliseTarget) {
         'While it runs, "progress" lists each unit of work and "pending" carries the attempt ' +
         'number of anything being retried. If the finished report is incomplete, "integrity" says ' +
         'so and says which half can still be read. Reading report or summary before the run ends ' +
-        'is an error rather than a partial document.',
+        'is an error rather than a partial document. For status and report, structuredContent ' +
+        'carries the same document as data, so there is no JSON to parse out of the text; summary ' +
+        'is markdown and comes back as text alone.',
       inputSchema: {
         workflowId: z
           .string()
@@ -427,8 +429,15 @@ function registerDeepTools(server, deep, normaliseTarget) {
       },
     },
     async ({ workflowId, view }) => {
-      const text = await deep.readView(workflowId, view ?? 'status');
-      return { content: [{ type: 'text', text }] };
+      const resolved = view ?? 'status';
+      const text = await deep.readView(workflowId, resolved);
+      // Status and report are JSON documents that were being handed over as prose, so a client
+      // wanting them as data had to parse a text block — the Hermes canary's daily script did
+      // exactly that on its first run. The structured half is the parse of this same string and
+      // nothing else: one document, two renderings, no reshaping that could let them disagree.
+      // Summary is markdown, so it has no structured half to carry.
+      if (resolved === 'summary') return { content: [{ type: 'text', text }] };
+      return { structuredContent: JSON.parse(text), content: [{ type: 'text', text }] };
     },
   );
 }

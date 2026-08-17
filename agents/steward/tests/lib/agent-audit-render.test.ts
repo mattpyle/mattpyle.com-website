@@ -156,6 +156,21 @@ test('excerpt strips the control characters that survive whitespace collapsing',
   assert.match(quoted, /\[31m<!doctype html>\[0m with a bell/);
 });
 
+test('excerpt keeps a space where each line break was', () => {
+  // An excerpt exists to be quoted as evidence, so a fused one misrepresents the
+  // file it quotes. temporal.io's robots.txt is two clean lines and read as one
+  // malformed line in the 2026-08-16 deep report, because the control-character
+  // strip deleted the newline before the whitespace collapse could see it.
+  assert.equal(
+    excerpt('Sitemap: https://example.com/sitemap.xml\nUser-agent: *\r\nDisallow:'),
+    'Sitemap: https://example.com/sitemap.xml User-agent: * Disallow:',
+  );
+
+  // And removing a control character that is not whitespace leaves no double
+  // space behind it, because the collapse runs on both sides of the strip.
+  assert.equal(excerpt(`one ${ESC} two`), 'one two');
+});
+
 test('stripControlChars covers C0, C1 and DEL, and leaves real text alone', () => {
   assert.equal(stripControlChars('a\u0000b\u001bc\u007fde'), 'abcde');
   assert.equal(stripControlChars('plain — text, ünicode, 日本語'), 'plain — text, ünicode, 日本語');

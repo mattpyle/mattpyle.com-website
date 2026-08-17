@@ -332,6 +332,34 @@ async function readState(workflowId) {
 }
 
 /**
+ * The one sentence a poller reads to learn what is happening right now.
+ *
+ * The workflow's own note wins when it has one, because only the workflow knows
+ * which page it is on. It is **prefixed** rather than replaced when the run is
+ * also queued, and that is the whole point of this function: since the hosted
+ * worker took its activity concurrency down to one, `queued` no longer means
+ * "nothing has picked this up". A run mid-audit can be waiting its turn for the
+ * activity slot, and it then answers `queued: true` beside a note saying it is
+ * rendering pages. Both are true, and a caller should not have to reconcile them
+ * — one sentence says the run is rendering and is waiting for the slot to do it.
+ *
+ * The two fallbacks, for a run with no note of its own, are unchanged: a queued
+ * run nothing has started, and a run whose worker was too busy to answer.
+ *
+ * @param {{ note?: string, queued: boolean, done: boolean, queryError?: string }} input
+ * @returns {string}
+ */
+export function statusNote({ note, queued, done, queryError }) {
+  if (note) return queued ? `queued behind another audit: ${note}` : note;
+  if (queued) return 'queued — the audit is started and durable, and no worker has picked it up yet';
+  if (done) return queryError ?? 'no state — the run may have ended before it reported any';
+  return (
+    'running — a worker has this audit in hand and was too busy to answer the progress query in ' +
+    'time. Rendering a page occupies the worker, so this is normal mid-audit.'
+  );
+}
+
+/**
  * The status document.
  *
  * `done` is terminal rather than successful: an audit that fails is a designed
@@ -360,14 +388,7 @@ async function readStatus(workflowId) {
     tier: 'deep',
     execution,
     phase: state?.phase ?? 'unknown',
-    note:
-      state?.note ??
-      (queued
-        ? 'queued — the audit is started and durable, and no worker has picked it up yet'
-        : done
-          ? (queryError ?? 'no state — the run may have ended before it reported any')
-          : 'running — a worker has this audit in hand and was too busy to answer the progress ' +
-            'query in time. Rendering a page occupies the worker, so this is normal mid-audit.'),
+    note: statusNote({ note: state?.note, queued, done, queryError }),
     done,
     succeeded,
     queued,

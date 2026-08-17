@@ -65,6 +65,28 @@ test('agents.md quotes the User-Agent and the refusal token exactly', () => {
   );
 });
 
+test('the limits table renders the caps this deployment enforces, not the defaults', () => {
+  // The page is the public contract for what an audit costs a caller, so it has to read the same
+  // env-or-default resolution the limiter does. Rendering the exported DEFAULT_* constants made it
+  // advertise 2 deep audits per caller while production ran 4.
+  //
+  // Asserted against the source because the numbers only exist once the page is built, and the
+  // resolvers' own behaviour is already covered by tests/mcp-deep-rate-limit.test.mjs.
+  const page = read('src/pages/steward.astro');
+
+  assert.match(page, /readLimits\(process\.env\)/, 'the fast caps must resolve through readLimits');
+  assert.match(
+    page,
+    /readDeepLimits\(process\.env\)/,
+    'the deep caps must resolve through readDeepLimits'
+  );
+  assert.doesNotMatch(
+    page,
+    /\{DEFAULT_[A-Z_]+\}/,
+    'a DEFAULT_ constant rendered into the page is a cap that ignores the environment'
+  );
+});
+
 test('the User-Agent points at a page this site actually serves', () => {
   // The URL in a User-Agent comment is the whole reason a site owner ever reaches any of this. A
   // string pointing at a 404 is worse than one pointing nowhere, because it costs somebody a click
