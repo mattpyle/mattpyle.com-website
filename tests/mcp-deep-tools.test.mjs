@@ -167,6 +167,35 @@ test('get_audit defaults to status and passes the view straight through', async 
   ]);
 });
 
+test('get_audit carries the JSON views as data, and the markdown one as text alone', async (t) => {
+  const documents = {
+    status: `${JSON.stringify({ workflowId: 'wf-1', done: false, queued: true }, null, 2)}\n`,
+    report: `${JSON.stringify({ schemaVersion: 2, checks: [{ id: 'robots', status: 'pass' }] }, null, 2)}\n`,
+    summary: '# Audit of https://example.com\n',
+  };
+  const { client, close } = await connect({ readView: async (_id, view) => documents[view] });
+  t.after(close);
+
+  for (const view of ['status', 'report']) {
+    const result = await client.callTool({
+      name: GET_AUDIT_TOOL_NAME,
+      arguments: { workflowId: 'wf-1', view },
+    });
+    // Deep-equal to the parse of its own text block, because the structured half is that parse and
+    // nothing else. Any reshaping here would be a second measurement able to disagree with the
+    // first, which is the thing the one-readView rule exists to prevent.
+    assert.deepEqual(result.structuredContent, JSON.parse(result.content[0].text), view);
+  }
+
+  // Markdown has no structured half to carry, and inventing one would be the reshaping above.
+  const summary = await client.callTool({
+    name: GET_AUDIT_TOOL_NAME,
+    arguments: { workflowId: 'wf-1', view: 'summary' },
+  });
+  assert.equal(summary.structuredContent, undefined);
+  assert.equal(summary.content[0].text, documents.summary);
+});
+
 test('an unreachable Temporal is a tool error, never a dropped request', async (t) => {
   // The stage-3 card's degradation line. An agent can act on a JSON-RPC error that names the
   // cause; it can only guess at a gateway timeout with no body.
