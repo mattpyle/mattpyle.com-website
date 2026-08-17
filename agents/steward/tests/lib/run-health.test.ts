@@ -114,8 +114,8 @@ test('a credential inside the window fails the check and says what breaks', () =
   assert.equal(shape.ok, false);
   assert.match(shape.summary, /a key expires in 10 day\(s\)/);
   assert.match(shape.summary, /something breaks/);
-  // Points at the private guide rather than reproducing it.
-  assert.match(shape.summary, /"Rotating a credential" in the steward user guide/);
+  // Points at the private operator docs rather than reproducing them.
+  assert.match(shape.summary, /steward\/docs\/rotate-a-credential\.md/);
 });
 
 test('the boundary is inclusive, and a day outside it is silent', () => {
@@ -158,8 +158,8 @@ test('no tracked credential names where its copies live — this file is public'
   // `agents/steward/` is public, and a list of every place a token is stored is
   // a map worth more to a stranger than to the operator, who owns the secrets
   // and does not need an email telling him where they are. The locations live
-  // in the private user guide under "Rotating a credential", and the alert
-  // points at it by name.
+  // in the private operator docs, in `steward/docs/rotate-a-credential.md`, and
+  // the alert points at it by name.
   //
   // Asserted over the serialised rows *and* the rendered summary, because the
   // leak this guards against is a helpful sentence added to either one.
