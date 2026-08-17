@@ -9,7 +9,8 @@
  * paragraph of positioning before finding the row that says what fetched their site.
  *
  * Nothing on this page restates a number that code already holds, except where it cannot. The rate
- * limits are imported from src/lib/mcp-rate-limit.mjs. The check list is
+ * limits are resolved through src/lib/mcp-rate-limit.mjs's own resolvers, so the table shows what
+ * this deployment enforces rather than what the defaults say. The check list is
  * src/data/steward-audit-checks.mjs, a copy of Steward's own specs guarded by a test on the
  * workspace side; that file's docblock explains why a copy is the only option. The User-Agent is
  * the one string typed out here, for the reason its own comment gives, and it is pinned by
@@ -18,13 +19,7 @@
 import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import { STEWARD_FAST_CHECKS, STEWARD_CHECK_CATEGORIES } from '../data/steward-audit-checks.mjs';
-import {
-  DEFAULT_PER_CALLER,
-  DEFAULT_GLOBAL_PER_DAY,
-  DEFAULT_WINDOW_SECONDS,
-  DEFAULT_DEEP_PER_CALLER,
-  DEFAULT_DEEP_GLOBAL_PER_DAY,
-} from '../lib/mcp-rate-limit.mjs';
+import { readLimits, readDeepLimits } from '../lib/mcp-rate-limit.mjs';
 
 /**
  * The User-Agent verbatim, character for character, including the version.
@@ -41,7 +36,19 @@ const AGENT_TOKEN = 'steward-audit';
 const ENDPOINT = 'https://www.mattpyle.com/mcp';
 const ISSUES_URL = 'https://github.com/mattpyle/mattpyle.com-website/issues';
 
-const windowHours = DEFAULT_WINDOW_SECONDS / 3600;
+/**
+ * The caps this deployment actually enforces, not the compile-time defaults.
+ *
+ * Read through the limiter's own resolvers, so the page cannot disagree with the code that refuses
+ * a caller. Production has run `MCP_DEEP_RATE_PER_CALLER=4` since 2026-08-16 while this table said
+ * 2, which is the harmless direction of wrong and still the one thing the page exists to get right.
+ * The page prerenders on Vercel, where the project's environment variables are set at build time; a
+ * build without them renders the same defaults it always did.
+ */
+const fastLimits = readLimits(process.env);
+const deepLimits = readDeepLimits(process.env);
+
+const windowHours = fastLimits.windowSeconds / 3600;
 
 const byCategory = STEWARD_CHECK_CATEGORIES.map(category => ({
   ...category,
@@ -299,7 +306,7 @@ const extraJsonLd = [
           <tr>
             <th scope="col">Tier</th>
             <th scope="col">Limit</th>
-            <th scope="col">Default</th>
+            <th scope="col">Cap</th>
             <th scope="col">Window</th>
           </tr>
         </thead>
@@ -307,25 +314,25 @@ const extraJsonLd = [
           <tr>
             <td>Fast</td>
             <td>Per caller</td>
-            <td>{DEFAULT_PER_CALLER} audits</td>
+            <td>{fastLimits.perCaller} audits</td>
             <td>{windowHours === 1 ? 'One hour' : `${windowHours} hours`}</td>
           </tr>
           <tr>
             <td>Fast</td>
             <td>Everyone together</td>
-            <td>{DEFAULT_GLOBAL_PER_DAY} audits</td>
+            <td>{fastLimits.globalPerDay} audits</td>
             <td>One UTC day</td>
           </tr>
           <tr>
             <td>Deep</td>
             <td>Per caller</td>
-            <td>{DEFAULT_DEEP_PER_CALLER} audits</td>
+            <td>{deepLimits.perCaller} audits</td>
             <td>One UTC day</td>
           </tr>
           <tr>
             <td>Deep</td>
             <td>Everyone together</td>
-            <td>{DEFAULT_DEEP_GLOBAL_PER_DAY} audits</td>
+            <td>{deepLimits.globalPerDay} audits</td>
             <td>One UTC day</td>
           </tr>
         </tbody>

@@ -195,10 +195,10 @@
     - table "Rate limits on the public endpoint":
       - caption: Rate limits on the public endpoint
       - rowgroup:
-        - row "Tier Limit Default Window":
+        - row "Tier Limit Cap Window":
           - columnheader "Tier"
           - columnheader "Limit"
-          - columnheader "Default"
+          - columnheader "Cap"
           - columnheader "Window"
       - rowgroup:
         - row /Fast Per caller \d+ audits One hour/:
@@ -211,10 +211,10 @@
           - cell "Everyone together"
           - cell /\d+ audits/
           - cell "One UTC day"
-        - row "Deep Per caller 2 audits One UTC day":
+        - row /Deep Per caller \d+ audits One UTC day/:
           - cell "Deep"
           - cell "Per caller"
-          - cell "2 audits"
+          - cell /\d+ audits/
           - cell "One UTC day"
         - row /Deep Everyone together \d+ audits One UTC day/:
           - cell "Deep"
