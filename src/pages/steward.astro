@@ -20,6 +20,13 @@ import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import { STEWARD_FAST_CHECKS, STEWARD_CHECK_CATEGORIES } from '../data/steward-audit-checks.mjs';
 import { readLimits, readDeepLimits } from '../lib/mcp-rate-limit.mjs';
+import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
+
+// The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
+// rather than written out, so this link and the sibling the middleware would actually serve
+// cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
+// absent rather than null.
+const markdownUrl = markdownSiblingFor('/steward/') ?? undefined;
 
 /**
  * The User-Agent verbatim, character for character, including the version.
@@ -121,7 +128,13 @@ const extraJsonLd = [
 ];
 ---
 
-<Layout title={title} seoTitle={seoTitle} description={description} extraJsonLd={extraJsonLd}>
+<Layout
+  title={title}
+  seoTitle={seoTitle}
+  description={description}
+  extraJsonLd={extraJsonLd}
+  markdownAlternate={markdownUrl}
+>
   <PageHeader
     eyebrow="Agent · Auditor"
     title="Steward"

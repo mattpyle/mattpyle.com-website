@@ -3,6 +3,13 @@ import { getCollection } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import PageHeader from '../../components/PageHeader.astro';
 import BuildsGrid from '../../components/BuildsGrid.astro';
+import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
+
+// The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
+// rather than written out, so this link and the sibling the middleware would actually serve
+// cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
+// absent rather than null.
+const markdownUrl = markdownSiblingFor('/builds/') ?? undefined;
 
 const allBuilds = await getCollection('builds');
 
@@ -16,6 +23,7 @@ const builds = allBuilds.sort((a, b) => {
 <Layout
   title="Builds: side projects and software experiments"
   description="Side projects and software experiments, some built on Temporal and some not. Hobby builds from a growth marketer, not a corporate portfolio."
+  markdownAlternate={markdownUrl}
 >
   <PageHeader
     eyebrow="Side projects"

@@ -16,6 +16,13 @@ import { createTools } from '../../lib/webmcp-tools.mjs';
 import { WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED, ORIGIN_TRIAL_EXPIRY } from '../../data/webmcp-catalog.mjs';
 import { formatVerifiedLabel } from '../../data/sitemap-lastmod.mjs';
 import { buildToolSnippet } from '../../lib/webmcp-snippet.mjs';
+import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
+
+// The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
+// rather than written out, so this link and the sibling the middleware would actually serve
+// cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
+// absent rather than null.
+const markdownUrl = markdownSiblingFor('/webmcp/') ?? undefined;
 
 // createTools only touches getIndex inside a handler's execute(), so building the definitions at
 // build time never fetches anything. Throw rather than stub a value, so that stops being true loudly.
@@ -155,6 +162,7 @@ const breadcrumbs = [
   description={description}
   breadcrumbs={breadcrumbs}
   extraJsonLd={extraJsonLd}
+  markdownAlternate={markdownUrl}
 >
   <PageHeader
     eyebrow="Agent tools · Experiment"

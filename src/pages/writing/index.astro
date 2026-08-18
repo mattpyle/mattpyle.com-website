@@ -4,6 +4,13 @@ import Layout from '../../layouts/Layout.astro';
 import PageHeader from '../../components/PageHeader.astro';
 import ArticleList from '../../components/ArticleList.astro';
 import { showDrafts } from '../../lib/show-drafts';
+import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
+
+// The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
+// rather than written out, so this link and the sibling the middleware would actually serve
+// cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
+// absent rather than null.
+const markdownUrl = markdownSiblingFor('/writing/') ?? undefined;
 
 const allArticles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
 
@@ -19,6 +26,7 @@ const allTags = [...new Set(articles.flatMap(a => a.data.tags))].sort();
 <Layout
   title="Writing on growth, marketing, AI, and building"
   description="Essays on growth, marketing, AI, and building software as a non-engineer, from the Director of Growth at Temporal Technologies."
+  markdownAlternate={markdownUrl}
 >
   <PageHeader
     eyebrow="Writing"

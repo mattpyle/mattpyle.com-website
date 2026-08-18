@@ -12,6 +12,12 @@ import {
 // with, so the two can never disagree about what /about's markdown is called.
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
+// The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
+// rather than written out, so this link and the sibling the middleware would actually serve
+// cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
+// absent rather than null.
+const markdownUrl = markdownSiblingFor('/scorecard/') ?? undefined;
+
 /**
  * On demand, for the Agent traffic section alone.
  *
@@ -87,7 +93,11 @@ function shortMetricName(name: string): string {
 }
 ---
 
-<Layout title="Scorecard: accessibility, performance, and SEO" description={SCORECARD.description}>
+<Layout
+  title="Scorecard: accessibility, performance, and SEO"
+  description={SCORECARD.description}
+  markdownAlternate={markdownUrl}
+>
   <div class="scorecard-shell" data-module="scorecard">
     <header class="scorecard-header">
       <p class="eyebrow">Public scorecard · live web</p>

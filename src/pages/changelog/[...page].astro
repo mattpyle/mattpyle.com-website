@@ -6,6 +6,7 @@ import ChangelogLedger from '../../components/ChangelogLedger.astro';
 import FilterPills from '../../components/FilterPills.astro';
 import { showDrafts } from '../../lib/show-drafts';
 import { compareChangelogEntries } from '../../lib/changelog-order';
+import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
 
 export const getStaticPaths = (async ({ paginate }) => {
   // Entries per ledger page. The year grouping is the visual scaffold; this is the
@@ -60,6 +61,12 @@ const description = "What's shipped on this site — launches, features, and the
 // this is the SERP-length variant (see the seoDescription prop in Layout.astro).
 const seoDescription = 'Everything shipped on this site, newest first: launches, features, infrastructure work, and the occasional experiment that did not pan out.';
 const breadcrumbUrl = isFirst ? '/changelog/' : `/changelog/${page.currentPage}/`;
+
+// The page's markdown sibling, declared in the head by Layout. Derived from this page's own
+// canonical path rather than a literal, so a paginated page advertises its own sibling and not
+// page one's. If a second page ever exists, scripts/validate-markdown-siblings.mjs fails the
+// build unless that sibling is emitted too, so this link cannot point at a 404 quietly.
+const markdownUrl = markdownSiblingFor(breadcrumbUrl) ?? undefined;
 ---
 
 <Layout
@@ -67,6 +74,7 @@ const breadcrumbUrl = isFirst ? '/changelog/' : `/changelog/${page.currentPage}/
   description={description}
   seoDescription={seoDescription}
   breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'Changelog', url: breadcrumbUrl }]}
+  markdownAlternate={markdownUrl}
 >
   <div class="changelog-shell">
     <header class="changelog-header">
