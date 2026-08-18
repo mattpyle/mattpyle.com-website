@@ -228,6 +228,18 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     {markdownAlternate && (
       <link rel="alternate" type="text/markdown" href={new URL(markdownAlternate, Astro.site)} />
     )}
+    {/*
+      llms.txt v2 (llmstxt.org, modified 2026-08-10) recommends advertising the file through the
+      `alternate` and `describedby` link relations, as `<link>` elements or an HTTP `Link:` header.
+      The `alternate` above is per-page and points at that page's own markdown sibling; this one is
+      the site-wide index, and it is on every page rather than the homepage alone so an agent that
+      arrives on a post finds it without going back to `/`.
+
+      A `<link>` element only. The edge `Link:` header on `/` in vercel.json already carries an
+      `alternate` to /llms.txt and a `describedby` to /agents.md, and changing that pair means
+      editing vercel.json and middleware.ts in step — a bigger, separate change.
+    */}
+    <link rel="describedby" type="text/markdown" href={new URL('/llms.txt', Astro.site)} />
     <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin />
     <ClientRouter />

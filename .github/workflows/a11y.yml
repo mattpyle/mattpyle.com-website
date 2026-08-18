@@ -196,3 +196,11 @@ jobs:
       - name: Validate HTML (Nu HTML Checker)
         if: always()
         run: npm run --silent validate:html -- --transport jar
+
+      # /llms.txt still conforms to llmstxt.org (v2), and every page still advertises it. The file
+      # is generated from the content collections, so a generator change can break its format
+      # without breaking the build; the nightly scorecard would catch that a day later, against
+      # production, as a degraded metric. Advisory here, and pre-deploy.
+      - name: Validate llms.txt conformance
+        if: always()
+        run: npm run --silent validate:llms-txt
