@@ -141,11 +141,20 @@ function toSearchText(markdown: string): string {
     .toLowerCase();
 }
 
-function headingId(unitSlug: string, text: string): string {
-  const anchor = text
+/**
+ * One slugifier for both sides of an in-page link: the id a body heading takes,
+ * and the fragment a `unit.md#some-heading` link carries. They have to agree or
+ * the link lands nowhere.
+ */
+function slugifyAnchor(text: string): string {
+  return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function headingId(unitSlug: string, text: string): string {
+  const anchor = slugifyAnchor(text);
   return anchor ? `${unitSlug}--${anchor}` : unitSlug;
 }
 
@@ -161,9 +170,22 @@ function resolveHref(href: string, unitSlugs: ReadonlySet<string>): string {
   const [target = '', fragment] = href.split('#', 2);
   if (!target.endsWith('.md')) return href;
   const base = path.posix.basename(target).replace(/\.md$/, '');
-  if (unitSlugs.has(base)) return `#${base}`;
+
+  // A link into another unit becomes an anchor, keeping its heading fragment:
+  // body heading ids are `${slug}--${anchor}`, so the two halves join here.
+  if (unitSlugs.has(base)) {
+    const anchor = fragment ? slugifyAnchor(fragment) : '';
+    return anchor ? `#${base}--${anchor}` : `#${base}`;
+  }
   if (base === 'README') return '#index';
-  return `docs/${base}.md${fragment ? `#${fragment}` : ''}`;
+
+  // Anything else stays a file link, and the two directories differ: the unit
+  // wrote the path relative to `steward/docs/`, and the page that follows it
+  // sits in `steward/`. Resolve against the first, re-relativise against the
+  // second, so `../steward-spec.md` becomes `steward-spec.md` while
+  // `_inventory.md` becomes `docs/_inventory.md`.
+  const resolved = path.posix.normalize(path.posix.join('docs', target));
+  return `${resolved}${fragment ? `#${fragment}` : ''}`;
 }
 
 function renderMarkdown(markdown: string, unitSlug: string, unitSlugs: ReadonlySet<string>): string {
@@ -182,6 +204,10 @@ function renderMarkdown(markdown: string, unitSlug: string, unitSlugs: ReadonlyS
       const title = token.title ? ` title="${escapeHtml(token.title)}"` : '';
       if (/^https?:/i.test(href)) {
         return `<a href="${escapeHtml(href)}"${title} rel="noopener noreferrer" target="_blank">${inner}</a>`;
+      }
+      // `mailto:` is neither an anchor nor a file, so it takes neither class.
+      if (/^mailto:/i.test(href)) {
+        return `<a href="${escapeHtml(href)}"${title}>${inner}</a>`;
       }
       const cls = href.startsWith('#') ? 'unit-link' : 'file-link';
       return `<a class="${cls}" href="${escapeHtml(href)}"${title}>${inner}</a>`;

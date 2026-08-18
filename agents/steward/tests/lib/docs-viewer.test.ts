@@ -131,8 +131,50 @@ test('inter-unit links become in-page anchors, other markdown stays a file link'
   const alpha = units.find((unit) => unit.slug === 'alpha');
   assert.ok(alpha);
   assert.match(alpha.html, /href="#beta"/);
-  assert.match(alpha.html, /href="docs\/steward-spec\.md"/);
+  // `../steward-spec.md` is written relative to steward/docs/; the page that
+  // follows it sits one level up, in steward/.
+  assert.match(alpha.html, /href="steward-spec\.md"/);
+  assert.doesNotMatch(alpha.html, /href="docs\/steward-spec\.md"/);
   assert.doesNotMatch(alpha.html, /href="[^"#]*beta\.md"/);
+});
+
+test('a file link inside the units directory keeps that directory', async () => {
+  const dir = await fixture();
+  const { intro } = await collectUnits(dir);
+  assert.match(intro, /href="#alpha"/);
+  const withInventory = await fixture({
+    'gamma.md': GAMMA.replace('Every verb, one line each.', 'See [inventory](_inventory.md).'),
+  });
+  const { units } = await collectUnits(withInventory);
+  const gamma = units.find((unit) => unit.slug === 'gamma');
+  assert.match(gamma?.html ?? '', /href="docs\/_inventory\.md"/);
+});
+
+test('an inter-unit link keeps its heading fragment, scoped to that unit', async () => {
+  const dir = await fixture({
+    'gamma.md': GAMMA.replace(
+      'Every verb, one line each.',
+      'Detail is in [alpha](alpha.md#a-subheading).',
+    ),
+  });
+  const { units } = await collectUnits(dir);
+  const gamma = units.find((unit) => unit.slug === 'gamma');
+  assert.match(gamma?.html ?? '', /href="#alpha--a-subheading"/);
+  const alpha = units.find((unit) => unit.slug === 'alpha');
+  assert.match(alpha?.html ?? '', /<h3 id="alpha--a-subheading">/);
+});
+
+test('only real file links carry the file-link class', async () => {
+  const dir = await fixture({
+    'gamma.md': GAMMA.replace(
+      'Every verb, one line each.',
+      'Ask [Matt](mailto:matt@example.com) or read [the spec](../steward-spec.md).',
+    ),
+  });
+  const { units } = await collectUnits(dir);
+  const gamma = units.find((unit) => unit.slug === 'gamma');
+  assert.match(gamma?.html ?? '', /class="file-link" href="steward-spec\.md"/);
+  assert.doesNotMatch(gamma?.html ?? '', /class="file-link" href="mailto:/);
 });
 
 test('body headings drop a level and carry a unit-scoped id', async () => {
