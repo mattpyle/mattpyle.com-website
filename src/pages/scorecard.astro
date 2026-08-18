@@ -12,6 +12,12 @@ import {
 // with, so the two can never disagree about what /about's markdown is called.
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
+// The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
+// rather than written out, so this link and the sibling the middleware would actually serve
+// cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
+// absent rather than null.
+const markdownUrl = markdownSiblingFor('/scorecard/') ?? undefined;
+
 /**
  * On demand, for the Agent traffic section alone.
  *
@@ -87,7 +93,11 @@ function shortMetricName(name: string): string {
 }
 ---
 
-<Layout title="Scorecard: accessibility, performance, and SEO" description={SCORECARD.description}>
+<Layout
+  title="Scorecard: accessibility, performance, and SEO"
+  description={SCORECARD.description}
+  markdownAlternate={markdownUrl}
+>
   <div class="scorecard-shell" data-module="scorecard">
     <header class="scorecard-header">
       <p class="eyebrow">Public scorecard · live web</p>
@@ -373,6 +383,39 @@ function shortMetricName(name: string): string {
       </footer>
     </section>
   </div>
+  <script>
+    /**
+     * Localise the Agent traffic timestamps.
+     *
+     * The page is cached and served byte-identically to everyone, so the server cannot know the
+     * reader's timezone and must not try: every stamp ships as UTC, labelled UTC, correct with no
+     * JavaScript at all. This rewrites the visible text to the reader's own zone; the `datetime`
+     * attribute, which is the machine-readable value and the one an agent reads, is never touched.
+     *
+     * Bound to astro:page-load rather than run once, because ClientRouter soft-navigates into this
+     * page without a fresh document (see the other components in src/components).
+     */
+    function localiseTimes(): void {
+      const local = new Intl.DateTimeFormat(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short',
+      });
+
+      for (const element of document.querySelectorAll<HTMLTimeElement>('time[data-local-time]')) {
+        const iso = element.getAttribute('datetime');
+        if (!iso) continue;
+        const at = new Date(iso);
+        if (Number.isNaN(at.getTime())) continue;
+        element.textContent = local.format(at);
+      }
+    }
+
+    document.addEventListener('astro:page-load', localiseTimes);
+  </script>
 </Layout>
 
 <style>
@@ -1031,37 +1074,3 @@ function shortMetricName(name: string): string {
     .chevron { transition: none; }
   }
 </style>
-
-<script>
-  /**
-   * Localise the Agent traffic timestamps.
-   *
-   * The page is cached and served byte-identically to everyone, so the server cannot know the
-   * reader's timezone and must not try: every stamp ships as UTC, labelled UTC, correct with no
-   * JavaScript at all. This rewrites the visible text to the reader's own zone; the `datetime`
-   * attribute, which is the machine-readable value and the one an agent reads, is never touched.
-   *
-   * Bound to astro:page-load rather than run once, because ClientRouter soft-navigates into this
-   * page without a fresh document (see the other components in src/components).
-   */
-  function localiseTimes(): void {
-    const local = new Intl.DateTimeFormat(undefined, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    });
-
-    for (const element of document.querySelectorAll<HTMLTimeElement>('time[data-local-time]')) {
-      const iso = element.getAttribute('datetime');
-      if (!iso) continue;
-      const at = new Date(iso);
-      if (Number.isNaN(at.getTime())) continue;
-      element.textContent = local.format(at);
-    }
-  }
-
-  document.addEventListener('astro:page-load', localiseTimes);
-</script>

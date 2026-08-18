@@ -1,11 +1,12 @@
 /**
  * The fast tier, as a package entry point the site can import.
  *
- * This file exists for exactly one consumer: `src/pages/mcp.ts` in the site
- * repo, which answers a public `audit_site` call inside a Vercel function. It is
- * the only thing `@mattpyle/steward`'s exports map publishes, and that narrowness
- * is the point — a package entry is a promise about an import graph, and this one
- * promises that the graph reaches HTTP, DNS and undici and nothing else.
+ * This file is the fast tier's surface for the site repo. Its first consumer, and the reason it
+ * exists, is `src/pages/mcp.ts`, which answers a public `audit_site` call inside a Vercel
+ * function; `scripts/validate-llms-txt.mjs` is the second, and reuses the llms.txt rules here
+ * rather than keeping a copy. What is published is narrow on purpose — a package entry is a
+ * promise about an import graph, and this one promises that the graph reaches HTTP, DNS and
+ * undici and nothing else. Adding an export is cheap; adding one that widens that graph is not.
  *
  * **What must never appear below this file:** `@temporalio/*`, `chrome-launcher`,
  * `lighthouse`, `@axe-core/*`, `@anthropic-ai/sdk`. Temporal because the public
@@ -37,6 +38,22 @@ export {
 } from './checks.js';
 
 export { renderMarkdownSummary } from './render.js';
+
+/**
+ * The llms.txt spec conformance rules, for the site's own generated file.
+ *
+ * A second consumer for this entry, added 2026-08-17, and the reason the entry is now described as
+ * the fast tier's surface rather than as one function for one caller. `scripts/validate-llms-txt.mjs`
+ * in the site repo asserts that the file `src/pages/llms.txt.ts` generates still conforms to
+ * llmstxt.org, and it reuses the parser here instead of growing a second one that drifts. It costs
+ * the /mcp function bundle nothing: `checks.ts` is already the entry's first import, and
+ * `llms-txt-conformance.ts` imports only that.
+ */
+export {
+  checkLlmsTxtConformance,
+  type LlmsTxtConformance,
+  type LlmsTxtViolation,
+} from './llms-txt-conformance.js';
 
 export {
   AUDIT_USER_AGENT,

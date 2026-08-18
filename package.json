@@ -19,6 +19,8 @@
     "a11y": "npm run build && playwright test",
     "a11y:run": "playwright test",
     "a11y:axe": "axe",
+    "validate:html": "node scripts/validate-html.mjs",
+    "validate:llms-txt": "node --import tsx scripts/validate-llms-txt.mjs",
     "spellcheck": "cspell --no-progress \"src/content/**/*.md\" \"src/data/skills/**/*.md\"",
     "check": "astro check",
     "new-post": "node scripts/new-post.mjs",
@@ -54,9 +56,11 @@
     "fast-xml-validator": "^1.2.0",
     "fontkit": "^2.0.4",
     "serve": "^14.2.6",
+    "tsx": "4.23.1",
     "turndown": "^7.2.4",
     "turndown-plugin-gfm": "^1.0.2",
     "typescript": "^5.9.3",
+    "vnu-jar": "26.8.15",
     "wait-on": "^9.0.10",
     "wawoff2": "^2.0.1"
   }

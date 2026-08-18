@@ -16,6 +16,13 @@ import { createTools } from '../../lib/webmcp-tools.mjs';
 import { WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED, ORIGIN_TRIAL_EXPIRY } from '../../data/webmcp-catalog.mjs';
 import { formatVerifiedLabel } from '../../data/sitemap-lastmod.mjs';
 import { buildToolSnippet } from '../../lib/webmcp-snippet.mjs';
+import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
+
+// The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
+// rather than written out, so this link and the sibling the middleware would actually serve
+// cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
+// absent rather than null.
+const markdownUrl = markdownSiblingFor('/webmcp/') ?? undefined;
 
 // createTools only touches getIndex inside a handler's execute(), so building the definitions at
 // build time never fetches anything. Throw rather than stub a value, so that stops being true loudly.
@@ -155,6 +162,7 @@ const breadcrumbs = [
   description={description}
   breadcrumbs={breadcrumbs}
   extraJsonLd={extraJsonLd}
+  markdownAlternate={markdownUrl}
 >
   <PageHeader
     eyebrow="Agent tools · Experiment"
@@ -465,283 +473,283 @@ const breadcrumbs = [
       </ul>
     </section>
   </div>
-</Layout>
+  <script>
+    /**
+     * The try-it controls.
+     *
+     * Imports the SAME createTools + memoized /webmcp/index.json fetch that WebMCP.astro registers
+     * with, so pressing Run executes the identical function an agent reaches through executeTool.
+     * That is the claim the intro copy makes, and this is what makes it true.
+     *
+     * Everything ships disabled in the HTML and is enabled here, so a JS failure degrades to the
+     * honest no-JS state rather than to dead controls.
+     */
+    import { createTools } from '../../lib/webmcp-tools.mjs';
+    import { getAppearance, APPEARANCE_CHANGE_EVENT } from '../../lib/appearance.mjs';
+    import { formatJson } from '../../lib/format-json.mjs';
+    import { buildToolSnippet } from '../../lib/webmcp-snippet.mjs';
 
-<script>
-  /**
-   * The try-it controls.
-   *
-   * Imports the SAME createTools + memoized /webmcp/index.json fetch that WebMCP.astro registers
-   * with, so pressing Run executes the identical function an agent reaches through executeTool.
-   * That is the claim the intro copy makes, and this is what makes it true.
-   *
-   * Everything ships disabled in the HTML and is enabled here, so a JS failure degrades to the
-   * honest no-JS state rather than to dead controls.
-   */
-  import { createTools } from '../../lib/webmcp-tools.mjs';
-  import { getAppearance, APPEARANCE_CHANGE_EVENT } from '../../lib/appearance.mjs';
-  import { formatJson } from '../../lib/format-json.mjs';
-  import { buildToolSnippet } from '../../lib/webmcp-snippet.mjs';
+    /** Fired by a radiogroup when its selection changes; the console listens to re-sync the snippet. */
+    const FIELD_CHANGE_EVENT = 'webmcp:fieldchange';
 
-  /** Fired by a radiogroup when its selection changes; the console listens to re-sync the snippet. */
-  const FIELD_CHANGE_EVENT = 'webmcp:fieldchange';
+    // Memoized so N tool runs share one fetch, exactly as in WebMCP.astro.
+    // connect-src 'self' permits this same-origin request.
+    let pending: Promise<any> | undefined;
+    const getIndex = () => (pending ??= fetch('/webmcp/index.json').then((r) => r.json()));
 
-  // Memoized so N tool runs share one fetch, exactly as in WebMCP.astro.
-  // connect-src 'self' permits this same-origin request.
-  let pending: Promise<any> | undefined;
-  const getIndex = () => (pending ??= fetch('/webmcp/index.json').then((r) => r.json()));
+    const IDLE_LINES =
+      '// Nothing run yet. Press Run tool to call the handler\n// and print the JSON it returns here.';
 
-  const IDLE_LINES =
-    '// Nothing run yet. Press Run tool to call the handler\n// and print the JSON it returns here.';
-
-  function setPlain(output: HTMLElement, text: string, dim = false) {
-    const pre = document.createElement('pre');
-    pre.className = 'output-pre';
-    const span = document.createElement('span');
-    if (dim) span.className = 'json-dim';
-    span.textContent = text;
-    pre.append(span);
-    output.replaceChildren(pre);
-  }
-
-  /** The blinking block is the only animated cue, and the only one reduced motion removes —
-      the status word, the button label, and the held-pressed button are all static. */
-  function setRunning(output: HTMLElement, name: string) {
-    setPlain(output, `Calling ${name}… `, true);
-    const cursor = document.createElement('span');
-    cursor.className = 'output-cursor';
-    cursor.textContent = '█';
-    output.querySelector('.output-pre')?.append(cursor);
-  }
-
-  function setJson(output: HTMLElement, value: unknown) {
-    const pre = document.createElement('pre');
-    pre.className = 'output-pre';
-    for (const token of formatJson(value)) {
-      if (token.kind === 'plain') {
-        pre.append(document.createTextNode(token.text));
-        continue;
-      }
+    function setPlain(output: HTMLElement, text: string, dim = false) {
+      const pre = document.createElement('pre');
+      pre.className = 'output-pre';
       const span = document.createElement('span');
-      // Brackets carry their nesting depth so opener and closer land on the same colour.
-      span.className =
-        token.kind === 'bracket' ? `json-bracket json-bracket-${token.depth}` : `json-${token.kind}`;
-      // textContent, never innerHTML — a string inside a result can't inject markup this way.
-      span.textContent = token.text;
+      if (dim) span.className = 'json-dim';
+      span.textContent = text;
       pre.append(span);
+      output.replaceChildren(pre);
     }
-    output.replaceChildren(pre);
-  }
 
-  function wireConsole(root: HTMLElement, tool: any) {
-    const runButton = root.querySelector<HTMLButtonElement>('[data-run]')!;
-    const note = root.querySelector<HTMLElement>('[data-note]')!;
-    const status = root.querySelector<HTMLElement>('[data-status]')!;
-    const frame = root.querySelector<HTMLElement>('[data-frame]')!;
-    const output = root.querySelector<HTMLElement>('[data-output]')!;
-    const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('.field-input'));
-    const groups = Array.from(root.querySelectorAll<HTMLElement>('.mode-pills'));
+    /** The blinking block is the only animated cue, and the only one reduced motion removes —
+        the status word, the button label, and the held-pressed button are all static. */
+    function setRunning(output: HTMLElement, name: string) {
+      setPlain(output, `Calling ${name}… `, true);
+      const cursor = document.createElement('span');
+      cursor.className = 'output-cursor';
+      cursor.textContent = '█';
+      output.querySelector('.output-pre')?.append(cursor);
+    }
 
-    // The snippet panel lives outside the console, in the same card.
-    const card = root.closest('.tool-card');
-    const snippetCode = card?.querySelector('.snippet-body code') ?? null;
-    const copyButton = card?.querySelector<HTMLButtonElement>('.copy-button') ?? null;
-
-    // Idle state. The status word is only made a live region AFTER this swap, so the
-    // Unavailable -> Ready transition on load isn't announced four times over.
-    inputs.forEach((input) => (input.disabled = false));
-    groups.forEach((group) =>
-      group.querySelectorAll<HTMLButtonElement>('.filter-pill').forEach((pill) => (pill.disabled = false))
-    );
-    runButton.disabled = false;
-    note.textContent = '';
-    note.hidden = true;
-    status.textContent = 'Ready';
-    setPlain(output, IDLE_LINES, true);
-    status.setAttribute('role', 'status');
-    status.setAttribute('aria-live', 'polite');
-
-    // Force a layout flush after the enable swap, so the enabled styles are the ones that paint.
-    // On its own this was not enough: the `background` transition still ran for 150ms afterwards,
-    // and axe sampling inside that window scored the button against a blend the page never rests
-    // on. The transition is suppressed in CSS until `data-settled`, set below.
-    void runButton.offsetHeight;
-
-    // Two frames: the first schedules the paint of the enabled state, the second runs after it.
-    // Re-enabling transitions any earlier would put them back inside the load swap.
-    requestAnimationFrame(() => requestAnimationFrame(() => (root.dataset.settled = 'true')));
-
-    function readArgs(): Record<string, unknown> {
-      const args: Record<string, unknown> = {};
-      for (const input of inputs) {
-        const value = input.value.trim();
-        if (!value) continue;
-        if (input.dataset.kind === 'number') {
-          const parsed = Number(value);
-          // Skip rather than pass NaN: JSON.stringify would render it `null` in the snippet, which
-          // is not a call anyone could paste.
-          if (!Number.isFinite(parsed)) continue;
-          args[input.dataset.field!] = parsed;
-        } else {
-          args[input.dataset.field!] = value;
+    function setJson(output: HTMLElement, value: unknown) {
+      const pre = document.createElement('pre');
+      pre.className = 'output-pre';
+      for (const token of formatJson(value)) {
+        if (token.kind === 'plain') {
+          pre.append(document.createTextNode(token.text));
+          continue;
         }
+        const span = document.createElement('span');
+        // Brackets carry their nesting depth so opener and closer land on the same colour.
+        span.className =
+          token.kind === 'bracket' ? `json-bracket json-bracket-${token.depth}` : `json-${token.kind}`;
+        // textContent, never innerHTML — a string inside a result can't inject markup this way.
+        span.textContent = token.text;
+        pre.append(span);
       }
-      for (const group of groups) {
-        const active = group.querySelector<HTMLButtonElement>('.filter-pill[aria-checked="true"]');
-        if (active) args[group.dataset.field!] = active.dataset.value;
-      }
-      return args;
+      output.replaceChildren(pre);
     }
 
-    // Keep the snippet honest: it shows the call the Run button would actually make right now, not
-    // a frozen example. Without this the write tool's snippet still said mode "modern" after you
-    // picked "retro" — the one card where the mismatch is most obvious, since the pills also
-    // display the live appearance.
-    function syncSnippet() {
-      const snippet = buildToolSnippet(tool.name, readArgs());
-      if (snippetCode) snippetCode.textContent = snippet;
-      if (copyButton) copyButton.dataset.copy = snippet;
-    }
+    function wireConsole(root: HTMLElement, tool: any) {
+      const runButton = root.querySelector<HTMLButtonElement>('[data-run]')!;
+      const note = root.querySelector<HTMLElement>('[data-note]')!;
+      const status = root.querySelector<HTMLElement>('[data-status]')!;
+      const frame = root.querySelector<HTMLElement>('[data-frame]')!;
+      const output = root.querySelector<HTMLElement>('[data-output]')!;
+      const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('.field-input'));
+      const groups = Array.from(root.querySelectorAll<HTMLElement>('.mode-pills'));
 
-    syncSnippet();
-    inputs.forEach((input) => input.addEventListener('input', syncSnippet));
-    root.addEventListener(FIELD_CHANGE_EVENT, syncSnippet);
+      // The snippet panel lives outside the console, in the same card.
+      const card = root.closest('.tool-card');
+      const snippetCode = card?.querySelector('.snippet-body code') ?? null;
+      const copyButton = card?.querySelector<HTMLButtonElement>('.copy-button') ?? null;
 
-    runButton.addEventListener('click', async () => {
-      runButton.disabled = true;
-      runButton.dataset.running = 'true';
-      runButton.textContent = 'Running…';
-      note.hidden = false;
-      note.textContent = 'Handler called; waiting for its return value.';
-      status.textContent = 'Running…';
-      frame.dataset.state = 'running';
-      frame.setAttribute('aria-busy', 'true');
-      setRunning(output, tool.name);
+      // Idle state. The status word is only made a live region AFTER this swap, so the
+      // Unavailable -> Ready transition on load isn't announced four times over.
+      inputs.forEach((input) => (input.disabled = false));
+      groups.forEach((group) =>
+        group.querySelectorAll<HTMLButtonElement>('.filter-pill').forEach((pill) => (pill.disabled = false))
+      );
+      runButton.disabled = false;
+      note.textContent = '';
+      note.hidden = true;
+      status.textContent = 'Ready';
+      setPlain(output, IDLE_LINES, true);
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
 
-      try {
-        const result = await tool.execute(readArgs());
-        status.textContent = 'Returned';
-        frame.dataset.state = 'success';
-        setJson(output, result);
-      } catch (error) {
-        const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-        status.textContent = 'Failed';
-        frame.dataset.state = 'error';
-        // Rendered in the panel as prefixed text, never thrown or dialogged.
-        setPlain(output, `ERROR  ${tool.name}\n\n${message}`);
-      } finally {
-        frame.removeAttribute('aria-busy');
-        delete runButton.dataset.running;
-        runButton.textContent = 'Run tool';
-        runButton.disabled = false;
-        note.hidden = true;
-        note.textContent = '';
-      }
-    });
-  }
+      // Force a layout flush after the enable swap, so the enabled styles are the ones that paint.
+      // On its own this was not enough: the `background` transition still ran for 150ms afterwards,
+      // and axe sampling inside that window scored the button against a blend the page never rests
+      // on. The transition is suppressed in CSS until `data-settled`, set below.
+      void runButton.offsetHeight;
 
-  /** A local radiogroup wearing .filter-pill's costume — FilterPills.astro is a URL-syncing widget. */
-  function wireRadiogroup(group: HTMLElement) {
-    const pills = Array.from(group.querySelectorAll<HTMLButtonElement>('.filter-pill'));
+      // Two frames: the first schedules the paint of the enabled state, the second runs after it.
+      // Re-enabling transitions any earlier would put them back inside the load swap.
+      requestAnimationFrame(() => requestAnimationFrame(() => (root.dataset.settled = 'true')));
 
-    function select(pill: HTMLButtonElement, focus = true) {
-      pills.forEach((candidate) => {
-        const active = candidate === pill;
-        candidate.classList.toggle('is-active', active);
-        candidate.setAttribute('aria-checked', active ? 'true' : 'false');
-        candidate.tabIndex = active ? 0 : -1;
-      });
-      if (focus) pill.focus();
-      // Bubbles to the console root, which rebuilds the snippet. Covers all three ways the
-      // selection moves: a click, an arrow key, and an appearance change from somewhere else.
-      group.dispatchEvent(new CustomEvent(FIELD_CHANGE_EVENT, { bubbles: true }));
-    }
-
-    pills.forEach((pill) => {
-      pill.addEventListener('click', () => select(pill, false));
-      pill.addEventListener('keydown', (event) => {
-        const current = pills.indexOf(pill);
-        let next: number | null = null;
-        switch (event.key) {
-          case 'ArrowRight':
-          case 'ArrowDown': next = (current + 1) % pills.length; break;
-          case 'ArrowLeft':
-          case 'ArrowUp': next = (current - 1 + pills.length) % pills.length; break;
-          case 'Home': next = 0; break;
-          case 'End': next = pills.length - 1; break;
-          default: return;
+      function readArgs(): Record<string, unknown> {
+        const args: Record<string, unknown> = {};
+        for (const input of inputs) {
+          const value = input.value.trim();
+          if (!value) continue;
+          if (input.dataset.kind === 'number') {
+            const parsed = Number(value);
+            // Skip rather than pass NaN: JSON.stringify would render it `null` in the snippet, which
+            // is not a call anyone could paste.
+            if (!Number.isFinite(parsed)) continue;
+            args[input.dataset.field!] = parsed;
+          } else {
+            args[input.dataset.field!] = value;
+          }
         }
-        event.preventDefault();
-        select(pills[next]);
-      });
-    });
-
-    return { pills, select };
-  }
-
-  function wireCopy(button: HTMLButtonElement, announcer: HTMLElement) {
-    button.disabled = false;
-    button.addEventListener('click', async () => {
-      const snippet = button.dataset.copy ?? '';
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(snippet);
-        copied = true;
-      } catch {
-        // Insecure context, denied permission, or no Clipboard API — say so rather than lie.
-        copied = false;
+        for (const group of groups) {
+          const active = group.querySelector<HTMLButtonElement>('.filter-pill[aria-checked="true"]');
+          if (active) args[group.dataset.field!] = active.dataset.value;
+        }
+        return args;
       }
-      button.textContent = copied ? 'Copied' : 'Copy failed';
-      button.dataset.state = copied ? 'copied' : 'failed';
-      announcer.textContent = copied ? 'Snippet copied to clipboard.' : 'Could not copy — select the snippet and copy it manually.';
-      setTimeout(() => {
-        button.textContent = 'Copy';
-        delete button.dataset.state;
-        announcer.textContent = '';
-      }, 2000);
-    });
-  }
 
-  document.addEventListener('astro:page-load', () => {
-    const shell = document.querySelector<HTMLElement>('[data-module="webmcp"]');
-    if (!shell) return;
+      // Keep the snippet honest: it shows the call the Run button would actually make right now, not
+      // a frozen example. Without this the write tool's snippet still said mode "modern" after you
+      // picked "retro" — the one card where the mismatch is most obvious, since the pills also
+      // display the live appearance.
+      function syncSnippet() {
+        const snippet = buildToolSnippet(tool.name, readArgs());
+        if (snippetCode) snippetCode.textContent = snippet;
+        if (copyButton) copyButton.dataset.copy = snippet;
+      }
 
-    const announcer = document.getElementById('webmcp-copy-status');
-    const tools = new Map<string, any>(createTools(getIndex).map((tool: any) => [tool.name, tool]));
+      syncSnippet();
+      inputs.forEach((input) => input.addEventListener('input', syncSnippet));
+      root.addEventListener(FIELD_CHANGE_EVENT, syncSnippet);
 
-    // Per-element flags rather than a window global: ClientRouter re-runs this script on every
-    // soft navigation, and returning to /webmcp gives a fresh DOM that must be wired again.
-    shell.querySelectorAll<HTMLElement>('.tool-console').forEach((root) => {
-      if (root.dataset.wired) return;
-      const tool = tools.get(root.dataset.tool!);
-      if (!tool) return;
-      root.dataset.wired = 'true';
-      root.querySelectorAll<HTMLElement>('.mode-pills').forEach((group) => {
-        const { pills, select } = wireRadiogroup(group);
+      runButton.addEventListener('click', async () => {
+        runButton.disabled = true;
+        runButton.dataset.running = 'true';
+        runButton.textContent = 'Running…';
+        note.hidden = false;
+        note.textContent = 'Handler called; waiting for its return value.';
+        status.textContent = 'Running…';
+        frame.dataset.state = 'running';
+        frame.setAttribute('aria-busy', 'true');
+        setRunning(output, tool.name);
 
-        // The mode pills are a STATE DISPLAY as well as an input: the footer toggle and an agent
-        // calling set_appearance both change the appearance without touching them. Initialize from
-        // the real value and re-sync on the change event, or they will show the wrong mode.
-        const sync = () => {
-          const current = getAppearance();
-          const match = pills.find((pill) => pill.dataset.value === current);
-          if (match) select(match, false);
-        };
-        sync();
-        document.addEventListener(APPEARANCE_CHANGE_EVENT, sync);
-      });
-      wireConsole(root, tool);
-    });
-
-    if (announcer) {
-      shell.querySelectorAll<HTMLButtonElement>('.copy-button').forEach((button) => {
-        if (button.dataset.wired) return;
-        button.dataset.wired = 'true';
-        wireCopy(button, announcer);
+        try {
+          const result = await tool.execute(readArgs());
+          status.textContent = 'Returned';
+          frame.dataset.state = 'success';
+          setJson(output, result);
+        } catch (error) {
+          const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          status.textContent = 'Failed';
+          frame.dataset.state = 'error';
+          // Rendered in the panel as prefixed text, never thrown or dialogged.
+          setPlain(output, `ERROR  ${tool.name}\n\n${message}`);
+        } finally {
+          frame.removeAttribute('aria-busy');
+          delete runButton.dataset.running;
+          runButton.textContent = 'Run tool';
+          runButton.disabled = false;
+          note.hidden = true;
+          note.textContent = '';
+        }
       });
     }
-  });
-</script>
+
+    /** A local radiogroup wearing .filter-pill's costume — FilterPills.astro is a URL-syncing widget. */
+    function wireRadiogroup(group: HTMLElement) {
+      const pills = Array.from(group.querySelectorAll<HTMLButtonElement>('.filter-pill'));
+
+      function select(pill: HTMLButtonElement, focus = true) {
+        pills.forEach((candidate) => {
+          const active = candidate === pill;
+          candidate.classList.toggle('is-active', active);
+          candidate.setAttribute('aria-checked', active ? 'true' : 'false');
+          candidate.tabIndex = active ? 0 : -1;
+        });
+        if (focus) pill.focus();
+        // Bubbles to the console root, which rebuilds the snippet. Covers all three ways the
+        // selection moves: a click, an arrow key, and an appearance change from somewhere else.
+        group.dispatchEvent(new CustomEvent(FIELD_CHANGE_EVENT, { bubbles: true }));
+      }
+
+      pills.forEach((pill) => {
+        pill.addEventListener('click', () => select(pill, false));
+        pill.addEventListener('keydown', (event) => {
+          const current = pills.indexOf(pill);
+          let next: number | null = null;
+          switch (event.key) {
+            case 'ArrowRight':
+            case 'ArrowDown': next = (current + 1) % pills.length; break;
+            case 'ArrowLeft':
+            case 'ArrowUp': next = (current - 1 + pills.length) % pills.length; break;
+            case 'Home': next = 0; break;
+            case 'End': next = pills.length - 1; break;
+            default: return;
+          }
+          event.preventDefault();
+          select(pills[next]);
+        });
+      });
+
+      return { pills, select };
+    }
+
+    function wireCopy(button: HTMLButtonElement, announcer: HTMLElement) {
+      button.disabled = false;
+      button.addEventListener('click', async () => {
+        const snippet = button.dataset.copy ?? '';
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(snippet);
+          copied = true;
+        } catch {
+          // Insecure context, denied permission, or no Clipboard API — say so rather than lie.
+          copied = false;
+        }
+        button.textContent = copied ? 'Copied' : 'Copy failed';
+        button.dataset.state = copied ? 'copied' : 'failed';
+        announcer.textContent = copied ? 'Snippet copied to clipboard.' : 'Could not copy — select the snippet and copy it manually.';
+        setTimeout(() => {
+          button.textContent = 'Copy';
+          delete button.dataset.state;
+          announcer.textContent = '';
+        }, 2000);
+      });
+    }
+
+    document.addEventListener('astro:page-load', () => {
+      const shell = document.querySelector<HTMLElement>('[data-module="webmcp"]');
+      if (!shell) return;
+
+      const announcer = document.getElementById('webmcp-copy-status');
+      const tools = new Map<string, any>(createTools(getIndex).map((tool: any) => [tool.name, tool]));
+
+      // Per-element flags rather than a window global: ClientRouter re-runs this script on every
+      // soft navigation, and returning to /webmcp gives a fresh DOM that must be wired again.
+      shell.querySelectorAll<HTMLElement>('.tool-console').forEach((root) => {
+        if (root.dataset.wired) return;
+        const tool = tools.get(root.dataset.tool!);
+        if (!tool) return;
+        root.dataset.wired = 'true';
+        root.querySelectorAll<HTMLElement>('.mode-pills').forEach((group) => {
+          const { pills, select } = wireRadiogroup(group);
+
+          // The mode pills are a STATE DISPLAY as well as an input: the footer toggle and an agent
+          // calling set_appearance both change the appearance without touching them. Initialize from
+          // the real value and re-sync on the change event, or they will show the wrong mode.
+          const sync = () => {
+            const current = getAppearance();
+            const match = pills.find((pill) => pill.dataset.value === current);
+            if (match) select(match, false);
+          };
+          sync();
+          document.addEventListener(APPEARANCE_CHANGE_EVENT, sync);
+        });
+        wireConsole(root, tool);
+      });
+
+      if (announcer) {
+        shell.querySelectorAll<HTMLButtonElement>('.copy-button').forEach((button) => {
+          if (button.dataset.wired) return;
+          button.dataset.wired = 'true';
+          wireCopy(button, announcer);
+        });
+      }
+    });
+  </script>
+
+</Layout>
 
 <style>
   .webmcp-shell {

@@ -649,9 +649,36 @@ interface LlmsOutcome {
   parsed: boolean;
 }
 
-/** Every `[title](url)` in a line, wherever it sits. */
+/** The longest single line `markdownLinksIn` will scan. See its docblock. */
+const LINK_SCAN_MAX = 2000;
+
+/**
+ * Every `[title](url)` in a line, wherever it sits.
+ *
+ * The destination is the leading run of non-space characters inside the
+ * parentheses; anything after the first space is markdown's optional link title
+ * and is discarded.
+ *
+ * Two things here are about cost rather than about markdown, both from CodeQL
+ * js/polynomial-redos on 2026-08-17. The input is a list item out of somebody
+ * else's llms.txt, reached through the public /mcp `audit_site` tool, so it is
+ * genuinely uncontrolled and a line that never matches is the case that matters.
+ *
+ * The link text is `[^[\]]*` rather than `[^\]]*`: excluding the opening bracket
+ * means a run of `[[[[…` cannot be consumed by it, so each start position fails
+ * immediately instead of scanning to the end of the line. A `[` inside link text
+ * would not have parsed correctly under the old spelling either.
+ *
+ * And the whole scan is capped. Backtracking between the URL and the optional
+ * title is still quadratic in the length of one line, and no spelling of this
+ * pattern that stays one regex removes that — so the length is bounded instead.
+ * A conforming list item is a URL and a short note; 2000 characters is far past
+ * anything real, and a line longer than that has already failed the check this
+ * feeds.
+ */
 function markdownLinksIn(line: string): Array<{ title: string; url: string }> {
-  return [...line.matchAll(/\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)].map((m) => ({
+  const scanned = line.length > LINK_SCAN_MAX ? line.slice(0, LINK_SCAN_MAX) : line;
+  return [...scanned.matchAll(/\[([^[\]]*)\]\(([^)\s]+)(?:\s[^)]*)?\)/g)].map((m) => ({
     title: m[1].trim(),
     url: m[2].trim(),
   }));

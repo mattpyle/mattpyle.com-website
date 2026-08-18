@@ -1,5 +1,7 @@
 // @ts-check
 import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
@@ -8,6 +10,7 @@ import { readWritingMetadata } from './scripts/lib/writing-metadata.mjs';
 import { SITE_ORIGIN } from './src/data/site-origin.mjs';
 import { ON_DEMAND_PAGES, resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
 import { PRE_PAINT_APPEARANCE_SCRIPT } from './src/lib/pre-paint-appearance.mjs';
+import { stripEmptySrcset } from './scripts/lib/empty-srcset.mjs';
 
 // Astro hashes the scripts it bundles. It does not hash is:inline scripts, in
 // <head> or in <body>, because is:inline means "emit these bytes untouched".
@@ -169,5 +172,29 @@ export default defineConfig({
         return item;
       },
     }),
+    // One upstream defect, swept up at the end of the build: Astro serialises an empty
+    // `srcset=""` on content-collection markdown images that produce no responsive variant, which
+    // is a markup validity error. See scripts/lib/empty-srcset.mjs for the upstream code path and
+    // the check that says when this can be deleted.
+    {
+      name: 'strip-empty-srcset',
+      hooks: {
+        'astro:build:done': async ({ dir, logger }) => {
+          const root = fileURLToPath(dir);
+          let files = 0;
+          let removed = 0;
+          for (const file of readdirSync(root, { recursive: true, withFileTypes: true })) {
+            if (!file.isFile() || !file.name.endsWith('.html')) continue;
+            const full = join(file.parentPath, file.name);
+            const result = stripEmptySrcset(readFileSync(full, 'utf8'));
+            if (result.removed === 0) continue;
+            writeFileSync(full, result.html, 'utf8');
+            files++;
+            removed += result.removed;
+          }
+          if (removed > 0) logger.info(`removed ${removed} empty srcset attribute(s) from ${files} page(s)`);
+        },
+      },
+    },
   ],
 });
