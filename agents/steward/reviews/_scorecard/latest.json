@@ -1,6 +1,6 @@
 {
-  "iso": "2026-08-17",
-  "timestamp": "2026-08-17T03:33:21-07:00",
+  "iso": "2026-08-18",
+  "timestamp": "2026-08-18T03:33:27-07:00",
   "scope": "23 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "97",
+      "value": "99",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 23 tested pages."
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-08-17",
+  "id": "2026-08-18",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -98,7 +98,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 97,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -109,7 +109,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -131,7 +131,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -208,7 +208,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -241,7 +241,7 @@
     {
       "url": "https://www.mattpyle.com/steward/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -252,7 +252,7 @@
     {
       "url": "https://www.mattpyle.com/webmcp/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -295,7 +295,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 1d ago (<= 7d threshold)",
+  "reason": "unchanged, published 2d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-08-17"
+  "archiveId": "2026-08-18"
 }
