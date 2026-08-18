@@ -25,8 +25,11 @@
  * message format, so everything downstream of the transport is shared.
  *
  * Errors fail the run. Warnings and info messages are printed and do not, because Nu's warnings
- * are style advice as often as they are defects; anything deliberately left is recorded in
- * docs/reference/html-validity-and-llms-txt.md rather than silenced here.
+ * are style advice as often as they are defects. One is left deliberately and is expected on every
+ * run: `The "list" role is unnecessary for element "ul"/"ol"`, 23 of them. Nu is right about the
+ * spec and wrong about the browsers — Safari drops list semantics from a list styled
+ * `list-style: none`, so VoiceOver stops announcing "list, 5 items", and `role="list"` restores
+ * it. The site styles every list that way. A warning that is not that one is worth reading.
  */
 
 import { spawnSync } from 'node:child_process';
