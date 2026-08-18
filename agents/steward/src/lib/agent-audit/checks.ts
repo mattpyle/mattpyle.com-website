@@ -649,9 +649,19 @@ interface LlmsOutcome {
   parsed: boolean;
 }
 
-/** Every `[title](url)` in a line, wherever it sits. */
+/**
+ * Every `[title](url)` in a line, wherever it sits.
+ *
+ * The destination is the leading run of non-space characters inside the
+ * parentheses; anything after the first space is markdown's optional link title
+ * and is discarded. Spelled as `[^)\s]+` then an optional `\s[^)]*` rather than
+ * `[^)\s]+[^)]*`, which is the same language and quadratic: the two character
+ * classes there overlap, so a non-matching line costs the engine every way of
+ * splitting the run between them. This input is a list item from somebody else's
+ * llms.txt (CodeQL js/polynomial-redos, 2026-08-17).
+ */
 function markdownLinksIn(line: string): Array<{ title: string; url: string }> {
-  return [...line.matchAll(/\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)].map((m) => ({
+  return [...line.matchAll(/\[([^\]]*)\]\(([^)\s]+)(?:\s[^)]*)?\)/g)].map((m) => ({
     title: m[1].trim(),
     url: m[2].trim(),
   }));
