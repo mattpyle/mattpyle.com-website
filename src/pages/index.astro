@@ -9,6 +9,7 @@ import WebRing from '../components/WebRing.astro';
 import { getCollection } from 'astro:content';
 import { showDrafts } from '../lib/show-drafts';
 import { compareChangelogEntries } from '../lib/changelog-order';
+import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 const recentArticles = (
   await getCollection('writing', ({ data }) => showDrafts || !data.draft)
@@ -28,12 +29,21 @@ const activityItems = (
     type: data.type,
     significance: data.significance,
   }));
+
+// Derived from the negotiation map rather than written out as `/index.md`, so the link in the
+// head and the sibling the middleware would actually serve cannot drift apart. `/` has had a
+// sibling all along; it just never said so.
+//
+// The map returns null for a path it does not negotiate, and Layout wants the prop absent rather
+// than null — so if `/` ever stops being negotiable this emits no link instead of a broken one.
+const markdownUrl = markdownSiblingFor('/') ?? undefined;
 ---
 
 <Layout
   title="Matt Pyle"
   fullTitle="Matt Pyle — Growth, AI agents, and building in public"
   description="Matt Pyle is Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder, writing about agent-led growth and the open web."
+  markdownAlternate={markdownUrl}
 >
   <Hero activityItems={activityItems} />
   <RetroHomeFurniture />
