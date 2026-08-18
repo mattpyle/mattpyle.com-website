@@ -1420,6 +1420,28 @@ program
   });
 
 program
+  .command('docs')
+  .description('Re-render the operator docs viewer at steward/docs.html and print its path')
+  .action(async () => {
+    // Lazy: the markdown parser is only ever needed by this verb.
+    const { generateDocsViewer, DocsUnitError } = await import('./lib/docs-viewer.js');
+    try {
+      const { outPath, units, groups, warnings } = await generateDocsViewer();
+      console.log('');
+      console.log(`  ${BOLD}${units.length} units${RESET} in ${groups.length} groups`);
+      for (const warning of warnings) console.log(`  ${paint(warning, DIM)}`);
+      console.log(`  ${outPath}`);
+      console.log(`  ${paint('Open it in a browser; it needs no server and no connection.', DIM)}`);
+      console.log('');
+    } catch (err) {
+      // A unit that will not parse is the operator's own typo, and the exit code
+      // is what a caller (or a future pre-commit hook) reads.
+      if (err instanceof DocsUnitError) fail(err.message);
+      throw err;
+    }
+  });
+
+program
   .command('scorecard')
   .option('--dry-run', 'audit and archive only — never opens or updates a PR (spec §4.2 step 4)')
   .option('--urls <csv>', 'comma-separated URL override; skips the live sitemap fetch')
