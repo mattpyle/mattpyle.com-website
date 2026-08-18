@@ -1,4 +1,13 @@
-name: Accessibility (axe-core + guard checks)
+name: Built-site checks (axe-core, HTML validity, llms.txt)
+
+# Everything that needs a real production build served over HTTP, sharing one build and one
+# server. The accessibility audits came first and are still the bulk of it; the HTML validity run
+# and the llms.txt conformance assertion joined on 2026-08-17 because they need exactly the same
+# two things and a second job would pay for a second build to get them.
+#
+# Which steps gate: the two axe runs and the audit-url report scan. The Playwright guard, the
+# HTML validity run and the llms.txt assertion are advisory — red on the PR, deploys proceed —
+# in the same spirit as spellcheck.
 
 on:
   push:
@@ -24,6 +33,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
+
+      # The Nu HTML Checker is a Java program. `vnu-jar` pins the jar itself as a devDependency,
+      # but not the runtime it needs — ubuntu-latest ships one preinstalled and the version it
+      # ships is not ours to depend on, so it is declared here like every other tool version in
+      # this workflow. Temurin 21 because Nu needs 8 or newer and 21 is the current LTS.
+      - name: Setup Java (for the Nu HTML Checker)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
 
       # ubuntu-latest ships a preinstalled google-chrome-stable specifically for
       # browser-automation workflows like this one (see actions/runner-images).
@@ -165,3 +184,15 @@ jobs:
       - name: Run axe over the audit-url HTML report
         if: always()
         run: npm run --silent check:html-report -w @mattpyle/steward
+
+      # The Nu HTML Checker over every route of the build served above, prerendered pages and the
+      # on-demand /scorecard alike. Advisory: malformed HTML degrades the accessibility tree that
+      # agents read, which is why it is checked, but it is not a reason to hold a deploy.
+      #
+      # `--transport jar` is explicit rather than inferred. The script falls back to POSTing each
+      # document to validator.w3.org when no JRE is on PATH, which is right on a laptop and wrong
+      # here: a step whose result depends on a public service's rate limiter is not a check. If
+      # the Java setup above ever breaks, this must fail rather than quietly go remote.
+      - name: Validate HTML (Nu HTML Checker)
+        if: always()
+        run: npm run --silent validate:html -- --transport jar

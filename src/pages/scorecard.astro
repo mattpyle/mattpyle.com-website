@@ -373,6 +373,40 @@ function shortMetricName(name: string): string {
       </footer>
     </section>
   </div>
+  <script>
+    /**
+     * Localise the Agent traffic timestamps.
+     *
+     * The page is cached and served byte-identically to everyone, so the server cannot know the
+     * reader's timezone and must not try: every stamp ships as UTC, labelled UTC, correct with no
+     * JavaScript at all. This rewrites the visible text to the reader's own zone; the `datetime`
+     * attribute, which is the machine-readable value and the one an agent reads, is never touched.
+     *
+     * Bound to astro:page-load rather than run once, because ClientRouter soft-navigates into this
+     * page without a fresh document (see the other components in src/components).
+     */
+    function localiseTimes(): void {
+      const local = new Intl.DateTimeFormat(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short',
+      });
+
+      for (const element of document.querySelectorAll<HTMLTimeElement>('time[data-local-time]')) {
+        const iso = element.getAttribute('datetime');
+        if (!iso) continue;
+        const at = new Date(iso);
+        if (Number.isNaN(at.getTime())) continue;
+        element.textContent = local.format(at);
+      }
+    }
+
+    document.addEventListener('astro:page-load', localiseTimes);
+  </script>
+
 </Layout>
 
 <style>
@@ -1031,37 +1065,3 @@ function shortMetricName(name: string): string {
     .chevron { transition: none; }
   }
 </style>
-
-<script>
-  /**
-   * Localise the Agent traffic timestamps.
-   *
-   * The page is cached and served byte-identically to everyone, so the server cannot know the
-   * reader's timezone and must not try: every stamp ships as UTC, labelled UTC, correct with no
-   * JavaScript at all. This rewrites the visible text to the reader's own zone; the `datetime`
-   * attribute, which is the machine-readable value and the one an agent reads, is never touched.
-   *
-   * Bound to astro:page-load rather than run once, because ClientRouter soft-navigates into this
-   * page without a fresh document (see the other components in src/components).
-   */
-  function localiseTimes(): void {
-    const local = new Intl.DateTimeFormat(undefined, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    });
-
-    for (const element of document.querySelectorAll<HTMLTimeElement>('time[data-local-time]')) {
-      const iso = element.getAttribute('datetime');
-      if (!iso) continue;
-      const at = new Date(iso);
-      if (Number.isNaN(at.getTime())) continue;
-      element.textContent = local.format(at);
-    }
-  }
-
-  document.addEventListener('astro:page-load', localiseTimes);
-</script>

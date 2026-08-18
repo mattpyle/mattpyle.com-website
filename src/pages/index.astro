@@ -42,16 +42,20 @@ const activityItems = (
     The guest book section: one inline block below RecentWriting, above the footer. Retro-only —
     it is in the DOM in both modes and hidden in modern by `.retro-furniture`, so nothing is
     injected or revealed at toggle time and the sidebar's `Sign the Guest Book ↓` anchor always
-    has a target. The section spans the shell; its inner column is capped at the reading measure,
-    because guest-book messages are prose and 1000px runs past 100 characters.
+    has a target. It spans the shell; its inner column is capped at the reading measure, because
+    guest-book messages are prose and 1000px runs past 100 characters.
+
+    A `div`, not a `section`: it is a layout wrapper around three components that each carry their
+    own heading and their own labelled `<section>`, and a `<section>` with no heading of its own is
+    a markup validity warning (`npm run validate:html`) as well as an unnamed region.
   */}
-  <section class="retro-furniture guestbook-section" id="guestbook">
+  <div class="retro-furniture guestbook-section" id="guestbook">
     <div class="guestbook-column">
       <Guestbook />
       <WebmasterNote />
       <WebRing />
     </div>
-  </section>
+  </div>
 </Layout>
 
 <style>
