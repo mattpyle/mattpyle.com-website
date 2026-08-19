@@ -1,13 +1,13 @@
 {
-  "iso": "2026-08-18",
-  "timestamp": "2026-08-18T03:33:27-07:00",
+  "iso": "2026-08-19",
+  "timestamp": "2026-08-19T03:33:23-07:00",
   "scope": "23 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "All 23 pages passed all four public metrics.",
+  "commentary": "Performance fell from 99 to 95; Agentic Browsing: 3/4 (Partial).",
   "metrics": [
     {
       "name": "Accessibility",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "99",
+      "value": "95",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 23 tested pages."
@@ -32,13 +32,13 @@
     },
     {
       "name": "Agentic Browsing",
-      "value": "4",
+      "value": "3",
       "maximum": "4",
-      "status": "Pass",
-      "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
+      "status": "Partial",
+      "description": "3 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-08-18",
+  "id": "2026-08-19",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -109,7 +109,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -120,18 +120,18 @@
     {
       "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog/",
       "scores": {
-        "performance": 100,
+        "performance": 95,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
-        "agentic-browsing": 100
+        "agentic-browsing": 95
       },
       "axeViolations": 0
     },
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -241,7 +241,7 @@
     {
       "url": "https://www.mattpyle.com/steward/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -274,7 +274,7 @@
     {
       "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -294,8 +294,9 @@
       "axeViolations": 0
     }
   ],
-  "decision": "no-op",
-  "reason": "unchanged, published 2d ago (<= 7d threshold)",
+  "decision": "open-pr",
+  "reason": "Performance 99→95",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/152",
   "dryRun": false,
-  "archiveId": "2026-08-18"
+  "archiveId": "2026-08-19"
 }
