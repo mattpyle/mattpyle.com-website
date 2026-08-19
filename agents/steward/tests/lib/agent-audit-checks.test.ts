@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { runFastAudit } from '../../src/lib/agent-audit/checks.js';
-import { HEADER_EXCERPT_MAX, type AuditResult, type CheckResult } from '../../src/lib/agent-audit/result.js';
+import {
+  DECISION_CLASSES,
+  HEADER_EXCERPT_MAX,
+  type AuditResult,
+  type CheckResult,
+} from '../../src/lib/agent-audit/result.js';
 
 /**
  * The fast tier against a mock site (no live network in the suite, per the
@@ -649,5 +654,52 @@ test('the check keeps its place in the report even though it is decided last', a
   assert.deepEqual(
     result.checks.slice(0, 3).map((c) => c.id),
     ['robots-txt', 'robots-ai-agents', 'content-signals'],
+  );
+});
+
+// --- decision classes ------------------------------------------------------
+
+test('every fast check declares a decision class, and it is the one recorded in the catalogue', async (t) => {
+  const result = await audit(t);
+  assert.deepEqual(
+    result.checks.map((c) => [c.id, c.decisionClass]),
+    [
+      ['robots-txt', 'bestPractice'],
+      ['robots-ai-agents', 'provenBlocker'],
+      ['content-signals', 'emergingConvention'],
+      ['sitemap', 'bestPractice'],
+      ['llms-txt', 'emergingConvention'],
+      ['llms-txt-links', 'conditional'],
+      ['llms-txt-list-items', 'conditional'],
+      ['agents-md', 'bestPractice'],
+      ['well-known-mcp-server', 'conditional'],
+      ['a2a-agent-card', 'conditional'],
+      ['markdown-negotiation-home', 'provenBlocker'],
+      ['markdown-negotiation-content', 'provenBlocker'],
+      ['link-headers', 'bestPractice'],
+    ],
+  );
+  // The class describes the check, so a site that passes everything still has
+  // one on every check — and no findings to count.
+  assert.deepEqual(result.decisionClasses, {
+    provenBlocker: 0,
+    bestPractice: 0,
+    conditional: 0,
+    emergingConvention: 0,
+  });
+});
+
+test('the class counts are the failing checks, tallied — nothing else', async (t) => {
+  const result = await audit(t, 'no-llms');
+  const failed = result.checks.filter((c) => c.status === 'fail');
+  const expected = Object.fromEntries(DECISION_CLASSES.map((c) => [c, 0])) as Record<string, number>;
+  for (const c of failed) expected[c.decisionClass as string] += 1;
+
+  assert.deepEqual(result.decisionClasses, expected);
+  assert.ok(failed.length > 0, 'the broken site should have produced findings');
+  assert.equal(
+    Object.values(result.decisionClasses ?? {}).reduce((a, b) => a + b, 0),
+    failed.length,
+    'every finding is counted exactly once',
   );
 });

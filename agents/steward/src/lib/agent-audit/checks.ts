@@ -12,6 +12,7 @@ import type { DeepOptions } from './deep.js';
 import {
   SCHEMA_VERSION,
   countByCategory,
+  countByDecisionClass,
   evidenceHeaders,
   excerpt,
   type AuditResult,
@@ -19,6 +20,7 @@ import {
   type CheckEvidence,
   type CheckResult,
   type CheckStatus,
+  type DecisionClass,
   type ReportIntegrity,
   type Severity,
 } from './result.js';
@@ -228,11 +230,22 @@ function looksLikeHtml(res: SafeResponse): boolean {
 // Check construction
 // ---------------------------------------------------------------------------
 
+/**
+ * A check's static metadata: everything true about the check before it runs.
+ *
+ * `decisionClass` is required here while it is optional on `CheckResult`, and the
+ * asymmetry is the point. The document type describes documents in general,
+ * including ones written before the field existed; this type describes the
+ * catalogue, where a check with no class is a check nobody decided about. Adding
+ * a check without one does not compile.
+ */
 interface CheckSpec {
   id: string;
   title: string;
   category: CheckCategory;
   severity: Severity;
+  /** How settled this check's subject is. See `DecisionClass` in result.ts. */
+  decisionClass: DecisionClass;
 }
 
 function result(
@@ -266,6 +279,10 @@ const ROBOTS: CheckSpec = {
   title: 'robots.txt exists and parses',
   category: 'crawlability',
   severity: 'medium',
+  // A thirty-year-old convention every crawler looks for, and the only place a
+  // site can name its sitemap or refuse an agent. Its absence costs the site
+  // those levers; it does not by itself stop anyone reading the page.
+  decisionClass: 'bestPractice',
 };
 
 async function checkRobots(ctx: AuditContext): Promise<CheckResult> {
@@ -353,6 +370,10 @@ const AI_RULES: CheckSpec = {
   title: 'robots.txt lets user-triggered AI agents read the site',
   category: 'crawlability',
   severity: 'high',
+  // A blocked agent that obeys robots.txt comes away with nothing, on any site.
+  // Read straight out of the file rather than inferred, which is what makes it
+  // proven rather than a best practice about being welcoming.
+  decisionClass: 'provenBlocker',
 };
 
 function checkAiAgents(ctx: AuditContext): CheckResult {
@@ -404,6 +425,8 @@ const CONTENT_SIGNALS: CheckSpec = {
   title: 'Content Signals preferences are declared',
   category: 'crawlability',
   severity: 'low',
+  // Cloudflare's proposal, 2025, with no cross-industry agreement behind it yet.
+  decisionClass: 'emergingConvention',
 };
 
 /**
@@ -480,6 +503,10 @@ const SITEMAP: CheckSpec = {
   title: 'A sitemap is declared in robots.txt and fetchable',
   category: 'crawlability',
   severity: 'high',
+  // Settled and near-universal, and the auditor's own way of finding a content
+  // page. Still not a blocker: a site whose pages link to each other is
+  // reachable without one.
+  decisionClass: 'bestPractice',
 };
 
 interface SitemapOutcome {
@@ -625,6 +652,11 @@ const LLMS_TXT: CheckSpec = {
   title: 'llms.txt exists and follows the spec',
   category: 'discovery',
   severity: 'medium',
+  // Proposed 2024 and adopted by publishers well ahead of any model provider
+  // committing to read it. The most arguable call in the catalogue: this site
+  // publishes one and believes in it, and that is exactly the kind of judgment
+  // the class is here to keep out of a stranger's report.
+  decisionClass: 'emergingConvention',
 };
 
 /** A list item under a `##` heading that is not in the form the format asks for. */
@@ -798,6 +830,10 @@ const LLMS_LINKS: CheckSpec = {
   title: 'The links in llms.txt resolve',
   category: 'discovery',
   severity: 'medium',
+  // Only reachable at all when the site chose to publish llms.txt. Against that
+  // choice a dead link is a real defect, which is why it is conditional rather
+  // than emerging: what is in question is applicability, not maturity.
+  decisionClass: 'conditional',
 };
 
 /** How many llms.txt links are actually fetched. Sampled, to stay a fast tier. */
@@ -876,6 +912,8 @@ const LLMS_LIST_ITEMS: CheckSpec = {
   title: 'Every llms.txt list item leads with a markdown link',
   category: 'discovery',
   severity: 'low',
+  // Conditional on the same choice as `llms-txt-links`, for the same reason.
+  decisionClass: 'conditional',
 };
 
 /**
@@ -950,6 +988,9 @@ const AGENTS_MD: CheckSpec = {
   title: 'agents.md exists and is markdown',
   category: 'discovery',
   severity: 'medium',
+  // Graded this way in the source mockup, and the reason its wording matters: an
+  // absent agents.md is a missed orientation document, not a failure condition.
+  decisionClass: 'bestPractice',
 };
 
 async function checkAgentsMd(ctx: AuditContext): Promise<CheckResult> {
@@ -988,6 +1029,9 @@ const MCP_WELL_KNOWN: CheckSpec = {
   title: 'An MCP server is discoverable at /.well-known/mcp-server',
   category: 'discovery',
   severity: 'low',
+  // Applies only to a site that runs an MCP server it wants strangers to find.
+  // A site with no such service is not failing by not advertising one.
+  decisionClass: 'conditional',
 };
 
 async function checkWellKnownMcp(ctx: AuditContext): Promise<CheckResult> {
@@ -1022,6 +1066,8 @@ const A2A_CARD: CheckSpec = {
   title: 'An A2A agent card is published',
   category: 'discovery',
   severity: 'low',
+  // Applies only to a site that operates an agent for other agents to call.
+  decisionClass: 'conditional',
 };
 
 async function checkAgentCard(ctx: AuditContext): Promise<CheckResult> {
@@ -1096,6 +1142,9 @@ const NEGOTIATION_HOME: CheckSpec = {
   title: 'The homepage serves markdown when asked for it',
   category: 'content-access',
   severity: 'high',
+  // Directly observed on the wire, and true of any site: an agent that asked for
+  // markdown and was handed HTML spends its context on markup.
+  decisionClass: 'provenBlocker',
 };
 
 const NEGOTIATION_CONTENT: CheckSpec = {
@@ -1103,6 +1152,8 @@ const NEGOTIATION_CONTENT: CheckSpec = {
   title: 'A content page serves markdown when asked for it',
   category: 'content-access',
   severity: 'high',
+  // The same measured failure, on the page an agent actually came to read.
+  decisionClass: 'provenBlocker',
 };
 
 /** Strips tags and decodes the handful of entities that show up in a title. */
@@ -1285,6 +1336,9 @@ const LINK_HEADERS: CheckSpec = {
   title: 'The homepage advertises its alternates in a Link header',
   category: 'content-access',
   severity: 'low',
+  // RFC 8288 is settled, and this is how a machine discovers an alternate
+  // without guessing at URLs. Advisory: the alternate still works unadvertised.
+  decisionClass: 'bestPractice',
 };
 
 function checkLinkHeaders(homepage: SafeResponse | null): CheckResult {
@@ -1523,6 +1577,7 @@ export function assembleResult(args: {
     ...(args.browserPages === undefined ? {} : { browserPages: args.browserPages }),
     ...(args.integrity === undefined ? {} : { integrity: args.integrity }),
     categories: countByCategory(args.checks),
+    decisionClasses: countByDecisionClass(args.checks),
     checks: args.checks,
     notes: args.notes,
   };

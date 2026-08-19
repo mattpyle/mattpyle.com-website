@@ -66,6 +66,7 @@ export {
 export type { FetchPolicy } from './safe-fetch.js';
 
 export {
+  DECISION_CLASSES,
   SCHEMA_VERSION,
   type AuditResult,
   type CategoryCount,
@@ -73,5 +74,7 @@ export {
   type CheckEvidence,
   type CheckResult,
   type CheckStatus,
+  type DecisionClass,
+  type DecisionClassCounts,
   type Severity,
 } from './result.js';

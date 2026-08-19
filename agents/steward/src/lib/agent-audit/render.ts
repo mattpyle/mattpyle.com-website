@@ -1,4 +1,5 @@
 import {
+  DECISION_CLASSES,
   rankedFixes,
   stripControlChars,
   type AuditResult,
@@ -41,6 +42,17 @@ const CATEGORY_LABEL: Record<string, string> = {
   discovery: 'Discovery',
   'content-access': 'Content access',
   'rendered-experience': 'Rendered experience',
+};
+
+/**
+ * Read out of the document rather than invented here: the classes are declared in
+ * result.ts, and this map only says what each one is called in prose.
+ */
+const DECISION_CLASS_LABEL: Record<string, string> = {
+  provenBlocker: 'Proven blocker',
+  bestPractice: 'Best practice',
+  conditional: 'Conditional',
+  emergingConvention: 'Emerging convention',
 };
 
 /** Anything interpolated into the output passes through here. See the docblock. */
@@ -109,6 +121,29 @@ export function renderMarkdownSummary(audit: AuditResult): string {
   out.push('');
   out.push('Per-category counts, deliberately not rolled into one number.');
   out.push('');
+
+  // Absent from a report written before the field existed, and the section is
+  // then absent too. Printing four zeros for a document that never carried the
+  // counts would state that this site has no findings of any class, which is a
+  // different claim from "this report predates the field".
+  if (audit.decisionClasses) {
+    const counts = audit.decisionClasses;
+    out.push('## Findings by decision class');
+    out.push('');
+    out.push('| Decision class | Findings |');
+    out.push('| --- | --- |');
+    for (const cls of DECISION_CLASSES) {
+      out.push(`| ${DECISION_CLASS_LABEL[cls] ?? cls} | ${counts[cls] ?? 0} |`);
+    }
+    out.push('');
+    out.push(
+      'How settled the subject of each failing check is, which is a property of the check and not of ' +
+        'this site. A separate axis from severity, and deliberately not folded into it: a proven ' +
+        'access failure and an absent emerging convention are different kinds of thing however ' +
+        'hard each one bites.',
+    );
+    out.push('');
+  }
 
   const fixes = rankedFixes(audit.checks);
   out.push('## Fixes, most important first');

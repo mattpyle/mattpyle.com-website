@@ -473,3 +473,29 @@ test('the sample is the homepage plus the site\'s own sitemap pages, deduplicate
   ]);
   assert.deepEqual(pages, ['https://example.test/', 'https://example.test/writing/hello/']);
 });
+
+test('every rendered-experience check declares a decision class, whatever happened', async () => {
+  const classes = (checks: CheckResult[]) =>
+    Object.fromEntries(checks.map((c) => [c.id, c.decisionClass]));
+
+  const measured = await runDeepChecks(context(), { runners: runners(), maxPages: 2 });
+  assert.deepEqual(classes(measured.checks), {
+    'lighthouse-agentic-browsing': 'emergingConvention',
+    'lighthouse-accessibility': 'provenBlocker',
+    'lighthouse-seo': 'bestPractice',
+    'lighthouse-performance': 'bestPractice',
+    'lighthouse-best-practices': 'bestPractice',
+    'axe-violations': 'provenBlocker',
+  });
+
+  // The class is the check's, not the run's: a browser that never started still
+  // produces six checks and each one still says what kind of thing it tests.
+  const dead = await runDeepChecks(context(), {
+    runners: runners({
+      lighthouse: () => Promise.reject(new Error('chrome not found')),
+      axe: () => Promise.reject(new Error('chrome not found')),
+    }),
+    maxPages: 2,
+  });
+  assert.deepEqual(classes(dead.checks), classes(measured.checks));
+});

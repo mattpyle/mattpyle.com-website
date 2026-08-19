@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { renderMarkdownSummary } from '../../src/lib/agent-audit/render.js';
 import {
   countByCategory,
+  countByDecisionClass,
   excerpt,
   rankedFixes,
   stripControlChars,
@@ -218,4 +219,44 @@ test('rankedFixes returns only failures, worst first', () => {
     ranked.map((c) => c.id),
     ['high', 'low'],
   );
+});
+
+test('countByDecisionClass counts findings only, with every class present', () => {
+  const counts = countByDecisionClass([
+    check({ id: 'blocked', status: 'fail', decisionClass: 'provenBlocker' }),
+    check({ id: 'also-blocked', status: 'fail', decisionClass: 'provenBlocker' }),
+    check({ id: 'passing', status: 'pass', decisionClass: 'bestPractice' }),
+    check({ id: 'not-applicable', status: 'not-applicable', decisionClass: 'conditional' }),
+    check({ id: 'errored', status: 'error', decisionClass: 'conditional' }),
+    check({ id: 'unclassified', status: 'fail' }),
+  ]);
+  assert.deepEqual(counts, {
+    provenBlocker: 2,
+    bestPractice: 0,
+    conditional: 0,
+    emergingConvention: 0,
+  });
+});
+
+test('the summary renders the class counts, and severity is not folded into them', () => {
+  const checks = [
+    check({ id: 'markdown-negotiation-home', status: 'fail', severity: 'high', decisionClass: 'provenBlocker' }),
+    check({ id: 'content-signals', status: 'fail', severity: 'low', decisionClass: 'emergingConvention' }),
+    check({ id: 'agents-md', status: 'pass', severity: 'medium', decisionClass: 'bestPractice' }),
+  ];
+  const result = fixture(checks);
+  result.decisionClasses = countByDecisionClass(checks);
+  const md = renderMarkdownSummary(result);
+  assert.match(md, /^## Findings by decision class$/m);
+  assert.match(md, /^\| Proven blocker \| 1 \|$/m);
+  assert.match(md, /^\| Best practice \| 0 \|$/m);
+  assert.match(md, /^\| Emerging convention \| 1 \|$/m);
+  // The per-category table is still there; the classes sit beside it.
+  assert.match(md, /^## Checks passed$/m);
+});
+
+test('a report written before decision classes renders no class section', () => {
+  const md = renderMarkdownSummary(fixture([check({ id: 'llms-txt', status: 'fail' })]));
+  assert.ok(!md.includes('decision class'), 'a document with no counts claimed some');
+  assert.match(md, /^## Fixes, most important first$/m);
 });

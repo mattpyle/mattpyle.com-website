@@ -1,4 +1,5 @@
 import {
+  DECISION_CLASSES,
   rankedFixes,
   stripControlChars,
   type AuditResult,
@@ -72,6 +73,13 @@ const CATEGORY_LABEL: Record<string, string> = {
   discovery: 'Discovery',
   'content-access': 'Content access',
   'rendered-experience': 'Rendered experience',
+};
+
+const DECISION_CLASS_LABEL: Record<string, string> = {
+  provenBlocker: 'Proven blocker',
+  bestPractice: 'Best practice',
+  conditional: 'Conditional',
+  emergingConvention: 'Emerging convention',
 };
 
 const SEVERITY_LABEL: Record<string, string> = {
@@ -453,6 +461,28 @@ export function renderHtmlReport(audit: AuditResult): string {
     );
   }
   out.push('</tbody></table>');
+  // Omitted entirely for a report written before the field existed. Four zeros
+  // would read as a site with no findings of any class — see the same note in
+  // render.ts.
+  if (audit.decisionClasses) {
+    const counts = audit.decisionClasses;
+    out.push('<table>');
+    out.push(
+      '<caption>Findings by decision class: how settled the subject of each failing check is, ' +
+        'which is a property of the check and not of this site. A separate axis from severity.</caption>',
+    );
+    out.push(
+      '<thead><tr><th scope="col">Decision class</th><th scope="col" class="num">Findings</th></tr></thead>',
+    );
+    out.push('<tbody>');
+    for (const cls of DECISION_CLASSES) {
+      out.push(
+        `<tr><th scope="row">${esc(DECISION_CLASS_LABEL[cls] ?? cls)}</th>` +
+          `<td class="num">${counts[cls] ?? 0}</td></tr>`,
+      );
+    }
+    out.push('</tbody></table>');
+  }
   out.push('</section>');
 
   out.push('<section aria-labelledby="fixes">');
