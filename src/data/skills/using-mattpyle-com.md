@@ -66,11 +66,32 @@ Four things trip up clients, all of them A2A 1.0 versus 0.x:
 - **The method is `SendMessage`**, not `message/send`. The 0.x spelling is accepted as an alias, but replies only ever use the current form.
 - **Text parts carry no `kind` discriminator.** Send `{"text": "..."}`. The 0.x `{"kind":"text","text":"..."}` shape is also read.
 - **Errors arrive on HTTP 200** with a JSON-RPC error object. Do not treat a 200 as success without checking for `error`.
-- **The reply is a `Message`, not a `Task`.** There is nothing to poll. One request, one answer, no state.
+- **This skill's reply is a `Message`, not a `Task`.** There is nothing to poll. One request, one answer, no state.
 
-Streaming, push notifications, and authentication are not implemented, and the Agent Card at `/.well-known/agent-card.json` declares them false rather than leaving you to discover it. A `GET` to `/a2a` returns 405 with a worked example in the body.
+Streaming, push notifications, task cancellation and authentication are not implemented, and the Agent Card at `/.well-known/agent-card.json` declares the capabilities it has as false rather than leaving you to discover it. A `GET` to `/a2a` returns 405 with a worked example in the body.
 
-The endpoint answers only from this site's own published content, compiled at build time. It cannot tell you anything a plain fetch could not.
+This skill answers only from the site's own published content, compiled at build time. It cannot tell you anything a plain fetch could not.
+
+## Ask the site to audit another site
+
+The same endpoint has a second skill, `audit-a-site`, and it is the one that does real work rather than reciting. Name an audit verb and a hostname:
+
+```bash
+curl -sS https://www.mattpyle.com/a2a   -H 'Content-Type: application/json'   -d '{"jsonrpc":"2.0","id":1,"method":"SendMessage",
+       "params":{"message":{"role":"ROLE_USER","messageId":"1",
+                            "parts":[{"text":"Audit example.com"}]}}}'
+```
+
+The fast tier above answers in seconds, as a `Message` carrying the report as markdown and as JSON. Add the word "deep" and you get the browser-rendered tier instead: Lighthouse per-axis scores and axe-core violation counts from up to three of the target's own pages, which takes minutes. That one comes back as a `Task`, so poll it:
+
+```bash
+curl -sS https://www.mattpyle.com/a2a   -H 'Content-Type: application/json'   -d '{"jsonrpc":"2.0","id":2,"method":"GetTask",
+       "params":{"id":"steward-audit-example.com-deep-1a2b3c4d"}}'
+```
+
+Poll until `status.state` is `TASK_STATE_COMPLETED`; the report is then the task's single artifact, in the same two renderings. `TASK_STATE_SUBMITTED` means the run is durable and waiting for the worker, and `metadata.queuePosition` says where it stands.
+
+Three things to know before you call it. The auditor obeys the target's robots.txt and arrives as `steward-audit/0.2.0 (+https://www.mattpyle.com/steward)`, so one audit is one visitor in that site's log. Audits are rate limited per caller and per day on a budget shared with the MCP endpoint at `https://www.mattpyle.com/mcp`, and the deep cap is much the smaller of the two; a refusal is `-32000` naming the limit and the retry delay. `GetTask` is free.
 
 ## Call the tools
 

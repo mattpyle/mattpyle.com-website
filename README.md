@@ -37,10 +37,13 @@ examples at [`/webmcp`](https://www.mattpyle.com/webmcp), and remain genuinely e
 
 **An A2A participant.** The site publishes an Agent Card at
 [`/.well-known/agent-card.json`](https://www.mattpyle.com/.well-known/agent-card.json) and answers
-real A2A 1.0 `SendMessage` calls at `/a2a`, in the retro webmaster's voice, from a digest compiled
-at build time. Calls arriving with the 0.x `message/send` spelling are answered in the 0.x response
-shape, so legacy clients can read the reply. Delete the card and the route, and the rest of the
-built site is byte-identical.
+real A2A 1.0 `SendMessage` calls at `/a2a`. Two skills: `ask-about-site` answers in the retro
+webmaster's voice from a digest compiled at build time, and `audit-a-site` audits a site you name —
+the fast tier as a direct `Message`, and the browser-rendered deep tier as a `Task` backed by a
+Temporal workflow, polled with `GetTask` until the report arrives as its artifact. Calls arriving
+with the 0.x `message/send` and `tasks/get` spellings are answered in the 0.x response shape, so
+legacy clients can read the reply. Delete the card and the route, and the rest of the built site is
+byte-identical.
 
 **A curated [`/changelog`](https://www.mattpyle.com/changelog).** A public, edited-down log of what
 shipped on the site — not raw commit history, not an engineering log.

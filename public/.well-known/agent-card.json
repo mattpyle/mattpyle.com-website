@@ -1,6 +1,6 @@
 {
   "name": "The mattpyle.com webmaster",
-  "description": "The webmaster of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Answers questions about the site: its writing, builds, changelog, scorecard, and agent-readable surfaces. Replies are written in the voice of the site's retro webmaster and the facts in them are current. Read-only, unauthenticated, and public: no accounts, no payments, no private data, and nothing it returns that is not already published on the site.",
+  "description": "The webmaster of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Two skills: it answers questions about the site (its writing, builds, changelog, scorecard, and agent-readable surfaces), and it audits any site you name for agent-readiness, returning the fast tier as a direct Message and the browser-rendered deep tier as a Task you poll to completion. Replies are written in the voice of the site's retro webmaster. Unauthenticated and public: no accounts, no payments, and no private data. Audits are rate limited, and the auditor obeys the target's robots.txt.",
   "supportedInterfaces": [
     {
       "url": "https://www.mattpyle.com/a2a",
@@ -12,7 +12,7 @@
     "organization": "Matt Pyle",
     "url": "https://www.mattpyle.com/"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentationUrl": "https://www.mattpyle.com/agents.md",
   "capabilities": {
     "streaming": false,
@@ -25,7 +25,7 @@
     {
       "id": "ask-about-site",
       "name": "Ask about this site",
-      "description": "Answers questions about mattpyle.com: who Matt Pyle is, what he has written and built, what has shipped recently, and which agent-readable surfaces the site exposes (agents.md, llms.txt, raw-markdown variants, WebMCP tools, this endpoint). Answers cite site URLs and are compiled from the site's own published content at build time, so they never contradict the pages themselves.",
+      "description": "Answers questions about mattpyle.com: who Matt Pyle is, what he has written and built, what has shipped recently, and which agent-readable surfaces the site exposes (agents.md, llms.txt, raw-markdown variants, WebMCP tools, this endpoint). Answers cite site URLs and are compiled from the site's own published content at build time, so they never contradict the pages themselves. One turn: the reply is a direct Message, and there is nothing to poll.",
       "tags": ["personal-site", "writing", "changelog", "webmcp", "agent-experience"],
       "examples": [
         "What is this site about?",
@@ -36,6 +36,20 @@
       ],
       "inputModes": ["text/plain"],
       "outputModes": ["text/markdown"]
+    },
+    {
+      "id": "audit-a-site",
+      "name": "Audit a site for agent-readiness",
+      "description": "Audits any site you name for what it says about itself to agents: robots.txt and its AI-agent rules, Content Signals, the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A discovery documents, and whether the homepage and a content page really serve markdown when asked for it. It checks behaviour rather than presence. Name a site and an audit verb, e.g. 'audit example.com', and say 'deep' for the browser-rendered tier that adds Lighthouse per-axis scores and axe-core violation counts from up to three of the site's own pages. The fast tier takes seconds and comes back as a direct Message carrying the report as markdown and as JSON. The deep tier takes minutes and comes back as a Task: poll GetTask with the task's id until its state is TASK_STATE_COMPLETED, and the report is the task's artifact, again as markdown and as JSON. The auditor obeys the target's robots.txt and arrives as steward-audit/0.2.0 (+https://www.mattpyle.com/steward), so one audit is one visitor in the target's log. Audits are rate limited per caller and per day, on a budget shared with the MCP endpoint at https://www.mattpyle.com/mcp; deep audits are capped far lower than fast ones because each spends real browser time on a hosted worker. Reading a Task with GetTask is free.",
+      "tags": ["audit", "agent-readiness", "llms-txt", "agents-md", "robots-txt", "lighthouse", "accessibility", "task"],
+      "examples": [
+        "Audit example.com",
+        "Run an agent-readiness audit of https://example.com",
+        "Run a deep audit of example.com, with Lighthouse and axe",
+        "Scan example.com and tell me what it says to agents"
+      ],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/markdown", "application/json"]
     }
   ]
 }

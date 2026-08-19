@@ -51,7 +51,7 @@ export const GET: APIRoute = async ({ site }) => {
   // Enumerated from the committed index rather than named in prose, so publishing a skill stays
   // "add a file in src/data/skills/" with no edit here.
   lines.push(...formatSkillsIndexLines(base, skillsIndex.skills));
-  lines.push(`- [A2A Agent Card](${base}/.well-known/agent-card.json): this site as an A2A agent. One skill, ask-about-site, answered by a JSON-RPC 2.0 endpoint at ${base}/a2a (A2A 1.0, method SendMessage, no auth, read-only). Full calling notes are in agents.md.`);
+  lines.push(`- [A2A Agent Card](${base}/.well-known/agent-card.json): this site as an A2A agent. Two skills, answered by a JSON-RPC 2.0 endpoint at ${base}/a2a (A2A 1.0, no auth): ask-about-site returns a direct Message about this site, and audit-a-site audits a site you name, its deep tier as a Task you poll with GetTask. Full calling notes are in agents.md.`);
   lines.push(`- [llms-full.txt](${base}/llms-full.txt): the full plain-text content export.`);
   lines.push(`- [agents.md](${base}/agents.md): how to read and cite this site.`);
   lines.push('');

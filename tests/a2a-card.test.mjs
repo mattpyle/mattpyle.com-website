@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readCard, readSchema, validateAgentCard } from '../scripts/validate-a2a-card.mjs';
 import { PRODUCTION_ORIGIN } from '../src/data/site-origin.mjs';
-import { A2A_METHOD } from '../src/lib/a2a-responder.mjs';
+import { A2A_METHOD, GET_TASK_METHOD } from '../src/lib/a2a-responder.mjs';
+import { ASK_SKILL_ID, AUDIT_SKILL_ID, SKILL_IDS, routeMessage } from '../src/lib/a2a-audit-skill.mjs';
 
 const schema = readSchema();
 
@@ -49,7 +50,7 @@ test('the validator catches a capability the responder does not implement', () =
     schema
   );
   assert.deepEqual(errors, [
-    'capabilities.streaming: the v1 responder implements none of these; must be false',
+    'capabilities.streaming: the responder implements none of these; must be false',
   ]);
 });
 
@@ -63,6 +64,48 @@ test('the validator enforces the required fields and the non-empty-array rule', 
   assert.ok(
     validateAgentCard(withoutSkills, schema).includes('/: missing required property "skills"')
   );
+});
+
+test('the card declares exactly the skills the endpoint dispatches', () => {
+  const card = readCard();
+  assert.deepEqual(card.skills.map((skill) => skill.id), [...SKILL_IDS]);
+
+  // A card advertising a skill id no message can route to is the failure this pins. The number is
+  // not the point; the ids are.
+  const errors = validateAgentCard(
+    { ...card, skills: [...card.skills, { id: 'explain-finding', name: 'x', description: 'y' }] },
+    schema
+  );
+  assert.deepEqual(errors, [
+    'skills: expected exactly [ask-about-site, audit-a-site], found [ask-about-site, audit-a-site, explain-finding]',
+  ]);
+});
+
+test('the audit skill advertises both methods a caller needs and both output modes', () => {
+  const audit = readCard().skills.find((skill) => skill.id === AUDIT_SKILL_ID);
+  // The deep tier is a Task, so a caller who reads only the card has to learn the polling method
+  // from it. Pinned because the description is the only place that says so.
+  assert.match(audit.description, new RegExp(GET_TASK_METHOD));
+  assert.match(audit.description, /TASK_STATE_COMPLETED/);
+  assert.deepEqual(audit.outputModes, ['text/markdown', 'application/json']);
+});
+
+test("every audit example the card publishes really routes to the audit skill", () => {
+  // The examples are the vocabulary a caller copies. An example that falls through to
+  // ask-about-site would teach the wrong words, and nothing else in the build would notice.
+  const audit = readCard().skills.find((skill) => skill.id === AUDIT_SKILL_ID);
+  for (const example of audit.examples) {
+    const route = routeMessage({}, example);
+    assert.equal(route.skill, AUDIT_SKILL_ID, `"${example}" should route to the audit skill`);
+    assert.ok(route.target, `"${example}" should name a target`);
+  }
+});
+
+test('no ask-about-site example is caught by the audit skill', () => {
+  const ask = readCard().skills.find((skill) => skill.id === ASK_SKILL_ID);
+  for (const example of ask.examples) {
+    assert.equal(routeMessage({}, example).skill, ASK_SKILL_ID, `"${example}" must stay unchanged`);
+  }
 });
 
 test('the card documents the endpoint the responder actually answers on', () => {

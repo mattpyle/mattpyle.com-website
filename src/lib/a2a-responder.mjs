@@ -1,17 +1,24 @@
 /**
- * The A2A responder: a JSON-RPC 2.0 handler that answers one method, in the voice of the site's
- * retro webmaster, from a digest compiled at build time.
+ * The A2A responder: the JSON-RPC 2.0 envelope, the method dispatch, and `ask-about-site` — the
+ * webmaster's own answers, in his voice, from a digest compiled at build time.
+ *
+ * TWO SKILLS SINCE 2026-08-18, and the second one lives next door. `ask-about-site` is everything
+ * below the intent table: a deterministic one-turn answer with nothing to track. `audit-a-site` is
+ * src/lib/a2a-audit-skill.mjs, which turns a request into a fast audit answered as a Message or a
+ * durable Temporal workflow answered as a Task. This file decides which skill a message is for and
+ * owns the envelope both of them answer in; it holds none of the audit's logic.
  *
  * Kept out of src/pages/a2a.ts so `node --test` can exercise the whole protocol surface without a
  * server, an adapter, or a deploy (see tests/a2a-responder.test.mjs) — the same split as
  * src/lib/webmcp-tools.mjs and src/lib/article-actions.mjs. The route is a wrapper: read the body,
  * call respond(), log, serialize.
  *
- * PURE. No I/O, no clock, no randomness of its own: the digest and the id factory are both passed
- * in. Every reply is a function of its arguments, which is what makes the tests assertions about
- * bytes rather than about shapes.
+ * PURE. No I/O, no clock, no randomness of its own: the digest, the id factory, the clock and the
+ * whole audit engine are passed in. Every reply is a function of its arguments, which is what
+ * makes the tests assertions about bytes rather than about shapes. `respond` is async because the
+ * audit skill's work is, not because anything here waits on the machine it runs on.
  *
- * THE METHOD NAME IS `SendMessage`, NOT `message/send`. A2A 1.0 (specification section 9.1)
+ * THE METHOD NAMES ARE `SendMessage` AND `GetTask`, NOT `message/send` AND `tasks/get`. A2A 1.0 (specification section 9.1)
  * renamed the JSON-RPC methods to PascalCase matching the gRPC service: "Method Naming: PascalCase
  * method names matching gRPC conventions (e.g., `SendMessage`, `GetTask`)". `message/send` is the
  * 0.x spelling and appears nowhere in the 1.0 specification. It is accepted here anyway, as an
@@ -37,25 +44,39 @@
  * expected, and the one call that would have worked, because an agent that cannot self-correct
  * from the error will either retry identically or conclude the site is broken.
  *
- * WHAT IT DOES NOT DO: streaming, Tasks, push notifications, authentication, or any state at all.
- * The skill is read-only over public content, so every call is trivially replay-safe and there is
- * nothing for a Task to track.
+ * WHAT IT DOES NOT DO: streaming, push notifications, task cancellation, the extended Agent Card,
+ * authentication, or any state of its own. There is still no session and no server-side store
+ * here: the only state either skill has is a Temporal workflow, and `GetTask` reads it rather than
+ * remembering it.
  */
 
-const DOMAIN = 'www.mattpyle.com';
+import {
+  AGENT_CARD_URL,
+  ERROR_CODES,
+  badRequest,
+  errorInfo,
+  errorResponse,
+  readText,
+} from './a2a-rpc.mjs';
+import {
+  AUDIT_SKILL_ID,
+  GET_TASK_METHOD,
+  LEGACY_GET_TASK_METHODS,
+  handleAuditMessage,
+  handleGetTask,
+  routeMessage,
+} from './a2a-audit-skill.mjs';
 
-/** The one method this endpoint implements, in its A2A 1.0 spelling. */
+/** The message-sending method, in its A2A 1.0 spelling. */
 export const A2A_METHOD = 'SendMessage';
 
 /** Pre-1.0 spellings accepted from older clients, and answered in the matching dialect. */
 export const LEGACY_METHODS = Object.freeze(['message/send']);
 
-export const ERROR_CODES = Object.freeze({
-  parse: -32700,
-  invalidRequest: -32600,
-  methodNotFound: -32601,
-  invalidParams: -32602,
-});
+/** Both methods, in both dialects, for the help text and the not-found error. */
+export const A2A_METHODS = Object.freeze([A2A_METHOD, GET_TASK_METHOD]);
+
+export { ERROR_CODES, GET_TASK_METHOD, LEGACY_GET_TASK_METHODS };
 
 /* ------------------------------------------------------------------ formatting helpers */
 
@@ -403,58 +424,36 @@ export function answer(question, digest) {
 
 /* ------------------------------------------------------------------ the JSON-RPC envelope */
 
-function errorResponse(id, code, message, data) {
-  return { jsonrpc: '2.0', id: id ?? null, error: { code, message, ...(data ? { data } : {}) } };
-}
-
-function errorInfo(reason, metadata) {
-  return {
-    '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
-    reason,
-    domain: DOMAIN,
-    ...(metadata ? { metadata } : {}),
-  };
-}
-
-function badRequest(violations) {
-  return { '@type': 'type.googleapis.com/google.rpc.BadRequest', fieldViolations: violations };
-}
-
-/** The first non-empty `text` in a Message's parts, or null. */
-function readText(message) {
-  if (!message || typeof message !== 'object' || !Array.isArray(message.parts)) return null;
-  for (const part of message.parts) {
-    // A 1.0 TextPart is `{ "text": "..." }`; the 0.x one was `{ "kind": "text", "text": "..." }`.
-    // Reading the member directly accepts both without a discriminator branch.
-    if (part && typeof part === 'object' && typeof part.text === 'string' && part.text.trim() !== '') {
-      return part.text;
-    }
-  }
-  return null;
-}
-
 /**
- * Handle one already-parsed JSON-RPC request object.
+ * Everything about a request that is true before a method is dispatched.
  *
- * @param {unknown} request
- * @param {{ digest: object, newId: () => string }} context
+ * Split out when the second method arrived: `SendMessage` and `GetTask` disagree about params and
+ * about what a result is, and agree about every line above this point. Two copies of the envelope
+ * rules would be two places for one endpoint to answer `-32600` differently.
+ *
+ * @returns {{ refusal: object } | { id: any, isNotification: boolean, method: string,
+ *             legacy: boolean, dialect: string, getTask: boolean }}
  */
-function handleRequest(request, { digest, newId }) {
+function validateEnvelope(request) {
   if (Array.isArray(request)) {
     return {
-      outcome: 'invalid-request/batch',
-      payload: errorResponse(null, ERROR_CODES.invalidRequest, 'Request payload validation error. This endpoint does not support JSON-RPC batch requests; send one request object.', [
-        errorInfo('BATCH_NOT_SUPPORTED'),
-      ]),
+      refusal: {
+        outcome: 'invalid-request/batch',
+        payload: errorResponse(null, ERROR_CODES.invalidRequest, 'Request payload validation error. This endpoint does not support JSON-RPC batch requests; send one request object.', [
+          errorInfo('BATCH_NOT_SUPPORTED'),
+        ]),
+      },
     };
   }
 
   if (!request || typeof request !== 'object') {
     return {
-      outcome: 'invalid-request/not-an-object',
-      payload: errorResponse(null, ERROR_CODES.invalidRequest, 'Request payload validation error. A JSON-RPC request must be a JSON object.', [
-        errorInfo('NOT_AN_OBJECT'),
-      ]),
+      refusal: {
+        outcome: 'invalid-request/not-an-object',
+        payload: errorResponse(null, ERROR_CODES.invalidRequest, 'Request payload validation error. A JSON-RPC request must be a JSON object.', [
+          errorInfo('NOT_AN_OBJECT'),
+        ]),
+      },
     };
   }
 
@@ -472,39 +471,159 @@ function handleRequest(request, { digest, newId }) {
   }
   if (violations.length > 0) {
     return {
-      outcome: 'invalid-request/envelope',
-      notification: isNotification,
-      payload: errorResponse(id, ERROR_CODES.invalidRequest, `Request payload validation error. A valid call to this endpoint looks like {"jsonrpc":"2.0","id":1,"method":"${A2A_METHOD}","params":{"message":{"role":"ROLE_USER","messageId":"1","parts":[{"text":"What is this site about?"}]}}}.`, [
-        badRequest(violations),
-      ]),
+      refusal: {
+        outcome: 'invalid-request/envelope',
+        notification: isNotification,
+        payload: errorResponse(id, ERROR_CODES.invalidRequest, `Request payload validation error. A valid call to this endpoint looks like {"jsonrpc":"2.0","id":1,"method":"${A2A_METHOD}","params":{"message":{"role":"ROLE_USER","messageId":"1","parts":[{"text":"What is this site about?"}]}}}.`, [
+          badRequest(violations),
+        ]),
+      },
     };
   }
 
   const method = request.method;
-  const known = method === A2A_METHOD || LEGACY_METHODS.includes(method);
-  if (!known) {
+  const sendMessage = method === A2A_METHOD || LEGACY_METHODS.includes(method);
+  const getTask = method === GET_TASK_METHOD || LEGACY_GET_TASK_METHODS.includes(method);
+  if (!sendMessage && !getTask) {
     return {
-      outcome: `method-not-found/${method}`,
-      notification: isNotification,
-      payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements exactly one method, "${A2A_METHOD}", which returns a direct Message rather than a Task. Streaming, Tasks, push notifications and the extended Agent Card are not implemented; the Agent Card at https://${DOMAIN}/.well-known/agent-card.json declares the same thing.`, [
-        errorInfo('METHOD_NOT_FOUND', {
-          requested: method,
-          supported: A2A_METHOD,
-          acceptedAliases: LEGACY_METHODS.join(','),
-          agentCard: `https://${DOMAIN}/.well-known/agent-card.json`,
-        }),
-      ]),
+      refusal: {
+        outcome: `method-not-found/${method}`,
+        notification: isNotification,
+        payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements two methods: "${A2A_METHOD}", and "${GET_TASK_METHOD}" for polling a Task the audit skill started. Streaming, push notifications, task cancellation and the extended Agent Card are not implemented; the Agent Card at ${AGENT_CARD_URL} declares the same thing.`, [
+          errorInfo('METHOD_NOT_FOUND', {
+            requested: method,
+            supported: A2A_METHODS.join(','),
+            acceptedAliases: [...LEGACY_METHODS, ...LEGACY_GET_TASK_METHODS].join(','),
+            agentCard: AGENT_CARD_URL,
+          }),
+        ]),
+      },
     };
   }
 
   // Everything from here answers in the dialect the request arrived in. The prefix rides the
   // outcome token rather than a new log field because the token is the whole dataset until the
   // hit counter exists, and it is a prefix rather than a suffix because the tokens already carry
-  // slashes of their own (`method-not-found/tasks/get`).
-  const legacy = LEGACY_METHODS.includes(method);
-  const dialect = legacy ? 'legacy/' : '';
+  // slashes of their own (`method-not-found/CancelTask`).
+  const legacy = LEGACY_METHODS.includes(method) || LEGACY_GET_TASK_METHODS.includes(method);
+  return { id, isNotification, method, legacy, dialect: legacy ? 'legacy/' : '', getTask };
+}
 
+/** The caller's thread id where they set one, and a fresh one otherwise. */
+function contextIdFor(params, newId) {
+  const inbound = params?.message?.contextId;
+  return typeof inbound === 'string' && inbound !== '' ? inbound : newId();
+}
+
+/**
+ * `ask-about-site`: the webmaster's one-turn answer, unchanged since the v1.
+ *
+ * @returns {{ outcome: string, payload: object }}
+ */
+function handleAsk(text, params, { id, legacy, dialect }, { digest, newId }) {
+  const { intent, text: reply, unrecognised } = answer(text, digest);
+  // The two fallbacks give the same answer and mean opposite things: one is the front desk doing
+  // its job, the other is a question this vocabulary could not place. Suffixed rather than made a
+  // slash segment, so `ok/site-unrecognised` still splits into the same two fields as every other
+  // token.
+  const outcomeIntent = unrecognised ? `${intent}-unrecognised` : intent;
+
+  const messageId = newId();
+  // Servers must set contextId. An inbound one is echoed so a client threading a conversation
+  // keeps its own thread id.
+  const contextId = contextIdFor(params, newId);
+
+  return {
+    outcome: `${dialect}ok/${outcomeIntent}`,
+    payload: {
+      jsonrpc: '2.0',
+      id,
+      // Either way a Message rather than a Task. This skill is a single read-only turn with
+      // nothing to track, so creating a Task would be ceremony that a client then has to poll to
+      // completion for no reason. The spec allows either, in both versions.
+      result: legacy
+        ? {
+            // The 0.x shape: the Message itself, discriminated by `kind`, with the lowercase role
+            // enum and a text part that carries its own `kind`. No mediaType: 0.x has no such
+            // field on a TextPart, and the reference SDK's own 1.0-to-0.x downgrade drops it
+            // rather than inventing a home for it.
+            kind: 'message',
+            messageId,
+            role: 'agent',
+            contextId,
+            parts: [{ kind: 'text', text: reply }],
+          }
+        : {
+            // The 1.0 shape: a SendMessageResponse wrapping the Message.
+            message: {
+              role: 'ROLE_AGENT',
+              messageId,
+              contextId,
+              parts: [{ text: reply, mediaType: 'text/markdown' }],
+            },
+          },
+    },
+  };
+}
+
+/**
+ * The answer when the audit skill has no engine behind it.
+ *
+ * Reachable in one place that matters: a deployment with no auditor wired in — a `npm run dev`
+ * without the environment, or a `respond()` call in a test that passed no `audit`. Said out loud
+ * rather than quietly answered as the other skill, because a caller who asked for an audit and got
+ * a description of the site would read it as the answer.
+ */
+function notConfigured(id) {
+  return {
+    outcome: 'audit-unavailable/not-configured',
+    payload: errorResponse(
+      id,
+      ERROR_CODES.internal,
+      'The audit skill is not available on this deployment. The ask-about-site skill is unaffected.',
+      [errorInfo('SKILL_NOT_CONFIGURED', { skill: AUDIT_SKILL_ID })]
+    ),
+  };
+}
+
+/**
+ * Handle one already-parsed JSON-RPC request object.
+ *
+ * Async since the audit skill arrived, and unavoidably so: `ask-about-site` answers out of a
+ * digest bundled into the function, while the audit skill runs HTTP requests at a third party or
+ * starts a workflow on Temporal Cloud. The dispatch below is the only place that knows which.
+ *
+ * @param {unknown} request
+ * @param {{ digest: object, newId: () => string, now?: () => string, audit?: object }} context
+ */
+async function handleRequest(request, context) {
+  const envelope = validateEnvelope(request);
+  if (envelope.refusal) return envelope.refusal;
+
+  const { id, isNotification, legacy, dialect, getTask } = envelope;
+  const { newId, now = () => new Date().toISOString(), audit } = context;
   const params = request.params;
+  const settled = (handled) => ({
+    ...handled,
+    outcome: `${dialect}${handled.outcome}`,
+    notification: isNotification,
+  });
+
+  if (getTask) {
+    if (!audit) return settled(notConfigured(id));
+    return settled(
+      await handleGetTask({
+        id,
+        params: params && typeof params === 'object' && !Array.isArray(params) ? params : {},
+        legacy,
+        contextId: newId(),
+        newId,
+        now,
+        audit,
+      })
+    );
+  }
+
   if (!params || typeof params !== 'object' || Array.isArray(params)) {
     return {
       outcome: `${dialect}invalid-params/no-params`,
@@ -535,64 +654,40 @@ function handleRequest(request, { digest, newId }) {
     };
   }
 
-  const { intent, text: reply, unrecognised } = answer(text, digest);
-  // The two fallbacks give the same answer and mean opposite things: one is the front desk doing
-  // its job, the other is a question this vocabulary could not place. Suffixed rather than made a
-  // slash segment, so `ok/site-unrecognised` still splits into the same two fields as every other
-  // token.
-  const outcomeIntent = unrecognised ? `${intent}-unrecognised` : intent;
+  // Which skill, decided before the keyword classifier runs and on stricter evidence than it uses:
+  // an audit verb AND a token naming a site, or the skill named outright in metadata. That is what
+  // leaves `ask-about-site` answering exactly as it did — none of its questions names a site.
+  const route = routeMessage(params, text);
+  if (route.skill === AUDIT_SKILL_ID) {
+    if (!audit) return settled(notConfigured(id));
+    return settled(
+      await handleAuditMessage({
+        id,
+        route,
+        contextId: contextIdFor(params, newId),
+        legacy,
+        newId,
+        now,
+        audit,
+      })
+    );
+  }
 
-  const messageId = newId();
-  // Servers must set contextId. An inbound one is echoed so a client threading a conversation
-  // keeps its own thread id.
-  const contextId =
-    typeof params.message.contextId === 'string' && params.message.contextId !== ''
-      ? params.message.contextId
-      : newId();
-
-  return {
-    outcome: `${dialect}ok/${outcomeIntent}`,
-    notification: isNotification,
-    payload: {
-      jsonrpc: '2.0',
-      id,
-      // Either way a Message rather than a Task. The skill is a single read-only turn with nothing
-      // to track, so creating a Task would be ceremony that a client then has to poll to
-      // completion for no reason. The spec allows either, in both versions.
-      result: legacy
-        ? {
-            // The 0.x shape: the Message itself, discriminated by `kind`, with the lowercase role
-            // enum and a text part that carries its own `kind`. No mediaType: 0.x has no such
-            // field on a TextPart, and the reference SDK's own 1.0-to-0.x downgrade drops it
-            // rather than inventing a home for it.
-            kind: 'message',
-            messageId,
-            role: 'agent',
-            contextId,
-            parts: [{ kind: 'text', text: reply }],
-          }
-        : {
-            // The 1.0 shape: a SendMessageResponse wrapping the Message.
-            message: {
-              role: 'ROLE_AGENT',
-              messageId,
-              contextId,
-              parts: [{ text: reply, mediaType: 'text/markdown' }],
-            },
-          },
-    },
-  };
+  return { ...handleAsk(text, params, envelope, context), notification: isNotification };
 }
 
 /**
  * Handle one raw request body.
  *
  * @param {string} rawBody
- * @param {{ digest: object, newId: () => string }} context
- * @returns {{ status: number, outcome: string, payload: object | null }} payload null means send
- *   no body (a JSON-RPC notification).
+ * @param {{ digest: object, newId: () => string, now?: () => string, audit?: object }} context
+ *   `audit` is the audit skill's engine, injected: `originFor`, `checkLimit`, `runFast`,
+ *   `startDeep`, `readTask` and `renderSummary`. Absent, the endpoint serves `ask-about-site`
+ *   alone, which is what keeps this module free of everything that half needs.
+ * @returns {Promise<{ status: number, outcome: string, payload: object | null }>} payload null
+ *   means send no body (a JSON-RPC notification).
  */
-export function respond(rawBody, { digest, newId }) {
+export async function respond(rawBody, context) {
   let request;
   try {
     request = JSON.parse(rawBody);
@@ -608,7 +703,7 @@ export function respond(rawBody, { digest, newId }) {
     };
   }
 
-  const { outcome, payload, notification } = handleRequest(request, { digest, newId });
+  const { outcome, payload, notification } = await handleRequest(request, context);
   // JSON-RPC errors ride a 200: the HTTP call succeeded, the RPC did not, and a client that reads
   // the status instead of the envelope would otherwise never see the error it needs to correct.
   return { status: notification ? 204 : 200, outcome, payload: notification ? null : payload };

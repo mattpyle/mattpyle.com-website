@@ -49,7 +49,7 @@ Every representation is also fetchable directly, at the page's own path with `.m
 
 ## A2A (experimental)
 
-This site is an A2A participant. There is an Agent Card at `/.well-known/agent-card.json` and a live endpoint at `/a2a`, and between them they do exactly one thing: answer questions about this site.
+This site is an A2A participant. There is an Agent Card at `/.well-known/agent-card.json` and a live endpoint at `/a2a`, and between them they do two things: answer questions about this site, and audit a site you name for agent-readiness.
 
 | | |
 |---|---|
@@ -57,11 +57,25 @@ This site is an A2A participant. There is an Agent Card at `/.well-known/agent-c
 | Endpoint | `https://www.mattpyle.com/a2a` |
 | Binding | JSON-RPC 2.0 over HTTPS POST, `Content-Type: application/json` |
 | Protocol version | A2A 1.0 |
-| Method | `SendMessage`, and nothing else |
-| Skill | `ask-about-site`: who Matt is, what he has written and built, what shipped recently, and which agent surfaces exist |
-| Auth | None. Read-only, public content only. |
+| Methods | `SendMessage`, and `GetTask` for polling a Task |
+| Skills | `ask-about-site` and `audit-a-site` |
+| Auth | None. Read-only or outbound-only; no accounts and no private data. |
 
-The reply is a direct `Message`, not a `Task`: the skill is a single read-only turn with no state to track, so there is nothing to poll to completion. Replies come back as `text/markdown` in the voice of this site's retro webmaster, with the facts and URLs compiled from the site's own published content at build time. Nothing it returns is unavailable to a plain `fetch`.
+`ask-about-site` answers who Matt is, what he has written and built, what shipped recently, and which agent surfaces exist. Its reply is a direct `Message`, not a `Task`: one read-only turn with no state to track, so there is nothing to poll to completion. Replies come back as `text/markdown` in the voice of this site's retro webmaster, with the facts and URLs compiled from the site's own published content at build time. Nothing it returns is unavailable to a plain `fetch`.
+
+`audit-a-site` audits any site you name. Say an audit verb and a hostname — "audit example.com" — and add "deep" for the browser-rendered tier.
+
+| Tier | Ask with | Shape | Takes | What it checks |
+|---|---|---|---|---|
+| fast | "audit example.com" | a direct `Message` | seconds | robots.txt and its AI-agent rules, Content Signals, the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A documents, and whether the homepage and a content page really serve markdown when asked |
+| deep | "run a deep audit of example.com" | a `Task` you poll with `GetTask` | minutes | all of the above, plus Lighthouse per-axis scores and axe-core violation counts from up to three of the site's own rendered pages |
+
+Both tiers hand back the report twice in the one response: as markdown, and as its canonical JSON. On the deep tier they are the two parts of the Task's single artifact, which appears once the state reaches `TASK_STATE_COMPLETED`.
+
+- **The Task id is the Temporal workflow id**, e.g. `steward-audit-example.com-deep-1a2b3c4d`. It is a handle to a durable run that survives a worker restart, and it is the same id the MCP endpoint's `deep_audit` returns.
+- **The auditor is Steward.** It obeys the target's robots.txt under the token `steward-audit` and arrives as `steward-audit/0.2.0 (+https://www.mattpyle.com/steward)`, so one audit is one visitor in the target's log. `/steward` says what an audit costs a site and how to refuse it.
+- **Audits are rate limited per caller and per day, on a budget shared with the MCP endpoint** at `https://www.mattpyle.com/mcp`. A deep slot spent on either protocol is spent on both. Deep audits are capped far lower than fast ones, because each spends real browser time on a hosted worker. A refusal is `-32000` naming which limit was hit and when to retry. Reading a Task with `GetTask` is free.
+- **No model is involved anywhere in this path.** The skill starts audits and reports state; it does not interpret a report or answer questions about one.
 
 A minimal call:
 
@@ -73,13 +87,29 @@ curl -sS https://www.mattpyle.com/a2a \
                             "parts":[{"text":"What is this site about?"}]}}}'
 ```
 
+A deep audit, started and then polled:
+
+```bash
+curl -sS https://www.mattpyle.com/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"SendMessage",
+       "params":{"message":{"role":"ROLE_USER","messageId":"1",
+                            "parts":[{"text":"Run a deep audit of example.com"}]}}}'
+
+curl -sS https://www.mattpyle.com/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"GetTask",
+       "params":{"id":"steward-audit-example.com-deep-1a2b3c4d"}}'
+```
+
 Notes for anyone calling it:
 
 - **The method is `SendMessage`, not `message/send`.** A2A 1.0 (spec §9.1) renamed the JSON-RPC methods to PascalCase matching gRPC. The 0.x `message/send` spelling is accepted here as an alias, per the migration guidance in the spec's Appendix A.2, but responses only ever use the current form.
 - **Text parts are the 1.0 shape**, `{"text": "..."}`, with no `kind` discriminator. The 0.x `{"kind":"text","text":"..."}` form is also read, since the member is in the same place either way.
 - **Errors ride an HTTP 200** with a JSON-RPC error object, as JSON-RPC intends. `error.data` is an array of objects each carrying an `@type`, per spec §9.5. An unknown method returns `-32601` naming the one method that works; a message with no text part returns `-32602` naming the field.
-- **Not implemented:** streaming, `Task` objects, push notifications, the extended Agent Card, and authentication. The Agent Card declares all of these as false rather than leaving you to find out.
-- **A `GET`** returns `405` with a worked example, rather than a bare status.
+- **`GetTask` takes `{"id": "..."}`**, and the 0.x `tasks/get` spelling is accepted as an alias on the same terms as `message/send`. An id this endpoint did not issue returns `-32001`, A2A's `TaskNotFoundError`.
+- **Not implemented:** streaming, push notifications, task cancellation, the extended Agent Card, and authentication. The Agent Card declares the capabilities it has as false rather than leaving you to find out. Polling `GetTask` is what stands in for streaming here.
+- **A `GET`** returns `405` with a worked example of each skill, rather than a bare status.
 - This is an experiment on a personal site, not a supported API, and it may be withdrawn without notice.
 
 ## WebMCP tools (experimental)
