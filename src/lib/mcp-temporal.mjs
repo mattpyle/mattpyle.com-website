@@ -368,8 +368,18 @@ export function statusNote({ note, queued, done, queryError }) {
  * sentence.
  */
 async function readStatus(workflowId) {
-  const { client, handle, description, state, queryError } = await readState(workflowId);
+  return statusFrom(workflowId, await readState(workflowId));
+}
 
+/**
+ * The status document, from one already-taken reading.
+ *
+ * Split out from `readStatus` when the A2A route arrived: a `GetTask` on a finished audit needs
+ * the status *and* the report, and calling `readStatus` then `readReport` would be two `readState`
+ * calls — six round trips to Cloud for one poll, with the second reading a moment later than the
+ * first and free to disagree with it. One reading answers both. See `readAuditSnapshot`.
+ */
+async function statusFrom(workflowId, { client, handle, description, state, queryError }) {
   const execution = description.status.name;
   const done = execution !== 'RUNNING';
   const succeeded = execution === 'COMPLETED';
@@ -411,6 +421,25 @@ async function readStatus(workflowId) {
     status.error = await failureMessage(handle, execution);
   }
   return status;
+}
+
+/**
+ * One reading of a run, as both documents at once: the status a poller reads, and the report if
+ * there is one.
+ *
+ * What the A2A route's `GetTask` is built on. It maps the status onto an A2A task state and, on a
+ * completed run, hands the report over as the task's artifact — so the state it reports and the
+ * artifact it attaches are guaranteed to be the same moment. `readReport`'s refusals are not
+ * reused here on purpose: a task that is still running is a `working` task rather than an error,
+ * which is the whole difference between polling a Task and calling a tool too early.
+ *
+ * @param {string} workflowId
+ * @returns {Promise<{ status: object, result?: object }>}
+ */
+export async function readAuditSnapshot(workflowId) {
+  const reading = await readState(workflowId);
+  const status = await statusFrom(workflowId, reading);
+  return reading.state?.result ? { status, result: reading.state.result } : { status };
 }
 
 /**

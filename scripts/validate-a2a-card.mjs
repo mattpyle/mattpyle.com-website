@@ -36,6 +36,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { validate } from './lib/json-schema.mjs';
+import { SKILL_IDS } from '../src/lib/a2a-audit-skill.mjs';
 import { PRODUCTION_ORIGIN } from '../src/data/site-origin.mjs';
 
 const CARD_PATH = fileURLToPath(new URL('../public/.well-known/agent-card.json', import.meta.url));
@@ -69,14 +70,19 @@ export function validateAgentCard(card, schema, { origin = PRODUCTION_ORIGIN } =
     }
   }
 
-  // src/lib/a2a-responder.mjs implements none of these. A card that claimed otherwise would send
-  // clients down code paths that return -32601.
+  // The endpoint implements none of these: streaming, push notifications and the extended Agent
+  // Card are all unimplemented, and polling GetTask is what stands in for the first two. A card
+  // that claimed otherwise would send clients down code paths that return -32601.
   for (const [name, value] of Object.entries(card.capabilities ?? {})) {
-    if (value !== false) errors.push(`capabilities.${name}: the v1 responder implements none of these; must be false`);
+    if (value !== false) errors.push(`capabilities.${name}: the responder implements none of these; must be false`);
   }
 
-  if ((card.skills ?? []).length !== 1) {
-    errors.push(`skills: the v1 declares exactly one skill, found ${(card.skills ?? []).length}`);
+  // Pinned to the responder's own list rather than to a number, because the failure this guards
+  // against is a card advertising a skill id no message can ever route to. A skill is only real
+  // if src/lib/a2a-audit-skill.mjs will dispatch it.
+  const declared = (card.skills ?? []).map((skill) => skill.id);
+  if (declared.join(',') !== [...SKILL_IDS].join(',')) {
+    errors.push(`skills: expected exactly [${[...SKILL_IDS].join(', ')}], found [${declared.join(', ')}]`);
   }
 
   return errors;
