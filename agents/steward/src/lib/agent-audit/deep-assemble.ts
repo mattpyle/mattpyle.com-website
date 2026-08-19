@@ -6,6 +6,7 @@ import {
   type CheckMetric,
   type CheckResult,
   type CheckStatus,
+  type DecisionClass,
   type Severity,
 } from './result.js';
 import type { AxeViolation, LighthouseLike } from '../audit-map.js';
@@ -60,6 +61,8 @@ interface AxisSpec {
   /** Two or three words for the headline tile the HTML report leads with. */
   label: string;
   severity: Severity;
+  /** How settled this check's subject is. See `DecisionClass` in result.ts. */
+  decisionClass: DecisionClass;
 }
 
 /**
@@ -71,6 +74,13 @@ interface AxisSpec {
  * category for this, so it is here for the same reason. Best-practices is low:
  * it is real, and it is the least likely of the four to be why an agent came
  * away with nothing.
+ *
+ * Decision class is a second, independent axis (see `DecisionClass`): it says how
+ * confidently a stranger can be told to act on a finding, not how hard the
+ * finding bites. Accessibility is the one axis that is both high severity and a
+ * proven blocker, because the accessibility tree is what an agent reads. The
+ * other four are measured numbers whose link to any one agent journey is an
+ * inference, which is a different claim and is graded as one.
  */
 const AXES: AxisSpec[] = [
   {
@@ -79,6 +89,9 @@ const AXES: AxisSpec[] = [
     title: "Lighthouse's Agentic Browsing score clears 90 on the sampled pages",
     label: 'Agentic browsing',
     severity: 'high',
+    // Lighthouse 13's own category for this, and brand new. It aims at exactly
+    // the right thing and nobody has yet shown what a given score predicts.
+    decisionClass: 'emergingConvention',
   },
   {
     key: 'accessibility',
@@ -86,6 +99,9 @@ const AXES: AxisSpec[] = [
     title: 'Lighthouse accessibility clears 90 on the sampled pages',
     label: 'Accessibility',
     severity: 'high',
+    // The accessibility tree is literally what a browser agent reads off the
+    // page. A defect here is measured, not inferred, on any site.
+    decisionClass: 'provenBlocker',
   },
   {
     key: 'seo',
@@ -93,6 +109,9 @@ const AXES: AxisSpec[] = [
     title: 'Lighthouse SEO clears 90 on the sampled pages',
     label: 'SEO',
     severity: 'medium',
+    // Settled practice with broad agreement. Not a blocker: a page an agent
+    // already has the URL for renders whatever its SEO score says.
+    decisionClass: 'bestPractice',
   },
   {
     key: 'performance',
@@ -100,6 +119,9 @@ const AXES: AxisSpec[] = [
     title: 'Lighthouse performance clears 90 on the sampled pages',
     label: 'Performance',
     severity: 'medium',
+    // A slow page can exhaust a budgeted fetcher, but that is an inference from
+    // a number rather than an observed refusal. Established practice, not proof.
+    decisionClass: 'bestPractice',
   },
   {
     key: 'best-practices',
@@ -107,6 +129,8 @@ const AXES: AxisSpec[] = [
     title: 'Lighthouse best-practices clears 90 on the sampled pages',
     label: 'Best practices',
     severity: 'low',
+    // Established web practice by construction; that is what the category is.
+    decisionClass: 'bestPractice',
   },
 ];
 
@@ -117,6 +141,9 @@ const AXE_CHECK = {
   id: 'axe-violations',
   title: 'axe-core finds no accessibility violations on the sampled pages',
   severity: 'high' as Severity,
+  // Named defects in the rendered tree, each one reproducible on the page it was
+  // found on. The most directly observed finding this tier produces.
+  decisionClass: 'provenBlocker' as DecisionClass,
 };
 
 // ---------------------------------------------------------------------------
@@ -215,7 +242,7 @@ export function toolVersions(): { axe: string } {
 // ---------------------------------------------------------------------------
 
 function check(
-  spec: { id: string; title: string; severity: Severity },
+  spec: { id: string; title: string; severity: Severity; decisionClass: DecisionClass },
   status: CheckStatus,
   observed: string,
   evidence: CheckEvidence[] = [],
@@ -273,7 +300,7 @@ export function assembleDeepChecks(input: AssembleInput): CheckResult[] {
  * can word it.
  */
 function noVerdict(
-  spec: { id: string; title: string; severity: Severity },
+  spec: { id: string; title: string; severity: Severity; decisionClass: DecisionClass },
   skipped: SkippedPage[],
   browserFailure: string | null,
   sampled: number,
@@ -325,7 +352,7 @@ function axisCheck(
   browserFailure: string | null,
   sampled: number,
 ): CheckResult {
-  const spec = { id: axis.id, title: axis.title, severity: axis.severity };
+  const spec = { id: axis.id, title: axis.title, severity: axis.severity, decisionClass: axis.decisionClass };
   const metricOf = (value: number, count: number): CheckMetric => ({
     label: axis.label,
     value,

@@ -20,6 +20,14 @@
  * v1 reader has never seen. A reader that switched over the three it knew — to
  * label them, or to lay them out — misreads the new document rather than merely
  * missing a row, which is the line this constant exists to mark.
+ *
+ * Decision classes (2026-08-18) did **not** move it, deliberately. `decisionClass`
+ * on a check and `decisionClasses` on the document are both optional additions: a
+ * v2 reader that has never heard of either reads the document exactly as it read
+ * the last one. Moving the number instead would have told every such reader that
+ * something it understood had changed, which is a false alarm, and would have
+ * split the temporal.io canary series across two versions mid-flight for a field
+ * its own readers are free to ignore.
  */
 export const SCHEMA_VERSION = 2;
 
@@ -56,6 +64,37 @@ export type CheckCategory = (typeof CATEGORIES)[number];
 
 /** Ranks the fix list. Not a score, and never summed — see the card. */
 export type Severity = 'high' | 'medium' | 'low';
+
+/**
+ * How settled the thing a check tests is — a property of the **check**, never of
+ * the site.
+ *
+ * Severity says how hard a finding bites. This says how confidently anyone can
+ * tell a site owner to act on it, and the two are separate axes that must not be
+ * collapsed: a missing A2A card is `low` severity *and* only applies to a site
+ * that runs an agent, while broken markdown negotiation is `high` severity *and*
+ * a measured access failure on any site. Before this field a reader weighing
+ * "no agents.md" against "the homepage ignores `Accept: text/markdown`" got no
+ * help from the format at all.
+ *
+ * - `provenBlocker` — the check measures an access or accessibility failure that
+ *   is real on any site, observed rather than inferred. Fix it.
+ * - `bestPractice` — an established convention with broad agreement behind it.
+ *   Absence is a real gap, not a measured failure.
+ * - `conditional` — applies only if the site has chosen to do the thing: publish
+ *   an llms.txt, run an MCP server, operate an agent. Absence is a finding only
+ *   against that choice, never on its own.
+ * - `emergingConvention` — the convention itself is young and not broadly
+ *   settled. Worth knowing about; not worth telling a stranger they are failing.
+ *
+ * Static metadata, assigned in the catalogue beside `severity`, with no per-run
+ * or per-site judgment anywhere in it. The editorial fields the source mockup
+ * also proposed — a business claim, a strategic-relevance grade — are deliberately
+ * not here: they are per-audience interpretation, and this document stays
+ * lossless and neutral so every audience can build its own projection from it.
+ */
+export const DECISION_CLASSES = ['provenBlocker', 'bestPractice', 'conditional', 'emergingConvention'] as const;
+export type DecisionClass = (typeof DECISION_CLASSES)[number];
 
 /**
  * What was fetched and what it said. Every check carries its own evidence so a
@@ -114,6 +153,16 @@ export interface CheckResult {
   title: string;
   category: CheckCategory;
   severity: Severity;
+  /**
+   * How settled this check's subject is. See `DecisionClass`.
+   *
+   * Optional for the same reason `userAgent` is: a document written before the
+   * field existed is still a valid document, and the temporal.io canary series
+   * was mid-flight when this landed, so its early reports have findings with no
+   * class on them. Absence means **unknown**, never a default class. Every check
+   * this code runs declares one — the catalogue's own type requires it.
+   */
+  decisionClass?: DecisionClass;
   status: CheckStatus;
   /** One line: what was actually observed. Present for every status. */
   observed: string;
@@ -155,6 +204,17 @@ export interface ReportIntegrity {
   /** Present whenever `status` is not `clean`. Written to be read out of context. */
   reason?: string;
 }
+
+/**
+ * How many **findings** carry each decision class: failing checks only, since a
+ * pass has nothing to weigh.
+ *
+ * All four keys are always present, zeros included, so a reader can lay out the
+ * four classes without first discovering which ones this run happened to produce.
+ * The whole object is absent from a document written before the field existed —
+ * see `decisionClass` on `CheckResult` for why absence means unknown.
+ */
+export type DecisionClassCounts = Record<DecisionClass, number>;
 
 export interface CategoryCount {
   category: CheckCategory;
@@ -204,6 +264,15 @@ export interface AuditResult {
   integrity?: ReportIntegrity;
   /** Per-category pass counts. No composite score, by decision — see the card. */
   categories: CategoryCount[];
+  /**
+   * The findings counted by decision class. See `DecisionClassCounts`.
+   *
+   * Beside the per-category counts rather than replacing them: they answer
+   * different questions. A category says where in the site a finding lives; a
+   * class says how confidently anyone can be told to act on it. Neither is
+   * summed into a score, for the same reason nothing else here is.
+   */
+  decisionClasses?: DecisionClassCounts;
   checks: CheckResult[];
   /**
    * Run-level problems that are not about any one check: the time budget ran
@@ -224,6 +293,26 @@ export function countByCategory(checks: CheckResult[]): CategoryCount[] {
       errors: mine.filter((c) => c.status === 'error').length,
     };
   });
+}
+
+/**
+ * Counts the failing checks by decision class.
+ *
+ * Findings only. A passing check has a class — the class describes the check, not
+ * the run — but counting passes here would make the object a description of the
+ * catalogue rather than of this site, which is not what a summary is for.
+ *
+ * A check with no class is not counted anywhere. That case cannot arise from this
+ * code, where the catalogue's type requires the field; it can arise for a caller
+ * that hands in checks from somewhere else, and silently filing those under a
+ * default class would be an invented fact.
+ */
+export function countByDecisionClass(checks: CheckResult[]): DecisionClassCounts {
+  const counts = Object.fromEntries(DECISION_CLASSES.map((c) => [c, 0])) as DecisionClassCounts;
+  for (const check of checks) {
+    if (check.status === 'fail' && check.decisionClass) counts[check.decisionClass] += 1;
+  }
+  return counts;
 }
 
 const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 };

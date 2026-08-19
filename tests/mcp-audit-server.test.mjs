@@ -128,6 +128,32 @@ test('the structured content survives the declared output schema', async (t) => 
   assert.equal(result.structuredContent.somethingNewInSchemaVersion3, true);
 });
 
+test('decision classes reach the caller as data, and a report without them still validates', async (t) => {
+  // The fixture above is a document from before decision classes existed, and every other test in
+  // this file already proves it validates. This one is the other half: a current document carries
+  // a class on each check and the per-class counts beside the categories, and both have to arrive
+  // as structured data rather than only in the prose.
+  const { client, close } = await connect({
+    runAudit: async (url) => {
+      const audit = auditFor(url);
+      audit.checks[0].decisionClass = 'emergingConvention';
+      audit.decisionClasses = { provenBlocker: 0, bestPractice: 0, conditional: 0, emergingConvention: 1 };
+      return audit;
+    },
+  });
+  t.after(close);
+
+  const result = await client.callTool({ name: TOOL_NAME, arguments: { url: 'example.com' } });
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent.checks[0].decisionClass, 'emergingConvention');
+  assert.deepEqual(result.structuredContent.decisionClasses, {
+    provenBlocker: 0,
+    bestPractice: 0,
+    conditional: 0,
+    emergingConvention: 1,
+  });
+});
+
 test('a target that is not a URL is a tool error, not an empty report', async (t) => {
   // An agent handed a 200 and an empty finding list summarises it as a clean site. Refusing loudly
   // is the only answer that cannot be misread.

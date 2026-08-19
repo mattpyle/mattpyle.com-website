@@ -94,6 +94,17 @@ const AUDIT_OUTPUT_SHAPE = {
   categories: z
     .array(z.looseObject({ category: z.string() }))
     .describe('Per-category pass/fail counts. There is deliberately no composite score.'),
+  // Optional here because it is optional in the document: a report written before the field
+  // existed carries no counts, and declaring it required would turn reading one of those back
+  // into an output validation error — the failure mode this schema's docblock exists to avoid.
+  decisionClasses: z
+    .looseObject({})
+    .optional()
+    .describe(
+      'How many findings carry each decision class: provenBlocker, bestPractice, conditional, ' +
+        'emergingConvention. A property of the checks that failed, not of the site, and a ' +
+        'separate axis from severity. Absent on a report written before the field existed.',
+    ),
   checks: z
     .array(
       z.looseObject({
@@ -101,6 +112,13 @@ const AUDIT_OUTPUT_SHAPE = {
         title: z.string(),
         category: z.string(),
         severity: z.string(),
+        decisionClass: z
+          .string()
+          .optional()
+          .describe(
+            'How settled the subject of this check is: provenBlocker, bestPractice, conditional or ' +
+              'emergingConvention. Absent means unknown, never a default.',
+          ),
         status: z.string().describe('pass, fail, not-applicable or error.'),
         observed: z.string(),
       }),
