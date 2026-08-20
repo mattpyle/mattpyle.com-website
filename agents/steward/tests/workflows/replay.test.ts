@@ -26,9 +26,9 @@ import { Worker } from '@temporalio/worker';
  * 'checkFrontmatter' does not match activity type of activity command 'runVale'
  * ```
  *
- * That break is a legitimate versioning finding (recorded in the build log), not
- * a regression: adding activities to a parallel fan-out is not a replay-safe
- * change, and nothing in production was parked on the old shape. The old fixture
+ * That break is a legitimate versioning finding, not a regression: adding
+ * activities to a parallel fan-out is not a replay-safe change, and nothing in
+ * production was parked on the old shape. The old fixture
  * is not kept alongside this one — a guard for a history shape no live workflow
  * has is a decoration.
  *
@@ -84,6 +84,9 @@ const buildAuditHistoryPath = fileURLToPath(
 );
 const auditSiteHistoryPath = fileURLToPath(
   new URL('../fixtures/histories/stage3-audit-site-fanout.json', import.meta.url),
+);
+const scorecardHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/scorecard-dry-run.json', import.meta.url),
 );
 
 test(
@@ -151,7 +154,16 @@ test(
  * rather than a single activity.
  *
  * **Verified able to fail** by the docblock's rule, on this fixture rather than
- * on trust — see the build-log entry for the probe and its output.
+ * on trust. A `wf.sleep('1 second')` injected before `auditSiteFetchChecks`, the
+ * workflow's first activity, produced
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 5, ActivityTaskScheduled)
+ * ```
+ *
+ * and failed this test alone, leaving the other three green. The probe was
+ * reverted and all four fixtures re-run green.
  */
 test(
   'the stage-3 fan-out audit history replays against current workflow code',
@@ -163,6 +175,63 @@ test(
       { workflowsPath, bundlerOptions: {} },
       history,
       'steward-audit-www.mattpyle.com-deep-fanout1',
+    );
+  },
+);
+
+/**
+ * ## `scorecardAuditWorkflow`: manufactured, not waited for
+ *
+ * Until this fixture existed, "the replay fixtures are untouched" was
+ * *vacuously* true for the scorecard — there was nothing for a change to it to
+ * break. That mattered more than it sounds: it is the workflow most likely to
+ * grow input fields next, and it already grew one (`note`, PR #108) whose
+ * replay safety was reasoned about by hand rather than measured.
+ *
+ * Unlike the publish leg, this history did not have to be waited for. A
+ * `steward scorecard --dry-run` produces a *complete* execution — the flag skips
+ * step 4's publish and makes step 5's archive log instead of commit — so the
+ * whole command sequence is exercised without touching GitHub. The fixture is a
+ * real run against `https://www.mattpyle.com` on 2026-08-19, workflow ID
+ * `steward-scorecard-2026-08-20T04-31-04-076Z` on the Temporal Cloud namespace:
+ * 167 events, `resolveAuditUrls` → `readPublishedScorecard` → 23 serial
+ * `auditLiveUrl` activities → `resolveRunStamp` → `archiveScorecardRun`, through
+ * to completion.
+ *
+ * **What it does not guard, deliberately.** A dry run takes the `publishMode ===
+ * 'pr'` branch's false arm, so `publishScorecardRun` appears nowhere in this
+ * history and a change to the publish leg replays clean against it. It is also
+ * a *manual* run, so the `triggeredBy === 'schedule'` arms — the credential
+ * check and the nightly health signal — are absent for the same reason. Both
+ * gaps are the price of a fixture that can be manufactured at all, and both are
+ * the shape the workflow's own docblocks say those branches take. What this
+ * fixture does pin is the part every run shares: the step order, the fan-out,
+ * and the fact that the fan-out is serial.
+ *
+ * **Verified able to fail** by the rule at the top of this file, on this fixture
+ * rather than on trust. A `wf.sleep('1 second')` injected before step 0's
+ * `resolveAuditUrls` produced
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 5, ActivityTaskScheduled)
+ * ```
+ *
+ * and the other three fixtures stayed green, which is the second half of the
+ * evidence: the probe broke exactly the history it should have.
+ *
+ * The probe was reverted and all four fixtures re-run green.
+ */
+test(
+  'the scorecard dry-run history replays against current workflow code',
+  { timeout: 120_000 },
+  async () => {
+    const history = JSON.parse(await fs.readFile(scorecardHistoryPath, 'utf8'));
+
+    await Worker.runReplayHistory(
+      { workflowsPath, bundlerOptions: {} },
+      history,
+      'steward-scorecard-2026-08-20T04-31-04-076Z',
     );
   },
 );
