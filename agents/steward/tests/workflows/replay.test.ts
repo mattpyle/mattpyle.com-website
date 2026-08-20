@@ -211,7 +211,7 @@ test(
  * and the other three fixtures stayed green, which is the second half of the
  * evidence: the probe broke exactly the history it should have.
  *
- * The probe was reverted and the test re-run green — see the build-log entry.
+ * The probe was reverted and all four fixtures re-run green.
  */
 test(
   'the scorecard dry-run history replays against current workflow code',
