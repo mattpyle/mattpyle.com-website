@@ -26,9 +26,9 @@ import { Worker } from '@temporalio/worker';
  * 'checkFrontmatter' does not match activity type of activity command 'runVale'
  * ```
  *
- * That break is a legitimate versioning finding (recorded in the build log), not
- * a regression: adding activities to a parallel fan-out is not a replay-safe
- * change, and nothing in production was parked on the old shape. The old fixture
+ * That break is a legitimate versioning finding, not a regression: adding
+ * activities to a parallel fan-out is not a replay-safe change, and nothing in
+ * production was parked on the old shape. The old fixture
  * is not kept alongside this one — a guard for a history shape no live workflow
  * has is a decoration.
  *
@@ -154,7 +154,16 @@ test(
  * rather than a single activity.
  *
  * **Verified able to fail** by the docblock's rule, on this fixture rather than
- * on trust — see the build-log entry for the probe and its output.
+ * on trust. A `wf.sleep('1 second')` injected before `auditSiteFetchChecks`, the
+ * workflow's first activity, produced
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 5, ActivityTaskScheduled)
+ * ```
+ *
+ * and failed this test alone, leaving the other three green. The probe was
+ * reverted and all four fixtures re-run green.
  */
 test(
   'the stage-3 fan-out audit history replays against current workflow code',
