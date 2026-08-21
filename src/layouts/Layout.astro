@@ -4,11 +4,14 @@ import '../styles/retro.css';
 import { ClientRouter } from 'astro:transitions';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 import WebMCP from '../components/WebMCP.astro';
 import AppearanceBanner from '../components/AppearanceBanner.astro';
 import AppearanceUI from '../components/AppearanceUI.astro';
 import { PRE_PAINT_APPEARANCE_SCRIPT } from '../lib/pre-paint-appearance.mjs';
+import { isRedesignedRoute } from '../lib/redesigned-routes.mjs';
 
 interface Breadcrumb {
   name: string;
@@ -58,6 +61,14 @@ const {
   readingTimeISO8601,
   extraJsonLd,
 } = Astro.props;
+
+/**
+ * Has this route been rebuilt to the redesign? See src/lib/redesigned-routes.mjs
+ * for what the flag does and when it goes away. Three things hang off it: the
+ * body class that arms the redesign tokens, which chrome renders, and which
+ * fonts are preloaded.
+ */
+const redesigned = isRedesignedRoute(Astro.url.pathname);
 
 const headTitleBase = seoTitle ?? title;
 const pageTitle = fullTitle ?? (headTitleBase === 'Matt Pyle' ? headTitleBase : `${headTitleBase} — Matt Pyle`);
@@ -199,7 +210,8 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#faf7f0" />
+    {/* The browser-chrome tint matches the page's own background, so it follows the skin. */}
+    <meta name="theme-color" content={redesigned ? '#f2f3f7' : '#faf7f0'} />
     <title>{pageTitle}</title>
 
     <!-- Open Graph -->
@@ -242,19 +254,47 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
       middleware.ts to keep in sync (CLAUDE.md), which this element does not.
     */}
     <link rel="describedby" type="text/markdown" href={new URL('/llms.txt', Astro.site)} />
-    <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin />
+    {/*
+      The latin subset of each face the page will actually paint, and no more. A
+      redesigned page never paints JetBrains Mono or Source Serif 4, and an
+      unconverted one never paints Bricolage or IBM Plex, so preloading both sets
+      everywhere would put ~100KB of unused font on every route's critical path.
+      The latin-ext subsets are deliberately not preloaded: unicode-range means
+      they are fetched only if the page contains a character that needs them.
+    */}
+    {redesigned ? (
+      <>
+        <link rel="preload" href="/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="preload" href="/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="preload" href="/fonts/ibm-plex-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+      </>
+    ) : (
+      <>
+        <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="preload" href="/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin />
+      </>
+    )}
     <ClientRouter />
     <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   </head>
-  <body>
+  <body class:list={[{ 'skin-redesign': redesigned }]}>
     <a href="#main" class="skip-link">Skip to content</a>
     <AppearanceBanner />
-    <Nav />
+    {/*
+      A redesigned route ships BOTH sets of chrome and shows one, which is what
+      lets the redesign leave retro untouched (Matt, 2026-08-20). The pair is
+      switched by `.modern-skin` / `.retro-skin` in retro.css, the same
+      construction the retro homepage furniture has always used: nothing is
+      injected or removed when the appearance toggles, and a hidden subtree holds
+      no tab stops and appears in no accessibility tree.
+    */}
+    {redesigned && <SiteHeader />}
+    <Nav skin={redesigned ? 'retro-skin' : undefined} />
     <main class="site-main" id="main">
       <slot />
     </main>
-    <Footer />
+    <Footer skin={redesigned ? 'retro-skin' : undefined} />
+    {redesigned && <SiteFooter />}
     <AppearanceUI />
     {/*
       MUST stay in <body>. This renders a <vercel-speed-insights> custom element, and a custom

@@ -1,0 +1,135 @@
+---
+/**
+ * The Writing section (docs/projects/redesign/design-export/README.md §1, "Writing").
+ *
+ * Two rows, from the real collection. No tags, no read-time column, no pills —
+ * the homepage list is date, title, excerpt and nothing else (constraints 2 and 4).
+ */
+import { formatSiteDate } from '../../lib/format-date.mjs';
+
+interface Article {
+  id: string;
+  data: { title: string; date: Date; description: string };
+}
+
+interface Props {
+  articles: Article[];
+}
+
+const { articles } = Astro.props;
+---
+
+<section class="rd-section writing modern-skin" aria-labelledby="home-writing-title">
+  <div class="rd-heading-row">
+    <h2 id="home-writing-title">Writing</h2>
+    <a href="/writing/" class="rd-all-link">all writing &rarr;</a>
+  </div>
+
+  {articles.length > 0 ? (
+    <div class="rows">
+      {articles.map(article => (
+        <a href={`/writing/${article.id}/`} class="row">
+          <time datetime={article.data.date.toISOString()} class="row-date">
+            {formatSiteDate(article.data.date)}
+          </time>
+          <span class="row-body">
+            <span class="row-title">{article.data.title}</span>
+            <span class="row-excerpt">{article.data.description}</span>
+          </span>
+        </a>
+      ))}
+      {/* Closes the list with the same hairline that opens each row. */}
+      <div class="rows-end"></div>
+    </div>
+  ) : (
+    <p class="empty">More writing coming soon.</p>
+  )}
+</section>
+
+<style>
+  .writing { padding-top: 88px; }
+
+  .rd-heading-row { padding-bottom: 22px; }
+  .rd-heading-row h2 { color: var(--writing); }
+  .rd-all-link { color: var(--writing); }
+  .rd-all-link:hover { color: var(--writing-hover); }
+
+  .rows { display: flex; flex-direction: column; }
+
+  /* The 20px padding with a matching negative margin is what lets the hover
+     ground bleed past the text without moving the text: the row keeps the
+     section's left edge while its background runs 20px wider on each side. */
+  .row {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 36px;
+    align-items: start;
+    padding: 30px 20px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .row:hover { background: var(--tint-writing); }
+
+  .rows-end { border-top: 1px solid var(--rule); }
+
+  .row-date {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+    padding-top: 7px;
+  }
+
+  .row-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .row-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.15;
+    letter-spacing: -.025em;
+    max-width: 26ch;
+  }
+
+  .row-excerpt {
+    font-size: 16.5px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    max-width: 62ch;
+    text-wrap: pretty;
+  }
+
+  .empty {
+    margin: 0;
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  @media (max-width: 720px) {
+    .writing { padding-top: 56px; }
+
+    .rd-heading-row { padding-bottom: 8px; }
+
+    /* Stacked, and the bleed goes with it: at 20px of gutter there is nothing
+       left to bleed into. */
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 22px 0;
+      margin: 0;
+    }
+
+    .row-date { padding-top: 0; font-size: 16px; }
+
+    .row-title { font-size: 27px; line-height: 1.18; }
+
+    .row-excerpt { font-size: 17px; }
+  }
+</style>

@@ -1,8 +1,22 @@
 ---
 const year = new Date().getFullYear();
+
+/**
+ * Appearance-skin class, set by Layout.astro on a route the redesign has
+ * rebuilt. On such a route this component is the RETRO half of a pair — the
+ * redesigned chrome renders beside it and retro.css shows exactly one of the
+ * two. Absent everywhere else, which keeps every unconverted page's markup
+ * byte-identical to what it was before the redesign branch.
+ */
+interface Props {
+  skin?: string;
+}
+
+const { skin } = Astro.props;
+
 ---
 
-<footer data-module="footer">
+<footer data-module="footer" class:list={[skin]}>
   <nav aria-label="Social links">
     <a href="/rss.xml" class="rss-link" aria-label="RSS feed for Writing">
       <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false">

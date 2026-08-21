@@ -1663,3 +1663,33 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
     animation: none;
   }
 }
+
+/* ── Appearance skins: the redesign beside the legacy chrome ──────────────
+   The redesign rebuilds the modern appearance surface by surface, and retro is
+   explicitly untouched by it (Matt, 2026-08-20). A redesigned route therefore
+   ships BOTH sets of chrome in the DOM — SiteHeader/SiteFooter and the new
+   homepage sections marked `.modern-skin`, Nav/Footer and the legacy homepage
+   sections marked `.retro-skin` — and exactly one is displayed.
+
+   This is the same construction as `.retro-furniture` above, and for the same
+   reason: nothing is injected, removed or re-rendered at toggle time, so the
+   toggle stays a CSS switch on one document rather than a re-render.
+
+   It is also what keeps every retro rule in this file working untouched. Retro
+   styles the legacy chrome through `[data-module='nav']` and
+   `[data-module='footer']`; the redesigned pair are `[data-module='site-header']`
+   and `[data-module='site-footer']`, which no selector here mentions. There is
+   no specificity contest to lose (see the Astro-scoped-selector trap noted at
+   the top of this file).
+
+   A hidden subtree is not in the accessibility tree and holds no tab stops, so
+   the keyboard and aria-golden rows in tests/a11y see one header and one footer
+   in each appearance, not two. */
+
+html:not([data-appearance='retro']) .retro-skin {
+  display: none;
+}
+
+html[data-appearance='retro'] .modern-skin {
+  display: none;
+}

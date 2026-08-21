@@ -1,0 +1,184 @@
+---
+/**
+ * The Projects section (docs/projects/redesign/design-export/README.md §1, "Projects").
+ *
+ * Rendered from the real `projects` collection, which holds one entry today
+ * (Matt, 2026-08-20). The design's two cards — Steward and WebMCP experiments —
+ * are not in the collection, and constraint 10 says leave a placeholder rather
+ * than invent a number or a label; inventing two content entries to fill a grid
+ * would have been the same mistake one level up. The grid stays two columns, so
+ * the section grows into the design as entries land.
+ *
+ * The card top is a placeholder hatch, deliberately: there is no real screenshot
+ * or diagram for any project yet, and the design would rather show an honest
+ * empty frame than a decorative one. The chip is aria-hidden — it names a
+ * missing asset, which is information for the eye and noise inside the card's
+ * accessible name.
+ */
+
+interface Project {
+  id: string;
+  data: {
+    title: string;
+    description: string;
+    github?: string;
+    live?: string;
+  };
+}
+
+interface Props {
+  projects: Project[];
+}
+
+const { projects } = Astro.props;
+
+const SITE_ORIGIN = Astro.site ? new URL(Astro.site).origin : 'https://www.mattpyle.com';
+
+/**
+ * Where a card goes. There are no per-project detail pages, so the useful
+ * destination is the project itself: its live URL, or its repository when the
+ * live URL is this very site. /projects is the fallback, never a dead card.
+ */
+function cardHref(project: Project): { href: string; external: boolean } {
+  const { live, github } = project.data;
+  if (live && new URL(live).origin !== SITE_ORIGIN) return { href: live, external: true };
+  if (github) return { href: github, external: true };
+  return { href: '/projects/', external: false };
+}
+---
+
+<section class="rd-section projects modern-skin" aria-labelledby="home-projects-title">
+  <div class="rd-heading-row">
+    <h2 id="home-projects-title">Projects</h2>
+    <a href="/projects/" class="rd-all-link">all projects &rarr;</a>
+  </div>
+
+  <div class="grid">
+    {projects.map(project => {
+      const { href, external } = cardHref(project);
+      return (
+        <a
+          href={href}
+          class="card"
+          target={external ? '_blank' : undefined}
+          rel={external ? 'noopener noreferrer' : undefined}
+        >
+          <span class="card-image" aria-hidden="true">
+            <span class="card-chip">[ image: pending ]</span>
+          </span>
+          <span class="card-body">
+            <span class="card-name">{project.data.title}</span>
+            <span class="card-blurb">{project.data.description}</span>
+            {external && <span class="sr-only"> (opens in a new tab)</span>}
+          </span>
+        </a>
+      );
+    })}
+  </div>
+</section>
+
+<style>
+  .projects { padding-top: 84px; }
+
+  .rd-heading-row { padding-bottom: 26px; }
+  .rd-heading-row h2 { color: var(--projects); }
+  .rd-all-link { color: var(--projects); }
+  .rd-all-link:hover { color: var(--projects-hover); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    overflow: hidden;
+    color: var(--ink);
+    transition: border-color 240ms ease, transform 240ms ease;
+  }
+
+  .card:hover {
+    border-color: var(--projects);
+    transform: translateY(-3px);
+  }
+
+  .card-image {
+    display: flex;
+    align-items: flex-end;
+    aspect-ratio: 16 / 9;
+    padding: 14px;
+    border-bottom: 1px solid var(--rule);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--hatch-projects-a) 0 8px,
+      var(--hatch-projects-b) 8px 16px
+    );
+  }
+
+  .card-chip {
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--hatch-chip-ink);
+    background: var(--paper);
+    border: 1px solid var(--hatch-chip-border);
+    border-radius: 3px;
+    padding: 5px 9px;
+  }
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px 26px 26px;
+  }
+
+  .card-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 25px;
+    letter-spacing: -.02em;
+  }
+
+  .card-blurb {
+    font-size: 16.5px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    text-wrap: pretty;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    .projects { padding-top: 52px; }
+
+    .rd-heading-row { padding-bottom: 20px; }
+
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    .card-image { aspect-ratio: 16 / 10; padding: 12px; }
+
+    .card-body { padding: 20px 20px 22px; }
+
+    .card-name { font-size: 24px; }
+
+    .card-blurb { font-size: 17px; }
+  }
+</style>
