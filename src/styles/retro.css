@@ -224,12 +224,17 @@ html[data-appearance='retro'] .nav-link.is-active {
 
 /* WCAG 1.4.10 reflow, retro only. Nav.astro wraps the header below 360px, where
    the modern faces stop fitting on one row. Retro's Comic Sans wordmark and bold
-   Verdana links need about 429px for that same row, so this extends the shipped
-   wrap pattern up to 440px (about 11px of slack over the measured need) instead
+   Verdana links need about 444px for that same row, so this extends the shipped
+   wrap pattern up to 456px (about 12px of slack over the measured need) instead
    of moving the shared breakpoint and reflowing modern. Retro at 440 and up
    keeps its single row. Selectors are scoped under [data-module='nav'] so they
-   outweigh Nav.astro's scoped rules, whose cid attribute counts as a class. */
-@media (max-width: 439.98px) {
+   outweigh Nav.astro's scoped rules, whose cid attribute counts as a class.
+
+   The 444 is per label set, not per link count: it was 429 until Builds was
+   renamed to Projects on 2026-08-20. tests/a11y/reflow.spec.ts brackets this
+   rule on both sides so the next label change fails there rather than in
+   somebody's browser. */
+@media (max-width: 455.98px) {
   html[data-appearance='retro'] [data-module='nav'] .nav-inner {
     flex-wrap: wrap;
     height: auto;
@@ -491,7 +496,8 @@ html[data-appearance='retro'] .log-title {
    panel is a grid item with the default min-width: auto, so that min-content
    pushed the whole page sideways. Letting the header wrap drops min-content to
    the wider of the two. Modern's narrower faces fit on one row and are left
-   alone; above the retro nav breakpoint there is room for both. */
+   alone; by 440 there is room for both. This breakpoint is its own measurement
+   and does not track the nav rule above, which moved to 456 on 2026-08-20. */
 @media (max-width: 439.98px) {
   html[data-appearance='retro'] [data-module='activity-log'] .log-header {
     flex-wrap: wrap;
@@ -566,16 +572,16 @@ html[data-appearance='retro'] .tag-pill {
   color: var(--retro-ink-muted);
 }
 
-/* ── /builds grid ─────────────────────────────────────────────────────── */
+/* ── /projects grid ─────────────────────────────────────────────────────── */
 
-html[data-appearance='retro'] .build-card {
+html[data-appearance='retro'] .project-card {
   background: var(--retro-frame-bg);
   border: 3px ridge var(--retro-frame-border);
   border-top-width: 3px;
   box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
 }
 
-html[data-appearance='retro'] .build-card h2 {
+html[data-appearance='retro'] .project-card h2 {
   font-family: var(--retro-font-display);
   color: var(--retro-maroon);
   font-size: 17px;
@@ -908,7 +914,7 @@ html[data-appearance='retro'] .connect-label {
   color: var(--retro-maroon);
 }
 
-/* ── Filter pills (shared: writing, builds, changelog) ──────────────── */
+/* ── Filter pills (shared: writing, projects, changelog) ──────────────── */
 
 html[data-appearance='retro'] .filter-pill {
   font-family: var(--retro-font-mono);

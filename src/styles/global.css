@@ -45,7 +45,7 @@
 
 /* ── Size-matched font fallbacks ─────────────────────────────────────────────
    Metric-override fallbacks so the swap from the local font to the Google-Fonts
-   web font causes no reflow (the CLS budget on /writing and /builds is ≤ 0.1).
+   web font causes no reflow (the CLS budget on /writing and /projects is ≤ 0.1).
    Values computed from @capsizecss/metrics: size-adjust matches average glyph
    width; ascent/descent/line-gap overrides match vertical metrics. */
 @font-face {

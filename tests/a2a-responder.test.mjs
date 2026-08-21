@@ -294,7 +294,7 @@ test('every intent answers from the digest and cites a real site URL', async () 
   const questions = {
     site: 'What is this site about?',
     writing: 'What has Matt written recently?',
-    builds: 'What projects has he built?',
+    projects: 'What projects has he built?',
     changelog: 'What has shipped on this site lately?',
     surfaces: 'What agent-readable surfaces does this site expose?',
     scorecard: 'What is the accessibility score?',
@@ -398,7 +398,7 @@ test('the surfaces vocabulary does not pull questions that route correctly today
   for (const [question, expected] of [
     ['What shipped recently?', 'changelog'],
     ['What articles has he written about standards?', 'writing'],
-    ['What experimental builds are on the shelf?', 'builds'],
+    ['What experimental builds are on the shelf?', 'projects'],
     ['What is the accessibility score?', 'scorecard'],
     ['Who is Matt Pyle and what is his background?', 'person'],
   ]) {
@@ -447,9 +447,9 @@ test('an empty digest degrades to prose rather than to a crash', async () => {
   const empty = {
     ...digest,
     writing: [],
-    builds: [],
+    projects: [],
     changelog: [],
-    counts: { writing: 0, builds: 0, changelog: 0, changelogListed: 0 },
+    counts: { writing: 0, projects: 0, changelog: 0, changelogListed: 0 },
   };
   assert.match(answer('what has he written?', empty).text, /nothing is published/i);
   assert.match(answer('what projects?', empty).text, /Nothing on the projects shelf/);

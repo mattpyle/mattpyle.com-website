@@ -40,11 +40,11 @@ const INDEX = {
       description: 'Auditing the same page with three different crawlers.',
     },
   ],
-  builds: [
+  projects: [
     {
       title: 'Scorecard',
       slug: 'scorecard',
-      url: 'https://www.mattpyle.com/builds',
+      url: 'https://www.mattpyle.com/projects',
       date: '2026-06-01T00:00:00.000Z',
       status: 'live',
       tags: ['astro'],
@@ -168,7 +168,7 @@ test('a non-empty get_recent_writing result gains no diagnostic fields', async (
   assert.deepEqual(Object.keys(result), ['posts']);
 });
 
-test('search_content matches title, description, and tags across writing, builds, and changelog', async () => {
+test('search_content matches title, description, and tags across writing, projects, and changelog', async () => {
   const tool = toolsByName().search_content;
 
   const byTitle = await tool.execute({ query: 'screen reader' });
@@ -178,14 +178,14 @@ test('search_content matches title, description, and tags across writing, builds
 
   const byTag = await tool.execute({ query: 'astro' });
   assert.equal(byTag.results.length, 1);
-  assert.equal(byTag.results[0].type, 'build');
+  assert.equal(byTag.results[0].type, 'project');
   assert.equal(byTag.results[0].status, 'live');
 
   const byDescription = await tool.execute({ query: 'crawlers' });
   assert.equal(byDescription.results[0].title, 'Fixture post two');
 
   // "performance" appears in both the writing description ("performance snapshot" is a
-  // build, actually) — assert the changelog entry is found and carries its significance.
+  // project, actually) — assert the changelog entry is found and carries its significance.
   const changelogHit = await tool.execute({ query: 'self-hosted fonts' });
   const clResult = changelogHit.results.find((r) => r.type === 'changelog');
   assert.ok(clResult, 'expected a changelog result for "self-hosted fonts"');
@@ -222,7 +222,7 @@ test('a query that matches nothing names the query and the corpus it searched', 
 
   assert.deepEqual(result.results, []);
   assert.equal(result.query, 'nothing matches this');
-  assert.deepEqual(result.corpus, { writing: 2, builds: 1, changelog: 1 });
+  assert.deepEqual(result.corpus, { writing: 2, projects: 1, changelog: 1 });
   assert.match(result.note, /nothing matches this/);
   assert.match(result.note, /4 entries/);
 });

@@ -128,9 +128,9 @@ function describe(digest, { unrecognised = false } = {}) {
   }
   lines.push('');
   lines.push(
-    `Ask me about the writing, the builds, what shipped recently, the scorecard, or the agent-readable ` +
+    `Ask me about the writing, the projects, what shipped recently, the scorecard, or the agent-readable ` +
       `surfaces. As of the last deploy: ${count(counts.writing, 'published article')}, ` +
-      `${count(counts.builds, 'build')}, ${count(counts.changelog, 'changelog entry', 'changelog entries')}.`
+      `${count(counts.projects, 'project')}, ${count(counts.changelog, 'changelog entry', 'changelog entries')}.`
   );
   lines.push('');
   lines.push(PROVENANCE);
@@ -170,15 +170,15 @@ function writing(digest) {
   return lines.join('\n');
 }
 
-function builds(digest) {
-  const { builds: projects, counts, site } = digest;
+function projectsAnswer(digest) {
+  const { projects, counts, site } = digest;
   const lines = [];
 
   if (projects.length === 0) {
     return ['Nothing on the projects shelf right now.', '', PROVENANCE].join('\n');
   }
 
-  lines.push(`The projects shelf. ${count(counts.builds, 'build')}.`);
+  lines.push(`The projects shelf. ${count(counts.projects, 'project')}.`);
   lines.push('');
   for (const project of projects) {
     const links = [
@@ -191,7 +191,7 @@ function builds(digest) {
     );
   }
   lines.push('');
-  lines.push(`They share one page: ${site.url}builds.`);
+  lines.push(`They share one page: ${site.url}projects.`);
   lines.push('');
   lines.push(PROVENANCE);
   return lines.join('\n');
@@ -331,8 +331,8 @@ const INTENTS = [
     ],
   },
   {
-    id: 'builds',
-    answer: builds,
+    id: 'projects',
+    answer: projectsAnswer,
     keywords: [
       'build', 'builds', 'built', 'project', 'projects', 'portfolio', 'side project', 'made',
       'making', 'demo',
