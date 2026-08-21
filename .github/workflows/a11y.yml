@@ -126,7 +126,7 @@ jobs:
             http://localhost:4321/ \
             http://localhost:4321/about \
             http://localhost:4321/writing \
-            http://localhost:4321/builds \
+            http://localhost:4321/projects \
             http://localhost:4321/scorecard \
             http://localhost:4321/steward \
             http://localhost:4321/webmcp \

@@ -36,7 +36,7 @@ import { WEB_RING, WEB_RING_DESCRIPTION, WEB_RING_NAME } from './web-ring.mjs';
  * @typedef {object} WebmcpIndex
  * @property {any} site
  * @property {any[]} writing
- * @property {any[]} builds
+ * @property {any[]} projects
  * @property {any[]} [changelog]
  */
 
@@ -168,7 +168,7 @@ export function createTools(getIndex) {
     {
       name: 'search_content',
       description:
-        'Search the titles, descriptions, and tags of every published article, build, and changelog entry on mattpyle.com.',
+        'Search the titles, descriptions, and tags of every published article, project, and changelog entry on mattpyle.com.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -178,7 +178,7 @@ export function createTools(getIndex) {
         additionalProperties: false,
       },
       execute: async (args = {}) => {
-        const { writing, builds, changelog = [] } = await getIndex();
+        const { writing, projects, changelog = [] } = await getIndex();
         const query = normalize(args.query).trim();
         if (!query) {
           // Chrome does not enforce `required`, so a blank or missing query reaches the handler.
@@ -190,7 +190,7 @@ export function createTools(getIndex) {
           };
         }
 
-        /** @param {any} entry @param {'writing'|'build'|'changelog'} type */
+        /** @param {any} entry @param {'writing'|'project'|'changelog'} type */
         const match = (entry, type) => {
           const haystack = [entry.title, entry.description, ...(entry.tags ?? [])].map(normalize);
           if (!haystack.some((field) => field.includes(query))) return null;
@@ -206,7 +206,7 @@ export function createTools(getIndex) {
 
         const results = [
           ...writing.map((entry) => match(entry, 'writing')),
-          ...builds.map((entry) => match(entry, 'build')),
+          ...projects.map((entry) => match(entry, 'project')),
           ...changelog.map((entry) => match(entry, 'changelog')),
         ].filter(Boolean);
 
@@ -218,11 +218,11 @@ export function createTools(getIndex) {
           return {
             results: [],
             query: String(args.query),
-            corpus: { writing: writing.length, builds: builds.length, changelog: changelog.length },
+            corpus: { writing: writing.length, projects: projects.length, changelog: changelog.length },
             note:
               `Nothing on mattpyle.com matches "${args.query}". ` +
-              `Searched the titles, descriptions, and tags of ${writing.length + builds.length + changelog.length} entries ` +
-              `(${writing.length} writing, ${builds.length} builds, ${changelog.length} changelog). ` +
+              `Searched the titles, descriptions, and tags of ${writing.length + projects.length + changelog.length} entries ` +
+              `(${writing.length} writing, ${projects.length} projects, ${changelog.length} changelog). ` +
               'Full article text is not indexed; try a broader term or call get_recent_writing to browse.',
           };
         }

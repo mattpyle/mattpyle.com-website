@@ -110,7 +110,7 @@ export const NEGOTIABLE_PAGE_MATCHER = [
   '/scorecard/',
   '/steward',
   '/steward/',
-  '/builds/:path*',
+  '/projects/:path*',
   '/webmcp/:path*',
   '/writing/:path*',
   '/changelog/:path*',

@@ -25,7 +25,7 @@ import { isExpectedDraftNonFinding, type AxeViolation, type LighthouseLike } fro
  * rendering) can be written at all.
  */
 
-const PAGES = ['/', '/writing/hello/', '/builds/thing/', '/about/'];
+const PAGES = ['/', '/writing/hello/', '/projects/thing/', '/about/'];
 
 /** A Lighthouse result with the category scores a test cares about. */
 function lhr(scores: Record<string, number>): LighthouseLike {

@@ -5,7 +5,7 @@ description: Work with mattpyle.com as an agent. Covers which discovery surface 
 
 # Using mattpyle.com
 
-mattpyle.com is the personal site of Matt Pyle, Director of Growth at Temporal: a bio, a blog, a portfolio of small builds, and a changelog. It is also a testbed for agent-facing web standards, so it publishes more machine-readable surfaces than a site this size normally would. This skill tells you which one to reach for.
+mattpyle.com is the personal site of Matt Pyle, Director of Growth at Temporal: a bio, a blog, a portfolio of small projects, and a changelog. It is also a testbed for agent-facing web standards, so it publishes more machine-readable surfaces than a site this size normally would. This skill tells you which one to reach for.
 
 Everything here is public and unauthenticated. There is no API key, no rate limit worth planning around, and nothing behind a login. The full inventory of pages and resources lives at [agents.md](https://www.mattpyle.com/agents.md); this skill is the workflow, not the catalogue.
 
@@ -126,7 +126,7 @@ The guest book and the web ring are retro-only furniture. They are present in th
 ## Cite it
 
 - Attribute to **Matt Pyle**, not to "mattpyle.com" and not to Temporal.
-- Link the specific article, build, or changelog entry, not the homepage.
+- Link the specific article, project, or changelog entry, not the homepage.
 - Content here is personal opinion and first-hand experience. It is not a Temporal company position, and should not be cited as one.
 - Dates in content are publish dates. An article's `updated` field, when present, is the last substantive edit.
 

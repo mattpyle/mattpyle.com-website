@@ -3,7 +3,7 @@
 The source for [mattpyle.com](https://www.mattpyle.com) — a personal site that doubles as a live
 testbed for emerging web standards: agentic browsing, `llms.txt`, `agents.md`, WebMCP, and whatever
 comes next. It's a mix of a bio, a blog ("Writing"), and a portfolio of small side projects
-("Builds"), with no product to sell and no stakeholders to answer to.
+("Projects"), with no product to sell and no stakeholders to answer to.
 
 The premise: AI agents are becoming a first-class consumer of the web, and you can't have a
 credible opinion about that from a slide deck. This site is where that opinion gets tested against
@@ -13,7 +13,7 @@ dead end.
 ## Stack
 
 - **[Astro 7](https://astro.build)**, static output, deployed on [Vercel](https://vercel.com).
-- Content lives in Astro content collections — `src/content/writing/`, `src/content/builds/`,
+- Content lives in Astro content collections — `src/content/writing/`, `src/content/projects/`,
   `src/content/changelog/` — validated against a Zod schema (`src/content.config.ts`). No CMS.
 - No framework components, no client-side state, no backend. Plain HTML/CSS plus a handful of
   build-time scripts.

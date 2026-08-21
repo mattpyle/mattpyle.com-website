@@ -99,7 +99,7 @@ test('every negotiable page path carries Vary: Accept in vercel.json', () => {
       `vercel.json has no Vary: Accept rule for /${section} entry pages`
     );
   }
-  for (const section of ['builds', 'webmcp', 'writing', 'changelog']) {
+  for (const section of ['projects', 'webmcp', 'writing', 'changelog']) {
     assert.ok(varyRules.includes(`/${section}`) && varyRules.includes(`/${section}/`), section);
   }
 });

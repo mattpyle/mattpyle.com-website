@@ -7,8 +7,8 @@
   - navigation "Main navigation":
     - link "Writing":
       - /url: /writing/
-    - link "Builds":
-      - /url: /builds/
+    - link "Projects":
+      - /url: /projects/
     - link "Changelog":
       - /url: /changelog/
     - link "Scorecard":

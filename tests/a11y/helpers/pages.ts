@@ -1,7 +1,7 @@
 /**
  * The page matrix for the a11y suite: every page template, plus every page with
  * interactive behaviour of its own. Pages that share a template still get their
- * own row when their interactive furniture differs (e.g. /writing and /builds
+ * own row when their interactive furniture differs (e.g. /writing and /projects
  * share ArticleList-ish layout but carry different FilterPills groups).
  */
 
@@ -63,11 +63,11 @@ export const PAGES: PageSpec[] = [
     snapshotRedact: ['[data-module="article-list"] .article-item', '.filter-status'],
   },
   {
-    name: 'builds-index',
-    path: '/builds',
+    name: 'projects-index',
+    path: '/projects',
     why: 'Index template plus the status FilterPills radiogroup',
-    snapshotKeepFirst: ['[data-module="builds-grid"] .build-item', '.card-tags li'],
-    snapshotRedact: ['[data-module="builds-grid"] .build-item', '.filter-status'],
+    snapshotKeepFirst: ['[data-module="projects-grid"] .project-item', '.card-tags li'],
+    snapshotRedact: ['[data-module="projects-grid"] .project-item', '.filter-status'],
   },
   {
     name: 'changelog-index',

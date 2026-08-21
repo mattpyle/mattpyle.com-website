@@ -1,6 +1,6 @@
 {
   "name": "The mattpyle.com webmaster",
-  "description": "The webmaster of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Two skills: it answers questions about the site (its writing, builds, changelog, scorecard, and agent-readable surfaces), and it audits any site you name for agent-readiness, returning the fast tier as a direct Message and the browser-rendered deep tier as a Task you poll to completion. Replies are written in the voice of the site's retro webmaster. Unauthenticated and public: no accounts, no payments, and no private data. Audits are rate limited, and the auditor obeys the target's robots.txt.",
+  "description": "The webmaster of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Two skills: it answers questions about the site (its writing, projects, changelog, scorecard, and agent-readable surfaces), and it audits any site you name for agent-readiness, returning the fast tier as a direct Message and the browser-rendered deep tier as a Task you poll to completion. Replies are written in the voice of the site's retro webmaster. Unauthenticated and public: no accounts, no payments, and no private data. Audits are rate limited, and the auditor obeys the target's robots.txt.",
   "supportedInterfaces": [
     {
       "url": "https://www.mattpyle.com/a2a",
