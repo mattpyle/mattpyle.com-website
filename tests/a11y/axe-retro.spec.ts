@@ -31,7 +31,7 @@ const ROUTES = [
   '/',
   '/about',
   '/writing',
-  '/builds',
+  '/projects',
   '/scorecard',
   '/steward',
   '/webmcp',

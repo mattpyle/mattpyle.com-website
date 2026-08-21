@@ -25,7 +25,7 @@ test('the digest carries the site description and the full section map', () => {
   assert.deepEqual(committed.site.sections, siteSections(PRODUCTION_ORIGIN));
   assert.deepEqual(
     committed.site.sections.map((section) => section.name),
-    ['Home', 'Writing', 'Builds', 'Changelog', 'Scorecard', 'About']
+    ['Home', 'Writing', 'Projects', 'Changelog', 'Scorecard', 'About']
   );
 });
 

@@ -12,7 +12,7 @@ export const GET: APIRoute = async ({ site }) => {
   const articles = (await getCollection('writing', ({ data }) => !data.draft)).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
-  const builds = (await getCollection('builds')).sort(
+  const projects = (await getCollection('projects')).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
@@ -36,7 +36,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('');
   lines.push(`- [Home](${base}/): bio, tagline, recent activity feed.`);
   lines.push(`- [Writing](${base}/writing/): all writing.`);
-  lines.push(`- [Builds](${base}/builds/): side projects.`);
+  lines.push(`- [Projects](${base}/projects/): side projects.`);
   lines.push(`- [Changelog](${base}/changelog/): reverse-chronological log of what has shipped on this site.`);
   lines.push(`- [Scorecard](${base}/scorecard/): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
   lines.push(`- [About](${base}/about/): full bio, interests, contact links.`);
@@ -47,7 +47,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('## Machine-readable resources');
   lines.push('');
   lines.push(`- [WebMCP tool manifest](${base}/webmcp/tools.json): names, descriptions, and input schemas for the tools above, generated from the live tool objects.`);
-  lines.push(`- [WebMCP content index](${base}/webmcp/index.json): the JSON index those tools read — author entity, section map, and every published article, build, and changelog entry.`);
+  lines.push(`- [WebMCP content index](${base}/webmcp/index.json): the JSON index those tools read — author entity, section map, and every published article, project, and changelog entry.`);
   // Enumerated from the committed index rather than named in prose, so publishing a skill stays
   // "add a file in src/data/skills/" with no edit here.
   lines.push(...formatSkillsIndexLines(base, skillsIndex.skills));
@@ -79,16 +79,16 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
   }
 
-  lines.push('## Builds');
+  lines.push('## Projects');
   lines.push('');
-  // Builds have no detail pages, so each bullet leads with the anchor of its card on /builds/
-  // (BuildsGrid.astro puts the id on the card's heading). The llms.txt format says a list item leads
+  // Projects have no detail pages, so each bullet leads with the anchor of its card on /projects/
+  // (ProjectsGrid.astro puts the id on the card's heading). The llms.txt format says a list item leads
   // with a link to somewhere with more detail, and a bullet that is only bold text is a dead end for
   // a parser collecting links — Steward's own `llms-txt-list-items` check reports these, and this
   // section was the site's one failure against it.
-  for (const build of builds) {
+  for (const project of projects) {
     lines.push(
-      `- [${build.data.title}](${base}/builds/#build-${build.id}) (${build.data.status}): ${build.data.description}`
+      `- [${project.data.title}](${base}/projects/#project-${project.id}) (${project.data.status}): ${project.data.description}`
     );
   }
   lines.push('');

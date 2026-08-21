@@ -45,7 +45,7 @@ export function siteSections(base) {
   return [
     { name: 'Home', url: `${base}/`, summary: 'Bio, tagline, recent activity feed.' },
     { name: 'Writing', url: `${base}/writing/`, summary: 'All writing.' },
-    { name: 'Builds', url: `${base}/builds/`, summary: 'Side projects.' },
+    { name: 'Projects', url: `${base}/projects/`, summary: 'Side projects.' },
     {
       name: 'Changelog',
       url: `${base}/changelog/`,

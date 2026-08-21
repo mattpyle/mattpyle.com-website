@@ -7,8 +7,8 @@
   - navigation "Main navigation":
     - link "Writing":
       - /url: /writing/
-    - link "Builds":
-      - /url: /builds/
+    - link "Projects":
+      - /url: /projects/
     - link "Changelog":
       - /url: /changelog/
     - link "Scorecard":
@@ -17,8 +17,8 @@
       - /url: /about/
 - main:
   - paragraph: Side projects
-  - heading "Builds" [level=1]
-  - paragraph: Software experiments — some built on Temporal, some not. Hobby builds, not a portfolio.
+  - heading "Projects" [level=1]
+  - paragraph: Software experiments — some built on Temporal, some not. Hobby projects, not a portfolio.
   - radiogroup "Filter by status":
     - radio "ALL" [checked]
     - radio "LIVE"

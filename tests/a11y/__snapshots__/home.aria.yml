@@ -7,8 +7,8 @@
   - navigation "Main navigation":
     - link "Writing":
       - /url: /writing/
-    - link "Builds":
-      - /url: /builds/
+    - link "Projects":
+      - /url: /projects/
     - link "Changelog":
       - /url: /changelog/
     - link "Scorecard":
@@ -22,8 +22,8 @@
   - paragraph: Director of Growth · Temporal Technologies
   - link "Read the writing":
     - /url: /writing/
-  - link "See the builds →":
-    - /url: /builds/
+  - link "See the projects →":
+    - /url: /projects/
   - complementary "Latest activity":
     - heading "Latest activity" [level=2]
     - link "VIEW CHANGELOG":

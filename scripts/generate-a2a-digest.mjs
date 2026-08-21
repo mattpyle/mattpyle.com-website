@@ -77,15 +77,15 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
     }))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 
-  const builds = readCollection(`${contentDir}builds`)
+  const projects = readCollection(`${contentDir}projects`)
     .map(({ slug, data }) => ({
-      title: requireString(data.title, `builds/${slug} title`),
-      // Builds have no per-entry route; src/pages/builds/ is an index page only.
-      url: `${base}/builds`,
-      date: isoDate(data.date, `builds/${slug} date`),
-      status: requireString(data.status, `builds/${slug} status`),
+      title: requireString(data.title, `projects/${slug} title`),
+      // Projects have no per-entry route; src/pages/projects/ is an index page only.
+      url: `${base}/projects`,
+      date: isoDate(data.date, `projects/${slug} date`),
+      status: requireString(data.status, `projects/${slug} status`),
       tags: data.tags ?? [],
-      description: requireString(data.description, `builds/${slug} description`),
+      description: requireString(data.description, `projects/${slug} description`),
       ...(data.github ? { github: data.github } : {}),
       ...(data.live ? { live: data.live } : {}),
     }))
@@ -178,11 +178,11 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       },
     ],
     writing,
-    builds,
+    projects,
     changelog: allChangelog.slice(0, CHANGELOG_LIMIT),
     counts: {
       writing: writing.length,
-      builds: builds.length,
+      projects: projects.length,
       // Both, so a reply that lists a truncated slice can say what it truncated.
       changelog: allChangelog.length,
       changelogListed: Math.min(allChangelog.length, CHANGELOG_LIMIT),

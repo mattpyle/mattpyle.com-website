@@ -72,10 +72,10 @@ test('ClientRouter announces the new page to assistive tech', async ({ page }) =
   await gotoSettled(page, '/');
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   const before = await readPageLoads(page);
-  await nav.getByRole('link', { name: 'Builds', exact: true }).click();
+  await nav.getByRole('link', { name: 'Projects', exact: true }).click();
   await waitForSoftNav(page, before);
 
   const announcer = page.locator('.astro-route-announcer');
   await expect(announcer).toHaveAttribute('aria-live', 'assertive');
-  await expect(announcer).toContainText('Builds');
+  await expect(announcer).toContainText('Projects');
 });
