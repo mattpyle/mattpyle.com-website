@@ -1,13 +1,13 @@
 {
-  "iso": "2026-08-20",
-  "timestamp": "2026-08-20T03:33:22-07:00",
+  "iso": "2026-08-21",
+  "timestamp": "2026-08-21T03:33:41-07:00",
   "scope": "23 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Performance rose from 95 to 99; all 23 pages passed all four public metrics.",
+  "commentary": "All 23 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-08-20",
+  "id": "2026-08-21",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -76,7 +76,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -109,7 +109,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -164,7 +164,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/public-scorecard/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -208,7 +208,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -252,7 +252,7 @@
     {
       "url": "https://www.mattpyle.com/webmcp/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -274,7 +274,7 @@
     {
       "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -294,9 +294,8 @@
       "axeViolations": 0
     }
   ],
-  "decision": "open-pr",
-  "reason": "Performance 95→99",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/155",
+  "decision": "no-op",
+  "reason": "unchanged, published 1d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-08-20"
+  "archiveId": "2026-08-21"
 }
