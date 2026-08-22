@@ -1,0 +1,232 @@
+---
+/**
+ * The /projects card grid.
+ *
+ * The homepage's project cards at page scale (src/components/home/HomeProjects.astro),
+ * which is where this page's layout comes from — no mockup covers /projects
+ * (Matt, 2026-08-21). Same two-column grid, same placeholder hatch, same
+ * card-as-link. What the page scale adds is the meta line each card carries:
+ * status and date, which are the two fields the ordering is built on and were
+ * only ever omitted on the homepage because the section shows a short excerpt.
+ *
+ * Status and date are PLAIN MONO TEXT, not pills — constraint 4 bans pill and
+ * chip visuals, which is also why the legacy card's tag list has no counterpart
+ * here.
+ *
+ * Real collection entries only. The collection holds one today, and constraint
+ * 10 says leave the grid short rather than invent an entry to fill it.
+ */
+import { formatSiteDate } from '../../lib/format-date.mjs';
+
+interface Project {
+  id: string;
+  data: {
+    title: string;
+    description: string;
+    status: 'live' | 'in-progress' | 'archived';
+    date: Date;
+    github?: string;
+    live?: string;
+  };
+}
+
+interface Props {
+  projects: Project[];
+}
+
+const { projects } = Astro.props;
+
+const SITE_ORIGIN = Astro.site ? new URL(Astro.site).origin : 'https://www.mattpyle.com';
+
+const STATUS_LABELS: Record<string, string> = {
+  'live': 'live',
+  'in-progress': 'in progress',
+  'archived': 'archived',
+};
+
+/**
+ * Where a card goes. There are no per-project detail pages, so the useful
+ * destination is the project itself: its live URL, or its repository when the
+ * live URL is this very site. /projects is the fallback, never a dead card.
+ * Same rule as the homepage section, deliberately.
+ */
+function cardHref(project: Project): { href: string; external: boolean } {
+  const { live, github } = project.data;
+  if (live && new URL(live).origin !== SITE_ORIGIN) return { href: live, external: true };
+  if (github) return { href: github, external: true };
+  return { href: '/projects/', external: false };
+}
+---
+
+<section class="rd-section board modern-skin" aria-labelledby="projects-board-title">
+  {/*
+    The grid needs a name in the accessibility tree and the design has no
+    visible heading for it — the H1 above is the page's only headline. Same
+    answer as WritingArchive.astro: a visually-hidden h2.
+  */}
+  <h2 id="projects-board-title" class="sr-only">All projects</h2>
+
+  {projects.length > 0 ? (
+    <div class="grid">
+      {projects.map(project => {
+        const { href, external } = cardHref(project);
+        return (
+          /*
+            THE ANCHOR llms.txt ADVERTISES. `/projects/#project-<id>` is the
+            address a project has (src/pages/llms.txt.ts), and an id has to be
+            unique in the document, so it lives on exactly one of the two trees.
+            It is on this one because a `display: none` element is not a scroll
+            target: in modern — the default appearance — the legacy card is
+            hidden, so an id there would be a fragment that lands nowhere. The
+            legacy card in ProjectsGrid.astro therefore no longer carries it, and
+            in retro the fragment resolves to the page rather than to the card.
+          */
+          <a
+            id={`project-${project.id}`}
+            href={href}
+            class="card"
+            target={external ? '_blank' : undefined}
+            rel={external ? 'noopener noreferrer' : undefined}
+          >
+            <span class="card-image" aria-hidden="true">
+              <span class="card-chip">[ image: pending ]</span>
+            </span>
+            <span class="card-body">
+              <span class="card-meta">
+                <span class="card-status">{STATUS_LABELS[project.data.status]}</span>
+                <time datetime={project.data.date.toISOString()} class="card-date">
+                  {formatSiteDate(project.data.date)}
+                </time>
+              </span>
+              <span class="card-name">{project.data.title}</span>
+              <span class="card-blurb">{project.data.description}</span>
+              {external && <span class="sr-only"> (opens in a new tab)</span>}
+            </span>
+          </a>
+        );
+      })}
+    </div>
+  ) : (
+    <p class="empty">More projects coming soon.</p>
+  )}
+</section>
+
+<style>
+  .board { padding-top: 72px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+  }
+
+  /* `scroll-margin-top` clears the sticky header when a `#project-…` fragment
+     lands on a card, the same mechanism the post rail's contents links use. */
+  .card {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    overflow: hidden;
+    color: var(--ink);
+    scroll-margin-top: 110px;
+    transition: border-color 240ms ease, transform 240ms ease;
+  }
+
+  .card:hover {
+    border-color: var(--projects);
+    transform: translateY(-3px);
+  }
+
+  .card-image {
+    display: flex;
+    align-items: flex-end;
+    aspect-ratio: 16 / 9;
+    padding: 14px;
+    border-bottom: 1px solid var(--rule);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--hatch-projects-a) 0 8px,
+      var(--hatch-projects-b) 8px 16px
+    );
+  }
+
+  .card-chip {
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--hatch-chip-ink);
+    background: var(--paper);
+    border: 1px solid var(--hatch-chip-border);
+    border-radius: 3px;
+    padding: 5px 9px;
+  }
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px 26px 26px;
+  }
+
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 18px;
+    row-gap: 4px;
+    font-family: var(--font-mono-plex);
+    font-size: 16px;
+  }
+
+  .card-status { color: var(--projects); }
+  .card-date { color: var(--ink-6); }
+
+  .card-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 25px;
+    letter-spacing: -.02em;
+  }
+
+  .card-blurb {
+    font-size: 16.5px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    text-wrap: pretty;
+  }
+
+  .empty {
+    margin: 0;
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    .board { padding-top: 48px; }
+
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    .card-image { aspect-ratio: 16 / 10; padding: 12px; }
+
+    .card-body { padding: 20px 20px 22px; }
+
+    .card-name { font-size: 24px; }
+
+    .card-blurb { font-size: 17px; }
+  }
+</style>

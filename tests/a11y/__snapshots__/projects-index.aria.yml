@@ -3,52 +3,45 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Projects":
+    - link "/projects":
       - /url: /projects/
-    - link "Changelog":
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
-  - paragraph: Side projects
   - heading "Projects" [level=1]
-  - paragraph: Software experiments — some built on Temporal, some not. Hobby projects, not a portfolio.
-  - radiogroup "Filter by status":
-    - radio "ALL" [checked]
-    - radio "LIVE"
-    - radio "IN PROGRESS"
-    - radio "ARCHIVED"
-  - paragraph: ·
-  - list:
-    - listitem:
-      - article:
-        - text: ·
-        - time: ·
-        - heading "·" [level=2]
-        - paragraph: ·
-        - list:
-          - listitem: ·
-        - link "·":
-          - /url: "#"
-        - link "·":
-          - /url: "#"
-- contentinfo:
-  - navigation "Social links":
-    - link "RSS feed for Writing":
-      - /url: /rss.xml
+  - paragraph: Software experiments, some built on Temporal and some not. Hobby projects, not a portfolio.
+  - text: The source is public.
+  - link "github.com/mattpyle (opens in a new tab)":
+    - /url: https://github.com/mattpyle
+  - region "All projects":
+    - heading "All projects" [level=2]
+    - link "· · · · ·":
+      - /url: "#"
       - text: ""
-    - link "GitHub (opens in a new tab)":
+      - time: ·
+      - text: ""
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Social links":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status

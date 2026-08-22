@@ -4,6 +4,7 @@ import { Image } from 'astro:assets';
 import Layout from '../../layouts/Layout.astro';
 import { showDrafts } from '../../lib/show-drafts';
 import { compareChangelogEntries } from '../../lib/changelog-order';
+import { formatSiteDate } from '../../lib/format-date.mjs';
 
 export async function getStaticPaths() {
   const entries = (await getCollection('changelog', ({ data }) => showDrafts || !data.draft))
@@ -53,15 +54,43 @@ const markdownUrl = `/changelog/${entry.id}.md`;
     { name: title, url: `/changelog/${entry.id}/` },
   ]}
 >
+  {/*
+    TWO ENTRY TEMPLATES IN ONE DOCUMENT, one shown per appearance — and, as on
+    the post page, THE ENTRY BODY IS NOT DUPLICATED.
+
+    src/pages/writing/[slug].astro explains the construction in full and this is
+    the same one: rendering <Content /> twice would put every heading id in the
+    document twice, which is invalid HTML and gives an in-page anchor two
+    targets. So the two trees share one `.prose` node, the redesigned chrome and
+    the legacy chrome sit around it, and each is hidden in the appearance it does
+    not belong to.
+
+    Every redesign rule in the style block is guarded with
+    `html:not([data-appearance='retro'])`, so retro keeps this document without a
+    specificity contest.
+  */}
   <article data-module="article">
 
     {showDrafts && draft && (
       <p class="draft-banner" role="status">DRAFT — not published, preview only</p>
     )}
 
-    <a href="/changelog/" class="back-link">← ALL CHANGELOG</a>
+    <div class="modern-skin entry-head rd-section">
+      <a href="/changelog/" class="entry-back">&larr; all changelog</a>
+      <h1 class="entry-title">{title}</h1>
+      <p class="entry-lead">{summary}</p>
+      {/* Date, type and significance as plain mono words. The legacy header
+          carries the same three as a time, a pill and a coloured dot; constraints
+          4 and 7 rule both of those out. */}
+      <p class="entry-meta">
+        <time datetime={date.toISOString()}>{formatSiteDate(date)}</time>
+        <span class="entry-type">{type}</span>
+        <span class="entry-sig">{significance}</span>
+      </p>
+    </div>
 
-    <header>
+    <header class="retro-skin">
+      <a href="/changelog/" class="back-link">← ALL CHANGELOG</a>
       <div class="changelog-meta">
         <time datetime={date.toISOString()}>{formatDate(date)}</time>
         <span class="sig-chip">
@@ -87,7 +116,28 @@ const markdownUrl = `/changelog/${entry.id}.md`;
       <Content />
     </div>
 
-    <footer class="changelog-footer">
+    {(prev || next) && (
+      <nav class="modern-skin entry-nav rd-section" aria-label="Changelog entry navigation">
+        {/* Newer first, then older: the log reads newest-first, so this is the
+            same direction the index runs in. `next` is the newer entry and
+            `prev` the older one — the names come from the chronology, not from
+            where they sit on the page (see getStaticPaths above). */}
+        {next && (
+          <a href={`/changelog/${next.id}/`} class="entry-step">
+            <span class="entry-step-label">newer &middot; {formatSiteDate(next.data.date)}</span>
+            <span class="entry-step-title">{next.data.title}</span>
+          </a>
+        )}
+        {prev && (
+          <a href={`/changelog/${prev.id}/`} class="entry-step">
+            <span class="entry-step-label">older &middot; {formatSiteDate(prev.data.date)}</span>
+            <span class="entry-step-title">{prev.data.title}</span>
+          </a>
+        )}
+      </nav>
+    )}
+
+    <footer class="changelog-footer retro-skin">
       <nav class="entry-navigation" aria-label="Changelog entry navigation">
         {(prev || next) && (
           <div class="entry-links">
@@ -120,6 +170,10 @@ const markdownUrl = `/changelog/${entry.id}.md`;
 </Layout>
 
 <style>
+  /* ── Legacy (retro) entry ──────────────────────────────────
+     Unchanged from before the redesign. The wrapper's own layout is overridden
+     on the guarded rule further down, because the redesigned tree needs the full
+     shell width and the legacy one needs the reading measure. */
   [data-module="article"] {
     max-width: var(--width-content);
     margin: 0 auto;
@@ -338,6 +392,240 @@ const markdownUrl = `/changelog/${entry.id}.md`;
 
   @media (max-width: 600px) {
     [data-module="article"] { padding: 40px var(--gutter-mobile) 56px; }
+  }
+
+  /* ── Redesigned (modern) entry ───────────────────────────────────────────
+     The post page's chrome at the changelog's scale and in its colour
+     (src/pages/writing/[slug].astro, whose comments carry the reasoning). No
+     rail: an entry is a paragraph or two and has no headings to build contents
+     from, so the two-column body would be a 210px empty column.
+
+     Every rule is guarded so retro wears the legacy treatment above on this same
+     document. `.rd-section` is on the `.modern-skin` blocks only, never on an
+     element retro also shows — the trap the post page's comment records. */
+  html:not([data-appearance='retro']) body.skin-redesign [data-module="article"] {
+    max-width: none;
+    margin: 0;
+    padding: 0 0 80px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .draft-banner {
+    max-width: var(--shell);
+    /* The shell's gutter, so the banner lines up with the headline under it. */
+    margin: 24px auto 0;
+    margin-inline: max(calc((100% - var(--shell)) / 2 + var(--shell-gutter)), var(--shell-gutter));
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--agents);
+    background: var(--tint-agents);
+    border-color: var(--agents);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-head {
+    padding-top: 66px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-back {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--changelog);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-back:hover {
+    color: var(--changelog-hover);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-title {
+    margin: 26px 0 0;
+    max-width: 24ch;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(48px, 5.6vw, 82px);
+    line-height: 1;
+    letter-spacing: -.035em;
+    color: var(--ink);
+    text-wrap: balance;
+    animation: riseIn .7s ease .05s both;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-lead {
+    margin: 30px 0 0;
+    max-width: 40ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 27px;
+    line-height: 1.32;
+    letter-spacing: -.02em;
+    color: var(--ink-3);
+    text-wrap: pretty;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-meta {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 22px;
+    row-gap: 6px;
+    margin: 26px 0 0;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-type {
+    color: var(--changelog);
+  }
+
+  /* `.prose` is in the DOM in BOTH appearances — it is the one node the two
+     trees share — so it is placed under the guard rather than by wearing the
+     unguarded `.rd-section` class, which would re-indent the legacy entry inside
+     its own padding. Same call, and same reason, as `.post-body` on the post
+     page.
+
+     IT IS MOVED, NOT RESIZED. The 68ch measure comes from the redesign prose
+     block in global.css and this rule deliberately sets no `max-width`, because
+     the two ways of restoring the measure after widening to the shell both fail:
+     a `.prose > *` rule is Astro-SCOPED, and the children here are rendered from
+     markdown so they carry no `data-astro-cid` attribute and the selector
+     matches nothing (measured — the paragraphs ran the full 1180px). The margin
+     below is the shell's left gutter as a length rather than `auto`, so the
+     68ch column starts where the headline above it starts. */
+  html:not([data-appearance='retro']) body.skin-redesign .prose,
+  html:not([data-appearance='retro']) body.skin-redesign .hero {
+    margin-inline: max(calc((100% - var(--shell)) / 2 + var(--shell-gutter)), var(--shell-gutter));
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .prose {
+    margin-top: 56px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .hero {
+    max-width: 68ch;
+    margin-top: 40px;
+    margin-bottom: 0;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .hero :global(img) {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  /* The prose overlay in global.css paints links and the blockquote rule in
+     WRITING blue, because it was written for the post page and a link inside a
+     post belongs to that section. Constraint 7 makes the colour a statement
+     about the section, so on this page it is the changelog's.
+
+     `:global(a)` because these nodes come from markdown and carry no
+     `data-astro-cid` attribute — a bare `.prose a` here compiles to
+     `a[data-astro-cid-…]` and matches nothing, the same trap the `.prose`
+     comment above records. The underline stays: inside a paragraph, colour
+     alone does not distinguish a link (WCAG 1.4.1). */
+  html:not([data-appearance='retro']) body.skin-redesign .prose :global(a) {
+    color: var(--changelog);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .prose :global(a:hover) {
+    color: var(--changelog-hover);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .prose :global(blockquote) {
+    border-left-color: var(--changelog);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-nav {
+    margin-top: 76px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-step {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: baseline;
+    padding: 30px 20px 34px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-step:hover {
+    background: var(--tint-writing);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-step-label {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .entry-step-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    max-width: 26ch;
+  }
+
+  @media (max-width: 720px) {
+    html:not([data-appearance='retro']) body.skin-redesign [data-module="article"] {
+      padding: 0 0 56px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .draft-banner {
+      margin-inline: var(--shell-gutter-mobile);
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-head {
+      padding-top: 34px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-title {
+      margin-top: 20px;
+      font-size: 40px;
+      letter-spacing: -.03em;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-lead {
+      margin-top: 22px;
+      font-size: 22px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-meta {
+      margin-top: 20px;
+      font-size: 16px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .prose,
+    html:not([data-appearance='retro']) body.skin-redesign .hero {
+      margin-inline: var(--shell-gutter-mobile);
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .prose { margin-top: 36px; }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-nav {
+      margin-top: 48px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-step {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 22px 0 24px;
+      margin: 0;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-step-label {
+      font-size: 16px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .entry-step-title {
+      font-size: 25px;
+    }
   }
 
   @media (max-width: 520px) {

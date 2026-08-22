@@ -355,10 +355,11 @@ textarea:focus-visible,
    ════════════════════════════════════════════════════════════════════════════
    Spec: docs/projects/redesign/design-export/README.md. Everything below is
    ADDITIVE and inert until a route opts in: Layout.astro puts `skin-redesign`
-   on <body> for the routes listed in src/lib/redesigned-routes.mjs, and only
-   the homepage is on that list today. The legacy tokens above stay live for
-   every page the redesign has not reached yet, which is why this block does not
-   simply redefine --color-bg / --font-serif / --font-mono.
+   on <body> for the routes listed in src/lib/redesigned-routes.mjs; the
+   homepage, /writing, /projects and /changelog are on that list today. The
+   legacy tokens above stay live for every page the redesign has not reached yet,
+   which is why this block does not simply redefine --color-bg / --font-serif /
+   --font-mono.
 
    The redesign lands on production in ONE merge (the `redesign` integration
    branch), so the site never shows two type systems at once in public. When the
@@ -732,7 +733,9 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
     color 380ms ease;
 }
 
-.rd-fill--writing { --fill: var(--writing); }
+.rd-fill--writing   { --fill: var(--writing); }
+.rd-fill--projects  { --fill: var(--projects); }
+.rd-fill--changelog { --fill: var(--changelog); }
 
 /* :active as well as :hover so the effect exists on touch, where there is no
    hover state to enter. */
@@ -747,14 +750,21 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
    (docs/projects/redesign/design-export/README.md §4, "Article").
 
    It is an OVERLAY on the `.prose` block further up this file rather than an
-   edit to it. That block is shared by the writing post page and the changelog
-   entry page, and the changelog has not been redesigned yet — editing it in
-   place would move a surface this branch has not rebuilt, at the exact type
-   scale it was not designed for. Guarded by `body.skin-redesign`, the changelog
-   entry page's prose is byte-identical to what it was before this branch.
+   edit to it. Editing that block in place would move every surface sharing it,
+   at the exact type scale each was not designed for. Guarded by
+   `body.skin-redesign`, an unconverted one is byte-identical to what it was
+   before this branch.
 
-   WHEN THE CHANGELOG CONVERTS, these rules and the ones above merge into one
-   block; that is the same deletion the `skin-redesign` flag is waiting for.
+   THE CHANGELOG ENTRY PAGE CONVERTED WITH THIS OVERLAY (2026-08-21) AND THE
+   OVERLAY STAYS. The comment here used to say the two blocks merge the day the
+   changelog converts, on the belief that the post page and the changelog entry
+   were the only two consumers of `.prose`. They are not: /steward and /webmcp
+   both build sections out of it, both are un-redesigned, and both are out of
+   scope for that build. So the merge is not blocked by the changelog any more —
+   it is blocked by those two, and it happens on the same day the
+   `skin-redesign` flag is deleted rather than before it. `.prose` is now shared
+   by two redesigned surfaces and two legacy ones, which is exactly what the
+   guard is for.
 
    Body headings start at h2 because the page template owns the h1 — CLAUDE.md's
    rule, unchanged here. */

@@ -4,6 +4,8 @@ import { getCollection } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import ChangelogLedger from '../../components/ChangelogLedger.astro';
 import FilterPills from '../../components/FilterPills.astro';
+import ChangelogHero from '../../components/changelog/ChangelogHero.astro';
+import ChangelogLog from '../../components/changelog/ChangelogLog.astro';
 import { showDrafts } from '../../lib/show-drafts';
 import { compareChangelogEntries } from '../../lib/changelog-order';
 import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
@@ -51,10 +53,22 @@ const typePills = [
   })),
 ];
 
+// The same filter for the redesigned tree, lower-cased. Nothing in the redesign
+// is set in caps — its mono is the nav's, the dates' and the paths', all of them
+// lower — so an upper-cased row of filter labels would read as the small caps
+// eyebrow constraint 2 removes.
+const redesignedTypePills = typePills.map(pill => ({ ...pill, label: pill.label.toLowerCase() }));
+
 // "showing X of Y": cumulative count through the current page. page.end is a
 // 0-indexed inclusive index into the full list, so +1 is the running total shown.
 const shownThrough = page.end + 1;
 const isFirst = page.currentPage === 1;
+
+// The newest entry in the WHOLE log, for the redesigned hero. Page one's first
+// row is that entry, and every later page is a slice of the same sorted list, so
+// page one is where it can be read off without a second getCollection call.
+// `page.data[0]` on /changelog/2 is the newest entry on that page, not the log's.
+const latest = isFirst ? (page.data[0]?.data.date ?? null) : null;
 
 const description = "What's shipped on this site — launches, features, and the occasional experiment.";
 // Meta-only. `description` above is the visible header subtitle and stays as written;
@@ -76,7 +90,34 @@ const markdownUrl = markdownSiblingFor(breadcrumbUrl) ?? undefined;
   breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'Changelog', url: breadcrumbUrl }]}
   markdownAlternate={markdownUrl}
 >
-  <div class="changelog-shell">
+  {/*
+    TWO LEDGERS IN ONE DOCUMENT, one shown per appearance — the same
+    construction src/pages/index.astro and src/pages/writing/index.astro use, and
+    for the same reason: the redesign rebuilds the MODERN appearance only, retro
+    is a client-side preference the server cannot read, so both trees ship and
+    CSS chooses. `.modern-skin` / `.retro-skin` in src/styles/retro.css do the
+    choosing.
+
+    A hidden subtree holds no tab stops and is absent from the accessibility
+    tree, so each appearance presents exactly one ledger.
+
+    Both take the same `page.data` slice in the same order, and both paginate
+    against the same `page.url`. The redesigned tree drops the significance
+    legend and the tag chips, which constraints 4 and 7 rule out; it keeps the
+    type filter, restyled (see ChangelogLog.astro).
+  */}
+  <ChangelogHero total={page.total} latest={latest} currentPage={page.currentPage} />
+  <ChangelogLog entries={page.data} pills={redesignedTypePills} />
+
+  <nav class="rd-section log-pager modern-skin" aria-label="Changelog pagination">
+    <div class="pager-links">
+      {page.url.prev && <a href={page.url.prev} class="pager-link">&larr; newer entries</a>}
+      {page.url.next && <a href={page.url.next} class="pager-link">older entries &rarr;</a>}
+    </div>
+    <span class="pager-count">showing {shownThrough} of {page.total}</span>
+  </nav>
+
+  <div class="changelog-shell retro-skin">
     <header class="changelog-header">
       <p class="header-eyebrow">Changelog</p>
       <h1 class="page-title">Changelog</h1>
@@ -127,6 +168,42 @@ const markdownUrl = markdownSiblingFor(breadcrumbUrl) ?? undefined;
 </Layout>
 
 <style>
+  /* ── Redesigned (modern) pager ───────────────────────────────────────────
+     The list's own hairline closes on `.rows-end`, so this row opens with no
+     border of its own; it is a footer to the log rather than another row.
+     Unguarded selectors are safe here because every one of them is inside a
+     `.modern-skin` subtree, which retro sets to `display: none`. */
+  .log-pager {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px 28px;
+    padding-top: 26px;
+  }
+
+  .pager-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+  }
+
+  .pager-link {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--changelog);
+  }
+
+  .pager-link:hover { color: var(--changelog-hover); }
+
+  .pager-count {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  /* ── Legacy (retro) ledger ───────────────────────────────────────────────
+     Unchanged from before the redesign. */
   .changelog-shell {
     max-width: 860px;
     margin: 0 auto;
@@ -227,5 +304,22 @@ const markdownUrl = markdownSiblingFor(breadcrumbUrl) ?? undefined;
 
   @media (max-width: 600px) {
     .changelog-shell { padding: 40px var(--gutter-mobile) 56px; }
+  }
+
+  /* 720px, not 600px: the redesign's own breakpoint, which every rd- component
+     shares. */
+  @media (max-width: 720px) {
+    .log-pager { padding-top: 20px; }
+
+    /* 44px tap targets, per the mobile spec. */
+    .pager-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 16px;
+    }
+
+    .pager-count { font-size: 16px; }
   }
 </style>

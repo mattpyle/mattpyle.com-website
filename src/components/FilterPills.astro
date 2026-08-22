@@ -184,6 +184,58 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
   .filter-pill:hover { color: var(--color-accent); border-color: var(--color-accent); }
   .filter-pill.is-active { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
 
+  /* ── Redesign: the same radiogroup as text links ────────────────────────
+     Constraint 4 of docs/projects/redesign/design-export/README.md bans the pill
+     VISUAL, not the filtering. Stripped of its border, its ground and its pill
+     radius, this control is mono text with a 2px bottom border under the active
+     item — which is the marker the design already uses for the current section
+     in the nav, so it needs no new idiom.
+
+     Guarded, so retro keeps the pills above. The other two groups on the site —
+     the tag filter on /writing and the status filter on /projects — sit inside a
+     `.retro-skin` subtree, which is `display: none` in modern, so these rules
+     only ever paint the changelog's redesigned group. */
+  html:not([data-appearance='retro']) body.skin-redesign .filter-pills {
+    gap: 8px 26px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .filter-pill {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    letter-spacing: 0;
+    color: var(--ink-6);
+    background: transparent;
+    border: 0;
+    /* Transparent rather than absent, so the active state adds colour instead of
+       adding height: a border appearing under one item would shift the row. */
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 2px 0 6px;
+    transition: color 240ms ease, border-color 240ms ease;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .filter-pill:hover {
+    color: var(--changelog);
+    border-color: transparent;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .filter-pill.is-active {
+    color: var(--changelog);
+    background: transparent;
+    border-color: var(--changelog);
+  }
+
+  /* 44px tap targets, per the mobile spec. */
+  @media (max-width: 720px) {
+    html:not([data-appearance='retro']) body.skin-redesign .filter-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 16px;
+    }
+  }
+
   .filter-status.sr-only {
     position: absolute;
     width: 1px;

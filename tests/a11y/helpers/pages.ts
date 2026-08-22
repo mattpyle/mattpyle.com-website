@@ -97,21 +97,41 @@ export const PAGES: PageSpec[] = [
   {
     name: 'projects-index',
     path: '/projects',
-    why: 'Index template plus the status FilterPills radiogroup',
-    snapshotKeepFirst: ['[data-module="projects-grid"] .project-item', '.card-tags li'],
-    snapshotRedact: ['[data-module="projects-grid"] .project-item', '.filter-status'],
+    why: 'Index template: the redesigned card grid, plus the legacy status FilterPills radiogroup',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    snapshotKeepFirst: ['.board .card', '[data-module="projects-grid"] .project-item', '.card-tags li'],
+    snapshotRedact: ['.board .card', '[data-module="projects-grid"] .project-item', '.filter-status'],
   },
   {
     name: 'changelog-index',
     path: '/changelog',
-    why: 'Ledger template, type FilterPills, year-rule grouping, pagination',
+    why: 'Index template: the redesigned year-grouped log and its restyled type FilterPills, plus the legacy ledger and pagination',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
     snapshotKeepFirst: [
+      '[data-module="changelog-log"] .log-row',
+      '[data-module="changelog-log"] .year-group',
       '[data-module="changelog-ledger"] .lg-row',
       '[data-module="changelog-ledger"] .year-rule',
       '.lg-tags--desktop .tag-pill',
       '.lg-tags--mobile .tag-pill',
     ],
-    snapshotRedact: ['[data-module="changelog-ledger"] .lg-row', '.filter-status'],
+    // Three regions carry a COUNT, which every published entry changes: the
+    // hero's "N entries, latest …" line, each year head, and the pager's
+    // "showing X of Y".
+    snapshotRedact: [
+      '[data-module="changelog-log"] .log-row',
+      '.log .year-head',
+      '.hero-facts-copy',
+      '.pager-count',
+      '[data-module="changelog-ledger"] .lg-row',
+      '.filter-status',
+    ],
   },
   {
     name: 'writing-entry',
@@ -144,7 +164,7 @@ export const PAGES: PageSpec[] = [
   {
     name: 'changelog-entry',
     path: `/changelog/${CHANGELOG_ENTRY}`,
-    why: 'Changelog entry template, shares .prose with writing entries',
+    why: 'Changelog entry template: the redesigned head and prev/next steps, plus the legacy header — the two share one .prose node, as the post page does',
     snapshotDrop: ['.prose > *'],
     snapshotKeepFirst: ['.article-tags li'],
     snapshotRedact: [
@@ -154,7 +174,13 @@ export const PAGES: PageSpec[] = [
       '.article-meta',
       '.changelog-meta',
       // Prev/next links are recomputed every time an entry ships either side.
+      // `.entry-navigation` is the legacy nav; `.entry-nav` the redesigned one.
       '.entry-navigation',
+      '.entry-nav',
+      // The redesigned tree's own content-variable regions.
+      '.entry-title',
+      '.entry-lead',
+      '.entry-meta',
     ],
   },
   {
