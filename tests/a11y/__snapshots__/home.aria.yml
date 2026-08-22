@@ -64,6 +64,8 @@
       - /url: https://github.com/mattpyle
     - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
     - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
