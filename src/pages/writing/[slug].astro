@@ -2,19 +2,28 @@
 import { getCollection, render } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import ArticleActions from '../../components/ArticleActions.astro';
+import PostRail from '../../components/writing/PostRail.astro';
 import { showDrafts } from '../../lib/show-drafts';
 import { readingTimeLabel, readingTimeISO8601 } from '../../lib/reading-time';
+import { formatSiteDate } from '../../lib/format-date.mjs';
+import { splitTitleFill } from '../../lib/title-fill.mjs';
 
 export async function getStaticPaths() {
-  const articles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
-  return articles.map(article => ({
+  const articles = (await getCollection('writing', ({ data }) => showDrafts || !data.draft))
+    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+  // The redesigned template ends on a "next" row, which is the next post DOWN
+  // the same reverse-chronological list the index shows — the one you would read
+  // after this one. The oldest post has none, and then the row is not rendered
+  // rather than being rendered empty.
+  return articles.map((article, index) => ({
     params: { slug: article.id },
-    props: { article },
+    props: { article, nextArticle: articles[index + 1] ?? null },
   }));
 }
 
-const { article } = Astro.props;
-const { Content } = await render(article);
+const { article, nextArticle } = Astro.props;
+const { Content, headings } = await render(article);
 
 function formatDate(date: Date): string {
   const d = date.getUTCDate().toString().padStart(2, '0');
@@ -27,6 +36,11 @@ const { title, date, updated, tags, description, featured, image, seoTitle, seoD
 const markdownUrl = `/writing/${article.id}.md`;
 const canonicalUrl = new URL(`/writing/${article.id}/`, Astro.site).toString();
 const articleBody = article.body ?? '';
+const readingLabel = readingTimeLabel(articleBody);
+
+// The trailing phrase that wears the hero fill. See src/lib/title-fill.mjs for
+// the rule and for why it has an upper bound.
+const { head: titleHead, fill: titleFill } = splitTitleFill(title);
 ---
 
 <Layout
@@ -47,20 +61,48 @@ const articleBody = article.body ?? '';
     { name: title, url: `/writing/${article.id}/` },
   ]}
 >
-  <article data-module="article">
+  {/*
+    TWO POST TEMPLATES IN ONE DOCUMENT, one shown per appearance — the same
+    construction as the homepage and the /writing index, with one difference that
+    matters: THE ARTICLE BODY IS NOT DUPLICATED.
+
+    The other two surfaces ship both trees whole. Doing that here would render
+    <Content /> twice, which puts every heading id in the document twice (invalid
+    HTML, and an in-page anchor with two targets) and doubles the weight of the
+    longest page on the site. So the two trees share one `.prose` node: the
+    redesigned chrome and the legacy chrome sit around it, and each is hidden in
+    the appearance it does not belong to.
+
+    That works because a `display: none` element is not a grid item. In modern,
+    `.post-body` is the two-column grid and its only laid-out children are the
+    rail and the prose; in retro the legacy header is visible instead and
+    `.post-body` is an ordinary block. Every redesign rule below is guarded with
+    `html:not([data-appearance='retro'])` so retro keeps this document without a
+    specificity contest, exactly as the REDESIGN block in global.css does.
+  */}
+  <article data-module="article" class="post">
 
     {showDrafts && article.data.draft && (
       <p class="draft-banner" role="status">DRAFT — not published, preview only</p>
     )}
 
-    <a href="/writing/" class="back-link">← ALL WRITING</a>
+    <div class="modern-skin post-head rd-section">
+      <a href="/writing/" class="post-back">&larr; all writing</a>
+      <h1 class="post-title">
+        {titleFill ? (
+          <>{titleHead}{' '}<span class="rd-fill rd-fill--writing">{titleFill}</span></>
+        ) : title}
+      </h1>
+      <p class="post-lead">{description}</p>
+    </div>
 
-    <header>
+    <header class="retro-skin">
+      <a href="/writing/" class="back-link">← ALL WRITING</a>
       <div data-module="article-meta">
         <time datetime={date.toISOString()}>{formatDate(date)}</time>
         {featured && <span class="featured-badge"><span aria-hidden="true">◆</span> FEATURED</span>}
         <span class="meta-sep" aria-hidden="true">·</span>
-        <span class="read-time">{readingTimeLabel(articleBody)}</span>
+        <span class="read-time">{readingLabel}</span>
       </div>
       <h1 class="page-title page-title--article">{title}</h1>
       <p class="article-dek page-intro">{description}</p>
@@ -70,11 +112,30 @@ const articleBody = article.body ?? '';
       <ArticleActions canonicalUrl={canonicalUrl} markdownUrl={markdownUrl} />
     </header>
 
-    <div class="prose">
-      <Content />
+    <div class="post-body">
+      <PostRail
+        date={date}
+        readingLabel={readingLabel}
+        headings={headings}
+        markdownUrl={markdownUrl}
+        canonicalUrl={canonicalUrl}
+      />
+
+      <div class="prose">
+        <Content />
+      </div>
     </div>
 
-    <footer class="article-footer">
+    {nextArticle && (
+      <div class="modern-skin post-next-wrap rd-section">
+        <a href={`/writing/${nextArticle.id}/`} class="post-next">
+          <span class="post-next-label">next &middot; {formatSiteDate(nextArticle.data.date)}</span>
+          <span class="post-next-title">{nextArticle.data.title}</span>
+        </a>
+      </div>
+    )}
+
+    <footer class="retro-skin article-footer">
       <a href="/writing/" class="back-link">← ALL WRITING</a>
     </footer>
 
@@ -82,6 +143,10 @@ const articleBody = article.body ?? '';
 </Layout>
 
 <style>
+  /* ── Legacy (retro) article ──────────────────────────────────────────────
+     Unchanged from before the redesign. The wrapper's own layout moved onto the
+     guarded rule further down, because the redesigned tree needs the full shell
+     width and the legacy one needs the reading measure. */
   [data-module="article"] {
     max-width: var(--width-content);
     margin: 0 auto;
@@ -169,7 +234,9 @@ const articleBody = article.body ?? '';
   /* ── Prose body ───────────────────────────────────────────────────────────
      Lives in src/styles/global.css (loaded on every page via Layout) so the
      changelog entry page shares the identical treatment with no extra stylesheet
-     request. Edit prose there, not here. */
+     request. The redesigned scale for it is in the same file, guarded by
+     `body.skin-redesign`, so the changelog surface does not move with it. Edit
+     prose there, not here. */
 
   /* ── Article footer ─────────────────────────────────────────────────────── */
 
@@ -183,5 +250,191 @@ const articleBody = article.body ?? '';
 
   @media (max-width: 600px) {
     [data-module="article"] { padding: 40px var(--gutter-mobile) 56px; }
+  }
+
+  /* ── Redesigned (modern) post ────────────────────────────────────────────
+     docs/projects/redesign/design-export/README.md §4. Every rule is guarded so
+     retro wears the legacy treatment above on this same document. */
+  html:not([data-appearance='retro']) body.skin-redesign [data-module="article"] {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .draft-banner {
+    max-width: var(--shell);
+    margin: 24px auto 0;
+    /* The shell's gutter, so the banner lines up with the headline under it. */
+    margin-inline: max(calc((100% - var(--shell)) / 2 + var(--shell-gutter)), var(--shell-gutter));
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--agents);
+    background: var(--tint-agents);
+    border-color: var(--agents);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-head {
+    padding-top: 66px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-back {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--writing);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-back:hover {
+    color: var(--writing-hover);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-title {
+    margin: 26px 0 0;
+    max-width: 24ch;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(48px, 5.6vw, 82px);
+    line-height: 1;
+    letter-spacing: -.035em;
+    color: var(--ink);
+    text-wrap: balance;
+    animation: riseIn .7s ease .05s both;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-lead {
+    margin: 30px 0 0;
+    max-width: 40ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 27px;
+    line-height: 1.32;
+    letter-spacing: -.02em;
+    color: var(--ink-3);
+    text-wrap: pretty;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  /* The two-column body. The legacy <header> is a child of this element in
+     retro and is `display: none` here, so it is not a grid item and takes no
+     column. */
+  /* `.rd-section` deliberately NOT on this element. That class is global and
+     unguarded — it is safe on the modern-skin blocks above and below, which
+     retro hides, but this one is in the DOM in BOTH appearances, and a 1180px
+     shell with a 40px gutter would re-indent the legacy article inside its own
+     padding. So it carries the shell itself, under the guard. */
+  html:not([data-appearance='retro']) body.skin-redesign .post-body {
+    max-width: var(--shell);
+    margin-inline: auto;
+    padding-inline: var(--shell-gutter);
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+    margin-top: 58px;
+    padding-top: 34px;
+    border-top: 1px solid var(--rule);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-next-wrap {
+    margin-top: 76px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-next {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: baseline;
+    padding: 30px 20px 34px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-next:hover {
+    background: var(--tint-writing);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-next-label {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .post-next-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 34px;
+    line-height: 1.14;
+    letter-spacing: -.025em;
+  }
+
+  /* One column below 900px: 210px of rail plus 68ch of prose stops fitting well
+     before the 720px the rest of the redesign breaks at. */
+  @media (max-width: 900px) {
+    html:not([data-appearance='retro']) body.skin-redesign .post-body {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 32px;
+      margin-top: 44px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-next {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    html:not([data-appearance='retro']) body.skin-redesign .post-head {
+      padding-top: 36px;
+    }
+
+    /* Smaller than the desktop clamp's own floor. The fill span cannot wrap —
+       that is what makes it one painted block — so the H1 has to be small enough
+       that its longest unbreakable phrase still fits a 320px viewport. See
+       src/lib/title-fill.mjs, which caps that phrase against this number. */
+    html:not([data-appearance='retro']) body.skin-redesign .post-title {
+      font-size: clamp(34px, 9vw, 48px);
+      margin-top: 18px;
+      letter-spacing: -.03em;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-lead {
+      margin-top: 20px;
+      font-size: 22px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-back {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 16px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-body {
+      padding-inline: var(--shell-gutter-mobile);
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-next-wrap {
+      margin-top: 48px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-next {
+      padding: 22px 0 24px;
+      margin: 0;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-next-label {
+      font-size: 16px;
+    }
+
+    html:not([data-appearance='retro']) body.skin-redesign .post-next-title {
+      font-size: 27px;
+      line-height: 1.18;
+    }
   }
 </style>

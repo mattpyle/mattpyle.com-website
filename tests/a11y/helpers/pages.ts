@@ -77,11 +77,22 @@ export const PAGES: PageSpec[] = [
   {
     name: 'writing-index',
     path: '/writing',
-    why: 'Index template plus the tag FilterPills radiogroup',
+    why: 'Index template: the redesigned year-grouped archive, plus the legacy tag FilterPills radiogroup',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    //
     // Order matters: the row is thinned to one first, then its tag chips, whose
     // count is per-post and would otherwise churn the tree's shape.
-    snapshotKeepFirst: ['[data-module="article-list"] .article-item', '.article-tags li'],
-    snapshotRedact: ['[data-module="article-list"] .article-item', '.filter-status'],
+    snapshotKeepFirst: ['.archive .row', '[data-module="article-list"] .article-item', '.article-tags li'],
+    // The year header carries a post COUNT, which every published post changes.
+    snapshotRedact: [
+      '.archive .row',
+      '.archive .year-head',
+      '[data-module="article-list"] .article-item',
+      '.filter-status',
+    ],
   },
   {
     name: 'projects-index',
@@ -105,7 +116,7 @@ export const PAGES: PageSpec[] = [
   {
     name: 'writing-entry',
     path: `/writing/${WRITING_ENTRY}`,
-    why: 'Article template plus ArticleActions (copy-markdown button, external links)',
+    why: 'Article template: the redesigned sticky rail (in-page contents plus the four actions), and the legacy ArticleActions',
     snapshotDrop: ['.prose > *'],
     snapshotKeepFirst: ['.article-tags li'],
     snapshotRedact: [
@@ -116,6 +127,18 @@ export const PAGES: PageSpec[] = [
       '.changelog-meta',
       // Prev/next links are recomputed every time an entry ships either side.
       '.entry-navigation',
+      // The redesigned tree's own content-variable regions. The rail's contents
+      // list is built from the post's h2s, so it is the article by another name;
+      // its SHAPE — a nav named "On this page", one link per section — is what
+      // this golden is guarding, and that survives redaction.
+      //
+      // The fixture post is the oldest one, so it never has a next-post row and
+      // this golden does not cover it. `.post-next` is listed anyway, so the day
+      // an older post exists the golden records a shape rather than a title.
+      '.post-title',
+      '.post-lead',
+      '.rail-contents',
+      '.post-next',
     ],
   },
   {

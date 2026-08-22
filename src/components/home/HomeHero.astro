@@ -12,20 +12,11 @@
   <h1>
     Matt{' '}
     {/*
-      THE HERO FILL. An underline that grows into a filled block on hover.
-
-      The bottom padding is load-bearing and the matching negative margin is why
-      it costs no layout: together they extend the PAINT box below the baseline
-      so the descender of the "y" stays inside the filled block and the reversed
-      text stays legible. Do not add the horizontal equivalent — it produced a
-      visible sliver of colour past the block when the text was selected.
-
-      Painted with a background-image sized to 0.07em and grown to 100%, rather
-      than with a pseudo-element or a scaleY: background-size animates on the
-      compositor and, unlike a transform, cannot be caught mid-flight looking
-      like a half-drawn rule.
+      THE HERO FILL — `.rd-fill` in global.css, shared with the /writing and
+      post headlines. It defaults to the agents magenta, which is the colour
+      this headline wants; the two writing surfaces add `.rd-fill--writing`.
     */}
-    <span class="fill">Pyle</span>
+    <span class="rd-fill">Pyle</span>
   </h1>
 
   <div class="hero-row">
@@ -52,28 +43,6 @@
     letter-spacing: -.045em;
     color: var(--ink);
     animation: riseIn .7s ease .05s both;
-  }
-
-  .fill {
-    white-space: nowrap;
-    display: inline-block;
-    padding: 0 0 .16em;
-    margin: 0 0 -.16em;
-    background-image: linear-gradient(var(--agents), var(--agents));
-    background-repeat: no-repeat;
-    background-position: 0 100%;
-    background-size: 100% .07em;
-    transition:
-      background-size 420ms cubic-bezier(.2, .8, .2, 1),
-      color 380ms ease;
-  }
-
-  /* :active as well as :hover so the effect exists on touch, where there is no
-     hover state to enter. */
-  .fill:hover,
-  .fill:active {
-    background-size: 100% 100%;
-    color: var(--paper);
   }
 
   .hero-row {

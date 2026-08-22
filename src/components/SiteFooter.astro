@@ -15,10 +15,6 @@
  * `data-appearance-toggle`, and AppearanceUI.astro drives every toggle on the
  * page through one delegated listener and a querySelectorAll, so the legacy
  * button and this one stay in sync with each other and with localStorage.
- *
- * NOT SHIPPED, pending real data: the spec's fourth link, `bluesky`. There is no
- * handle to point it at, and constraint 10 says leave a placeholder rather than
- * invent one — so it is absent, not faked. One <a> and it is done.
  */
 ---
 
@@ -33,16 +29,19 @@
       <nav aria-label="Social links" class="footer-links">
         <a href="/rss.xml">rss</a>
         {/*
-          The two links that leave the site say so. Same visually-hidden suffix
-          the legacy footer and ArticleActions use, so the whole site announces a
-          new tab the same way. No visual arrow: the design's link row is four
-          plain words and an arrow on two of them reads as decoration.
+          The three links that leave the site say so. Same visually-hidden
+          suffix the legacy footer and ArticleActions use, so the whole site
+          announces a new tab the same way. No visual arrow: the design's link
+          row is plain words, and an arrow on half of them reads as decoration.
         */}
         <a href="https://github.com/mattpyle" target="_blank" rel="noopener noreferrer">
           github<span class="sr-only"> (opens in a new tab)</span>
         </a>
         <a href="https://linkedin.com/in/matt-pyle" target="_blank" rel="noopener noreferrer">
           linkedin<span class="sr-only"> (opens in a new tab)</span>
+        </a>
+        <a href="https://bsky.app/profile/mattpyle.com" target="_blank" rel="noopener noreferrer">
+          bluesky<span class="sr-only"> (opens in a new tab)</span>
         </a>
         {/* Footer only — the header nav deliberately stays at five links. */}
         <a href="/webmcp/">webmcp</a>
