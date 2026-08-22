@@ -40,9 +40,30 @@ export const PAGES: PageSpec[] = [
   {
     name: 'home',
     path: '/',
-    why: 'Homepage template: hero, activity log, recent writing, retro furniture',
-    snapshotKeepFirst: ['[data-module="activity-log"] .log-item', '.article-list .article-item'],
+    why: 'Homepage template: hero, writing rows, project cards, the live scorecard panel, agent surfaces, changelog',
+    // The homepage ships two trees — the redesigned modern one and the legacy
+    // one retro still wears — and the hidden half is absent from the
+    // accessibility tree, so this golden records whichever appearance the run is
+    // in. These rows are taken in modern. The legacy selectors below are kept so
+    // the pruning still applies if a run ever takes this snapshot in retro.
+    snapshotKeepFirst: [
+      '.writing .row',
+      '.projects .card',
+      '.changelog .row',
+      '[data-module="activity-log"] .log-item',
+      '.article-list .article-item',
+    ],
     snapshotRedact: [
+      '.writing .row',
+      '.projects .card',
+      '.changelog .row',
+      // Every scorecard run rewrites these three, and /scorecard's own golden
+      // already guards the numbers' shape. The four GATE NAMES are not
+      // content-variable and are deliberately left readable — they are the part
+      // of this panel worth a golden.
+      '.headline-number',
+      '.headline-caption',
+      '.gate-score',
       '[data-module="activity-log"] .log-item',
       '.article-list .article-item',
       '.filter-status',

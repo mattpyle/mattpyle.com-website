@@ -1,0 +1,91 @@
+---
+/**
+ * The Changelog section (docs/projects/redesign/design-export/README.md §1, "Changelog").
+ *
+ * Five real entries from the changelog collection. The mockup's five lines are
+ * invented copy and are never to be reproduced (Matt, 2026-08-20) — each row
+ * here is an entry's own `summary`, the same sentence /changelog shows.
+ *
+ * Single column. A two-column version was drawn and rejected as hard to read.
+ * The rows are not links, as the design has them: the section link goes to
+ * /changelog, where every entry is one click from its full text.
+ */
+import { formatSiteDate } from '../../lib/format-date.mjs';
+
+interface Entry {
+  id: string;
+  date: Date;
+  summary: string;
+}
+
+interface Props {
+  entries: Entry[];
+}
+
+const { entries } = Astro.props;
+---
+
+<section class="rd-section changelog modern-skin" aria-labelledby="home-changelog-title">
+  <div class="rd-heading-row">
+    <h2 id="home-changelog-title">Changelog</h2>
+    <a href="/changelog/" class="rd-all-link">full changelog &rarr;</a>
+  </div>
+
+  <div class="rows">
+    {entries.map(entry => (
+      <div class="row">
+        <time datetime={entry.date.toISOString()} class="row-date">
+          {formatSiteDate(entry.date)}
+        </time>
+        <span class="row-text">{entry.summary}</span>
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  .changelog { padding-top: 84px; }
+
+  .rd-heading-row { padding-bottom: 22px; }
+  .rd-heading-row h2 { color: var(--changelog); }
+  .rd-all-link { color: var(--changelog); }
+  .rd-all-link:hover { color: var(--changelog-hover); }
+
+  .rows { display: flex; flex-direction: column; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 170px minmax(0, 1fr);
+    gap: 36px;
+    padding: 18px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .row-date {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--changelog);
+  }
+
+  .row-text {
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink-3);
+    text-wrap: pretty;
+  }
+
+  @media (max-width: 720px) {
+    .changelog { padding-top: 52px; }
+
+    .rd-heading-row { padding-bottom: 8px; }
+
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 16px 0;
+    }
+
+    .row-date { font-size: 16px; }
+  }
+</style>

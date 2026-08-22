@@ -349,3 +349,324 @@ textarea:focus-visible,
     scroll-behavior: auto !important;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   REDESIGN — the design system for the rebuilt surfaces
+   ════════════════════════════════════════════════════════════════════════════
+   Spec: docs/projects/redesign/design-export/README.md. Everything below is
+   ADDITIVE and inert until a route opts in: Layout.astro puts `skin-redesign`
+   on <body> for the routes listed in src/lib/redesigned-routes.mjs, and only
+   the homepage is on that list today. The legacy tokens above stay live for
+   every page the redesign has not reached yet, which is why this block does not
+   simply redefine --color-bg / --font-serif / --font-mono.
+
+   The redesign lands on production in ONE merge (the `redesign` integration
+   branch), so the site never shows two type systems at once in public. When the
+   last surface converts, the legacy tokens and the `skin-redesign` flag both go,
+   and --font-mono-plex becomes --font-mono.
+
+   Every base rule here is guarded with html:not([data-appearance='retro']).
+   Retro is a re-skin of the SAME document and has to be able to win on a page
+   carrying this flag; :not() makes that structural rather than a specificity
+   race. See src/styles/retro.css.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Redesign fonts ──────────────────────────────────────────────────────────
+   Self-hosted for the same reason the 2026-08-14 batch self-hosted the others:
+   a cross-origin render-blocking stylesheet cost the live Performance score.
+   Files, weight ranges and unicode-range values are exactly what
+   fonts.googleapis.com/css2 served to Chrome (Bricolage Grotesque v9,
+   IBM Plex Sans v23, IBM Plex Mono v20), latin + latin-ext only.
+
+   Bricolage Grotesque and IBM Plex Sans are variable — Google serves ONE file
+   per subset covering the whole weight range, so 400/500/700/800 cost one
+   request, not four. IBM Plex Mono is static per weight, and only 400 ships:
+   the README type scale uses mono at 400 and nowhere else, so the 500 file
+   would be dead weight on the critical path.
+
+   If a font file changes, rename it — /fonts/* is served with an immutable
+   cache header (vercel.json). */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/bricolage-grotesque-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/bricolage-grotesque-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ── Size-matched fallbacks for the redesign fonts ───────────────────────────
+   Same technique and the same reason as the legacy pair above: font-display is
+   `swap`, so the fallback paints first and the swap must not reflow (the
+   homepage CLS budget is 0). Computed with @capsizecss/unpack + createFontStack
+   from the shipped woff2 files, against Arial (both sans faces) and Courier New
+   (the mono), which are the first real families in each stack below.
+
+   Known limit, carried on purpose: a variable font reports ONE average glyph
+   width, measured at its default instance (400). The hero H1 renders Bricolage
+   at 700, so its fallback is matched slightly loose. It costs nothing here
+   because every headline in the design sets a unitless line-height, which makes
+   the line box a multiple of font-size rather than of the metrics of the face —
+   the swap changes glyph widths, not the height of anything below it. */
+@font-face {
+  font-family: 'Bricolage Grotesque Fallback';
+  src: local('Arial'), local('ArialMT');
+  size-adjust: 100.0447%;
+  ascent-override: 92.9585%;
+  descent-override: 26.9879%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans Fallback';
+  src: local('Arial'), local('ArialMT');
+  size-adjust: 101.1663%;
+  ascent-override: 101.3184%;
+  descent-override: 27.183%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono Fallback';
+  src: local('Courier New'), local('CourierNewPSMT');
+  size-adjust: 99.9837%;
+  ascent-override: 102.5167%;
+  descent-override: 27.5045%;
+  line-gap-override: 0%;
+}
+
+/* ── Redesign tokens ─────────────────────────────────────────────────────────
+   Names are the spec own names, unprefixed, so the README tables map one-to-one
+   onto this block. Colours are authored in oklch exactly as the spec authored
+   them; the hex equivalents in the README are approximations and are not used.
+
+   The four semantic colours CARRY MEANING — writing, projects, agents, changelog
+   — and nothing decorative may take one. A heading is coloured because of the
+   section it names, not because colour looked good there. */
+:root {
+  /* Layout */
+  --shell: 1180px;
+  --shell-gutter: 40px;
+  --shell-gutter-mobile: 20px;
+  --radius: 6px;
+
+  /* Neutrals */
+  --bg:        oklch(0.965 0.004 265);
+  --surface:   oklch(1 0 0);
+  --footer-bg: oklch(0.955 0.004 265);
+  --paper:     oklch(0.99 0.002 265);
+  --ink:       oklch(0.21 0.012 265);
+  --ink-2:     oklch(0.24 0.012 265);
+  --ink-3:     oklch(0.28 0.012 265);
+  --ink-4:     oklch(0.36 0.012 265);
+  --ink-5:     oklch(0.38 0.012 265);
+  --ink-6:     oklch(0.41 0.012 265);
+  --rule:      oklch(0.9 0.006 265);
+  --rule-2:    oklch(0.92 0.006 265);
+  --track:     oklch(0.93 0.006 265);
+
+  /* Semantic */
+  --writing:         oklch(0.47 0.13 255);
+  --writing-hover:   oklch(0.32 0.14 255);
+  --projects:        oklch(0.44 0.11 155);
+  --projects-hover:  oklch(0.31 0.1 155);
+  --agents:          oklch(0.47 0.16 330);
+  --agents-hover:    oklch(0.33 0.16 330);
+  --changelog:       oklch(0.45 0.11 65);
+  --changelog-hover: oklch(0.32 0.1 65);
+
+  /* Tints — hover grounds and placeholder hatching */
+  --tint-writing:  oklch(0.955 0.012 255);
+  --tint-agents:   oklch(0.975 0.012 330);
+  --hatch-projects-a:  oklch(0.93 0.014 155);
+  --hatch-projects-b:  oklch(0.965 0.008 155);
+  --hatch-chip-ink:    oklch(0.34 0.05 155);
+  --hatch-chip-border: oklch(0.88 0.02 155);
+
+  /* Type. --font-mono-plex rather than --font-mono because the legacy token is
+     still JetBrains Mono on 20-odd unconverted pages; it takes the plain name
+     when the last of them converts. */
+  --font-display:    'Bricolage Grotesque', 'Bricolage Grotesque Fallback', Arial, sans-serif;
+  --font-body:       'IBM Plex Sans', 'IBM Plex Sans Fallback', Arial, sans-serif;
+  --font-mono-plex:  'IBM Plex Mono', 'IBM Plex Mono Fallback', 'Courier New', monospace;
+}
+
+/* ── Redesign base ───────────────────────────────────────────────────────────
+   Applies only where Layout.astro set the flag, and only in modern: retro is a
+   re-skin of this same DOM and owns these properties in its own appearance. */
+html:not([data-appearance='retro']) body.skin-redesign {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+/* The legacy `a { color: var(--color-accent) }` is an oxblood that belongs to
+   the old palette. Inheriting instead makes every link in the redesign state its
+   own colour, which is the point of the semantic set. */
+html:not([data-appearance='retro']) body.skin-redesign a {
+  color: inherit;
+  transition: color 240ms ease;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign a:focus-visible,
+html:not([data-appearance='retro']) body.skin-redesign button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign ::selection {
+  background: var(--agents);
+  color: var(--paper);
+  text-shadow: none;
+}
+
+/* The H1 carries the hero fill in the agents magenta, so a magenta selection on
+   top of it is unreadable. Ink instead — the spec calls this out explicitly. */
+html:not([data-appearance='retro']) body.skin-redesign h1 ::selection {
+  background: var(--ink);
+  color: var(--paper);
+  text-shadow: none;
+}
+
+/* ── Redesign motion ─────────────────────────────────────────────────────────
+   Two one-shot entry animations, declared here rather than in a component so the
+   keyframes exist once. The blanket prefers-reduced-motion rule above clamps
+   both to 0.01ms, which leaves the end state (`both` fill) intact — the content
+   is never left translated away or at scaleX(0).
+
+   TRANSFORM ONLY. The spec's riseIn also fades opacity 0 → 1, and the fade is
+   dropped on purpose: the hero H1 is the largest text on the site, and an
+   accessibility audit that samples during those 700ms reads its colour blended
+   with the page and reports a colour-contrast violation on a pair the page never
+   paints. Measured, not assumed — `npx axe http://localhost:4321/` failed on
+   `.hero > h1` three runs out of three with the fade in, and passes without it,
+   while @axe-core/playwright (which waits) saw no violation either way. Same
+   class of defect as docs/work/webmcp-axe-contrast-flake.md, and the same answer:
+   do not animate a property an audit reads.
+
+   A rise with no fade is still a rise. Nothing else about the entry changes. */
+@keyframes riseIn {
+  from { transform: translateY(14px); }
+  to   { transform: none; }
+}
+
+@keyframes barGrow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* ── Redesign layout shell ───────────────────────────────────────────────────
+   The one container every redesigned section sits in: a 1180px column with a
+   40px gutter (20px on mobile). Global rather than per-component because five
+   components would otherwise each carry their own copy of the same three
+   declarations, and a shell that drifts between sections is a misalignment you
+   only see at one viewport width.
+
+   Not guarded against retro: the only markup carrying this class is inside a
+   `.modern-skin` subtree, which retro sets to `display: none`. */
+.rd-section {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding-inline: var(--shell-gutter);
+}
+
+/* Section heading row: the h2 in its section colour, and an `all … →` link
+   pushed to the right margin. Shared for the same reason as the shell. */
+.rd-heading-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.rd-heading-row h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: -.02em;
+}
+
+.rd-heading-row .rd-all-link {
+  margin-left: auto;
+  font-family: var(--font-mono-plex);
+  font-size: 17px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .rd-section { padding-inline: var(--shell-gutter-mobile); }
+
+  /* Wraps rather than shortening: the 390px prototype trims these to "all →"
+     and "full →", but a section link that names its destination is worth one
+     more line, and at 320px the un-wrapped row overflowed the page. */
+  .rd-heading-row { flex-wrap: wrap; }
+
+  .rd-heading-row h2 { font-size: 26px; }
+
+  /* 44px tap target on every small in-content link, per the mobile spec. */
+  .rd-heading-row .rd-all-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 10px 0;
+    font-size: 16px;
+  }
+}
+
+/* The skip link is Layout.astro's, and it is painted on every page — off-screen,
+   but painted — so its font-family decides whether a route downloads that face.
+   Left on the legacy --font-mono it would pull JetBrains Mono onto a redesigned
+   page for one hidden control and nothing else, which is 31KB for a link nobody
+   sees until they press Tab. The colours move with it: the legacy oxblood is not
+   in this palette. */
+html:not([data-appearance='retro']) body.skin-redesign .skip-link {
+  font-family: var(--font-mono-plex);
+  font-size: 15px;
+  background: var(--ink);
+  color: var(--paper);
+}

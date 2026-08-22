@@ -1,0 +1,158 @@
+---
+/**
+ * The hero (docs/projects/redesign/design-export/README.md §1, "Hero").
+ *
+ * The H1 is the name and nothing else — no job title in a headline (constraint
+ * 1), no eyebrow above it (constraint 2). The only decorative motion on the
+ * whole page lives here.
+ */
+---
+
+<section class="rd-section hero modern-skin">
+  <h1>
+    Matt{' '}
+    {/*
+      THE HERO FILL. An underline that grows into a filled block on hover.
+
+      The bottom padding is load-bearing and the matching negative margin is why
+      it costs no layout: together they extend the PAINT box below the baseline
+      so the descender of the "y" stays inside the filled block and the reversed
+      text stays legible. Do not add the horizontal equivalent — it produced a
+      visible sliver of colour past the block when the text was selected.
+
+      Painted with a background-image sized to 0.07em and grown to 100%, rather
+      than with a pseudo-element or a scaleY: background-size animates on the
+      compositor and, unlike a transform, cannot be caught mid-flight looking
+      like a half-drawn rule.
+    */}
+    <span class="fill">Pyle</span>
+  </h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      This site is an experiment in building the web for its newest readers, and publishing what
+      they see.
+    </p>
+    <div class="hero-agent">
+      <span class="hero-agent-copy">Reading this as an agent?<br />Start here.</span>
+      <a href="/llms.txt" class="hero-agent-link">llms.txt</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero { padding-top: 78px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .fill {
+    white-space: nowrap;
+    display: inline-block;
+    padding: 0 0 .16em;
+    margin: 0 0 -.16em;
+    background-image: linear-gradient(var(--agents), var(--agents));
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 100% .07em;
+    transition:
+      background-size 420ms cubic-bezier(.2, .8, .2, 1),
+      color 380ms ease;
+  }
+
+  /* :active as well as :hover so the effect exists on touch, where there is no
+     hover state to enter. */
+  .fill:hover,
+  .fill:active {
+    background-size: 100% 100%;
+    color: var(--paper);
+  }
+
+  .hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 40px;
+    margin-top: 44px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    max-width: 30ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-agent {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .hero-agent-copy {
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .hero-agent-link {
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+    color: var(--agents);
+  }
+
+  .hero-agent-link:hover { color: var(--agents-hover); }
+
+  @media (max-width: 720px) {
+    .hero { padding-top: 40px; }
+
+    h1 {
+      font-size: 68px;
+      line-height: .94;
+      letter-spacing: -.04em;
+    }
+
+    .hero-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 28px;
+      margin-top: 28px;
+    }
+
+    .hero-statement { font-size: 24px; }
+
+    /* One inline row on mobile, per the 390px prototype. */
+    .hero-agent {
+      flex-direction: row;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding-left: 16px;
+    }
+
+    .hero-agent-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+  }
+</style>
