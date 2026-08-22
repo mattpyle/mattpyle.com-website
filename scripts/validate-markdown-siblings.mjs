@@ -26,10 +26,12 @@ const outputRoots = [primaryRoot, join(root, '.vercel', 'output', 'static')].fil
 const CURATED_ROUTES = [
   'src/pages/writing/[slug].md.ts',
   'src/pages/changelog/[slug].md.ts',
-  // /scorecard renders on demand, so no built HTML exists for the emit step to convert; this
+  // /activity renders on demand, so no built HTML exists for the emit step to convert; this
   // route is the page's only markdown sibling. Deleting it would leave the negotiation contract
-  // silently falling back to HTML on one of the site's seven audited routes.
-  'src/pages/scorecard.md.ts',
+  // silently falling back to HTML on one of the site's audited routes. It replaced
+  // src/pages/scorecard.md.ts on 2026-08-22, when the store read moved and /scorecard went back to
+  // prerendering with an ordinary converted sibling.
+  'src/pages/activity.md.ts',
 ];
 for (const route of CURATED_ROUTES) {
   assert.ok(existsSync(join(root, route)), `curated markdown route is missing: ${route}`);

@@ -1,0 +1,476 @@
+---
+/**
+ * The three data bands of /scorecard
+ * (docs/projects/redesign/design-export-remaining/design_handoff_scorecard, bands 2–4): the latest
+ * run as four large numbers, every previous run as a row, and one paragraph on how the data
+ * arrives.
+ *
+ * EVERY VALUE IS DERIVED, NOTHING IS WRITTEN OUT. The numbers come from
+ * src/data/scorecard-runs.json through `scorecardGates()` in src/data/scorecard.ts — the same
+ * derivation the homepage panel calls, which is what the bundle means by "must not duplicate that
+ * logic; share it". The mockup's figures match the run of 20 Aug 2026 because that is the run it
+ * was drawn against.
+ *
+ * The design was reduced across several rounds and the cuts are load-bearing. No per-check
+ * accordions, no progress bars for the four gates, no performance-over-time chart, no per-run
+ * detail pages — the rows here are deliberately not links, because there is nothing to link to.
+ * The bundle lists all of them; do not reintroduce one without asking.
+ *
+ * COLOUR CARRIES NO STATE IN THE PREVIOUS-RUNS LIST. Magenta means "agents" on this site, not
+ * "bad", so a run that scored 3 of 4 looks exactly like one that scored 4. The single coloured
+ * number on the page is the agentic-browsing gate, which is the gate the site exists to move.
+ */
+import {
+  SCORECARD,
+  SCORECARD_HISTORY,
+  SCORECARD_TIMESTAMP,
+  passingGates,
+  scorecardGates,
+} from '../../data/scorecard';
+
+const gates = scorecardGates();
+
+/**
+ * The run's provenance line: when it ran, how it was entered, and what it covered.
+ *
+ * Composed from three formatters rather than one because no single `Intl` pattern produces the
+ * bundle's string — en-GB writes the date the right way round but names the zone "GMT-7", and
+ * en-US names it "PDT" but writes "August 20, 2026". The zone is America/Vancouver because that is
+ * the clock a person reads dates on in this repo (CLAUDE.md); a run recorded at another offset is
+ * shown at the same instant in this one, which is a relabelling rather than a claim.
+ */
+const RUN_ZONE = 'America/Vancouver';
+const runDate = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  timeZone: RUN_ZONE,
+});
+const runTime = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: RUN_ZONE,
+});
+const runZoneName = new Intl.DateTimeFormat('en-US', { timeZone: RUN_ZONE, timeZoneName: 'short' });
+const runDateUtc = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+/**
+ * A run with an exact instant prints it in the run zone; a run that only has a calendar date
+ * prints that date as written.
+ *
+ * The date-only branch formats in UTC, NOT in the run zone. `2026-08-20` is a calendar date with
+ * no instant in it, and reading it as midnight UTC and then re-formatting it in America/Vancouver
+ * moves it to the evening of the 19th — which is exactly the off-by-one this branch shipped for
+ * one build. A date with no time attached is not a thing that can be converted.
+ */
+function runStamp(timestamp: string | undefined, isoDate: string): string {
+  if (!timestamp) return runDateUtc.format(new Date(`${isoDate}T00:00:00.000Z`));
+  const at = new Date(timestamp);
+  const zone = runZoneName.formatToParts(at).find(part => part.type === 'timeZoneName')?.value ?? '';
+  return `${runDate.format(at)}, ${runTime.format(at)} ${zone}`.trim();
+}
+
+const provenance = [
+  // The instant comes from the run record; `SCORECARD.verified` carries the calendar date the
+  // sitemap shares and nothing finer.
+  runStamp(SCORECARD_TIMESTAMP, SCORECARD.verified.iso),
+  SCORECARD.entry,
+  SCORECARD.scope,
+]
+  .filter(Boolean)
+  .join(' · ');
+
+/**
+ * What THIS run found, and nothing else.
+ *
+ * A gate that did not pass names itself, its score and its own description. When every gate passed
+ * this is empty and the band renders nothing at all — the bundle is explicit that filler, and
+ * standing explanations like "lowest result on any tested page, not an average", are not wanted
+ * here. The commentary field is not used for it either: that is a summary of what CHANGED, which
+ * is the previous-runs column's job.
+ */
+const findings = gates
+  .filter(gate => gate.status !== 'Pass')
+  .map(gate => `${gate.label} did not pass at ${gate.score}. ${SCORECARD.metrics.find(m => m.name === gate.label)?.description ?? ''}`.trim())
+  .join(' ');
+
+/**
+ * "Agentic Browsing" as the design writes it, "Agentic browsing", without turning "SEO" into
+ * "Seo". Only a word that is already plain Capitalised is lowered; an all-caps acronym is left
+ * alone, and the first word always is.
+ */
+function sentenceCase(name: string): string {
+  return name
+    .split(' ')
+    .map((word, index) =>
+      index > 0 && word === word.charAt(0) + word.slice(1).toLowerCase() ? word.toLowerCase() : word
+    )
+    .join(' ');
+}
+
+/** Every previous run as a row: date, gates passing, and the run's own commentary. */
+const previousRuns = SCORECARD_HISTORY.map(run => ({
+  id: run.id,
+  iso: run.verified.timestamp ?? run.verified.iso,
+  date: run.verified.label,
+  gates: `${passingGates(run.metrics)} of ${run.metrics.length}`,
+  note: run.commentary,
+}));
+---
+
+<div class="modern-skin">
+  <section class="rd-section band-latest" aria-labelledby="scorecard-latest-title">
+    <div class="band-head">
+      <h2 id="scorecard-latest-title">Latest run</h2>
+      <p class="provenance">{provenance}</p>
+    </div>
+
+    <div class="gates">
+      {gates.map(gate => (
+        <div class:list={['gate', gate.maximum !== 100 && 'gate--agents']}>
+          <span class="gate-score">{gate.score}</span>
+          <span class="gate-name">{sentenceCase(gate.label)}</span>
+        </div>
+      ))}
+    </div>
+
+    {findings && <p class="findings">{findings}</p>}
+
+    {/*
+      Where the Agent traffic block used to be. It moved to /activity in the same change — this
+      page is audit results, that one is traffic — and the nav is full, so this cross-link plus the
+      footer link and the homepage panel's pointer are how a reader reaches it.
+    */}
+    <p class="crosslink">Agent traffic moved to <a href="/activity/">/activity</a>.</p>
+  </section>
+
+  <section class="rd-section band-previous" aria-labelledby="scorecard-previous-title">
+    <div class="band-head">
+      <h2 id="scorecard-previous-title">Previous runs</h2>
+    </div>
+
+    {/*
+      A list, not a table: three cells of which only one is a value, and no column a reader would
+      compare down. `role="list"` because `list-style: none` makes Safari drop list semantics.
+    */}
+    <ul class="runs" role="list">
+      {previousRuns.map(run => (
+        <li class="run">
+          <span class="run-date"><time datetime={run.iso}>{run.date}</time></span>
+          <span class="run-gates">{run.gates}</span>
+          <span class="run-note">{run.note}</span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="rd-section band-how" aria-labelledby="scorecard-how-title">
+    <div>
+      <h2 id="scorecard-how-title">How this gets here</h2>
+      <p class="how-prose">
+        A <a href="https://temporal.io" target="_blank" rel="noopener noreferrer">Temporal<span class="sr-only"> (opens in a new tab)</span></a> workflow runs nightly, auditing every page for technical SEO, performance, accessibility, and agentic browsing standards.
+      </p>
+    </div>
+    <div class="as-data">
+      <span class="as-data-label">The same numbers, as data</span>
+      <a href="/scorecard.json" class="as-data-link">scorecard.json</a>
+    </div>
+  </section>
+</div>
+
+<style>
+  /* Not global on this site: `.sr-only` is declared per component (see ActivityLog.astro,
+     Footer.astro and a dozen others), so a component that uses the class has to carry the rule.
+     Without it the label renders as visible text — which is how the 24 hour labels below turned a
+     280px chart into a 1123px one on the first reflow run. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ── Band 2: latest run ─────────────────────────────────────────────────── */
+  .band-latest { padding-top: 76px; }
+
+  .band-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+
+  .band-head h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+  }
+
+  .provenance {
+    margin: 0;
+    font-size: 19px;
+    color: var(--ink-6);
+  }
+
+  .gates {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .gate {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 34px 0 0;
+  }
+
+  .gate + .gate {
+    padding-left: 32px;
+    border-left: 1px solid var(--rule);
+  }
+
+  .gate-score {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 84px;
+    line-height: .9;
+    letter-spacing: -.04em;
+    color: var(--ink);
+  }
+
+  /* The only coloured number on the page. Selected by the gate whose maximum is not 100, which is
+     the agentic-browsing gate by construction: it is the one measured in checks rather than out of
+     a Lighthouse hundred. Keying on the shape of the score rather than on its name means a renamed
+     metric keeps its colour and a second out-of-100 gate never steals it. */
+  .gate--agents .gate-score { color: var(--agents); }
+
+  .gate-name {
+    font-size: 20px;
+    color: var(--ink-2);
+  }
+
+  .findings {
+    margin: 28px 0 0;
+    max-width: 58ch;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-6);
+  }
+
+  .crosslink {
+    margin: 28px 0 0;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-6);
+  }
+
+  .crosslink a,
+  .how-prose a {
+    color: var(--agents);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--rule);
+    transition: color 240ms ease, text-decoration-color 240ms ease;
+  }
+
+  .crosslink a:hover,
+  .how-prose a:hover {
+    color: var(--agents-hover);
+    text-decoration-color: currentColor;
+  }
+
+  /* ── Band 3: previous runs ──────────────────────────────────────────────── */
+  .band-previous { padding-top: 80px; }
+
+  .band-previous .band-head { margin-bottom: 20px; }
+
+  .runs {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    /* The closing rule of the group, heavier than the row rules above it. */
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .run {
+    display: grid;
+    grid-template-columns: 160px 130px minmax(0, 1fr);
+    gap: 28px;
+    align-items: baseline;
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .run-date {
+    font-size: 19px;
+    color: var(--ink);
+  }
+
+  .run-gates {
+    font-size: 19px;
+    color: var(--ink-6);
+  }
+
+  .run-note {
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink-6);
+    text-wrap: pretty;
+  }
+
+  /* ── Band 4: how this gets here ─────────────────────────────────────────── */
+  .band-how {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 64px;
+    align-items: start;
+    /* No bottom padding beyond the spec's 96px: SiteFooter.astro opens with a 96px margin-top, so
+       setting it here as well doubles the gap. Measured on the served build for /about and
+       /steward, and the same correction applies to every band that closes a page. */
+    padding-top: 80px;
+  }
+
+  .band-how h2 {
+    margin: 0 0 16px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+  }
+
+  .how-prose {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 20px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .as-data {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-left: 1px solid var(--rule);
+    padding-left: 26px;
+  }
+
+  .as-data-label {
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .as-data-link {
+    font-size: 20px;
+    color: var(--agents);
+  }
+
+  .as-data-link:hover { color: var(--agents-hover); }
+
+  /* ── Responsive ─────────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    /* 2×2, keeping a rule between the cells in both directions. The `+ .gate` inset above would
+       put a left border on cell 3, which starts a row, so the borders are restated per position. */
+    .gates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .gate,
+    .gate + .gate {
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    .gate:nth-child(even) {
+      padding-left: 32px;
+      border-left: 1px solid var(--rule);
+    }
+
+    .gate:nth-child(n + 3) {
+      margin-top: 34px;
+      padding-top: 34px;
+      border-top: 1px solid var(--rule);
+    }
+
+    .band-how {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 32px;
+    }
+
+    .as-data {
+      border-left: 0;
+      padding-left: 0;
+      border-top: 1px solid var(--rule);
+      padding-top: 20px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .band-latest { padding-top: 52px; }
+    .band-previous { padding-top: 56px; }
+    .band-how { padding-top: 56px; }
+
+    .band-head h2,
+    .band-how h2 { font-size: 26px; }
+
+    .provenance { font-size: 18px; }
+
+    /* One column, a top rule per gate, score at 64px. */
+    .gates {
+      grid-template-columns: minmax(0, 1fr);
+      border-top: 0;
+    }
+
+    .gate,
+    .gate + .gate,
+    .gate:nth-child(even),
+    .gate:nth-child(n + 3) {
+      gap: 8px;
+      margin-top: 0;
+      padding: 22px 0 0;
+      border-left: 0;
+      border-top: 1px solid var(--rule);
+    }
+
+    .gate:first-child { border-top: 1px solid var(--rule-2); }
+
+    .gate-score { font-size: 64px; }
+
+    .gate-name { font-size: 19px; }
+
+    /* Two lines: date and gates on the first, the note beneath. */
+    .run {
+      grid-template-columns: 160px minmax(0, 1fr);
+      gap: 8px 28px;
+      padding: 18px 0;
+    }
+
+    .run-note { grid-column: 1 / -1; }
+
+    .how-prose { font-size: 18px; }
+  }
+
+  @media (max-width: 380px) {
+    /* The 160px date column plus the gates column overflows a 320px viewport once the shell's
+       20px gutters are taken off. Stacking is the only thing left that does not truncate a date. */
+    .run { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

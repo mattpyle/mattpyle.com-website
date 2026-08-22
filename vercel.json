@@ -1,7 +1,7 @@
 {
   "redirects": [
-    { "source": "/agent-traffic", "destination": "/scorecard/#agent-traffic", "permanent": false },
-    { "source": "/agent-traffic/", "destination": "/scorecard/#agent-traffic", "permanent": false }
+    { "source": "/agent-traffic", "destination": "/activity/", "permanent": false },
+    { "source": "/agent-traffic/", "destination": "/activity/", "permanent": false }
   ],
   "headers": [
     {
@@ -53,6 +53,14 @@
     },
     {
       "source": "/about/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/activity",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/activity/",
       "headers": [{ "key": "Vary", "value": "Accept" }]
     },
     {

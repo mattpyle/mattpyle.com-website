@@ -39,6 +39,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Projects](${base}/projects/): side projects.`);
   lines.push(`- [Changelog](${base}/changelog/): reverse-chronological log of what has shipped on this site.`);
   lines.push(`- [Scorecard](${base}/scorecard/): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
+  lines.push(`- [Activity](${base}/activity/): agent traffic to this site — fetches of its agent surfaces and pages served as Markdown, counted per UTC hour.`);
   lines.push(`- [About](${base}/about/): full bio, interests, contact links.`);
   lines.push(`- [WebMCP](${base}/webmcp/): the six WebMCP tools this site registers for in-browser AI agents (four read, two write), what they return, and how to test them.`);
   lines.push(`- [Steward](${base}/steward/): the agent-readiness auditor this site runs, the identity it arrives under in your logs, how to refuse it, and how to run an audit yourself.`);
@@ -52,6 +53,8 @@ export const GET: APIRoute = async ({ site }) => {
   // "add a file in src/data/skills/" with no edit here.
   lines.push(...formatSkillsIndexLines(base, skillsIndex.skills));
   lines.push(`- [A2A Agent Card](${base}/.well-known/agent-card.json): this site as an A2A agent. Two skills, answered by a JSON-RPC 2.0 endpoint at ${base}/a2a (A2A 1.0, no auth): ask-about-site returns a direct Message about this site, and audit-a-site audits a site you name, its deep tier as a Task you poll with GetTask. Full calling notes are in agents.md.`);
+  lines.push(`- [scorecard.json](${base}/scorecard.json): every scorecard run as JSON — the same numbers /scorecard displays.`);
+  lines.push(`- [activity.json](${base}/activity.json): the agent-traffic counts as JSON — the same numbers /activity displays, at UTC-hour resolution.`);
   lines.push(`- [llms-full.txt](${base}/llms-full.txt): the full plain-text content export.`);
   lines.push(`- [agents.md](${base}/agents.md): how to read and cite this site.`);
   lines.push('');

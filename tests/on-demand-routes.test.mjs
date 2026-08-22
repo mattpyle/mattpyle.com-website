@@ -7,7 +7,10 @@ import { trailingSlashRedirectFor } from '../src/lib/trailing-slash.mjs';
 
 // Query-string canonicalisation on the routes that render per request. The rule is narrow on
 // purpose and the tests below are mostly about the paths it must NOT touch: a redirect that
-// escaped its three paths would strip utm parameters off every inbound link on the site.
+// escaped its four paths would strip utm parameters off every inbound link on the site.
+//
+// The list is /activity's as of 2026-08-22. It was /scorecard's before that, and moved with the
+// store read: /scorecard prerenders again, where a query string is not part of the cache key.
 
 const middlewareSource = readFileSync(fileURLToPath(new URL('../middleware.ts', import.meta.url)), 'utf8');
 
@@ -21,9 +24,10 @@ test('a query string on an on-demand path canonicalises to the fully canonical p
   // Slash form included, so the hop lands on the canonical URL rather than on a path that
   // immediately owes a second 308 to trailing-slash normalisation. One hop, always.
   const expected = {
-    '/scorecard': '/scorecard/',
-    '/scorecard/': '/scorecard/',
-    '/scorecard.md': '/scorecard.md',
+    '/activity': '/activity/',
+    '/activity/': '/activity/',
+    '/activity.md': '/activity.md',
+    '/activity.json': '/activity.json',
   };
   for (const path of ON_DEMAND_PATHS) {
     assert.equal(canonicalOnDemandPath(path, '?q=abc'), expected[path], path);
