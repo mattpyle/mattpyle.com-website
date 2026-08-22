@@ -14,7 +14,7 @@
  *      typefaces it never paints.
  *
  * An unconverted route is byte-identical to what it was before the branch. That
- * is the point: converting /writing does not have to re-verify /scorecard.
+ * is the point: converting /writing did not have to re-verify /scorecard.
  *
  * WHEN THE LAST SURFACE CONVERTS, DELETE THIS MODULE. The flag, the legacy
  * tokens in global.css, and the legacy Nav/Footer components all go together;
@@ -22,7 +22,16 @@
  */
 
 /** Trailing-slash canonical form, matching the hrefs in the nav. */
-const REDESIGNED = new Set(['/']);
+const REDESIGNED = new Set(['/', '/writing/']);
+
+/**
+ * Whole subtrees, for a template that converts every one of its pages at once.
+ * `/writing/` is listed above as well: this prefix covers the posts under it,
+ * and the index itself is an exact match rather than a prefix so that adding a
+ * post template here can never silently convert an index that has not been
+ * rebuilt.
+ */
+const REDESIGNED_PREFIXES = ['/writing/'];
 
 /**
  * @param {string} pathname
@@ -30,5 +39,6 @@ const REDESIGNED = new Set(['/']);
  */
 export function isRedesignedRoute(pathname) {
   const path = pathname.endsWith('/') ? pathname : `${pathname}/`;
-  return REDESIGNED.has(path);
+  if (REDESIGNED.has(path)) return true;
+  return REDESIGNED_PREFIXES.some(prefix => path.startsWith(prefix));
 }

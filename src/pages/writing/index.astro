@@ -3,6 +3,8 @@ import { getCollection } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import PageHeader from '../../components/PageHeader.astro';
 import ArticleList from '../../components/ArticleList.astro';
+import WritingHero from '../../components/writing/WritingHero.astro';
+import WritingArchive from '../../components/writing/WritingArchive.astro';
 import { showDrafts } from '../../lib/show-drafts';
 import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
 
@@ -28,10 +30,30 @@ const allTags = [...new Set(articles.flatMap(a => a.data.tags))].sort();
   description="Essays on growth, marketing, AI, and building software as a non-engineer, from the Director of Growth at Temporal Technologies."
   markdownAlternate={markdownUrl}
 >
-  <PageHeader
-    eyebrow="Writing"
-    title="Writing"
-    subtitle="Growth, marketing, AI, and building things."
-  />
-  <ArticleList articles={articles} allTags={allTags} />
+  {/*
+    TWO INDEXES IN ONE DOCUMENT, one shown per appearance — the same
+    construction src/pages/index.astro uses, and for the same reason: the
+    redesign rebuilds the MODERN appearance only, retro is a client-side
+    preference the server cannot read, so both trees ship and CSS chooses.
+    `.modern-skin` / `.retro-skin` in src/styles/retro.css do the choosing.
+
+    A hidden subtree holds no tab stops and is absent from the accessibility
+    tree, so each appearance presents exactly one index.
+
+    The two lists take the same collection and sort it differently on purpose:
+    the legacy list floats `featured` posts to the top, and the redesigned one is
+    strictly reverse-chronological because it groups by year. See
+    WritingArchive.astro.
+  */}
+  <WritingHero />
+  <WritingArchive articles={articles} />
+
+  <div class="retro-skin">
+    <PageHeader
+      eyebrow="Writing"
+      title="Writing"
+      subtitle="Growth, marketing, AI, and building things."
+    />
+    <ArticleList articles={articles} allTags={allTags} />
+  </div>
 </Layout>

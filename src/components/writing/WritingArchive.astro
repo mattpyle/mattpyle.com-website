@@ -1,0 +1,208 @@
+---
+/**
+ * The /writing post list (docs/projects/redesign/design-export/README.md §3).
+ *
+ * Posts grouped by year: a header row naming the year and its post count, then
+ * one row per post — date, title and excerpt, read length. No tags and no
+ * filter pills; the design bans both (constraint 4), so the tag radiogroup on
+ * this page belongs to the legacy tree only.
+ *
+ * Strict reverse-chronological order, which is a DEVIATION from the legacy list:
+ * that one floats `featured: true` posts to the top. A year heading over a list
+ * that is not in date order reads as a bug, and the grouping is the design.
+ */
+import { formatSiteDate } from '../../lib/format-date.mjs';
+import { readingMinutes } from '../../lib/reading-time';
+
+interface Article {
+  id: string;
+  body?: string;
+  data: { title: string; date: Date; description: string };
+}
+
+interface Props {
+  articles: Article[];
+}
+
+const { articles } = Astro.props;
+
+const byYear = new Map<number, Article[]>();
+for (const article of [...articles].sort((a, b) => b.data.date.getTime() - a.data.date.getTime())) {
+  const year = article.data.date.getUTCFullYear();
+  const bucket = byYear.get(year);
+  if (bucket) bucket.push(article);
+  else byYear.set(year, [article]);
+}
+
+const groups = [...byYear.entries()]
+  .sort((a, b) => b[0] - a[0])
+  .map(([year, posts]) => ({
+    year,
+    count: `${posts.length} ${posts.length === 1 ? 'post' : 'posts'}`,
+    posts,
+  }));
+---
+
+<section class="rd-section archive modern-skin" aria-labelledby="writing-archive-title">
+  {/*
+    The list needs a name in the accessibility tree, and the design has no
+    visible heading for it — the H1 above is the page's only headline. A
+    visually-hidden h2 names the region without reintroducing a label the design
+    removed on purpose.
+  */}
+  <h2 id="writing-archive-title" class="sr-only">All posts</h2>
+
+  {groups.length > 0 ? groups.map(group => (
+    <div class="year-group">
+      <div class="year-head">
+        <span class="year">{group.year}</span>
+        <span class="year-count">{group.count}</span>
+      </div>
+      {group.posts.map(post => (
+        <a href={`/writing/${post.id}/`} class="row">
+          <time datetime={post.data.date.toISOString()} class="row-date">
+            {formatSiteDate(post.data.date)}
+          </time>
+          <span class="row-body">
+            <span class="row-title">{post.data.title}</span>
+            <span class="row-excerpt">{post.data.description}</span>
+          </span>
+          <span class="row-length">{readingMinutes(post.body ?? '')} min</span>
+        </a>
+      ))}
+      {/* Closes the group with the same hairline that opens each row. */}
+      <div class="rows-end"></div>
+    </div>
+  )) : (
+    <p class="empty">More writing coming soon.</p>
+  )}
+</section>
+
+<style>
+  .archive { padding-top: 72px; }
+
+  .year-group + .year-group { margin-top: 56px; }
+
+  .year-head {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 36px;
+    padding-bottom: 8px;
+  }
+
+  .year {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .year-count {
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  /* The 20px padding with a matching negative margin is what lets the hover
+     ground bleed past the text without moving the text. */
+  .row {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) max-content;
+    gap: 36px;
+    align-items: start;
+    padding: 32px 20px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .row:hover { background: var(--tint-writing); }
+
+  .rows-end { border-top: 1px solid var(--rule); }
+
+  .row-date {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+    padding-top: 7px;
+  }
+
+  .row-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .row-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 34px;
+    line-height: 1.14;
+    letter-spacing: -.025em;
+    max-width: 26ch;
+  }
+
+  .row-excerpt {
+    font-size: 17.5px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    max-width: 64ch;
+    text-wrap: pretty;
+  }
+
+  .row-length {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--writing);
+    padding-top: 7px;
+    white-space: nowrap;
+  }
+
+  .empty {
+    margin: 0;
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    .archive { padding-top: 48px; }
+
+    .year-group + .year-group { margin-top: 40px; }
+
+    .year-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    /* Stacked, and the bleed goes with it: at 20px of gutter there is nothing
+       left to bleed into. The read length falls to the foot of the stack in
+       document order rather than being reordered there, so what a screen reader
+       announces and what the page shows stay the same sequence. */
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 22px 0;
+      margin: 0;
+    }
+
+    .row-date,
+    .row-length { padding-top: 0; font-size: 16px; }
+
+    .row-title { font-size: 27px; line-height: 1.18; }
+
+    .row-excerpt { font-size: 17px; }
+  }
+</style>

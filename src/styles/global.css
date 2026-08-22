@@ -384,6 +384,20 @@ textarea:focus-visible,
    the README type scale uses mono at 400 and nowhere else, so the 500 file
    would be dead weight on the critical path.
 
+   BRICOLAGE IS NO LONGER GOOGLE'S FILE. Its `opsz` axis is pinned at 96 and its
+   `wght` axis clipped to the 400-800 declared below, which takes the latin
+   subset from 77KB to 39KB — it gates the hero H1, the LCP element on every
+   redesigned page. It is still a variable font in `wght`, so the four weights
+   still cost one request. What it costs is optical sizing: every size now wears
+   the display cut instead of its own, which leaves the H1s identical (they were
+   already clamped to the axis maximum) and makes text between 22px and 34px
+   about 8% tighter. Regenerate with scripts/fonts/instance-bricolage.py, which
+   carries the full reasoning and the prerequisites.
+
+   The size-matched fallback below did NOT move with it: the pin is at the file's
+   own default instance, so the metrics capsize reads are the same numbers to the
+   unit. Verified, not assumed.
+
    If a font file changes, rename it — /fonts/* is served with an immutable
    cache header (vercel.json). */
 @font-face {
@@ -391,7 +405,7 @@ textarea:focus-visible,
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url('/fonts/bricolage-grotesque-latin.woff2') format('woff2');
+  src: url('/fonts/bricolage-grotesque-opsz96-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -400,7 +414,7 @@ textarea:focus-visible,
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url('/fonts/bricolage-grotesque-latin-ext.woff2') format('woff2');
+  src: url('/fonts/bricolage-grotesque-opsz96-latin-ext.woff2') format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
@@ -547,8 +561,18 @@ html:not([data-appearance='retro']) body.skin-redesign {
 
 /* The legacy `a { color: var(--color-accent) }` is an oxblood that belongs to
    the old palette. Inheriting instead makes every link in the redesign state its
-   own colour, which is the point of the semantic set. */
-html:not([data-appearance='retro']) body.skin-redesign a {
+   own colour, which is the point of the semantic set.
+
+   THE GUARD IS IN `:where()` HERE, and nowhere else in this block, because this
+   rule is a DEFAULT that every component is expected to override. At the full
+   guard's specificity (0,2,3) it silently beat a component rule written on one
+   class — `.rd-all-link { color: var(--writing) }` compiles to
+   `.rd-all-link[data-astro-cid-…]`, which is (0,2,0) — and the section links,
+   the hero llms.txt link and the post rail's actions all rendered in plain ink
+   instead of their semantic colour. Measured on the served build, not reasoned
+   about. `:where()` contributes nothing, so this lands at (0,1,2): still above
+   the bare `a` rule it exists to cancel, and below anything a component says. */
+:where(html:not([data-appearance='retro'])) body.skin-redesign a {
   color: inherit;
   transition: color 240ms ease;
 }
@@ -669,4 +693,246 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
   font-size: 15px;
   background: var(--ink);
   color: var(--paper);
+}
+
+/* ── The hero fill ───────────────────────────────────────────────────────────
+   An underline that grows into a filled block on hover. It appears on three
+   headlines now — the homepage name, the /writing H1, the post H1 — and the
+   spec's rule is that it takes the colour of the SECTION it belongs to, so it
+   is one rule parameterised by `--fill` rather than three copies that can drift
+   apart in their geometry.
+
+   `--fill` is set by a class, never by an inline `style` attribute: the CSP
+   declares `style-src 'self'` with no `'unsafe-inline'`, and an inline style
+   (which is also what Astro's `define:vars` compiles to) is refused in
+   production.
+
+   The bottom padding is load-bearing and the matching negative margin is why it
+   costs no layout: together they extend the PAINT box below the baseline so a
+   descender stays inside the filled block and the reversed text stays legible.
+   Do not add the horizontal equivalent — it produced a visible sliver of colour
+   past the block when the text was selected.
+
+   Painted with a background-image sized to 0.07em and grown to 100%, rather
+   than with a pseudo-element or a scaleY: background-size animates on the
+   compositor and, unlike a transform, cannot be caught mid-flight looking like
+   a half-drawn rule. */
+.rd-fill {
+  --fill: var(--agents);
+  white-space: nowrap;
+  display: inline-block;
+  padding: 0 0 .16em;
+  margin: 0 0 -.16em;
+  background-image: linear-gradient(var(--fill), var(--fill));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% .07em;
+  transition:
+    background-size 420ms cubic-bezier(.2, .8, .2, 1),
+    color 380ms ease;
+}
+
+.rd-fill--writing { --fill: var(--writing); }
+
+/* :active as well as :hover so the effect exists on touch, where there is no
+   hover state to enter. */
+.rd-fill:hover,
+.rd-fill:active {
+  background-size: 100% 100%;
+  color: var(--paper);
+}
+
+/* ── Redesign prose ──────────────────────────────────────────────────────────
+   The rendered-markdown scale for the redesigned post template
+   (docs/projects/redesign/design-export/README.md §4, "Article").
+
+   It is an OVERLAY on the `.prose` block further up this file rather than an
+   edit to it. That block is shared by the writing post page and the changelog
+   entry page, and the changelog has not been redesigned yet — editing it in
+   place would move a surface this branch has not rebuilt, at the exact type
+   scale it was not designed for. Guarded by `body.skin-redesign`, the changelog
+   entry page's prose is byte-identical to what it was before this branch.
+
+   WHEN THE CHANGELOG CONVERTS, these rules and the ones above merge into one
+   block; that is the same deletion the `skin-redesign` flag is waiting for.
+
+   Body headings start at h2 because the page template owns the h1 — CLAUDE.md's
+   rule, unchanged here. */
+html:not([data-appearance='retro']) body.skin-redesign .prose {
+  max-width: 68ch;
+  font-family: var(--font-body);
+  font-size: 20px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  gap: 28px;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose p {
+  text-wrap: pretty;
+}
+
+/* `scroll-margin-top` is what makes the rail's contents links land below the
+   sticky header, and it is the whole mechanism — the spec is explicit that
+   there is no JS behind those anchors. 110px clears the header at its tallest. */
+html:not([data-appearance='retro']) body.skin-redesign .prose h2 {
+  margin: 14px 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+  color: var(--ink);
+  scroll-margin-top: 110px;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose h3 {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 23px;
+  line-height: 1.25;
+  letter-spacing: -.02em;
+  color: var(--ink);
+  scroll-margin-top: 110px;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Writing blue, because a link inside a writing post is part of that section.
+   The underline stays — inside a paragraph, colour alone does not distinguish a
+   link (WCAG 1.4.1), and the redesign's link colours are section labels rather
+   than link affordances. */
+html:not([data-appearance='retro']) body.skin-redesign .prose a {
+  color: var(--writing);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--rule);
+  transition: color 240ms ease, text-decoration-color 240ms ease;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose a:hover {
+  color: var(--writing-hover);
+  text-decoration-color: currentColor;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose blockquote {
+  margin: 12px 0;
+  padding: 22px 26px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--writing);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 21px;
+  line-height: 1.5;
+  font-style: normal;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose ul,
+html:not([data-appearance='retro']) body.skin-redesign .prose ol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding-left: 26px;
+  line-height: 1.6;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose li {
+  margin-bottom: 0;
+}
+
+/* A nested list is a child of an <li>, and the flex column above would leave it
+   with no gap from the text it hangs under. */
+html:not([data-appearance='retro']) body.skin-redesign .prose li > ul,
+html:not([data-appearance='retro']) body.skin-redesign .prose li > ol {
+  margin-top: 12px;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose code {
+  font-family: var(--font-mono-plex);
+  font-size: .85em;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--ink-2);
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose pre {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  font-family: var(--font-mono-plex);
+  font-size: 15.5px;
+  line-height: 1.6;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose pre code {
+  font-size: 1em;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose hr {
+  border-top-color: var(--rule);
+  margin: 8px 0;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose figcaption {
+  margin-top: 10px;
+  font-family: var(--font-mono-plex);
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--ink-6);
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose img {
+  border-radius: var(--radius);
+}
+
+/* A wide table scrolls inside its own box rather than widening the page: the
+   reflow row of the a11y suite fails on a horizontally scrolling document. */
+html:not([data-appearance='retro']) body.skin-redesign .prose table {
+  display: block;
+  overflow-x: auto;
+  font-family: var(--font-mono-plex);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose th,
+html:not([data-appearance='retro']) body.skin-redesign .prose td {
+  padding: 10px 16px 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+html:not([data-appearance='retro']) body.skin-redesign .prose thead th {
+  font-size: 15px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-6);
+  font-weight: 400;
+}
+
+@media (max-width: 720px) {
+  html:not([data-appearance='retro']) body.skin-redesign .prose {
+    font-size: 18px;
+    gap: 24px;
+  }
+
+  html:not([data-appearance='retro']) body.skin-redesign .prose h2 { font-size: 26px; }
+  html:not([data-appearance='retro']) body.skin-redesign .prose h3 { font-size: 21px; }
+
+  html:not([data-appearance='retro']) body.skin-redesign .prose blockquote {
+    padding: 18px 20px;
+    font-size: 19px;
+  }
 }
