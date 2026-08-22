@@ -1,0 +1,147 @@
+---
+/**
+ * The /changelog headline.
+ *
+ * No mockup covers this page (Matt, 2026-08-21); it dresses like the writing
+ * index, so this is WritingHero.astro's shape with the fill in CHANGELOG AMBER.
+ *
+ * The right-hand block reports what the ledger holds — a real count off the
+ * collection, not an invented one — and links the machine-readable form of the
+ * same log. Both are live endpoints.
+ *
+ * A paginated page says which page it is, in place of the count: page 2 showing
+ * "37 entries" would be reporting the whole log while listing twenty of it.
+ */
+import { formatSiteDate } from '../../lib/format-date.mjs';
+
+interface Props {
+  /** Entries in the whole collection, not on this page. */
+  total: number;
+  /** The newest entry's date, or null when the log is empty. */
+  latest: Date | null;
+  /** 1 on /changelog, 2 on /changelog/2, and so on. */
+  currentPage: number;
+}
+
+const { total, latest, currentPage } = Astro.props;
+
+const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
+---
+
+{/*
+  A div, not a section — the same call WritingHero.astro made: `npm run
+  validate:html` names an h1 inside sectioning content, and an unnamed <section>
+  is not exposed as a region anyway.
+*/}
+<div class="rd-section changelog-hero modern-skin">
+  <h1><span class="rd-fill rd-fill--changelog">Changelog</span></h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      What has shipped on this site — launches, features, and the occasional experiment.
+    </p>
+    <div class="hero-facts">
+      <span class="hero-facts-copy">
+        {currentPage === 1 ? countLabel : `Page ${currentPage} of ${countLabel}`}{
+          latest && <>, latest <time datetime={latest.toISOString()}>{formatSiteDate(latest)}</time></>
+        }.
+      </span>
+      <span class="hero-facts-links">
+        <a href="/changelog.md" class="link-agents">changelog.md</a>
+      </span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .changelog-hero { padding-top: 78px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 40px;
+    margin-top: 44px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    max-width: 32ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .hero-facts-copy {
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .hero-facts-links {
+    display: flex;
+    column-gap: 20px;
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+  }
+
+  .link-agents { color: var(--agents); }
+  .link-agents:hover { color: var(--agents-hover); }
+
+  @media (max-width: 720px) {
+    .changelog-hero { padding-top: 40px; }
+
+    h1 {
+      /* One word, and a long one: 68px overflows a 320px viewport where
+         "Writing" and "Projects" fit. Measured, not guessed. */
+      font-size: 52px;
+      line-height: .96;
+      letter-spacing: -.04em;
+    }
+
+    .hero-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 28px;
+      margin-top: 28px;
+    }
+
+    .hero-statement { font-size: 24px; }
+
+    .hero-facts { padding-left: 16px; }
+
+    /* 44px tap targets, per the mobile spec. */
+    .hero-facts-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+  }
+</style>

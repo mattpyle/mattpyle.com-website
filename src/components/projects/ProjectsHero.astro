@@ -1,0 +1,143 @@
+---
+/**
+ * The /projects headline.
+ *
+ * No mockup covers this page (Matt, 2026-08-21). It takes the /writing hero's
+ * shape — H1, then a statement beside a bordered right-hand block — with the
+ * fill in PROJECTS GREEN, because the spec's rule is that the fill always wears
+ * the colour of the section it belongs to.
+ *
+ * The right-hand block is Matt's GitHub profile, which is a real destination
+ * already linked from the footer and /about. Constraint 10 rules out inventing
+ * a count or a label to fill the slot, so nothing else goes here.
+ */
+---
+
+{/*
+  A div, not a section — the same call WritingHero.astro made: `npm run
+  validate:html` names an h1 inside sectioning content, and an unnamed <section>
+  is not exposed as a region anyway.
+*/}
+<div class="rd-section projects-hero modern-skin">
+  <h1><span class="rd-fill rd-fill--projects">Projects</span></h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      Software experiments, some built on Temporal and some not. Hobby projects, not a portfolio.
+    </p>
+    <div class="hero-source">
+      <span class="hero-source-copy">The source is public.</span>
+      <span class="hero-source-links">
+        <a
+          href="https://github.com/mattpyle"
+          class="link-projects"
+          target="_blank"
+          rel="noopener noreferrer"
+        >github.com/mattpyle<span class="sr-only"> (opens in a new tab)</span></a>
+      </span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .projects-hero { padding-top: 78px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 40px;
+    margin-top: 44px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    max-width: 32ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-source {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .hero-source-copy {
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .hero-source-links {
+    display: flex;
+    column-gap: 20px;
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+  }
+
+  .link-projects { color: var(--projects); }
+  .link-projects:hover { color: var(--projects-hover); }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    .projects-hero { padding-top: 40px; }
+
+    h1 {
+      font-size: 68px;
+      line-height: .94;
+      letter-spacing: -.04em;
+    }
+
+    .hero-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 28px;
+      margin-top: 28px;
+    }
+
+    .hero-statement { font-size: 24px; }
+
+    .hero-source { padding-left: 16px; }
+
+    /* 44px tap targets, per the mobile spec. */
+    .hero-source-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+  }
+</style>

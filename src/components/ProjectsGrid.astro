@@ -3,12 +3,14 @@ import FilterPills from './FilterPills.astro';
 
 interface Project {
   /**
-   * The content collection's slug, which becomes the card's anchor.
+   * The content collection's slug.
    *
    * There are no per-project detail pages, so `/projects/#project-<id>` is the address a project
-   * has. It is what llms.txt links each project bullet to (src/pages/llms.txt.ts), so an agent
-   * reading the list has somewhere to follow — the anchor has to land on the card rather than at
-   * the top of a page.
+   * has, and it is what llms.txt links each project bullet to (src/pages/llms.txt.ts). THAT ANCHOR
+   * NO LONGER LIVES HERE. An id is unique per document and /projects ships two trees, so it sits
+   * on the redesigned card in src/components/projects/ProjectsBoard.astro instead: that is the
+   * tree the default appearance displays, and a `display: none` element is not a scroll target.
+   * In retro the fragment resolves to the page rather than to the card.
    */
   id: string;
   data: {
@@ -73,7 +75,7 @@ const pills = [
               {formatDate(project.data.date)}
             </time>
           </header>
-          <h2 id={`project-${project.id}`}>{project.data.title}</h2>
+          <h2>{project.data.title}</h2>
           <p class="card-desc">{project.data.description}</p>
           <ul role="list" class="card-tags">
             {project.data.tags.map(tag => <li class="tag-pill">{tag}</li>)}

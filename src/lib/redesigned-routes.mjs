@@ -22,16 +22,19 @@
  */
 
 /** Trailing-slash canonical form, matching the hrefs in the nav. */
-const REDESIGNED = new Set(['/', '/writing/']);
+const REDESIGNED = new Set(['/', '/writing/', '/projects/', '/changelog/']);
 
 /**
  * Whole subtrees, for a template that converts every one of its pages at once.
- * `/writing/` is listed above as well: this prefix covers the posts under it,
- * and the index itself is an exact match rather than a prefix so that adding a
- * post template here can never silently convert an index that has not been
- * rebuilt.
+ * `/writing/` and `/changelog/` are listed above as well: the prefix covers the
+ * pages under each — posts, and the changelog's entries plus its paginated
+ * pages at /changelog/2 and beyond — and the index itself is an exact match
+ * rather than a prefix so that adding an entry template here can never silently
+ * convert an index that has not been rebuilt.
+ *
+ * `/projects/` is an exact match with no prefix: it has no pages beneath it.
  */
-const REDESIGNED_PREFIXES = ['/writing/'];
+const REDESIGNED_PREFIXES = ['/writing/', '/changelog/'];
 
 /**
  * @param {string} pathname
