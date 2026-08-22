@@ -121,14 +121,16 @@ export const PAGES: PageSpec[] = [
       '.lg-tags--desktop .tag-pill',
       '.lg-tags--mobile .tag-pill',
     ],
-    // Three regions carry a COUNT, which every published entry changes: the
-    // hero's "N entries, latest …" line, each year head, and the pager's
-    // "showing X of Y".
+    // ONLY THE ROWS ARE REDACTED. Three regions on this page carry a COUNT that
+    // every published entry changes — the hero's "N entries, latest …" line,
+    // the year head, and the pager's "showing X of Y" — and redacting a count
+    // is the one thing that must not happen to it: `·` asserts nothing, so a
+    // pager that rendered empty, or a hero that lost its number, would pass.
+    // They are hand-written regexes in the golden instead, the way
+    // steward.aria.yml holds its own counts. See the note in that golden's
+    // sibling spec about what a forced regeneration does to them.
     snapshotRedact: [
       '[data-module="changelog-log"] .log-row',
-      '.log .year-head',
-      '.hero-facts-copy',
-      '.pager-count',
       '[data-module="changelog-ledger"] .lg-row',
       '.filter-status',
     ],

@@ -18,9 +18,9 @@
 - main:
   - heading "Changelog" [level=1]
   - paragraph: What has shipped on this site — launches, features, and the occasional experiment.
-  - text: ·
-  - time: ·
-  - text: ·
+  - text: /\d+ entries, latest/
+  - time: /\d{2} \w{3} \d{4}/
+  - text: .
   - link "changelog.md":
     - /url: /changelog.md
   - region "All entries":
@@ -33,12 +33,12 @@
       - radio "infra"
       - radio "experiment"
     - paragraph: ·
-    - text: ·
+    - text: /\d+/
     - link "· · · · ·":
       - /url: "#"
       - time: ·
       - text: ""
-  - navigation "Changelog pagination": ·
+  - navigation "Changelog pagination": /showing \d+ of \d+/
 - contentinfo:
   - text: Matt Pyle
   - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
