@@ -2,12 +2,14 @@
 import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import AboutGrid from '../components/AboutGrid.astro';
+import AboutHero from '../components/about/AboutHero.astro';
+import AboutBody from '../components/about/AboutBody.astro';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 // The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
 // rather than written out, so this link and the sibling the middleware would actually serve
 // cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
-// absent rather than null.
+// absent rather than null. The portrait rail links the same value for the same reason.
 const markdownUrl = markdownSiblingFor('/about/') ?? undefined;
 ---
 
@@ -17,10 +19,32 @@ const markdownUrl = markdownSiblingFor('/about/') ?? undefined;
   description="Matt Pyle is Director of Growth at Temporal Technologies: growth marketer, hobbyist builder, and a curious person who ships things in public."
   markdownAlternate={markdownUrl}
 >
-  <PageHeader
-    eyebrow="About"
-    title="Matt Pyle"
-    subtitle="Director of Growth at Temporal Technologies."
-  />
-  <AboutGrid />
+  {/*
+    TWO ABOUT PAGES IN ONE DOCUMENT, one shown per appearance — the same
+    construction src/pages/index.astro and src/pages/writing/index.astro use, and
+    for the same reason: the redesign rebuilds the MODERN appearance only, retro
+    is a client-side preference the server cannot read, so both trees ship and CSS
+    chooses. `.modern-skin` / `.retro-skin` in src/styles/retro.css do the
+    choosing.
+
+    A hidden subtree holds no tab stops and is absent from the accessibility
+    tree, so each appearance presents exactly one page — including exactly one
+    h1, "About" in modern and "Matt Pyle" in retro.
+
+    The two trees carry the same facts in different words: the redesigned tree is
+    a prose-led page under the bundle's section structure, the legacy one is the
+    bio-plus-links grid it has always been. The headshot is the same file in both,
+    so a reader switching appearance pays for one image.
+  */}
+  <AboutHero />
+  <AboutBody markdownUrl={markdownUrl} />
+
+  <div class="retro-skin">
+    <PageHeader
+      eyebrow="About"
+      title="Matt Pyle"
+      subtitle="Director of Growth at Temporal Technologies."
+    />
+    <AboutGrid />
+  </div>
 </Layout>

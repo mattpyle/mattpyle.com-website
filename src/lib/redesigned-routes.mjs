@@ -22,7 +22,7 @@
  */
 
 /** Trailing-slash canonical form, matching the hrefs in the nav. */
-const REDESIGNED = new Set(['/', '/writing/', '/projects/', '/changelog/']);
+const REDESIGNED = new Set(['/', '/writing/', '/projects/', '/changelog/', '/about/', '/steward/']);
 
 /**
  * Whole subtrees, for a template that converts every one of its pages at once.

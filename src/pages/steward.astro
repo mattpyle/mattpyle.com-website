@@ -18,6 +18,8 @@
  */
 import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
+import StewardHero from '../components/steward/StewardHero.astro';
+import StewardBody from '../components/steward/StewardBody.astro';
 import { STEWARD_FAST_CHECKS, STEWARD_CHECK_CATEGORIES } from '../data/steward-audit-checks.mjs';
 import { readLimits, readDeepLimits } from '../lib/mcp-rate-limit.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
@@ -62,6 +64,19 @@ const byCategory = STEWARD_CHECK_CATEGORIES.map(category => ({
   checks: STEWARD_FAST_CHECKS.filter(check => check.category === category.id),
 }));
 
+const windowLabel = windowHours === 1 ? 'One hour' : `${windowHours} hours`;
+
+/**
+ * The four rate-limit rows, built once so the redesigned table and the legacy one cannot disagree
+ * about what this deployment enforces.
+ */
+const limitRows = [
+  { tier: 'Fast', scope: 'Per caller', cap: `${fastLimits.perCaller}`, window: windowLabel },
+  { tier: 'Fast', scope: 'Everyone together', cap: `${fastLimits.globalPerDay}`, window: 'One UTC day' },
+  { tier: 'Deep', scope: 'Per caller', cap: `${deepLimits.perCaller}`, window: 'One UTC day' },
+  { tier: 'Deep', scope: 'Everyone together', cap: `${deepLimits.globalPerDay}`, window: 'One UTC day' },
+];
+
 const refusalSnippet = `User-agent: ${AGENT_TOKEN}\nDisallow: /`;
 
 const callSnippet = `curl -sS ${ENDPOINT} \\
@@ -93,7 +108,7 @@ const extraJsonLd = [
     name: title,
     description,
     url: canonical,
-    dateModified: '2026-08-15',
+    dateModified: '2026-08-22',
     author: { '@id': personId },
     publisher: { '@id': personId },
     mainEntityOfPage: canonical,
@@ -135,6 +150,45 @@ const extraJsonLd = [
   extraJsonLd={extraJsonLd}
   markdownAlternate={markdownUrl}
 >
+  {/*
+    TWO STEWARD PAGES IN ONE DOCUMENT, one shown per appearance — the same construction
+    src/pages/index.astro and src/pages/writing/index.astro use, and for the same reason: the
+    redesign rebuilds the MODERN appearance only, retro is a client-side preference the server
+    cannot read, so both trees ship and CSS chooses. `.modern-skin` / `.retro-skin` in
+    src/styles/retro.css do the choosing.
+
+    A hidden subtree holds no tab stops and is absent from the accessibility tree, so each
+    appearance presents exactly one page.
+
+    Both trees take the SAME derived values — the User-Agent, the check list, the resolved caps —
+    so the two can only ever disagree about wording, never about what this deployment enforces.
+    Their heading ids differ (`rd-` prefixed in the redesigned tree) because an id is unique per
+    document, not per subtree.
+  */}
+  <StewardHero endpoint={ENDPOINT} />
+  <StewardBody
+    userAgent={USER_AGENT}
+    agentToken={AGENT_TOKEN}
+    endpoint={ENDPOINT}
+    issuesUrl={ISSUES_URL}
+    refusalSnippet={refusalSnippet}
+    callSnippet={callSnippet}
+    deepCallSnippet={deepCallSnippet}
+    checkCount={STEWARD_FAST_CHECKS.length}
+    byCategory={byCategory}
+    limitRows={limitRows}
+  />
+
+  {/*
+    The legacy page below is unchanged apart from this wrapper and six prose re-wraps: Astro's
+    `compressHTML` drops the whitespace either side of an element boundary when it contains a
+    newline, so a line starting with `<code>` was rendering glued to the word before it. Live on
+    production today. scripts/check-inline-tag-wrapping.mjs finds the shape.
+
+    Its indentation is left as found so this diff shows the six re-wraps rather than 280 shifted
+    lines.
+  */}
+  <div class="retro-skin">
   <PageHeader
     eyebrow="Agent · Auditor"
     title="Steward"
@@ -210,9 +264,9 @@ const extraJsonLd = [
         people's sites.
       </p>
       <p>
-        So there are two tiers. The <strong>fast tier</strong> is the {STEWARD_FAST_CHECKS.length}
-        checks below: plain HTTP, seconds, and the report comes back in the call. The
-        <strong>deep tier</strong> opens up to three of the site's own pages in a real browser and
+        So there are two tiers. The <strong>fast tier</strong> is the {STEWARD_FAST_CHECKS.length} checks
+        below: plain HTTP, seconds, and the report comes back in the call. The <strong>deep tier</strong> opens
+        up to three of the site's own pages in a real browser and
         reports Lighthouse's per-axis scores and axe-core's violation counts across them. It costs
         a site far more than a dozen requests, so it is capped much harder and it takes minutes
         rather than seconds.
@@ -268,37 +322,35 @@ const extraJsonLd = [
       </p>
       <pre><code>{callSnippet}</code></pre>
       <p>
-        Two renderings ship in the one response: the canonical JSON in
-        <code>structuredContent</code>, one entry per check with its evidence, and the same report as
+        Two renderings ship in the one response: the canonical JSON in <code>structuredContent</code>, one
+        entry per check with its evidence, and the same report as
         a markdown summary in the text content. A <code>GET</code> on <a href={ENDPOINT}>the endpoint
         itself</a> answers <code>405</code> with this example rather than a bare status.
       </p>
       <p>
-        The unit audited is a site, not a page: any path in the URL is ignored. Only
-        <code>http</code> and <code>https</code> targets are accepted, and addresses on private
-        networks are refused before a connection is opened.
+        The unit audited is a site, not a page: any path in the URL is ignored. Only <code>http</code> and <code>https</code> targets
+        are accepted, and addresses on private networks are refused before a connection is opened.
       </p>
 
       <h3>The deep tier: <code>deep_audit</code> and <code>get_audit</code></h3>
       <p>
         The same endpoint carries the browser-rendered tier, and it has a different shape because it
         has a different cost. A deep audit takes minutes, which is longer than any MCP client holds
-        a tool call open, so <code>deep_audit(url)</code> returns a workflow ID straight away and
-        <code>get_audit(workflowId, view)</code> reads it back. There are no findings in the
-        <code>deep_audit</code> response, and it says so.
+        a tool call open, so <code>deep_audit(url)</code> returns a workflow ID straight away and <code>get_audit(workflowId, view)</code> reads
+        it back. There are no findings in the <code>deep_audit</code> response, and it says so.
       </p>
       <pre><code>{deepCallSnippet}</code></pre>
       <p>
         Poll <code>get_audit</code> with <code>view: "status"</code> until <code>done</code> is
-        true, then read <code>view: "report"</code> for the canonical JSON or
-        <code>"summary"</code> for markdown. While it runs, the status view lists each unit of work
+        true, then read <code>view: "report"</code> for the canonical JSON or <code>"summary"</code> for
+        markdown. While it runs, the status view lists each unit of work
         with its state, and anything being retried carries its attempt number, straight from
         Temporal rather than from a count kept by hand.
       </p>
       <p>
         <strong>If your audit says it is queued, it is.</strong> There is one worker behind this
-        endpoint, so a busy moment is a real wait rather than a slow site. The status view answers
-        <code>queued: true</code> with a <code>queuePosition</code> when nothing has picked your run
+        endpoint, so a busy moment is a real wait rather than a slow site. The status view answers <code>queued: true</code> with
+        a <code>queuePosition</code> when nothing has picked your run
         up yet, and it says so plainly rather than leaving you to guess. Either way the audit is
         durable: it survives a worker restart, and the workflow ID keeps answering.
       </p>
@@ -379,6 +431,7 @@ const extraJsonLd = [
         withdrawn without notice.
       </p>
     </section>
+  </div>
   </div>
 </Layout>
 

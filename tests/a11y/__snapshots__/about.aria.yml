@@ -3,59 +3,96 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Projects":
+    - link "/projects":
       - /url: /projects/
-    - link "Changelog":
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
-  - paragraph: About
-  - heading "Matt Pyle" [level=1]
-  - paragraph: Director of Growth at Temporal Technologies.
-  - complementary:
-    - img "Matt Pyle"
-    - paragraph: MATT PYLE
-    - paragraph: Director of Growth
-    - paragraph: Temporal Technologies
-  - region "Background":
-    - heading "Background" [level=2]
-    - paragraph: Eyup! I think about product-led growth, marketing strategy, and the intersection of AI with how modern marketing teams actually work.
-    - paragraph: I build software as a hobbyist — not a professional engineer, but someone who increasingly vibe codes to bring ideas to life. Most of the projects are small and questionably useful. Occasionally one escapes into the wild.
-    - paragraph: This site is where I think out loud.
-  - region "Areas of interest":
-    - heading "Areas of interest" [level=2]
+  - heading "About" [level=1]
+  - paragraph: I do growth for a living and build things as a hobby. This site is where I think out loud.
+  - text: Reading this as an agent?
+  - link "/agents.md":
+    - /url: /agents.md
+  - link "/llms.txt":
+    - /url: /llms.txt
+  - paragraph: I am Matt Pyle. I do growth for a living — product-led growth, SaaS marketing strategy, and what AI is doing to the way marketing teams work. I build software as a hobby, and the two keep meeting in the middle.
+  - paragraph: "I am not a professional engineer. I write real, working code with Claude Code as a collaborator, and most of what comes out is small and questionably useful. Occasionally one escapes into the wild. The building is still the useful part: marketing something you have never tried to build is guesswork with a nicer deck."
+  - region "This site is an experiment":
+    - heading "This site is an experiment" [level=2]
+    - paragraph: Agents are becoming first-class readers of the web. Not crawlers indexing it for somebody else — readers, arriving with a question and leaving with an answer. Most of the web was not written for them, and the conventions that would fix that are being drafted right now.
+    - paragraph:
+      - text: So this site implements them and reports back.
+      - link "llms.txt":
+        - /url: /llms.txt
+      - text: ","
+      - link "agents.md":
+        - /url: /agents.md
+      - text: ", a WebMCP surface with tools an agent can actually call, markdown at every URL for anything that asks for it, and a"
+      - link "scorecard":
+        - /url: /scorecard/
+      - text: that publishes the audit numbers whether or not they are flattering. When a check fails, the scorecard says so.
+  - blockquote: An agent reading this page is a visitor, not traffic. It gets the same content, in a format it can use, at the same URL.
+  - region "Everything here is built in the open":
+    - heading "Everything here is built in the open" [level=2]
+    - paragraph:
+      - text: The code is public, the
+      - link "changelog":
+        - /url: /changelog/
+      - text: explains every change in plain English, and the posts include the parts I got wrong. I write the words; the agents I build with help me ship them, and the site says so.
+    - paragraph:
+      - text: The day job is growth at
+      - strong: Temporal Technologies
+      - text: ", which is where durable execution and a human in the loop stopped being abstractions to me. That belief is load-bearing in what runs here:"
+      - link "the agent that reviews and publishes this site":
+        - /url: /steward/
+      - text: waits for me to approve a draft before anything ships.
+  - region "Some things that are true":
+    - heading "Some things that are true" [level=2]
     - list:
-      - listitem: Product-led growth
-      - listitem: SaaS marketing strategy
-      - listitem: AI + marketing workflows
-      - listitem: Building software (the hobbyist kind)
-      - listitem: Good coffee, taken seriously
-      - listitem: Asking "why does this actually work?"
-  - region "Connect":
-    - heading "Connect" [level=2]
-    - navigation "Contact and social links":
-      - link "GITHUB github.com/mattpyle ↗":
-        - /url: https://github.com/mattpyle
-      - link "LINKEDIN linkedin.com/in/matt-pyle ↗":
-        - /url: https://linkedin.com/in/matt-pyle
-- contentinfo:
-  - navigation "Social links":
-    - link "RSS feed for Writing":
-      - /url: /rss.xml
-      - text: ""
-    - link "GitHub (opens in a new tab)":
+      - listitem: I am not a professional engineer, and nothing here pretends otherwise.
+      - listitem: Good coffee, taken seriously.
+      - listitem: The question behind most of this is “why does this actually work?”
+  - separator
+  - region "Say hello":
+    - heading "Say hello" [level=2]
+    - link "bluesky @mattpyle.com (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "github mattpyle (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin matt-pyle (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "rss rss.xml":
+      - /url: /rss.xml
+    - paragraph: No newsletter, no calendar link, nothing for sale. If you write to me about the site I will probably write back about the site.
+  - complementary "Matt Pyle at a glance":
+    - img "Matt Pyle"
+    - paragraph: Growth by trade. Hobbyist builder otherwise.
+    - separator
+    - text: day job Director of Growth, Temporal Technologies writing here since July 2026 this page as data
+    - link "about.md":
+      - /url: /about.md
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Social links":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
+      - /url: https://github.com/mattpyle
+    - link "linkedin (opens in a new tab)":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status

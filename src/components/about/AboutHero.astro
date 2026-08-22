@@ -1,0 +1,138 @@
+---
+/**
+ * The /about headline (docs/projects/redesign/design-export-remaining/design_handoff_about_page).
+ *
+ * Same construction as WritingHero.astro — H1, then a statement beside a bordered
+ * right-hand block — with the fill left on its default `--agents`, because /about
+ * is an agents surface. No fill variant class is added for that reason.
+ *
+ * The hero row and the body band below it share ONE grid so the page has a single
+ * right edge: `minmax(0, 68ch) 300px` with a 72px gap, declared in both. The
+ * reading column is 68ch; the 300px column carries the agent block here and the
+ * portrait rail below.
+ */
+---
+
+{/*
+  A div, not a section — the same call WritingHero.astro and ProjectsHero.astro
+  made: `npm run validate:html` names an h1 inside sectioning content, and an
+  unnamed <section> is not exposed as a region anyway.
+*/}
+<div class="rd-section about-hero modern-skin">
+  <h1><span class="rd-fill">About</span></h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      I do growth for a living and build things as a hobby. This site is where I think out loud.
+    </p>
+    {/*
+      The agent block. Deliberately the same shape as WritingHero's
+      `.hero-subscribe`: a label over two mono links, both agent surfaces, both
+      in the agents magenta.
+    */}
+    <div class="hero-agents">
+      <span class="hero-agents-copy">Reading this as an agent?</span>
+      <span class="hero-agents-links">
+        <a href="/agents.md">/agents.md</a>
+        <a href="/llms.txt">/llms.txt</a>
+      </span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .about-hero { padding-top: 78px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-row {
+    display: grid;
+    grid-template-columns: minmax(0, 68ch) 300px;
+    gap: 72px;
+    align-items: end;
+    margin-top: 44px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    max-width: 34ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-agents {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .hero-agents-copy {
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .hero-agents-links {
+    display: flex;
+    column-gap: 20px;
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+  }
+
+  .hero-agents-links a { color: var(--agents); }
+  .hero-agents-links a:hover { color: var(--agents-hover); }
+
+  /* The grid collapses one step earlier than the type does: 300px + 68ch + 72px
+     stops fitting well before 720px, and a squeezed reading column is worse than
+     a stacked one. */
+  @media (max-width: 1000px) {
+    .hero-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
+
+    .hero-statement { max-width: 46ch; }
+  }
+
+  @media (max-width: 720px) {
+    .about-hero { padding-top: 40px; }
+
+    h1 {
+      font-size: 68px;
+      line-height: .94;
+      letter-spacing: -.04em;
+    }
+
+    .hero-row { margin-top: 28px; }
+
+    .hero-statement { font-size: 24px; }
+
+    .hero-agents { padding-left: 16px; }
+
+    /* 44px tap targets, per the mobile spec. */
+    .hero-agents-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+  }
+</style>

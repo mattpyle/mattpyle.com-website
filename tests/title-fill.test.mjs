@@ -54,17 +54,19 @@ test('extra whitespace does not become an empty fill', () => {
  * and the negative cases are the point: an unconverted route must stay
  * byte-identical to what it was before the branch.
  */
-test('the redesigned routes are the homepage, /writing, /projects and /changelog', () => {
+test('the redesigned routes are the homepage, /writing, /projects, /changelog, /about and /steward', () => {
   for (const path of [
     '/',
     '/writing', '/writing/', '/writing/hello-world', '/writing/hello-world/',
     '/projects', '/projects/',
     // The index, its paginated pages and its entries convert together.
     '/changelog', '/changelog/', '/changelog/2/', '/changelog/public-scorecard/',
+    '/about', '/about/',
+    '/steward', '/steward/',
   ]) {
     assert.equal(isRedesignedRoute(path), true, path);
   }
-  for (const path of ['/about/', '/scorecard/', '/steward/', '/webmcp/']) {
+  for (const path of ['/scorecard/', '/webmcp/']) {
     assert.equal(isRedesignedRoute(path), false, path);
   }
 });
