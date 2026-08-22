@@ -56,6 +56,11 @@ export function siteSections(base) {
       url: `${base}/scorecard/`,
       summary: 'Latest verified accessibility, performance, SEO, and agentic browsing scores.',
     },
+    {
+      name: 'Activity',
+      url: `${base}/activity/`,
+      summary: 'Agent traffic to this site: agent-surface fetches and pages served as Markdown, counted per UTC hour.',
+    },
     { name: 'About', url: `${base}/about/`, summary: 'Full bio, interests, contact links.' },
   ];
 }

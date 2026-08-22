@@ -195,25 +195,32 @@ export const PAGES: PageSpec[] = [
   {
     name: 'scorecard',
     path: '/scorecard',
-    why: 'Scorecard template, the details/summary run history disclosures, and the live Agent traffic tables',
+    why: 'Scorecard template: the redesigned gate row and previous-runs list, plus the legacy details/summary run history disclosures',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    //
     // Every scorecard run rewrites src/data/scorecard-runs.json, so every number,
     // date and commentary line on this page is content-variable by construction.
-    // The four metric names are not, and they are the part worth guarding.
+    // The four GATE NAMES are not, and they are the part worth guarding.
     //
-    // The Agent traffic section is content-variable in a stronger sense again: it
-    // reads a live store per request. The suite serves it with AGENT_TRAFFIC_FIXTURE
-    // set (see playwright.config.ts), so the row COUNT is deterministic and the
-    // shape of a row is worth guarding — one row per table, with its cells redacted.
-    snapshotKeepFirst: [
-      '.history-run',
-      'table[aria-labelledby="traffic-surfaces-title"] tbody tr',
-      'table[aria-labelledby="traffic-clients-title"] tbody tr',
-      'table[aria-labelledby="traffic-markdown-title"] tbody tr',
-    ],
+    // THE GATE SCORES ARE NOT REDACTED and must not be: `100` and `4/4` are the
+    // denominator rule this page shares with the homepage panel, and `·` would
+    // assert nothing about either. They are hand-written regexes in the golden,
+    // the way steward.aria.yml holds its counts.
+    //
+    // The Agent traffic tables are gone from this page entirely — they moved to
+    // /activity on 2026-08-22, which has its own row below.
+    snapshotKeepFirst: ['.run', '.history-run'],
+    // `.run-date` and `.run-note`, never `.run` itself: the middle cell of a previous-run row is
+    // its gates-passing COUNT, and `·` would assert nothing about it. It stays in the golden as a
+    // hand-written regex, the way the changelog pager's count does.
     snapshotRedact: [
-      '.freshness',
-      '#agent-traffic .num',
-      '#agent-traffic tbody tr',
+      '.provenance',
+      '.findings',
+      '.run-date',
+      '.run-note',
       '#latest-run-title',
       '.latest-time',
       '.run-verdict',
@@ -225,6 +232,49 @@ export const PAGES: PageSpec[] = [
       '.history-header > p',
       '.history-run',
       '.history-footer > span',
+    ],
+  },
+  {
+    name: 'activity',
+    path: '/activity',
+    why: 'Activity template: the 24-column hour chart, the last-hour table and the three count tables, plus the legacy traffic block retro wears',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    //
+    // This page reads a live store per request, so every figure on it is
+    // content-variable. The suite serves it with AGENT_TRAFFIC_FIXTURE set (see
+    // playwright.config.ts), which makes the row COUNTS deterministic and the
+    // shape of a row worth guarding — one row per table, cells redacted.
+    //
+    // THE CHART IS PRUNED TO ONE COLUMN, not redacted away: 24 columns of
+    // fixture counts would churn the golden on every run (each column's
+    // accessible name carries its own UTC hour, and the hour moves with the
+    // clock), while one column still records that a column is an hour label
+    // followed by a count.
+    snapshotKeepFirst: [
+      '.chart-col',
+      '.hour-table tbody tr',
+      '.surface-table tbody tr',
+      '.client-table tbody tr',
+      '.markdown-table tbody tr',
+      'table[aria-labelledby="traffic-surfaces-title"] tbody tr',
+      'table[aria-labelledby="traffic-clients-title"] tbody tr',
+      'table[aria-labelledby="traffic-markdown-title"] tbody tr',
+    ],
+    snapshotRedact: [
+      '.stamp-rendered',
+      '.stamp-last',
+      '.count-number',
+      '.chart-col',
+      '.hour-table tbody tr',
+      '.surface-table tbody tr',
+      '.client-table tbody tr',
+      '.markdown-table tbody tr',
+      '.freshness',
+      '#agent-traffic .num',
+      '#agent-traffic tbody tr',
     ],
   },
   {

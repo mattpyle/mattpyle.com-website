@@ -1,0 +1,140 @@
+---
+/**
+ * The /activity headline (docs/projects/redesign/design-export-remaining/design_handoff_activity,
+ * band 1).
+ *
+ * THE HERO STATEMENT IS NOT THE EXPORT'S. The revised export says "Every request this site
+ * receives, and what asked for it.", and design-export-remaining/README.md says that line must not
+ * ship: the store logs two event classes, agent-surface fetches and pages served as Markdown, and
+ * it does not log page views. The wording here is the honest scope, taken from the shape of the
+ * data rather than from the mockup.
+ *
+ * THE STAMP IS THE ONLY LIVENESS CUE, and it reads at hour resolution because hour resolution is
+ * all the store has. There is no pulsing dot, no polling and no "live" indicator; the bundle says
+ * "there must never be one", and this page ships no JavaScript at all, so there could not be.
+ * Unlike the traffic block this replaces, the stamp is not localised in the browser either — it is
+ * labelled UTC and is true with scripting off, which is what the rest of the page's UTC framing
+ * needs it to be.
+ */
+import { utcStamp } from '../../lib/activity-summary.mjs';
+
+interface Props {
+  renderedAt: Date;
+  /** The newest hour bucket anything landed in, as hours since the epoch, or null. */
+  lastCountedHour: number | null;
+  /** The hour bucket this render falls in. */
+  currentHour: number;
+}
+
+const { renderedAt, lastCountedHour, currentHour } = Astro.props;
+
+/**
+ * "Last request", at the only resolution the data supports.
+ *
+ * Three cases and no fourth: inside the hour in progress, inside a named earlier hour, or nothing
+ * counted at all. Nothing here may read as minutes — an earlier draft of this band showed
+ * per-request rows with relative times and was cut for exactly that reason.
+ */
+function lastRequestLine(): string {
+  if (lastCountedHour === null) return 'Last request: nothing counted yet';
+  if (lastCountedHour >= currentHour) return 'Last request: within the hour';
+  const at = new Date(lastCountedHour * 3_600_000);
+  return `Last request: in the ${String(at.getUTCHours()).padStart(2, '0')}:00 UTC hour`;
+}
+---
+
+{/*
+  A div, not a section — the same call every other redesigned hero made: `npm run validate:html`
+  names an h1 inside sectioning content, and an unnamed <section> is not exposed as a region.
+*/}
+<div class="rd-section activity-hero modern-skin">
+  <h1><span class="rd-fill">Activity</span></h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      Agent surfaces fetched, pages served as Markdown, and what asked for them.
+    </p>
+    <div class="hero-stamp">
+      <span class="stamp-rendered">Rendered {utcStamp(renderedAt)}</span>
+      <span class="stamp-last">{lastRequestLine()}</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .activity-hero { padding-top: 72px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-row {
+    display: grid;
+    grid-template-columns: minmax(0, 30ch) 320px;
+    gap: 72px;
+    align-items: end;
+    margin-top: 32px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-stamp {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .stamp-rendered {
+    font-size: 18px;
+    color: var(--ink-2);
+  }
+
+  .stamp-last {
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  @media (max-width: 900px) {
+    .hero-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .hero-stamp {
+      border-left: 0;
+      padding-left: 0;
+      border-top: 1px solid var(--rule);
+      padding-top: 18px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .activity-hero { padding-top: 52px; }
+
+    h1 { font-size: 68px; }
+
+    .hero-row { margin-top: 24px; }
+
+    .hero-statement { font-size: 24px; }
+  }
+</style>

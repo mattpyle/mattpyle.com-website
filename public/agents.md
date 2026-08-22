@@ -18,7 +18,8 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/projects` — "Projects": a list of side projects (an Astro content collection at `src/content/projects/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo. It was published at `/builds` until 2026-08-20; every old URL, including `/builds.md`, now 301s to its `/projects` equivalent.
 - `/changelog` — "Changelog": a reverse-chronological, curated log of what has shipped on this site (an Astro content collection at `src/content/changelog/`). Each entry has a title, summary, date, tags, a `type` (launch/feature/content/infra/experiment), and a `significance` (major/minor/patch).
 - `/changelog/<slug>` — Individual changelog entry pages, with the full write-up. Each has a hand-authored raw-markdown variant at `/changelog/<slug>.md` — prefer this over scraping the HTML.
-- `/scorecard` — "Scorecard": the latest manually verified accessibility, performance, SEO, and agentic-browsing results for this site.
+- `/scorecard` — "Scorecard": the latest manually verified accessibility, performance, SEO, and agentic-browsing results for this site. Also at `/scorecard.json`.
+- `/activity` — "Activity": agent traffic to this site — fetches of its agent surfaces and pages served as Markdown, counted per UTC hour. Also at `/activity.json`.
 - `/about` — Bio, areas of interest, and contact/social links.
 - `/webmcp` — "WebMCP": the tools below in full — what each one takes and returns, how an agent calls them, how to test them, and the dated state of the standard.
 - `/steward` — "Steward": the agent-readiness auditor this site runs and the editorial agent that publishes it. What the audit checks, what one costs a site, the User-Agent it arrives under, and how to refuse it.

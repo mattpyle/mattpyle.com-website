@@ -43,7 +43,15 @@
         <a href="https://bsky.app/profile/mattpyle.com" target="_blank" rel="noopener noreferrer">
           bluesky<span class="sr-only"> (opens in a new tab)</span>
         </a>
-        {/* Footer only — the header nav deliberately stays at five links. */}
+        {/*
+          Footer only — the header nav deliberately stays at five links, and /activity is off it
+          for the same reason (Matt, 2026-08-21). This link, the homepage agent panel's pointer and
+          the cross-link on /scorecard are how /activity is reached.
+
+          The LEGACY footer is deliberately not given the same link: it renders on every page the
+          redesign has not converted, and those pages must stay byte-identical to the branch's tip.
+        */}
+        <a href="/activity/">activity</a>
         <a href="/webmcp/">webmcp</a>
         <button
           type="button"

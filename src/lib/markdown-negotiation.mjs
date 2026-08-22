@@ -79,14 +79,18 @@ export function markdownSiblingFor(pathname) {
 // like any other page. Only the emit step and the coverage validator read this; the
 // middleware deliberately does not, because its 404 fallback is the safety net.
 //
-// /scorecard.md is here for a different reason from the other two. Those are entries whose source
-// markdown beats anything a converter could produce; /scorecard renders on demand (its Agent
-// traffic section reads the hit store at request time), so there is no built HTML file for the
-// emit step to convert and a curated route is the only way it can have a sibling at all.
+// /activity.md is here for a different reason from the other two. Those are entries whose source
+// markdown beats anything a converter could produce; /activity renders on demand (it reads the hit
+// store at request time), so there is no built HTML file for the emit step to convert and a
+// curated route is the only way it can have a sibling at all.
+//
+// /scorecard.md held this slot until 2026-08-22 and no longer does: the store read moved to
+// /activity, /scorecard went back to prerendering, and its sibling is an ordinary converted file
+// again. The exception follows the store read, not the page.
 const CURATED_SIBLINGS = [
   /^\/writing\/[^/]+\.md$/,
   /^\/changelog\/(?!\d+\.md$)[^/]+\.md$/,
-  /^\/scorecard\.md$/,
+  /^\/activity\.md$/,
 ];
 
 /** @param {string} siblingPath @returns {boolean} */
@@ -106,6 +110,8 @@ export const NEGOTIABLE_PAGE_MATCHER = [
   '/',
   '/about',
   '/about/',
+  '/activity',
+  '/activity/',
   '/scorecard',
   '/scorecard/',
   '/steward',

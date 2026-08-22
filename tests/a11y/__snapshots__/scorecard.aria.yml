@@ -3,138 +3,62 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Projects":
+    - link "/projects":
       - /url: /projects/
-    - link "Changelog":
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
-  - paragraph: Public scorecard · live web
   - heading "Scorecard" [level=1]
-  - paragraph: The latest verified scores, followed by every live-network run we have recorded.
-  - region "·":
-    - paragraph: Latest run
-    - heading "·" [level=2]:
-      - time: ·
+  - paragraph: This site's own scores, measured nightly.
+  - region "Latest run":
+    - heading "Latest run" [level=2]
+    - paragraph: ·
+    - text: /\d+ Accessibility \d+ Performance \d+ SEO \d+\/\d+ Agentic browsing/
     - paragraph:
-      - strong: ·
-      - text: ·
-    - article:
-      - heading "Accessibility" [level=3]
-      - text: ·
-      - paragraph: ··
-      - paragraph: ·
-    - article:
-      - heading "Performance" [level=3]
-      - text: ·
-      - paragraph: ··
-      - paragraph: ·
-    - article:
-      - heading "SEO" [level=3]
-      - text: ·
-      - paragraph: ··
-      - paragraph: ·
-    - article:
-      - heading "Agentic Browsing" [level=3]
-      - text: ·
-      - paragraph: ··
-      - paragraph: ·
-    - term: Scope
-    - definition: ·
-    - term: Tools
-    - definition: ·
-    - term: Entry
-    - definition: ·
-    - paragraph: ·
-  - region "Agent traffic":
-    - heading "Agent traffic" [level=2]
+      - text: Agent traffic moved to
+      - link "/activity":
+        - /url: /activity/
+      - text: .
+  - region "Previous runs":
+    - heading "Previous runs" [level=2]
+    - list:
+      - listitem:
+        - time: ·
+        - text: /\d+ of \d+ ·/
+  - region "How this gets here":
+    - heading "How this gets here" [level=2]
     - paragraph:
-      - text: ·
-      - time: ·
-    - paragraph: /Requests, last \d+ hours/
-    - paragraph: ·
-    - paragraph: Requests, last 7 days
-    - paragraph: ·
-    - paragraph: Requests, total
-    - paragraph: ·
-    - heading "By surface" [level=3]
-    - region "By surface":
-      - table "By surface":
-        - rowgroup:
-          - row /Surface 7 days \d+ days Total/:
-            - columnheader "Surface"
-            - columnheader "7 days"
-            - columnheader /\d+ days/
-            - columnheader "Total"
-        - rowgroup:
-          - row "· · · ·":
-            - cell "·":
-              - code: ·
-            - cell "·"
-            - cell "·"
-            - cell "·"
-    - heading "By client type" [level=3]
-    - region "By client type":
-      - table "By client type":
-        - rowgroup:
-          - row /Client 7 days \d+ days Total/:
-            - columnheader "Client"
-            - columnheader "7 days"
-            - columnheader /\d+ days/
-            - columnheader "Total"
-        - rowgroup:
-          - row "· · · ·":
-            - cell "·"
-            - cell "·"
-            - cell "·"
-            - cell "·"
-    - heading "Markdown negotiation" [level=3]
-    - region "Markdown negotiation":
-      - table "Markdown negotiation":
-        - rowgroup:
-          - row /Page 7 days \d+ days Total/:
-            - columnheader "Page"
-            - columnheader "7 days"
-            - columnheader /\d+ days/
-            - columnheader "Total"
-        - rowgroup:
-          - row "· · · ·":
-            - cell "·":
-              - code: ·
-            - cell "·"
-            - cell "·"
-            - cell "·"
-  - region "Run history":
-    - paragraph: Archive
-    - heading "Run history" [level=2]
-    - paragraph: ·
-    - group:
-      - time: ·
-      - group "·"
-      - group "·"
-      - group "·"
-      - group "·"
-      - text: ·
-    - text: ·
-    - navigation "Scorecard history pagination": ← Newer Page 1 Older →
+      - text: A
+      - link "Temporal (opens in a new tab)":
+        - /url: https://temporal.io
+      - text: workflow runs nightly, auditing every page for technical SEO, performance, accessibility, and agentic browsing standards.
+    - text: The same numbers, as data
+    - link "scorecard.json":
+      - /url: /scorecard.json
 - contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
   - navigation "Social links":
-    - link "RSS feed for Writing":
+    - link "rss":
       - /url: /rss.xml
-      - text: ""
-    - link "GitHub (opens in a new tab)":
+    - link "github (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status
