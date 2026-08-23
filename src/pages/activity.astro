@@ -3,9 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import ActivityHero from '../components/activity/ActivityHero.astro';
 import ActivityBody from '../components/activity/ActivityBody.astro';
-import { buildActivity } from '../lib/activity-summary.mjs';
-import { epochHour, flattenTraffic, readAgentTraffic, MAX_TABLE_ROWS } from '../lib/agent-traffic.mjs';
-import { FAMILY_NOTES } from '../lib/activity-summary.mjs';
+import { buildActivity, FAMILY_NOTES } from '../lib/activity-summary.mjs';
+import { flattenTraffic, readAgentTraffic, MAX_TABLE_ROWS } from '../lib/agent-traffic.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 // The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
@@ -98,11 +97,7 @@ function familyNote(family: string): string | undefined {
     A hidden subtree holds no tab stops and is absent from the accessibility tree, so each
     appearance presents exactly one page, with exactly one h1.
   */}
-  <ActivityHero
-    renderedAt={renderedAt}
-    lastCountedHour={activity?.lastCountedHour ?? null}
-    currentHour={epochHour(renderedAt)}
-  />
+  <ActivityHero renderedAt={renderedAt} />
   <ActivityBody activity={activity} emptyStateCopy={emptyStateCopy} />
 
   <div class="retro-skin">

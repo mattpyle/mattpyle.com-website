@@ -19,7 +19,8 @@
  * is logged at the edge"; design-export-remaining/README.md says that must not ship, because page
  * views are not counted. The wording here states the two event classes that are.
  *
- * TWO DEVIATIONS FROM THE BUNDLE, both because the alternative would be a page that lies:
+ * THREE DEVIATIONS FROM THE BUNDLE, the first two because the alternative would be a page that
+ * lies:
  *
  * 1. The bundle says "No text beside or beneath any table". A table here is capped at
  *    MAX_TABLE_ROWS rows (src/lib/agent-traffic.mjs), so a row past the cap is dropped — and
@@ -28,6 +29,10 @@
  * 2. The bundle has no empty or unavailable state, because the mockup always has numbers. This
  *    page reads a live store per request, so it has three states, and the two without numbers say
  *    which one they are.
+ * 3. Below 500px the 30-day column is dropped from the three tables that have one. The bundle
+ *    keeps every column at every width; a 320px viewport cannot hold four, and the 30-day figure
+ *    is the one a reader needs least because every table here is sorted on another column. The
+ *    rule and its reasoning are at the 500px breakpoint at the foot of this file.
  *
  * NO INLINE STYLE ANYWHERE, INCLUDING THE BARS. The site's CSP declares `style-src 'self'` with no
  * `'unsafe-inline'`, so a computed `height` on a bar — and Astro's `define:vars`, which compiles to
@@ -102,7 +107,7 @@ function familyNote(family: string): string | undefined {
           {activity.hours.map(hour => (
             <li class="chart-col">
               <span class="sr-only">{String(hour.utcHour).padStart(2, '0')}:00 UTC, </span>
-              <span class="chart-count">{hour.count}</span>
+              <span class="chart-count">{counts.format(hour.count)}</span>
               <span class:list={['chart-bar', `bar--h${hour.percent}`]} aria-hidden="true"></span>
             </li>
           ))}
@@ -163,7 +168,7 @@ function familyNote(family: string): string | undefined {
         <table class="grid-table surface-table">
           <thead>
             <tr>
-              <th scope="col">Surface</th>
+              <th scope="col" class="c-path">Surface</th>
               <th scope="col" class="c-num c-wide">7 days</th>
               <th scope="col" class="c-num c-wide">30 days</th>
               <th scope="col" class="c-num c-wide">Recorded</th>
@@ -172,7 +177,7 @@ function familyNote(family: string): string | undefined {
           <tbody>
             {activity.surfaces.rows.map(row => (
               <tr>
-                <td>{row.path}</td>
+                <td class="c-path">{row.path}</td>
                 <td class="c-num c-lead">{counts.format(row.week)}</td>
                 <td class="c-num">{counts.format(row.month)}</td>
                 <td class="c-num">{counts.format(row.total)}</td>
@@ -189,15 +194,15 @@ function familyNote(family: string): string | undefined {
         <section class="table-half" aria-labelledby="activity-clients-title">
           <div class="band-head">
             <h2 id="activity-clients-title">By client</h2>
+            {/* One source line, and the same legend The last hour band carries: a swatch beside a
+                column name explains nothing, the label is what explains the swatch. */}
+            <span class="legend"><span class="legend-swatch" aria-hidden="true"></span> bot/agent</span>
           </div>
           <table class="grid-table client-table">
             <thead>
               <tr>
-                <th scope="col" class="c-marker">
-                  <span class="legend-swatch" aria-hidden="true"></span>
-                  <span class="sr-only">bot or agent</span>
-                </th>
-                <th scope="col">Client</th>
+                <th scope="col" class="c-marker"><span class="sr-only">bot or agent</span></th>
+                <th scope="col" class="c-client">Client</th>
                 <th scope="col" class="c-num">7 days</th>
                 <th scope="col" class="c-num">30 days</th>
               </tr>
@@ -208,7 +213,7 @@ function familyNote(family: string): string | undefined {
                   <td class="c-marker">
                     <span class:list={['marker', row.kind === 'agent' && 'marker--agent']} aria-hidden="true"></span>
                   </td>
-                  <td>{row.family}{familyNote(row.family ?? '') && <span class="family-note"> ({familyNote(row.family ?? '')})</span>}</td>
+                  <td class="c-client">{row.family}{familyNote(row.family ?? '') && <span class="family-note"> ({familyNote(row.family ?? '')})</span>}</td>
                   <td class="c-num c-lead">{counts.format(row.week)}</td>
                   <td class="c-num">{counts.format(row.month)}</td>
                 </tr>
@@ -228,7 +233,7 @@ function familyNote(family: string): string | undefined {
             <table class="grid-table markdown-table">
               <thead>
                 <tr>
-                  <th scope="col">Page</th>
+                  <th scope="col" class="c-path">Page</th>
                   <th scope="col" class="c-num">7 days</th>
                   <th scope="col" class="c-num">30 days</th>
                 </tr>
@@ -236,7 +241,7 @@ function familyNote(family: string): string | undefined {
               <tbody>
                 {activity.pages.rows.map(row => (
                   <tr>
-                    <td>{markdownSiblingFor(row.path ?? '') ?? row.path}</td>
+                    <td class="c-path">{markdownSiblingFor(row.path ?? '') ?? row.path}</td>
                     <td class="c-num c-lead">{counts.format(row.week)}</td>
                     <td class="c-num">{counts.format(row.month)}</td>
                   </tr>
@@ -488,8 +493,13 @@ function familyNote(family: string): string | undefined {
     overflow-wrap: anywhere;
   }
 
-  /* The first data column reads as the row's subject, so it takes full ink. */
-  .grid-table tbody td:first-of-type { color: var(--ink); }
+  /* Ink is per column, never per position: the marker column is the first cell of two of these
+     tables, and a `td:first-of-type` rule spent the row's full ink on an empty 9px square while
+     the client name beside it stepped back. A client is full ink and a path steps back, in every
+     band, because that is the pair The last hour band already reads as. */
+  .grid-table td.c-client { color: var(--ink); }
+
+  .grid-table td.c-path { color: var(--ink-2); }
 
   .grid-table .c-num {
     text-align: right;
@@ -523,10 +533,6 @@ function familyNote(family: string): string | undefined {
 
   .hour-table th.c-marker,
   .hour-table td.c-marker { padding-left: 0; }
-
-  .hour-table td.c-client { color: var(--ink); }
-
-  .hour-table td.c-path { color: var(--ink-2); }
 
   .hour-table td.c-num { color: var(--ink); }
 

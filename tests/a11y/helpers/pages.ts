@@ -265,7 +265,6 @@ export const PAGES: PageSpec[] = [
     ],
     snapshotRedact: [
       '.stamp-rendered',
-      '.stamp-last',
       '.count-number',
       '.chart-col',
       '.hour-table tbody tr',

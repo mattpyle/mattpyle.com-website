@@ -11,36 +11,33 @@
  *
  * THE STAMP IS THE ONLY LIVENESS CUE, and it reads at hour resolution because hour resolution is
  * all the store has. There is no pulsing dot, no polling and no "live" indicator; the bundle says
- * "there must never be one", and this page ships no JavaScript at all, so there could not be.
+ * "there must never be one". Nothing in this modern tree runs a script — the one script the
+ * document ships is the retro tree's timestamp localiser, which reaches the legacy markup only.
  * Unlike the traffic block this replaces, the stamp is not localised in the browser either — it is
  * labelled UTC and is true with scripting off, which is what the rest of the page's UTC framing
  * needs it to be.
+ *
+ * THE STAMP IS SPELLED, THE MACHINE SURFACES STAY ISO. The bundle writes it "22 Aug 2026, 06:08
+ * UTC", and the formatter here is the one src/pages/activity.astro already builds for the retro
+ * tree's stamp, field for field: the two trees are one document and may not print the same instant
+ * two different ways. `utcStamp()` in the summary module keeps its ISO-shaped form for
+ * /activity.md, and /activity.json and every `datetime` attribute are ISO too.
  */
-import { utcStamp } from '../../lib/activity-summary.mjs';
-
 interface Props {
   renderedAt: Date;
-  /** The newest hour bucket anything landed in, as hours since the epoch, or null. */
-  lastCountedHour: number | null;
-  /** The hour bucket this render falls in. */
-  currentHour: number;
 }
 
-const { renderedAt, lastCountedHour, currentHour } = Astro.props;
+const { renderedAt } = Astro.props;
 
-/**
- * "Last request", at the only resolution the data supports.
- *
- * Three cases and no fourth: inside the hour in progress, inside a named earlier hour, or nothing
- * counted at all. Nothing here may read as minutes — an earlier draft of this band showed
- * per-request rows with relative times and was cut for exactly that reason.
- */
-function lastRequestLine(): string {
-  if (lastCountedHour === null) return 'Last request: nothing counted yet';
-  if (lastCountedHour >= currentHour) return 'Last request: within the hour';
-  const at = new Date(lastCountedHour * 3_600_000);
-  return `Last request: in the ${String(at.getUTCHours()).padStart(2, '0')}:00 UTC hour`;
-}
+const stamp = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'UTC',
+  timeZoneName: 'short',
+});
 ---
 
 {/*
@@ -55,8 +52,7 @@ function lastRequestLine(): string {
       Agent surfaces fetched, pages served as Markdown, and what asked for them.
     </p>
     <div class="hero-stamp">
-      <span class="stamp-rendered">Rendered {utcStamp(renderedAt)}</span>
-      <span class="stamp-last">{lastRequestLine()}</span>
+      <span class="stamp-rendered">Rendered {stamp.format(renderedAt)}</span>
     </div>
   </div>
 </div>
@@ -96,9 +92,6 @@ function lastRequestLine(): string {
   }
 
   .hero-stamp {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
     border-left: 1px solid var(--rule);
     padding-left: 20px;
   }
@@ -106,11 +99,6 @@ function lastRequestLine(): string {
   .stamp-rendered {
     font-size: 18px;
     color: var(--ink-2);
-  }
-
-  .stamp-last {
-    font-size: 18px;
-    color: var(--ink-6);
   }
 
   @media (max-width: 900px) {

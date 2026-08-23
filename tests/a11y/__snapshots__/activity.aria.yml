@@ -18,7 +18,7 @@
 - main:
   - heading "Activity" [level=1]
   - paragraph: Agent surfaces fetched, pages served as Markdown, and what asked for them.
-  - text: · ·
+  - text: ·
   - region "Headline counts":
     - heading "Headline counts" [level=2]
     - text: "· Requests, last 24 hours · Requests, last 7 days · Requests recorded"
@@ -60,6 +60,7 @@
           - cell "·"
   - region "By client":
     - heading "By client" [level=2]
+    - text: bot/agent
     - table:
       - rowgroup:
         - row "bot or agent Client 7 days 30 days":

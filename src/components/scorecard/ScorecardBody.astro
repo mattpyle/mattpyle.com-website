@@ -16,9 +16,11 @@
  * detail pages — the rows here are deliberately not links, because there is nothing to link to.
  * The bundle lists all of them; do not reintroduce one without asking.
  *
- * COLOUR CARRIES NO STATE IN THE PREVIOUS-RUNS LIST. Magenta means "agents" on this site, not
- * "bad", so a run that scored 3 of 4 looks exactly like one that scored 4. The single coloured
- * number on the page is the agentic-browsing gate, which is the gate the site exists to move.
+ * COLOUR CARRIES NO STATE ANYWHERE ON THIS PAGE. Magenta means "agents" on this site, not "bad",
+ * so a run that scored 3 of 4 looks exactly like one that scored 4. No score is coloured either:
+ * the bundle painted the agentic-browsing gate magenta as the one gate the site exists to move,
+ * and Matt overrode that at the PR #163 review (design-export-remaining/README.md) because one
+ * differently coloured number among four reads as unexplained emphasis rather than as meaning.
  */
 import {
   SCORECARD,
@@ -87,18 +89,16 @@ const provenance = [
   .join(' · ');
 
 /**
- * What THIS run found, and nothing else.
+ * What THIS run found, in the run's own words.
  *
- * A gate that did not pass names itself, its score and its own description. When every gate passed
- * this is empty and the band renders nothing at all — the bundle is explicit that filler, and
- * standing explanations like "lowest result on any tested page, not an average", are not wanted
- * here. The commentary field is not used for it either: that is a summary of what CHANGED, which
- * is the previous-runs column's job.
+ * The bundle derives this line from the failing gates and appends each gate's `description`, and
+ * that description is a STANDING explanation — the same sentence every run — which is exactly the
+ * filler the bundle itself bans. Matt's call at the PR #163 review
+ * (design-export-remaining/README.md) was to render the run's `commentary` instead: it is written
+ * per run, so it satisfies the ban by construction, and it is the same field the previous-runs
+ * rows already print. A run with no commentary renders nothing at all here.
  */
-const findings = gates
-  .filter(gate => gate.status !== 'Pass')
-  .map(gate => `${gate.label} did not pass at ${gate.score}. ${SCORECARD.metrics.find(m => m.name === gate.label)?.description ?? ''}`.trim())
-  .join(' ');
+const findings = SCORECARD.commentary.trim();
 
 /**
  * "Agentic Browsing" as the design writes it, "Agentic browsing", without turning "SEO" into
@@ -133,7 +133,7 @@ const previousRuns = SCORECARD_HISTORY.map(run => ({
 
     <div class="gates">
       {gates.map(gate => (
-        <div class:list={['gate', gate.maximum !== 100 && 'gate--agents']}>
+        <div class="gate">
           <span class="gate-score">{gate.score}</span>
           <span class="gate-name">{sentenceCase(gate.label)}</span>
         </div>
@@ -253,12 +253,6 @@ const previousRuns = SCORECARD_HISTORY.map(run => ({
     letter-spacing: -.04em;
     color: var(--ink);
   }
-
-  /* The only coloured number on the page. Selected by the gate whose maximum is not 100, which is
-     the agentic-browsing gate by construction: it is the one measured in checks rather than out of
-     a Lighthouse hundred. Keying on the shape of the score rather than on its name means a renamed
-     metric keeps its colour and a second out-of-100 gate never steals it. */
-  .gate--agents .gate-score { color: var(--agents); }
 
   .gate-name {
     font-size: 20px;

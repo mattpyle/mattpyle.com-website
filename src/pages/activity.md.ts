@@ -51,9 +51,7 @@ function table(headers: string[], rows: (string | number)[][]): string {
   ].join('\n');
 }
 
-export const GET: APIRoute = async ({ request }) => {
-  console.log(`[activity.md] accept="${request.headers.get('accept') ?? ''}"`);
-
+export const GET: APIRoute = async () => {
   const renderedAt = new Date();
   const traffic = await readAgentTraffic({ now: renderedAt });
   const activity = traffic.ok ? buildActivity(flattenTraffic(traffic), renderedAt) : null;
