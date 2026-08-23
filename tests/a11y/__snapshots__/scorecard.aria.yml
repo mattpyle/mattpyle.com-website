@@ -22,6 +22,7 @@
     - heading "Latest run" [level=2]
     - paragraph: ·
     - text: /\d+ Accessibility \d+ Performance \d+ SEO \d+\/\d+ Agentic browsing/
+    - paragraph: ·
     - paragraph:
       - text: Agent traffic moved to
       - link "/activity":
