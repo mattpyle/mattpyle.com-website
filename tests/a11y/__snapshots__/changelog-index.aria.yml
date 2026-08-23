@@ -3,48 +3,58 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Builds":
-      - /url: /builds/
-    - link "Changelog":
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
-  - paragraph: Changelog
   - heading "Changelog" [level=1]
-  - paragraph: What's shipped on this site — launches, features, and the occasional experiment.
-  - radiogroup "Filter by type":
-    - radio "ALL" [checked]
-    - radio "LAUNCH"
-    - radio "FEATURE"
-    - radio "CONTENT"
-    - radio "INFRA"
-    - radio "EXPERIMENT"
-  - paragraph: ·
-  - text: /\d+ ·/
-  - heading "·" [level=2]:
-    - link "·":
+  - paragraph: What has shipped on this site — launches, features, and the occasional experiment.
+  - text: /\d+ entries, latest/
+  - time: /\d{2} \w{3} \d{4}/
+  - text: .
+  - link "changelog.md":
+    - /url: /changelog.md
+  - region "All entries":
+    - heading "All entries" [level=2]
+    - radiogroup "Filter by type":
+      - radio "all" [checked]
+      - radio "launch"
+      - radio "feature"
+      - radio "content"
+      - radio "infra"
+      - radio "experiment"
+    - paragraph: ·
+    - text: /\d+/
+    - link "· · · · ·":
       - /url: "#"
-  - paragraph: ·
-  - text: · · · · · ·
+      - time: ·
+      - text: ""
   - navigation "Changelog pagination": /showing \d+ of \d+/
 - contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
   - navigation "Social links":
-    - link "RSS feed for Writing":
+    - link "rss":
       - /url: /rss.xml
-      - text: ""
-    - link "GitHub (opens in a new tab)":
+    - link "github (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status

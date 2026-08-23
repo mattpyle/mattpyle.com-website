@@ -19,14 +19,22 @@ test.beforeEach(async ({ page }) => {
   await installPageLoadCounter(page);
 });
 
-const HOPS: { from: string; linkName: string; to: RegExp }[] = [
-  { from: '/', linkName: 'Writing', to: /\/writing\/?$/ },
-  { from: '/writing', linkName: 'Changelog', to: /\/changelog\/?$/ },
-  { from: '/changelog', linkName: 'Scorecard', to: /\/scorecard\/?$/ },
+/**
+ * Hops are addressed by HREF, not by the link's accessible name. The name is a
+ * design decision — the redesigned header labels its links `/writing`, the
+ * legacy one labels them `Writing`, and the homepage now ships both headers and
+ * shows one per appearance — while the href is the thing this check is actually
+ * about: following an internal link and landing on that route. `label` is only
+ * the test title.
+ */
+const HOPS: { from: string; label: string; href: string; to: RegExp }[] = [
+  { from: '/', label: 'Writing', href: '/writing/', to: /\/writing\/?$/ },
+  { from: '/writing', label: 'Changelog', href: '/changelog/', to: /\/changelog\/?$/ },
+  { from: '/changelog', label: 'Scorecard', href: '/scorecard/', to: /\/scorecard\/?$/ },
 ];
 
 for (const hop of HOPS) {
-  test(`ClientRouter: ${hop.from} -> ${hop.linkName} leaves focus somewhere sensible`, async ({
+  test(`ClientRouter: ${hop.from} -> ${hop.label} leaves focus somewhere sensible`, async ({
     page,
   }) => {
     await gotoSettled(page, hop.from);
@@ -35,7 +43,7 @@ for (const hop of HOPS) {
     // its label (the homepage hero also links to /writing).
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
     const before = await readPageLoads(page);
-    await nav.getByRole('link', { name: hop.linkName, exact: true }).click();
+    await nav.locator(`a[href="${hop.href}"]`).click();
     await waitForSoftNav(page, before);
     await expect(page).toHaveURL(hop.to);
 
@@ -72,10 +80,10 @@ test('ClientRouter announces the new page to assistive tech', async ({ page }) =
   await gotoSettled(page, '/');
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   const before = await readPageLoads(page);
-  await nav.getByRole('link', { name: 'Builds', exact: true }).click();
+  await nav.locator('a[href="/projects/"]').click();
   await waitForSoftNav(page, before);
 
   const announcer = page.locator('.astro-route-announcer');
   await expect(announcer).toHaveAttribute('aria-live', 'assertive');
-  await expect(announcer).toContainText('Builds');
+  await expect(announcer).toContainText('Projects');
 });

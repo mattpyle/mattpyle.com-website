@@ -15,7 +15,7 @@ export const GET: APIRoute = async ({ site }) => {
   const articles = (await getCollection('writing', ({ data }) => !data.draft)).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
-  const builds = (await getCollection('builds')).sort(
+  const projects = (await getCollection('projects')).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
@@ -27,7 +27,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('# Matt Pyle — Full Content Export');
   lines.push('');
   lines.push(
-    'Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder. This exports every published article and build plus the current public scorecard snapshot from mattpyle.com, generated at build time from the same content that backs the live site.'
+    'Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder. This exports every published article and project plus the current public scorecard snapshot from mattpyle.com, generated at build time from the same content that backs the live site.'
   );
   lines.push('');
   lines.push(`See ${base}/agents.md for citation guidance.`);
@@ -46,7 +46,7 @@ export const GET: APIRoute = async ({ site }) => {
   );
   lines.push('');
   lines.push(
-    `Machine-readable: ${base}/webmcp/tools.json is the tool manifest (names, descriptions, input schemas, example calls), generated from the live tool objects. ${base}/webmcp/index.json is the static content index the tools read — the same author entity, section map, writing list, and builds list exported below — and you can fetch it directly. ${base}/webmcp/ is the human-facing page, with the per-tool detail and the current state of the standard.`
+    `Machine-readable: ${base}/webmcp/tools.json is the tool manifest (names, descriptions, input schemas, example calls), generated from the live tool objects. ${base}/webmcp/index.json is the static content index the tools read — the same author entity, section map, writing list, and projects list exported below — and you can fetch it directly. ${base}/webmcp/ is the human-facing page, with the per-tool detail and the current state of the standard.`
   );
   lines.push('');
   lines.push('---');
@@ -86,20 +86,20 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
   }
 
-  lines.push('## Builds');
+  lines.push('## Projects');
   lines.push('');
-  for (const build of builds) {
-    lines.push(`### ${build.data.title}`);
+  for (const project of projects) {
+    lines.push(`### ${project.data.title}`);
     lines.push('');
-    lines.push(`Status: ${build.data.status}`);
-    lines.push(`Date: ${formatDate(build.data.date)}`);
-    lines.push(`Tags: ${build.data.tags.join(', ')}`);
-    if (build.data.github) lines.push(`GitHub: ${build.data.github}`);
-    if (build.data.live) lines.push(`Live: ${build.data.live}`);
+    lines.push(`Status: ${project.data.status}`);
+    lines.push(`Date: ${formatDate(project.data.date)}`);
+    lines.push(`Tags: ${project.data.tags.join(', ')}`);
+    if (project.data.github) lines.push(`GitHub: ${project.data.github}`);
+    if (project.data.live) lines.push(`Live: ${project.data.live}`);
     lines.push('');
-    lines.push(build.data.description);
+    lines.push(project.data.description);
     lines.push('');
-    lines.push(build.body ?? '');
+    lines.push(project.body ?? '');
     lines.push('');
     lines.push('---');
     lines.push('');

@@ -96,15 +96,16 @@ jobs:
       # static output under dist/client/ instead of writing straight into
       # dist/ — serve dist/client, not dist, or every route here 404s.
       #
-      # Not `npx serve` any more: /scorecard renders on demand (its Agent
-      # traffic section reads the hit store per request), so a static server
-      # 404s one of the eight routes audited below. serve-built-site.mjs serves
-      # the same directory and falls back to the adapter's render function,
-      # which is the ordering Vercel itself uses.
+      # Not `npx serve` any more: /activity renders on demand (it reads the hit
+      # store per request), so a static server 404s one of the nine routes
+      # audited below. serve-built-site.mjs serves the same directory and falls
+      # back to the adapter's render function, which is the ordering Vercel
+      # itself uses. /scorecard was the on-demand route until 2026-08-22, when
+      # the store read moved to /activity and it went back to prerendering.
       #
-      # AGENT_TRAFFIC_FIXTURE makes that section render its tables rather than
-      # its store-unavailable state, so axe actually scans the markup that
-      # ships. No store exists on a runner, and never should.
+      # AGENT_TRAFFIC_FIXTURE makes /activity render its tables rather than its
+      # store-unavailable state, so axe actually scans the markup that ships. No
+      # store exists on a runner, and never should.
       - name: Serve built site
         env:
           AGENT_TRAFFIC_FIXTURE: '1'
@@ -126,8 +127,9 @@ jobs:
             http://localhost:4321/ \
             http://localhost:4321/about \
             http://localhost:4321/writing \
-            http://localhost:4321/builds \
+            http://localhost:4321/projects \
             http://localhost:4321/scorecard \
+            http://localhost:4321/activity \
             http://localhost:4321/steward \
             http://localhost:4321/webmcp \
             http://localhost:4321/writing/accessibility-and-ai/
@@ -136,7 +138,7 @@ jobs:
       # persisted client-side preference, and @axe-core/cli has no hook to run a script before it
       # scans. So the site's second appearance — the one carrying the guest book, the webmaster note
       # and the web ring, all `display: none` in modern — is audited here instead, by
-      # @axe-core/playwright on the same eight routes, same axe-core 4.12.1, against this job's
+      # @axe-core/playwright on the same nine routes, same axe-core 4.12.1, against this job's
       # build on this job's server. Gating, not advisory: this is a real axe run, it is just driven
       # by a browser that can set localStorage before the first paint.
       #
@@ -165,7 +167,7 @@ jobs:
       # --grep-invert drops two families. @golden is the aria snapshots: they match their golden as
       # a subset, so they are blind to additions and belong on the scorecard with a human reading
       # the diff, not on a per-PR gate. @axe is the retro scan, which already ran as its own gating
-      # step above; leaving it in would scan eight routes twice and report a real axe violation as
+      # step above; leaving it in would scan nine routes twice and report a real axe violation as
       # an advisory one.
       - name: Run accessibility guard checks (Playwright)
         if: always()
@@ -187,7 +189,7 @@ jobs:
         run: npm run --silent check:html-report -w @mattpyle/steward
 
       # The Nu HTML Checker over every route of the build served above, prerendered pages and the
-      # on-demand /scorecard alike. Advisory: malformed HTML degrades the accessibility tree that
+      # on-demand /activity alike. Advisory: malformed HTML degrades the accessibility tree that
       # agents read, which is why it is checked, but it is not a reason to hold a deploy.
       #
       # `--transport jar` is explicit rather than inferred. The script falls back to POSTing each

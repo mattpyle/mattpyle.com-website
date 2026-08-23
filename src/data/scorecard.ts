@@ -92,6 +92,17 @@ export const SCORECARD: ScorecardSnapshot = {
   metrics: latest.metrics,
 };
 
+/**
+ * The latest run's exact audit instant, when it has one.
+ *
+ * `SCORECARD.verified` deliberately reuses `SCORECARD_VERIFIED` from sitemap-lastmod.mjs so the
+ * sitemap's lastmod and the visible date cannot drift, and that object carries a calendar date and
+ * nothing finer. /scorecard's provenance line needs the time and the zone, which only the run
+ * record has — hence this second export rather than a widened `verified`, which would put a field
+ * on the shape the sitemap has no business knowing about.
+ */
+export const SCORECARD_TIMESTAMP: IsoTimestamp | undefined = latest.timestamp;
+
 /** Every run older than the latest, newest first — derived from `RUNS.slice(1)`. */
 export const SCORECARD_HISTORY: readonly ScorecardHistoryRun[] = history.map((run) => ({
   id: run.id,
@@ -102,3 +113,49 @@ export const SCORECARD_HISTORY: readonly ScorecardHistoryRun[] = history.map((ru
   commentary: run.commentary,
   metrics: run.metrics,
 }));
+
+/** One gate as the two redesigned surfaces render it. */
+export interface ScorecardGate {
+  /** The metric's name, lower-cased, as the homepage panel labels it. */
+  name: string;
+  /** The metric's name as authored, for a surface that wants sentence case. */
+  label: string;
+  /** Printable score: a bare number out of 100, a `value/maximum` otherwise. */
+  score: string;
+  /** Numeric value and maximum, for a `<progress>` element. Never NaN, never 0 maximum. */
+  value: number;
+  maximum: number;
+  status: ScorecardStatus;
+}
+
+/**
+ * The gate derivation both redesigned scorecard surfaces render from.
+ *
+ * It lived in `HomeAgents.astro` until /scorecard was rebuilt on the same design
+ * (docs/projects/redesign/design-export-remaining/design_handoff_scorecard), whose spec says the
+ * page "must not duplicate that logic; share it". The rule it carries is the denominator one: a
+ * score out of 100 reads as a bare number, and anything else keeps its denominator, because "4"
+ * on its own is not a score. The homepage panel and the page it links to cannot disagree about a
+ * run while both call this.
+ *
+ * @param {readonly ScorecardMetric[]} metrics defaults to the latest run's
+ */
+export function scorecardGates(metrics: readonly ScorecardMetric[] = SCORECARD.metrics): ScorecardGate[] {
+  return metrics.map((metric) => {
+    const value = Number(metric.value);
+    const maximum = Number(metric.maximum);
+    return {
+      name: metric.name.toLowerCase(),
+      label: metric.name,
+      score: maximum === 100 ? metric.value : `${metric.value}/${metric.maximum}`,
+      value: Number.isFinite(value) ? value : 0,
+      maximum: Number.isFinite(maximum) && maximum > 0 ? maximum : 1,
+      status: metric.status,
+    };
+  });
+}
+
+/** How many of a run's gates passed. Printed as "N of M" on both surfaces. */
+export function passingGates(metrics: readonly ScorecardMetric[] = SCORECARD.metrics): number {
+  return metrics.filter((metric) => metric.status === 'Pass').length;
+}

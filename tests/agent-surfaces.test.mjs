@@ -11,6 +11,7 @@ import {
 import { readSkills, skillUrlFor, SKILLS_INDEX_PATH } from '../src/lib/agent-skills.mjs';
 import { NEGOTIABLE_PAGE_MATCHER } from '../src/lib/markdown-negotiation.mjs';
 import { ON_DEMAND_PATHS } from '../src/lib/on-demand-routes.mjs';
+import { RETIRED_URL_MATCHER } from '../src/lib/retired-urls.mjs';
 
 const middlewareSource = readFileSync(fileURLToPath(new URL('../middleware.ts', import.meta.url)), 'utf8');
 
@@ -81,10 +82,12 @@ test('the matcher lists no agent path the module would ignore', () => {
   // NEGOTIABLE_PAGE_MATCHER in src/lib/markdown-negotiation.mjs owns them, and
   // tests/markdown-negotiation.test.mjs asserts that side of the sync. ON_DEMAND_PATHS is the
   // third reason a path can be in the matcher: query-string canonicalisation, owned by
-  // src/lib/on-demand-routes.mjs and diffed in tests/on-demand-routes.test.mjs.
+  // src/lib/on-demand-routes.mjs and diffed in tests/on-demand-routes.test.mjs. RETIRED_URL_MATCHER
+  // is the fourth: an old URL has to reach the function to be 301ed, and it is no longer a page.
   for (const entry of matcherEntries()) {
     if (NEGOTIABLE_PAGE_MATCHER.includes(entry)) continue;
     if (ON_DEMAND_PATHS.includes(entry)) continue;
+    if (RETIRED_URL_MATCHER.includes(entry)) continue;
     const probe = entry.replace('/:path*', '/probe');
     assert.equal(isAgentSurface(probe), true, `${entry} is matched but not recognised as a surface`);
   }

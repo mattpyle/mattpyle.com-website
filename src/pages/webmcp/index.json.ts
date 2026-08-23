@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({ site }) => {
   const articles = (await getCollection('writing', ({ data }) => !data.draft)).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
-  const builds = (await getCollection('builds')).sort(
+  const projects = (await getCollection('projects')).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
   );
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
@@ -55,17 +55,17 @@ export const GET: APIRoute = async ({ site }) => {
       tags: article.data.tags,
       description: article.data.description,
     })),
-    builds: builds.map((build) => ({
-      title: build.data.title,
-      slug: build.id,
-      // Builds have no per-entry route — src/pages/builds/ is an index page only.
-      url: `${base}/builds/`,
-      date: build.data.date.toISOString(),
-      status: build.data.status,
-      tags: build.data.tags,
-      description: build.data.description,
-      ...(build.data.github ? { github: build.data.github } : {}),
-      ...(build.data.live ? { live: build.data.live } : {}),
+    projects: projects.map((project) => ({
+      title: project.data.title,
+      slug: project.id,
+      // Projects have no per-entry route — src/pages/projects/ is an index page only.
+      url: `${base}/projects/`,
+      date: project.data.date.toISOString(),
+      status: project.data.status,
+      tags: project.data.tags,
+      description: project.data.description,
+      ...(project.data.github ? { github: project.data.github } : {}),
+      ...(project.data.live ? { live: project.data.live } : {}),
     })),
     // `description` mirrors `summary` so search_content's shared matcher (which reads
     // .title/.description/.tags) covers changelog entries with no special-casing.

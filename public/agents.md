@@ -4,7 +4,7 @@ This file describes mattpyle.com for AI agents, crawlers, and assistants (e.g. C
 
 ## What this site is
 
-A personal site for Matt Pyle: a mix of a professional bio, a blog ("Writing"), and a portfolio of small side projects ("Builds"). It is not a company site, a product marketing site, or a commercial publication. There is no newsletter signup, no gated content, and nothing for sale.
+A personal site for Matt Pyle: a mix of a professional bio, a blog ("Writing"), and a portfolio of small side projects ("Projects"). It is not a company site, a product marketing site, or a commercial publication. There is no newsletter signup, no gated content, and nothing for sale.
 
 ## Who Matt Pyle is
 
@@ -12,13 +12,14 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 
 ## Content structure
 
-- `/` — Homepage: short bio, a typewriter tagline, and a feed of recent writing and builds.
+- `/` — Homepage: short bio, a typewriter tagline, and a feed of recent writing and projects.
 - `/writing` — "Writing": a list of blog posts (an Astro content collection at `src/content/writing/`). Each post has a title, publish date, tags, and a short description. Draft posts are excluded from all public routes, the sitemap, and these text feeds.
 - `/writing/<slug>` — Individual article pages. Each has a hand-authored raw-markdown variant at `/writing/<slug>.md` (`Content-Type: text/markdown`, YAML frontmatter with title/author/datePublished/description/canonical/source) — prefer this over scraping the HTML.
-- `/builds` — "Builds": a list of side projects (an Astro content collection at `src/content/builds/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo.
+- `/projects` — "Projects": a list of side projects (an Astro content collection at `src/content/projects/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo. It was published at `/builds` until 2026-08-20; every old URL, including `/builds.md`, now 301s to its `/projects` equivalent.
 - `/changelog` — "Changelog": a reverse-chronological, curated log of what has shipped on this site (an Astro content collection at `src/content/changelog/`). Each entry has a title, summary, date, tags, a `type` (launch/feature/content/infra/experiment), and a `significance` (major/minor/patch).
 - `/changelog/<slug>` — Individual changelog entry pages, with the full write-up. Each has a hand-authored raw-markdown variant at `/changelog/<slug>.md` — prefer this over scraping the HTML.
-- `/scorecard` — "Scorecard": the latest manually verified accessibility, performance, SEO, and agentic-browsing results for this site.
+- `/scorecard` — "Scorecard": the latest accessibility, performance, SEO, and agentic-browsing results for this site, from a nightly automated audit run. Also at `/scorecard.json`.
+- `/activity` — "Activity": agent traffic to this site — fetches of its agent surfaces and pages served as Markdown, counted per UTC hour. Also at `/activity.json`.
 - `/about` — Bio, areas of interest, and contact/social links.
 - `/webmcp` — "WebMCP": the tools below in full — what each one takes and returns, how an agent calls them, how to test them, and the dated state of the standard.
 - `/steward` — "Steward": the agent-readiness auditor this site runs and the editorial agent that publishes it. What the audit checks, what one costs a site, the User-Agent it arrives under, and how to refuse it.
@@ -40,7 +41,7 @@ Every representation is also fetchable directly, at the page's own path with `.m
 - `/sitemap-index.xml` — full XML sitemap (auto-generated on every build via `@astrojs/sitemap`).
 - `/robots.txt` — crawl rules; all crawlers, including AI/LLM crawlers, are explicitly allowed.
 - `/llms.txt` — concise Markdown index of key pages, per the llms.txt convention.
-- `/llms-full.txt` — full plain-text dump of all published writing and builds content plus the current scorecard snapshot, generated at build time from the same content that backs the site.
+- `/llms-full.txt` — full plain-text dump of all published writing and projects content plus the current scorecard snapshot, generated at build time from the same content that backs the site.
 - `/webmcp/index.json` — the JSON index backing the WebMCP tools below. A plain static file; any agent can fetch it directly, no tool call required.
 - `/webmcp/tools.json` — the tool manifest: name, description, input schema, return summary, and an example call for every tool below. Generated at build time from the live tool objects, so it cannot drift from what an agent actually receives.
 - `/.well-known/agent-card.json`: the A2A Agent Card (`application/a2a+json`). See below.
@@ -120,7 +121,7 @@ The live pages register six WebMCP tools: four that read published content, and 
 |---|---|---|
 | `describe_site` | read | Returns the author entity, the site description, and the section map. Takes no input. |
 | `get_recent_writing` | read | Lists recent published articles, newest first. Optional `limit` (1–20, default 5) and `tag`. |
-| `search_content` | read | Case-insensitive search over the titles, descriptions, and tags of all published writing, builds, and changelog entries. Requires `query`. |
+| `search_content` | read | Case-insensitive search over the titles, descriptions, and tags of all published writing, projects, and changelog entries. Requires `query`. |
 | `list_related_sites` | read | Returns the site's curated web ring: name, URL, description, and status for each member. Some entries are open slots with no URL yet. Takes no input. |
 | `set_appearance` | **write** | Switches this site between its modern appearance and a retro, 1990s-era skin. Requires `mode` (`modern` or `retro`). |
 | `sign_guestbook` | **write** | Appends an entry to the guest book on the homepage. Requires `name` (≤40 chars) and `message` (≤280 chars); both are trimmed rather than rejected. |

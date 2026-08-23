@@ -1,0 +1,130 @@
+---
+/**
+ * The /writing headline (docs/projects/redesign/design-export/README.md §3).
+ *
+ * The same hero shape as the homepage — H1, then a statement beside a bordered
+ * right-hand block — with the fill in WRITING BLUE. The spec's rule is that the
+ * fill always takes the colour of the section it belongs to, which is why
+ * `.rd-fill` (global.css) is parameterised rather than hard-coded to magenta.
+ */
+---
+
+{/*
+  A div, not a section. `npm run validate:html` names an h1 inside sectioning
+  content ("Consider using the h1 element as a top-level heading only"), and an
+  unnamed <section> is not exposed as a region anyway — so the element was
+  carrying the warning and nothing else.
+*/}
+<div class="rd-section writing-hero modern-skin">
+  <h1><span class="rd-fill rd-fill--writing">Writing</span></h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      Notes on accessibility, agents, and building a site that tells the truth about itself.
+    </p>
+    {/*
+      The subscribe block. Two real endpoints, each in the colour of what it
+      serves: the feed is a writing surface, /llms.txt is an agent surface.
+    */}
+    <div class="hero-subscribe">
+      <span class="hero-subscribe-copy">Subscribe or read it as data.</span>
+      <span class="hero-subscribe-links">
+        <a href="/rss.xml" class="link-writing">rss.xml</a>
+        <a href="/llms.txt" class="link-agents">llms.txt</a>
+      </span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .writing-hero { padding-top: 78px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 40px;
+    margin-top: 44px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    max-width: 32ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-subscribe {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .hero-subscribe-copy {
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .hero-subscribe-links {
+    display: flex;
+    column-gap: 20px;
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+  }
+
+  .link-writing { color: var(--writing); }
+  .link-writing:hover { color: var(--writing-hover); }
+  .link-agents { color: var(--agents); }
+  .link-agents:hover { color: var(--agents-hover); }
+
+  @media (max-width: 720px) {
+    .writing-hero { padding-top: 40px; }
+
+    h1 {
+      font-size: 68px;
+      line-height: .94;
+      letter-spacing: -.04em;
+    }
+
+    .hero-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 28px;
+      margin-top: 28px;
+    }
+
+    .hero-statement { font-size: 24px; }
+
+    .hero-subscribe { padding-left: 16px; }
+
+    /* 44px tap targets, per the mobile spec. */
+    .hero-subscribe-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+  }
+</style>

@@ -99,7 +99,7 @@ export const SCORECARD_URLS_FALLBACK = [
   '/',
   '/about/',
   '/writing/',
-  '/builds/',
+  '/projects/',
   '/changelog/',
   '/scorecard/',
 ] as const;
@@ -452,10 +452,10 @@ export const ENABLE_PUBLISH_LEG = process.env.STEWARD_ENABLE_PUBLISH_LEG === 'fa
 /**
  * The content collections Steward reviews.
  *
- * `builds` is deliberately absent. It has no `draft` field in
+ * `projects` is deliberately absent. It has no `draft` field in
  * `src/content.config.ts` at all, so neither the gate-mode draft refusal nor the
  * `SHOW_DRAFTS` build has any meaning for it — it is out of scope until someone
- * decides what reviewing a build entry would even mean.
+ * decides what reviewing a project entry would even mean.
  */
 export const COLLECTIONS = ['writing', 'changelog'] as const;
 export type Collection = (typeof COLLECTIONS)[number];

@@ -1,0 +1,260 @@
+---
+/**
+ * The /changelog entry list.
+ *
+ * The writing index's idioms (src/components/writing/WritingArchive.astro) over
+ * the grouping the ledger already had: entries newest-first, grouped by the year
+ * they shipped, one row each carrying date, title, summary.
+ *
+ * WHAT THE LEGACY LEDGER SHOWS AND THIS DOES NOT: the significance dot and the
+ * legend that explains it, and the tag chips. Constraint 7 is that colour
+ * carries section meaning and nothing is labelled with a swatch, and constraint
+ * 4 bans chips — so significance and type are plain mono words at the end of the
+ * row, which is where the writing index puts a post's read length.
+ *
+ * THE TYPE FILTER SURVIVES. Constraint 4 bans the pill VISUAL, not the function:
+ * FilterPills' radiogroup restyles into mono text with a 2px bottom border under
+ * the active one, which is the marker the design already uses for the current
+ * section in the nav. Those rules are in FilterPills.astro under the redesign
+ * guard. Hiding a year heading whose rows are all filtered out — the job
+ * ChangelogLedger.astro does for the legacy tree in a script — is one `:has()`
+ * selector here.
+ */
+import FilterPills from '../FilterPills.astro';
+import { formatSiteDate } from '../../lib/format-date.mjs';
+
+interface Entry {
+  id: string;
+  data: {
+    title: string;
+    summary: string;
+    date: Date;
+    type: string;
+    significance: 'major' | 'minor' | 'patch';
+  };
+}
+
+interface Props {
+  entries: Entry[];
+  pills: { value: string; label: string; title?: string }[];
+}
+
+const { entries, pills } = Astro.props;
+
+// Entries arrive newest-first, already sliced to the current page. Group them by
+// year preserving that order; a year that spans a page boundary repeats its
+// heading on the next page, exactly as the legacy ledger does.
+const groups: { year: number; items: Entry[] }[] = [];
+for (const entry of entries) {
+  const year = entry.data.date.getUTCFullYear();
+  const group = groups.at(-1);
+  if (group && group.year === year) group.items.push(entry);
+  else groups.push({ year, items: [entry] });
+}
+---
+
+<section class="rd-section log modern-skin" aria-labelledby="changelog-log-title">
+  {/*
+    The list needs a name in the accessibility tree and the design has no visible
+    heading for it — the H1 above is the page's only headline. Same answer as
+    WritingArchive.astro: a visually-hidden h2.
+  */}
+  <h2 id="changelog-log-title" class="sr-only">All entries</h2>
+
+  <div class="log-filter">
+    <FilterPills
+      pills={pills}
+      groupLabel="Filter by type"
+      itemSelector='[data-module="changelog-log"] .log-row'
+      itemDataAttr="type"
+      matchMode="exact"
+      noun="entry"
+      nounPlural="entries"
+      filterVerb="of type"
+    />
+  </div>
+
+  <div data-module="changelog-log">
+    {groups.length > 0 ? groups.map(group => (
+      <div class="year-group">
+        {/*
+          The year, and NO COUNT beside it. The writing index puts a post count
+          in this slot, but that list has no filter: here the number would go on
+          reading "13 entries" over three visible rows the moment a type is
+          selected. The hero states the log's size and the pager states how much
+          of it this page shows; both stay true.
+        */}
+        <div class="year-head">
+          <span class="year">{group.year}</span>
+        </div>
+        {group.items.map(entry => (
+          <a href={`/changelog/${entry.id}/`} class="log-row" data-type={entry.data.type}>
+            <time datetime={entry.data.date.toISOString()} class="row-date">
+              {formatSiteDate(entry.data.date)}
+            </time>
+            <span class="row-body">
+              <span class="row-title">{entry.data.title}</span>
+              <span class="row-summary">{entry.data.summary}</span>
+            </span>
+            <span class="row-kind">
+              <span class="row-type">{entry.data.type}</span>
+              <span class="row-sig">{entry.data.significance}</span>
+            </span>
+          </a>
+        ))}
+        {/* Closes the group with the same hairline that opens each row. */}
+        <div class="rows-end"></div>
+      </div>
+    )) : (
+      <p class="empty">No changelog entries yet.</p>
+    )}
+  </div>
+</section>
+
+
+<style>
+  .log { padding-top: 56px; }
+
+  .log-filter { padding-bottom: 34px; }
+
+  .year-group + .year-group { margin-top: 56px; }
+
+  /* A year heading whose rows are all filtered out would otherwise sit over
+     nothing. The legacy ledger does this in JavaScript, listening for the event
+     FilterPills dispatches; here it is one selector, because every input it
+     needs is already in the DOM. That also keeps this component off the CSP's
+     script-src hash list, which is sitewide — a new inline script here would
+     rewrite the policy on all 23 routes.
+
+     Where :has() is unsupported the heading simply stays, with no rows under
+     it. The same graceful failure the ledger's own `:has` hover rule accepts. */
+  .year-group:not(:has(.log-row:not([hidden]))) { display: none; }
+
+  .year-head { padding-bottom: 8px; }
+
+  .year {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  /* The 20px padding with a matching negative margin is what lets the hover
+     ground bleed past the text without moving the text. */
+  .log-row {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) max-content;
+    gap: 36px;
+    align-items: start;
+    padding: 28px 20px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .log-row[hidden] { display: none; }
+
+  /* --tint-writing, not an amber of its own. The spec names ONE hover ground for
+     every list row it draws: "writing rows, changelog-adjacent rows, and the
+     next-post row tint to oklch(0.955 0.012 255)". An amber at that lightness
+     would also be the pale cream constraint 9 rules out. */
+  .log-row:hover { background: var(--tint-writing); }
+
+  .rows-end { border-top: 1px solid var(--rule); }
+
+  .row-date {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+    padding-top: 7px;
+  }
+
+  .row-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .row-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    max-width: 26ch;
+  }
+
+  .row-summary {
+    font-size: 17.5px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    max-width: 64ch;
+    text-wrap: pretty;
+  }
+
+  .row-kind {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: right;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    padding-top: 7px;
+    white-space: nowrap;
+  }
+
+  .row-type { color: var(--changelog); }
+  .row-sig { color: var(--ink-6); }
+
+  .empty {
+    margin: 0;
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    .log { padding-top: 40px; }
+
+    .log-filter { padding-bottom: 22px; }
+
+    .year-group + .year-group { margin-top: 40px; }
+
+    /* Stacked, and the bleed goes with it: at 20px of gutter there is nothing
+       left to bleed into. The type and significance fall to the foot of the
+       stack in document order rather than being reordered there, so what a
+       screen reader announces and what the page shows stay the same sequence. */
+    .log-row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 22px 0;
+      margin: 0;
+    }
+
+    .row-date { padding-top: 0; font-size: 16px; }
+
+    .row-title { font-size: 25px; line-height: 1.2; }
+
+    .row-summary { font-size: 17px; }
+
+    .row-kind {
+      flex-direction: row;
+      gap: 14px;
+      text-align: left;
+      padding-top: 0;
+      font-size: 16px;
+    }
+  }
+</style>

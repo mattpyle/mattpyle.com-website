@@ -25,8 +25,8 @@
         "summary": "All writing."
       },
       {
-        "name": "Builds",
-        "url": "https://www.mattpyle.com/builds/",
+        "name": "Projects",
+        "url": "https://www.mattpyle.com/projects/",
         "summary": "Side projects."
       },
       {
@@ -38,6 +38,11 @@
         "name": "Scorecard",
         "url": "https://www.mattpyle.com/scorecard/",
         "summary": "Latest verified accessibility, performance, SEO, and agentic browsing scores."
+      },
+      {
+        "name": "Activity",
+        "url": "https://www.mattpyle.com/activity/",
+        "summary": "Agent traffic to this site: agent-surface fetches and pages served as Markdown, counted per UTC hour."
       },
       {
         "name": "About",
@@ -116,10 +121,10 @@
       "description": "AI built this site. Every automated tool gave it top marks. Then I installed a screen reader for the first time, spent an evening fumbling with it, and heard what my site actually sounds like."
     }
   ],
-  "builds": [
+  "projects": [
     {
       "title": "mattpyle.com",
-      "url": "https://www.mattpyle.com/builds",
+      "url": "https://www.mattpyle.com/projects",
       "date": "2026-07-13T00:00:00.000Z",
       "status": "live",
       "tags": [
@@ -279,7 +284,7 @@
   ],
   "counts": {
     "writing": 2,
-    "builds": 1,
+    "projects": 1,
     "changelog": 13,
     "changelogListed": 10
   }

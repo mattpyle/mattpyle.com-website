@@ -1,13 +1,16 @@
 ---
 import FilterPills from './FilterPills.astro';
 
-interface Build {
+interface Project {
   /**
-   * The content collection's slug, which becomes the card's anchor.
+   * The content collection's slug.
    *
-   * There are no per-build detail pages, so `/builds/#build-<id>` is the address a build has. It is
-   * what llms.txt links each build bullet to (src/pages/llms.txt.ts), so an agent reading the list
-   * has somewhere to follow — the anchor has to land on the card rather than at the top of a page.
+   * There are no per-project detail pages, so `/projects/#project-<id>` is the address a project
+   * has, and it is what llms.txt links each project bullet to (src/pages/llms.txt.ts). THAT ANCHOR
+   * NO LONGER LIVES HERE. An id is unique per document and /projects ships two trees, so it sits
+   * on the redesigned card in src/components/projects/ProjectsBoard.astro instead: that is the
+   * tree the default appearance displays, and a `display: none` element is not a scroll target.
+   * In retro the fragment resolves to the page rather than to the card.
    */
   id: string;
   data: {
@@ -22,10 +25,10 @@ interface Build {
 }
 
 interface Props {
-  builds: Build[];
+  projects: Project[];
 }
 
-const { builds } = Astro.props;
+const { projects } = Astro.props;
 
 function formatDate(date: Date): string {
   const m = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
@@ -47,11 +50,11 @@ const pills = [
 ];
 ---
 
-<div data-module="builds-wrapper">
+<div data-module="projects-wrapper">
   <FilterPills
     pills={pills}
     groupLabel="Filter by status"
-    itemSelector='[data-module="builds-grid"] .build-item'
+    itemSelector='[data-module="projects-grid"] .project-item'
     itemDataAttr="status"
     matchMode="exact"
     noun="project"
@@ -59,36 +62,36 @@ const pills = [
     filterVerb="with status"
   />
 
-  <ol data-module="builds-grid" role="list">
-    {builds.map(build => (
-      <li class="build-item" data-status={build.data.status}>
-        <article class={`build-card status--${build.data.status}`}>
+  <ol data-module="projects-grid" role="list">
+    {projects.map(project => (
+      <li class="project-item" data-status={project.data.status}>
+        <article class={`project-card status--${project.data.status}`}>
           <header class="card-header">
             <div class="card-status">
               <span class="status-dot" aria-hidden="true"></span>
-              <span class="status-label">{STATUS_LABELS[build.data.status]}</span>
+              <span class="status-label">{STATUS_LABELS[project.data.status]}</span>
             </div>
-            <time datetime={build.data.date.toISOString()} class="card-date">
-              {formatDate(build.data.date)}
+            <time datetime={project.data.date.toISOString()} class="card-date">
+              {formatDate(project.data.date)}
             </time>
           </header>
-          <h2 id={`build-${build.id}`}>{build.data.title}</h2>
-          <p class="card-desc">{build.data.description}</p>
+          <h2>{project.data.title}</h2>
+          <p class="card-desc">{project.data.description}</p>
           <ul role="list" class="card-tags">
-            {build.data.tags.map(tag => <li class="tag-pill">{tag}</li>)}
+            {project.data.tags.map(tag => <li class="tag-pill">{tag}</li>)}
           </ul>
           <footer class="card-links">
-            {build.data.github && (
-              <a href={build.data.github} target="_blank" rel="noopener noreferrer" class="card-link">
+            {project.data.github && (
+              <a href={project.data.github} target="_blank" rel="noopener noreferrer" class="card-link">
                 GITHUB ↗
               </a>
             )}
-            {build.data.live && (
-              <a href={build.data.live} target="_blank" rel="noopener noreferrer" class="card-link">
+            {project.data.live && (
+              <a href={project.data.live} target="_blank" rel="noopener noreferrer" class="card-link">
                 LIVE ↗
               </a>
             )}
-            {!build.data.github && !build.data.live && (
+            {!project.data.github && !project.data.live && (
               <span class="no-link">No public link yet</span>
             )}
           </footer>
@@ -99,13 +102,13 @@ const pills = [
 </div>
 
 <style>
-  [data-module="builds-wrapper"] {
+  [data-module="projects-wrapper"] {
     max-width: var(--width-content);
     margin: 0 auto;
     padding: 0 var(--gutter) 72px;
   }
 
-  [data-module="builds-grid"] {
+  [data-module="projects-grid"] {
     list-style: none;
     margin: 0;
     padding: 24px 0 0;
@@ -114,7 +117,7 @@ const pills = [
     gap: 20px;
   }
 
-  .build-card {
+  .project-card {
     border: 1px solid var(--color-border);
     border-top-width: 2px;
     background: var(--color-card);
@@ -156,7 +159,7 @@ const pills = [
 
   .card-date { font-family: var(--font-mono); font-size: 10px; color: var(--color-label); }
 
-  .build-card h2 {
+  .project-card h2 {
     font-family: var(--font-serif);
     font-weight: 600;
     font-size: 19px;
@@ -196,6 +199,6 @@ const pills = [
 
   .no-link { font-family: var(--font-mono); font-size: 11px; color: var(--color-label); }
 
-  @media (max-width: 760px) { [data-module="builds-grid"] { grid-template-columns: 1fr; } }
-  @media (max-width: 600px) { [data-module="builds-wrapper"] { padding: 8px var(--gutter-mobile) 56px; } }
+  @media (max-width: 760px) { [data-module="projects-grid"] { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { [data-module="projects-wrapper"] { padding: 8px var(--gutter-mobile) 56px; } }
 </style>

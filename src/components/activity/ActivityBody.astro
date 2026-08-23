@@ -1,0 +1,812 @@
+---
+/**
+ * The five data bands of /activity
+ * (docs/projects/redesign/design-export-remaining/design_handoff_activity, bands 2-6): headline
+ * counts, the last day hour by hour, the last hour, three tables, and one paragraph on how the
+ * counting works.
+ *
+ * EVERY FIGURE COMES FROM ONE `buildActivity()` CALL, made by the page and handed in whole. The
+ * JSON endpoint at /activity.json calls the same function on the same read, so the two surfaces
+ * cannot report different numbers for the same instant. Nothing is computed here beyond
+ * formatting.
+ *
+ * HOUR-HONEST EVERYWHERE. The store keeps counts per UTC hour bucket and never individual
+ * requests, so no band shows a minute, a relative time or a single request. The "last hour" rows
+ * and the newest bar of the chart above them are the same bucket rendered twice, which is what
+ * makes them agree by construction rather than by luck.
+ *
+ * THE BAND-6 PARAGRAPH IS NOT THE EXPORT'S. The revised export claims "Every request to this site
+ * is logged at the edge"; design-export-remaining/README.md says that must not ship, because page
+ * views are not counted. The wording here states the two event classes that are.
+ *
+ * THREE DEVIATIONS FROM THE BUNDLE, the first two because the alternative would be a page that
+ * lies:
+ *
+ * 1. The bundle says "No text beside or beneath any table". A table here is capped at
+ *    MAX_TABLE_ROWS rows (src/lib/agent-traffic.mjs), so a row past the cap is dropped — and
+ *    dropping rows silently would make a truncated table read as a complete one. The omitted count
+ *    prints only when it is not zero, which is never with today's bounded key space.
+ * 2. The bundle has no empty or unavailable state, because the mockup always has numbers. This
+ *    page reads a live store per request, so it has three states, and the two without numbers say
+ *    which one they are.
+ * 3. Below 500px the 30-day column is dropped from the three tables that have one. The bundle
+ *    keeps every column at every width; a 320px viewport cannot hold four, and the 30-day figure
+ *    is the one a reader needs least because every table here is sorted on another column. The
+ *    rule and its reasoning are at the 500px breakpoint at the foot of this file.
+ *
+ * NO INLINE STYLE ANYWHERE, INCLUDING THE BARS. The site's CSP declares `style-src 'self'` with no
+ * `'unsafe-inline'`, so a computed `height` on a bar — and Astro's `define:vars`, which compiles to
+ * the same thing — is refused in production. The bar heights are a ladder of classes at the foot of
+ * this file instead: one rule per whole percent the geometry can produce. Same constraint that made
+ * the homepage scorecard panel use a real `<progress>` element rather than a div with a width.
+ */
+import { FAMILY_NOTES } from '../../lib/activity-summary.mjs';
+import { MAX_TABLE_ROWS } from '../../lib/agent-traffic.mjs';
+// The store counts the page path a client asked for; the table shows the URL that answered, so a
+// row reads as the markdown document it was. Same function the middleware derives the sibling
+// with, so the two can never disagree about what /about's markdown is called.
+import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
+
+interface Props {
+  /** The `buildActivity()` result, or null when the store did not answer. */
+  activity: ReturnType<typeof import('../../lib/activity-summary.mjs').buildActivity> | null;
+  /** What to say when `activity` is null or has counted nothing. */
+  emptyStateCopy: string;
+}
+
+const { activity, emptyStateCopy } = Astro.props;
+
+const counts = new Intl.NumberFormat('en-GB');
+
+const hasData = Boolean(activity && activity.counted);
+
+/** A client family with its gloss, for the two places a family name is printed. */
+function familyNote(family: string): string | undefined {
+  return FAMILY_NOTES[family as keyof typeof FAMILY_NOTES];
+}
+---
+
+<div class="modern-skin">
+  {hasData && activity ? (
+    <Fragment>
+      <section class="rd-section band-counts" aria-labelledby="activity-counts-title">
+        <h2 id="activity-counts-title" class="sr-only">Headline counts</h2>
+        <div class="counts">
+          <div class="count count--agents">
+            <span class="count-number">{counts.format(activity.totals.day)}</span>
+            <span class="count-label">Requests, last 24 hours</span>
+          </div>
+          <div class="count">
+            <span class="count-number">{counts.format(activity.totals.week)}</span>
+            <span class="count-label">Requests, last 7 days</span>
+          </div>
+          {/*
+            "Requests recorded", never "all time": collection began 21 Jul 2026, so the total is
+            barely older than the 30-day column. The label carries that on its own — the bundle is
+            explicit that no explanatory sentence goes with it.
+          */}
+          <div class="count">
+            <span class="count-number">{counts.format(activity.totals.total)}</span>
+            <span class="count-label">Requests recorded</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="rd-section band-chart" aria-labelledby="activity-chart-title">
+        <div class="band-head">
+          <h2 id="activity-chart-title">The last day, hour by hour</h2>
+        </div>
+
+        {/*
+          A list of 24 columns, each naming its own hour to a screen reader. All 24 bars are the
+          same colour: an earlier draft highlighted the peak hour, which read as "the current hour"
+          and was wrong. The tick row below is aria-hidden because every column already says which
+          hour it is.
+        */}
+        <ul class="chart" role="list">
+          {activity.hours.map(hour => (
+            <li class="chart-col">
+              <span class="sr-only">{String(hour.utcHour).padStart(2, '0')}:00 UTC, </span>
+              <span class="chart-count">{counts.format(hour.count)}</span>
+              <span class:list={['chart-bar', `bar--h${hour.percent}`]} aria-hidden="true"></span>
+            </li>
+          ))}
+        </ul>
+
+        <div class="ticks" aria-hidden="true">
+          {activity.hours.map(hour => <span class="tick">{hour.tick}</span>)}
+        </div>
+
+        <p class="chart-note">Requests per hour, UTC.</p>
+      </section>
+
+      <section class="rd-section band-hour" aria-labelledby="activity-hour-title">
+        <div class="band-head">
+          <h2 id="activity-hour-title">The last hour</h2>
+          {/* One source line: a line break beside an inline tag loses its space in the built
+              HTML (scripts/check-inline-tag-wrapping.mjs). */}
+          <span class="legend"><span class="legend-swatch" aria-hidden="true"></span> bot/agent</span>
+        </div>
+
+        {activity.lastHour.rows.length > 0 ? (
+          <table class="grid-table hour-table">
+            <thead>
+              <tr>
+                <th scope="col" class="c-marker"><span class="sr-only">bot or agent</span></th>
+                <th scope="col" class="c-client">Client</th>
+                <th scope="col" class="c-path">Asked for</th>
+                <th scope="col" class="c-num">Requests</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activity.lastHour.rows.map(row => (
+                <tr>
+                  <td class="c-marker">
+                    <span class:list={['marker', row.kind === 'agent' && 'marker--agent']} aria-hidden="true"></span>
+                  </td>
+                  {/*
+                    Plain ink, never a colour: the marker carries the classification, and colouring
+                    the name as well would state it twice while failing anyone who cannot see the
+                    difference.
+                  */}
+                  <td class="c-client">{row.family}{familyNote(row.family) && <span class="family-note"> ({familyNote(row.family)})</span>}</td>
+                  <td class="c-path">{row.path}</td>
+                  <td class="c-num">{counts.format(row.count)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p class="band-empty">Nothing has been counted in the hour so far.</p>
+        )}
+      </section>
+
+      <section class="rd-section band-surfaces" aria-labelledby="activity-surfaces-title">
+        <div class="band-head">
+          <h2 id="activity-surfaces-title">By surface</h2>
+        </div>
+        <table class="grid-table surface-table">
+          <thead>
+            <tr>
+              <th scope="col" class="c-path">Surface</th>
+              <th scope="col" class="c-num c-wide">7 days</th>
+              <th scope="col" class="c-num c-wide">30 days</th>
+              <th scope="col" class="c-num c-wide">Recorded</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activity.surfaces.rows.map(row => (
+              <tr>
+                <td class="c-path">{row.path}</td>
+                <td class="c-num c-lead">{counts.format(row.week)}</td>
+                <td class="c-num">{counts.format(row.month)}</td>
+                <td class="c-num">{counts.format(row.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {activity.surfaces.omitted > 0 && (
+          <p class="omitted">{activity.surfaces.omitted} further surface(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+        )}
+      </section>
+
+      <div class="rd-section band-tables">
+        <section class="table-half" aria-labelledby="activity-clients-title">
+          <div class="band-head">
+            <h2 id="activity-clients-title">By client</h2>
+            {/* One source line, and the same legend The last hour band carries: a swatch beside a
+                column name explains nothing, the label is what explains the swatch. */}
+            <span class="legend"><span class="legend-swatch" aria-hidden="true"></span> bot/agent</span>
+          </div>
+          <table class="grid-table client-table">
+            <thead>
+              <tr>
+                <th scope="col" class="c-marker"><span class="sr-only">bot or agent</span></th>
+                <th scope="col" class="c-client">Client</th>
+                <th scope="col" class="c-num">7 days</th>
+                <th scope="col" class="c-num">30 days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activity.clients.rows.map(row => (
+                <tr>
+                  <td class="c-marker">
+                    <span class:list={['marker', row.kind === 'agent' && 'marker--agent']} aria-hidden="true"></span>
+                  </td>
+                  <td class="c-client">{row.family}{familyNote(row.family ?? '') && <span class="family-note"> ({familyNote(row.family ?? '')})</span>}</td>
+                  <td class="c-num c-lead">{counts.format(row.week)}</td>
+                  <td class="c-num">{counts.format(row.month)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {activity.clients.omitted > 0 && (
+            <p class="omitted">{activity.clients.omitted} further client(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+          )}
+        </section>
+
+        <section class="table-half" aria-labelledby="activity-markdown-title">
+          <div class="band-head">
+            <h2 id="activity-markdown-title">Markdown negotiation</h2>
+          </div>
+          {activity.pages.rows.length > 0 ? (
+            <table class="grid-table markdown-table">
+              <thead>
+                <tr>
+                  <th scope="col" class="c-path">Page</th>
+                  <th scope="col" class="c-num">7 days</th>
+                  <th scope="col" class="c-num">30 days</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activity.pages.rows.map(row => (
+                  <tr>
+                    <td class="c-path">{markdownSiblingFor(row.path ?? '') ?? row.path}</td>
+                    <td class="c-num c-lead">{counts.format(row.week)}</td>
+                    <td class="c-num">{counts.format(row.month)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p class="band-empty">
+              No page has been served as Markdown yet. Every page here has a Markdown
+              representation and answers a request for it; this table fills in the first time
+              something asks.
+            </p>
+          )}
+          {activity.pages.omitted > 0 && (
+            <p class="omitted">{activity.pages.omitted} further page(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+          )}
+        </section>
+      </div>
+    </Fragment>
+  ) : (
+    <section class="rd-section band-counts" aria-labelledby="activity-unavailable-title">
+      <h2 id="activity-unavailable-title" class="sr-only">Counts</h2>
+      <p class="band-empty band-empty--lead">{emptyStateCopy}</p>
+    </section>
+  )}
+
+  <section class="rd-section band-how" aria-labelledby="activity-how-title">
+    <div>
+      <h2 id="activity-how-title">How this is counted</h2>
+      <p class="how-prose">
+        Two things are counted at the edge: a fetch of one of this site's agent surfaces, and a page served as Markdown to a client that asked for it. Ordinary page views are not. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
+      </p>
+    </div>
+    <div class="as-data">
+      <span class="as-data-label">The same numbers, as data</span>
+      <a href="/activity.json" class="as-data-link">activity.json</a>
+    </div>
+  </section>
+</div>
+
+<style>
+  /* Not global on this site: `.sr-only` is declared per component (see ActivityLog.astro,
+     Footer.astro and a dozen others), so a component that uses the class has to carry the rule.
+     Without it the label renders as visible text — which is how the 24 hour labels below turned a
+     280px chart into a 1123px one on the first reflow run. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ── Shared band furniture ──────────────────────────────────────────────── */
+  .band-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+
+  .band-head h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+  }
+
+  .band-empty {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-6);
+    text-wrap: pretty;
+  }
+
+  .band-empty--lead {
+    padding-top: 34px;
+    border-top: 1px solid var(--rule-2);
+    font-size: 20px;
+    color: var(--ink-2);
+  }
+
+  .omitted {
+    margin: 14px 0 0;
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  /* ── Band 2: headline counts ────────────────────────────────────────────── */
+  .band-counts { padding-top: 72px; }
+
+  .counts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .count {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 34px 0 0;
+  }
+
+  .count + .count {
+    padding-left: 32px;
+    border-left: 1px solid var(--rule);
+  }
+
+  .count-number {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 84px;
+    line-height: .9;
+    letter-spacing: -.04em;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The 24-hour figure is the one coloured number on the page, for the same reason the agentic
+     browsing gate is the one coloured number on /scorecard: it is the number the page is about. */
+  .count--agents .count-number { color: var(--agents); }
+
+  .count-label {
+    font-size: 20px;
+    color: var(--ink-2);
+  }
+
+  /* ── Band 3: the last day, hour by hour ─────────────────────────────────── */
+  .band-chart { padding-top: 76px; }
+
+  .chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+    height: 170px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .chart-col {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .chart-count {
+    font-size: 16px;
+    color: var(--ink-6);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .chart-bar {
+    width: 100%;
+    background: var(--agents);
+  }
+
+  .ticks {
+    display: flex;
+    gap: 5px;
+    margin-top: 10px;
+  }
+
+  .tick {
+    flex: 1;
+    text-align: center;
+    font-size: 16px;
+    color: var(--ink-6);
+    font-variant-numeric: tabular-nums;
+    /* An empty tick still has to hold its column open, or the four labelled ones stop lining up
+       with their bars. */
+    min-height: 1em;
+  }
+
+  .chart-note {
+    margin: 14px 0 0;
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  /* ── Band 4: the last hour ──────────────────────────────────────────────── */
+  .band-hour { padding-top: 76px; }
+
+  .legend {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .legend-swatch {
+    display: block;
+    width: 9px;
+    height: 9px;
+    background: var(--agents);
+  }
+
+  .marker {
+    display: block;
+    width: 9px;
+    height: 9px;
+    background: transparent;
+  }
+
+  .marker--agent { background: var(--agents); }
+
+  /* ── Bands 4-5: the tables ──────────────────────────────────────────────── */
+  /* Real tables, styled as tables. `display: block` on a table drops its semantics from Chrome's
+     accessibility tree, which is what the aria goldens would notice; the responsive rules below
+     restructure ROWS instead, which leaves the table itself a table. */
+  .grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    table-layout: fixed;
+  }
+
+  .grid-table th {
+    text-align: left;
+    font-weight: 400;
+    font-size: 18px;
+    color: var(--ink-6);
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .grid-table td {
+    font-size: 19px;
+    color: var(--ink-6);
+    padding: 14px 0;
+    border-bottom: 1px solid var(--track);
+    overflow-wrap: anywhere;
+  }
+
+  /* Ink is per column, never per position: the marker column is the first cell of two of these
+     tables, and a `td:first-of-type` rule spent the row's full ink on an empty 9px square while
+     the client name beside it stepped back. A client is full ink and a path steps back, in every
+     band, because that is the pair The last hour band already reads as. */
+  .grid-table td.c-client { color: var(--ink); }
+
+  .grid-table td.c-path { color: var(--ink-2); }
+
+  .grid-table .c-num {
+    text-align: right;
+    padding-left: 20px;
+    width: 96px;
+  }
+
+  /* Recency reads first: the 7-day column is full ink, the older columns step back. */
+  .grid-table td.c-lead { color: var(--ink); }
+
+  .surface-table .c-wide { width: 130px; }
+
+  .surface-table td.c-num { padding-left: 24px; }
+
+  .surface-table td { padding: 15px 0; }
+
+  .c-marker {
+    width: 9px;
+    padding-right: 0;
+  }
+
+  .client-table th:nth-child(2),
+  .client-table td:nth-child(2) { padding-left: 16px; }
+
+  .hour-table .c-client { width: 220px; }
+
+  .hour-table .c-num { width: 110px; }
+
+  .hour-table th,
+  .hour-table td { padding-left: 20px; }
+
+  .hour-table th.c-marker,
+  .hour-table td.c-marker { padding-left: 0; }
+
+  .hour-table td.c-num { color: var(--ink); }
+
+  /* The marker cell has no baseline of its own, so it centres against the row instead. */
+  .grid-table td.c-marker { vertical-align: middle; }
+
+  .family-note { color: var(--ink-6); }
+
+  .band-surfaces { padding-top: 76px; }
+
+  .band-tables {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 72px;
+    align-items: start;
+    padding-top: 76px;
+  }
+
+  .band-tables .band-head { margin-bottom: 20px; gap: 14px; }
+
+  /* ── Band 6: how this is counted ────────────────────────────────────────── */
+  .band-how {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 64px;
+    align-items: start;
+    /* No bottom padding: SiteFooter.astro opens with the spec's 96px margin-top, and setting it
+       here as well doubles the gap. Measured on the served build for /about and /steward. */
+    padding-top: 76px;
+  }
+
+  .band-how h2 {
+    margin: 0 0 16px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+  }
+
+  .how-prose {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 20px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .as-data {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-left: 1px solid var(--rule);
+    padding-left: 26px;
+  }
+
+  .as-data-label {
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .as-data-link {
+    font-size: 20px;
+    color: var(--agents);
+  }
+
+  .as-data-link:hover { color: var(--agents-hover); }
+
+  /* ── Responsive ─────────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .counts { grid-template-columns: minmax(0, 1fr); }
+
+    .count,
+    .count + .count {
+      padding: 22px 0 0;
+      border-left: 0;
+      border-top: 1px solid var(--rule);
+    }
+
+    .count:first-child { border-top: 0; }
+
+    .band-tables {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 56px;
+    }
+
+    .band-how {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 32px;
+    }
+
+    .as-data {
+      border-left: 0;
+      padding-left: 0;
+      border-top: 1px solid var(--rule);
+      padding-top: 20px;
+    }
+
+    /* The middle column goes to a second line rather than squeezing: client and count on the
+       first, the path beneath. The ROWS restructure, not the table, so the table keeps its
+       semantics. */
+    .hour-table thead .c-path { display: none; }
+
+    .hour-table .c-client { width: auto; }
+
+    .hour-table tbody tr {
+      display: grid;
+      grid-template-columns: 9px minmax(0, 1fr) 110px;
+      gap: 0 20px;
+      border-bottom: 1px solid var(--track);
+    }
+
+    .hour-table tbody td {
+      border-bottom: 0;
+      padding-top: 14px;
+      padding-bottom: 4px;
+    }
+
+    .hour-table tbody td.c-path {
+      grid-column: 2 / -1;
+      padding: 0 0 14px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .band-counts,
+    .band-chart,
+    .band-hour,
+    .band-surfaces,
+    .band-tables,
+    .band-how { padding-top: 56px; }
+
+    .band-head h2,
+    .band-how h2 { font-size: 26px; }
+
+    .count-number { font-size: 64px; }
+
+    .count-label { font-size: 19px; }
+
+    /* 24 bars stay; the per-bar counts do not fit and go. The ticks remain, so the row is still
+       readable as a day. Screen readers keep every hour AND every count: the hour label on each
+       column is visually-hidden text, and the count that disappears here is only hidden visually
+       — see the .chart-count rule below, which is `sr-only`, not `display: none`. */
+    .chart { height: 140px; gap: 3px; }
+
+    .chart-count {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .ticks { gap: 3px; }
+
+    .tick { font-size: 14px; }
+
+    .grid-table th { font-size: 17px; }
+
+    .grid-table td { font-size: 17px; padding: 12px 0; }
+
+    .surface-table td { padding: 12px 0; }
+
+    .grid-table .c-num,
+    .surface-table .c-wide { width: 68px; padding-left: 12px; }
+
+    .surface-table td.c-num { padding-left: 12px; }
+
+    .hour-table .c-num { width: 68px; }
+
+    .hour-table tbody tr { grid-template-columns: 9px minmax(0, 1fr) 68px; }
+
+    .how-prose { font-size: 18px; }
+  }
+
+  @media (max-width: 500px) {
+    /* The 30-day column is the first thing a 320px viewport cannot hold, and it is the column a
+       reader needs least — every table here is sorted by the 7-day one. The hour table has no
+       30-day column, so its last cell is the request count and stays. */
+    .surface-table th:last-child,
+    .surface-table td:last-child,
+    .client-table th:last-child,
+    .client-table td:last-child,
+    .markdown-table th:last-child,
+    .markdown-table td:last-child { display: none; }
+  }
+
+  /* ── The bar-height ladder ──────────────────────────────────────────────── */
+  /* One rule per whole percent hourlySeries() can produce: 0 for an hour with nothing in it, and 4
+     to 82 for every other hour (the floor keeps a single request visible, the ceiling leaves room
+     for the count label above the bar). A ladder rather than a computed height because the CSP
+     refuses an inline style attribute in production; see the docblock at the top of this file. */
+  .bar--h0 { height: 0; }
+  .bar--h4 { height: 4%; }
+  .bar--h5 { height: 5%; }
+  .bar--h6 { height: 6%; }
+  .bar--h7 { height: 7%; }
+  .bar--h8 { height: 8%; }
+  .bar--h9 { height: 9%; }
+  .bar--h10 { height: 10%; }
+  .bar--h11 { height: 11%; }
+  .bar--h12 { height: 12%; }
+  .bar--h13 { height: 13%; }
+  .bar--h14 { height: 14%; }
+  .bar--h15 { height: 15%; }
+  .bar--h16 { height: 16%; }
+  .bar--h17 { height: 17%; }
+  .bar--h18 { height: 18%; }
+  .bar--h19 { height: 19%; }
+  .bar--h20 { height: 20%; }
+  .bar--h21 { height: 21%; }
+  .bar--h22 { height: 22%; }
+  .bar--h23 { height: 23%; }
+  .bar--h24 { height: 24%; }
+  .bar--h25 { height: 25%; }
+  .bar--h26 { height: 26%; }
+  .bar--h27 { height: 27%; }
+  .bar--h28 { height: 28%; }
+  .bar--h29 { height: 29%; }
+  .bar--h30 { height: 30%; }
+  .bar--h31 { height: 31%; }
+  .bar--h32 { height: 32%; }
+  .bar--h33 { height: 33%; }
+  .bar--h34 { height: 34%; }
+  .bar--h35 { height: 35%; }
+  .bar--h36 { height: 36%; }
+  .bar--h37 { height: 37%; }
+  .bar--h38 { height: 38%; }
+  .bar--h39 { height: 39%; }
+  .bar--h40 { height: 40%; }
+  .bar--h41 { height: 41%; }
+  .bar--h42 { height: 42%; }
+  .bar--h43 { height: 43%; }
+  .bar--h44 { height: 44%; }
+  .bar--h45 { height: 45%; }
+  .bar--h46 { height: 46%; }
+  .bar--h47 { height: 47%; }
+  .bar--h48 { height: 48%; }
+  .bar--h49 { height: 49%; }
+  .bar--h50 { height: 50%; }
+  .bar--h51 { height: 51%; }
+  .bar--h52 { height: 52%; }
+  .bar--h53 { height: 53%; }
+  .bar--h54 { height: 54%; }
+  .bar--h55 { height: 55%; }
+  .bar--h56 { height: 56%; }
+  .bar--h57 { height: 57%; }
+  .bar--h58 { height: 58%; }
+  .bar--h59 { height: 59%; }
+  .bar--h60 { height: 60%; }
+  .bar--h61 { height: 61%; }
+  .bar--h62 { height: 62%; }
+  .bar--h63 { height: 63%; }
+  .bar--h64 { height: 64%; }
+  .bar--h65 { height: 65%; }
+  .bar--h66 { height: 66%; }
+  .bar--h67 { height: 67%; }
+  .bar--h68 { height: 68%; }
+  .bar--h69 { height: 69%; }
+  .bar--h70 { height: 70%; }
+  .bar--h71 { height: 71%; }
+  .bar--h72 { height: 72%; }
+  .bar--h73 { height: 73%; }
+  .bar--h74 { height: 74%; }
+  .bar--h75 { height: 75%; }
+  .bar--h76 { height: 76%; }
+  .bar--h77 { height: 77%; }
+  .bar--h78 { height: 78%; }
+  .bar--h79 { height: 79%; }
+  .bar--h80 { height: 80%; }
+  .bar--h81 { height: 81%; }
+  .bar--h82 { height: 82%; }
+</style>

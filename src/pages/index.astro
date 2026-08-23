@@ -6,6 +6,11 @@ import RetroHomeFurniture from '../components/RetroHomeFurniture.astro';
 import Guestbook from '../components/Guestbook.astro';
 import WebmasterNote from '../components/WebmasterNote.astro';
 import WebRing from '../components/WebRing.astro';
+import HomeHero from '../components/home/HomeHero.astro';
+import HomeWriting from '../components/home/HomeWriting.astro';
+import HomeProjects from '../components/home/HomeProjects.astro';
+import HomeAgents from '../components/home/HomeAgents.astro';
+import HomeChangelog from '../components/home/HomeChangelog.astro';
 import { getCollection } from 'astro:content';
 import { showDrafts } from '../lib/show-drafts';
 import { compareChangelogEntries } from '../lib/changelog-order';
@@ -17,18 +22,33 @@ const recentArticles = (
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
   .slice(0, 2);
 
-const activityItems = (
+const changelogEntries = (
   await getCollection('changelog', ({ data }) => showDrafts || !data.draft)
-)
-  .sort(compareChangelogEntries)
-  .slice(0, 4)
-  .map(({ id, data }) => ({
-    date: data.date,
-    href: `/changelog/${id}/`,
-    title: data.title,
-    type: data.type,
-    significance: data.significance,
-  }));
+).sort(compareChangelogEntries);
+
+// The legacy (retro) hero's activity rail takes four; the redesigned changelog
+// section takes five. Same source, sliced twice, so the two can never disagree
+// about which entry is newest.
+const activityItems = changelogEntries.slice(0, 4).map(({ id, data }) => ({
+  date: data.date,
+  href: `/changelog/${id}/`,
+  title: data.title,
+  type: data.type,
+  significance: data.significance,
+}));
+
+const changelogRows = changelogEntries.slice(0, 5).map(({ id, data }) => ({
+  id,
+  date: data.date,
+  summary: data.summary,
+}));
+
+// Newest first, two cards. The collection holds one entry today; the design's
+// Steward and WebMCP cards are not in it, and Matt chose to render what is real
+// rather than author two entries to fill the grid (2026-08-20).
+const featuredProjects = (await getCollection('projects'))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+  .slice(0, 2);
 
 // Derived from the negotiation map rather than written out as `/index.md`, so the link in the
 // head and the sibling the middleware would actually serve cannot drift apart. `/` has had a
@@ -45,25 +65,53 @@ const markdownUrl = markdownSiblingFor('/') ?? undefined;
   description="Matt Pyle is Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder, writing about agent-led growth and the open web."
   markdownAlternate={markdownUrl}
 >
-  <Hero activityItems={activityItems} />
-  <RetroHomeFurniture />
-  <RecentWriting articles={recentArticles} />
   {/*
-    The guest book section: one inline block below RecentWriting, above the footer. Retro-only —
-    it is in the DOM in both modes and hidden in modern by `.retro-furniture`, so nothing is
-    injected or revealed at toggle time and the sidebar's `Sign the Guest Book ↓` anchor always
-    has a target. It spans the shell; its inner column is capped at the reading measure, because
-    guest-book messages are prose and 1000px runs past 100 characters.
+    TWO HOMEPAGES IN ONE DOCUMENT, one shown per appearance.
 
-    A `div`, not a `section`: it is a layout wrapper around three components that each carry their
-    own heading and their own labelled `<section>`, and a `<section>` with no heading of its own is
-    a markup validity warning (`npm run validate:html`) as well as an unnamed region.
+    The redesign rebuilds the MODERN homepage only; retro stays exactly as it was
+    (Matt, 2026-08-20), and retro is a client-side preference the server cannot
+    read, so both trees have to ship and CSS has to choose. `.modern-skin` and
+    `.retro-skin` in src/styles/retro.css do the choosing — the same construction
+    the retro furniture below has always used, so nothing is injected, removed or
+    re-rendered when the toggle flips.
+
+    That is also what keeps retro's stylesheet untouched: it hooks onto
+    `.hero-eyebrow`, `.section-eyebrow`, `.article-title`, `[data-module='hero']`
+    and friends, which live only in the legacy tree. The redesigned sections
+    share none of those class names, so there is no rule to update and no
+    specificity contest to lose.
+
+    A hidden subtree holds no tab stops and is absent from the accessibility
+    tree, so each appearance presents exactly one homepage to a keyboard or a
+    screen reader.
   */}
-  <div class="retro-furniture guestbook-section" id="guestbook">
-    <div class="guestbook-column">
-      <Guestbook />
-      <WebmasterNote />
-      <WebRing />
+  <HomeHero />
+  <HomeWriting articles={recentArticles} />
+  <HomeProjects projects={featuredProjects} />
+  <HomeAgents />
+  <HomeChangelog entries={changelogRows} />
+
+  <div class="retro-skin">
+    <Hero activityItems={activityItems} />
+    <RetroHomeFurniture />
+    <RecentWriting articles={recentArticles} />
+    {/*
+      The guest book section: one inline block below RecentWriting, above the footer. Retro-only —
+      it is in the DOM in both modes and hidden in modern by `.retro-furniture`, so nothing is
+      injected or revealed at toggle time and the sidebar's `Sign the Guest Book ↓` anchor always
+      has a target. It spans the shell; its inner column is capped at the reading measure, because
+      guest-book messages are prose and 1000px runs past 100 characters.
+
+      A `div`, not a `section`: it is a layout wrapper around three components that each carry their
+      own heading and their own labelled `<section>`, and a `<section>` with no heading of its own is
+      a markup validity warning (`npm run validate:html`) as well as an unnamed region.
+    */}
+    <div class="retro-furniture guestbook-section" id="guestbook">
+      <div class="guestbook-column">
+        <Guestbook />
+        <WebmasterNote />
+        <WebRing />
+      </div>
     </div>
   </div>
 </Layout>

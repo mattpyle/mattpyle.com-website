@@ -22,10 +22,18 @@ const CONTROL_TAGS = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'DIALOG']
 // ring) sits in the DOM on every render and is hidden by CSS in modern. `.retro-furniture`
 // is the single class that marks all of it, so one rule covers every piece, present and
 // future. Decorative and hidden nodes go the same way.
+//
+// A redesigned page ships BOTH trees and lets CSS choose: the modern one, and the legacy one
+// marked `.retro-skin`, which retro.css hides in modern. Converted whole, that serves the page
+// twice in different words, which is the opposite of what the `.md` sibling is for. The
+// converter keeps the modern tree, the same way it keeps the modern appearance's furniture —
+// one class, one rule, and a page converted before the redesign is unaffected because it has
+// no `.retro-skin` subtree to drop.
 function isDroppable(element) {
   if (NON_CONTENT_TAGS.has(element.tagName)) return true;
   if (CONTROL_TAGS.has(element.tagName)) return true;
   if (element.classList?.contains('retro-furniture')) return true;
+  if (element.classList?.contains('retro-skin')) return true;
   if (element.hasAttribute('hidden')) return true;
   if (element.getAttribute('aria-hidden') === 'true') return true;
   return false;

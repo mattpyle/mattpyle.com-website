@@ -224,12 +224,17 @@ html[data-appearance='retro'] .nav-link.is-active {
 
 /* WCAG 1.4.10 reflow, retro only. Nav.astro wraps the header below 360px, where
    the modern faces stop fitting on one row. Retro's Comic Sans wordmark and bold
-   Verdana links need about 429px for that same row, so this extends the shipped
-   wrap pattern up to 440px (about 11px of slack over the measured need) instead
+   Verdana links need about 444px for that same row, so this extends the shipped
+   wrap pattern up to 456px (about 12px of slack over the measured need) instead
    of moving the shared breakpoint and reflowing modern. Retro at 440 and up
    keeps its single row. Selectors are scoped under [data-module='nav'] so they
-   outweigh Nav.astro's scoped rules, whose cid attribute counts as a class. */
-@media (max-width: 439.98px) {
+   outweigh Nav.astro's scoped rules, whose cid attribute counts as a class.
+
+   The 444 is per label set, not per link count: it was 429 until Builds was
+   renamed to Projects on 2026-08-20. tests/a11y/reflow.spec.ts brackets this
+   rule on both sides so the next label change fails there rather than in
+   somebody's browser. */
+@media (max-width: 455.98px) {
   html[data-appearance='retro'] [data-module='nav'] .nav-inner {
     flex-wrap: wrap;
     height: auto;
@@ -491,7 +496,8 @@ html[data-appearance='retro'] .log-title {
    panel is a grid item with the default min-width: auto, so that min-content
    pushed the whole page sideways. Letting the header wrap drops min-content to
    the wider of the two. Modern's narrower faces fit on one row and are left
-   alone; above the retro nav breakpoint there is room for both. */
+   alone; by 440 there is room for both. This breakpoint is its own measurement
+   and does not track the nav rule above, which moved to 456 on 2026-08-20. */
 @media (max-width: 439.98px) {
   html[data-appearance='retro'] [data-module='activity-log'] .log-header {
     flex-wrap: wrap;
@@ -566,16 +572,16 @@ html[data-appearance='retro'] .tag-pill {
   color: var(--retro-ink-muted);
 }
 
-/* ── /builds grid ─────────────────────────────────────────────────────── */
+/* ── /projects grid ─────────────────────────────────────────────────────── */
 
-html[data-appearance='retro'] .build-card {
+html[data-appearance='retro'] .project-card {
   background: var(--retro-frame-bg);
   border: 3px ridge var(--retro-frame-border);
   border-top-width: 3px;
   box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
 }
 
-html[data-appearance='retro'] .build-card h2 {
+html[data-appearance='retro'] .project-card h2 {
   font-family: var(--retro-font-display);
   color: var(--retro-maroon);
   font-size: 17px;
@@ -764,14 +770,15 @@ html[data-appearance='retro'] .history-run[open] .history-toggle::after {
   content: '[ \2212 ]';
 }
 
-/* ── /scorecard, Agent traffic ────────────────────────────────────────── */
+/* ── /activity, Agent traffic ─────────────────────────────────────────── */
 
 /* Every rule below hangs off #agent-traffic, and the id is doing real work rather than being
    lazy about class names. Astro stamps its scoping attribute onto every compound of a page's
-   own selectors, so `.traffic thead th` in scorecard.astro compiles to three classes-worth of
+   own selectors, so `.traffic thead th` in activity.astro compiles to three classes-worth of
    specificity and outranks any plain `html[data-appearance='retro'] .traffic thead th` here,
    however specific it looks. An id outranks all of it in one token and stays readable. The
-   section has one anyway: /agent-traffic redirects to this anchor. */
+   section carries the id for its own sake; /agent-traffic redirects to /activity/, which is the
+   page these rules now style, and not to this anchor. */
 
 html[data-appearance='retro'] #agent-traffic .traffic-panel,
 html[data-appearance='retro'] #agent-traffic .traffic-empty,
@@ -908,7 +915,7 @@ html[data-appearance='retro'] .connect-label {
   color: var(--retro-maroon);
 }
 
-/* ── Filter pills (shared: writing, builds, changelog) ──────────────── */
+/* ── Filter pills (shared: writing, projects, changelog) ──────────────── */
 
 html[data-appearance='retro'] .filter-pill {
   font-family: var(--retro-font-mono);
@@ -1656,4 +1663,34 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
     padding-left: 0;
     animation: none;
   }
+}
+
+/* ── Appearance skins: the redesign beside the legacy chrome ──────────────
+   The redesign rebuilds the modern appearance surface by surface, and retro is
+   explicitly untouched by it (Matt, 2026-08-20). A redesigned route therefore
+   ships BOTH sets of chrome in the DOM — SiteHeader/SiteFooter and the new
+   homepage sections marked `.modern-skin`, Nav/Footer and the legacy homepage
+   sections marked `.retro-skin` — and exactly one is displayed.
+
+   This is the same construction as `.retro-furniture` above, and for the same
+   reason: nothing is injected, removed or re-rendered at toggle time, so the
+   toggle stays a CSS switch on one document rather than a re-render.
+
+   It is also what keeps every retro rule in this file working untouched. Retro
+   styles the legacy chrome through `[data-module='nav']` and
+   `[data-module='footer']`; the redesigned pair are `[data-module='site-header']`
+   and `[data-module='site-footer']`, which no selector here mentions. There is
+   no specificity contest to lose (see the Astro-scoped-selector trap noted at
+   the top of this file).
+
+   A hidden subtree is not in the accessibility tree and holds no tab stops, so
+   the keyboard and aria-golden rows in tests/a11y see one header and one footer
+   in each appearance, not two. */
+
+html:not([data-appearance='retro']) .retro-skin {
+  display: none;
+}
+
+html[data-appearance='retro'] .modern-skin {
+  display: none;
 }

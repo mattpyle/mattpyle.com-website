@@ -1,0 +1,114 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: mp/
+  - navigation "Main navigation":
+    - link "/writing":
+      - /url: /writing/
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
+      - /url: /changelog/
+    - link "/scorecard":
+      - /url: /scorecard/
+    - link "/about":
+      - /url: /about/
+- main:
+  - heading "Activity" [level=1]
+  - paragraph: Agent surfaces fetched, pages served as Markdown, and what asked for them.
+  - text: ·
+  - region "Headline counts":
+    - heading "Headline counts" [level=2]
+    - text: "· Requests, last 24 hours · Requests, last 7 days · Requests recorded"
+  - region "The last day, hour by hour":
+    - heading "The last day, hour by hour" [level=2]
+    - list:
+      - listitem: · ·
+    - paragraph: Requests per hour, UTC.
+  - region "The last hour":
+    - heading "The last hour" [level=2]
+    - text: bot/agent
+    - table:
+      - rowgroup:
+        - row "bot or agent Client Asked for Requests":
+          - columnheader "bot or agent"
+          - columnheader "Client"
+          - columnheader "Asked for"
+          - columnheader "Requests"
+      - rowgroup:
+        - row "· · ·":
+          - cell
+          - cell "·"
+          - cell "·"
+          - cell "·"
+  - region "By surface":
+    - heading "By surface" [level=2]
+    - table:
+      - rowgroup:
+        - row "Surface 7 days 30 days Recorded":
+          - columnheader "Surface"
+          - columnheader "7 days"
+          - columnheader "30 days"
+          - columnheader "Recorded"
+      - rowgroup:
+        - row "· · · ·":
+          - cell "·"
+          - cell "·"
+          - cell "·"
+          - cell "·"
+  - region "By client":
+    - heading "By client" [level=2]
+    - text: bot/agent
+    - table:
+      - rowgroup:
+        - row "bot or agent Client 7 days 30 days":
+          - columnheader "bot or agent"
+          - columnheader "Client"
+          - columnheader "7 days"
+          - columnheader "30 days"
+      - rowgroup:
+        - row "· · ·":
+          - cell
+          - cell "·"
+          - cell "·"
+          - cell "·"
+  - region "Markdown negotiation":
+    - heading "Markdown negotiation" [level=2]
+    - table:
+      - rowgroup:
+        - row "Page 7 days 30 days":
+          - columnheader "Page"
+          - columnheader "7 days"
+          - columnheader "30 days"
+      - rowgroup:
+        - row "· · ·":
+          - cell "·"
+          - cell "·"
+          - cell "·"
+  - region "How this is counted":
+    - heading "How this is counted" [level=2]
+    - paragraph: "Two things are counted at the edge: a fetch of one of this site's agent surfaces, and a page served as Markdown to a client that asked for it. Ordinary page views are not. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    - text: The same numbers, as data
+    - link "activity.json":
+      - /url: /activity.json
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Social links":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
+      - /url: https://github.com/mattpyle
+    - link "linkedin (opens in a new tab)":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
+      - /url: /webmcp/
+    - button "Switch to retro mode"
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
+- status

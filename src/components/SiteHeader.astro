@@ -1,0 +1,177 @@
+---
+/**
+ * The redesigned sticky header (docs/projects/redesign/design-export/README.md §1).
+ *
+ * Renders alongside — not instead of — the legacy Nav.astro on a redesigned
+ * route. Both are in the DOM; `.modern-skin` / `.retro-skin` in retro.css show
+ * exactly one, the same way the retro homepage furniture has always worked.
+ * That is what lets the redesign restyle the header without touching a single
+ * retro rule: retro's selectors all hang off `[data-module='nav']`, which is the
+ * OTHER element. Nothing here competes with them on specificity.
+ *
+ * Never set `display` on the root element: the show/hide pair above sets it, and
+ * an Astro-scoped rule carries a `[data-astro-cid-…]` and would win.
+ *
+ * The nav colours are the spec's semantic set — each link is painted in the
+ * colour of the section it leads to, and the current section is marked with a
+ * 2px underline in that same colour rather than with a label or a swatch.
+ */
+
+// Normalised to the trailing-slash canonical before comparing, for the same
+// reason Nav.astro normalises: production 308s to the slash form, but the dev
+// server and the a11y suite's local server answer the slash-less URL directly.
+const path = Astro.url.pathname.endsWith('/') ? Astro.url.pathname : `${Astro.url.pathname}/`;
+
+function isActive(href: string): boolean {
+  return href === '/' ? path === '/' : path.startsWith(href);
+}
+
+/**
+ * Five items, as the spec fixes it: trimmed from six to stay calm at laptop
+ * widths. `section` names the semantic colour, not the route.
+ *
+ * DEVIATION, deliberate: the mobile prototype shows four of these, dropping
+ * /changelog. The mobile nav here is a horizontal scroller, so the fifth item
+ * costs nothing but a swipe, and dropping it would make /changelog unreachable
+ * from the header on every phone. More content in a scroll container is the
+ * safer half of that trade.
+ */
+const NAV_LINKS = [
+  { label: '/writing',   href: '/writing/',   section: 'writing'   },
+  { label: '/projects',  href: '/projects/',  section: 'projects'  },
+  { label: '/changelog', href: '/changelog/', section: 'changelog' },
+  { label: '/scorecard', href: '/scorecard/', section: 'agents'    },
+  { label: '/about',     href: '/about/',     section: 'ink'       },
+] as const;
+---
+
+<header data-module="site-header" class="modern-skin">
+  <div class="header-inner">
+    <a href="/" class="wordmark" aria-label="Matt Pyle — home">mp/</a>
+    <nav aria-label="Main navigation">
+      {NAV_LINKS.map(({ label, href, section }) => (
+        <a
+          href={href}
+          class="header-link"
+          data-section={section}
+          aria-current={isActive(href) ? 'page' : undefined}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  </div>
+</header>
+
+<style>
+  [data-module="site-header"] {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: oklch(0.965 0.004 265 / .92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* The hairline is painted as a pseudo-element rather than as a real border so
+     it sits INSIDE the blurred box: a bottom border would be drawn outside the
+     backdrop-filtered area and read as a second, harder line under it. */
+  [data-module="site-header"]::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding: 22px var(--shell-gutter);
+  }
+
+  .wordmark {
+    font-family: var(--font-mono-plex);
+    font-size: 21px;
+    letter-spacing: -.01em;
+    color: var(--ink);
+    flex: none;
+  }
+
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    column-gap: 26px;
+    row-gap: 10px;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+  }
+
+  .header-link[data-section="writing"]   { color: var(--writing); }
+  .header-link[data-section="projects"]  { color: var(--projects); }
+  .header-link[data-section="changelog"] { color: var(--changelog); }
+  .header-link[data-section="agents"]    { color: var(--agents); }
+  .header-link[data-section="ink"]       { color: var(--ink); }
+
+  .header-link[data-section="writing"]:hover   { color: var(--writing-hover); }
+  .header-link[data-section="projects"]:hover  { color: var(--projects-hover); }
+  .header-link[data-section="changelog"]:hover { color: var(--changelog-hover); }
+  .header-link[data-section="agents"]:hover    { color: var(--agents-hover); }
+  .header-link[data-section="ink"]:hover       { color: var(--ink-4); }
+
+  /* The current section is marked in its own colour. currentColor rather than a
+     repeat of the five rules above, so the two can never drift. */
+  .header-link[aria-current="page"] {
+    border-bottom: 2px solid currentColor;
+    padding-bottom: 3px;
+  }
+
+  @media (max-width: 720px) {
+    .header-inner {
+      gap: 18px;
+      padding: 14px var(--shell-gutter-mobile);
+    }
+
+    .wordmark {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      font-size: 19px;
+    }
+
+    /* A horizontal scroller, not a wrap: five mono links wrapped onto three
+       rows at 320px makes the header taller than the hero. WCAG 1.4.10 allows a
+       container that scrolls on one axis; what it forbids is the PAGE scrolling
+       sideways, which this prevents rather than causes. */
+    nav {
+      flex-wrap: nowrap;
+      /* flex-start, not the flex-end this row inherits from the desktop rule:
+         when a flex row overflows its own scroll container, end-justification
+         pushes the first items past the container's start edge, where scrolling
+         cannot reach them. At 390px that made /writing and /projects
+         unreachable — visibly cut off, and cut off in the only direction the
+         scrollbar does not go. */
+      justify-content: flex-start;
+      margin-left: auto;
+      overflow-x: auto;
+      column-gap: 20px;
+      font-size: 16px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .header-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      white-space: nowrap;
+    }
+  }
+</style>

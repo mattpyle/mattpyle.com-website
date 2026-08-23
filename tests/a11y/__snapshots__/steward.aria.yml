@@ -3,25 +3,27 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Builds":
-      - /url: /builds/
-    - link "Changelog":
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
-  - paragraph: Agent · Auditor
   - heading "Steward" [level=1]
-  - paragraph: The agent-readiness auditor behind the steward-audit User-Agent, and the editorial agent that publishes this site.
+  - paragraph: The auditor behind the steward-audit User-Agent, and the agent that publishes this site.
+  - text: Audit endpoint
+  - link "www.mattpyle.com/mcp":
+    - /url: https://www.mattpyle.com/mcp
   - region "Did Steward just fetch your site?":
     - heading "Did Steward just fetch your site?" [level=2]
-    - paragraph: "Then somebody asked for a report on it. Steward is an agent-readiness auditor: it reads what a site says about itself over plain HTTP, writes a report for whoever ran it, and leaves. It is not a crawler, it does not index anything, and it does not come back on a schedule."
+    - paragraph: Then somebody asked for a report on it. Steward reads what a site says about itself over plain HTTP, writes the report for whoever ran it, and leaves. It does not index anything and it does not come back on a schedule.
     - table "What one Steward request is":
       - caption: What one Steward request is
       - rowgroup:
@@ -33,9 +35,9 @@
           - rowheader "robots.txt token"
           - cell "steward-audit":
             - code: steward-audit
-        - row "Cost of one audit Roughly a dozen HTTP requests, spread over a few seconds. A deep audit adds up to three of your pages opened in a real browser, which fetch their own subresources the way any visitor's browser does.":
+        - row "Cost of one audit Roughly a dozen HTTP requests over a few seconds. A deep audit adds up to three of your pages opened in a real browser, which fetch their own subresources the way any visitor's browser does.":
           - rowheader "Cost of one audit"
-          - cell "Roughly a dozen HTTP requests, spread over a few seconds. A deep audit adds up to three of your pages opened in a real browser, which fetch their own subresources the way any visitor's browser does."
+          - cell "Roughly a dozen HTTP requests over a few seconds. A deep audit adds up to three of your pages opened in a real browser, which fetch their own subresources the way any visitor's browser does."
         - row "Frequency Once, when a person or an agent asks. No schedule, no repeat visits, no crawl.":
           - rowheader "Frequency"
           - cell "Once, when a person or an agent asks. No schedule, no repeat visits, no crawl."
@@ -46,91 +48,58 @@
       - strong: It obeys your robots.txt.
       - text: Every URL is checked against your rules before it is requested; only
       - code: /robots.txt
-      - text: itself is fetched without asking. Anything you disallow is reported as “not checked”, never as a finding against your site.
-    - heading "How do I refuse it?" [level=3]
-    - paragraph: "Add this to your robots.txt:"
+      - text: is fetched without asking. Anything you disallow is reported as “not checked”, never as a finding against your site.
+    - heading "How to refuse it" [level=3]
     - code: "User-agent: steward-audit Disallow: /"
-    - paragraph: One audit then costs you exactly one request — robots.txt, read once — and nothing else about how this site treats you changes.
-  - region "What is Steward?":
-    - heading "What is Steward?" [level=2]
-    - paragraph: Steward is this site's editorial agent. It reviews a draft — spelling, prose linting, an editorial pass, a real production build with accessibility and performance audits — waits for Matt to approve it, then publishes by pull request and verifies production. The agent-readiness audit started as one step of that review, checking this site against the conventions it writes about, and it turned out to be the half worth pointing at other people's sites.
-    - paragraph:
-      - text: So there are two tiers. The
-      - strong: fast tier
-      - text: "is the 13checks below: plain HTTP, seconds, and the report comes back in the call. The"
-      - strong: deep tier
-      - text: opens up to three of the site's own pages in a real browser and reports Lighthouse's per-axis scores and axe-core's violation counts across them. It costs a site far more than a dozen requests, so it is capped much harder and it takes minutes rather than seconds.
+    - paragraph: One audit then costs you one request — robots.txt, read once. Nothing else about how this site treats you changes.
+  - region "What Steward is":
+    - heading "What Steward is" [level=2]
+    - paragraph: Steward is this site's editorial agent. It reviews a draft — spelling, prose linting, an editorial pass, a real production build with accessibility and performance audits — waits durably for Matt to approve it, publishes by pull request, then verifies production. The agent-readiness audit started as one step of that review and turned out to be the half worth pointing at other people's sites.
     - paragraph:
       - text: It checks behaviour rather than presence. A
-      - code: /\d+/
+      - code: "200"
       - text: from
-      - code: /llms.txt
-      - text: /that is really the site's HTML \d+ page is a failure here, which is the single most common way a site passes a presence check while giving an agent nothing\./
-  - region "What does the audit check?":
-    - heading "What does the audit check?" [level=2]
-    - paragraph: "/\\d+ checks in three categories\\. Each one comes back with its verdict, the evidence behind it, and — where it failed — what to do about it\\. There is deliberately no composite score: a single number would hide which of these is broken\\./"
-    - region "Crawlability 4 checks":
-      - heading "Crawlability 4 checks" [level=3]
-      - paragraph: What the site says an agent may do.
-      - list:
-        - listitem:
-          - paragraph: robots.txt exists and parses medium
-          - paragraph: ·
-        - listitem:
-          - paragraph: robots.txt lets user-triggered AI agents read the site high
-          - paragraph: ·
-        - listitem:
-          - paragraph: Content Signals preferences are declared low
-          - paragraph: ·
-        - listitem:
-          - paragraph: A sitemap is declared in robots.txt and fetchable high
-          - paragraph: ·
-    - region "Discovery 6 checks":
-      - heading "Discovery 6 checks" [level=3]
-      - paragraph: What an agent can find without being told where to look.
-      - list:
-        - listitem:
-          - paragraph: llms.txt exists and follows the spec medium
-          - paragraph: ·
-        - listitem:
-          - paragraph: The links in llms.txt resolve medium
-          - paragraph: ·
-        - listitem:
-          - paragraph: Every llms.txt list item leads with a markdown link low
-          - paragraph: ·
-        - listitem:
-          - paragraph: agents.md exists and is markdown medium
-          - paragraph: ·
-        - listitem:
-          - paragraph: An MCP server is discoverable at /.well-known/mcp-server low
-          - paragraph: ·
-        - listitem:
-          - paragraph: An A2A agent card is published low
-          - paragraph: ·
-    - region "Content access 3 checks":
-      - heading "Content access 3 checks" [level=3]
-      - paragraph: Whether the content comes back in a form a model can read.
-      - list:
-        - listitem:
-          - paragraph: The homepage serves markdown when asked for it high
-          - paragraph: ·
-        - listitem:
-          - paragraph: A content page serves markdown when asked for it high
-          - paragraph: ·
-        - listitem:
-          - paragraph: The homepage advertises its alternates in a Link header low
-          - paragraph: ·
-  - region "How do I run an audit myself?":
-    - heading "How do I run an audit myself?" [level=2]
+      - code: "/llms.txt"
+      - text: that is really the site's HTML 404 page is a failure here — the most common way a site passes a presence check while giving an agent nothing.
+    - text: /Fast tier \d+ checks over plain HTTP\. Seconds, and the report comes back in the call\. Deep tier Up to three pages opened in a real browser, reporting Lighthouse scores and axe-core violations\. Minutes, and capped far harder\./
+  - region "What the audit checks":
+    - heading "What the audit checks" [level=2]
+    - text: /\d+ checks, \d+ categories, no composite score\./
+    - heading "Crawlability" [level=3]
+    - paragraph: What the site says an agent may do.
+    - paragraph: /\d+ checks/
+    - list "Crawlability":
+      - listitem: robots.txt exists and parses · medium
+      - listitem: robots.txt lets user-triggered AI agents read the site · high
+      - listitem: Content Signals preferences are declared · low
+      - listitem: A sitemap is declared in robots.txt and fetchable · high
+    - heading "Discovery" [level=3]
+    - paragraph: What an agent can find without being told where to look.
+    - paragraph: /\d+ checks/
+    - list "Discovery":
+      - listitem: llms.txt exists and follows the spec · medium
+      - listitem: The links in llms.txt resolve · medium
+      - listitem: Every llms.txt list item leads with a markdown link · low
+      - listitem: agents.md exists and is markdown · medium
+      - listitem: An MCP server is discoverable at /.well-known/mcp-server · low
+      - listitem: An A2A agent card is published · low
+    - heading "Content access" [level=3]
+    - paragraph: Whether the content comes back in a form a model can read.
+    - paragraph: /\d+ checks/
+    - list "Content access":
+      - listitem: The homepage serves markdown when asked for it · high
+      - listitem: A content page serves markdown when asked for it · high
+      - listitem: The homepage advertises its alternates in a Link header · low
+  - region "Running an audit yourself":
+    - heading "Running an audit yourself" [level=2]
     - paragraph:
       - text: Point an MCP client at
       - code: https://www.mattpyle.com/mcp
-      - text: . It is a stateless streamable-HTTP server with three tools. Start with
+      - text: — a stateless streamable-HTTP server with three tools. No account, no key.
       - code: audit_site(url)
-      - text: ": it runs the fast checks and the report comes back in the call — there is nothing to poll and no second request to make. No account and no key."
-    - code: "curl -sS https://www.mattpyle.com/mcp \\ -H 'Content-Type: application/json' \\ -H 'Accept: application/json, text/event-stream' \\ -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\", \"params\":{\"name\":\"audit_site\",\"arguments\":{\"url\":\"example.com\"}}}'"
+      - text: runs the fast checks and the report comes back in the call, with nothing to poll.
     - paragraph:
-      - text: "Two renderings ship in the one response: the canonical JSON in"
+      - text: "Two renderings ship in one response: the canonical JSON in"
       - code: structuredContent
       - text: ", one entry per check with its evidence, and the same report as a markdown summary in the text content. A"
       - code: GET
@@ -138,32 +107,21 @@
       - link "the endpoint itself":
         - /url: https://www.mattpyle.com/mcp
       - text: answers
-      - code: /\d+/
-      - text: with this example rather than a bare status.
-    - paragraph:
-      - text: "The unit audited is a site, not a page: any path in the URL is ignored. Only"
+      - code: "405"
+      - text: "with a worked example rather than a bare status. The unit audited is a site, not a page: any path in the URL is ignored, only"
       - code: http
       - text: and
       - code: https
-      - text: targets are accepted, and addresses on private networks are refused before a connection is opened.
-    - 'heading "The deep tier: deep_audit and get_audit" [level=3]':
-      - text: ""
-      - code: deep_audit
-      - text: ""
-      - code: get_audit
+      - text: are accepted, and addresses on private networks are refused before a connection is opened.
+    - heading "The deep tier" [level=3]
     - paragraph:
-      - text: The same endpoint carries the browser-rendered tier, and it has a different shape because it has a different cost. A deep audit takes minutes, which is longer than any MCP client holds a tool call open, so
+      - text: A deep audit takes longer than any MCP client holds a tool call open, so
       - code: deep_audit(url)
       - text: returns a workflow ID straight away and
       - code: get_audit(workflowId, view)
-      - text: reads it back. There are no findings in the
+      - text: reads it back — there are no findings in the
       - code: deep_audit
-      - text: response, and it says so.
-    - code: "curl -sS https://www.mattpyle.com/mcp \\ -H 'Content-Type: application/json' \\ -H 'Accept: application/json, text/event-stream' \\ -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\", \"params\":{\"name\":\"deep_audit\",\"arguments\":{\"url\":\"example.com\"}}}'"
-    - paragraph:
-      - text: Poll
-      - code: get_audit
-      - text: with
+      - text: response, and it says so. Poll
       - code: "view: \"status\""
       - text: until
       - code: done
@@ -172,18 +130,12 @@
       - text: for the canonical JSON or
       - code: "\"summary\""
       - text: for markdown. While it runs, the status view lists each unit of work with its state, and anything being retried carries its attempt number, straight from Temporal rather than from a count kept by hand.
-    - paragraph:
-      - strong: If your audit says it is queued, it is.
-      - text: There is one worker behind this endpoint, so a busy moment is a real wait rather than a slow site. The status view answers
-      - code: "queued: true"
-      - text: with a
-      - code: queuePosition
-      - text: "when nothing has picked your run up yet, and it says so plainly rather than leaving you to guess. Either way the audit is durable: it survives a worker restart, and the workflow ID keeps answering."
-    - paragraph:
-      - strong: If a finished report is incomplete, it says so.
-      - text: A deep audit that sampled pages and rendered none of them comes back marked
-      - code: "integrity: degraded"
-      - text: ", in the report and in the status view, with a line saying which half is missing and which half can still be read. A report that quietly reads as clean when the browser produced nothing is the one failure mode worth building a rule against."
+    - term: Queued means queued
+    - definition: One worker sits behind this endpoint, so a busy moment is a real wait rather than a slow site. The status view answers queued with a position rather than leaving you to guess.
+    - term: Incomplete says so
+    - definition: A deep audit that sampled pages and rendered none of them comes back marked degraded, naming which half is missing and which half can still be read.
+    - term: Durable either way
+    - definition: A run survives a worker restart, and the workflow ID keeps answering.
     - paragraph:
       - strong:
         - text: Powered by
@@ -191,63 +143,69 @@
           - /url: https://temporal.io
         - text: .
       - text: Matt works at Temporal, so that is disclosure as much as it is a credit.
-    - heading "What are the limits?" [level=3]
-    - table "Rate limits on the public endpoint":
-      - caption: Rate limits on the public endpoint
+    - text: Fast audit
+    - region "Fast audit":
+      - code: "curl -sS https://www.mattpyle.com/mcp \\ -H 'Content-Type: application/json' \\ -H 'Accept: application/json, text/event-stream' \\ -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\", \"params\":{\"name\":\"audit_site\",\"arguments\":{\"url\":\"example.com\"}}}'"
+    - text: Deep audit
+    - region "Deep audit":
+      - code: "curl -sS https://www.mattpyle.com/mcp \\ -H 'Content-Type: application/json' \\ -H 'Accept: application/json, text/event-stream' \\ -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\", \"params\":{\"name\":\"deep_audit\",\"arguments\":{\"url\":\"example.com\"}}}'"
+    - text: Rate limits
+    - table "Rate limits":
       - rowgroup:
-        - row "Tier Limit Cap Window":
+        - row "Tier Scope Cap Window":
           - columnheader "Tier"
-          - columnheader "Limit"
+          - columnheader "Scope"
           - columnheader "Cap"
           - columnheader "Window"
       - rowgroup:
-        - row /Fast Per caller \d+ audits One hour/:
+        - row /Fast Per caller \d+ One hour/:
           - cell "Fast"
           - cell "Per caller"
-          - cell /\d+ audits/
+          - cell /\d+/
           - cell "One hour"
-        - row /Fast Everyone together \d+ audits One UTC day/:
+        - row /Fast Everyone together \d+ One UTC day/:
           - cell "Fast"
           - cell "Everyone together"
-          - cell /\d+ audits/
+          - cell /\d+/
           - cell "One UTC day"
-        - row /Deep Per caller \d+ audits One UTC day/:
+        - row /Deep Per caller \d+ One UTC day/:
           - cell "Deep"
           - cell "Per caller"
-          - cell /\d+ audits/
+          - cell /\d+/
           - cell "One UTC day"
-        - row /Deep Everyone together \d+ audits One UTC day/:
+        - row /Deep Everyone together \d+ One UTC day/:
           - cell "Deep"
           - cell "Everyone together"
-          - cell /\d+ audits/
+          - cell /\d+/
           - cell "One UTC day"
     - paragraph:
       - text: A refusal is a JSON-RPC error with a
       - code: Retry-After
-      - text: header, naming which limit was hit and how long to wait. The fast limits exist because every accepted call spends a dozen requests at a third party's origin under this site's name; an unbounded endpoint would be an open relay with an honest User-Agent. The deep limits are two orders of magnitude smaller because a deep audit spends minutes of browser time on a machine somebody pays for, where a fast one spends seconds inside the function that answered you. The counters hold a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself.
-    - paragraph:
-      - text: There is no key, no account, and no way to ask for more.
+      - text: header naming which limit was hit and how long to wait. Every accepted call spends a dozen requests at somebody else's origin under this site's name; an unbounded endpoint would be an open relay with an honest User-Agent. The deep limits are two orders of magnitude smaller because a deep audit spends minutes of browser time on a machine somebody pays for. The counters hold a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself. There is no key and no way to ask for more.
       - code: get_audit
-      - text: "is free to call as often as you like: it reads a run you already paid for and makes no request at anybody's origin."
+      - text: "is free: it reads a run you already paid for and makes no request at anybody's origin."
   - region "Contact":
     - heading "Contact" [level=2]
-    - paragraph:
-      - text: If Steward misbehaved on your site — ignored a rule, requested something it should not have, or reported something that is not true —
-      - link "open an issue on the repository":
-        - /url: https://github.com/mattpyle/mattpyle.com-website/issues
-      - text: . It is the same repository the auditor's code lives in, and it is read.
-    - paragraph: Steward is an experiment on a personal site, not a supported service. It may change or be withdrawn without notice.
+    - paragraph: If Steward misbehaved on your site — ignored a rule, requested something it should not have, or reported something that is not true — open an issue. It is the same repository the auditor's code lives in, and it is read.
+    - link "Open an issue":
+      - /url: https://github.com/mattpyle/mattpyle.com-website/issues
+    - text: Steward is an experiment on a personal site, not a supported service. It may change or be withdrawn without notice.
 - contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
   - navigation "Social links":
-    - link "RSS feed for Writing":
+    - link "rss":
       - /url: /rss.xml
-      - text: ""
-    - link "GitHub (opens in a new tab)":
+    - link "github (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status

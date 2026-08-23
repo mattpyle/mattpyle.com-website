@@ -1,0 +1,137 @@
+---
+/**
+ * The /steward headline
+ * (docs/projects/redesign/design-export-remaining/design_handoff_steward).
+ *
+ * The site's hero shape — H1, then a statement beside a bordered right-hand block
+ * — with the fill left on its default `--agents`, because Steward is an agent
+ * surface. No fill variant class is added for that reason.
+ *
+ * The right-hand block is the audit endpoint, which is the one thing a reader who
+ * arrived from a log line might want to call rather than read about. It takes its
+ * URL from the page rather than writing one out: the page already holds the
+ * endpoint the rest of its copy quotes.
+ */
+interface Props {
+  /** The MCP endpoint, from the page. */
+  endpoint: string;
+}
+
+const { endpoint } = Astro.props;
+
+/** The endpoint without its scheme, which is how the mockup prints it. */
+const endpointLabel = endpoint.replace(/^https?:\/\//, '');
+---
+
+{/*
+  A div, not a section — the same call WritingHero.astro and ProjectsHero.astro
+  made: `npm run validate:html` names an h1 inside sectioning content, and an
+  unnamed <section> is not exposed as a region anyway.
+*/}
+<div class="rd-section steward-hero modern-skin">
+  <h1><span class="rd-fill">Steward</span></h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      The auditor behind the steward-audit User-Agent, and the agent that publishes this site.
+    </p>
+    <div class="hero-endpoint">
+      <span class="hero-endpoint-label">Audit endpoint</span>
+      <a class="hero-endpoint-link" href={endpoint}>{endpointLabel}</a>
+    </div>
+  </div>
+</div>
+
+<style>
+  .steward-hero { padding-top: 72px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-row {
+    display: grid;
+    grid-template-columns: minmax(0, 36ch) 320px;
+    gap: 72px;
+    align-items: end;
+    margin-top: 32px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-endpoint {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .hero-endpoint-label {
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .hero-endpoint-link {
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+    color: var(--agents);
+    overflow-wrap: anywhere;
+  }
+
+  .hero-endpoint-link:hover { color: var(--agents-hover); }
+
+  /* Every two-column band on this page stacks at 1000px, per the bundle's
+     responsive note. The hero goes with them so the page never has one band in
+     two columns and its neighbour in one. */
+  @media (max-width: 1000px) {
+    .hero-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
+
+    .hero-statement { max-width: 46ch; }
+  }
+
+  @media (max-width: 720px) {
+    .steward-hero { padding-top: 40px; }
+
+    h1 {
+      font-size: 68px;
+      line-height: .94;
+      letter-spacing: -.04em;
+    }
+
+    .hero-row { margin-top: 28px; }
+
+    .hero-statement { font-size: 24px; }
+
+    .hero-endpoint { padding-left: 16px; }
+
+    /* 44px tap target, per the mobile spec. */
+    .hero-endpoint-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+    }
+  }
+</style>

@@ -16,8 +16,29 @@ import { installPageLoadCounter, gotoSettled } from './helpers/settle';
  * The pruning is per-page and declared in helpers/pages.ts, so what is being
  * ignored is legible in review rather than buried in a regex.
  *
+ * REDACT CONTENT, NEVER A COUNT. Redaction replaces a subtree's text with `·`,
+ * which asserts nothing about it: a region redacted to `·` still matches when it
+ * renders empty, or loses the number that was its whole point. That is fine for
+ * a post title, which is content the template does not owe the reader; it is
+ * wrong for "showing X of Y", an entry count, or a score, where the number IS
+ * the behaviour under test. Those stay in the golden as a regex — `/showing \d+
+ * of \d+/` — so the shape is pinned and the value is free. Checked by breaking
+ * it: blanking the changelog pager's count fails `changelog-index`, which a
+ * `·` redaction did not.
+ *
+ * Playwright writes some of those regexes itself when it regenerates, and it
+ * writes them too tight — it turned the hero's date into `/\d+ Aug \d+/`, which
+ * would fail the day the newest entry is not in August. Widen them by hand and
+ * read every one.
+ *
  * Update deliberately: `npx playwright test aria-snapshot --update-snapshots`,
  * then read the diff. A diff here means the accessibility tree changed shape.
+ *
+ * A FORCED regeneration (`--update-snapshots=all`) rewrites all ten and
+ * RELITERALISES hand-written regexes — it has turned `/\d+ audits/` into
+ * `"2 audits"` in steward.aria.yml on every forced run so far. Force only when
+ * a golden may have gone stale without failing (they match as a subset, so an
+ * ADDED element never fails one), then keep only the files you meant to move.
  *
  * Tagged @golden because these are the one family the per-PR guard in
  * .github/workflows/a11y.yml excludes: they match as a subset rather than an

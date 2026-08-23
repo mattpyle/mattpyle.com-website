@@ -9,16 +9,30 @@ function isActive(href: string): boolean {
   return href === '/' ? path === '/' : path.startsWith(href);
 }
 
+
+/**
+ * Appearance-skin class, set by Layout.astro on a route the redesign has
+ * rebuilt. On such a route this component is the RETRO half of a pair — the
+ * redesigned chrome renders beside it and retro.css shows exactly one of the
+ * two. Absent everywhere else, which keeps every unconverted page's markup
+ * byte-identical to what it was before the redesign branch.
+ */
+interface Props {
+  skin?: string;
+}
+
+const { skin } = Astro.props;
+
 const NAV_LINKS = [
   { label: 'Writing',   href: '/writing/'   },
-  { label: 'Builds',    href: '/builds/'    },
+  { label: 'Projects',  href: '/projects/'  },
   { label: 'Changelog', href: '/changelog/' },
   { label: 'Scorecard', href: '/scorecard/' },
   { label: 'About',     href: '/about/'     },
 ] as const;
 ---
 
-<header data-module="nav">
+<header data-module="nav" class:list={[skin]}>
   <div class="nav-inner">
     <a href="/" aria-label="Matt Pyle — home" class="nav-logo">MATT PYLE</a>
     <span class="nav-flourish" aria-hidden="true"><span class="nav-flourish-arm"
@@ -98,15 +112,20 @@ const NAV_LINKS = [
     nav { gap: 16px; }
   }
 
-  /* WCAG 1.4.10 reflow: the single non-wrapping row needs 352px, so below that
+  /* WCAG 1.4.10 reflow: the single non-wrapping row needs 363px, so below that
      the header wraps instead of scrolling the page sideways. The wordmark takes
      its own row (flex-basis 100%) and the links follow, wrapping among
      themselves as needed. Retro restyles this same markup in wider faces
      (Comic Sans wordmark, bold Verdana links) and needs the same wrap further
-     up, at 440px, which retro.css layers on top; nothing here assumes either
-     mode's font metrics. Scoped below 360px, so 375 and up keep the single
-     60px row. */
-  @media (max-width: 359.98px) {
+     up, at 456px, which retro.css layers on top; nothing here assumes either
+     mode's font metrics. Scoped below 375px, so 375 and up keep the single
+     60px row.
+
+     The measurement is per label set, not per link count: renaming Builds to
+     Projects on 2026-08-20 widened the row from 352 to 363 and put 360–362 into
+     overflow, which nothing caught because the modern rows only ran at 320. A
+     modern row at 375 in tests/a11y/reflow.spec.ts is the guard now. */
+  @media (max-width: 374.98px) {
     .nav-inner {
       flex-wrap: wrap;
       height: auto;

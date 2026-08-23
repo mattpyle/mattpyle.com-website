@@ -1,0 +1,201 @@
+---
+/**
+ * The redesigned footer (docs/projects/redesign/design-export/README.md §1, "Footer").
+ *
+ * Renders alongside the legacy Footer.astro on a redesigned route, exactly like
+ * SiteHeader.astro beside Nav.astro: both are in the DOM, `.modern-skin` /
+ * `.retro-skin` in retro.css show one. Retro's footer rules all hang off
+ * `[data-module='footer']`, which is the other element, so nothing here can
+ * reach them and nothing there can reach this. Do not set `display` on the root.
+ *
+ * The appearance toggle lives here as a mono link in the link row rather than as
+ * the legacy pill button (Matt, 2026-08-20): the design has no appearance
+ * control of its own, and the wink block sets the register for this corner of
+ * the page. The MECHANICS are untouched — it is still a <button> carrying
+ * `data-appearance-toggle`, and AppearanceUI.astro drives every toggle on the
+ * page through one delegated listener and a querySelectorAll, so the legacy
+ * button and this one stay in sync with each other and with localStorage.
+ */
+---
+
+<footer data-module="site-footer" class="modern-skin">
+  <div class="footer-inner">
+    <div class="footer-bio">
+      <span class="footer-name">Matt Pyle</span>
+      <p class="footer-blurb">
+        Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are
+        about to get weird.
+      </p>
+      <nav aria-label="Social links" class="footer-links">
+        <a href="/rss.xml">rss</a>
+        {/*
+          The three links that leave the site say so. Same visually-hidden
+          suffix the legacy footer and ArticleActions use, so the whole site
+          announces a new tab the same way. No visual arrow: the design's link
+          row is plain words, and an arrow on half of them reads as decoration.
+        */}
+        <a href="https://github.com/mattpyle" target="_blank" rel="noopener noreferrer">
+          github<span class="sr-only"> (opens in a new tab)</span>
+        </a>
+        <a href="https://linkedin.com/in/matt-pyle" target="_blank" rel="noopener noreferrer">
+          linkedin<span class="sr-only"> (opens in a new tab)</span>
+        </a>
+        <a href="https://bsky.app/profile/mattpyle.com" target="_blank" rel="noopener noreferrer">
+          bluesky<span class="sr-only"> (opens in a new tab)</span>
+        </a>
+        {/*
+          Footer only — the header nav deliberately stays at five links, and /activity is off it
+          for the same reason (Matt, 2026-08-21). This link, the homepage agent panel's pointer and
+          the cross-link on /scorecard are how /activity is reached.
+
+          The LEGACY footer is deliberately not given the same link: it renders on every page the
+          redesign has not converted, and those pages must stay byte-identical to the branch's tip.
+        */}
+        <a href="/activity/">activity</a>
+        <a href="/webmcp/">webmcp</a>
+        <button
+          type="button"
+          class="appearance-toggle"
+          data-appearance-toggle
+          aria-label="Switch to retro mode"
+        >
+          Retro mode
+        </button>
+      </nav>
+    </div>
+
+    {/*
+      The wink. Real text rather than an aria-hidden flourish: it is three short
+      lines and it is the only place the footer says anything in the site's own
+      voice. A div of spans, not a list — these are three lines of one joke, not
+      three items.
+    */}
+    <div class="footer-wink">
+      <span>if (agent) goto /webmcp</span>
+      <span>else &#123; coffee(); read('/writing'); &#125;</span>
+      <span class="wink-last">robots.txt says yes. The cat abstained.</span>
+    </div>
+  </div>
+</footer>
+
+<style>
+  [data-module="site-footer"] {
+    margin-top: 96px;
+    border-top: 1px solid var(--rule);
+    background: var(--footer-bg);
+  }
+
+  .footer-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 40px;
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding: 46px var(--shell-gutter) 54px;
+  }
+
+  .footer-bio {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 46ch;
+  }
+
+  .footer-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -.02em;
+    color: var(--ink);
+  }
+
+  .footer-blurb {
+    margin: 0;
+    font-size: 17.5px;
+    line-height: 1.55;
+    color: var(--ink-4);
+    text-wrap: pretty;
+  }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 20px;
+    row-gap: 8px;
+    font-family: var(--font-mono-plex);
+    font-size: 16px;
+  }
+
+  .footer-links a,
+  .appearance-toggle {
+    color: var(--ink-6);
+  }
+
+  .footer-links a:hover,
+  .appearance-toggle:hover {
+    color: var(--agents);
+  }
+
+  /* A button that reads as a link: the control is a real <button> because it
+     performs an action rather than navigating, and the design gives it the same
+     weight as its neighbours. Font, size and colour are inherited from the row
+     so it cannot drift from them. */
+  .appearance-toggle {
+    font: inherit;
+    text-transform: lowercase;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    transition: color 240ms ease;
+  }
+
+  .footer-wink {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: var(--font-mono-plex);
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--ink-6);
+    text-align: right;
+  }
+
+  .wink-last { color: var(--agents); }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    [data-module="site-footer"] { margin-top: 56px; }
+
+    .footer-inner {
+      gap: 28px;
+      padding: 34px var(--shell-gutter-mobile) 40px;
+    }
+
+    /* Left-aligned on a narrow screen: a right-aligned block under a
+       left-aligned one reads as two unrelated columns once they stack. */
+    .footer-wink { text-align: left; }
+
+    /* 44px tap targets, per the mobile spec. */
+    .footer-links a,
+    .appearance-toggle {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+    }
+  }
+</style>

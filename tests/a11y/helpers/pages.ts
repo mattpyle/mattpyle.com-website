@@ -1,7 +1,7 @@
 /**
  * The page matrix for the a11y suite: every page template, plus every page with
  * interactive behaviour of its own. Pages that share a template still get their
- * own row when their interactive furniture differs (e.g. /writing and /builds
+ * own row when their interactive furniture differs (e.g. /writing and /projects
  * share ArticleList-ish layout but carry different FilterPills groups).
  */
 
@@ -40,9 +40,30 @@ export const PAGES: PageSpec[] = [
   {
     name: 'home',
     path: '/',
-    why: 'Homepage template: hero, activity log, recent writing, retro furniture',
-    snapshotKeepFirst: ['[data-module="activity-log"] .log-item', '.article-list .article-item'],
+    why: 'Homepage template: hero, writing rows, project cards, the live scorecard panel, agent surfaces, changelog',
+    // The homepage ships two trees — the redesigned modern one and the legacy
+    // one retro still wears — and the hidden half is absent from the
+    // accessibility tree, so this golden records whichever appearance the run is
+    // in. These rows are taken in modern. The legacy selectors below are kept so
+    // the pruning still applies if a run ever takes this snapshot in retro.
+    snapshotKeepFirst: [
+      '.writing .row',
+      '.projects .card',
+      '.changelog .row',
+      '[data-module="activity-log"] .log-item',
+      '.article-list .article-item',
+    ],
     snapshotRedact: [
+      '.writing .row',
+      '.projects .card',
+      '.changelog .row',
+      // Every scorecard run rewrites these three, and /scorecard's own golden
+      // already guards the numbers' shape. The four GATE NAMES are not
+      // content-variable and are deliberately left readable — they are the part
+      // of this panel worth a golden.
+      '.headline-number',
+      '.headline-caption',
+      '.gate-score',
       '[data-module="activity-log"] .log-item',
       '.article-list .article-item',
       '.filter-status',
@@ -51,40 +72,80 @@ export const PAGES: PageSpec[] = [
   {
     name: 'about',
     path: '/about',
-    why: 'About template: headshot, bio, external contact links',
+    why: 'About template: the redesigned reading column, reach grid and portrait rail, plus the legacy bio grid',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern.
+    //
+    // Nothing on this page is content-variable: the copy is authored in the
+    // template, not rendered from a collection, so there is nothing to redact and
+    // no count to protect.
   },
   {
     name: 'writing-index',
     path: '/writing',
-    why: 'Index template plus the tag FilterPills radiogroup',
+    why: 'Index template: the redesigned year-grouped archive, plus the legacy tag FilterPills radiogroup',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    //
     // Order matters: the row is thinned to one first, then its tag chips, whose
     // count is per-post and would otherwise churn the tree's shape.
-    snapshotKeepFirst: ['[data-module="article-list"] .article-item', '.article-tags li'],
-    snapshotRedact: ['[data-module="article-list"] .article-item', '.filter-status'],
+    snapshotKeepFirst: ['.archive .row', '[data-module="article-list"] .article-item', '.article-tags li'],
+    // The year header carries a post COUNT, which every published post changes.
+    snapshotRedact: [
+      '.archive .row',
+      '.archive .year-head',
+      '[data-module="article-list"] .article-item',
+      '.filter-status',
+    ],
   },
   {
-    name: 'builds-index',
-    path: '/builds',
-    why: 'Index template plus the status FilterPills radiogroup',
-    snapshotKeepFirst: ['[data-module="builds-grid"] .build-item', '.card-tags li'],
-    snapshotRedact: ['[data-module="builds-grid"] .build-item', '.filter-status'],
+    name: 'projects-index',
+    path: '/projects',
+    why: 'Index template: the redesigned card grid, plus the legacy status FilterPills radiogroup',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    snapshotKeepFirst: ['.board .card', '[data-module="projects-grid"] .project-item', '.card-tags li'],
+    snapshotRedact: ['.board .card', '[data-module="projects-grid"] .project-item', '.filter-status'],
   },
   {
     name: 'changelog-index',
     path: '/changelog',
-    why: 'Ledger template, type FilterPills, year-rule grouping, pagination',
+    why: 'Index template: the redesigned year-grouped log and its restyled type FilterPills, plus the legacy ledger and pagination',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
     snapshotKeepFirst: [
+      '[data-module="changelog-log"] .log-row',
+      '[data-module="changelog-log"] .year-group',
       '[data-module="changelog-ledger"] .lg-row',
       '[data-module="changelog-ledger"] .year-rule',
       '.lg-tags--desktop .tag-pill',
       '.lg-tags--mobile .tag-pill',
     ],
-    snapshotRedact: ['[data-module="changelog-ledger"] .lg-row', '.filter-status'],
+    // ONLY THE ROWS ARE REDACTED. Three regions on this page carry a COUNT that
+    // every published entry changes — the hero's "N entries, latest …" line,
+    // the year head, and the pager's "showing X of Y" — and redacting a count
+    // is the one thing that must not happen to it: `·` asserts nothing, so a
+    // pager that rendered empty, or a hero that lost its number, would pass.
+    // They are hand-written regexes in the golden instead, the way
+    // steward.aria.yml holds its own counts. See the note in that golden's
+    // sibling spec about what a forced regeneration does to them.
+    snapshotRedact: [
+      '[data-module="changelog-log"] .log-row',
+      '[data-module="changelog-ledger"] .lg-row',
+      '.filter-status',
+    ],
   },
   {
     name: 'writing-entry',
     path: `/writing/${WRITING_ENTRY}`,
-    why: 'Article template plus ArticleActions (copy-markdown button, external links)',
+    why: 'Article template: the redesigned sticky rail (in-page contents plus the four actions), and the legacy ArticleActions',
     snapshotDrop: ['.prose > *'],
     snapshotKeepFirst: ['.article-tags li'],
     snapshotRedact: [
@@ -95,12 +156,24 @@ export const PAGES: PageSpec[] = [
       '.changelog-meta',
       // Prev/next links are recomputed every time an entry ships either side.
       '.entry-navigation',
+      // The redesigned tree's own content-variable regions. The rail's contents
+      // list is built from the post's h2s, so it is the article by another name;
+      // its SHAPE — a nav named "On this page", one link per section — is what
+      // this golden is guarding, and that survives redaction.
+      //
+      // The fixture post is the oldest one, so it never has a next-post row and
+      // this golden does not cover it. `.post-next` is listed anyway, so the day
+      // an older post exists the golden records a shape rather than a title.
+      '.post-title',
+      '.post-lead',
+      '.rail-contents',
+      '.post-next',
     ],
   },
   {
     name: 'changelog-entry',
     path: `/changelog/${CHANGELOG_ENTRY}`,
-    why: 'Changelog entry template, shares .prose with writing entries',
+    why: 'Changelog entry template: the redesigned head and prev/next steps, plus the legacy header — the two share one .prose node, as the post page does',
     snapshotDrop: ['.prose > *'],
     snapshotKeepFirst: ['.article-tags li'],
     snapshotRedact: [
@@ -110,31 +183,44 @@ export const PAGES: PageSpec[] = [
       '.article-meta',
       '.changelog-meta',
       // Prev/next links are recomputed every time an entry ships either side.
+      // `.entry-navigation` is the legacy nav; `.entry-nav` the redesigned one.
       '.entry-navigation',
+      '.entry-nav',
+      // The redesigned tree's own content-variable regions.
+      '.entry-title',
+      '.entry-lead',
+      '.entry-meta',
     ],
   },
   {
     name: 'scorecard',
     path: '/scorecard',
-    why: 'Scorecard template, the details/summary run history disclosures, and the live Agent traffic tables',
+    why: 'Scorecard template: the redesigned gate row and previous-runs list, plus the legacy details/summary run history disclosures',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    //
     // Every scorecard run rewrites src/data/scorecard-runs.json, so every number,
     // date and commentary line on this page is content-variable by construction.
-    // The four metric names are not, and they are the part worth guarding.
+    // The four GATE NAMES are not, and they are the part worth guarding.
     //
-    // The Agent traffic section is content-variable in a stronger sense again: it
-    // reads a live store per request. The suite serves it with AGENT_TRAFFIC_FIXTURE
-    // set (see playwright.config.ts), so the row COUNT is deterministic and the
-    // shape of a row is worth guarding — one row per table, with its cells redacted.
-    snapshotKeepFirst: [
-      '.history-run',
-      'table[aria-labelledby="traffic-surfaces-title"] tbody tr',
-      'table[aria-labelledby="traffic-clients-title"] tbody tr',
-      'table[aria-labelledby="traffic-markdown-title"] tbody tr',
-    ],
+    // THE GATE SCORES ARE NOT REDACTED and must not be: `100` and `4/4` are the
+    // denominator rule this page shares with the homepage panel, and `·` would
+    // assert nothing about either. They are hand-written regexes in the golden,
+    // the way steward.aria.yml holds its counts.
+    //
+    // The Agent traffic tables are gone from this page entirely — they moved to
+    // /activity on 2026-08-22, which has its own row below.
+    snapshotKeepFirst: ['.run', '.history-run'],
+    // `.run-date` and `.run-note`, never `.run` itself: the middle cell of a previous-run row is
+    // its gates-passing COUNT, and `·` would assert nothing about it. It stays in the golden as a
+    // hand-written regex, the way the changelog pager's count does.
     snapshotRedact: [
-      '.freshness',
-      '#agent-traffic .num',
-      '#agent-traffic tbody tr',
+      '.provenance',
+      '.findings',
+      '.run-date',
+      '.run-note',
       '#latest-run-title',
       '.latest-time',
       '.run-verdict',
@@ -149,19 +235,80 @@ export const PAGES: PageSpec[] = [
     ],
   },
   {
+    name: 'activity',
+    path: '/activity',
+    why: 'Activity template: the 24-column hour chart, the last-hour table and the three count tables, plus the legacy traffic block retro wears',
+    // Two trees ship here and the hidden one is absent from the accessibility
+    // tree, so this golden records whichever appearance the run is in — these
+    // rows are taken in modern. The legacy selectors are kept so the pruning
+    // still applies if a run ever takes this snapshot in retro.
+    //
+    // This page reads a live store per request, so every figure on it is
+    // content-variable. The suite serves it with AGENT_TRAFFIC_FIXTURE set (see
+    // playwright.config.ts), which makes the row COUNTS deterministic and the
+    // shape of a row worth guarding — one row per table, cells redacted.
+    //
+    // THE CHART IS PRUNED TO ONE COLUMN, not redacted away: 24 columns of
+    // fixture counts would churn the golden on every run (each column's
+    // accessible name carries its own UTC hour, and the hour moves with the
+    // clock), while one column still records that a column is an hour label
+    // followed by a count.
+    snapshotKeepFirst: [
+      '.chart-col',
+      '.hour-table tbody tr',
+      '.surface-table tbody tr',
+      '.client-table tbody tr',
+      '.markdown-table tbody tr',
+      'table[aria-labelledby="traffic-surfaces-title"] tbody tr',
+      'table[aria-labelledby="traffic-clients-title"] tbody tr',
+      'table[aria-labelledby="traffic-markdown-title"] tbody tr',
+    ],
+    snapshotRedact: [
+      '.stamp-rendered',
+      '.count-number',
+      '.chart-col',
+      '.hour-table tbody tr',
+      '.surface-table tbody tr',
+      '.client-table tbody tr',
+      '.markdown-table tbody tr',
+      '.freshness',
+      '#agent-traffic .num',
+      '#agent-traffic tbody tr',
+    ],
+  },
+  {
     name: 'steward',
     path: '/steward',
-    why: 'Steward template: the check list, the log-identity and limits tables, and two code blocks that must not wrap mid-token',
+    why: 'Steward template: the check list, the log-identity and limits tables, and two focusable code blocks that must not wrap mid-token',
+    // Two trees ship here and the hidden one is absent from the accessibility tree, so this golden
+    // records whichever appearance the run is in — these rows are taken in modern. `.check-plain`
+    // is the legacy tree's gloss and `.check-detail` the redesigned one's; both are listed so the
+    // pruning still applies if a run ever takes this snapshot in retro.
+    //
     // The one-sentence gloss on each check is editorial copy; the check titles beside it are
     // Steward's own words, and agents/steward/tests/lib/agent-audit-checks.test.ts already fails if
     // the list drifts from the audit. Redacting the gloss keeps this golden a guard on the
     // template's shape rather than a second, weaker copy of that assertion.
-    snapshotRedact: ['.check-plain'],
+    //
+    // THE COUNTS ARE NOT REDACTED and must not be: the check count, the per-category counts and the
+    // four rate-limit caps are the whole point of the tables that carry them. They are hand-written
+    // regexes in the golden, so the shape is pinned and the value is free.
+    snapshotRedact: ['.check-plain', '.check-detail'],
   },
   {
     name: 'webmcp',
     path: '/webmcp',
-    why: 'The most interactive page: per-tool radiogroups, inputs, run buttons, focusable scroll regions',
+    why: 'The most interactive page: aria-pressed choice buttons, inputs, run buttons, focusable scroll regions',
+    // ONE CARD, not six. Six would be six copies of one template, and the
+    // catalog is generated, so a seventh tool is a data change rather than a
+    // template one. The kept card is `describe_site`, the first — which is the
+    // no-inputs shape, so the schema table is deliberately outside this golden.
+    //
+    // Only the redesigned tree reaches this snapshot. Both trees ship and both
+    // carry `.tool-card`, but the hidden one is absent from the accessibility
+    // tree, so `keepFirst` sees the modern cards only. Its choice control is a
+    // pair of `aria-pressed` toggle buttons; the legacy tree keeps the roving
+    // radiogroup, and that tree is never what this file records.
     snapshotKeepFirst: ['.tool-card'],
   },
 ];

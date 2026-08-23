@@ -1,15 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import ScorecardHero from '../components/scorecard/ScorecardHero.astro';
+import ScorecardBody from '../components/scorecard/ScorecardBody.astro';
 import { SCORECARD, SCORECARD_HISTORY } from '../data/scorecard';
-import {
-  MAX_TABLE_ROWS,
-  flattenTraffic,
-  readAgentTraffic,
-  summarizeTraffic,
-} from '../lib/agent-traffic.mjs';
-// The store counts the page path a client asked for; the table shows the URL that answered, so a
-// row reads as the markdown document it was. Same function the middleware derives the sibling
-// with, so the two can never disagree about what /about's markdown is called.
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 // The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
@@ -19,67 +12,24 @@ import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 const markdownUrl = markdownSiblingFor('/scorecard/') ?? undefined;
 
 /**
- * On demand, for the Agent traffic section alone.
+ * PRERENDERED, as of the scorecard/activity redesign.
  *
- * Everything above and below that section still renders from committed JSON (src/data/
- * scorecard-runs.json) and would prerender perfectly happily; the store read is the only reason
- * this page runs per request. The cost is paid deliberately and it is not free — a prerendered
- * /scorecard is a file the sitemap validator, the markdown-sibling emit step and every local audit
- * could all assume existed. Each of those now has an explicit on-demand branch; see
- * scripts/validate-sitemap.mjs, src/pages/scorecard.md.ts and scripts/serve-built-site.mjs.
+ * This page ran per request from 2026-08-06 until now, and its own docblock said why: the Agent
+ * traffic section read the hit store at request time, and nothing else on the page did. That
+ * section is now /activity, which takes `prerender = false` in its place, so the reason is gone
+ * and the default comes back with it. Four things that had to grow an on-demand branch for this
+ * page lose it again: the sitemap integration's `customPages`, scripts/validate-sitemap.mjs, the
+ * markdown-sibling emit step (src/pages/scorecard.md.ts is deleted — the converter now has a built
+ * HTML file to work from, like every other non-entry page), and scripts/serve-built-site.mjs.
  *
- * The resilience is the CDN, not a retry: s-maxage plus a day of stale-while-revalidate means a
- * store outage shorter than the window serves the last good numbers, and only past it does the
- * section show its unavailable state. The conformance sections render either way.
+ * Every value on this page comes from committed JSON (src/data/scorecard-runs.json), so a
+ * prerender is not merely allowed here, it is the honest shape: the content changes when a run
+ * lands, and a run landing is a deploy.
  */
-export const prerender = false;
-
-Astro.response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=86400');
+export const prerender = true;
 
 const currentPasses = SCORECARD.metrics.filter(metric => metric.status === 'Pass').length;
 const historyPageSize = 20;
-
-// One clock for the whole render, so the windows and the "rendered at" stamp cannot disagree.
-const renderedAt = new Date();
-const traffic = await readAgentTraffic({ now: renderedAt });
-const summary = traffic.ok ? summarizeTraffic(flattenTraffic(traffic), renderedAt) : null;
-
-const counts = new Intl.NumberFormat('en-GB');
-
-// Timestamps ship as UTC and are localised in the browser (see the script at the foot of this
-// file). Without JS they read as labelled UTC, which is true rather than merely tolerable; with
-// it, they read in the visitor's own zone. Either way the cached HTML is identical for everyone,
-// which is what lets this page be cached at all.
-const utcStamp = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: 'UTC',
-  timeZoneName: 'short',
-});
-
-const renderedStamp = { iso: renderedAt.toISOString(), label: utcStamp.format(renderedAt) };
-
-/**
- * What the section says when it has no numbers. Three states, not two: "no store configured" and
- * "the store did not answer" are the same blank space on the page and completely different
- * findings, and only the second can happen in production. The first is what a local build looks
- * like, and saying the store failed there would be a small lie told on every preview.
- */
-const emptyStateCopy = traffic.ok
-  ? 'Counting is running and nothing has been counted yet. The first agent request to a discovery document fills this in.'
-  : traffic.reason === 'no-store'
-    ? 'No counter store is configured in this environment, so there is nothing to read. That is a local build; production reads the live store.'
-    : 'Live counts are unavailable right now: the store did not answer this render. Nothing above or below this section depends on it.';
-
-// Two families are not crawler names and read as jargon without a gloss.
-const FAMILY_NOTES: Record<string, string> = {
-  none: 'sent no user agent',
-  other: 'unrecognised',
-  'other-bot': 'says it is a bot, unnamed here',
-};
 
 const DEFAULT_CURRENT_COMMENTARY =
   'The lowest result across the tested pages is shown for each category. A pass means the ' +
@@ -92,12 +42,31 @@ function shortMetricName(name: string): string {
   return name;
 }
 ---
-
 <Layout
   title="Scorecard: accessibility, performance, and SEO"
   description={SCORECARD.description}
   markdownAlternate={markdownUrl}
 >
+  {/*
+    TWO SCORECARDS IN ONE DOCUMENT, one shown per appearance — the same construction
+    src/pages/about.astro, index.astro and writing/index.astro use, and for the same reason: the
+    redesign rebuilds the MODERN appearance only, retro is a client-side preference the server
+    cannot read, so both trees ship and CSS chooses. `.modern-skin` / `.retro-skin` in
+    src/styles/retro.css do the choosing, and retro.css itself is untouched by this build.
+
+    A hidden subtree holds no tab stops and is absent from the accessibility tree, so each
+    appearance presents exactly one page, with exactly one h1.
+
+    Both trees read the same run-log, and neither carries the Agent traffic block any more. The
+    legacy tree below keeps its own indentation inside the new wrapper: re-indenting 300 lines
+    would have hidden the one real change in it — the traffic section becoming a cross-link — in a
+    whitespace diff. Same call the /steward reskin made.
+  */}
+  <ScorecardHero />
+  <ScorecardBody />
+
+  <div class="retro-skin">
+
   <div class="scorecard-shell" data-module="scorecard">
     <header class="scorecard-header">
       <p class="eyebrow">Public scorecard · live web</p>
@@ -162,143 +131,12 @@ function shortMetricName(name: string): string {
       </div>
     </section>
 
-    <section id="agent-traffic" class="traffic" aria-labelledby="agent-traffic-title">
-      <header class="traffic-header">
-        <h2 id="agent-traffic-title">Agent traffic</h2>
-        <p class="freshness">
-          Rendered <time datetime={renderedStamp.iso} data-local-time>{renderedStamp.label}</time>
-        </p>
-      </header>
-
-      {summary && summary.counted ? (
-        <Fragment>
-          <div class="traffic-panel">
-            <div class="statrow">
-              <div class="stat">
-                <p class="label">Requests, last 24 hours</p>
-                <p class="num">{counts.format(summary.totals.day)}</p>
-              </div>
-              <div class="stat">
-                <p class="label">Requests, last 7 days</p>
-                <p class="num">{counts.format(summary.totals.week)}</p>
-              </div>
-              <div class="stat">
-                <p class="label">Requests, total</p>
-                <p class="num">{counts.format(summary.totals.total)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="subsect">
-            <h3 id="traffic-surfaces-title">By surface</h3>
-            {/*
-              The scroll container, not `table { display: block }`: Chrome drops table semantics
-              from the accessibility tree the moment a table stops being display: table, and this
-              page's aria golden would be the thing that noticed. Focusable because a region that
-              scrolls has to be reachable by keyboard.
-            */}
-            <div class="table-scroll" role="region" tabindex="0" aria-labelledby="traffic-surfaces-title">
-            <table aria-labelledby="traffic-surfaces-title">
-              <thead>
-                <tr>
-                  <th scope="col">Surface</th>
-                  <th scope="col" class="n">7 days</th>
-                  <th scope="col" class="n">30 days</th>
-                  <th scope="col" class="n">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.surfaces.rows.map(row => (
-                  <tr>
-                    <td><code>{row.path}</code></td>
-                    <td class="n">{counts.format(row.week)}</td>
-                    <td class="n">{counts.format(row.month)}</td>
-                    <td class="n">{counts.format(row.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-            {summary.surfaces.omitted > 0 && (
-              <p class="footnote">{summary.surfaces.omitted} further surface(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
-            )}
-          </div>
-
-          <div class="subsect">
-            <h3 id="traffic-clients-title">By client type</h3>
-            <div class="table-scroll" role="region" tabindex="0" aria-labelledby="traffic-clients-title">
-            <table aria-labelledby="traffic-clients-title">
-              <thead>
-                <tr>
-                  <th scope="col">Client</th>
-                  <th scope="col" class="n">7 days</th>
-                  <th scope="col" class="n">30 days</th>
-                  <th scope="col" class="n">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.clients.rows.map(row => (
-                  <tr>
-                    <td class="family">
-                      {row.family}
-                      {row.family && FAMILY_NOTES[row.family] && (
-                        <span class="family-note"> ({FAMILY_NOTES[row.family]})</span>
-                      )}
-                    </td>
-                    <td class="n">{counts.format(row.week)}</td>
-                    <td class="n">{counts.format(row.month)}</td>
-                    <td class="n">{counts.format(row.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-            {summary.clients.omitted > 0 && (
-              <p class="footnote">{summary.clients.omitted} further client type(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
-            )}
-          </div>
-
-          <div class="subsect">
-            <h3 id="traffic-markdown-title">Markdown negotiation</h3>
-            {summary.pages.rows.length > 0 ? (
-              <div class="table-scroll" role="region" tabindex="0" aria-labelledby="traffic-markdown-title">
-              <table aria-labelledby="traffic-markdown-title">
-                <thead>
-                  <tr>
-                    <th scope="col">Page</th>
-                    <th scope="col" class="n">7 days</th>
-                    <th scope="col" class="n">30 days</th>
-                    <th scope="col" class="n">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.pages.rows.map(row => (
-                    <tr>
-                      <td><code>{markdownSiblingFor(row.path ?? '') ?? row.path}</code></td>
-                      <td class="n">{counts.format(row.week)}</td>
-                      <td class="n">{counts.format(row.month)}</td>
-                      <td class="n">{counts.format(row.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            ) : (
-              <p class="traffic-empty">
-                No page has been served as Markdown yet. Every page here has a Markdown
-                representation and answers <code>Accept: text/markdown</code> with it; this row
-                fills in the first time something asks.
-              </p>
-            )}
-            {summary.pages.omitted > 0 && (
-              <p class="footnote">{summary.pages.omitted} further page(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
-            )}
-          </div>
-        </Fragment>
-      ) : (
-        <p class="traffic-unavailable">{emptyStateCopy}</p>
-      )}
-    </section>
+    {/*
+      Where the Agent traffic block was until 2026-08-22. It moved to /activity wholesale — this
+      page is audit results, that one is traffic — so both appearances point at it rather than only
+      the redesigned one.
+    */}
+    <p class="traffic-moved">Agent traffic moved to <a href="/activity/">/activity</a>.</p>
 
     <section class="history" aria-labelledby="history-title">
       <header class="history-header">
@@ -383,39 +221,7 @@ function shortMetricName(name: string): string {
       </footer>
     </section>
   </div>
-  <script>
-    /**
-     * Localise the Agent traffic timestamps.
-     *
-     * The page is cached and served byte-identically to everyone, so the server cannot know the
-     * reader's timezone and must not try: every stamp ships as UTC, labelled UTC, correct with no
-     * JavaScript at all. This rewrites the visible text to the reader's own zone; the `datetime`
-     * attribute, which is the machine-readable value and the one an agent reads, is never touched.
-     *
-     * Bound to astro:page-load rather than run once, because ClientRouter soft-navigates into this
-     * page without a fresh document (see the other components in src/components).
-     */
-    function localiseTimes(): void {
-      const local = new Intl.DateTimeFormat(undefined, {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZoneName: 'short',
-      });
-
-      for (const element of document.querySelectorAll<HTMLTimeElement>('time[data-local-time]')) {
-        const iso = element.getAttribute('datetime');
-        if (!iso) continue;
-        const at = new Date(iso);
-        if (Number.isNaN(at.getTime())) continue;
-        element.textContent = local.format(at);
-      }
-    }
-
-    document.addEventListener('astro:page-load', localiseTimes);
-  </script>
+  </div>
 </Layout>
 
 <style>
@@ -468,7 +274,6 @@ function shortMetricName(name: string): string {
   }
 
   .run-header h2,
-  .traffic-header h2,
   .history-header h2 {
     margin: 0;
     color: var(--color-heading);
@@ -659,169 +464,15 @@ function shortMetricName(name: string): string {
     line-height: 1.55;
   }
 
-  /* ── Agent traffic ─────────────────────────────────────────────────── */
-
-  .traffic { margin-top: 60px; }
-
-  .traffic-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 24px;
-    margin-bottom: 16px;
-  }
-
-  .freshness {
-    margin: 0 0 3px;
+  .traffic-moved {
+    margin: 60px 0 0;
     color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    line-height: 1.6;
-    text-align: right;
-  }
-
-  .traffic-panel {
-    overflow: hidden;
-    margin-bottom: 34px;
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-top: 3px solid var(--color-heading);
-    box-shadow: 0 16px 40px rgba(35, 31, 24, .045);
-  }
-
-  .statrow {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .stat {
-    min-width: 0;
-    padding: 22px 20px 24px;
-    border-right: 1px solid var(--color-border);
-  }
-
-  .stat:last-child { border-right: 0; }
-
-  .stat .label {
-    margin: 0 0 16px;
-    color: var(--color-heading);
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    font-weight: 600;
-    letter-spacing: .06em;
-    line-height: 1.4;
-    text-transform: uppercase;
-  }
-
-  .stat .num {
-    margin: 0;
-    color: var(--color-heading);
-    font-family: var(--font-serif);
-    font-size: 44px;
-    font-weight: 600;
-    letter-spacing: -.035em;
-    line-height: .85;
-  }
-
-  .subsect { margin-bottom: 30px; }
-
-  .subsect h3 {
-    margin: 0 0 10px;
-    color: var(--color-heading);
-    font-family: var(--font-serif);
-    font-size: 17px;
-    font-weight: 600;
-  }
-
-  /* The one place a table is allowed to be wider than the page. */
-  .table-scroll { overflow-x: auto; }
-
-  .table-scroll:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
-  }
-
-  .traffic table {
-    width: 100%;
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  .traffic thead th {
-    padding: 10px 14px;
-    border-bottom: 2px solid var(--color-heading);
-    color: var(--color-label);
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    font-weight: 400;
-    letter-spacing: .12em;
-    text-align: left;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  /* Shrink the numeric columns to their content so the numbers sit beside the row they belong to
-     rather than drifting into the middle of a wide column. The first column takes the slack. */
-  .traffic th.n,
-  .traffic td.n {
-    width: 1%;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    white-space: nowrap;
-  }
-
-  .traffic thead th:first-child { width: 100%; }
-
-  .traffic tbody td {
-    padding: 9px 14px;
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-text);
-  }
-
-  .traffic tbody tr:last-child td { border-bottom: 0; }
-  .traffic tbody tr:hover { background: var(--color-accent-wash); }
-
-  /* A path is not prose and must not be hyphenated into `/robot s.txt` by a narrow column. It
-     stays on one line and the container scrolls, which is what the container is for. */
-  .traffic td code,
-  .traffic td.family {
-    color: var(--color-heading);
     font-family: var(--font-mono);
     font-size: 11.5px;
-    white-space: nowrap;
-  }
-
-  .family-note { color: var(--color-muted); }
-
-  .footnote {
-    margin: 6px 0 0;
-    color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    line-height: 1.7;
-  }
-
-  .traffic-empty,
-  .traffic-unavailable {
-    margin: 0;
-    padding: 18px 20px;
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    /* Same top rule as .latest-run and .traffic-panel: this is the panel, in the state where it
-       has no numbers, not a callout of its own. */
-    border-top: 3px solid var(--color-heading);
-    color: var(--color-muted);
-    font-size: 13px;
     line-height: 1.6;
   }
 
-  .traffic-empty code,
-  .traffic-unavailable code {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-  }
+  .traffic-moved a { color: var(--color-accent); }
 
   .history { margin-top: 60px; }
 
@@ -978,9 +629,6 @@ function shortMetricName(name: string): string {
   }
 
   @media (max-width: 820px) {
-    .stat { padding: 16px 12px 18px; }
-    .stat .num { font-size: 32px; }
-    .stat .label { font-size: 8.5px; }
     .current-scores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .current-score:nth-child(2) { border-right: 0; }
     .current-score:nth-child(-n + 2) { border-bottom: 1px solid var(--color-border); }
@@ -1010,11 +658,6 @@ function shortMetricName(name: string): string {
     .verification div:last-child { grid-column: 1 / -1; }
     .current-commentary,
     .history-detail > p { padding: 16px 0 0; border-top: 1px solid var(--color-border); border-left: 0; }
-
-    .traffic { margin-top: 48px; }
-    .traffic-header { align-items: flex-start; flex-direction: column; gap: 8px; }
-    .freshness { text-align: left; }
-    .stat { padding: 18px 16px 20px; }
 
     .history { margin-top: 48px; }
     .history-header { align-items: flex-start; }
@@ -1058,11 +701,6 @@ function shortMetricName(name: string): string {
 
   @media (max-width: 410px) {
     .run-header { flex-direction: column; gap: 14px; }
-    /* Three 44px numbers do not fit 320px; stacking beats a table that scrolls sideways
-       for the one row a reader most wants to read at a glance. */
-    .statrow { grid-template-columns: 1fr; }
-    .stat { border-right: 0; border-bottom: 1px solid var(--color-border); }
-    .stat:last-child { border-bottom: 0; }
     .current-scores { grid-template-columns: 1fr; }
     .current-score { border-right: 0; border-bottom: 1px solid var(--color-border); }
     .current-score:last-child { border-bottom: 0; }

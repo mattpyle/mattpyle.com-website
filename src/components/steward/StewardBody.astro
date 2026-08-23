@@ -1,0 +1,857 @@
+---
+/**
+ * The five bands below the /steward hero
+ * (docs/projects/redesign/design-export-remaining/design_handoff_steward).
+ *
+ * A RESKIN, NOT A REWRITE. Every section of the legacy page survives here and the
+ * order holds — did Steward just fetch your site, what Steward is, what the audit
+ * checks, running one yourself, contact — because that order is load-bearing: the
+ * stranger who arrived from a log line gets what visited, what it cost, and how to
+ * refuse it before the page explains itself. Copy is tightened; no claim is
+ * dropped.
+ *
+ * NOTHING HERE IS A NUMBER TYPED OUT. The check list, its categories, the counts,
+ * the User-Agent, the token and the four rate-limit rows all arrive as props from
+ * the page, which resolves them through the limiter's own resolvers and the check
+ * data file. A version or a cap written into this markup would be the one error on
+ * this page that actively wastes somebody's time.
+ *
+ * RULE CONVENTION: every h2 is followed by one full-width hairline, then its
+ * content at 26px. No exceptions on this page — `.band-body` carries both, so a
+ * new band cannot forget.
+ */
+interface Props {
+  userAgent: string;
+  agentToken: string;
+  endpoint: string;
+  issuesUrl: string;
+  refusalSnippet: string;
+  callSnippet: string;
+  deepCallSnippet: string;
+  checkCount: number;
+  byCategory: Array<{
+    id: string;
+    label: string;
+    summary: string;
+    checks: Array<{ id: string; title: string; severity: string; plain: string }>;
+  }>;
+  limitRows: Array<{ tier: string; scope: string; cap: string; window: string }>;
+}
+
+const {
+  userAgent,
+  agentToken,
+  endpoint,
+  issuesUrl,
+  refusalSnippet,
+  callSnippet,
+  deepCallSnippet,
+  checkCount,
+  byCategory,
+  limitRows,
+} = Astro.props;
+
+/** The deep tier's three promises, as label/value rows. */
+const GUARANTEES = [
+  {
+    label: 'Queued means queued',
+    value:
+      'One worker sits behind this endpoint, so a busy moment is a real wait rather than a slow ' +
+      'site. The status view answers queued with a position rather than leaving you to guess.',
+  },
+  {
+    label: 'Incomplete says so',
+    value:
+      'A deep audit that sampled pages and rendered none of them comes back marked degraded, ' +
+      'naming which half is missing and which half can still be read.',
+  },
+  {
+    label: 'Durable either way',
+    value: 'A run survives a worker restart, and the workflow ID keeps answering.',
+  },
+];
+---
+
+<div class="steward-body modern-skin">
+  <section class="rd-section band" aria-labelledby="rd-steward-logs">
+    <div class="band-head">
+      <h2 id="rd-steward-logs">Did Steward just fetch your site?</h2>
+    </div>
+    <div class="band-body band-body--logs">
+      <div class="logs-main">
+        <p class="lead">
+          Then somebody asked for a report on it. Steward reads what a site says about itself over
+          plain HTTP, writes the report for whoever ran it, and leaves. It does not index anything
+          and it does not come back on a schedule.
+        </p>
+
+        <table class="facts">
+          <caption class="sr-only">What one Steward request is</caption>
+          <tbody>
+            <tr>
+              <th scope="row">User-Agent</th>
+              <td><code>{userAgent}</code></td>
+            </tr>
+            <tr>
+              <th scope="row">robots.txt token</th>
+              <td><code>{agentToken}</code></td>
+            </tr>
+            <tr>
+              <th scope="row">Cost of one audit</th>
+              <td>
+                Roughly a dozen HTTP requests over a few seconds. A deep audit adds up to three of
+                your pages opened in a real browser, which fetch their own subresources the way any
+                visitor's browser does.
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Frequency</th>
+              <td>Once, when a person or an agent asks. No schedule, no repeat visits, no crawl.</td>
+            </tr>
+            <tr>
+              <th scope="row">What it collects</th>
+              <td>
+                Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known
+                discovery documents — and the headers of a couple of pages. Nothing is stored here
+                and nothing is published anywhere.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="secondary">
+          <strong>It obeys your robots.txt.</strong> Every URL is checked against your rules before
+          it is requested; only <code>/robots.txt</code> is fetched without asking. Anything you
+          disallow is reported as “not checked”, never as a finding against your site.
+        </p>
+      </div>
+
+      {/*
+        The only boxed element on the page, and it is boxed because it is the
+        thing an annoyed stranger came for.
+      */}
+      <div class="refusal">
+        <h3>How to refuse it</h3>
+        <pre><code>{refusalSnippet}</code></pre>
+        <p>
+          One audit then costs you one request — robots.txt, read once. Nothing else about how this
+          site treats you changes.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="rd-section band" aria-labelledby="rd-steward-what">
+    <div class="band-head">
+      <h2 id="rd-steward-what">What Steward is</h2>
+    </div>
+    <div class="band-body band-body--stack">
+      <p class="lead">
+        Steward is this site's editorial agent. It reviews a draft — spelling, prose linting, an
+        editorial pass, a real production build with accessibility and performance audits — waits
+        durably for Matt to approve it, publishes by pull request, then verifies production. The
+        agent-readiness audit started as one step of that review and turned out to be the half worth
+        pointing at other people's sites.
+      </p>
+      <p class="lead">
+        It checks behaviour rather than presence. A <code>200</code> from <code>/llms.txt</code> that
+        is really the site's HTML 404 page is a failure here — the most common way a site passes a
+        presence check while giving an agent nothing.
+      </p>
+
+      <div class="tiers">
+        <div class="tier">
+          <span class="tier-name">Fast tier</span>
+          <span class="tier-copy">
+            {checkCount} checks over plain HTTP. Seconds, and the report comes back in the call.
+          </span>
+        </div>
+        <div class="tier">
+          <span class="tier-name">Deep tier</span>
+          <span class="tier-copy">
+            Up to three pages opened in a real browser, reporting Lighthouse scores and axe-core
+            violations. Minutes, and capped far harder.
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rd-section band" aria-labelledby="rd-steward-checks">
+    <div class="band-head band-head--with-note">
+      <h2 id="rd-steward-checks">What the audit checks</h2>
+      <span class="band-note">
+        {checkCount} checks, {byCategory.length} categories, no composite score.
+      </span>
+    </div>
+    <div class="band-body band-body--checks">
+      {byCategory.map(category => (
+        <div class="category">
+          <div class="category-head">
+            <h3 id={`rd-category-${category.id}`}>{category.label}</h3>
+            <p class="category-purpose">{category.summary}</p>
+            <p class="category-count">{category.checks.length} checks</p>
+          </div>
+          <ul class="check-rows" role="list" aria-labelledby={`rd-category-${category.id}`}>
+            {category.checks.map(check => (
+              <li class="check-row">
+                <span class="check-text">
+                  <span class="check-name">{check.title}</span>
+                  <span class="check-detail">{check.plain}</span>
+                </span>
+                {/*
+                  Weight is a word in ink, never a coloured pill: severity is not
+                  one of the four semantic colours, and a magenta "high" would
+                  read as "agents".
+                */}
+                <span class="check-weight">{check.severity}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="rd-section band" aria-labelledby="rd-steward-running">
+    <div class="band-head">
+      <h2 id="rd-steward-running">Running an audit yourself</h2>
+    </div>
+    <div class="band-body band-body--running">
+      <div class="running-main">
+        <p class="lead">
+          Point an MCP client at <code>{endpoint}</code> — a stateless streamable-HTTP server with
+          three tools. No account, no key. <code>audit_site(url)</code> runs the fast checks and the
+          report comes back in the call, with nothing to poll.
+        </p>
+        {/*
+          NO LINE BREAK MAY TOUCH AN INLINE TAG in the two paragraphs below. Astro's
+          `compressHTML` drops the whitespace either side of an element boundary
+          when it contains a newline, so a source line starting with `<code>`
+          renders glued to the word before it ("call open, sodeep_audit(url)").
+          Measured on the built page. Every break here falls between two plain
+          words, which is why some of these lines run long.
+        */}
+        <p class="secondary">
+          Two renderings ship in one response: the canonical JSON in <code>structuredContent</code>,
+          one entry per check with its evidence, and the same report as a markdown summary in the
+          text content. A <code>GET</code> on <a href={endpoint}>the endpoint itself</a> answers <code>405</code> with
+          a worked example rather than a bare status. The unit audited is a site, not a page: any
+          path in the URL is ignored, only <code>http</code> and <code>https</code> are accepted, and
+          addresses on private networks are refused before a connection is opened.
+        </p>
+
+        <h3>The deep tier</h3>
+        <p class="secondary">
+          A deep audit takes longer than any MCP client holds a tool call open, so <code>deep_audit(url)</code> returns
+          a workflow ID straight away and <code>get_audit(workflowId, view)</code> reads it back — there
+          are no findings in the <code>deep_audit</code> response, and it says so. Poll <code>view: "status"</code> until <code>done</code> is
+          true, then read <code>view: "report"</code> for the canonical JSON or <code>"summary"</code> for markdown. While it
+          runs, the status view lists each unit of work with its state, and anything being retried
+          carries its attempt number, straight from Temporal rather than from a count kept by hand.
+        </p>
+
+        <dl class="guarantees">
+          {GUARANTEES.map(guarantee => (
+            <div class="guarantee">
+              <dt>{guarantee.label}</dt>
+              <dd>{guarantee.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p class="secondary credit">
+          <strong>Powered by <a href="https://temporal.io" rel="noopener">Temporal</a>.</strong> Matt
+          works at Temporal, so that is disclosure as much as it is a credit.
+        </p>
+      </div>
+
+      <div class="running-aside">
+        {/*
+          Focusable because they scroll horizontally — a curl line is longer than
+          the 480px column and must never wrap mid-token, so a keyboard user needs
+          to be able to scroll it (axe: scrollable-region-focusable, measured on
+          the served build). Same construction the /webmcp snippets use: a named
+          region with a tab stop, named by the label already above it.
+        */}
+        <div class="snippet">
+          <span class="snippet-label" id="rd-snippet-fast">Fast audit</span>
+          <pre role="region" tabindex="0" aria-labelledby="rd-snippet-fast"><code>{callSnippet}</code></pre>
+        </div>
+        <div class="snippet">
+          <span class="snippet-label" id="rd-snippet-deep">Deep audit</span>
+          <pre role="region" tabindex="0" aria-labelledby="rd-snippet-deep"><code>{deepCallSnippet}</code></pre>
+        </div>
+
+        <div class="limits">
+          <span class="snippet-label" id="rd-limits-label">Rate limits</span>
+          <table class="limits-table" aria-labelledby="rd-limits-label">
+            <thead>
+              <tr>
+                <th scope="col">Tier</th>
+                <th scope="col">Scope</th>
+                <th scope="col" class="num">Cap</th>
+                <th scope="col" class="num">Window</th>
+              </tr>
+            </thead>
+            <tbody>
+              {limitRows.map(row => (
+                <tr>
+                  <td>{row.tier}</td>
+                  <td class="dim">{row.scope}</td>
+                  <td class="num">{row.cap}</td>
+                  <td class="num dim">{row.window}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p class="limits-note">
+            A refusal is a JSON-RPC error with a <code>Retry-After</code> header naming which limit
+            was hit and how long to wait. Every accepted call spends a dozen requests at somebody
+            else's origin under this site's name; an unbounded endpoint would be an open relay with
+            an honest User-Agent. The deep limits are two orders of magnitude smaller because a deep
+            audit spends minutes of browser time on a machine somebody pays for. The counters hold a
+            keyed hash of the caller's address with a lifetime no longer than the window, never the
+            address itself. There is no key and no way to ask for more. <code>get_audit</code> is
+            free: it reads a run you already paid for and makes no request at anybody's origin.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rd-section band" aria-labelledby="rd-steward-contact">
+    <div class="band-head">
+      <h2 id="rd-steward-contact">Contact</h2>
+    </div>
+    <div class="band-body band-body--contact">
+      <p class="lead">
+        If Steward misbehaved on your site — ignored a rule, requested something it should not have,
+        or reported something that is not true — open an issue. It is the same repository the
+        auditor's code lives in, and it is read.
+      </p>
+      <div class="contact-aside">
+        <a class="contact-link" href={issuesUrl} rel="noopener">Open an issue</a>
+        {/* The page's last courtesy. It stays. */}
+        <span class="contact-note">
+          Steward is an experiment on a personal site, not a supported service. It may change or be
+          withdrawn without notice.
+        </span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<style>
+  .band { padding-top: 76px; }
+
+  /* The last band carries NO bottom padding: SiteFooter.astro already opens with a
+     96px margin-top, which is the spec's page bottom. Setting it here as well
+     doubled the gap — measured on the served build. */
+
+  .band-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+  }
+
+  .band-note {
+    font-size: 19px;
+    color: var(--ink-6);
+  }
+
+  /* The rule convention, in one place: the hairline and the 26px below it belong
+     to every band, so a new one cannot forget either. */
+  .band-body {
+    border-top: 1px solid var(--rule-2);
+    padding-top: 26px;
+  }
+
+  .band-body--stack {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .band-body--logs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 420px;
+    gap: 64px;
+    align-items: start;
+  }
+
+  .band-body--running {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 480px;
+    gap: 64px;
+    align-items: start;
+  }
+
+  .band-body--contact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 64px;
+    align-items: start;
+  }
+
+  .band-body--checks {
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  .logs-main,
+  .running-main {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  h3 {
+    margin: 12px 0 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 23px;
+    letter-spacing: -.02em;
+    color: var(--ink);
+  }
+
+  .lead {
+    margin: 0;
+    max-width: 68ch;
+    font-size: 20px;
+    line-height: 1.65;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .secondary {
+    margin: 0;
+    max-width: 68ch;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .secondary strong,
+  .lead strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* The redesign's inline code treatment, matching the `.prose code` rule in
+     global.css so the two surfaces cannot drift. */
+  code {
+    font-family: var(--font-mono-plex);
+    font-size: .85em;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink-2);
+  }
+
+  pre {
+    margin: 0;
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    font-family: var(--font-mono-plex);
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--ink-2);
+  }
+
+  /* The two curl blocks are tab stops (they scroll), so they need a ring of their
+     own: the redesign's focus rule in global.css names `a` and `button` only. */
+  pre:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+  }
+
+  pre code {
+    font-size: 1em;
+    background: none;
+    border: 0;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  a { color: var(--agents); }
+  a:hover { color: var(--agents-hover); }
+
+  /* Prose links keep the hairline underline: inside a paragraph, colour alone
+     does not distinguish a link (WCAG 1.4.1). */
+  .lead a,
+  .secondary a,
+  .limits-note a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--rule);
+    transition: color 240ms ease, text-decoration-color 240ms ease;
+  }
+
+  .lead a:hover,
+  .secondary a:hover,
+  .limits-note a:hover { text-decoration-color: currentColor; }
+
+  /* ── Band 2: the facts table and the refusal card ─────────────────────────── */
+
+  .facts {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .facts th {
+    width: 190px;
+    text-align: left;
+    vertical-align: top;
+    font-weight: 400;
+    font-size: 18px;
+    color: var(--ink-6);
+    padding: 16px 24px 16px 0;
+    border-top: 1px solid var(--track);
+  }
+
+  .facts td {
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    padding: 16px 0;
+    border-top: 1px solid var(--track);
+  }
+
+  /* The User-Agent is one long unbreakable token and it must wrap rather than
+     push the document sideways at 320px — see tests/a11y/reflow.spec.ts. */
+  .facts code { overflow-wrap: anywhere; }
+
+  .refusal {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 26px 28px 28px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  .refusal h3 { margin: 0; }
+
+  /* Inside the card, the code block inverts: the card is the surface, so the
+     block takes the page ground to stay legible against it. */
+  .refusal pre {
+    background: var(--bg);
+    line-height: 1.7;
+  }
+
+  .refusal p {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+
+  /* ── Band 3: the two tiers ────────────────────────────────────────────────── */
+
+  .tiers {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px;
+    margin-top: 4px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .tier {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 24px 26px 26px;
+    background: var(--surface);
+  }
+
+  .tier-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 23px;
+    letter-spacing: -.02em;
+    color: var(--ink);
+  }
+
+  .tier-copy {
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+
+  /* ── Band 4: the check categories ─────────────────────────────────────────── */
+
+  .category {
+    display: grid;
+    grid-template-columns: 300px minmax(320px, 1fr);
+    gap: 64px;
+    align-items: start;
+  }
+
+  .category-head h3 { margin: 0 0 8px; }
+
+  .category-purpose {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-6);
+  }
+
+  .category-count {
+    margin: 8px 0 0;
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .check-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    /* The group closes on the heavier rule, so a category reads as one block
+       rather than as rows that ran out. */
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .check-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 90px;
+    gap: 24px;
+    align-items: baseline;
+    padding: 16px 0;
+    border-top: 1px solid var(--track);
+  }
+
+  .check-text {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .check-name {
+    font-size: 19px;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+
+  .check-detail {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-6);
+  }
+
+  .check-weight {
+    font-size: 18px;
+    text-align: right;
+    color: var(--ink-6);
+  }
+
+  /* ── Band 5: running one ──────────────────────────────────────────────────── */
+
+  .guarantees {
+    margin: 0;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .guarantee {
+    display: grid;
+    grid-template-columns: 220px minmax(150px, 1fr);
+    gap: 28px;
+    align-items: baseline;
+    padding: 16px 0;
+    border-top: 1px solid var(--track);
+  }
+
+  .guarantee dt {
+    font-size: 19px;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+
+  .guarantee dd {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+
+  .credit { margin-top: 4px; }
+
+  .running-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .snippet,
+  .limits {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .snippet-label {
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .limits-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .limits-table th {
+    text-align: left;
+    font-weight: 400;
+    font-size: 17px;
+    color: var(--ink-6);
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .limits-table td {
+    font-size: 18px;
+    color: var(--ink);
+    padding: 12px 0;
+    border-bottom: 1px solid var(--track);
+  }
+
+  .limits-table th + th,
+  .limits-table td + td { padding-left: 20px; }
+
+  .limits-table .num { text-align: right; }
+  .limits-table .dim { color: var(--ink-6); }
+
+  .limits-note {
+    margin: 4px 0 0;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-6);
+  }
+
+  /* ── Band 6: contact ──────────────────────────────────────────────────────── */
+
+  .contact-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 1px solid var(--rule);
+    padding-left: 26px;
+  }
+
+  .contact-link { font-size: 20px; }
+
+  .contact-note {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-6);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Every two-column band stacks in source order, which puts the refusal card
+     directly under the facts table and the curl examples under the prose that
+     introduces them. */
+  @media (max-width: 1000px) {
+    .band { padding-top: 56px; }
+
+    .band-body--logs,
+    .band-body--running,
+    .band-body--contact {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 32px;
+    }
+
+    .category {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    .tiers { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (max-width: 720px) {
+    h2 { font-size: 26px; }
+
+    .lead { font-size: 18px; }
+
+    .secondary,
+    .tier-copy,
+    .guarantee dt,
+    .guarantee dd,
+    .refusal p { font-size: 18px; }
+
+    .refusal { padding: 20px 22px 22px; }
+
+    /* Both wide tables become their own scroll region rather than widening the
+       page, the way `.prose table` already does. */
+    .facts,
+    .limits-table {
+      display: block;
+      overflow-x: auto;
+    }
+
+    .facts th { width: auto; }
+
+    .check-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+
+    .check-weight { text-align: left; }
+
+    /* 220px + 28px + 150px is wider than a 320px viewport, so this row stacks
+       too — it was the one band that still pushed the document sideways. */
+    .guarantee {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+
+    .contact-aside {
+      border-left: 0;
+      border-top: 1px solid var(--rule);
+      padding-left: 0;
+      padding-top: 20px;
+    }
+
+    /* 44px tap targets, per the mobile spec. */
+    .contact-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+    }
+  }
+</style>

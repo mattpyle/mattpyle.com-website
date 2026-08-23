@@ -3,51 +3,65 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Builds":
-      - /url: /builds/
-    - link "Changelog":
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
   - article:
-    - link "← ALL WRITING":
+    - link "← all writing":
       - /url: /writing/
-    - time: /\d+ JUL \d+/
-    - text: 8 min read
-    - heading "·" [level=1]
+    - heading "· ·" [level=1]
     - paragraph: ·
-    - list:
-      - listitem: ·
-    - region "Use this article":
-      - heading "Use this article" [level=2]
-      - link "View markdown":
+    - complementary "About this post":
+      - heading "About this post" [level=2]
+      - time: /\d+ Jul \d+/
+      - text: 8 min read
+      - navigation "·":
+        - link "·":
+          - /url: "#"
+        - link "·":
+          - /url: "#"
+        - link "·":
+          - /url: "#"
+        - link "·":
+          - /url: "#"
+        - link "·":
+          - /url: "#"
+        - link "·":
+          - /url: "#"
+      - link "view markdown":
         - /url: /writing/accessibility-and-ai.md
-      - button "Copy markdown"
-      - link "Ask ChatGPT (opens in a new tab)":
+      - button "copy markdown"
+      - link "ask chatgpt (opens in a new tab)":
         - /url: https://chatgpt.com/?hint=search&q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Faccessibility-and-ai%2F+so+I+can+ask+questions+about+its+contents
-      - link "Ask Claude (opens in a new tab)":
+      - link "ask claude (opens in a new tab)":
         - /url: https://claude.ai/new?q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Faccessibility-and-ai%2F+so+I+can+ask+questions+about+its+contents
       - status
-    - link "← ALL WRITING":
-      - /url: /writing/
 - contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
   - navigation "Social links":
-    - link "RSS feed for Writing":
+    - link "rss":
       - /url: /rss.xml
-      - text: ""
-    - link "GitHub (opens in a new tab)":
+    - link "github (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status

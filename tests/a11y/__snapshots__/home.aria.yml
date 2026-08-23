@@ -3,56 +3,75 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Builds":
-      - /url: /builds/
-    - link "Changelog":
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
-  - paragraph: Growth & PLG, in public
   - heading "Matt Pyle" [level=1]
-  - paragraph: I think about growth, write about marketing, and build things that sometimes work.
-  - paragraph: Director of Growth · Temporal Technologies
-  - link "Read the writing":
-    - /url: /writing/
-  - link "See the builds →":
-    - /url: /builds/
-  - complementary "Latest activity":
-    - heading "Latest activity" [level=2]
-    - link "VIEW CHANGELOG":
-      - /url: /changelog/
-    - list:
-      - listitem:
-        - link "· · · ·":
-          - /url: "#"
-          - time: ·
-          - text: ""
-  - heading "Recent writing" [level=2]
-  - list:
-    - listitem:
-      - link "·":
-        - /url: "#"
+  - paragraph: This site is an experiment in building the web for its newest readers, and publishing what they see.
+  - text: Reading this as an agent? Start here.
+  - link "llms.txt":
+    - /url: /llms.txt
+  - region "Writing":
+    - heading "Writing" [level=2]
+    - link "all writing →":
+      - /url: /writing/
+    - link "· · ·":
+      - /url: "#"
       - time: ·
-  - link "ALL WRITING →":
-    - /url: /writing/
-- contentinfo:
-  - navigation "Social links":
-    - link "RSS feed for Writing":
-      - /url: /rss.xml
       - text: ""
-    - link "GitHub (opens in a new tab)":
+  - region "Projects":
+    - heading "Projects" [level=2]
+    - link "all projects →":
+      - /url: /projects/
+    - link "· · ·":
+      - /url: "#"
+  - region "Agent surfaces":
+    - heading "Agent surfaces" [level=2]
+    - link "agent traffic →":
+      - /url: /activity/
+    - text: Conformance scorecard
+    - link "full results →":
+      - /url: /scorecard/
+    - paragraph: · ·
+    - text: accessibility · performance · seo · agentic browsing ·
+    - link "llms.txt The map of this site, written for machines and readable by anyone.":
+      - /url: /llms.txt
+    - link "/webmcp Tool definitions agents can call to search the writing and read the projects.":
+      - /url: /webmcp/
+    - link "agents.md How to use this site as an agent, including what not to assume.":
+      - /url: /agents.md
+  - region "Changelog":
+    - heading "Changelog" [level=2]
+    - link "full changelog →":
+      - /url: /changelog/
+    - time: ·
+    - text: ·
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Social links":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status

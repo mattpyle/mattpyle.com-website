@@ -45,7 +45,7 @@ export function siteSections(base) {
   return [
     { name: 'Home', url: `${base}/`, summary: 'Bio, tagline, recent activity feed.' },
     { name: 'Writing', url: `${base}/writing/`, summary: 'All writing.' },
-    { name: 'Builds', url: `${base}/builds/`, summary: 'Side projects.' },
+    { name: 'Projects', url: `${base}/projects/`, summary: 'Side projects.' },
     {
       name: 'Changelog',
       url: `${base}/changelog/`,
@@ -55,6 +55,11 @@ export function siteSections(base) {
       name: 'Scorecard',
       url: `${base}/scorecard/`,
       summary: 'Latest verified accessibility, performance, SEO, and agentic browsing scores.',
+    },
+    {
+      name: 'Activity',
+      url: `${base}/activity/`,
+      summary: 'Agent traffic to this site: agent-surface fetches and pages served as Markdown, counted per UTC hour.',
     },
     { name: 'About', url: `${base}/about/`, summary: 'Full bio, interests, contact links.' },
   ];
