@@ -137,6 +137,15 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Reserve the scrollbar's width on every page, scrolling or not. Without it,
+     /writing is the one page short enough to fit the viewport, so it is the one
+     page with no scrollbar, and the centred shell sits ~7px further right there
+     than everywhere else — the nav wordmark visibly jumps when you navigate
+     into or out of it. Only shows on classic-scrollbar platforms (Windows,
+     Linux, and macOS set to always-show); overlay scrollbars take no space and
+     see no change either way. Sitewide rather than per-page: which pages happen
+     to fit the viewport changes every time content is added. */
+  scrollbar-gutter: stable;
 }
 
 body {

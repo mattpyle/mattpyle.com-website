@@ -7,9 +7,14 @@
  * left on its default `--agents`, because the scorecard is an agents surface. No fill variant class
  * is added for that reason.
  *
- * THE H1 CLAMP CEILING IS 118px HERE, not the 176px the type scale allows, and the bundle says
- * why: "Scorecard" is a longer word than "Writing" or "About", and at 176px it wraps. The clamp
- * keeps the same 12vw middle term as its siblings, so the three heroes still scale together.
+ * THE H1 CLAMP CEILING IS THE SITEWIDE 176px, same as every sibling hero. It was 118px, on the
+ * bundle's claim that "Scorecard" wraps at 176. Measured on the rendered page across 320px to
+ * 3840px on 2026-08-23, it does not: the word is one line at every width, and the cap only starts
+ * binding at a 1467px viewport, where 176px renders "Scorecard" 737px wide inside a 1100px column
+ * — 363px to spare. It cannot wrap in any case, because `.rd-fill` is `white-space: nowrap`.
+ *
+ * Below 720px the media query at the foot of this file pins 68px, so the ceiling never applies
+ * there and raising it changed nothing at mobile widths.
  */
 ---
 
@@ -30,7 +35,7 @@
     margin: 0;
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: clamp(74px, 12vw, 118px);
+    font-size: clamp(74px, 12vw, 176px);
     line-height: .92;
     letter-spacing: -.045em;
     color: var(--ink);
