@@ -1,0 +1,119 @@
+---
+/**
+ * The /webmcp headline (docs/projects/redesign/design-export-remaining/design_handoff_webmcp,
+ * band 1).
+ *
+ * The right block is the page's "same tools, as data" rail: the two JSON endpoints the catalog
+ * below is generated from. They are the only links in the hero, and they are the same two rows
+ * band 6 opens with — stated twice on purpose, because an agent reading the top of the page
+ * should not have to reach the bottom to find the manifest.
+ */
+---
+
+{/*
+  A div, not a section — the same call every other redesigned hero made: `npm run validate:html`
+  names an h1 inside sectioning content, and an unnamed <section> is not exposed as a region.
+*/}
+<div class="rd-section webmcp-hero modern-skin">
+  <h1><span class="rd-fill">WebMCP</span></h1>
+
+  <div class="hero-row">
+    <p class="hero-statement">
+      Six typed tools this page hands to an agent, and what they return.
+    </p>
+    <div class="hero-data">
+      <span class="hero-data-label">The same tools, as data</span>
+      <a class="hero-data-link" href="/webmcp/tools.json">webmcp/tools.json</a>
+      <a class="hero-data-link" href="/webmcp/index.json">webmcp/index.json</a>
+    </div>
+  </div>
+</div>
+
+<style>
+  .webmcp-hero { padding-top: 72px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 176px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-row {
+    display: grid;
+    grid-template-columns: minmax(0, 34ch) 320px;
+    gap: 72px;
+    align-items: end;
+    margin-top: 32px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  .hero-statement {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .hero-data {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+  }
+
+  .hero-data-label {
+    margin-bottom: 4px;
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .hero-data-link {
+    font-family: var(--font-mono-plex);
+    font-size: 20px;
+    color: var(--agents);
+  }
+
+  .hero-data-link:hover { color: var(--agents-hover); }
+
+  @media (max-width: 900px) {
+    .hero-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .hero-data {
+      border-left: 0;
+      padding-left: 0;
+      border-top: 1px solid var(--rule);
+      padding-top: 18px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .webmcp-hero { padding-top: 52px; }
+
+    h1 { font-size: 68px; }
+
+    .hero-row { margin-top: 24px; }
+
+    .hero-statement { font-size: 24px; }
+
+    /* 44px tap target on every small in-content link, per the mobile spec. */
+    .hero-data-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+    }
+  }
+</style>

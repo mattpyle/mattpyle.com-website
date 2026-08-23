@@ -578,8 +578,19 @@ html:not([data-appearance='retro']) body.skin-redesign {
   transition: color 240ms ease;
 }
 
+/* EVERY focusable thing, not only links and buttons. The list read `a, button`
+   until /webmcp converted, because no redesigned surface had a form control or a
+   focusable scroll region before it — so an input fell through to the base
+   rule's oxblood ring, which is not in this palette. The spec says "every button
+   and input"; `[tabindex]` joins them because the two code panes on /webmcp are
+   focusable divs, and the next redesigned form inherits the ring rather than
+   rediscovering the gap. */
 html:not([data-appearance='retro']) body.skin-redesign a:focus-visible,
-html:not([data-appearance='retro']) body.skin-redesign button:focus-visible {
+html:not([data-appearance='retro']) body.skin-redesign button:focus-visible,
+html:not([data-appearance='retro']) body.skin-redesign input:focus-visible,
+html:not([data-appearance='retro']) body.skin-redesign select:focus-visible,
+html:not([data-appearance='retro']) body.skin-redesign textarea:focus-visible,
+html:not([data-appearance='retro']) body.skin-redesign [tabindex]:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
 }

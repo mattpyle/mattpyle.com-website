@@ -54,7 +54,7 @@ test('extra whitespace does not become an empty fill', () => {
  * and the negative cases are the point: an unconverted route must stay
  * byte-identical to what it was before the branch.
  */
-test('the redesigned routes are every surface except /webmcp', () => {
+test('every page surface is redesigned, and an unknown path still is not', () => {
   for (const path of [
     '/',
     '/writing', '/writing/', '/writing/hello-world', '/writing/hello-world/',
@@ -65,12 +65,15 @@ test('the redesigned routes are every surface except /webmcp', () => {
     '/steward', '/steward/',
     '/scorecard', '/scorecard/',
     '/activity', '/activity/',
+    '/webmcp', '/webmcp/',
   ]) {
     assert.equal(isRedesignedRoute(path), true, path);
   }
-  // /webmcp is the last surface still on the legacy design. When it converts, this whole module
-  // goes: src/lib/redesigned-routes.mjs says to delete the flag rather than leave it half-true.
-  for (const path of ['/webmcp/']) {
+  // /webmcp was the last surface on the legacy design, so the flag is now true for every page the
+  // site renders. src/lib/redesigned-routes.mjs says to DELETE the module at that point rather
+  // than leave a permanently-true flag; that removal is its own change, and until it lands this
+  // negative case is what keeps the function a function rather than a `return true`.
+  for (const path of ['/not-a-page/']) {
     assert.equal(isRedesignedRoute(path), false, path);
   }
 });

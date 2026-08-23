@@ -298,7 +298,17 @@ export const PAGES: PageSpec[] = [
   {
     name: 'webmcp',
     path: '/webmcp',
-    why: 'The most interactive page: per-tool radiogroups, inputs, run buttons, focusable scroll regions',
+    why: 'The most interactive page: aria-pressed choice buttons, inputs, run buttons, focusable scroll regions',
+    // ONE CARD, not six. Six would be six copies of one template, and the
+    // catalog is generated, so a seventh tool is a data change rather than a
+    // template one. The kept card is `describe_site`, the first — which is the
+    // no-inputs shape, so the schema table is deliberately outside this golden.
+    //
+    // Only the redesigned tree reaches this snapshot. Both trees ship and both
+    // carry `.tool-card`, but the hidden one is absent from the accessibility
+    // tree, so `keepFirst` sees the modern cards only. Its choice control is a
+    // pair of `aria-pressed` toggle buttons; the legacy tree keeps the roving
+    // radiogroup, and that tree is never what this file records.
     snapshotKeepFirst: ['.tool-card'],
   },
 ];

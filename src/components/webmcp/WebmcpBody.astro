@@ -1,0 +1,989 @@
+---
+/**
+ * The five bands under the /webmcp hero
+ * (docs/projects/redesign/design-export-remaining/design_handoff_webmcp, bands 2-6): where the
+ * standard stands, what WebMCP is, the tool catalog, how an agent uses them beside how to test
+ * them, and the machine-readable resources.
+ *
+ * THE CATALOG IS HANDED IN, NEVER READ HERE. src/pages/webmcp/index.astro builds it off the real
+ * tool objects createTools() returns, and both appearances render from that one array — so the
+ * redesigned tree cannot describe a tool the site does not register any more than the legacy tree
+ * could. This component only lays it out.
+ *
+ * IT SHARES THE PAGE'S SCRIPT HOOKS WITH THE LEGACY TREE, deliberately. `.tool-card`,
+ * `.tool-console`, `[data-run]`, `[data-note]`, `[data-status]`, `[data-frame]`, `[data-output]`,
+ * `.field-input`, `.mode-pills`, `.filter-pill` and `.copy-button` are the same names the legacy
+ * markup uses, so ONE wiring script drives whichever tree the appearance shows. What differs
+ * between the trees is supplied as data rather than as a second code path: the status vocabulary
+ * and the idle comment come off `data-*` attributes on the console root, and the run button's
+ * label is read back from the DOM rather than hard-coded.
+ *
+ * EVERY id IS `rd-` PREFIXED. Both trees ship in one document, so a shared id would be a duplicate
+ * — which `npm run validate:html` fails, and which would point a legacy `<label for>` at a hidden
+ * input.
+ *
+ * THE CHOICE BUTTONS ARE `aria-pressed`, NOT A RADIOGROUP. That is the bundle's call and it is the
+ * one behavioural difference between the trees: the legacy tree's `set_appearance` control is a
+ * roving-tabindex radiogroup, this one is two toggle buttons, and the shared script reads
+ * `data-select` to know which contract to keep.
+ *
+ * TWO DEVIATIONS FROM THE BUNDLE.
+ *
+ * The first asks for the schema tables to scroll inside their own box
+ * below 720px (`display: block; overflow-x: auto`, as the redesign's `.prose table` does). They do
+ * not: `display: block` on a `<table>` drops the table out of the accessibility tree, and a
+ * scrollable box with no focusable content inside it is an axe `scrollable-region-focusable`
+ * finding unless it takes a tab stop of its own — six new tab stops for six tables of four short
+ * cells each. The cells wrap with `overflow-wrap: anywhere` instead, which fits 320px and keeps
+ * the schema a table.
+ *
+ * The second is the output pane's ceiling. The bundle gives the pane a floor and no ceiling, which
+ * was right for a mockup printing canned five-line results and wrong for a page printing what the
+ * handler returns: `describe_site` alone comes back forty lines, and one uncapped card would be
+ * taller than the rest of the page. The floor stays and a `max-height` joins it, which costs
+ * nothing because the pane is already a focusable region.
+ */
+import { ORIGIN_TRIAL_EXPIRY, WEBMCP_VERIFIED } from '../../data/webmcp-catalog.mjs';
+
+interface Field {
+  name: string;
+  rdId: string;
+  label: string;
+  required: boolean;
+  type: string;
+  hint: string;
+  constraints: string;
+  control: string;
+  options: string[];
+  minimum?: number;
+  maximum?: number;
+  value: string;
+}
+
+interface CatalogEntry {
+  name: string;
+  description: string;
+  kind: string;
+  returns: string;
+  tryLabel: string;
+  fields: Field[];
+  snippet: string;
+}
+
+interface Props {
+  catalog: CatalogEntry[];
+  expiryLabel: string;
+}
+
+const { catalog, expiryLabel } = Astro.props;
+
+/**
+ * The five machine-readable surfaces band 6 lists. Editorial copy, so it lives beside the layout
+ * that prints it; the two JSON endpoints are the same pair the hero rail links.
+ */
+const RESOURCES = [
+  {
+    path: '/webmcp/tools.json',
+    description:
+      'The tool manifest: names, descriptions, input schemas, and an example call for each. ' +
+      'Generated from the real tool objects at build time.',
+  },
+  {
+    path: '/webmcp/index.json',
+    description:
+      'The content index the tools themselves read: the author entity, the section map, and ' +
+      'every published article, project, and changelog entry.',
+  },
+  { path: '/llms.txt', description: 'The site index, written for machines and readable by anyone.' },
+  { path: '/llms-full.txt', description: 'The full content export.' },
+  { path: '/agents.md', description: 'How to read and cite this site, including what not to assume.' },
+];
+
+/** The static comment the output pane holds before anything has been called. */
+const IDLE_COMMENT = '// Nothing has been called yet.';
+---
+
+<div class="webmcp-modern modern-skin" data-module="webmcp">
+  <section class="rd-section band-standard" aria-labelledby="rd-standard-title">
+    <h2 id="rd-standard-title">Where the standard stands today</h2>
+    <dl class="standard-grid">
+      <div class="standard-cell">
+        <dt>Spec status</dt>
+        <dd>A <a href="https://webmachinelearning.github.io/webmcp/" rel="noopener">Draft Community Group Report</a> of the W3C Web Machine Learning Community Group.</dd>
+      </div>
+      <div class="standard-cell">
+        <dt>Browser support</dt>
+        <dd>An <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">origin trial in Chrome</a> from version 149. No other engine implements it.</dd>
+      </div>
+      <div class="standard-cell">
+        <dt>This site's token</dt>
+        <dd>Expires <time datetime={ORIGIN_TRIAL_EXPIRY}>{expiryLabel}</time>. After that Chrome ignores it and the tools stop registering.</dd>
+      </div>
+      <div class="standard-cell">
+        <dt>Discovery</dt>
+        <dd>Registration is the JavaScript API alone. The JSON endpoints here are this site's own convention.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="rd-section band-what" aria-labelledby="rd-what-title">
+    <h2 id="rd-what-title">What WebMCP is</h2>
+    <div class="band-prose">
+      <p>An agent driving an ordinary web page has to infer everything: which element is the search box, what a button does, whether a click worked. WebMCP replaces the inference with a contract. A page calls <code>registerTool</code> with a name, a description, and a JSON Schema for its inputs; the agent gets a function it can call and a return value it can parse. The same shape the Model Context Protocol gives a server-side tool, running in the page, with the page's own data and the visitor's own session.</p>
+      <p>Registration is feature-detected and additive. In a browser with no <code>modelContext</code> — which today is every browser except Chrome with the trial — the code returns immediately, writes no DOM and reads no layout. Remove the tools and the site is byte-for-byte what it was.</p>
+    </div>
+  </section>
+
+  <section class="rd-section band-catalog" aria-labelledby="rd-catalog-title">
+    <h2 id="rd-catalog-title">The tool catalog</h2>
+
+    <div class="tool-list">
+      {catalog.map((entry, index) => (
+        <article class="tool-card">
+          <div class="tool-def">
+            <div class="tool-head">
+              <h3 class="tool-name">{entry.name}</h3>
+              <span class="tool-kind">{entry.kind}</span>
+              <span class="tool-index">{index + 1} of {catalog.length}</span>
+            </div>
+
+            <p class="tool-desc">{entry.description}</p>
+
+            {entry.fields.length > 0 && (
+              <table class="schema-table">
+                <thead>
+                  <tr>
+                    <th scope="col" class="c-name">Input</th>
+                    <th scope="col" class="c-type">Type</th>
+                    <th scope="col" class="c-req">Required</th>
+                    <th scope="col" class="c-cons">Constraints</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entry.fields.map(field => (
+                    <tr>
+                      <td class="c-name">{field.name}</td>
+                      <td class="c-type">{field.type}</td>
+                      <td class="c-req">{field.required ? 'Yes' : 'No'}</td>
+                      <td class="c-cons">{field.constraints}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <div class="tool-returns">
+              <span class="tool-label">Returns</span>
+              <p class="tool-returns-line">{entry.returns}</p>
+            </div>
+
+            <div class="snippet-frame">
+              <p class="tool-label snippet-bar">
+                <span>How an agent calls it</span>
+                <button type="button" class="copy-button" data-copy={entry.snippet} disabled>Copy</button>
+              </p>
+              {/* Focusable because it scrolls horizontally: the longer snippets overflow the
+                  column and must never wrap mid-token, so a keyboard user needs to be able to
+                  scroll it (axe: scrollable-region-focusable). */}
+              <div
+                class="snippet-body"
+                role="region"
+                aria-label={`Snippet: how an agent calls ${entry.name}`}
+                tabindex="0"
+              >
+                <pre><code>{entry.snippet}</code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="tool-demo tool-console"
+            data-tool={entry.name}
+            data-status-idle="not run yet"
+            data-status-running="running"
+            data-status-done="returned a JSON string"
+            data-status-failed="the handler threw"
+            data-idle-lines={IDLE_COMMENT}
+          >
+            <p class="demo-lede">{entry.tryLabel}</p>
+
+            {entry.fields.map(field => (
+              <div class="demo-field">
+                {field.control === 'pills' ? (
+                  <>
+                    <span class="demo-label" id={`${field.rdId}-label`}>{field.label}</span>
+                    <div
+                      class="mode-pills demo-choices"
+                      role="group"
+                      data-select="pressed"
+                      data-field={field.name}
+                      aria-labelledby={`${field.rdId}-label`}
+                      aria-describedby={`${field.rdId}-hint`}
+                    >
+                      {field.options.map(option => (
+                        <button
+                          type="button"
+                          class:list={['filter-pill', 'demo-choice', { 'is-active': option === field.value }]}
+                          aria-pressed={option === field.value ? 'true' : 'false'}
+                          data-value={option}
+                          disabled
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label class="demo-label" for={field.rdId}>{field.label}</label>
+                    <input
+                      class="field-input demo-input"
+                      id={field.rdId}
+                      type={field.control === 'number' ? 'number' : 'text'}
+                      value={field.value}
+                      min={field.minimum}
+                      max={field.maximum}
+                      step={field.control === 'number' ? 1 : undefined}
+                      aria-describedby={`${field.rdId}-hint`}
+                      data-field={field.name}
+                      data-kind={field.control}
+                      disabled
+                    />
+                  </>
+                )}
+                <p class="demo-hint" id={`${field.rdId}-hint`}>{field.hint}</p>
+              </div>
+            ))}
+
+            <div class="demo-run">
+              <button type="button" class="run-button" data-run disabled>Run {entry.name}</button>
+              <p class="demo-note" data-note>Disabled — needs JavaScript.</p>
+            </div>
+
+            <div class="demo-output" data-frame>
+              <p class="demo-output-bar">
+                <span class="tool-label">Output</span>
+                <span class="demo-status" data-status>unavailable</span>
+              </p>
+              <div
+                class="output-body"
+                role="region"
+                aria-label={`Output from ${entry.name}`}
+                tabindex="0"
+                data-output
+              >
+                <pre class="output-pre"><span class="json-dim">// JavaScript is off, so nothing here can run.
+// The definitions, inputs and snippets on this page
+// are static text and still read fine without it.</span></pre>
+              </div>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+
+    <p class="sr-only" data-copy-status role="status" aria-live="polite"></p>
+  </section>
+
+  <div class="rd-section band-columns">
+    <section aria-labelledby="rd-uses-title">
+      <h2 id="rd-uses-title">How an agent uses them</h2>
+      <div class="band-prose">
+        <p>Every page registers the tools on <code>document.modelContext</code> as it loads, including after a client-side navigation. An agent in the browser discovers them there and invokes one by name. Nothing is exposed over the network, there is no endpoint and no authentication — the tools live in the page you already have open.</p>
+        <p>Arguments go over as a <strong>JSON string</strong>, not an object; passing an object throws <code>Failed to parse input arguments</code>. Results come back as a JSON string too.</p>
+        <p>Chrome does not enforce the declared input schema, so every handler validates its own inputs: clamping <code>limit</code>, rejecting a blank query, falling back to modern for an unknown mode, trimming an over-long guest-book entry to the limits the visible form enforces.</p>
+      </div>
+    </section>
+    <section aria-labelledby="rd-testing-title">
+      <h2 id="rd-testing-title">Testing them yourself</h2>
+      <div class="band-prose">
+        <p>The run controls above work in any browser with no setup, because they call the handler directly. What they do not exercise is the protocol.</p>
+        <p>For that: Chrome 149 or later with the WebMCP origin trial, <code>chrome://flags/#enable-webmcp-testing</code>, and a client on the agent side — the Model Context Tool Inspector extension is the straightforward one.</p>
+        <p>All six tools have been driven that way on Chrome {WEBMCP_VERIFIED.chrome}, against this production site. The read tools returned what the page renders, <code>set_appearance</code> flipped that browser's view, and <code>sign_guestbook</code> wrote an entry that appeared while the guest book was open, badged as agent-written.</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="rd-section band-resources" aria-labelledby="rd-resources-title">
+    <h2 id="rd-resources-title">Machine-readable resources</h2>
+    <div class="resource-list">
+      {RESOURCES.map(resource => (
+        <a class="resource-row" href={resource.path}>
+          <span class="resource-path">{resource.path}</span>
+          <span class="resource-desc">{resource.description}</span>
+        </a>
+      ))}
+    </div>
+  </section>
+</div>
+
+<style>
+  /* Not global on this site: `.sr-only` is declared per component (see ActivityBody.astro,
+     Footer.astro and a dozen others), so a component that uses the class has to carry the rule.
+     Without it the copy announcer renders as visible text. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ── Shared band furniture ──────────────────────────────────────────────────
+     The rule convention, applied to every band: one H2, then exactly one
+     full-width hairline, then the content. In the tabular bands that hairline is
+     the first row's `border-top`; in the prose bands it is a `border-top` on the
+     prose container. */
+  h2 {
+    margin: 0 0 20px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+  }
+
+  .band-prose {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    padding-top: 26px;
+    border-top: 1px solid var(--rule-2);
+    font-size: 20px;
+    line-height: 1.65;
+    color: var(--ink-2);
+  }
+
+  .band-prose p {
+    margin: 0;
+    max-width: 68ch;
+    text-wrap: pretty;
+  }
+
+  .band-prose strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* Code literals are the only place monospace appears in running text. */
+  code {
+    font-family: var(--font-mono-plex);
+    font-size: .85em;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  .tool-label {
+    margin: 0;
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  /* ── Band 2: where the standard stands ──────────────────────────────────── */
+  .band-standard { padding-top: 72px; }
+
+  .standard-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 22px 0 0;
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .standard-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 24px 28px 0;
+    border-left: 1px solid var(--rule);
+  }
+
+  .standard-cell:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .standard-cell:last-child { padding-right: 0; }
+
+  .standard-cell dt {
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .standard-cell dd {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .standard-cell a {
+    color: var(--agents);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--rule);
+  }
+
+  .standard-cell a:hover {
+    color: var(--agents-hover);
+    text-decoration-color: currentColor;
+  }
+
+  /* ── Band 3: what WebMCP is ─────────────────────────────────────────────── */
+  .band-what { padding-top: 76px; }
+
+  /* ── Band 4: the tool catalog ───────────────────────────────────────────── */
+  .band-catalog {
+    /* The catalog is where the page's colours live, so its JSON panes redefine the
+       three --json-* tokens whose shipped values were tuned against the legacy
+       --color-surface-code cream and reach for the legacy palette. Keys, numbers,
+       keywords and the bracket ramp are unchanged and all clear 6.3:1 on the white
+       --surface ground; strings take --agents in place of the legacy oxblood, the
+       same thread back to the palette the oxblood was, at 7.5:1; punctuation takes
+       --ink-6 at 8.8:1. Measured against oklch(1 0 0), not assumed. */
+    --json-string: var(--agents);
+    --json-punctuation: var(--ink-6);
+    padding-top: 76px;
+  }
+
+  .band-catalog h2 { margin-bottom: 22px; }
+
+  .tool-list {
+    display: flex;
+    flex-direction: column;
+    /* Closes the last card, so the group reads as bounded rather than trailing off. */
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .tool-card {
+    display: grid;
+    grid-template-columns: minmax(340px, 1fr) minmax(300px, 460px);
+    gap: 64px;
+    padding: 34px 0 38px;
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .tool-def {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .tool-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 16px;
+  }
+
+  /* An identifier, so mono is correct — and a real heading, because the catalog's
+     hierarchy is semantics the design must not flatten. */
+  .tool-name {
+    margin: 0;
+    font-family: var(--font-mono-plex);
+    font-weight: 400;
+    font-size: 25px;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+
+  /* A plain word, never a pill or a badge. */
+  .tool-kind,
+  .tool-index {
+    font-size: 18px;
+    color: var(--ink-6);
+  }
+
+  .tool-index {
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .tool-desc {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .schema-table {
+    width: 100%;
+    margin-top: 4px;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  /* `overflow-wrap` on the header row as well as the body. With `table-layout:
+     fixed` a column is exactly as wide as its percentage says, and "Constraints"
+     and "Required" are wider than 16% of a 280px table — without this they spill
+     out of their cells and past the page. Breaking a header word is ugly and is
+     the last resort: the ≤720px block below hands the table back to auto layout
+     first, so the break only happens if even that cannot fit. */
+  .schema-table th {
+    text-align: left;
+    font-weight: 400;
+    font-size: 17px;
+    color: var(--ink-6);
+    padding: 0 0 10px 20px;
+    border-bottom: 1px solid var(--rule);
+    overflow-wrap: anywhere;
+  }
+
+  .schema-table td {
+    font-size: 18px;
+    color: var(--ink-6);
+    padding: 12px 0 12px 20px;
+    border-bottom: 1px solid var(--track);
+    overflow-wrap: anywhere;
+  }
+
+  .schema-table .c-name {
+    padding-left: 0;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+  }
+
+  .schema-table td.c-name { color: var(--ink); }
+
+  .schema-table .c-type,
+  .schema-table .c-req { width: 16%; }
+
+  .schema-table .c-cons { width: 34%; }
+
+  .tool-returns {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .tool-returns-line {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .snippet-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    min-width: 0;
+  }
+
+  .snippet-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+
+  .copy-button {
+    margin-left: auto;
+    font: inherit;
+    font-size: 18px;
+    color: var(--agents);
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .copy-button:hover:not(:disabled) { color: var(--agents-hover); }
+
+  .copy-button:disabled {
+    color: var(--ink-6);
+    cursor: default;
+  }
+
+  .snippet-body {
+    /* `scroll`, not the `auto` the rest of the site uses for code blocks: the snippet is rewritten
+       live from the controls, so with `auto` the scrollbar appears and disappears as you type and
+       the whole card jogs. Reserving the track keeps the panel a constant height. Costs nothing on
+       platforms with overlay scrollbars, where it never took space to begin with. Same call, and
+       the same reason, as the legacy console's snippet pane. */
+    overflow-x: scroll;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  .snippet-body pre {
+    margin: 0;
+    padding: 16px 18px;
+  }
+
+  .snippet-body code {
+    font-family: var(--font-mono-plex);
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    white-space: pre;
+  }
+
+  /* ── Band 4: the demonstration column ───────────────────────────────────── */
+  .tool-demo {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .demo-lede,
+  .demo-hint {
+    margin: 0;
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .demo-lede { font-size: 18px; }
+
+  .demo-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .demo-label {
+    font-size: 18px;
+    color: var(--ink-2);
+  }
+
+  .demo-input {
+    font: inherit;
+    font-size: 19px;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 11px 14px;
+    min-width: 0;
+  }
+
+  .demo-input:disabled {
+    color: var(--ink-6);
+    border-style: dashed;
+  }
+
+  .demo-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .demo-choice {
+    font: inherit;
+    font-size: 19px;
+    padding: 10px 18px;
+    border-radius: var(--radius);
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  .demo-choice[aria-pressed='true'] {
+    border-color: var(--agents);
+    background: var(--tint-agents);
+    color: var(--agents);
+  }
+
+  .demo-choice:hover:not(:disabled) { border-color: var(--agents); }
+
+  .demo-choice:disabled {
+    border-style: dashed;
+    cursor: default;
+  }
+
+  .demo-choice[aria-pressed='true']:disabled { border-style: solid; }
+
+  .demo-run {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  /* The one filled button in the system. It exists because this is the one page
+     where something executes. */
+  .run-button {
+    font: inherit;
+    font-size: 19px;
+    color: var(--paper);
+    background: var(--agents);
+    border: 1px solid var(--agents);
+    border-radius: var(--radius);
+    padding: 12px 22px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  .run-button:hover:not(:disabled) {
+    background: var(--agents-hover);
+    border-color: var(--agents-hover);
+  }
+
+  .run-button:disabled {
+    background: var(--surface);
+    border-style: dashed;
+    color: var(--ink-6);
+    cursor: default;
+  }
+
+  .demo-note {
+    margin: 0;
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .demo-output {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .demo-output-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .demo-status {
+    margin-left: auto;
+    font-size: 18px;
+    color: var(--ink-6);
+    text-align: right;
+  }
+
+  /* The bundle's `min-height: 120px` and no ceiling, plus a ceiling. The mockup's panes printed
+     canned five-line results; these print what the handler returns, and `describe_site` alone is
+     forty lines — an uncapped pane would make one card taller than the rest of the page. Scrolling
+     costs nothing here because the pane is already a focusable region, which is why the legacy
+     console's pane is one too. */
+  .output-body {
+    overflow: auto;
+    min-height: 120px;
+    max-height: 320px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+
+  /* The two scrollable regions are focusable divs, so the redesign's blanket focus ring — which
+     reaches `a` and `button` — does not cover them. */
+  .output-body:focus-visible,
+  .snippet-body:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+  }
+
+  /* The panes are rebuilt by the page's script, so their nodes carry no scoping
+     attribute — `:global()` under the component's own root is what reaches them
+     (learnings, 2026-08-22). */
+  .webmcp-modern :global(.output-pre) {
+    margin: 0;
+    font-family: var(--font-mono-plex);
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Editor-conventional JSON colouring, the same tokens the legacy console prints
+     through — the tokenizer is shared and only the ground changes. */
+  .webmcp-modern :global(.json-key) { color: var(--json-key); }
+  .webmcp-modern :global(.json-string) { color: var(--json-string); }
+  .webmcp-modern :global(.json-number) { color: var(--json-number); }
+  .webmcp-modern :global(.json-keyword) { color: var(--json-keyword); }
+  .webmcp-modern :global(.json-punctuation) { color: var(--json-punctuation); }
+  .webmcp-modern :global(.json-dim) { color: var(--ink-6); }
+  .webmcp-modern :global(.json-bracket-0) { color: var(--json-bracket-0); }
+  .webmcp-modern :global(.json-bracket-1) { color: var(--json-bracket-1); }
+  .webmcp-modern :global(.json-bracket-2) { color: var(--json-bracket-2); }
+
+  /* A thrown handler prints as prefixed text, never as a dialog. `--json-dim` is
+     not reused for it: an error is not a comment. */
+  .demo-output[data-state='error'] :global(.output-pre) { color: var(--agents-hover); }
+
+  /* The blinking block is the only animated cue on the page, and the only thing
+     reduced motion removes; the status word and the button label are static.
+
+     THE COLOUR IS SET HERE, not inherited. The legacy console's `.output-cursor`
+     rule is fully global — it has to be, because the script builds that element
+     — so it paints this pane's cursor in the legacy amber unless this rule names
+     a colour of its own. `--ink-6` is the same ink the dim "Calling …" line the
+     cursor sits on already uses, at 8.8:1 on the pane's white ground.
+
+     THE KEYFRAME NAME IS NOT the legacy one. Astro scopes selectors, not at-rule
+     names, so two `@keyframes webmcp-blink` in one document are one keyframe and
+     the later definition wins for both trees. Each tree owns its own blink. */
+  .webmcp-modern :global(.output-cursor) {
+    color: var(--ink-6);
+    animation: webmcp-modern-blink 1s steps(1, end) infinite;
+  }
+
+  @keyframes webmcp-modern-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .webmcp-modern :global(.output-cursor) { animation: none; }
+  }
+
+  /* ── Band 5: the two prose columns ──────────────────────────────────────── */
+  .band-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 72px;
+    align-items: start;
+    padding-top: 76px;
+  }
+
+  /* ── Band 6: machine-readable resources ─────────────────────────────────── */
+  .band-resources {
+    /* No bottom padding: SiteFooter.astro opens with the spec's 96px margin-top,
+       and setting it here as well doubles the gap. */
+    padding-top: 76px;
+  }
+
+  .resource-list {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .resource-row {
+    display: grid;
+    grid-template-columns: 260px minmax(150px, 1fr);
+    gap: 32px;
+    align-items: baseline;
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
+    transition: color 240ms ease;
+  }
+
+  .resource-path {
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+    color: var(--agents);
+  }
+
+  .resource-desc {
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  .resource-row:hover .resource-path,
+  .resource-row:hover .resource-desc { color: var(--agents-hover); }
+
+  /* ── Responsive ─────────────────────────────────────────────────────────── */
+  @media (max-width: 1000px) {
+    /* Each tool card stacks: the definition, then the demonstration. */
+    .tool-card {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 34px;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .standard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    /* In a 2x2 the third and fourth cells open a new row, so the left-hand rule
+       belongs to the even cells only and each row's own hairline comes back. */
+    .standard-cell {
+      padding: 22px 22px 22px 0;
+      border-left: 0;
+      border-top: 1px solid var(--rule);
+    }
+
+    .standard-cell:nth-child(even) {
+      padding-right: 0;
+      padding-left: 22px;
+      border-left: 1px solid var(--rule);
+    }
+
+    .standard-cell:nth-child(-n + 2) { border-top: 0; }
+
+    .band-columns {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 52px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .band-standard { padding-top: 52px; }
+
+    .band-what,
+    .band-catalog,
+    .band-columns,
+    .band-resources { padding-top: 56px; }
+
+    h2 { font-size: 26px; }
+
+    .band-prose { font-size: 19px; }
+
+    .tool-name { font-size: 22px; }
+
+    .tool-index {
+      margin-left: 0;
+      white-space: normal;
+    }
+
+    /* Auto layout below 720px. The percentage columns are right at the design
+       width, where 16% of 460px is room enough for "Required"; at 320px the
+       same 16% is 45px and the word does not fit at any padding. Auto layout
+       sizes each column to what it holds, which is what makes the four columns
+       land inside 280px. `.c-name` is restated rather than left to specificity:
+       the flush-left first column is the alignment the mono identifiers read
+       against, and it should not depend on which of two rules wins. */
+    .schema-table { table-layout: auto; }
+
+    .schema-table .c-type,
+    .schema-table .c-req,
+    .schema-table .c-cons { width: auto; }
+
+    .schema-table th,
+    .schema-table td { padding-left: 10px; }
+
+    .schema-table .c-name { padding-left: 0; }
+
+    /* 44px minimum on every run control and input, per the mobile spec. */
+    .demo-input,
+    .demo-choice,
+    .run-button { min-height: 44px; }
+
+    .copy-button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+    }
+
+    .resource-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+  }
+</style>

@@ -3,26 +3,28 @@
 - banner:
   - link "Matt Pyle — home":
     - /url: /
-    - text: MATT PYLE
+    - text: mp/
   - navigation "Main navigation":
-    - link "Writing":
+    - link "/writing":
       - /url: /writing/
-    - link "Projects":
+    - link "/projects":
       - /url: /projects/
-    - link "Changelog":
+    - link "/changelog":
       - /url: /changelog/
-    - link "Scorecard":
+    - link "/scorecard":
       - /url: /scorecard/
-    - link "About":
+    - link "/about":
       - /url: /about/
 - main:
-  - paragraph: Agent tools · Experiment
   - heading "WebMCP" [level=1]
-  - paragraph: The typed tools this site hands to an AI agent, what they return, and where the standard honestly stands.
-  - paragraph: WebMCP is a browser API that lets a page hand an AI agent a set of typed tools — real functions with names, inputs, and return values — instead of leaving it to guess its way through the interface. It is a W3C Community Group draft, available in Chrome behind an origin trial, and the 6 tools below are the ones this site registers.
-  - paragraph: Run any of them here. The buttons call the same handler an agent calls, in this page — not a live protocol round-trip.
-  - region "Where does WebMCP actually stand today?":
-    - heading "Where does WebMCP actually stand today?" [level=2]
+  - paragraph: Six typed tools this page hands to an agent, and what they return.
+  - text: The same tools, as data
+  - link "webmcp/tools.json":
+    - /url: /webmcp/tools.json
+  - link "webmcp/index.json":
+    - /url: /webmcp/index.json
+  - region "Where the standard stands today":
+    - heading "Where the standard stands today" [level=2]
     - term: Spec status
     - definition:
       - text: A
@@ -34,131 +36,101 @@
       - text: An
       - link "origin trial in Chrome":
         - /url: https://developer.chrome.com/docs/ai/webmcp
-      - text: /, available from Chrome \d+\. No other engine implements it currently\./
+      - text: /from version \d+\. No other engine implements it\./
     - term: This site's token
     - definition:
-      - text: The origin-trial token embedded in these pages expires
-      - time: /\d+ Nov \d+/
-      - text: . After that Chrome ignores it and the tools simply stop registering.
+      - text: Expires
+      - time: /\d+ \w+ \d+/
+      - text: . After that Chrome ignores it and the tools stop registering.
     - term: Discovery
-    - definition:
-      - text: Registration is purely the JavaScript API, so this page and
-      - code: /webmcp/tools.json
-      - text: are this site's own implementation. Discovery paths and standards are evolving.
-  - region "What is WebMCP, and why would a site bother?":
-    - heading "What is WebMCP, and why would a site bother?" [level=2]
+    - definition: Registration is the JavaScript API alone. The JSON endpoints here are this site's own convention.
+  - region "What WebMCP is":
+    - heading "What WebMCP is" [level=2]
     - paragraph:
       - text: "An agent driving an ordinary web page has to infer everything: which element is the search box, what a button does, whether a click worked. WebMCP replaces the inference with a contract. A page calls"
       - code: registerTool
-      - text: with a name, a description, and a JSON Schema for the inputs, and the agent gets a function it can call and a return value it can parse — the same shape the Model Context Protocol gives a server-side tool, but running in the page, with the page's own data and the visitor's own session.
+      - text: with a name, a description, and a JSON Schema for its inputs; the agent gets a function it can call and a return value it can parse. The same shape the Model Context Protocol gives a server-side tool, running in the page, with the page's own data and the visitor's own session.
     - paragraph:
-      - text: "The interesting part for a site like this one is that it costs nothing to be wrong about. Registration is feature-detected and additive: on every browser that has no"
+      - text: Registration is feature-detected and additive. In a browser with no
       - code: modelContext
-      - text: — which is currently every browser except Chrome behind a flag or the origin trial — the code returns immediately, writes no DOM, and reads no layout. Remove the tools and the site is byte-for-byte what it was.
-  - region "Which tools does this site register?":
-    - heading "Which tools does this site register?" [level=2]
-    - paragraph: "6 tools: 4 that read published content, 2 that write. What they write is a preference and a guest-book entry, both in your own browser and nowhere else. Definitions below are read from the live tool objects at build time, so they stay in sync with what an agent receives."
+      - text: — which today is every browser except Chrome with the trial — the code returns immediately, writes no DOM and reads no layout. Remove the tools and the site is byte-for-byte what it was.
+  - region "The tool catalog":
+    - heading "The tool catalog" [level=2]
     - article:
-      - paragraph: /Tool \d+ \/ \d+/
       - heading "describe_site" [level=3]
-      - text: read
+      - text: read 1 of 6
       - paragraph: "Describe mattpyle.com: who the author is, what the site is, and which sections it has. Call this first for context about the site you're on."
-      - paragraph: Inputs
-      - paragraph: None. Takes no arguments.
-      - paragraph: Returns
+      - text: Returns
       - paragraph: An object with person, site, and sections.
-      - paragraph: Try it
-      - paragraph: No inputs — call it as-is.
-      - button "Run tool"
-      - text: Output · JSON
-      - status: Ready
-      - region "Output from describe_site": // Nothing run yet. Press Run tool to call the handler // and print the JSON it returns here.
-      - text: How an agent calls it
-      - button "Copy"
+      - paragraph:
+        - text: How an agent calls it
+        - button "Copy"
       - 'region "Snippet: how an agent calls describe_site"':
         - code: "const tool = (await document.modelContext.getTools()).find(t => t.name === 'describe_site'); await document.modelContext.executeTool(tool, '{}');"
+      - paragraph: No inputs. Call it as-is.
+      - button "Run describe_site"
+      - paragraph:
+        - text: Output
+        - status: not run yet
+      - region "Output from describe_site": // Nothing has been called yet.
     - status
-  - region "How does an agent use these tools?":
-    - heading "How does an agent use these tools?" [level=2]
+  - region "How an agent uses them":
+    - heading "How an agent uses them" [level=2]
     - paragraph:
-      - text: Every page on this site registers the tools on
+      - text: Every page registers the tools on
       - code: document.modelContext
-      - text: when the page loads, including after a client-side navigation. An agent running inside the browser discovers them from that object and invokes one by name. Nothing is exposed over the network, there is no endpoint to hit, and there is no authentication — the tools live entirely in the page you already have open.
+      - text: as it loads, including after a client-side navigation. An agent in the browser discovers them there and invokes one by name. Nothing is exposed over the network, there is no endpoint and no authentication — the tools live in the page you already have open.
     - paragraph:
       - text: Arguments go over as a
       - strong: JSON string
-      - text: ", not an object — passing an object throws"
+      - text: ", not an object; passing an object throws"
       - code: Failed to parse input arguments
-      - text: . Results come back as a JSON string too. The snippet in each card above is the exact call.
+      - text: . Results come back as a JSON string too.
     - paragraph:
-      - text: Because Chrome does not enforce the declared
-      - code: inputSchema
-      - text: ", every handler validates its own inputs — clamping"
+      - text: "Chrome does not enforce the declared input schema, so every handler validates its own inputs: clamping"
       - code: limit
-      - text: ", rejecting a blank"
-      - code: query
-      - text: ", falling back to modern for an unknown"
-      - code: mode
-      - text: ", trimming an over-long guest-book"
-      - code: name
-      - text: or
-      - code: message
-      - text: to the same limits the visible form enforces.
-  - region "How can I test them myself?":
-    - heading "How can I test them myself?" [level=2]
-    - paragraph: The buttons on this page work everywhere, in any browser, with no setup — they call the handler directly. What they do not exercise is the protocol.
+      - text: ", rejecting a blank query, falling back to modern for an unknown mode, trimming an over-long guest-book entry to the limits the visible form enforces."
+  - region "Testing them yourself":
+    - heading "Testing them yourself" [level=2]
+    - paragraph: The run controls above work in any browser with no setup, because they call the handler directly. What they do not exercise is the protocol.
     - paragraph:
-      - text: /For that you need Chrome from version \d+ with the WebMCP origin trial, plus/
+      - text: "/For that: Chrome \\d+ or later with the WebMCP origin trial,/"
       - code: chrome://flags/#enable-webmcp-testing
-      - text: ", and something on the agent side to make the calls — the Model Context Tool Inspector extension is the straightforward option. Chrome's"
-      - link "WebMCP documentation":
-        - /url: https://developer.chrome.com/docs/ai/webmcp
-      - text: is the current reference for both.
+      - text: ", and a client on the agent side — the Model Context Tool Inspector extension is the straightforward one."
     - paragraph:
-      - text: /All six tools have been driven that way, on Chrome \d+\.\d+\.\d+\.\d+, which is where the calling convention above came from\. A client running outside the page enumerated the six and invoked every one against this production site\. The read tools returned what the page itself renders,/
+      - text: /All six tools have been driven that way on Chrome \d+\.\d+\.\d+\.\d+, against this production site\. The read tools returned what the page renders,/
       - code: set_appearance
-      - text: flipped this browser's view, and
+      - text: flipped that browser's view, and
       - code: sign_guestbook
-      - text: wrote an entry that appeared in the guest book while it was open, badged as agent-written. Each claim here moves when it is measured, not when it ships.
-  - region "Where are the machine-readable resources?":
-    - heading "Where are the machine-readable resources?" [level=2]
-    - paragraph: If you are reading this as text rather than executing JavaScript on the live page, you cannot call the tools — but you can read the same things they read.
-    - list:
-      - listitem:
-        - link "/webmcp/tools.json":
-          - /url: /webmcp/tools.json
-          - code: /webmcp/tools.json
-        - text: "— the tool manifest: names, descriptions, input schemas, and an example call for each. Generated from the real tool objects at build time."
-      - listitem:
-        - link "/webmcp/index.json":
-          - /url: /webmcp/index.json
-          - code: /webmcp/index.json
-        - text: "— the content index the tools themselves read: the author entity, the section map, and every published article, build, and changelog entry."
-      - listitem:
-        - link "/llms.txt":
-          - /url: /llms.txt
-          - code: /llms.txt
-        - text: and
-        - link "/llms-full.txt":
-          - /url: /llms-full.txt
-          - code: /llms-full.txt
-        - text: — the site index and the full content export.
-      - listitem:
-        - link "/agents.md":
-          - /url: /agents.md
-          - code: /agents.md
-        - text: — how to read and cite this site.
+      - text: wrote an entry that appeared while the guest book was open, badged as agent-written.
+  - region "Machine-readable resources":
+    - heading "Machine-readable resources" [level=2]
+    - 'link "/webmcp/tools.json The tool manifest: names, descriptions, input schemas, and an example call for each. Generated from the real tool objects at build time."':
+      - /url: /webmcp/tools.json
+    - 'link "/webmcp/index.json The content index the tools themselves read: the author entity, the section map, and every published article, project, and changelog entry."':
+      - /url: /webmcp/index.json
+    - link "/llms.txt The site index, written for machines and readable by anyone.":
+      - /url: /llms.txt
+    - link "/llms-full.txt The full content export.":
+      - /url: /llms-full.txt
+    - link "/agents.md How to read and cite this site, including what not to assume.":
+      - /url: /agents.md
 - contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
   - navigation "Social links":
-    - link "RSS feed for Writing":
+    - link "rss":
       - /url: /rss.xml
-      - text: ""
-    - link "GitHub (opens in a new tab)":
+    - link "github (opens in a new tab)":
       - /url: https://github.com/mattpyle
-    - link "LinkedIn (opens in a new tab)":
+    - link "linkedin (opens in a new tab)":
       - /url: https://linkedin.com/in/matt-pyle
-    - link "WebMCP":
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"
-  - paragraph: /© \d+ Matt Pyle/
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
 - status
