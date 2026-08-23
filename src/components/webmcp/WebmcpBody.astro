@@ -73,9 +73,15 @@ interface CatalogEntry {
 interface Props {
   catalog: CatalogEntry[];
   expiryLabel: string;
+  /**
+   * When the tools were last driven end to end, rendered beside the Chrome build they were driven
+   * on. Dated because agents.md cites a different, earlier build for the calling convention: two
+   * measurements on two dates, which without the dates reads as one of them being a typo.
+   */
+  verifiedLabel: string;
 }
 
-const { catalog, expiryLabel } = Astro.props;
+const { catalog, expiryLabel, verifiedLabel } = Astro.props;
 
 /**
  * The five machine-readable surfaces band 6 lists. Editorial copy, so it lives beside the layout
@@ -299,7 +305,7 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
       <div class="band-prose">
         <p>The run controls above work in any browser with no setup, because they call the handler directly. What they do not exercise is the protocol.</p>
         <p>For that: Chrome 149 or later with the WebMCP origin trial, <code>chrome://flags/#enable-webmcp-testing</code>, and a client on the agent side — the Model Context Tool Inspector extension is the straightforward one.</p>
-        <p>All six tools have been driven that way on Chrome {WEBMCP_VERIFIED.chrome}, against this production site. The read tools returned what the page renders, <code>set_appearance</code> flipped that browser's view, and <code>sign_guestbook</code> wrote an entry that appeared while the guest book was open, badged as agent-written.</p>
+        <p>All six tools have been driven that way on Chrome {WEBMCP_VERIFIED.chrome}, on <time datetime={WEBMCP_VERIFIED.iso}>{verifiedLabel}</time>, against this production site. The read tools returned what the page renders, <code>set_appearance</code> flipped that browser's view, and <code>sign_guestbook</code> wrote an entry that appeared while the guest book was open, badged as agent-written.</p>
       </div>
     </section>
   </div>

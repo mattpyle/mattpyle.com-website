@@ -42,74 +42,122 @@
       "headers": [
         {
           "key": "Link",
-          "value": "</llms.txt>; rel=\"describedby\"; type=\"text/markdown\", </agents.md>; rel=\"describedby\"; type=\"text/markdown\", </.well-known/agent-card.json>; rel=\"service-desc\"; type=\"application/a2a+json\""
+          "value": "</llms.txt>; rel=\"describedby\"; type=\"text/markdown\", </agents.md>; rel=\"describedby\"; type=\"text/markdown\", </.well-known/agent-card.json>; rel=\"service-desc\"; type=\"application/a2a+json\", </index.md>; rel=\"alternate\"; type=\"text/markdown\""
         },
         { "key": "Vary", "value": "Accept" }
       ]
     },
     {
       "source": "/about",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</about.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/about/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</about.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/activity",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</activity.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/activity/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</activity.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/projects",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</projects.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/projects/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</projects.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/scorecard",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</scorecard.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/scorecard/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</scorecard.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/steward",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</steward.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/steward/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</steward.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/webmcp",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</webmcp.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/webmcp/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</webmcp.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/writing",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</writing.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/writing/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</writing.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/changelog",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</changelog.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/changelog/",
-      "headers": [{ "key": "Vary", "value": "Accept" }]
+      "headers": [
+        { "key": "Link", "value": "</changelog.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
     },
     {
       "source": "/writing/:slug([^/.]+)",
