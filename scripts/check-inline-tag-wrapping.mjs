@@ -22,8 +22,7 @@
 //
 // Exit code 1 when a boundary is found, so it can join a check chain later if it earns it.
 
-import { readFileSync } from 'node:fs';
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,15 +48,42 @@ function astroFiles(dir) {
   return found;
 }
 
-let offences = 0;
+/**
+ * Blank a matched region, keeping one newline per line it spanned so every line after it still
+ * reports the number a reader will find it on.
+ * @param {string} match
+ */
+const blank = (match) => '\n'.repeat(match.split('\n').length - 1);
 
-for (const file of astroFiles(src)) {
-  const text = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
-  // The frontmatter fence and the <style> block are not markup; only the template between them can
-  // carry this defect.
-  const withoutFrontmatter = text.replace(/^---[\s\S]*?\n---\n/, match => '\n'.repeat(match.split('\n').length - 1));
-  const template = withoutFrontmatter.replace(/<style>[\s\S]*?<\/style>/g, match => '\n'.repeat(match.split('\n').length - 1));
-  const lines = template.split('\n');
+/**
+ * The part of an `.astro` file that becomes markup: not the frontmatter, not a `<style>` block,
+ * and not a comment.
+ *
+ * COMMENTS COME OUT BEFORE THE STYLE BLOCK, AND THAT ORDER IS THE POINT. The style mask is a text
+ * match, so a comment that merely NAMES the tag used to open a mask that then ran to the real
+ * block's `</style>`; every line between the two stopped being checked and the file reported clean.
+ * A docblock in src/pages/webmcp/index.astro did exactly that on 2026-08-22, hiding six live
+ * offences from the one tool that can see this defect class. Taking comments out first means the
+ * mask can only ever engage on a real element.
+ *
+ * @param {string} text
+ */
+export function templateOf(text) {
+  return text
+    .replace(/^---[\s\S]*?\n---\n/, blank)
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, blank)
+    .replace(/<!--[\s\S]*?-->/g, blank)
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, blank);
+}
+
+/**
+ * The line breaks in one `.astro` source that sit against an inline tag.
+ * @param {string} text
+ * @returns {{ line: number, previous: string, current: string }[]}
+ */
+export function findOffences(text) {
+  const lines = templateOf(text.replace(/\r\n/g, '\n')).split('\n');
+  const found = [];
 
   for (let i = 1; i < lines.length; i += 1) {
     const previous = lines[i - 1].trim();
@@ -74,20 +100,32 @@ for (const file of astroFiles(src)) {
     // An inline tag closing the previous line, text opening this one.
     const glueAfter = CLOSES.test(previous) && !TAG_ONLY.test(previous) && currentIsText;
 
-    if (glueBefore || glueAfter) {
+    if (glueBefore || glueAfter) found.push({ line: i + 1, previous, current });
+  }
+
+  return found;
+}
+
+function main() {
+  let offences = 0;
+
+  for (const file of astroFiles(src)) {
+    const where = relative(root, file).split(sep).join('/');
+    for (const { line, previous, current } of findOffences(readFileSync(file, 'utf8'))) {
       offences += 1;
-      const where = `${relative(root, file).split(sep).join('/')}:${i + 1}`;
-      console.error(`${where}\n    ${previous}\n    ${current}\n`);
+      console.error(`${where}:${line}\n    ${previous}\n    ${current}\n`);
     }
   }
+
+  if (offences > 0) {
+    console.error(
+      `check-inline-tag-wrapping: ${offences} line break(s) sit against an inline tag and will lose ` +
+        `their space in the built HTML. Keep the tag and the text beside it on one source line.`
+    );
+    process.exit(1);
+  }
+
+  console.log('check-inline-tag-wrapping: no line break sits against an inline tag.');
 }
 
-if (offences > 0) {
-  console.error(
-    `check-inline-tag-wrapping: ${offences} line break(s) sit against an inline tag and will lose ` +
-      `their space in the built HTML. Keep the tag and the text beside it on one source line.`
-  );
-  process.exit(1);
-}
-
-console.log('check-inline-tag-wrapping: no line break sits against an inline tag.');
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();
