@@ -69,6 +69,18 @@ test('retro-only furniture is dropped by its marker class, not by page', () => {
   assert.match(markdown, /Real content\./);
 });
 
+test('the legacy tree of a two-tree page is dropped, so the page converts once', () => {
+  const markdown = pageToMarkdown(
+    page(
+      '<div class="modern-skin"><h1>About</h1><p>Modern wording.</p></div>' +
+        '<div class="retro-skin"><h1>ABOUT</h1><p>Legacy wording.</p></div>'
+    )
+  );
+  assert.match(markdown, /Modern wording\./);
+  assert.equal(markdown.includes('Legacy wording.'), false);
+  assert.equal(markdown.match(/^#+ /gm).length, 1);
+});
+
 test('behaviour, decoration and interactive controls are not content', () => {
   const markdown = pageToMarkdown(
     page(
