@@ -238,18 +238,23 @@ export default async function middleware(request: Request) {
 //
 // Then the agent-surface list from src/lib/agent-surfaces.mjs.
 //
-// Finally `/scorecard.md`, which is neither: it is in ON_DEMAND_PATHS in
-// src/lib/on-demand-routes.mjs, and it is here purely so the query-string canonicalisation above
-// can reach it. Nothing else in this function acts on it — a `.md` URL maps to no sibling, so it
-// falls straight through to next().
+// Finally `/activity.md` and `/activity.json`, which are neither: both are in ON_DEMAND_PATHS in
+// src/lib/on-demand-routes.mjs, and both are here purely so the query-string canonicalisation
+// above can reach them. Nothing else in this function acts on either — a path whose last segment
+// carries an extension maps to no sibling, so it falls straight through to next(). `/scorecard.md`
+// was in this position until 2026-08-22 and left with the store read; it is a converted static
+// file now, reached as a plain fetch by the negotiation proxy above.
 export const config = {
   matcher: [
     '/',
     '/about',
     '/about/',
+    '/activity',
+    '/activity/',
+    '/activity.md',
+    '/activity.json',
     '/scorecard',
     '/scorecard/',
-    '/scorecard.md',
     '/steward',
     '/steward/',
     '/projects/:path*',

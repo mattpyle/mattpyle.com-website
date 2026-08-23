@@ -40,6 +40,11 @@
         "summary": "Latest verified accessibility, performance, SEO, and agentic browsing scores."
       },
       {
+        "name": "Activity",
+        "url": "https://www.mattpyle.com/activity/",
+        "summary": "Agent traffic to this site: agent-surface fetches and pages served as Markdown, counted per UTC hour."
+      },
+      {
         "name": "About",
         "url": "https://www.mattpyle.com/about/",
         "summary": "Full bio, interests, contact links."

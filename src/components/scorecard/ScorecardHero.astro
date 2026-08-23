@@ -1,0 +1,63 @@
+---
+/**
+ * The /scorecard headline (docs/projects/redesign/design-export-remaining/design_handoff_scorecard,
+ * band 1).
+ *
+ * Same construction as AboutHero.astro and WritingHero.astro — H1 then a statement — with the fill
+ * left on its default `--agents`, because the scorecard is an agents surface. No fill variant class
+ * is added for that reason.
+ *
+ * THE H1 CLAMP CEILING IS 118px HERE, not the 176px the type scale allows, and the bundle says
+ * why: "Scorecard" is a longer word than "Writing" or "About", and at 176px it wraps. The clamp
+ * keeps the same 12vw middle term as its siblings, so the three heroes still scale together.
+ */
+---
+
+{/*
+  A div, not a section — the same call WritingHero.astro, ProjectsHero.astro and AboutHero.astro
+  made: `npm run validate:html` names an h1 inside sectioning content, and an unnamed <section> is
+  not exposed as a region anyway.
+*/}
+<div class="rd-section scorecard-hero modern-skin">
+  <h1><span class="rd-fill">Scorecard</span></h1>
+  <p class="hero-statement">This site's own scores, measured nightly.</p>
+</div>
+
+<style>
+  .scorecard-hero { padding-top: 72px; }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(74px, 12vw, 118px);
+    line-height: .92;
+    letter-spacing: -.045em;
+    color: var(--ink);
+    animation: riseIn .7s ease .05s both;
+  }
+
+  .hero-statement {
+    margin: 32px 0 0;
+    max-width: 30ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.3;
+    letter-spacing: -.02em;
+    color: var(--ink-2);
+    text-wrap: pretty;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  @media (max-width: 720px) {
+    .scorecard-hero { padding-top: 52px; }
+
+    h1 { font-size: 68px; }
+
+    .hero-statement {
+      margin-top: 24px;
+      font-size: 24px;
+    }
+  }
+</style>

@@ -770,14 +770,15 @@ html[data-appearance='retro'] .history-run[open] .history-toggle::after {
   content: '[ \2212 ]';
 }
 
-/* ── /scorecard, Agent traffic ────────────────────────────────────────── */
+/* ── /activity, Agent traffic ─────────────────────────────────────────── */
 
 /* Every rule below hangs off #agent-traffic, and the id is doing real work rather than being
    lazy about class names. Astro stamps its scoping attribute onto every compound of a page's
-   own selectors, so `.traffic thead th` in scorecard.astro compiles to three classes-worth of
+   own selectors, so `.traffic thead th` in activity.astro compiles to three classes-worth of
    specificity and outranks any plain `html[data-appearance='retro'] .traffic thead th` here,
    however specific it looks. An id outranks all of it in one token and stays readable. The
-   section has one anyway: /agent-traffic redirects to this anchor. */
+   section carries the id for its own sake; /agent-traffic redirects to /activity/, which is the
+   page these rules now style, and not to this anchor. */
 
 html[data-appearance='retro'] #agent-traffic .traffic-panel,
 html[data-appearance='retro'] #agent-traffic .traffic-empty,

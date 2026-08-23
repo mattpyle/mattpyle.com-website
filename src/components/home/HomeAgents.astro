@@ -10,23 +10,14 @@
  * happen to match the run of 20 Aug 2026 because that is the run it was drawn
  * against, not because they were copied.
  */
-import { SCORECARD } from '../../data/scorecard';
+import { SCORECARD, passingGates, scorecardGates } from '../../data/scorecard';
 import { formatIsoDate } from '../../lib/format-date.mjs';
 
-const gates = SCORECARD.metrics.map(metric => {
-  const value = Number(metric.value);
-  const maximum = Number(metric.maximum);
-  return {
-    name: metric.name.toLowerCase(),
-    // A score out of 100 reads as a bare number; anything else keeps its
-    // denominator, because "4" on its own is not a score.
-    score: maximum === 100 ? metric.value : `${metric.value}/${metric.maximum}`,
-    value: Number.isFinite(value) ? value : 0,
-    maximum: Number.isFinite(maximum) && maximum > 0 ? maximum : 1,
-  };
-});
-
-const passing = SCORECARD.metrics.filter(metric => metric.status === 'Pass').length;
+// The gate derivation and the pass count are shared with /scorecard rather than kept here: the
+// page is the expansion of this panel, and the two must not be able to disagree about a run. Both
+// live in src/data/scorecard.ts, next to the run-log they derive from.
+const gates = scorecardGates();
+const passing = passingGates();
 const verifiedDate = formatIsoDate(SCORECARD.verified.iso);
 
 /**
@@ -56,6 +47,14 @@ const SURFACES = [
 <section class="rd-section agents modern-skin" aria-labelledby="home-agents-title">
   <div class="rd-heading-row">
     <h2 id="home-agents-title">Agent surfaces</h2>
+    {/*
+      The pointer to /activity, which is off the header nav on purpose (the nav is
+      full — Matt, 2026-08-21) and reaches readers from here, the footer and a
+      cross-link on /scorecard instead. `.rd-all-link` is the shell's existing
+      right-margin section link, so this row matches the writing, projects and
+      changelog rows above it rather than inventing a third kind of link.
+    */}
+    <a href="/activity/" class="rd-all-link">agent traffic &rarr;</a>
   </div>
 
   <div class="grid">
@@ -116,6 +115,8 @@ const SURFACES = [
 
   .rd-heading-row { padding-bottom: 26px; }
   .rd-heading-row h2 { color: var(--agents); }
+  .rd-heading-row .rd-all-link { color: var(--agents); }
+  .rd-heading-row .rd-all-link:hover { color: var(--agents-hover); }
 
   .grid {
     display: grid;

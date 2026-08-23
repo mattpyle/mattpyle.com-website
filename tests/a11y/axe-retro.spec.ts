@@ -4,7 +4,7 @@ import type { Result } from 'axe-core';
 import { installPageLoadCounter, gotoSettled } from './helpers/settle';
 
 /**
- * axe against RETRO, on the same eight routes `.github/workflows/a11y.yml` audits with
+ * axe against RETRO, on the same nine routes `.github/workflows/a11y.yml` audits with
  * `@axe-core/cli` in modern. The CLI can only audit what the server sends, and retro lives entirely
  * in client-side storage, so the second mode of a two-mode site had no automated audit at all: the
  * guest book, the webmaster note and the web ring are `display: none` in modern, and a contrast or
@@ -33,6 +33,7 @@ const ROUTES = [
   '/writing',
   '/projects',
   '/scorecard',
+  '/activity',
   '/steward',
   '/webmcp',
   '/writing/accessibility-and-ai/',
