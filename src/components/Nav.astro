@@ -11,17 +11,12 @@ function isActive(href: string): boolean {
 
 
 /**
- * Appearance-skin class, set by Layout.astro on a route the redesign has
- * rebuilt. On such a route this component is the RETRO half of a pair — the
- * redesigned chrome renders beside it and retro.css shows exactly one of the
- * two. Absent everywhere else, which keeps every unconverted page's markup
- * byte-identical to what it was before the redesign branch.
+ * `retro-skin` is hardcoded on the header below rather than passed in. This
+ * component is the RETRO half of a pair on every route: SiteHeader.astro renders
+ * beside it and retro.css shows exactly one of the two. It was a `skin` prop
+ * while the redesign converted the site one route at a time and unconverted
+ * pages had to render this nav unskinned; every route is converted now.
  */
-interface Props {
-  skin?: string;
-}
-
-const { skin } = Astro.props;
 
 const NAV_LINKS = [
   { label: 'Writing',   href: '/writing/'   },
@@ -32,7 +27,7 @@ const NAV_LINKS = [
 ] as const;
 ---
 
-<header data-module="nav" class:list={[skin]}>
+<header data-module="nav" class="retro-skin">
   <div class="nav-inner">
     <a href="/" aria-label="Matt Pyle — home" class="nav-logo">MATT PYLE</a>
     <span class="nav-flourish" aria-hidden="true"><span class="nav-flourish-arm"

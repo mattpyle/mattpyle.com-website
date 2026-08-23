@@ -98,7 +98,9 @@
       - code: chrome://flags/#enable-webmcp-testing
       - text: ", and a client on the agent side — the Model Context Tool Inspector extension is the straightforward one."
     - paragraph:
-      - text: /All six tools have been driven that way on Chrome \d+\.\d+\.\d+\.\d+, against this production site\. The read tools returned what the page renders,/
+      - text: /All six tools have been driven that way on Chrome \d+\.\d+\.\d+\.\d+, on/
+      - time: /\d+ \w+ \d+/
+      - text: ", against this production site. The read tools returned what the page renders,"
       - code: set_appearance
       - text: flipped that browser's view, and
       - code: sign_guestbook
