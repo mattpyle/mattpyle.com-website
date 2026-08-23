@@ -137,6 +137,15 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Reserve the scrollbar's width on every page, scrolling or not. Without it,
+     /writing is the one page short enough to fit the viewport, so it is the one
+     page with no scrollbar, and the centred shell sits ~7px further right there
+     than everywhere else — the nav wordmark visibly jumps when you navigate
+     into or out of it. Only shows on classic-scrollbar platforms (Windows,
+     Linux, and macOS set to always-show); overlay scrollbars take no space and
+     see no change either way. Sitewide rather than per-page: which pages happen
+     to fit the viewport changes every time content is added. */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -354,17 +363,21 @@ textarea:focus-visible,
    REDESIGN — the design system for the rebuilt surfaces
    ════════════════════════════════════════════════════════════════════════════
    Spec: docs/projects/redesign/design-export/README.md. Everything below is
-   ADDITIVE and inert until a route opts in: Layout.astro puts `skin-redesign`
-   on <body> for the routes listed in src/lib/redesigned-routes.mjs; the
-   homepage, /writing, /projects and /changelog are on that list today. The
-   legacy tokens above stay live for every page the redesign has not reached yet,
-   which is why this block does not simply redefine --color-bg / --font-serif /
-   --font-mono.
+   ADDITIVE: Layout.astro puts `skin-redesign` on <body> of every page, so the
+   block is live sitewide. It was per-route while the redesign converted one
+   surface at a time; the route flag that decided that is gone.
 
-   The redesign lands on production in ONE merge (the `redesign` integration
-   branch), so the site never shows two type systems at once in public. When the
-   last surface converts, the legacy tokens and the `skin-redesign` flag both go,
-   and --font-mono-plex becomes --font-mono.
+   The block does not simply redefine --color-bg / --font-serif / --font-mono
+   because the legacy tokens above are not dead. RETRO consumes them: retro.css
+   redefines none of them, the legacy @font-face blocks are retro's type (and
+   the same woff2 files feed the OG generator), and the legacy Nav/Footer are
+   retro's only chrome. All of that is coupled to retro's retirement, not to the
+   redesign. --font-mono-plex becomes --font-mono on the day retro goes, not
+   before.
+
+   The separable step this block IS waiting on: dropping `skin-redesign` means
+   rewriting ~110 `body.skin-redesign` selectors atomically while keeping each
+   one's html:not([data-appearance='retro']) guard verbatim.
 
    Every base rule here is guarded with html:not([data-appearance='retro']).
    Retro is a re-skin of the SAME document and has to be able to win on a page
@@ -744,9 +757,20 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
     color 380ms ease;
 }
 
+/* One modifier per section colour, named for the section rather than the token,
+   and matching the nav one-for-one: the five `.header-link[data-section=...]`
+   rules in SiteHeader.astro paint a section's nav item, and these paint the same
+   section's H1 fill. A page's colour runs from its nav item to its headline, so
+   a section page whose H1 wears a colour the nav does not is the tell that a
+   modifier is missing — which is exactly what /about did until 2026-08-23, on
+   the bare class and so on the `--agents` default.
+
+   The homepage is the deliberate exception: its name keeps the magenta default,
+   which is the approved homepage design and not a section colour. */
 .rd-fill--writing   { --fill: var(--writing); }
 .rd-fill--projects  { --fill: var(--projects); }
 .rd-fill--changelog { --fill: var(--changelog); }
+.rd-fill--ink       { --fill: var(--ink); }
 
 /* :active as well as :hover so the effect exists on touch, where there is no
    hover state to enter. */
