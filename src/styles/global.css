@@ -757,9 +757,20 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
     color 380ms ease;
 }
 
+/* One modifier per section colour, named for the section rather than the token,
+   and matching the nav one-for-one: the five `.header-link[data-section=...]`
+   rules in SiteHeader.astro paint a section's nav item, and these paint the same
+   section's H1 fill. A page's colour runs from its nav item to its headline, so
+   a section page whose H1 wears a colour the nav does not is the tell that a
+   modifier is missing — which is exactly what /about did until 2026-08-23, on
+   the bare class and so on the `--agents` default.
+
+   The homepage is the deliberate exception: its name keeps the magenta default,
+   which is the approved homepage design and not a section colour. */
 .rd-fill--writing   { --fill: var(--writing); }
 .rd-fill--projects  { --fill: var(--projects); }
 .rd-fill--changelog { --fill: var(--changelog); }
+.rd-fill--ink       { --fill: var(--ink); }
 
 /* :active as well as :hover so the effect exists on touch, where there is no
    hover state to enter. */

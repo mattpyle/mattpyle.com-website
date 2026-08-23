@@ -3,8 +3,14 @@
  * The /about headline (docs/projects/redesign/design-export-remaining/design_handoff_about_page).
  *
  * Same construction as WritingHero.astro — H1, then a statement beside a bordered
- * right-hand block — with the fill left on its default `--agents`, because /about
- * is an agents surface. No fill variant class is added for that reason.
+ * right-hand block — with `.rd-fill--ink` on the H1, because /about's section colour
+ * is ink: SiteHeader.astro gives this page's nav item `data-section="ink"`, and a
+ * page's colour runs from its nav item to its headline.
+ *
+ * It wore the bare `.rd-fill` until 2026-08-23, which meant the `--agents` magenta
+ * default, which meant /about was the one section page whose H1 did not match its
+ * own nav item. The agent block below is a different thing and stays magenta: those
+ * ARE agent surfaces, and they are links rather than the page's identity.
  *
  * The hero row and the body band below it share ONE grid so the page has a single
  * right edge: `minmax(0, 68ch) 300px` with a 72px gap, declared in both. The
@@ -19,7 +25,7 @@
   unnamed <section> is not exposed as a region anyway.
 */}
 <div class="rd-section about-hero modern-skin">
-  <h1><span class="rd-fill">About</span></h1>
+  <h1><span class="rd-fill rd-fill--ink">About</span></h1>
 
   <div class="hero-row">
     <p class="hero-statement">
