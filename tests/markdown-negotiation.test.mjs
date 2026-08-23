@@ -103,3 +103,47 @@ test('every negotiable page path carries Vary: Accept in vercel.json', () => {
     assert.ok(varyRules.includes(`/${section}`) && varyRules.includes(`/${section}/`), section);
   }
 });
+
+// Every fixed-path negotiable page advertises its markdown variant in a Link header, so an agent
+// learns the variant exists without spending a request to guess at it (RFC 8288; the steward fast
+// audit's `link-headers` check is the acceptance). The value is asserted against markdownSiblingFor
+// rather than against a second literal list: a header pointing at a sibling URL the middleware
+// would not serve is worse than no header, and only deriving both from the same function can
+// prevent it. The two entry-page families are absent on purpose — their sibling URL depends on the
+// slug, which needs a captured parameter in the header value.
+test('every fixed-path negotiable page advertises its markdown sibling in a Link header', () => {
+  const linkRules = new Map(
+    vercelConfig.headers
+      .map((rule) => [rule.source, rule.headers.find((header) => header.key === 'Link')?.value])
+      .filter(([, value]) => value)
+  );
+
+  for (const entry of NEGOTIABLE_PAGE_MATCHER) {
+    if (entry.includes(':path*') || entry.includes(':slug')) continue;
+    const value = linkRules.get(entry);
+    assert.ok(value, `vercel.json has no Link header for ${entry}`);
+
+    const sibling = markdownSiblingFor(entry);
+    assert.ok(sibling, `${entry} maps to no markdown sibling`);
+    assert.ok(
+      value.includes(`<${sibling}>; rel="alternate"; type="text/markdown"`),
+      `${entry} advertises the wrong alternate: ${value}`
+    );
+  }
+});
+
+// The homepage keeps the two rel values it already carried. The steward check only looks for an
+// alternate, so a rewrite that dropped these would pass it while removing the site's own discovery
+// pointers from the one page every agent arrives at.
+test('the homepage Link header keeps its describedby and service-desc entries', () => {
+  const home = vercelConfig.headers.find((rule) => rule.source === '/');
+  const link = home.headers.find((header) => header.key === 'Link').value;
+  for (const expected of [
+    '</llms.txt>; rel="describedby"; type="text/markdown"',
+    '</agents.md>; rel="describedby"; type="text/markdown"',
+    '</.well-known/agent-card.json>; rel="service-desc"; type="application/a2a+json"',
+    '</index.md>; rel="alternate"; type="text/markdown"',
+  ]) {
+    assert.ok(link.includes(expected), `homepage Link header lost ${expected}`);
+  }
+});

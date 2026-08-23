@@ -146,6 +146,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const personId = `${new URL('/', Astro.site).toString()}#person`;
 const expiryLabel = formatVerifiedLabel(ORIGIN_TRIAL_EXPIRY);
 
+// The date the tools were last driven end to end, shown beside the Chrome build in both trees.
+// public/agents.md cites an earlier build (150.0.7871.182, 2026-07-24) for the calling convention;
+// these are two measurements on two dates, and undated the pair reads as one of them being a typo.
+const verifiedLabel = formatVerifiedLabel(WEBMCP_VERIFIED.iso);
+
 const extraJsonLd = [
   {
     '@type': 'TechArticle',
@@ -209,7 +214,7 @@ const breadcrumbs = [
     carried whole, which is the same call the /scorecard reskin made.
   */}
   <WebmcpHero />
-  <WebmcpBody catalog={catalog} expiryLabel={expiryLabel} />
+  <WebmcpBody catalog={catalog} expiryLabel={expiryLabel} verifiedLabel={verifiedLabel} />
 
   <div class="retro-skin">
 
@@ -487,8 +492,8 @@ const breadcrumbs = [
         documentation</a> is the current reference for both.
       </p>
       <p>
-        All six tools have been driven that way, on Chrome {WEBMCP_VERIFIED.chrome}, which is where
-        the calling convention above came from. A client running outside the page enumerated the six
+        All six tools have been driven that way, on Chrome {WEBMCP_VERIFIED.chrome} on <time datetime={WEBMCP_VERIFIED.iso}>{verifiedLabel}</time>, which is
+        where the calling convention above came from. A client running outside the page enumerated the six
         and invoked every one against this production site. The read tools returned what the page
         itself renders, <code>set_appearance</code> flipped this browser's view,
         and <code>sign_guestbook</code> wrote an entry that appeared in the guest book while it was
