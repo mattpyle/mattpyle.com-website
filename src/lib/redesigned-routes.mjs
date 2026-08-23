@@ -31,6 +31,7 @@ const REDESIGNED = new Set([
   '/steward/',
   '/scorecard/',
   '/activity/',
+  '/webmcp/',
 ]);
 
 /**
