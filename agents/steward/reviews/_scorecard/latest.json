@@ -1,13 +1,13 @@
 {
-  "iso": "2026-08-23",
-  "timestamp": "2026-08-23T03:33:41-07:00",
+  "iso": "2026-08-24",
+  "timestamp": "2026-08-24T03:33:44-07:00",
   "scope": "24 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Coverage rose from 23 to 24 pages; all 24 pages passed all four public metrics.",
+  "commentary": "All 24 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-08-23",
+  "id": "2026-08-24",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -87,7 +87,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -98,7 +98,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -305,9 +305,8 @@
       "axeViolations": 0
     }
   ],
-  "decision": "open-pr",
-  "reason": "Coverage 23→24 pages",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/170",
+  "decision": "no-op",
+  "reason": "unchanged, published 1d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-08-23"
+  "archiveId": "2026-08-24"
 }
