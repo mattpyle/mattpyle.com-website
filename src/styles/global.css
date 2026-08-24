@@ -758,8 +758,8 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
 }
 
 /* One modifier per section colour, named for the section rather than the token,
-   and matching the nav one-for-one: the five `.header-link[data-section=...]`
-   rules in SiteHeader.astro paint a section's nav item, and these paint the same
+   and matching the nav one-for-one: the five `[data-section=...]` rules in
+   SiteHeader.astro paint a section's nav item, and these paint the same
    section's H1 fill. A page's colour runs from its nav item to its headline, so
    a section page whose H1 wears a colour the nav does not is the tell that a
    modifier is missing — which is exactly what /about did until 2026-08-23, on

@@ -1,6 +1,7 @@
 ---
 /**
- * The redesigned sticky header (docs/projects/redesign/design-export/README.md §1).
+ * The redesigned sticky header (docs/projects/redesign/design-export/README.md §1,
+ * mobile per docs/projects/redesign/design-mobile-nav/README.md, Option 3a).
  *
  * Renders alongside — not instead of — the legacy Nav.astro on a redesigned
  * route. Both are in the DOM; `.modern-skin` / `.retro-skin` in retro.css show
@@ -15,6 +16,16 @@
  * The nav colours are the spec's semantic set — each link is painted in the
  * colour of the section it leads to, and the current section is marked with a
  * 2px underline in that same colour rather than with a label or a swatch.
+ *
+ * TWO LINK TREES, one shown at a time. `.nav-wide` is the desktop row: all five
+ * links in canonical order, unchanged on every page. `.nav-narrow` is the
+ * priority-plus row below 720px: the current section first, then canonical order,
+ * with whatever does not fit behind a `more` disclosure. The two orders genuinely
+ * differ, so they are two subtrees flipped by media query rather than one subtree
+ * reordered with `order:` — CSS `order` would divorce reading order from focus
+ * order, which is the defect this component exists to avoid. Only one is ever
+ * `display: block`/`flex`, so no width exposes a link twice to the accessibility
+ * tree, and the 1280px aria goldens see the desktop tree alone.
  */
 
 // Normalised to the trailing-slash canonical before comparing, for the same
@@ -30,11 +41,8 @@ function isActive(href: string): boolean {
  * Five items, as the spec fixes it: trimmed from six to stay calm at laptop
  * widths. `section` names the semantic colour, not the route.
  *
- * DEVIATION, deliberate: the mobile prototype shows four of these, dropping
- * /changelog. The mobile nav here is a horizontal scroller, so the fifth item
- * costs nothing but a swipe, and dropping it would make /changelog unreachable
- * from the header on every phone. More content in a scroll container is the
- * safer half of that trade.
+ * This is the CANONICAL order. The desktop row renders it verbatim on every
+ * page; the mobile row derives its own order from it below.
  */
 const NAV_LINKS = [
   { label: '/writing',   href: '/writing/',   section: 'writing'   },
@@ -43,22 +51,82 @@ const NAV_LINKS = [
   { label: '/scorecard', href: '/scorecard/', section: 'agents'    },
   { label: '/about',     href: '/about/',     section: 'ink'       },
 ] as const;
+
+type NavLink = (typeof NAV_LINKS)[number];
+
+/**
+ * The mobile link-selection rule, resolved at template level. No JS measures
+ * anything: the sets below are fixed per breakpoint and flipped by media query.
+ *
+ * 1. The current section is always the first visible link, so the header is
+ *    self-locating on every page.
+ * 2. The rest follow in canonical order, skipping the one already shown.
+ * 3. Pages with no current section (/, /steward, /activity, /webmcp) fall back to
+ *    canonical order with nothing underlined.
+ *
+ * The consequence, accepted: below 720px the nav order differs per page. It is
+ * recognisable, not a fixed spatial map. Desktop keeps the fixed map.
+ */
+const currentIndex = NAV_LINKS.findIndex(link => isActive(link.href));
+const mobileOrder: readonly NavLink[] =
+  currentIndex === -1
+    ? NAV_LINKS
+    : [NAV_LINKS[currentIndex], ...NAV_LINKS.filter((_, i) => i !== currentIndex)];
+
+/**
+ * Three links fit beside `more` at 390pt-class widths and two at 320pt-class, so
+ * exactly one link — `mobileOrder[2]` — moves between the row and the panel. It
+ * is rendered in BOTH, and each copy is hidden at the width where the other one
+ * shows, which is why the panel's contents shrink as the row's grow.
+ */
+const rowItems = mobileOrder.slice(0, 3).map((link, i) => ({ ...link, collapsible: i === 2 }));
+const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible: i === 0 }));
 ---
 
 <header data-module="site-header" class="modern-skin">
   <div class="header-inner">
     <a href="/" class="wordmark" aria-label="Matt Pyle — home">mp/</a>
     <nav aria-label="Main navigation">
-      {NAV_LINKS.map(({ label, href, section }) => (
-        <a
-          href={href}
-          class="header-link"
-          data-section={section}
-          aria-current={isActive(href) ? 'page' : undefined}
-        >
-          {label}
-        </a>
-      ))}
+      <div class="nav-wide">
+        {NAV_LINKS.map(({ label, href, section }) => (
+          <a
+            href={href}
+            class="header-link"
+            data-section={section}
+            aria-current={isActive(href) ? 'page' : undefined}
+          >
+            {label}
+          </a>
+        ))}
+      </div>
+
+      <div class="nav-narrow">
+        {rowItems.map(({ label, href, section, collapsible }) => (
+          <a
+            href={href}
+            class:list={['nav-row-link', collapsible && 'is-collapsible']}
+            data-section={section}
+            aria-current={isActive(href) ? 'page' : undefined}
+          >
+            <span class="nav-mark">{label}</span>
+          </a>
+        ))}
+        <details class="nav-more">
+          <summary>more</summary>
+          <div class="nav-panel">
+            {panelItems.map(({ label, href, section, collapsible }) => (
+              <a
+                href={href}
+                class:list={['nav-panel-link', collapsible && 'is-collapsible']}
+                data-section={section}
+                aria-current={isActive(href) ? 'page' : undefined}
+              >
+                <span class="nav-mark">{label}</span>
+              </a>
+            ))}
+          </div>
+        </details>
+      </div>
     </nav>
   </div>
 </header>
@@ -105,73 +173,218 @@ const NAV_LINKS = [
   }
 
   nav {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+  }
+
+  .nav-wide {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     column-gap: 26px;
     row-gap: 10px;
-    font-family: var(--font-mono-plex);
-    font-size: 17px;
   }
 
-  .header-link[data-section="writing"]   { color: var(--writing); }
-  .header-link[data-section="projects"]  { color: var(--projects); }
-  .header-link[data-section="changelog"] { color: var(--changelog); }
-  .header-link[data-section="agents"]    { color: var(--agents); }
-  .header-link[data-section="ink"]       { color: var(--ink); }
+  .nav-narrow { display: none; }
 
-  .header-link[data-section="writing"]:hover   { color: var(--writing-hover); }
-  .header-link[data-section="projects"]:hover  { color: var(--projects-hover); }
-  .header-link[data-section="changelog"]:hover { color: var(--changelog-hover); }
-  .header-link[data-section="agents"]:hover    { color: var(--agents-hover); }
-  .header-link[data-section="ink"]:hover       { color: var(--ink-4); }
+  /* Keyed on the attribute rather than on a class, so the desktop row, the
+     mobile row and the panel share one set of colour rules and cannot drift.
+     Astro's scoping keeps this inside the header. */
+  [data-section="writing"]   { color: var(--writing); }
+  [data-section="projects"]  { color: var(--projects); }
+  [data-section="changelog"] { color: var(--changelog); }
+  [data-section="agents"]    { color: var(--agents); }
+  [data-section="ink"]       { color: var(--ink); }
+
+  [data-section="writing"]:hover   { color: var(--writing-hover); }
+  [data-section="projects"]:hover  { color: var(--projects-hover); }
+  [data-section="changelog"]:hover { color: var(--changelog-hover); }
+  [data-section="agents"]:hover    { color: var(--agents-hover); }
+  [data-section="ink"]:hover       { color: var(--ink-4); }
 
   /* The current section is marked in its own colour. currentColor rather than a
-     repeat of the five rules above, so the two can never drift. */
+     repeat of the five rules above, so the two can never drift.
+
+     Desktop puts the border on the anchor, which is inline there and so already
+     hugs the text. The mobile trees put it on an inner span instead, because
+     their anchors are 48px flex rows and a border on the anchor would draw at
+     the bottom of the row rather than under the word. */
   .header-link[aria-current="page"] {
     border-bottom: 2px solid currentColor;
     padding-bottom: 3px;
   }
 
+  [aria-current="page"] .nav-mark {
+    border-bottom: 2px solid currentColor;
+    padding-bottom: 3px;
+  }
+
+  /* ── Below 720px: the priority-plus row ──────────────────────────────────
+     Option 3a of docs/projects/redesign/design-mobile-nav. Replaces the
+     horizontal scroller that shipped with the redesign: it was WCAG-compliant
+     but carried no affordance that it scrolled, so it read as broken.
+
+     Site values win for the chrome the bundle redraws (the blur and z-index
+     above, `var(--rule)` for the hairline), since the bundle declares desktop
+     unchanged. Bundle values bind for the mobile-only pieces below: type sizes,
+     spacing, the 48px rows and the panel treatment. */
   @media (max-width: 720px) {
     .header-inner {
-      gap: 18px;
-      padding: 14px var(--shell-gutter-mobile);
+      align-items: stretch;
+      gap: 16px;
+      /* The bundle's 16px, not var(--shell-gutter-mobile)'s 20px: the row needs
+         every pixel at the 3-link breakpoint below, and the bundle sets the
+         header's own gutter narrower than the content column's on purpose. */
+      padding: 0 16px;
+      min-height: 48px;
+    }
+
+    /* Always on, which is the bundle's own no-JS fallback for the scrolled
+       state: the alternative is `animation-timeline: scroll()`, which is
+       Chromium-only and degrades to exactly this. */
+    [data-module="site-header"] {
+      box-shadow: 0 6px 16px -12px oklch(0.21 0.012 265 / .5);
     }
 
     .wordmark {
       display: inline-flex;
       align-items: center;
-      min-height: 44px;
-      font-size: 19px;
+      min-height: 48px;
+      font-size: 15px;
+      font-weight: 500;
     }
 
-    /* A horizontal scroller, not a wrap: five mono links wrapped onto three
-       rows at 320px makes the header taller than the hero. WCAG 1.4.10 allows a
-       container that scrolls on one axis; what it forbids is the PAGE scrolling
-       sideways, which this prevents rather than causes. */
-    nav {
-      flex-wrap: nowrap;
-      /* flex-start, not the flex-end this row inherits from the desktop rule:
-         when a flex row overflows its own scroll container, end-justification
-         pushes the first items past the container's start edge, where scrolling
-         cannot reach them. At 390px that made /writing and /projects
-         unreachable — visibly cut off, and cut off in the only direction the
-         scrollbar does not go. */
-      justify-content: flex-start;
-      margin-left: auto;
-      overflow-x: auto;
-      column-gap: 20px;
-      font-size: 16px;
-      -webkit-overflow-scrolling: touch;
+    .nav-wide { display: none; }
+
+    .nav-narrow {
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+      font-size: 13px;
     }
 
-    .header-link {
-      display: inline-flex;
+    .nav-row-link {
+      display: flex;
       align-items: center;
-      min-height: 44px;
+      min-height: 48px;
       white-space: nowrap;
+    }
+
+    /* The `more` control. A word, not a glyph, and deliberately WITHOUT a
+       leading slash: the absence of the slash is what marks it as not-a-section
+       in this wordmark's grammar. `summary` already exposes the expanded state,
+       so no role and no hand-rolled aria-expanded. */
+    .nav-more {
+      display: flex;
+    }
+
+    .nav-more > summary {
+      display: flex;
+      align-items: center;
+      min-height: 48px;
+      padding-left: 2px;
+      /* `display: flex` suppresses the native marker in current Blink, WebKit
+         and Gecko; these two cover the older WebKit that ignores it. */
+      list-style: none;
+      cursor: pointer;
+      white-space: nowrap;
+      color: oklch(0.52 0.01 265);
+    }
+
+    .nav-more > summary::-webkit-details-marker { display: none; }
+
+    .nav-more[open] > summary { color: var(--ink); }
+
+    /* The panel OVERLAYS the page; it never reflows it. A second row inside a
+       sticky header pushes the article down under the reader's thumb on every
+       open. The sticky header is the containing block, so `top: 100%` lands the
+       panel directly under the hairline and `right: 0` flushes it to the edge.
+
+       No overflow: hidden — a focus ring on the last row must not be clipped.
+       No transition either: open and close are instant, so reduced-motion is
+       satisfied by construction rather than by a query. */
+    .nav-panel {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      min-width: 168px;
+      display: flex;
+      flex-direction: column;
+      padding: 6px 0;
+      background: oklch(0.982 0.003 265 / .97);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--rule);
+      border-top: none;
+      border-bottom-left-radius: 12px;
+      box-shadow: 0 16px 32px -20px oklch(0.21 0.012 265 / .55);
+    }
+
+    /* 0.97, deliberately: every label keeps its desktop contrast ratio against
+       this ground. Do not thin it, and do not fade or mask the panel text. */
+    .nav-panel-link {
+      display: flex;
+      align-items: center;
+      min-height: 48px;
+      padding: 0 20px 0 18px;
+      white-space: nowrap;
+    }
+
+    /* Three links in the row is the wider of the two mobile sets, so the panel's
+       copy of the movable link is hidden by default and the ≤374px block below
+       swaps the pair. Written as a default plus an override rather than as two
+       complementary queries, because `max-width: 374px` and `min-width: 375px`
+       leave a gap at fractional widths where NEITHER copy would render. */
+    .nav-panel-link.is-collapsible { display: none; }
+  }
+
+  /*
+   * The three-to-two breakpoint, which the bundle does not give: it specifies
+   * 390pt and 320pt frames and leaves the boundary between them to measurement.
+   *
+   * 375px, measured. The widest 3-link row the selection rule can produce is 27
+   * mono characters (/writing /projects /changelog, and the four rotations of it
+   * that land on the same three longest labels), which at the bundle's 13px IBM
+   * Plex Mono needs 366px of header once the 16px gutters, the 15px wordmark,
+   * the four 16px gaps and `more` are counted. 375 is the first common device
+   * width that clears it, and it holds 9px of slack — enough that a hinting or
+   * fallback-metric difference cannot overflow the row, and not so much that a
+   * width which could show three links is showing two.
+   *
+   * Below it the 320pt-class set applies: two links, 12px type, 14px gutters and
+   * gaps. The widest 2-link row is 18 characters and needs 256px, which clears
+   * 280px — the narrowest width the reflow check goes down to — by 24px.
+   *
+   * If a label is ever renamed, re-measure: renaming Builds to Projects widened
+   * the desktop row by 11px in 2026-08 and broke three viewport widths that no
+   * existing check was looking at.
+   */
+  @media (max-width: 374px) {
+    .header-inner {
+      gap: 14px;
+      padding: 0 14px;
+    }
+
+    .wordmark { font-size: 14px; }
+
+    .nav-narrow {
+      gap: 14px;
+      font-size: 12px;
+    }
+
+    /* The row sheds its third link and the panel gains it. Rendered twice, shown
+       once: at no width is either copy in the accessibility tree alongside the
+       other. */
+    .nav-row-link.is-collapsible { display: none; }
+    .nav-panel-link.is-collapsible { display: flex; }
+
+    .nav-panel {
+      min-width: 160px;
+    }
+
+    .nav-panel-link {
+      padding: 0 18px 0 16px;
     }
   }
 </style>

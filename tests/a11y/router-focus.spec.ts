@@ -26,6 +26,13 @@ test.beforeEach(async ({ page }) => {
  * shows one per appearance — while the href is the thing this check is actually
  * about: following an internal link and landing on that route. `label` is only
  * the test title.
+ *
+ * `:visible` because the redesigned header ships TWO link trees since the mobile
+ * nav landed — the desktop row and the priority-plus row below 720px — and every
+ * href appears in both. Exactly one is displayed at any width, so the pseudo-class
+ * resolves the pair without pinning this check to a viewport or to a tree's class
+ * name. Without it the locator is a strict-mode violation rather than a failure
+ * that means anything.
  */
 const HOPS: { from: string; label: string; href: string; to: RegExp }[] = [
   { from: '/', label: 'Writing', href: '/writing/', to: /\/writing\/?$/ },
@@ -43,7 +50,7 @@ for (const hop of HOPS) {
     // its label (the homepage hero also links to /writing).
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
     const before = await readPageLoads(page);
-    await nav.locator(`a[href="${hop.href}"]`).click();
+    await nav.locator(`a[href="${hop.href}"]:visible`).click();
     await waitForSoftNav(page, before);
     await expect(page).toHaveURL(hop.to);
 
@@ -80,7 +87,7 @@ test('ClientRouter announces the new page to assistive tech', async ({ page }) =
   await gotoSettled(page, '/');
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   const before = await readPageLoads(page);
-  await nav.locator('a[href="/projects/"]').click();
+  await nav.locator('a[href="/projects/"]:visible').click();
   await waitForSoftNav(page, before);
 
   const announcer = page.locator('.astro-route-announcer');
