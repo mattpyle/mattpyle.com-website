@@ -202,11 +202,13 @@ a:hover {
    SITE-WIDE. This list previously reached only `a` and `.filter-pill`, which meant every other
    focusable element — buttons, inputs, anything with a tabindex — fell back to the UA ring or, on
    elements whose own styles reset the outline, to nothing. Extended when /webmcp shipped the
-   site's first form inputs and focusable panels. */
+   site's first form inputs and focusable panels, and again when the mobile nav shipped the site's
+   first `summary`: it is focusable without being any of the above, so it fell through the same gap. */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
+summary:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -597,11 +599,15 @@ html:not([data-appearance='retro']) body.skin-redesign {
    rule's oxblood ring, which is not in this palette. The spec says "every button
    and input"; `[tabindex]` joins them because the two code panes on /webmcp are
    focusable divs, and the next redesigned form inherits the ring rather than
-   rediscovering the gap. */
+   rediscovering the gap. `summary` joined on the same argument when the mobile
+   nav's `more` control shipped — it is focusable without being a button, an
+   input or a tabindex, so it was the one focusable element in the modern skin
+   still wearing the browser's own ring. */
 html:not([data-appearance='retro']) body.skin-redesign a:focus-visible,
 html:not([data-appearance='retro']) body.skin-redesign button:focus-visible,
 html:not([data-appearance='retro']) body.skin-redesign input:focus-visible,
 html:not([data-appearance='retro']) body.skin-redesign select:focus-visible,
+html:not([data-appearance='retro']) body.skin-redesign summary:focus-visible,
 html:not([data-appearance='retro']) body.skin-redesign textarea:focus-visible,
 html:not([data-appearance='retro']) body.skin-redesign [tabindex]:focus-visible {
   outline: 2px solid var(--ink);
@@ -758,8 +764,8 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
 }
 
 /* One modifier per section colour, named for the section rather than the token,
-   and matching the nav one-for-one: the five `.header-link[data-section=...]`
-   rules in SiteHeader.astro paint a section's nav item, and these paint the same
+   and matching the nav one-for-one: the five `[data-section=...]` rules in
+   SiteHeader.astro paint a section's nav item, and these paint the same
    section's H1 fill. A page's colour runs from its nav item to its headline, so
    a section page whose H1 wears a colour the nav does not is the tell that a
    modifier is missing — which is exactly what /about did until 2026-08-23, on
