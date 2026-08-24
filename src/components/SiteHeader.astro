@@ -289,6 +289,17 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
       list-style: none;
       cursor: pointer;
       white-space: nowrap;
+      /* The bundle's muted ink, kept by ruling after it was measured. Against
+         the backdrops this site actually has it is 4.96:1 over the densest body
+         text and 5.00:1 over /webmcp's panels — AA at this size — because
+         `blur(8px)` averages the backdrop far lighter than a flat composite
+         assumes. THE LATENT CASE: composited flat against a SOLID dark surface
+         it falls to 4.21:1, below AA. No such surface exists here today; the
+         figure came from injecting one. So the day a dark full-bleed hero,
+         image or panel can scroll under the sticky header, re-measure this
+         colour rather than assuming the 4.96 still holds. Every other colour in
+         this header clears AA even in that synthetic case; this is the only one
+         with no token behind it and the least headroom. */
       color: oklch(0.52 0.01 265);
     }
 
