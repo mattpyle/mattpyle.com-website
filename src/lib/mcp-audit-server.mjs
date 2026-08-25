@@ -128,6 +128,123 @@ const AUDIT_OUTPUT_SHAPE = {
 };
 
 /**
+ * `get_audit`'s output schema: one object covering all three views.
+ *
+ * **Why it exists.** The first outside interactive client to use this endpoint read `progress` as a
+ * list, it is an object with `phase`, `steps` and `checks`, and the parse crashed. The prose
+ * description said so; nothing machine-readable did. This is that sentence made machine-readable.
+ *
+ * **Why one flat object rather than a union.** The MCP SDK only publishes an `outputSchema` that
+ * normalises to an object schema — a `z.union` is dropped from `tools/list` entirely and then fails
+ * validation on every call — so a three-way union is not a shape this can be declared in. One
+ * object it is, with every field optional and each one saying which view it belongs to.
+ *
+ * **Why the status and report views are not wrapped.** Their `structuredContent` is the parse of
+ * the very text block beside it, and nothing else: one document, two renderings, unable to
+ * disagree. Wrapping them in an envelope would add a field the text does not carry, break that
+ * property, and break every client already reading them. The summary view had no structured half
+ * at all, so it is the one that could take a shape: `{ view: "summary", markdown }`, which is
+ * additive for existing callers and gives the markdown somewhere to live now that the SDK requires
+ * `structuredContent` on every result of a tool that declares a schema.
+ *
+ * **Why nested objects are loose**, the same stance `AUDIT_OUTPUT_SHAPE` takes and for the same
+ * reason: the canonical shapes live in Steward's `deep-contract.ts` and `result.ts`, this is a
+ * second copy by definition, and a strict copy turns a successful read into an `Output validation
+ * error` the moment the two drift. A caller seeing a field this schema did not announce is a far
+ * better failure than a caller getting nothing.
+ */
+export const GET_AUDIT_OUTPUT_SHAPE = z.looseObject({
+  // ---- the summary view, the only one with a shape of its own ----
+  view: z
+    .literal('summary')
+    .optional()
+    .describe('Present on the summary view only. The status and report views are the documents.'),
+  markdown: z.string().optional().describe('summary view: the report as markdown, the same text as the text content.'),
+
+  // ---- the status view ----
+  workflowId: z.string().optional().describe('status view: the ID this audit was started under.'),
+  url: z.string().optional().describe('status view: exactly what the caller asked to audit.'),
+  tier: z.string().optional().describe('status view: always "deep" on this endpoint.'),
+  execution: z
+    .string()
+    .optional()
+    .describe("status view: Temporal's own answer — RUNNING, COMPLETED, FAILED, TIMED_OUT."),
+  phase: z.string().optional().describe("status view: the workflow's account of itself."),
+  note: z.string().optional().describe('status view: one line saying what is happening right now.'),
+  done: z
+    .boolean()
+    .optional()
+    .describe('status view: the run ended, either way. Terminal, not successful — poll until this is true.'),
+  succeeded: z
+    .boolean()
+    .optional()
+    .describe('status view: whether the ended run produced a report. Meaningless while done is false.'),
+  queued: z
+    .boolean()
+    .optional()
+    .describe('status view: started and durable, waiting for a worker. Can be true mid-audit — the worker renders serially.'),
+  queuePosition: z.number().optional().describe('status view: where this run stands, when queued and readable.'),
+  progress: z
+    .looseObject({
+      phase: z.string().describe('fetching, rendering, assembling, complete or failed.'),
+      steps: z
+        .array(z.looseObject({ id: z.string(), kind: z.string(), label: z.string(), state: z.string() }))
+        .describe('The durable work: the fetch pass, each rendered page, assembly. One step is one activity.'),
+      checks: z
+        .array(z.looseObject({ id: z.string(), title: z.string(), status: z.string() }))
+        .describe("The audit's own verdicts, filling in as they are decided. Empty while the fetch pass runs."),
+    })
+    .optional()
+    .describe(
+      'status view: an OBJECT with phase, steps and checks — not a list. Absent when the run could ' +
+        'not be queried. "Which check are we on" is steps; "how much is left" is checks.',
+    ),
+  pending: z
+    .array(z.looseObject({ activityType: z.string(), activityId: z.string(), attempt: z.number(), state: z.string() }))
+    .optional()
+    .describe('status view: the units Temporal has in flight, with the attempt number of anything being retried.'),
+  error: z.string().optional().describe('status view: why a finished run has no report. Absent otherwise.'),
+
+  // ---- the report view ----
+  schemaVersion: z.number().optional().describe('report view: the audit document schema version.'),
+  tool: z.looseObject({ name: z.string(), version: z.string() }).optional().describe('report view: what ran the audit.'),
+  target: z.looseObject({ input: z.string(), origin: z.string() }).optional().describe('report view: what was audited.'),
+  durationMs: z.number().optional().describe('report view: how long the audit took.'),
+  requests: z.number().optional().describe('report view: how many HTTP requests the audit made at the target.'),
+  browserPages: z.number().optional().describe('report view: pages rendered in a real browser.'),
+  categories: z
+    .array(z.looseObject({ category: z.string() }))
+    .optional()
+    .describe('report view: per-category pass/fail counts. There is deliberately no composite score.'),
+  decisionClasses: z
+    .looseObject({})
+    .optional()
+    .describe('report view: how many findings carry each decision class. Absent on a report written before the field existed.'),
+  checks: z
+    .array(
+      z.looseObject({
+        id: z.string(),
+        title: z.string(),
+        category: z.string(),
+        severity: z.string(),
+        status: z.string().describe('pass, fail, not-applicable or error.'),
+        observed: z.string(),
+      }),
+    )
+    .optional()
+    .describe('report view: every check, with its verdict, its evidence, and a fix where it failed.'),
+  notes: z.array(z.string()).optional().describe('report view: what the audit could not do, in its own words.'),
+
+  // ---- shared by the status and report views, and the same field in both ----
+  startedAt: z.string().optional(),
+  finishedAt: z.string().optional(),
+  integrity: z
+    .looseObject({ status: z.string().describe('clean or degraded.'), reason: z.string().optional() })
+    .optional()
+    .describe('Whether the run produced a whole document. Reported on the status view too, so a poller sees it.'),
+});
+
+/**
  * What a client is told this server is, before it calls anything.
  *
  * The User-Agent is interpolated rather than written out, because it is the auditor's and this file
@@ -426,7 +543,9 @@ function registerDeepTools(server, deep, normaliseTarget) {
         'so and says which half can still be read. Reading report or summary before the run ends ' +
         'is an error rather than a partial document. For status and report, structuredContent ' +
         'carries the same document as data, so there is no JSON to parse out of the text; summary ' +
-        'is markdown and comes back as text alone.',
+        'is markdown, and its structuredContent is { view: "summary", markdown } carrying that ' +
+        'same text. Note that "progress" on the status view is an object with "phase", "steps" ' +
+        'and "checks", not a list; the output schema says so field by field.',
       inputSchema: {
         workflowId: z
           .string()
@@ -437,6 +556,7 @@ function registerDeepTools(server, deep, normaliseTarget) {
           .optional()
           .describe('Which document to read. Defaults to status, the one that is always readable.'),
       },
+      outputSchema: GET_AUDIT_OUTPUT_SHAPE,
       annotations: {
         // A read of a run's own state. The same read twice is the same answer
         // once the run has ended.
@@ -453,8 +573,12 @@ function registerDeepTools(server, deep, normaliseTarget) {
       // wanting them as data had to parse a text block — the Hermes canary's daily script did
       // exactly that on its first run. The structured half is the parse of this same string and
       // nothing else: one document, two renderings, no reshaping that could let them disagree.
-      // Summary is markdown, so it has no structured half to carry.
-      if (resolved === 'summary') return { content: [{ type: 'text', text }] };
+      // Summary is markdown, so it has no document to carry as data — it gets the one-field
+      // envelope `GET_AUDIT_OUTPUT_SHAPE`'s docblock argues for instead, because the SDK requires
+      // a structured half on every result of a tool that declares an output schema.
+      if (resolved === 'summary') {
+        return { structuredContent: { view: 'summary', markdown: text }, content: [{ type: 'text', text }] };
+      }
       return { structuredContent: JSON.parse(text), content: [{ type: 'text', text }] };
     },
   );
