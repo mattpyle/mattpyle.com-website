@@ -216,8 +216,13 @@ jobs:
           # not published yet: the review quotes the unpublished draft and its
           # critique, so a tracked file there is the leak this job exists to
           # catch, not a stale artifact.
+          #
+          # `agents/benchmark/runs/` holds one folder per benchmark run: the
+          # agent's answer, its event stream, and its fetch log. They quote
+          # temporal.io's pages back at length and are the raw material for a
+          # study that has not been published.
           # ---------------------------------------------------------------
-          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/'
+          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/|^agents/benchmark/runs/'
 
           tracked_private=$(git ls-files | grep -E "$private")
 
