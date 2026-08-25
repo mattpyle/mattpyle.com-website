@@ -1,6 +1,6 @@
 {
-  "iso": "2026-08-24",
-  "timestamp": "2026-08-24T03:33:44-07:00",
+  "iso": "2026-08-25",
+  "timestamp": "2026-08-25T03:33:41-07:00",
   "scope": "24 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "99",
+      "value": "100",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 24 tested pages."
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-08-24",
+  "id": "2026-08-25",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -98,7 +98,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -306,7 +306,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 1d ago (<= 7d threshold)",
+  "reason": "unchanged, published 2d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-08-24"
+  "archiveId": "2026-08-25"
 }
