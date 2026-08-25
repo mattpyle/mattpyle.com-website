@@ -70,6 +70,19 @@ agents/steward/bin/
 # cleanup` after a merge). Not scratch: this is the dataset, waiting.
 agents/steward/.reviews-drafts/
 
+# Benchmark rig (agents/benchmark) — local state and run artifacts only. The rig
+# itself is committed, including its uv.lock; what a RUN produces is not.
+# `runs/` holds one folder per dry run: the agent's answer, its AgentEvent
+# stream, and its fetch log. Those quote temporal.io's pages back at length and
+# are the raw material for a study that has not been published, so they stay
+# local until a result is reported.
+agents/benchmark/runs/
+agents/benchmark/.venv/
+agents/benchmark/.temporal-dev.db
+agents/benchmark/.temporal-dev.db-*
+__pycache__/
+.pytest_cache/
+
 # Playwright a11y suite (npm run a11y) run artifacts — traces, screenshots, HTML
 # report. The committed part of the suite is tests/a11y/ plus its aria goldens in
 # tests/a11y/__snapshots__/, which are a checked-in fixture, not output.
