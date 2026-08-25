@@ -11,6 +11,7 @@ import {
   DEEP_BUDGET_SECONDS,
   FAST_BUDGET_SECONDS,
 } from '../lib/agent-audit/deep-contract.js';
+import { GET_AUDIT_OUTPUT_SHAPE } from './get-audit-output.js';
 import { normaliseTarget } from '../lib/agent-audit/checks.js';
 import { AUDIT_VERSION } from '../lib/agent-audit/safe-fetch.js';
 import { renderMarkdownSummary } from '../lib/agent-audit/render.js';
@@ -355,7 +356,10 @@ export function createAuditMcpServer(client: Client): McpServer {
         'until done is true — done means the run ended, either way — then succeeded says whether ' +
         'there is a report to read, and error says why if there is not. Reading report or summary ' +
         'before then is an error rather than a partial document. Takes the workflowId audit_site ' +
-        'returned.',
+        'returned. For status and report, structuredContent carries the same document as data; ' +
+        'summary is markdown, and its structuredContent is { view: "summary", markdown } carrying ' +
+        'that same text. Note that "progress" on the status view is an object with "phase", ' +
+        '"steps" and "checks", not a list; the output schema says so field by field.',
       inputSchema: {
         workflowId: z
           .string()
@@ -366,6 +370,11 @@ export function createAuditMcpServer(client: Client): McpServer {
           .optional()
           .describe('Which document to read. Defaults to status, the one that is always readable.'),
       },
+      // Declared here and on the public endpoint, in two copies each true to its own server: this
+      // one serves resources and so carries reportUri and summaryUri, the hosted one carries the
+      // queue half instead. See get-audit-output.ts for why it is one flat object and why the
+      // summary view is the only one wrapped.
+      outputSchema: GET_AUDIT_OUTPUT_SHAPE,
       annotations: {
         // A read of this server's own state, and the same read twice is the same
         // answer once the run has ended.
@@ -378,8 +387,15 @@ export function createAuditMcpServer(client: Client): McpServer {
     async ({ workflowId, view }) => {
       // The same three calls the resources make, so the two surfaces serve one
       // document each and cannot drift into disagreeing.
-      const text = await readView(client, workflowId, view ?? 'status');
-      return { content: [{ type: 'text' as const, text }] };
+      const resolved = view ?? 'status';
+      const text = await readView(client, workflowId, resolved);
+      // The structured half is the parse of this same string and nothing else, so the two
+      // renderings cannot disagree. Markdown has no document to parse, so it gets the envelope.
+      const structuredContent =
+        resolved === 'summary'
+          ? { view: 'summary' as const, markdown: text }
+          : (JSON.parse(text) as Record<string, unknown>);
+      return { structuredContent, content: [{ type: 'text' as const, text }] };
     },
   );
 

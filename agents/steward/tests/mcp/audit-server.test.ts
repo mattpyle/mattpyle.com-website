@@ -8,6 +8,7 @@ import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createTestEnv } from '../helpers/test-env.js';
 import { startMcpHttpServer, MCP_PATH, type McpHttpServer } from '../../src/mcp/http.js';
+import { GET_AUDIT_OUTPUT_SHAPE } from '../../src/mcp/get-audit-output.js';
 import type { AuditResult } from '../../src/lib/agent-audit/result.js';
 
 /**
@@ -293,6 +294,54 @@ test('get_audit serves the same three documents as the resources, byte for byte'
       const viaResource = await client.readResource({ uri: `steward://audit/${out.workflowId}/${view}` });
       assert.equal(toolText(viaTool), textOf(viaResource), `${view} differs between tool and resource`);
     }
+  } finally {
+    await client.close();
+  }
+});
+
+test('get_audit declares an output schema, and every view it returns satisfies it', async () => {
+  const client = await connect();
+  try {
+    const { tools } = await client.listTools();
+    const schema = tools.find((t) => t.name === 'get_audit')?.outputSchema as
+      | { type?: string; properties?: Record<string, { type?: string; properties?: object }> }
+      | undefined;
+
+    // The card this closes: no tool on either MCP surface describes its output in prose alone.
+    assert.ok(schema, 'get_audit must publish an outputSchema');
+    assert.equal(schema.type, 'object');
+    // The field an outside client read as a list, which is the reason the schema exists.
+    const progress = schema.properties?.progress;
+    assert.equal(progress?.type, 'object');
+    assert.deepEqual(Object.keys(progress?.properties ?? {}).sort(), ['checks', 'phase', 'steps']);
+
+    const call = await client.callTool({ name: 'audit_site', arguments: { url: 'example.com', fast: true } });
+    const out = call.structuredContent as Record<string, string>;
+    await pollUntilDone(client, out.statusUri);
+
+    // Parsed against the declaration directly, so a mismatch names the field rather than arriving
+    // as a generic tool error. The documents are the real workflow's, not fixtures.
+    for (const view of ['status', 'report', 'summary'] as const) {
+      const result = await client.callTool({
+        name: 'get_audit',
+        arguments: { workflowId: out.workflowId, view },
+      });
+      assert.notEqual(result.isError, true, view);
+      GET_AUDIT_OUTPUT_SHAPE.parse(result.structuredContent);
+    }
+
+    // Status and report stay the document itself; only summary is wrapped, and its markdown is the
+    // same string as the text block beside it.
+    const status = await client.callTool({
+      name: 'get_audit',
+      arguments: { workflowId: out.workflowId, view: 'status' },
+    });
+    assert.deepEqual(status.structuredContent, JSON.parse(toolText(status)));
+    const summary = await client.callTool({
+      name: 'get_audit',
+      arguments: { workflowId: out.workflowId, view: 'summary' },
+    });
+    assert.deepEqual(summary.structuredContent, { view: 'summary', markdown: toolText(summary) });
   } finally {
     await client.close();
   }

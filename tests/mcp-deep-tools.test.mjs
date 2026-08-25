@@ -5,6 +5,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   createAuditServer,
   DEEP_TOOL_NAME,
+  GET_AUDIT_OUTPUT_SHAPE,
   GET_AUDIT_TOOL_NAME,
   TOOL_NAME,
 } from '../src/lib/mcp-audit-server.mjs';
@@ -170,7 +171,7 @@ test('get_audit defaults to status and passes the view straight through', async 
 test('get_audit carries the JSON views as data, and the markdown one as text alone', async (t) => {
   const documents = {
     status: `${JSON.stringify({ workflowId: 'wf-1', done: false, queued: true }, null, 2)}\n`,
-    report: `${JSON.stringify({ schemaVersion: 2, checks: [{ id: 'robots', status: 'pass' }] }, null, 2)}\n`,
+    report: `${JSON.stringify({ schemaVersion: 2, checks: REPORT.checks }, null, 2)}\n`,
     summary: '# Audit of https://example.com\n',
   };
   const { client, close } = await connect({ readView: async (_id, view) => documents[view] });
@@ -187,13 +188,162 @@ test('get_audit carries the JSON views as data, and the markdown one as text alo
     assert.deepEqual(result.structuredContent, JSON.parse(result.content[0].text), view);
   }
 
-  // Markdown has no structured half to carry, and inventing one would be the reshaping above.
+  // Markdown has no document to carry as data, so its structured half is the one-field envelope
+  // and nothing else — the markdown in it is the same string as the text block, not a second
+  // rendering of it.
   const summary = await client.callTool({
     name: GET_AUDIT_TOOL_NAME,
     arguments: { workflowId: 'wf-1', view: 'summary' },
   });
-  assert.equal(summary.structuredContent, undefined);
+  assert.deepEqual(summary.structuredContent, { view: 'summary', markdown: documents.summary });
   assert.equal(summary.content[0].text, documents.summary);
+});
+
+// The four documents `get_audit` can hand back, written the way src/lib/mcp-temporal.mjs assembles
+// them. Deliberately verbatim rather than generated: a fixture that is built from the same code the
+// schema is checked against would agree with itself no matter what either one said.
+const STATUS_MID_RUN = {
+  workflowId: 'steward-audit-example.com-deep-1a2b3c4d',
+  url: 'example.com',
+  tier: 'deep',
+  execution: 'RUNNING',
+  phase: 'auditing',
+  note: 'rendering https://example.com/about',
+  done: false,
+  succeeded: false,
+  queued: false,
+  startedAt: '2026-08-24T18:00:00.000Z',
+  // The field the first outside client mis-parsed: an object, not a list.
+  progress: {
+    phase: 'rendering',
+    steps: [
+      { id: 'fetch', kind: 'fetch', label: 'HTTP checks', state: 'done' },
+      { id: 'page:https://example.com/about', kind: 'page', label: '/about', state: 'running' },
+      { id: 'assembly', kind: 'assembly', label: 'Assemble the report', state: 'pending' },
+    ],
+    checks: [{ id: 'robots-txt', title: 'robots.txt parses', status: 'pass' }],
+  },
+  pending: [
+    {
+      activityType: 'auditRenderedPage',
+      activityId: '2',
+      attempt: 2,
+      state: 'started',
+      lastFailure: 'Chrome did not start',
+    },
+  ],
+};
+
+const STATUS_DONE = {
+  workflowId: 'steward-audit-example.com-deep-1a2b3c4d',
+  url: 'example.com',
+  tier: 'deep',
+  execution: 'COMPLETED',
+  phase: 'complete',
+  note: '18 of 24 checks passed',
+  done: true,
+  succeeded: true,
+  queued: false,
+  startedAt: '2026-08-24T18:00:00.000Z',
+  finishedAt: '2026-08-24T18:01:09.000Z',
+  progress: { phase: 'complete', steps: [], checks: [] },
+  integrity: { status: 'clean' },
+};
+
+const REPORT = {
+  schemaVersion: 2,
+  tool: { name: 'steward audit-url', version: '0.2.0', userAgent: 'steward-audit/0.2.0' },
+  target: { input: 'example.com', origin: 'https://example.com' },
+  startedAt: '2026-08-24T18:00:00.000Z',
+  finishedAt: '2026-08-24T18:01:09.000Z',
+  durationMs: 69574,
+  requests: 15,
+  browserPages: 3,
+  integrity: { status: 'clean' },
+  categories: [{ category: 'crawlability', passed: 1, applicable: 1, notApplicable: 0, errors: 0 }],
+  decisionClasses: { provenBlocker: 0, bestPractice: 2, conditional: 1, emergingConvention: 3 },
+  checks: [
+    {
+      id: 'robots-txt',
+      title: 'robots.txt parses',
+      category: 'crawlability',
+      severity: 'high',
+      decisionClass: 'provenBlocker',
+      status: 'pass',
+      observed: 'robots.txt parsed, 12 agents allowed at /',
+    },
+  ],
+  notes: [],
+};
+
+test('get_audit declares an output schema, and it says progress is an object', async (t) => {
+  const { client, close } = await connect();
+  t.after(close);
+
+  const { tools } = await client.listTools();
+  const schema = tools.find((tool) => tool.name === GET_AUDIT_TOOL_NAME)?.outputSchema;
+
+  // The whole point of the card: every tool on this endpoint publishes its output shape, so a
+  // client never has to infer one from prose.
+  assert.ok(schema, 'get_audit must publish an outputSchema');
+  assert.equal(schema.type, 'object');
+
+  // The field an outside client read as a list, and the reason this schema exists.
+  const progress = schema.properties?.progress;
+  assert.equal(progress?.type, 'object');
+  assert.deepEqual(Object.keys(progress.properties ?? {}).sort(), ['checks', 'phase', 'steps']);
+  assert.equal(progress.properties.steps.type, 'array');
+
+  // And the summary view's envelope, the one view that has a shape of its own.
+  assert.equal(schema.properties?.markdown?.type, 'string');
+});
+
+test('the declared schema accepts every document get_audit actually returns', async (t) => {
+  const documents = {
+    status: `${JSON.stringify(STATUS_MID_RUN, null, 2)}\n`,
+    report: `${JSON.stringify(REPORT, null, 2)}\n`,
+    summary: '# Audit of https://example.com\n\n18 of 24 checks passed.\n',
+  };
+  const { client, close } = await connect({ readView: async (_id, view) => documents[view] });
+  t.after(close);
+
+  // Parsed directly, so a mismatch names the field rather than surfacing as a generic tool error.
+  for (const [label, document] of [
+    ['status, mid-run', STATUS_MID_RUN],
+    ['status, done', STATUS_DONE],
+    ['report', REPORT],
+    ['summary', { view: 'summary', markdown: documents.summary }],
+  ]) {
+    assert.doesNotThrow(() => GET_AUDIT_OUTPUT_SHAPE.parse(document), label);
+  }
+
+  // And through the server, which validates the structured half against this same schema before it
+  // answers — so a call that comes back without isError is the declaration holding on the wire.
+  for (const view of ['status', 'report', 'summary']) {
+    const result = await client.callTool({
+      name: GET_AUDIT_TOOL_NAME,
+      arguments: { workflowId: 'wf-1', view },
+    });
+    assert.notEqual(result.isError, true, view);
+    assert.ok(result.structuredContent, view);
+  }
+
+  // The status and report views stay the document itself, byte for byte with the text beside them.
+  // Wrapping either one in an envelope to make the schema tidier would break that, and would break
+  // every client already reading them.
+  const status = await client.callTool({
+    name: GET_AUDIT_TOOL_NAME,
+    arguments: { workflowId: 'wf-1', view: 'status' },
+  });
+  assert.deepEqual(status.structuredContent, STATUS_MID_RUN);
+
+  // The summary still reads as markdown to a person, in the text block and in the envelope.
+  const summary = await client.callTool({
+    name: GET_AUDIT_TOOL_NAME,
+    arguments: { workflowId: 'wf-1', view: 'summary' },
+  });
+  assert.equal(summary.content[0].text, documents.summary);
+  assert.equal(summary.structuredContent.markdown, documents.summary);
 });
 
 test('an unreachable Temporal is a tool error, never a dropped request', async (t) => {
