@@ -33,15 +33,16 @@ across routes — the entry URL is configuration, not part of the prompt.
 
 3. Copy `.env.example` to `.env.local` and set the key for your model's provider:
    `DEEPSEEK_API_KEY` for `deepseek:*` (the default), `GOOGLE_API_KEY` for `google:*` (Gemini),
-   `ANTHROPIC_API_KEY` for `anthropic:*`. The runner reads the key from the environment, so export
-   it before running:
+   `ANTHROPIC_API_KEY` for `anthropic:*`. Every command reads `.env.local` itself at start, so
+   there is nothing to export. A variable already set in the shell always wins, which is how you
+   override one setting for one run:
 
    ```powershell
-   Get-Content .env.local | Where-Object { $_ -match '^\w+=' } | ForEach-Object {
-     $name, $value = $_ -split '=', 2
-     Set-Item -Path "env:$name" -Value $value
-   }
+   $env:TEMPORAL_ADDRESS = "localhost:7233"   # beats whatever .env.local says, for this shell
    ```
+
+   Set `BENCHMARK_ENV_FILE` to read a different file, or to a path that does not exist to read
+   none.
 
 4. Point the runner at the task pack. It defaults to
    `docs/reference/benchmark-task-pack-temporal-v1.md` in this repository; set
@@ -131,6 +132,74 @@ A remote address with no API key is refused before the run starts. Connecting to
 plaintext is answered with a connection reset, and the error that surfaces names neither the
 address nor the missing key.
 
+## Running the whole benchmark
+
+`benchmark-batch` runs every task on every route, N repeats each, one run at a time, and records
+every cell in a manifest. Runs are sequential on purpose: one process is one run, so cells cannot
+share a worker.
+
+```powershell
+uv run benchmark-batch --repeats 5
+```
+
+| Flag | What it does |
+|---|---|
+| `--tasks`, `--routes`, `--repeats` | The plan. Defaults to tasks 1-5, routes a,b,c, 5 repeats: 75 runs. |
+| `--manifest` | Where the manifest is written, or an existing one to resume. |
+| `--retry-failed` | Also re-run the cells the manifest records as failed. |
+| `--dry-run` | Print the cells that would run and run nothing. |
+| `--model`, `--pack`, `--address`, `--namespace`, `--temporal-api-key`, and every budget flag | Passed to each run. |
+
+A cell that fails is an outcome, not an abort: the manifest records the failure and the batch
+carries on. Pointed at an existing manifest, the batch runs only the cells that have no outcome,
+so a batch killed halfway resumes where it stopped and one re-run against a finished manifest does
+nothing. A resumed batch keeps the model and budget flags its first cells ran under, because a
+result whose cells did not all run the same way is not comparable; naming a different one on the
+command line works, and says so in the output.
+
+The Temporal API key is never written to the manifest. Supply it the same way on a resume, from
+`.env.local` or `--temporal-api-key`.
+
+Marking is a separate command. The batch runner never calls a judge.
+
+## Marking a run
+
+`benchmark-mark` marks run directories against the marking sheet in two passes:
+
+1. **The code pass**, always. It parses the answer's Sources list, checks every cited URL against
+   that run's fetch log, fetches each one again at marking time to record whether it still
+   resolves, and checks the sheet's allowed-citation lists and required strings. Deterministic, and
+   never overridden by the judge.
+2. **The judge pass**, one blind model call per task per run. The judge sees the task prompt, the
+   judge-checked points, the answer, the code pass's citation findings, and the pages the sheet
+   pins, fetched at marking time. It never sees the route, the model, the run directory's name, or
+   any token count.
+
+```powershell
+uv run benchmark-mark runs\2026-08-25-c-deepseek-v4-flash-213432
+uv run benchmark-mark runs\2026-08-24-a runs\2026-08-24-b runs\2026-08-24-c --summary calibration.md
+```
+
+| Flag | What it does |
+|---|---|
+| `--sheet` | The marking sheet file (default: `docs/reference/benchmark-marking-sheet-temporal-v1.yaml`, or `BENCHMARK_MARKING_SHEET`). |
+| `--judge-prompt` | The judge prompt template (default: `docs/reference/benchmark-judge-prompt-v1.md`, or `BENCHMARK_JUDGE_PROMPT`). |
+| `--judge-model` | Which model marks. Defaults to the same cheap model runs use; the audition passes its own. |
+| `--no-judge` | Code pass only. |
+| `--summary` | Write the per-answer, per-point table calibration compares against hand marks. |
+| `--task`, `--pack` | Mark one task; read prompts from a pack elsewhere. |
+
+Marking writes `task-<n>-marking.json` beside the run's other artifacts: both passes' verdicts, the
+judge's justifications, its token usage and cost, the rendered judge call itself, and the path and
+content hash of both the sheet and the prompt file that produced the mark. The total judge cost is
+printed at the end of every marking command.
+
+Both input files live with the task pack and are read at run time, never embedded here: a marking
+criterion is vault material like a task prompt, and freezing a prompt after calibration is then an
+edit to a file rather than a change to this code. The sheet's structure — which points are
+code-checked, the allowed citation lists, the required strings — is documented in its own header
+comment.
+
 ## How it is put together
 
 | File | Role |
@@ -142,6 +211,12 @@ address nor the missing key.
 | `benchmark/tools.py` | The harness adapter — the one file that knows about both the fetch tool and the harness. |
 | `benchmark/workflow.py` | The agent workflow, driven by Pydantic AI through the harness. |
 | `benchmark/cli.py` | One run: hosts a worker, starts the workflow, streams the turn to disk, writes the artifacts. |
+| `benchmark/envfile.py` | Reads `.env.local` at CLI start, never over a variable the shell already set. |
+| `benchmark/marking_sheet.py` | Reads the machine-readable marking sheet, and refuses one it cannot mark from. |
+| `benchmark/marking.py` | The code pass: the Sources list, the fetch log, the live check, the sheet's deterministic rules. Model-free and network-injected. |
+| `benchmark/judge.py` | What the judge sees, and the one call that sends it. Blindness is a property of what this file renders. |
+| `benchmark/mark_cli.py` | Marking: both passes, `marking.json`, the calibration table, the cost line. |
+| `benchmark/batch_cli.py` | The batch: the plan, the manifest, resume, and one subprocess per cell. |
 
 `fetch.py` is deliberately independent of the harness so the rules survive a change of rig: if the
 harness is replaced by a plain agent loop, this file moves across unchanged and only `tools.py` is
@@ -163,5 +238,5 @@ Two things worth knowing before changing the rig:
 
 ## What this does not do yet
 
-Scoring. A run produces artifacts; marking them against the pack's sheets, and anything that could
-be called a benchmark result, is a separate step.
+Reporting. A batch produces runs and a marking produces scores; turning those into the benchmark's
+comparison between routes is a separate step.
