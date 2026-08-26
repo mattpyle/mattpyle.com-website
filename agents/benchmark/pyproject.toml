@@ -5,7 +5,7 @@ description = "Agent-task benchmark rig: one agent, one task, one entry route, m
 requires-python = ">=3.11"
 dependencies = [
     "temporal-agent-harness[pydantic-ai]",
-    "pydantic-ai-slim[anthropic,temporal]>=2.13",
+    "pydantic-ai-slim[anthropic,google,temporal]>=2.13",
     "httpx>=0.27",
 ]
 

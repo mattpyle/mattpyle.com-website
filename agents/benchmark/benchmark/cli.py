@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .routes import DEFAULT_BUDGETS, route_by_name
+from .runtime import DEFAULT_MODEL
 from .task_pack import load_task
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -64,10 +65,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    # The key requirement follows the model's provider prefix (PydanticAI model strings,
+    # e.g. "anthropic:claude-sonnet-5", "google:gemini-3.5-flash").
+    model = args.model or os.environ.get("BENCHMARK_MODEL") or DEFAULT_MODEL
+    if model.startswith("google"):
+        required_key = "GOOGLE_API_KEY"
+        key_present = os.environ.get("GOOGLE_API_KEY") or os.environ.get(
+            "GEMINI_API_KEY"
+        )
+    else:
+        required_key = "ANTHROPIC_API_KEY"
+        key_present = os.environ.get("ANTHROPIC_API_KEY")
+    if not key_present:
         print(
-            "error: ANTHROPIC_API_KEY is not set. Put it in agents/benchmark/.env.local "
-            "and export it, or set it in the shell.",
+            f"error: {required_key} is not set for model {model}. Put it in "
+            "agents/benchmark/.env.local and export it, or set it in the shell.",
             file=sys.stderr,
         )
         return 2

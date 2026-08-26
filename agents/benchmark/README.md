@@ -31,8 +31,9 @@ across routes — the entry URL is configuration, not part of the prompt.
    uv sync
    ```
 
-3. Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY`. The runner reads the key from
-   the environment, so export it before running:
+3. Copy `.env.example` to `.env.local` and set the key for your model's provider:
+   `ANTHROPIC_API_KEY` for `anthropic:*` models, `GOOGLE_API_KEY` for `google:*` (Gemini)
+   models. The runner reads the key from the environment, so export it before running:
 
    ```powershell
    Get-Content .env.local | Where-Object { $_ -match '^\w+=' } | ForEach-Object {
