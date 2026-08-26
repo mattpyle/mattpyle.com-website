@@ -163,16 +163,21 @@ def resolve_plan(args, manifest: dict) -> tuple[dict, list[str]]:
         if value is not None:
             named_flags += [flag, str(value)]
     recorded_flags = list(recorded.get("run_flags") or [])
-    if named_flags and recorded_flags and named_flags != recorded_flags:
+    # Naming no flags on a resume inherits the recorded ones, so that is not a mismatch. Naming
+    # different ones is, and it is one whether or not the first pass recorded any: a first batch
+    # that ran on defaults records an empty list, and a resume that sets a budget against it
+    # changes the cells just as much as one that sets a different budget.
+    if recorded and named_flags and named_flags != recorded_flags:
         notes.append(
-            f"note: this pass sets {named_flags}; the manifest recorded {recorded_flags}. The "
-            "command line wins, so the cells of this batch did not all run under the same flags."
+            f"note: this pass sets {named_flags}; the manifest recorded "
+            f"{recorded_flags or 'no run flags'}. The command line wins, so the cells of this "
+            "batch did not all run under the same flags."
         )
 
     model = (
         args.model or recorded.get("model") or os.environ.get("BENCHMARK_MODEL") or DEFAULT_MODEL
     )
-    if args.model and recorded.get("model") and args.model != recorded["model"]:
+    if recorded and args.model and args.model != recorded.get("model"):
         notes.append(
             f"note: this pass answers on {args.model}; the manifest recorded "
             f"{recorded['model']}. The cells of this batch are not all from one model."
@@ -222,8 +227,15 @@ def record(manifest: dict, cell: Cell, outcome: CellOutcome, started_at: str) ->
     return entry
 
 
-def run_cell_subprocess(cell: Cell, *, out_dir: Path, passthrough: list[str]) -> CellOutcome:
-    """One cell as one `benchmark-run` process, with its output echoed as it happens."""
+def run_cell_subprocess(
+    cell: Cell, *, out_dir: Path, passthrough: list[str], env: dict[str, str] | None = None
+) -> CellOutcome:
+    """One cell as one `benchmark-run` process, with its output echoed as it happens.
+
+    Anything secret reaches the child through `env`, never through argv: a command line is
+    readable by every process on the machine, and `benchmark-run` reads `TEMPORAL_API_KEY` from
+    its environment anyway.
+    """
     command = [
         sys.executable,
         "-m",
@@ -242,6 +254,7 @@ def run_cell_subprocess(cell: Cell, *, out_dir: Path, passthrough: list[str]) ->
         process = subprocess.Popen(
             command,
             cwd=str(PROJECT_ROOT),
+            env={**os.environ, **(env or {})},
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -293,11 +306,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: unknown route(s) {', '.join(unknown)}", file=sys.stderr)
         return 2
 
-    # The Temporal API key is never written to the manifest: an artifact file is not a place for a
-    # secret. A resumed batch takes it from the environment, or from --temporal-api-key again.
+    # The Temporal API key is never written to the manifest and never put on a child's command
+    # line: an artifact file is not a place for a secret, and neither is the process table. It
+    # reaches each run through the environment, which is where `benchmark-run` reads it anyway.
     passthrough = ["--model", plan["model"], *plan["run_flags"]]
-    if args.temporal_api_key is not None:
-        passthrough += ["--temporal-api-key", args.temporal_api_key]
+    cell_env = {} if args.temporal_api_key is None else {"TEMPORAL_API_KEY": args.temporal_api_key}
 
     cells = plan_cells(plan["tasks"], plan["routes"], plan["repeats"])
     todo = pending_cells(cells, manifest, args.retry_failed)
@@ -324,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest=manifest,
         manifest_path=manifest_path,
         runner=lambda cell: run_cell_subprocess(
-            cell, out_dir=args.out, passthrough=passthrough
+            cell, out_dir=args.out, passthrough=passthrough, env=cell_env
         ),
         total=len(cells),
     )

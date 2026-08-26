@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .envfile import load_env_file
-from .fetch import Transport, httpx_transport
+from .fetch import Transport
 from .judge import (
     JudgeResult,
     call_judge,
@@ -31,6 +31,7 @@ from .marking import (
     RunArtifacts,
     fetch_live_pages,
     load_run,
+    marking_transport,
     parse_sources,
     resolve_citations,
     run_code_pass,
@@ -95,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     return asyncio.run(_mark_all(args=args, sheet=sheet, prompt=prompt))
 
 
-async def _mark_all(*, args, sheet: MarkingSheet, prompt, transport: Transport = httpx_transport) -> int:
+async def _mark_all(*, args, sheet: MarkingSheet, prompt, transport: Transport = marking_transport) -> int:
     markings: list[dict] = []
     total_cost = 0.0
     priced = True

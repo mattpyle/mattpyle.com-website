@@ -9,15 +9,17 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlsplit
 
-from .fetch import Transport
+from .fetch import USER_AGENT, Transport
 from .marking_sheet import Point, TaskSheet
 
 __all__ = [
     "Citation",
+    "marking_transport",
     "PointResult",
     "CodePass",
     "RunArtifacts",
@@ -34,6 +36,12 @@ NOT_CODE_CHECKED = "not-code-checked"
 # How much of a page fetched at marking time is put in front of the judge. Enough to compare a
 # command or a price against; not so much that five pages crowd out the answer.
 LIVE_PAGE_CHARS = 6_000
+
+# The marker fetches what an answer cites, and an answer is model output. These are the bounds on
+# what that can cost: how many URLs one answer can send it to, and how much of any one response it
+# will read before it stops. Both are far above what a real answer needs.
+MAX_CITATIONS_CHECKED = 20
+MAX_RESPONSE_BYTES = 400_000
 
 # A Sources line is written every way a model writes one: bare, as a heading, bolded, with or
 # without a colon. Nothing but the word and its decoration may be on the line.
@@ -68,6 +76,8 @@ class Citation:
     run_refusal_reason: str | None = None
     live_status: int | None = None
     live_error: str | None = None
+    # Why the marker did not fetch this URL at all, if it did not.
+    skipped_reason: str | None = None
 
     @property
     def resolves(self) -> bool:
@@ -87,6 +97,7 @@ class Citation:
             "run_refusal_reason": self.run_refusal_reason,
             "live_status": self.live_status,
             "live_error": self.live_error,
+            "skipped_reason": self.skipped_reason,
             "resolves": self.resolves,
             "sound": self.sound,
         }
@@ -215,6 +226,33 @@ def normalise_url(url: str) -> str:
     return f"{host}{path}{query}"
 
 
+def _on_allowlist(url: str, allowed: Iterable[str]) -> bool:
+    """Whether a cited URL is one of the pages a point allows.
+
+    Anchored at the start of the normalised URL, so the entry stands for a host and a path prefix.
+    An unanchored match would let `attacker.example/docs.temporal.io/quickstarts` satisfy
+    `docs.temporal.io/quickstarts`, and the URLs here come out of untrusted answer text.
+    """
+    normalised = _page_key(url)
+    for entry in allowed:
+        prefix = _page_key(entry if "//" in entry else f"https://{entry}")
+        if normalised == prefix or normalised.startswith(prefix.rstrip("/") + "/"):
+            return True
+    return False
+
+
+def _page_key(url: str) -> str:
+    """A URL as the page it names, with the markdown twin folded onto the HTML one.
+
+    Route C is served `set-up-your-local-python.md` where route A reads
+    `set-up-your-local-python`; the pack's allowed lists name one page, and both routes cite it.
+    Only allowlist matching folds them: the fetch log is matched on the URL as fetched, because
+    there a `.md` and its HTML twin are two different requests.
+    """
+    key = normalise_url(url)
+    return key[:-3] if key.endswith(".md") else key
+
+
 def _fetch_log_index(fetch_log: Iterable[dict]) -> dict[str, dict]:
     """The best record per URL: a served fetch beats a refusal, whatever the order."""
     index: dict[str, dict] = {}
@@ -236,7 +274,7 @@ async def resolve_citations(
     """
     index = _fetch_log_index(fetch_log)
     citations: list[Citation] = []
-    for url in urls:
+    for position, url in enumerate(urls):
         record = index.get(normalise_url(url))
         citation = Citation(url=url)
         if record is not None:
@@ -244,13 +282,68 @@ async def resolve_citations(
             citation.served_in_run = bool(record.get("served"))
             citation.run_status = record.get("status")
             citation.run_refusal_reason = record.get("refusal_reason")
-        try:
-            status, _content_type, _body = await transport(url, {"Accept": "text/html"})
-            citation.live_status = status
-        except Exception as exc:  # noqa: BLE001 - any failure is a recorded citation failure
-            citation.live_error = f"{type(exc).__name__}: {exc}"
+
+        citation.skipped_reason = _skip_reason(url, position)
+        if citation.skipped_reason is None:
+            try:
+                status, _content_type, _body = await transport(url, {"Accept": "text/html"})
+                citation.live_status = status
+            except Exception as exc:  # noqa: BLE001 - any failure is a recorded citation failure
+                citation.live_error = f"{type(exc).__name__}: {exc}"
         citations.append(citation)
     return citations
+
+
+def _skip_reason(url: str, position: int) -> str | None:
+    """Why this cited URL is not fetched at marking time, if it is not.
+
+    The Sources list is model output, so the marker treats it as a list of requests a stranger
+    asked it to make: a bounded number of them, https only, and never at an address that is not
+    on the public internet. A skipped URL is recorded with its reason and marked as unresolved,
+    which is the same outcome as a citation that does not resolve.
+    """
+    if position >= MAX_CITATIONS_CHECKED:
+        return f"over the {MAX_CITATIONS_CHECKED}-citation cap for one answer"
+    parts = urlsplit(url)
+    if parts.scheme.lower() != "https":
+        return f"not https ({parts.scheme or 'no scheme'})"
+    host = (parts.hostname or "").strip("[]")
+    try:
+        address = ip_address(host)
+    except ValueError:
+        return None
+    if not address.is_global:
+        return f"not a public address ({host})"
+    return None
+
+
+async def marking_transport(url: str, headers: dict[str, str]) -> tuple[int, str | None, str]:
+    """The network, as the marker uses it: streamed, and stopped at `MAX_RESPONSE_BYTES`.
+
+    The run's own transport buffers the whole body, which is safe there because the fetch tool
+    only reaches an allowlist. Here the URL came out of an answer, so the response is read in
+    chunks and the read stops at the cap rather than the cap being applied to what already
+    arrived.
+    """
+    import httpx
+
+    async with httpx.AsyncClient(
+        follow_redirects=True, timeout=30.0, headers={"User-Agent": USER_AGENT}
+    ) as client:
+        async with client.stream("GET", url, headers=headers) as response:
+            chunks: list[bytes] = []
+            kept = 0
+            async for chunk in response.aiter_bytes():
+                chunks.append(chunk)
+                kept += len(chunk)
+                if kept >= MAX_RESPONSE_BYTES:
+                    break
+            body = b"".join(chunks)[:MAX_RESPONSE_BYTES]
+            return (
+                response.status_code,
+                response.headers.get("content-type"),
+                body.decode(response.encoding or "utf-8", "replace"),
+            )
 
 
 async def fetch_live_pages(urls: Iterable[str], transport: Transport) -> list[dict]:
@@ -337,11 +430,7 @@ def _mark_point(
                 )
 
     if point.citation_allowlist:
-        matches = [
-            citation
-            for citation in citations
-            if any(allowed.lower() in normalise_url(citation.url) for allowed in point.citation_allowlist)
-        ]
+        matches = [citation for citation in citations if _on_allowlist(citation.url, point.citation_allowlist)]
         sound = [citation for citation in matches if citation.sound]
         if sound:
             reasons.append(f"allowed citation served in the run: {sound[0].url}")

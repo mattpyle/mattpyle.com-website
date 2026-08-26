@@ -48,3 +48,22 @@ def test_a_missing_file_is_not_an_error(tmp_path):
 def test_the_env_file_override_points_somewhere_else(tmp_path, monkeypatch):
     monkeypatch.setenv("BENCHMARK_ENV_FILE", str(tmp_path / "other.env"))
     assert default_env_file() == tmp_path / "other.env"
+
+
+def test_a_variable_set_to_empty_counts_as_set(tmp_path):
+    """`$env:TEMPORAL_API_KEY = ""` is how a run is sent to the local dev server."""
+    environ = {"TEMPORAL_API_KEY": ""}
+    loaded = load_env_file(_write(tmp_path, "TEMPORAL_API_KEY=from-file\n"), environ)
+    assert environ["TEMPORAL_API_KEY"] == "" and loaded == []
+
+
+def test_an_unquoted_trailing_comment_is_not_part_of_the_value(tmp_path):
+    environ: dict[str, str] = {}
+    load_env_file(
+        _write(
+            tmp_path,
+            'A=value # why\nB="quoted # kept"\nC=pass#word\n',
+        ),
+        environ,
+    )
+    assert environ == {"A": "value", "B": "quoted # kept", "C": "pass#word"}

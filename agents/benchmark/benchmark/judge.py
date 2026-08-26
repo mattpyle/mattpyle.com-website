@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -123,12 +124,22 @@ def render_citation_verdicts(code_pass: CodePass) -> str:
     lines = []
     for citation in code_pass.citations:
         served = "fetched during the run" if citation.served_in_run else "NOT fetched during the run"
-        if citation.live_error:
+        if citation.skipped_reason:
+            live = f"not checked at marking time: {citation.skipped_reason}"
+        elif citation.live_error:
             live = f"unreachable at marking time ({citation.live_error})"
         else:
             live = f"HTTP {citation.live_status} at marking time"
-        lines.append(f"- {citation.url} — {served}; {live}")
+        # The URL came out of the answer, so it goes in as quoted data on one line: backticked,
+        # and with anything that could start a line of its own stripped out.
+        lines.append(f"- `{_one_line(citation.url)}` — {served}; {live}")
     return "\n".join(lines)
+
+
+def _one_line(text: str, limit: int = 300) -> str:
+    """One line of quoted data: no newlines, no backticks to close the quote with, and bounded."""
+    flattened = " ".join(text.split()).replace("`", "'")
+    return flattened if len(flattened) <= limit else flattened[:limit] + "..."
 
 
 def render_live_pages(pages: list[dict]) -> str:
@@ -155,18 +166,37 @@ def render_judge_input(
     code_pass: CodePass,
     live_pages: list[dict],
 ) -> str:
-    """Fill the template. Nothing reaches the judge that this function does not put there."""
+    """Fill the template. Nothing reaches the judge that this function does not put there.
+
+    Every placeholder is substituted in one pass. Filling them one at a time meant an answer
+    containing the literal text `{{citation_verdicts}}` had it expanded by a later iteration, so
+    the answer could forge the block that tells the judge which citations are sound. `re.sub`
+    with a function never rescans what it inserted, so a placeholder inside the answer reaches the
+    judge as the literal text the answer wrote.
+    """
     values = {
         "task_prompt": task_prompt,
         "marking_sheet": render_marking_sheet(task_sheet, code_pass),
-        "answer": answer.strip(),
+        "answer": _fence_safe(answer.strip()),
         "citation_verdicts": render_citation_verdicts(code_pass),
         "live_pages": render_live_pages(live_pages),
     }
-    text = prompt.template
-    for name, value in values.items():
-        text = text.replace(f"{{{{{name}}}}}", value)
-    return text
+    return _PLACEHOLDER.sub(lambda match: values.get(match.group(1), match.group(0)), prompt.template)
+
+
+_PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
+
+# The template fences the answer between these, and names the fence as data. An answer that wrote
+# one of them itself would end the fence early and put the rest of its text back in the prompt's
+# own voice, so a marker written inside the answer is quoted before it goes in. This bites only an
+# answer that contains the marker, which no answer to these tasks does.
+_FENCE_MARKERS = ("ANSWER-START", "ANSWER-END")
+
+
+def _fence_safe(answer: str) -> str:
+    for marker in _FENCE_MARKERS:
+        answer = answer.replace(marker, f"[quoted from the answer: {marker}]")
+    return answer
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,10 @@
 # ABOUTME: Shared fixtures for the marking tests: a marking sheet, a run directory, and a
 # transport that never touches the network.
 #
-# Nothing here reads the real task pack or the real marking sheet. The vault files are private
-# working material; the tests exercise the code that reads them, against fixtures of the same
-# shape.
+# Everything here is invented. The real task pack and its marking sheets are private working
+# material — pack rule 1 is that the agent is never told what a sheet checks, and this repository
+# is public — so the fixtures describe a made-up product on a made-up domain, in the shape the
+# real files have. What is under test is the code that reads such a file, not the file.
 
 from __future__ import annotations
 
@@ -12,53 +13,55 @@ from pathlib import Path
 
 import pytest
 
+DOCS = "https://docs.nimbus.example"
+
 SHEET = """\
-# fixture sheet
+# fixture sheet: invented criteria for an invented product
 version: fixture-v1
 derived_from:
   pack: fixtures/pack.md
   pack_version: v1
 tasks:
   - number: 1
-    title: first workflow
+    title: starting out
     live_pages:
-      - https://docs.temporal.io/develop/python/set-up-your-local-python
+      - https://docs.nimbus.example/start
     points:
       - id: "1.1"
-        text: Points to an official getting-started path.
+        text: Points at the official getting-started page.
         checks: [code]
         citation_allowlist:
-          - docs.temporal.io/quickstarts
+          - docs.nimbus.example/start
       - id: "1.2"
-        text: The setup steps are correct and local-first.
+        text: The steps are correct and run on the reader's own machine.
         checks: [judge]
       - id: "1.3"
         text: Citations resolve and appear in the fetch log.
         checks: [code]
         citation_mechanics: true
       - id: "1.4"
-        text: Names the dev server command, used correctly.
+        text: Names the command that starts the daemon, and uses it for what it is.
         checks: [code, judge]
         required_strings:
-          - - "temporal server start-dev"
+          - - "nimbus daemon start"
 """
 
-ANSWER = """\
-Install the Temporal CLI and run `temporal server start-dev`, then run the sample workflow.
+ANSWER = f"""\
+Install the Nimbus CLI, then run `nimbus daemon start` and open the sample project.
 
 Sources
-https://docs.temporal.io/quickstarts
-https://docs.temporal.io/develop/python/set-up-your-local-python
+{DOCS}/start
+{DOCS}/guide/first-project
 """
 
 PACK = """\
-## Task 1: first workflow
+## Task 1: starting out
 
-**Prompt:** "I'm a Python developer and I keep hearing about Temporal. Help me get started."
+**Prompt:** "I keep hearing about Nimbus and I want to try it on my laptop. Where do I begin?"
 
 Marking sheet, one point each:
 
-1. Points to an official getting-started path.
+1. Points at the official getting-started page.
 """
 
 
@@ -84,10 +87,7 @@ def make_run(tmp_path: Path):
         *,
         name: str = "2026-08-24-a",
         answer: str = ANSWER,
-        fetched: tuple[str, ...] = (
-            "https://docs.temporal.io/quickstarts",
-            "https://docs.temporal.io/develop/python/set-up-your-local-python",
-        ),
+        fetched: tuple[str, ...] = (f"{DOCS}/start", f"{DOCS}/guide/first-project"),
         refused: tuple[str, ...] = (),
         task_number: int = 1,
     ) -> Path:
@@ -131,7 +131,7 @@ def make_run(tmp_path: Path):
                     "route": "a",
                     "route_label": "HTML only",
                     "task_number": task_number,
-                    "model": "anthropic:claude-sonnet-5",
+                    "model": "someprovider:some-model-9",
                     "tokens": {"input_tokens": 1344397, "total_tokens": 1350911},
                 }
             ),

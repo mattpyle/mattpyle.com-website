@@ -13,6 +13,7 @@ from benchmark.judge import JudgePrompt, JudgeResult, JudgeVerdict
 from benchmark.mark_cli import mark_run, summary_table
 from benchmark.marking import load_run
 from benchmark.marking_sheet import load_sheet
+from tests.conftest import DOCS
 
 TEMPLATE = (
     "{{task_prompt}}\n{{marking_sheet}}\n{{citation_verdicts}}\n{{live_pages}}\n{{answer}}\n"
@@ -77,15 +78,15 @@ async def test_a_marking_records_both_passes_and_what_produced_them(
     assert marking["score"] == {"awarded": 4, "of": 4, "unresolved": 0}
     assert marking["marked_at"]
     # The transcript keeps the call itself, which is what a spot check reads.
-    assert "temporal server start-dev" in marking["judge_input"]
+    assert "nimbus daemon start" in marking["judge_input"]
 
 
 async def test_the_judge_cannot_award_a_point_the_code_pass_refused(
     make_run, sheet_file, pack_file, prompt, transport
 ):
     run_dir = make_run(
-        answer="Just redeploy.\n\nSources\nhttps://docs.temporal.io/quickstarts\n",
-        fetched=("https://docs.temporal.io/quickstarts",),
+        answer=f"Just run it in the cloud.\n\nSources\n{DOCS}/start\n",
+        fetched=(f"{DOCS}/start",),
     )
     marking = await _mark(
         run_dir, sheet_file, pack_file, prompt, transport(), fake_judge({"1.2": True, "1.4": True})
@@ -149,10 +150,7 @@ async def test_the_live_page_a_sheet_pins_is_fetched_at_marking_time(
     marking = await _mark(
         make_run(), sheet_file, pack_file, prompt, checker, fake_judge({"1.2": True, "1.4": True})
     )
-    assert (
-        "https://docs.temporal.io/develop/python/set-up-your-local-python"
-        in checker.urls
-    )
+    assert f"{DOCS}/start" in checker.urls
     assert marking["live_pages"][0]["status"] == 200
     # The page's text rides in the judge call, not twice in the transcript.
     assert "text" not in marking["live_pages"][0]

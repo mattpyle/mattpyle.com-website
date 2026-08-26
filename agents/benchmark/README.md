@@ -148,7 +148,8 @@ uv run benchmark-batch --repeats 5
 | `--manifest` | Where the manifest is written, or an existing one to resume. |
 | `--retry-failed` | Also re-run the cells the manifest records as failed. |
 | `--dry-run` | Print the cells that would run and run nothing. |
-| `--model`, `--pack`, `--address`, `--namespace`, `--temporal-api-key`, and every budget flag | Passed to each run. |
+| `--model`, `--pack`, `--address`, `--namespace`, and every budget flag | Passed to each run. |
+| `--temporal-api-key` | Given to each run through its environment, never on its command line. |
 
 A cell that fails is an outcome, not an abort: the manifest records the failure and the batch
 carries on. Pointed at an existing manifest, the batch runs only the cells that have no outcome,
@@ -191,8 +192,15 @@ uv run benchmark-mark runs\2026-08-24-a runs\2026-08-24-b runs\2026-08-24-c --su
 
 Marking writes `task-<n>-marking.json` beside the run's other artifacts: both passes' verdicts, the
 judge's justifications, its token usage and cost, the rendered judge call itself, and the path and
-content hash of both the sheet and the prompt file that produced the mark. The total judge cost is
-printed at the end of every marking command.
+content hash of both the sheet and the prompt file that produced the mark. Any command that calls
+the judge prints the total judge cost at the end; `--no-judge` has none to print.
+
+A Sources list is model output, so the marker treats it as a list of requests a stranger asked it
+to make. It fetches at most the first 20 cited URLs, https only, never at an address that is not on
+the public internet, and reads at most 400 KB of any one response. A URL it will not follow is
+recorded in `marking.json` with the reason and counts as unresolved, exactly like one that 404s.
+For the same reason the answer reaches the judge as fenced data, and a placeholder or a forged
+heading written inside an answer stays inside it.
 
 Both input files live with the task pack and are read at run time, never embedded here: a marking
 criterion is vault material like a task prompt, and freezing a prompt after calibration is then an

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 __all__ = ["load_env_file", "default_env_file"]
@@ -28,6 +29,23 @@ def default_env_file() -> Path:
     return PROJECT_ROOT / ENV_FILE_NAME
 
 
+def _value(raw: str) -> str:
+    """One line's value: quotes removed, and an unquoted trailing comment removed with them.
+
+    A quoted value is taken whole, so a `#` inside quotes is part of the key. An unquoted value
+    loses everything from a whitespace-preceded `#` on, which is where a comment can be, and keeps
+    a `#` that sits inside the value itself.
+    """
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return _COMMENT.split(value, maxsplit=1)[0].strip()
+
+
+# A comment starts at a `#` that follows whitespace, or at one that starts the value.
+_COMMENT = re.compile(r"(?:(?<=\s)|^)#")
+
+
 def load_env_file(path: Path | None = None, environ: dict[str, str] | None = None) -> list[str]:
     """Set variables from `path` that are not already set, and return the names set.
 
@@ -35,6 +53,10 @@ def load_env_file(path: Path | None = None, environ: dict[str, str] | None = Non
     shell just as well as on one where none are. Lines that are blank, commented, or not
     `NAME=value` are skipped, and a `export ` prefix and surrounding quotes are tolerated because
     the same file gets sourced by hand.
+
+    "Already set" means the name is present, empty value included: `$env:TEMPORAL_API_KEY = ""` is
+    how a run is told to use the local dev server, and a file that filled it back in would undo
+    exactly the override the operator just made.
     """
     target = environ if environ is not None else os.environ
     file_path = path or default_env_file()
@@ -52,10 +74,8 @@ def load_env_file(path: Path | None = None, environ: dict[str, str] | None = Non
         name = name.strip()
         if not separator or not name or not name.replace("_", "").isalnum():
             continue
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        if target.get(name):
+        value = _value(value)
+        if name in target:
             continue
         target[name] = value
         loaded.append(name)

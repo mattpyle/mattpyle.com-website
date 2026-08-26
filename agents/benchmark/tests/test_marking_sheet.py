@@ -19,8 +19,8 @@ def test_it_reads_the_points_and_their_split(sheet_file):
     assert task.point("1.1").code_checked and not task.point("1.1").judge_checked
     assert task.point("1.2").judge_checked and not task.point("1.2").code_checked
     assert task.point("1.4").code_checked and task.point("1.4").judge_checked
-    assert task.point("1.4").required_strings == (("temporal server start-dev",),)
-    assert task.live_pages == ("https://docs.temporal.io/develop/python/set-up-your-local-python",)
+    assert task.point("1.4").required_strings == (("nimbus daemon start",),)
+    assert task.live_pages == ("https://docs.nimbus.example/start",)
 
 
 def test_the_identity_it_records_names_the_file(sheet_file):

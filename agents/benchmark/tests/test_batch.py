@@ -186,3 +186,56 @@ def test_the_temporal_api_key_never_reaches_the_manifest():
     assert "--temporal-api-key" not in PASSTHROUGH
     plan, _ = resolve_plan(_args(temporal_api_key="a-secret"), {})
     assert "a-secret" not in json.dumps(plan)
+
+
+def test_adding_a_flag_to_a_batch_that_ran_on_defaults_is_said_out_loud():
+    """The first pass records no flags; a second that sets one still changes the cells."""
+    from benchmark.batch_cli import resolve_plan
+
+    manifest = {"plan": {"tasks": [1], "routes": ["c"], "repeats": 2, "model": "m:1", "run_flags": []}}
+    plan, notes = resolve_plan(_args(token_budget=100), manifest)
+    assert plan["run_flags"] == ["--token-budget", "100"]
+    assert len(notes) == 1 and "no run flags" in notes[0]
+
+
+def test_a_resume_that_names_the_same_flags_is_quiet():
+    from benchmark.batch_cli import resolve_plan
+
+    manifest = {
+        "plan": {
+            "tasks": [1],
+            "routes": ["c"],
+            "repeats": 2,
+            "model": "m:1",
+            "run_flags": ["--token-budget", "100"],
+        }
+    }
+    _, notes = resolve_plan(_args(model="m:1", token_budget=100), manifest)
+    assert notes == []
+
+
+def test_the_temporal_key_goes_to_the_child_in_its_environment_not_its_argv(tmp_path, monkeypatch):
+    from benchmark.batch_cli import Cell, run_cell_subprocess
+
+    seen: dict = {}
+
+    class FakePopen:
+        def __init__(self, command, **kwargs):
+            seen["command"] = command
+            seen["env"] = kwargs.get("env")
+            self.stdout = iter([f"artifacts {tmp_path / 'run-1'}\n"])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr("benchmark.batch_cli.subprocess.Popen", FakePopen)
+    outcome = run_cell_subprocess(
+        Cell(1, "a", 1),
+        out_dir=tmp_path,
+        passthrough=["--model", "m:1"],
+        env={"TEMPORAL_API_KEY": "a-secret"},
+    )
+    assert outcome.status == "ok" and outcome.run_dir == "run-1"
+    assert "a-secret" not in " ".join(seen["command"])
+    assert seen["env"]["TEMPORAL_API_KEY"] == "a-secret"
+    assert seen["env"]["PATH"]  # the child keeps the rest of the environment
