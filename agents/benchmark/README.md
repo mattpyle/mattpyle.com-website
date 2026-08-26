@@ -75,6 +75,11 @@ across routes — the entry URL is configuration, not part of the prompt.
    | `task-<n>-fetches.jsonl` | Every request the agent attempted: URL, status, bytes, served or refused, and the refusal reason. |
    | `task-<n>-run.json` | The run's mechanics: model, budgets, wall time, token totals, fetch counts. |
 
+   A run ends by signalling the agent workflow to close, the harness's own ending, so a finished
+   run shows Completed in the Temporal UI. If the close has not landed 30 seconds later the run
+   terminates the workflow instead; `run.json` records which of the two happened in
+   `workflow_ending`.
+
 Useful flags: `--model`, `--max-fetches`, `--max-bytes`, `--wall-seconds`, `--token-budget`,
 `--model-activity-seconds`, `--thinking`, `--address`, `--namespace`, `--temporal-api-key`,
 `--pack`, `--out`. Budgets must be identical across routes within one benchmark run, so change them
