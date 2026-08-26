@@ -105,6 +105,45 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 
+# How long the run waits for the agent workflow to end after it is asked to close. The turn is
+# already over by then and the loop only has to notice a flag, so this is a stuck-run backstop
+# rather than a budget.
+CLOSE_TIMEOUT_SECONDS = 30.0
+
+
+async def _end_workflow(handle, *, timeout: float = CLOSE_TIMEOUT_SECONDS) -> str:
+    """End the agent workflow through the harness's own close path and say how it ended.
+
+    `AgentWorkflowRunner` registers the signal this sends: `set_signal_handler("close",
+    self._handle_close)` in `temporal_agent_harness.harness.agent_workflow`. The handler sets a
+    flag the turn loop checks, so `run()` returns and the workflow closes as Completed. It is the
+    harness's own way of ending an agent — it closes its subagents by signalling `close` on their
+    handles. Terminating instead, which this replaces, left every finished run reading as
+    Terminated in the Temporal UI.
+
+    The signal is sent only after the turn's event stream has drained client-side, so no handler
+    is still running and the completion carries no unfinished-handler warning.
+
+    A close that does not land must not hang a batch cell, so the wait is bounded and falls back
+    to the old terminate. The return value is recorded in `run.json` as `workflow_ending`.
+    """
+    try:
+        await handle.signal("close")
+        await asyncio.wait_for(handle.result(), timeout=timeout)
+        return "completed"
+    except TimeoutError:
+        print(
+            f"  ! close signal did not end the workflow in {timeout:.0f}s; terminating",
+            flush=True,
+        )
+        await handle.terminate(
+            reason=f"benchmark run complete; close timed out after {timeout:.0f}s"
+        )
+        return "terminated-after-close-timeout"
+    except Exception as exc:  # noqa: BLE001 — the artifacts are owed whatever the ending was
+        print(f"  ! workflow did not close cleanly: {exc}", flush=True)
+        return f"failed: {type(exc).__name__}"
+
 
 def _temporal_address_problem(address: str, api_key: str) -> str | None:
     """Refuse a remote address with no API key, naming both causes.
@@ -301,7 +340,7 @@ async def _run(
                         failure = str(reply["failure"])
                         print(f"  ! {failure}", flush=True)
 
-        await handle.terminate(reason="benchmark run complete")
+        workflow_ending = await _end_workflow(handle)
 
     ended_at = datetime.now().astimezone()
     answer_path.write_text(answer or "(no answer produced)\n", encoding="utf-8")
@@ -314,6 +353,7 @@ async def _run(
         "task_title": task.title,
         "model": settings.model,
         "workflow_id": workflow_id,
+        "workflow_ending": workflow_ending,
         "started_at": started_at.isoformat(),
         "ended_at": ended_at.isoformat(),
         "wall_seconds": round((ended_at - started_at).total_seconds(), 1),
