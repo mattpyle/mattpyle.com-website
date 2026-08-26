@@ -31,8 +31,10 @@ across routes — the entry URL is configuration, not part of the prompt.
    uv sync
    ```
 
-3. Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY`. The runner reads the key from
-   the environment, so export it before running:
+3. Copy `.env.example` to `.env.local` and set the key for your model's provider:
+   `DEEPSEEK_API_KEY` for `deepseek:*` (the default), `GOOGLE_API_KEY` for `google:*` (Gemini),
+   `ANTHROPIC_API_KEY` for `anthropic:*`. The runner reads the key from the environment, so export
+   it before running:
 
    ```powershell
    Get-Content .env.local | Where-Object { $_ -match '^\w+=' } | ForEach-Object {
@@ -61,7 +63,9 @@ across routes — the entry URL is configuration, not part of the prompt.
    uv run benchmark-run --task 1 --route a
    ```
 
-3. Read the artifacts under `runs\<date>-<route>\`:
+3. Read the artifacts under `runs\<date>-<route>-<model>-<hhmmss>\`, for example
+   `runs\2026-08-25-c-deepseek-v4-flash-141530\`. Every run gets its own directory: keying them by
+   date and route alone let a second run silently overwrite the first.
 
    | File | What it holds |
    |---|---|
@@ -70,9 +74,62 @@ across routes — the entry URL is configuration, not part of the prompt.
    | `task-<n>-fetches.jsonl` | Every request the agent attempted: URL, status, bytes, served or refused, and the refusal reason. |
    | `task-<n>-run.json` | The run's mechanics: model, budgets, wall time, token totals, fetch counts. |
 
-Useful flags: `--model`, `--max-fetches`, `--max-bytes`, `--wall-seconds`, `--address`,
-`--namespace`, `--pack`, `--out`. Budgets must be identical across routes within one benchmark run,
-so change them for the whole run or not at all.
+Useful flags: `--model`, `--max-fetches`, `--max-bytes`, `--wall-seconds`, `--token-budget`,
+`--model-activity-seconds`, `--thinking`, `--address`, `--namespace`, `--temporal-api-key`,
+`--pack`, `--out`. Budgets must be identical across routes within one benchmark run, so change them
+for the whole run or not at all.
+
+## Choosing a model
+
+`--model` takes a Pydantic AI model string and is the only thing that has to change to swap
+providers; the key check follows the prefix and names the key the chosen model needs.
+
+| Flag | Key |
+|---|---|
+| `--model deepseek:deepseek-v4-flash` (default) | `DEEPSEEK_API_KEY` |
+| `--model google:gemini-3.5-flash` | `GOOGLE_API_KEY` or `GEMINI_API_KEY` |
+| `--model anthropic:claude-sonnet-5` | `ANTHROPIC_API_KEY` |
+
+Runs are non-thinking by default. Deepseek V4 thinks unless told not to, and thinking tokens are
+billed as output tokens, so leaving thinking on would inflate the output-token metric without
+changing the answer being marked. `--thinking on` turns it back on for models that support it, and
+every `run.json` records which mode produced it.
+
+## Budgets that end a run
+
+A run stops when it spends `--token-budget` tokens in total (default 2,000,000; `0` disables it).
+That is a kill-switch rather than a research variable: it is set well above the largest run
+observed, so it ends a loop that will never finish and leaves a run that would have finished alone.
+Exhausting it is a recorded outcome, not a crash — the run writes its three artifact files with
+`failure` set in `run.json` and exits non-zero.
+
+`--model-activity-seconds` is the StartToClose timeout on one model request (default 300). The
+Pydantic AI default of 60 seconds is shorter than a slow model's first token, and Temporal retries
+a timed-out activity, so the run pays for the same request several times before it completes.
+
+## Running on Temporal Cloud
+
+Set `TEMPORAL_API_KEY` (or pass `--temporal-api-key`) along with `--address` and `--namespace`, and
+the run connects to Cloud over TLS instead of the local dev server. The worker is still local: only
+the server moves.
+
+```powershell
+$env:TEMPORAL_API_KEY = "<key>"
+uv run benchmark-run --task 1 --route c `
+  --address "<namespace>.<account>.tmprl.cloud:7233" --namespace "<namespace>.<account>"
+```
+
+With no API key set the runner uses `localhost:7233`, which stays the default and the debug path.
+Each `run.json` records which of the two it ran against. If your `.env.local` points `TEMPORAL_ADDRESS`
+at Cloud, going back to the dev server for one run takes both overrides:
+
+```powershell
+uv run benchmark-run --task 1 --route c --address localhost:7233 --namespace default --temporal-api-key ""
+```
+
+A remote address with no API key is refused before the run starts. Connecting to a TLS endpoint in
+plaintext is answered with a connection reset, and the error that surfaces names neither the
+address nor the missing key.
 
 ## How it is put together
 

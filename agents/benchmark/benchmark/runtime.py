@@ -8,16 +8,33 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 from .fetch import Budgets, FetchTool, httpx_transport
-from .routes import DEFAULT_BUDGETS, Route, route_by_name
+from .routes import (
+    DEFAULT_BUDGETS,
+    DEFAULT_MODEL_ACTIVITY_SECONDS,
+    DEFAULT_TOKEN_BUDGET,
+    Route,
+    route_by_name,
+)
 
-__all__ = ["RunSettings", "current_settings", "current_fetch_tool", "system_prompt"]
+__all__ = [
+    "RunSettings",
+    "current_settings",
+    "current_fetch_tool",
+    "system_prompt",
+    "model_slug",
+    "DEFAULT_MODEL",
+]
 
-DEFAULT_MODEL = "anthropic:claude-sonnet-5"
+# Deepseek is the default because runs are paid for out of Matt's prepaid Deepseek credit; Gemini
+# and Anthropic are one `--model` flag away and need no code change. The provider rides Deepseek's
+# OpenAI-compatible API, so the `openai` extra is what pulls it in, not a Deepseek package.
+DEFAULT_MODEL = "deepseek:deepseek-v4-flash"
 
 
 @dataclass(frozen=True)
@@ -26,6 +43,12 @@ class RunSettings:
     budgets: Budgets
     fetch_log: Path
     model: str
+    # Deepseek V4 thinks by default. Thinking tokens are billed as output tokens and would inflate
+    # the output-token metric without changing the answer the benchmark marks, so runs are
+    # non-thinking unless someone asks otherwise, and the mode is recorded in every run.json.
+    thinking: bool
+    token_budget: int | None
+    model_activity_seconds: float
 
 
 def _int_env(name: str, fallback: int) -> int:
@@ -36,6 +59,29 @@ def _int_env(name: str, fallback: int) -> int:
 def _float_env(name: str, fallback: float) -> float:
     raw = os.environ.get(name)
     return float(raw) if raw else fallback
+
+
+def _bool_env(name: str, fallback: bool) -> bool:
+    raw = os.environ.get(name)
+    if not raw:
+        return fallback
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def model_slug(model: str) -> str:
+    """A filesystem-safe name for one model string, for run directory names.
+
+    `deepseek:deepseek-v4-flash` becomes `deepseek-v4-flash` and `google:gemini-3.5-flash` becomes
+    `google-gemini-3-5-flash`: the provider prefix is kept only when the model name does not
+    already carry it.
+    """
+    provider, _, name = model.partition(":")
+    if not name:
+        provider, name = "", model
+    if name.startswith(provider):
+        provider = ""
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{provider}-{name}".lower())
+    return slug.strip("-") or "model"
 
 
 @lru_cache(maxsize=1)
@@ -51,11 +97,17 @@ def current_settings() -> RunSettings:
         ),
     )
     fetch_log = Path(os.environ.get("BENCHMARK_FETCH_LOG", "fetches.jsonl"))
+    token_budget = _int_env("BENCHMARK_TOKEN_BUDGET", DEFAULT_TOKEN_BUDGET)
     return RunSettings(
         route=route,
         budgets=budgets,
         fetch_log=fetch_log,
         model=os.environ.get("BENCHMARK_MODEL", DEFAULT_MODEL),
+        thinking=_bool_env("BENCHMARK_THINKING", False),
+        token_budget=token_budget if token_budget > 0 else None,
+        model_activity_seconds=_float_env(
+            "BENCHMARK_MODEL_ACTIVITY_SECONDS", DEFAULT_MODEL_ACTIVITY_SECONDS
+        ),
     )
 
 
