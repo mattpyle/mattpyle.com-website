@@ -18,8 +18,13 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from .routes import DEFAULT_BUDGETS, route_by_name
-from .runtime import DEFAULT_MODEL
+from .routes import (
+    DEFAULT_BUDGETS,
+    DEFAULT_MODEL_ACTIVITY_SECONDS,
+    DEFAULT_TOKEN_BUDGET,
+    route_by_name,
+)
+from .runtime import DEFAULT_MODEL, model_slug
 from .task_pack import load_task
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +56,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--namespace", default=os.environ.get("TEMPORAL_NAMESPACE", "default")
     )
+    parser.add_argument(
+        "--temporal-api-key",
+        default=os.environ.get("TEMPORAL_API_KEY", ""),
+        help=(
+            "Temporal Cloud API key. Set it (or TEMPORAL_API_KEY) to run against Cloud; leave it "
+            "unset to use the local dev server."
+        ),
+    )
     parser.add_argument("--model", default=os.environ.get("BENCHMARK_MODEL"))
     parser.add_argument("--max-fetches", type=int, default=DEFAULT_BUDGETS.max_fetches)
     parser.add_argument(
@@ -59,16 +72,70 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--wall-seconds", type=float, default=DEFAULT_BUDGETS.wall_time_seconds
     )
+    parser.add_argument(
+        "--token-budget",
+        type=int,
+        default=DEFAULT_TOKEN_BUDGET,
+        help=(
+            "total tokens one run may spend before it stops and records budget exhaustion; "
+            "0 disables the limit (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--model-activity-seconds",
+        type=float,
+        default=DEFAULT_MODEL_ACTIVITY_SECONDS,
+        help=(
+            "StartToClose timeout for one model request activity; raise it for models with a slow "
+            "first token (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--thinking",
+        choices=["off", "on"],
+        default="off",
+        help=(
+            "whether the model may spend thinking tokens; off keeps them out of the output-token "
+            "metric (default: %(default)s)"
+        ),
+    )
     return parser.parse_args(argv)
+
+
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
+
+
+def _temporal_address_problem(address: str, api_key: str) -> str | None:
+    """Refuse a remote address with no API key, naming both causes.
+
+    Without the key the client connects in plaintext, and a TLS endpoint answers that by resetting
+    the connection: the failure that reaches the operator is a `transport error` from deep inside
+    the Rust bridge, which names neither the address nor the missing key. Steward's client refuses
+    the same combination for the same reason.
+    """
+    if (api_key or "").strip():
+        return None
+    host = address.split("]")[0] + "]" if address.startswith("[") else address.split(":")[0]
+    if host in LOOPBACK_HOSTS:
+        return None
+    return (
+        f"TEMPORAL_ADDRESS is {address}, which is not the local dev server, but no Temporal API "
+        "key is set. Put TEMPORAL_API_KEY in agents/benchmark/.env.local and export it, pass "
+        "--temporal-api-key, or point --address back at localhost:7233."
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
     # The key requirement follows the model's provider prefix (PydanticAI model strings,
-    # e.g. "anthropic:claude-sonnet-5", "google:gemini-3.5-flash").
+    # e.g. "deepseek:deepseek-v4-flash", "google:gemini-3.5-flash", "anthropic:claude-sonnet-5").
+    # Switching models is this one flag; nothing else in the rig names a provider.
     model = args.model or os.environ.get("BENCHMARK_MODEL") or DEFAULT_MODEL
-    if model.startswith("google"):
+    if model.startswith("deepseek"):
+        required_key = "DEEPSEEK_API_KEY"
+        key_present = os.environ.get("DEEPSEEK_API_KEY")
+    elif model.startswith("google"):
         required_key = "GOOGLE_API_KEY"
         key_present = os.environ.get("GOOGLE_API_KEY") or os.environ.get(
             "GEMINI_API_KEY"
@@ -84,10 +151,21 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    address_problem = _temporal_address_problem(args.address, args.temporal_api_key)
+    if address_problem:
+        print(f"error: {address_problem}", file=sys.stderr)
+        return 2
+
     route = route_by_name(args.route)
     task = load_task(args.task, args.pack)
 
-    run_dir = args.out / f"{datetime.now().date().isoformat()}-{route.name}"
+    # Date, route, model and time of day, because date-plus-route alone let a second run
+    # overwrite the first: that is how the 2026-08-24 Sonnet route C artifacts were lost.
+    started_at = datetime.now().astimezone()
+    run_dir = args.out / (
+        f"{started_at.date().isoformat()}-{route.name}-{model_slug(model)}-"
+        f"{started_at.strftime('%H%M%S')}"
+    )
     run_dir.mkdir(parents=True, exist_ok=True)
     prefix = f"task-{task.number}"
     fetch_log = run_dir / f"{prefix}-fetches.jsonl"
@@ -95,9 +173,10 @@ def main(argv: list[str] | None = None) -> int:
     answer_path = run_dir / f"{prefix}-answer.md"
     summary_path = run_dir / f"{prefix}-run.json"
 
-    # The fetch tool appends, so the run owns the file's lifecycle: clear it here rather than
-    # letting a re-run of the same task and route stack two runs into one log.
-    fetch_log.unlink(missing_ok=True)
+    # The fetch tool appends, so the run owns the file's lifecycle. Create it empty rather than
+    # leaving it to the first fetch: a run that ends before it fetches anything still owes the
+    # three artifact files its run.json names, and an empty log is the honest record of no fetches.
+    fetch_log.write_text("", encoding="utf-8")
 
     # Set the run's environment BEFORE the workflow module is imported: it reads these at import
     # to build its agent, and the worker below imports it.
@@ -106,8 +185,10 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["BENCHMARK_MAX_FETCHES"] = str(args.max_fetches)
     os.environ["BENCHMARK_MAX_BYTES"] = str(args.max_bytes)
     os.environ["BENCHMARK_WALL_SECONDS"] = str(args.wall_seconds)
-    if args.model:
-        os.environ["BENCHMARK_MODEL"] = args.model
+    os.environ["BENCHMARK_TOKEN_BUDGET"] = str(args.token_budget)
+    os.environ["BENCHMARK_MODEL_ACTIVITY_SECONDS"] = str(args.model_activity_seconds)
+    os.environ["BENCHMARK_THINKING"] = "on" if args.thinking == "on" else "off"
+    os.environ["BENCHMARK_MODEL"] = model
 
     return asyncio.run(
         _run(
@@ -119,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
             events_log=events_log,
             answer_path=answer_path,
             summary_path=summary_path,
+            started_at=started_at,
         )
     )
 
@@ -133,6 +215,7 @@ async def _run(
     events_log: Path,
     answer_path: Path,
     summary_path: Path,
+    started_at: datetime,
 ) -> int:
     # Imported here, not at module load: the workflow module reads the run's environment at import.
     from pydantic_ai.durable_exec.temporal import AgentPlugin, PydanticAIPlugin
@@ -157,9 +240,17 @@ async def _run(
     settings = current_settings()
     route = settings.route
 
-    client = await Client.connect(
-        args.address, namespace=args.namespace, plugins=[PydanticAIPlugin()]
-    )
+    # Temporal Cloud when an API key is set, the local dev server otherwise. The key implies TLS,
+    # and `temporal-namespace` is redundant against a namespace endpoint but not free to omit:
+    # without it, API-key auth against a regional endpoint fails with a bare `Request
+    # unauthorized` that names nothing. Steward's client makes the same call for the same reason.
+    api_key = (args.temporal_api_key or "").strip()
+    connect_kwargs: dict = {"namespace": args.namespace, "plugins": [PydanticAIPlugin()]}
+    if api_key:
+        connect_kwargs["api_key"] = api_key
+        connect_kwargs["tls"] = True
+        connect_kwargs["rpc_metadata"] = {"temporal-namespace": args.namespace}
+    client = await Client.connect(args.address, **connect_kwargs)
 
     worker = Worker(
         client,
@@ -170,11 +261,13 @@ async def _run(
     )
 
     workflow_id = f"benchmark-{route.name}-task{task.number}-{uuid.uuid4().hex[:8]}"
-    started_at = datetime.now().astimezone()
+    target = "Temporal Cloud" if api_key else "local dev server"
 
     print(
         f"route {route.name} ({route.label}) | task {task.number}: {task.title}\n"
-        f"entry {route.entry_url} | model {settings.model}\n"
+        f"entry {route.entry_url} | model {settings.model} | "
+        f"thinking {'on' if settings.thinking else 'off'}\n"
+        f"temporal {args.address} ({target}) | namespace {args.namespace}\n"
         f"workflow {workflow_id} | artifacts {run_dir}",
         flush=True,
     )
@@ -216,6 +309,11 @@ async def _run(
                 if item.event.type == AgentEventType.REPLY:
                     reply = item.event.output
                     answer = str(reply.get("text", ""))
+                    # Budget exhaustion arrives on the reply, not as a turn error: the run is over
+                    # and scoreable, and the artifacts below are written exactly as for any run.
+                    if reply.get("failure"):
+                        failure = str(reply["failure"])
+                        print(f"  ! {failure}", flush=True)
 
         await handle.terminate(reason="benchmark run complete")
 
@@ -233,10 +331,18 @@ async def _run(
         "started_at": started_at.isoformat(),
         "ended_at": ended_at.isoformat(),
         "wall_seconds": round((ended_at - started_at).total_seconds(), 1),
+        "thinking": settings.thinking,
+        "temporal": {
+            "address": args.address,
+            "namespace": args.namespace,
+            "target": "cloud" if api_key else "local-dev-server",
+        },
         "budgets": {
             "max_fetches": settings.budgets.max_fetches,
             "max_bytes_per_response": settings.budgets.max_bytes_per_response,
             "wall_time_seconds": settings.budgets.wall_time_seconds,
+            "total_tokens": settings.token_budget,
+            "model_activity_seconds": settings.model_activity_seconds,
         },
         "failure": failure,
         "event_count": len(events),

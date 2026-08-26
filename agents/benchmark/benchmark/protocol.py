@@ -20,3 +20,7 @@ class BenchmarkAnswer(BaseModel):
     output_tokens: int | None = None
     total_tokens: int | None = None
     model_requests: int | None = None
+    # A run that runs out of token budget is a scoreable outcome, not a crash: the turn still
+    # replies, carrying whatever tokens were spent and the reason it stopped, so the run writes
+    # its three artifact files like any other run and the marking sheet can see what happened.
+    failure: str | None = None

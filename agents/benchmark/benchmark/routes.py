@@ -10,7 +10,14 @@ from dataclasses import dataclass
 
 from .fetch import Budgets, RouteRules
 
-__all__ = ["Route", "ROUTES", "route_by_name", "DEFAULT_BUDGETS"]
+__all__ = [
+    "Route",
+    "ROUTES",
+    "route_by_name",
+    "DEFAULT_BUDGETS",
+    "DEFAULT_TOKEN_BUDGET",
+    "DEFAULT_MODEL_ACTIVITY_SECONDS",
+]
 
 
 @dataclass(frozen=True)
@@ -65,6 +72,18 @@ DEFAULT_BUDGETS = Budgets(
     max_bytes_per_response=60_000,
     wall_time_seconds=600.0,
 )
+
+
+# A kill-switch, not a research variable. The dry run's route A finished at 1.34M input tokens
+# with nothing watching, so the cap is set well above the largest run anyone has observed: it stops
+# a loop that will never finish, and leaves every run that would have finished alone. Lower it with
+# `--token-budget` to make the budget itself the thing under test.
+DEFAULT_TOKEN_BUDGET = 2_000_000
+
+# How long one model request may take before Temporal times its activity out and retries. The
+# harness default is 60 seconds, at which Gemini needed four attempts before its first token
+# arrived on 2026-08-24; a slow first token is not a failure worth retrying through.
+DEFAULT_MODEL_ACTIVITY_SECONDS = 300.0
 
 
 def route_by_name(name: str) -> Route:
