@@ -28,6 +28,8 @@ __all__ = [
     "current_fetch_tool",
     "system_prompt",
     "model_slug",
+    "provider_key_problem",
+    "required_provider_key",
     "DEFAULT_MODEL",
 ]
 
@@ -82,6 +84,33 @@ def model_slug(model: str) -> str:
         provider = ""
     slug = re.sub(r"[^a-z0-9]+", "-", f"{provider}-{name}".lower())
     return slug.strip("-") or "model"
+
+
+def required_provider_key(model: str) -> tuple[str, str | None]:
+    """The key one model needs, and its value if the environment has it.
+
+    The requirement follows the model string's provider prefix (Pydantic AI model strings, e.g.
+    `deepseek:deepseek-v4-flash`, `google:gemini-3.5-flash`, `anthropic:claude-sonnet-5`).
+    Switching models is that one string; nothing else in the rig names a provider.
+    """
+    if model.startswith("deepseek"):
+        return "DEEPSEEK_API_KEY", os.environ.get("DEEPSEEK_API_KEY")
+    if model.startswith("google"):
+        return "GOOGLE_API_KEY", os.environ.get("GOOGLE_API_KEY") or os.environ.get(
+            "GEMINI_API_KEY"
+        )
+    return "ANTHROPIC_API_KEY", os.environ.get("ANTHROPIC_API_KEY")
+
+
+def provider_key_problem(model: str) -> str | None:
+    """The message to print when the chosen model's key is missing, or None when it is set."""
+    name, value = required_provider_key(model)
+    if value:
+        return None
+    return (
+        f"{name} is not set for model {model}. Put it in agents/benchmark/.env.local, "
+        "or set it in the shell."
+    )
 
 
 @lru_cache(maxsize=1)

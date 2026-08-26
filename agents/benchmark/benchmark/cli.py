@@ -18,13 +18,14 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+from .envfile import load_env_file
 from .routes import (
     DEFAULT_BUDGETS,
     DEFAULT_MODEL_ACTIVITY_SECONDS,
     DEFAULT_TOKEN_BUDGET,
     route_by_name,
 )
-from .runtime import DEFAULT_MODEL, model_slug
+from .runtime import DEFAULT_MODEL, model_slug, provider_key_problem
 from .task_pack import load_task
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -126,29 +127,14 @@ def _temporal_address_problem(address: str, api_key: str) -> str | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Before the arguments are parsed: the file's values are the defaults several flags read.
+    load_env_file()
     args = _parse_args(argv)
 
-    # The key requirement follows the model's provider prefix (PydanticAI model strings,
-    # e.g. "deepseek:deepseek-v4-flash", "google:gemini-3.5-flash", "anthropic:claude-sonnet-5").
-    # Switching models is this one flag; nothing else in the rig names a provider.
     model = args.model or os.environ.get("BENCHMARK_MODEL") or DEFAULT_MODEL
-    if model.startswith("deepseek"):
-        required_key = "DEEPSEEK_API_KEY"
-        key_present = os.environ.get("DEEPSEEK_API_KEY")
-    elif model.startswith("google"):
-        required_key = "GOOGLE_API_KEY"
-        key_present = os.environ.get("GOOGLE_API_KEY") or os.environ.get(
-            "GEMINI_API_KEY"
-        )
-    else:
-        required_key = "ANTHROPIC_API_KEY"
-        key_present = os.environ.get("ANTHROPIC_API_KEY")
-    if not key_present:
-        print(
-            f"error: {required_key} is not set for model {model}. Put it in "
-            "agents/benchmark/.env.local and export it, or set it in the shell.",
-            file=sys.stderr,
-        )
+    key_problem = provider_key_problem(model)
+    if key_problem:
+        print(f"error: {key_problem}", file=sys.stderr)
         return 2
 
     address_problem = _temporal_address_problem(args.address, args.temporal_api_key)

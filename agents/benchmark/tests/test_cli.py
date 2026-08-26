@@ -14,7 +14,10 @@ PROVIDER_KEYS = ("DEEPSEEK_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "ANTHRO
 
 
 @pytest.fixture
-def no_provider_keys(monkeypatch):
+def no_provider_keys(monkeypatch, tmp_path):
+    # `main` loads `.env.local` before it checks anything, so the test points that at a path with
+    # no file: without this the machine's own keys decide the result.
+    monkeypatch.setenv("BENCHMARK_ENV_FILE", str(tmp_path / "absent.env"))
     for name in (*PROVIDER_KEYS, "BENCHMARK_MODEL"):
         monkeypatch.delenv(name, raising=False)
 
