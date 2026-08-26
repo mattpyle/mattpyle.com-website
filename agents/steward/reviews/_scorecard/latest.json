@@ -1,6 +1,6 @@
 {
-  "iso": "2026-08-25",
-  "timestamp": "2026-08-25T03:33:41-07:00",
+  "iso": "2026-08-26",
+  "timestamp": "2026-08-26T03:33:31-07:00",
   "scope": "24 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-08-25",
+  "id": "2026-08-26",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -306,7 +306,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 2d ago (<= 7d threshold)",
+  "reason": "unchanged, published 3d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-08-25"
+  "archiveId": "2026-08-26"
 }
