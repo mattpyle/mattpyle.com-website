@@ -27,6 +27,7 @@ __all__ = [
     "call_judge",
     "default_judge_prompt_path",
     "estimate_cost",
+    "normalise_point_id",
 ]
 
 JUDGE_PROMPT_RELATIVE_PATH = "docs/reference/benchmark-judge-prompt-v1.md"
@@ -216,6 +217,22 @@ class JudgeVerdict:
             "awarded": self.awarded,
             "justification": self.justification,
         }
+
+
+def normalise_point_id(point_id: str) -> str:
+    """The join key for a point id, tolerant of how the judge writes it back.
+
+    The prompt renders each criterion as `### Point 1.2`, so the judge often returns
+    `"Point 1.2"` rather than `"1.2"`. Rather than fight the prompt, which is frozen and hashed
+    into every marking.json, the harness normalises both sides before joining: it drops a leading
+    `point` label, surrounding punctuation and case, and the leading zeros a model sometimes pads
+    a segment with.
+    """
+    text = point_id.strip().lower()
+    text = re.sub(r"^point\b[\s.:#\-]*", "", text)
+    text = text.strip(" \t.:#-)(")
+    segments = text.split(".")
+    return ".".join(segment.lstrip("0") or "0" for segment in segments)
 
 
 @dataclass

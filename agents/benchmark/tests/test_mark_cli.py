@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from benchmark.judge import JudgePrompt, JudgeResult, JudgeVerdict
+from benchmark.judge import JudgePrompt, JudgeResult, JudgeVerdict, normalise_point_id
 from benchmark.mark_cli import mark_run, summary_table
 from benchmark.marking import load_run
 from benchmark.marking_sheet import load_sheet
@@ -165,6 +165,92 @@ async def test_the_transcript_is_json_serialisable(
     path = tmp_path / "marking.json"
     path.write_text(json.dumps(marking, indent=2), encoding="utf-8")
     assert json.loads(path.read_text(encoding="utf-8"))["schema"] == "benchmark-marking/1"
+
+
+async def test_a_decorated_verdict_id_still_resolves_to_its_point(
+    make_run, sheet_file, pack_file, prompt, transport
+):
+    """The 2026-08-26 calibration run: the judge returned "Point 1.2", the sheet says "1.2".
+
+    The prompt renders each criterion as `### Point 1.2`, so the decoration is invited and
+    recurs at random. It must not read as an unresolved point.
+    """
+    marking = await _mark(
+        make_run(),
+        sheet_file,
+        pack_file,
+        prompt,
+        transport(),
+        fake_judge({"Point 1.2": True, "point 01.4": False}),
+    )
+    points = {point["id"]: point for point in marking["points"]}
+    assert points["1.2"]["judge"] == {
+        "id": "Point 1.2",
+        "awarded": True,
+        "justification": "because Point 1.2",
+    }
+    assert points["1.4"]["judge"]["awarded"] is False
+    assert marking["score"]["unresolved"] == 0
+    assert marking["unmatched_verdicts"] == []
+
+
+async def test_a_verdict_for_no_point_on_the_sheet_is_recorded_not_dropped(
+    make_run, sheet_file, pack_file, prompt, transport
+):
+    marking = await _mark(
+        make_run(),
+        sheet_file,
+        pack_file,
+        prompt,
+        transport(),
+        fake_judge({"1.2": True, "1.4": True, "9.9": True}),
+    )
+    assert [verdict["id"] for verdict in marking["unmatched_verdicts"]] == ["9.9"]
+    assert marking["score"]["awarded"] == 4
+
+
+async def test_two_verdicts_for_one_point_keep_the_first_and_record_the_spare(
+    make_run, sheet_file, pack_file, prompt, transport
+):
+    """Normalisation can collide: `"Point 1.2"` and `"1.2"` are one key.
+
+    The first answer stands and the second is recorded, so a judge that marks a point twice
+    cannot overwrite itself out of sight.
+    """
+
+    async def judge(model: str, judge_input: str) -> JudgeResult:
+        return JudgeResult(
+            verdicts=[
+                JudgeVerdict(point_id="1.2", awarded=True, justification="first"),
+                JudgeVerdict(point_id="Point 1.2", awarded=False, justification="second"),
+                JudgeVerdict(point_id="1.4", awarded=True, justification="because 1.4"),
+            ],
+            usage={},
+        )
+
+    marking = await _mark(make_run(), sheet_file, pack_file, prompt, transport(), judge)
+    points = {point["id"]: point for point in marking["points"]}
+    assert points["1.2"]["judge"]["justification"] == "first"
+    assert marking["unmatched_verdicts"] == [
+        {"id": "Point 1.2", "awarded": False, "justification": "second"}
+    ]
+
+
+@pytest.mark.parametrize(
+    "written,expected",
+    [
+        ("1.2", "1.2"),
+        ("Point 1.2", "1.2"),
+        ("point 1.2", "1.2"),
+        ("  POINT  1.2 ", "1.2"),
+        ("Point: 1.2", "1.2"),
+        ("#1.2", "1.2"),
+        ("Point 01.02", "1.2"),
+        ("1.2.", "1.2"),
+    ],
+)
+def test_the_join_key_survives_how_the_judge_writes_an_id(written, expected):
+    assert normalise_point_id(written) == expected
 
 
 def test_a_prompt_object_is_what_the_marker_records():
