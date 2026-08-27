@@ -237,7 +237,7 @@ export const PAGES: PageSpec[] = [
   {
     name: 'activity',
     path: '/activity',
-    why: 'Activity template: the 24-column hour chart, the last-hour table and the three count tables, plus the legacy traffic block retro wears',
+    why: 'Activity template: the 24-column hour chart, the last-hour table and the four count tables, plus the legacy traffic block retro wears',
     // Two trees ship here and the hidden one is absent from the accessibility
     // tree, so this golden records whichever appearance the run is in — these
     // rows are taken in modern. The legacy selectors are kept so the pruning
@@ -253,13 +253,19 @@ export const PAGES: PageSpec[] = [
     // accessible name carries its own UTC hour, and the hour moves with the
     // clock), while one column still records that a column is an hour label
     // followed by a count.
+    //
+    // ONE SELECTOR PER TABLE, never a shared class. `keepFirst` thins a selector's matches to the
+    // first one in the document, so two tables sharing a class would lose the second table's rows
+    // from the golden entirely rather than keeping one of each.
     snapshotKeepFirst: [
       '.chart-col',
       '.hour-table tbody tr',
       '.surface-table tbody tr',
+      '.bot-page-table tbody tr',
       '.client-table tbody tr',
       '.markdown-table tbody tr',
       'table[aria-labelledby="traffic-surfaces-title"] tbody tr',
+      'table[aria-labelledby="traffic-bot-pages-title"] tbody tr',
       'table[aria-labelledby="traffic-clients-title"] tbody tr',
       'table[aria-labelledby="traffic-markdown-title"] tbody tr',
     ],
@@ -269,6 +275,7 @@ export const PAGES: PageSpec[] = [
       '.chart-col',
       '.hour-table tbody tr',
       '.surface-table tbody tr',
+      '.bot-page-table tbody tr',
       '.client-table tbody tr',
       '.markdown-table tbody tr',
       '.freshness',

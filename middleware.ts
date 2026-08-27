@@ -51,7 +51,7 @@ const RETIRABLE = /^\/writing\/([^/.]+?)(\.md)?\/?$/;
 // take the log line with it. `waitUntil` keeps the round trip off the response path entirely, and
 // recordHit() already swallows everything it can; this catch covers the one gap that leaves, a
 // throw raised before waitUntil is handed a promise.
-function countHit(event: 'surface' | 'markdown', path: string, request: Request): void {
+function countHit(event: 'surface' | 'markdown' | 'page', path: string, request: Request): void {
   try {
     waitUntil(recordHit({ event, path, ua: request.headers.get('user-agent') }));
   } catch {
@@ -72,12 +72,26 @@ function canonicalPageUrl(url: URL): string {
 // fallback taken when a sibling was expected but the fetch missed. A page that fell back to
 // HTML still owes the redirect.
 //
+// It is also the ORDINARY-PAGE PATH, and therefore where the `page` event class is counted. The
+// count sits on the `next()` branch only: a request that leaves here as a 308 was not served a
+// page, and the follow-up canonical request re-enters this function and is counted normally — the
+// same "a redirect costs a count rather than inventing one" rule the on-demand canonicalisation
+// at the top of the handler states.
+//
+// `isPage` rather than a path check here, because only the caller knows whether the path maps to a
+// page at all. It is false for every `.md` and `.json` URL, which is what stops the proxy fetch
+// below from counting its own internal request as a second, browser-less page view of the post it
+// was serving.
+//
 // The query string rides along: /about?utm_source=x must not lose the parameter that a
 // client-side analytics read is waiting for. The one case that deliberately drops a query is
 // the on-demand canonicalisation at the top of the handler, which has already run by now.
-function slashRedirectOrNext(url: URL): Response {
+function slashRedirectOrNext(url: URL, request: Request, isPage: boolean): Response {
   const slashed = trailingSlashRedirectFor(url.pathname);
-  if (!slashed) return next();
+  if (!slashed) {
+    if (isPage) countHit('page', url.pathname, request);
+    return next();
+  }
   const location = `${slashed}${url.search}`;
   console.log(`[middleware] 308 ${url.pathname}${url.search} -> ${location}`);
   return new Response(null, { status: 308, headers: { Location: location } });
@@ -152,7 +166,7 @@ export default async function middleware(request: Request) {
   // asking for markdown is answered with markdown, never with a 308.
   const sibling = markdownSiblingFor(url.pathname);
   const accept = request.headers.get('accept');
-  if (!sibling || !prefersMarkdown(accept)) return slashRedirectOrNext(url);
+  if (!sibling || !prefersMarkdown(accept)) return slashRedirectOrNext(url, request, Boolean(sibling));
 
   const target = new URL(url);
   target.pathname = sibling;
@@ -171,7 +185,9 @@ export default async function middleware(request: Request) {
   if (!upstream.ok) {
     const status = upstream.status;
     console.log(formatLogLine('markdown', { result: 'miss', path: url.pathname, sibling, status }));
-    return slashRedirectOrNext(url);
+    // A page whose sibling missed is still a page serve: the client asked for markdown and is
+    // about to get HTML, so it is counted as the page view it turned into.
+    return slashRedirectOrNext(url, request, true);
   }
 
   // One line per served markdown response, so "does anything ever negotiate?" is a query

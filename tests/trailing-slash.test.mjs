@@ -83,7 +83,7 @@ test('the redirect runs after the markdown negotiation branch', () => {
   // — which is exactly what the platform `trailingSlash` did when it was measured on a preview.
   const negotiation = middlewareSource.indexOf('prefersMarkdown(accept)');
   const redirect = middlewareSource.indexOf('function slashRedirectOrNext');
-  const firstCall = middlewareSource.indexOf('slashRedirectOrNext(url)');
+  const firstCall = middlewareSource.indexOf('slashRedirectOrNext(url,');
   assert.ok(negotiation > 0, 'the middleware must still consult prefersMarkdown');
   assert.ok(redirect > 0, 'the middleware must define slashRedirectOrNext');
   assert.ok(

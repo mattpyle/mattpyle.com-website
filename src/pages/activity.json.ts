@@ -64,7 +64,7 @@ export const GET: APIRoute = async () => {
      * What is counted, in the payload rather than only in the page's prose: a reader of the JSON
      * gets the same scope statement a reader of the page does.
      */
-    counts: 'Fetches of this site\'s agent surfaces, and pages served as Markdown to clients that asked for them. Page views are not counted.',
+    counts: 'Fetches of this site\'s agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted.',
     counted: activity.counted,
     /** Rolling windows ending at `renderedAt`, so none of them is a calendar period in any zone. */
     totals: {
@@ -106,6 +106,22 @@ export const GET: APIRoute = async () => {
         recorded: row.total,
       })),
       omitted: activity.clients.omitted,
+    },
+    /**
+     * The `page` event class: which of this site's pages named bots read as ordinary HTML.
+     *
+     * Separate from `markdown` below, which is the same site's pages served to a client that
+     * negotiated for them. One is a crawler reading the page; the other is an agent asking for a
+     * different representation of it.
+     */
+    botPages: {
+      rows: activity.botPages.rows.map(row => ({
+        page: row.path,
+        last7Days: row.week,
+        last30Days: row.month,
+        recorded: row.total,
+      })),
+      omitted: activity.botPages.omitted,
     },
     markdown: {
       // The store counts the page path a client asked for; this reports the sibling URL that

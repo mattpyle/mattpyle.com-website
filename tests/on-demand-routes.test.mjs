@@ -80,9 +80,23 @@ test('middleware.ts matches every on-demand path', () => {
 test('the redirect branch runs before anything that counts a hit', () => {
   // Ordering, asserted against the source because it is not observable from the exports. A busted
   // request that reached countHit() first would still cost a store write per attack request.
-  const redirect = middlewareSource.indexOf('canonicalOnDemandPath(url.pathname');
-  const firstCount = middlewareSource.indexOf("countHit('");
+  //
+  // Measured INSIDE THE HANDLER, not across the whole file: since the `page` class was added, one
+  // countHit() call lives in slashRedirectOrNext(), which is declared above the handler and reached
+  // only from inside it. A file-wide indexOf would read that declaration as a hit counted before
+  // the canonicalisation it in fact runs after.
+  const handler = middlewareSource.indexOf('export default async function middleware');
+  assert.ok(handler > 0, 'the middleware must still export a default handler');
+
+  const redirect = middlewareSource.indexOf('canonicalOnDemandPath(url.pathname', handler);
+  const firstCount = middlewareSource.indexOf("countHit('", handler);
   assert.ok(redirect > 0, 'the middleware must call canonicalOnDemandPath');
   assert.ok(firstCount > 0, 'the middleware must still count hits');
   assert.ok(redirect < firstCount, 'canonicalisation must come before the first countHit call');
+
+  // The one countHit() outside the handler is the ordinary-page count, and it is reached through
+  // slashRedirectOrNext(), whose every call site is below the canonicalisation above.
+  for (const call of [...middlewareSource.matchAll(/slashRedirectOrNext\(url,/g)]) {
+    assert.ok(call.index > redirect, 'every slash-redirect call must come after canonicalisation');
+  }
 });

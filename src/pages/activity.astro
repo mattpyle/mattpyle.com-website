@@ -80,7 +80,7 @@ function familyNote(family: string): string | undefined {
 <Layout
   title="Activity"
   fullTitle="Activity: agent traffic to mattpyle.com"
-  description="Requests to this site's agent surfaces and pages served as Markdown: the last 24 hours hour by hour, by surface, by client, and by page."
+  description="Requests to this site's agent surfaces, pages served as Markdown, and pages read by named bots: the last 24 hours hour by hour, by surface, by client, and by page."
   markdownAlternate={markdownUrl}
 >
   {/*
@@ -104,7 +104,7 @@ function familyNote(family: string): string | undefined {
     <PageHeader
       eyebrow="Agent traffic · live counts"
       title="Activity"
-      subtitle="Requests to this site's agent surfaces, and pages served as Markdown to clients that asked for them."
+      subtitle="Requests to this site's agent surfaces, pages served as Markdown to clients that asked for them, and pages read by bots this site can name."
     />
 
     <div class="activity-shell" data-module="activity">
@@ -167,6 +167,42 @@ function familyNote(family: string): string | undefined {
               </div>
               {activity.surfaces.omitted > 0 && (
                 <p class="footnote">{activity.surfaces.omitted} further surface(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+              )}
+            </div>
+
+            <div class="subsect">
+              <h3 id="traffic-bot-pages-title">Pages read by bots</h3>
+              {activity.botPages.rows.length > 0 ? (
+                <div class="table-scroll" role="region" tabindex="0" aria-labelledby="traffic-bot-pages-title">
+                <table aria-labelledby="traffic-bot-pages-title">
+                  <thead>
+                    <tr>
+                      <th scope="col">Page</th>
+                      <th scope="col" class="n">7 days</th>
+                      <th scope="col" class="n">30 days</th>
+                      <th scope="col" class="n">Recorded</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activity.botPages.rows.map(row => (
+                      <tr>
+                        <td><code>{row.path}</code></td>
+                        <td class="n">{counts.format(row.week)}</td>
+                        <td class="n">{counts.format(row.month)}</td>
+                        <td class="n">{counts.format(row.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              ) : (
+                <p class="traffic-empty">
+                  No named bot has fetched an ordinary page yet. Only clients this site can name
+                  by user agent are counted here; a page a browser loads is not counted at all.
+                </p>
+              )}
+              {activity.botPages.omitted > 0 && (
+                <p class="footnote">{activity.botPages.omitted} further page(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
               )}
             </div>
 

@@ -231,8 +231,9 @@ function tally(rows, keyOf, nowHour, keyName) {
 /**
  * Everything the section renders, from flat rows.
  *
- * The headline numbers count both event classes: a surface fetch and a negotiated-markdown serve
- * are both an agent asking this site for something, and the page says which is which underneath.
+ * The headline numbers count every event class: a surface fetch, a negotiated-markdown serve and a
+ * named bot reading an ordinary page are all an agent asking this site for something, and the page
+ * says which is which underneath.
  *
  * @param {Array<{ hour: number | null, event: string, family: string, path: string,
  *                 count: number }>} rows
@@ -242,6 +243,10 @@ export function summarizeTraffic(rows, now = new Date()) {
   const nowHour = epochHour(now);
   const surfaceRows = rows.filter((row) => row.event === 'surface');
   const markdownRows = rows.filter((row) => row.event === 'markdown');
+  // The `page` class, added 2026-08-26. Every row here is a named bot by construction — the write
+  // path refuses the class for a browser, an unrecognised client and an absent user agent — so
+  // nothing downstream has to filter it again, and nothing downstream may assume it can.
+  const pageRows = rows.filter((row) => row.event === 'page');
   const hours = rows.map((row) => row.hour).filter((hour) => hour !== null);
 
   return {
@@ -249,9 +254,12 @@ export function summarizeTraffic(rows, now = new Date()) {
     totals: windowTotals(rows, nowHour),
     surfaceTotals: windowTotals(surfaceRows, nowHour),
     markdownTotals: windowTotals(markdownRows, nowHour),
+    botPageTotals: windowTotals(pageRows, nowHour),
     surfaces: tally(surfaceRows, (row) => row.path, nowHour, 'path'),
     clients: tally(rows, (row) => row.family, nowHour, 'family'),
     pages: tally(markdownRows, (row) => row.path, nowHour, 'path'),
+    /** Which pages bots read, which is the question the `page` class was added to answer. */
+    botPages: tally(pageRows, (row) => row.path, nowHour, 'path'),
     /**
      * The newest bucket anything landed in, for "last counted". Null when nothing has, and null
      * when everything there is has been rolled up into months, which is the same statement: no
@@ -568,6 +576,11 @@ function fixtureDayHashes(now) {
     [150, 'surface|curl|/.well-known/agent-skills/index.json', 5],
     [400, 'surface|googlebot|/sitemap-index.xml', 8],
     [700, 'surface|browser|/llms-full.txt', 1],
+    // The `page` class. Every family and path here already appears above, so the client table
+    // gains no row and only the bot-pages table is new.
+    [3, 'page|gptbot|/writing/accessibility-and-ai', 5],
+    [12, 'page|perplexitybot|/about', 2],
+    [80, 'page|claudebot|/writing/accessibility-and-ai', 4],
   ];
 
   /** @type {Map<string, Record<string, string>>} */

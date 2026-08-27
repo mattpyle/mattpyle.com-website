@@ -192,6 +192,14 @@ export function buildActivity(rows, now = new Date()) {
       omitted: summary.clients.omitted,
     },
     pages: summary.pages,
+    /**
+     * Which of this site's pages named bots have read, from the `page` event class.
+     *
+     * Separate from `pages`, which is the markdown-negotiation table: one is "an agent asked for
+     * this page as markdown", the other is "a crawler fetched the ordinary HTML". Merging them
+     * would collapse the distinction the class was added to draw.
+     */
+    botPages: summary.botPages,
     /** The newest bucket anything landed in, or null when nothing has. */
     lastCountedHour: summary.lastHour,
   };
