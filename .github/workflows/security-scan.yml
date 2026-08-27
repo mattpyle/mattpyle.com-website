@@ -220,9 +220,11 @@ jobs:
           # `agents/benchmark/runs/` holds one folder per benchmark run: the
           # agent's answer, its event stream, and its fetch log. They quote
           # temporal.io's pages back at length and are the raw material for a
-          # study that has not been published.
+          # study that has not been published. `calibration.md` beside it is
+          # the marking summary written by the marker's `--summary` flag, and
+          # quotes that same material back a point at a time.
           # ---------------------------------------------------------------
-          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/|^agents/benchmark/runs/'
+          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/|^agents/benchmark/runs/|^agents/benchmark/calibration\.md$'
 
           tracked_private=$(git ls-files | grep -E "$private")
 
