@@ -76,7 +76,11 @@ agents/steward/.reviews-drafts/
 # stream, and its fetch log. Those quote temporal.io's pages back at length and
 # are the raw material for a study that has not been published, so they stay
 # local until a result is reported.
+# `calibration.md` is the marker's summary table, written by `--summary`: every
+# answer, every point, the judge's call. It quotes the same unpublished run
+# material `runs/` holds, so it is ignored for the same reason.
 agents/benchmark/runs/
+agents/benchmark/calibration.md
 agents/benchmark/.venv/
 agents/benchmark/.temporal-dev.db
 agents/benchmark/.temporal-dev.db-*

@@ -20,9 +20,11 @@ from .envfile import load_env_file
 from .fetch import Transport
 from .judge import (
     JudgeResult,
+    JudgeVerdict,
     call_judge,
     default_judge_prompt_path,
     load_judge_prompt,
+    normalise_point_id,
     render_judge_input,
 )
 from .marking import (
@@ -124,6 +126,13 @@ async def _mark_all(*, args, sheet: MarkingSheet, prompt, transport: Transport =
                 f"{score['unresolved']} unresolved -> {path.name}",
                 flush=True,
             )
+            if marking["unmatched_verdicts"]:
+                ids = ", ".join(repr(v["id"]) for v in marking["unmatched_verdicts"])
+                print(
+                    f"  warning: judge returned {len(marking['unmatched_verdicts'])} verdict(s) "
+                    f"for no point on this sheet: {ids}",
+                    flush=True,
+                )
             cost = (marking["judge"] or {}).get("cost_usd")
             if cost is None and not args.no_judge:
                 priced = False
@@ -182,15 +191,28 @@ async def mark_run(
         except Exception as exc:  # noqa: BLE001 - a failed judge call is a recorded outcome
             judge_result = JudgeResult(error=f"{type(exc).__name__}: {exc}")
 
-    verdicts = {
-        verdict.point_id: verdict for verdict in (judge_result.verdicts if judge_result else [])
-    }
+    # The judge writes ids back the way the prompt renders them, so `"Point 1.2"` and `"1.2"` are
+    # the same point. Both sides of the join are normalised; see `normalise_point_id`. The first
+    # verdict for a key wins and any later one is spare, so a judge that marks a point twice does
+    # not quietly overwrite its own first answer.
+    verdicts: dict[str, JudgeVerdict] = {}
+    spare: list[JudgeVerdict] = []
+    for verdict in judge_result.verdicts if judge_result else []:
+        key = normalise_point_id(verdict.point_id)
+        if key in verdicts:
+            spare.append(verdict)
+        else:
+            verdicts[key] = verdict
     code_results = {result.point_id: result for result in code_pass.points}
 
+    matched: set[str] = set()
     points = []
     for point in task_sheet.points:
         code = code_results[point.id]
-        verdict = verdicts.get(point.id)
+        key = normalise_point_id(point.id)
+        verdict = verdicts.get(key)
+        if verdict is not None:
+            matched.add(key)
         code_awarded = code.verdict == AWARDED if point.code_checked else None
         judge_awarded = verdict.awarded if verdict else None
         awarded = _combine(point.code_checked, point.judge_checked, code_awarded, judge_awarded)
@@ -212,6 +234,11 @@ async def mark_run(
 
     awarded_count = sum(1 for point in points if point["awarded"] is True)
     unresolved = sum(1 for point in points if point["awarded"] is None)
+    # A verdict for a point this sheet does not have is kept rather than dropped: a mark that
+    # disappears is invisible, and the next id the judge invents has to be readable evidence.
+    unmatched = [
+        verdict.as_dict() for key, verdict in verdicts.items() if key not in matched
+    ] + [verdict.as_dict() for verdict in spare]
 
     return {
         "schema": MARKING_SCHEMA,
@@ -230,6 +257,7 @@ async def mark_run(
             for page in live_pages
         ],
         "points": points,
+        "unmatched_verdicts": unmatched,
         "score": {"awarded": awarded_count, "of": len(points), "unresolved": unresolved},
     }
 
