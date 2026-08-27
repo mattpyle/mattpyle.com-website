@@ -23,6 +23,7 @@
  */
 
 import { AGENT_SURFACE_PATHS, WELL_KNOWN_SURFACE_PATHS } from './agent-surfaces.mjs';
+import { PAGE_PATHS } from '../data/page-paths.mjs';
 
 /**
  * Version prefix on every key. A later reshape of the schema writes `v2` beside `v1` and the
@@ -31,8 +32,24 @@ import { AGENT_SURFACE_PATHS, WELL_KNOWN_SURFACE_PATHS } from './agent-surfaces.
  */
 export const KEY_VERSION = 'v1';
 
-/** The two event classes. A surface fetch and a negotiated-markdown serve are different findings. */
-export const EVENTS = ['surface', 'markdown'];
+/**
+ * The three event classes, each a different finding.
+ *
+ * | Class | What it counts |
+ * |---|---|
+ * | `surface` | a fetch of one of the site's discovery documents |
+ * | `markdown` | a page served as markdown to a client that negotiated for it |
+ * | `page` | a NAMED BOT fetching an ordinary HTML page |
+ *
+ * `page` was added 2026-08-26 and is the only one with a client condition on it. The other two
+ * count whatever asked, because asking for llms.txt or for `text/markdown` is itself the agentic
+ * act being measured; an ordinary page fetch is not, and counting every one of them would make
+ * this a page-view analytics store, which is exactly what property 1 above says it is not. The
+ * classifier decides, and only a family in CLIENT_FAMILIES other than `browser` passes: a browser
+ * is a person, `other` means the classifier could not tell, and `none` means the client did not
+ * say. None of the three is a bot this site can name, so none of them is counted at all.
+ */
+export const EVENTS = ['surface', 'markdown', 'page'];
 
 /**
  * Buckets are UTC, and the field carries the UTC hour.
@@ -143,6 +160,38 @@ export function knownFamilies() {
   return [...CLIENT_FAMILIES.map(({ family }) => family), FALLBACK_FAMILY, ABSENT_FAMILY];
 }
 
+/** The one named family that is a person rather than a machine. */
+const HUMAN_FAMILY = 'browser';
+
+/**
+ * Which families the `page` class will count: every family the list above names except `browser`,
+ * and neither of the two fallbacks.
+ *
+ * Derived from CLIENT_FAMILIES rather than re-listed, so welcoming a new crawler stays the one
+ * line the list's own docblock promises. The script tells (`curl`, `python`, `node`, `go`,
+ * `wget`) are in, and that is deliberate: none of them is a person reading the page in a browser,
+ * and a scripted fetcher reading posts is the shape a live agent task most often arrives in. The
+ * render layer already separates a named agent from a tool (clientKind() in
+ * src/lib/activity-summary.mjs), so calling them all bots here loses nothing downstream.
+ */
+export const PAGE_CLIENT_FAMILIES = CLIENT_FAMILIES.map(({ family }) => family).filter(
+  (family) => family !== HUMAN_FAMILY
+);
+
+const PAGE_CLIENTS = new Set(PAGE_CLIENT_FAMILIES);
+
+/**
+ * Is this a client the `page` class counts?
+ *
+ * The gate is on the CLASSIFIED family, never on the raw user agent, so it inherits the privacy
+ * promise rather than reopening it: by the time anything decides, the string is already gone.
+ *
+ * @param {string} family
+ */
+export function isPageClient(family) {
+  return PAGE_CLIENTS.has(family);
+}
+
 /** The surfaces that get a key of their own; anything else under /.well-known/ buckets. */
 const NAMED_SURFACES = new Set([...AGENT_SURFACE_PATHS, ...WELL_KNOWN_SURFACE_PATHS]);
 const WELL_KNOWN_PREFIX = '/.well-known/';
@@ -150,12 +199,28 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
 /** The bucket for a well-known path the site does not publish. */
 export const UNNAMED_WELL_KNOWN = '/.well-known/*';
 
-/** The bucket for any path that fails the shape check below. */
+/** The bucket for any path that fails the shape check below, and for any page the site does not publish. */
 export const UNNAMED_PAGE = '/*';
 
-// A page path is only ever counted after the middleware has served its markdown sibling, so it is
-// already bounded by the pages that exist. These caps are the second lock: if that call site ever
-// moves ahead of the upstream check, an attacker still cannot mint keys, only inflate one bucket.
+/**
+ * Every page path the site publishes, generated at build by scripts/generate-page-paths.mjs.
+ *
+ * This is the whole bound on the `page` class's key space, and it has to be, because that class is
+ * the only one the middleware counts without first learning that the path resolves to anything:
+ * `next()` hands the request on and never sees a status, so a stranger asking for a page that does
+ * not exist reaches the counter exactly like a crawler reading a real post. A `markdown` serve is
+ * bounded instead by its own upstream 200, and a `surface` fetch by a fixed list.
+ *
+ * A path missing from this set is counted as UNNAMED_PAGE rather than dropped, so a build that ran
+ * before a post was published undercounts that post's resolution and nothing else.
+ */
+const PUBLISHED_PAGES = new Set(PAGE_PATHS);
+
+// A `markdown` path is only ever counted after the middleware has served its markdown sibling, so
+// it is already bounded by the pages that exist. These caps are the second lock: if that call site
+// ever moves ahead of the upstream check, an attacker still cannot mint keys, only inflate one
+// bucket. The `page` class does not rely on them at all — PUBLISHED_PAGES is its bound — and they
+// stay in front of it anyway, so the two classes cannot disagree about a path's shape.
 const MAX_PATH_LENGTH = 96;
 const MAX_PATH_SEGMENTS = 4;
 const PAGE_PATH_SHAPE = /^\/[a-z0-9\-/]*$/;
@@ -169,6 +234,10 @@ function normalize(pathname) {
 /**
  * The path component of a key, bucketed so the key space stays finite.
  *
+ * Three branches for three classes: a `surface` path is one of a fixed list or a well-known
+ * bucket; a `markdown` path passes the shape caps; a `page` path passes those AND has to be a page
+ * the site publishes, because that class alone reaches here without an upstream 200 behind it.
+ *
  * @param {string} event one of EVENTS
  * @param {string} pathname
  * @returns {string}
@@ -180,11 +249,12 @@ export function counterPath(event, pathname) {
     if (path.startsWith(WELL_KNOWN_PREFIX)) return UNNAMED_WELL_KNOWN;
     return UNNAMED_PAGE;
   }
-  if (path === '') return '/';
-  if (path.length > MAX_PATH_LENGTH) return UNNAMED_PAGE;
-  if (path.split('/').length - 1 > MAX_PATH_SEGMENTS) return UNNAMED_PAGE;
-  if (!PAGE_PATH_SHAPE.test(path)) return UNNAMED_PAGE;
-  return path;
+  const page = path === '' ? '/' : path;
+  if (page.length > MAX_PATH_LENGTH) return UNNAMED_PAGE;
+  if (page.split('/').length - 1 > MAX_PATH_SEGMENTS) return UNNAMED_PAGE;
+  if (!PAGE_PATH_SHAPE.test(page)) return UNNAMED_PAGE;
+  if (event === 'page' && !PUBLISHED_PAGES.has(page)) return UNNAMED_PAGE;
+  return page;
 }
 
 /** The set holding every UTC day that has a hash, so a reader never has to SCAN. */
@@ -303,7 +373,7 @@ export function parseMonthField(field) {
  * The hour leads the field so a prefix match answers "this hour" without parsing, and so the
  * fields of a day sort into chronological order.
  *
- * A day's hash holds at most (24 hours x 2 events x ~30 families x ~40 paths) fields and
+ * A day's hash holds at most (24 hours x 3 events x ~30 families x ~60 paths) fields and
  * realistically a few dozen, so one round trip answers totals, per-client, per-path and per-hour
  * for any window, in any timezone. Nothing expires and nothing is thrown away: a day past every
  * rolling window is folded into its month rather than deleted, so the all-time numbers are
@@ -380,6 +450,13 @@ const STORE_TIMEOUT_MS = 1500;
 export async function recordHit({ event, path, ua, now, env = process.env, fetchImpl = fetch }) {
   let keys;
   try {
+    // Before the store is even looked up, so the bots-only rule holds in every environment and a
+    // test can assert that a browser's page view attempted no network call at all. A page view by
+    // a person is not undercounted here, it is not counted: see the EVENTS table above.
+    if (event === 'page' && !isPageClient(classifyClient(ua))) {
+      return { ok: false, reason: 'not-a-bot' };
+    }
+
     const store = readStoreConfig(env);
     if (!store) return { ok: false, reason: 'no-store' };
 

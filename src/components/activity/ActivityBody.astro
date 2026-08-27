@@ -1,9 +1,10 @@
 ---
 /**
- * The five data bands of /activity
+ * The data bands of /activity
  * (docs/projects/redesign/design-export-remaining/design_handoff_activity, bands 2-6): headline
- * counts, the last day hour by hour, the last hour, three tables, and one paragraph on how the
- * counting works.
+ * counts, the last day hour by hour, the last hour, the tables, and one paragraph on how the
+ * counting works. The bot-pages table is the one band the export does not have — it renders the
+ * `page` event class, added to the counter after the export was drawn.
  *
  * EVERY FIGURE COMES FROM ONE `buildActivity()` CALL, made by the page and handed in whole. The
  * JSON endpoint at /activity.json calls the same function on the same read, so the two surfaces
@@ -190,6 +191,53 @@ function familyNote(family: string): string | undefined {
         )}
       </section>
 
+      {/*
+        Pages read by bots — the `page` event class. It sits beside By surface rather than in the
+        two-column band below because it is the same shape as that table (a path and three window
+        columns) and answers the matching question: what the discovery documents are to an agent
+        that is looking around, an ordinary post is to one that is reading.
+
+        No marker column and no legend here, unlike the two client tables. Every row of this table
+        is a bot by construction — the write path refuses the class for a browser, an unrecognised
+        client and an absent user agent — so a marker that was always filled in would state the
+        table's own heading once per row.
+      */}
+      <section class="rd-section band-bot-pages" aria-labelledby="activity-bot-pages-title">
+        <div class="band-head">
+          <h2 id="activity-bot-pages-title">Pages read by bots</h2>
+        </div>
+        {activity.botPages.rows.length > 0 ? (
+          <table class="grid-table bot-page-table">
+            <thead>
+              <tr>
+                <th scope="col" class="c-path">Page</th>
+                <th scope="col" class="c-num c-wide">7 days</th>
+                <th scope="col" class="c-num c-wide">30 days</th>
+                <th scope="col" class="c-num c-wide">Recorded</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activity.botPages.rows.map(row => (
+                <tr>
+                  <td class="c-path">{row.path}</td>
+                  <td class="c-num c-lead">{counts.format(row.week)}</td>
+                  <td class="c-num">{counts.format(row.month)}</td>
+                  <td class="c-num">{counts.format(row.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p class="band-empty">
+            No named bot has fetched an ordinary page yet. Only clients this site can name by
+            user agent are counted here; a page a browser loads is not counted at all.
+          </p>
+        )}
+        {activity.botPages.omitted > 0 && (
+          <p class="omitted">{activity.botPages.omitted} further page(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+        )}
+      </section>
+
       <div class="rd-section band-tables">
         <section class="table-half" aria-labelledby="activity-clients-title">
           <div class="band-head">
@@ -272,7 +320,7 @@ function familyNote(family: string): string | undefined {
     <div>
       <h2 id="activity-how-title">How this is counted</h2>
       <p class="how-prose">
-        Two things are counted at the edge: a fetch of one of this site's agent surfaces, and a page served as Markdown to a client that asked for it. Ordinary page views are not. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
+        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
       </p>
     </div>
     <div class="as-data">
@@ -510,11 +558,14 @@ function familyNote(family: string): string | undefined {
   /* Recency reads first: the 7-day column is full ink, the older columns step back. */
   .grid-table td.c-lead { color: var(--ink); }
 
-  .surface-table .c-wide { width: 130px; }
+  .surface-table .c-wide,
+  .bot-page-table .c-wide { width: 130px; }
 
-  .surface-table td.c-num { padding-left: 24px; }
+  .surface-table td.c-num,
+  .bot-page-table td.c-num { padding-left: 24px; }
 
-  .surface-table td { padding: 15px 0; }
+  .surface-table td,
+  .bot-page-table td { padding: 15px 0; }
 
   .c-marker {
     width: 9px;
@@ -541,7 +592,8 @@ function familyNote(family: string): string | undefined {
 
   .family-note { color: var(--ink-6); }
 
-  .band-surfaces { padding-top: 76px; }
+  .band-surfaces,
+  .band-bot-pages { padding-top: 76px; }
 
   .band-tables {
     display: grid;
@@ -663,6 +715,7 @@ function familyNote(family: string): string | undefined {
     .band-chart,
     .band-hour,
     .band-surfaces,
+    .band-bot-pages,
     .band-tables,
     .band-how { padding-top: 56px; }
 
@@ -698,12 +751,15 @@ function familyNote(family: string): string | undefined {
 
     .grid-table td { font-size: 17px; padding: 12px 0; }
 
-    .surface-table td { padding: 12px 0; }
+    .surface-table td,
+    .bot-page-table td { padding: 12px 0; }
 
     .grid-table .c-num,
-    .surface-table .c-wide { width: 68px; padding-left: 12px; }
+    .surface-table .c-wide,
+    .bot-page-table .c-wide { width: 68px; padding-left: 12px; }
 
-    .surface-table td.c-num { padding-left: 12px; }
+    .surface-table td.c-num,
+    .bot-page-table td.c-num { padding-left: 12px; }
 
     .hour-table .c-num { width: 68px; }
 
@@ -718,6 +774,8 @@ function familyNote(family: string): string | undefined {
        30-day column, so its last cell is the request count and stays. */
     .surface-table th:last-child,
     .surface-table td:last-child,
+    .bot-page-table th:last-child,
+    .bot-page-table td:last-child,
     .client-table th:last-child,
     .client-table td:last-child,
     .markdown-table th:last-child,

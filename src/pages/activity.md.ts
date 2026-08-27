@@ -62,7 +62,7 @@ export const GET: APIRoute = async () => {
       // Matches the HTML page's <title> (src/pages/activity.astro) so the two representations of
       // this route describe themselves the same way.
       'title: "Activity: agent traffic to mattpyle.com"',
-      'description: "Requests to this site\'s agent surfaces and pages served as Markdown: the last 24 hours hour by hour, by surface, by client, and by page."',
+      'description: "Requests to this site\'s agent surfaces, pages served as Markdown, and pages read by named bots: the last 24 hours hour by hour, by surface, by client, and by page."',
       `canonical: ${CANONICAL}`,
       `source: ${CANONICAL}`,
       `rendered: ${renderedAt.toISOString()}`,
@@ -71,7 +71,7 @@ export const GET: APIRoute = async () => {
     ].join('\n'),
 
     '# Activity',
-    "Fetches of this site's agent surfaces, and pages served as Markdown to clients that asked for them. Page views are not counted, and the nightly scorecard audit does not appear in these numbers.",
+    "Fetches of this site's agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted, and the nightly scorecard audit does not appear in these numbers.",
     `Read from the store at ${utcStamp(renderedAt)}. Every count is a UTC hour bucket or a rolling window over hour buckets; there are no per-request records and no sub-hour timestamps. The same figures as JSON: ${SITE_ORIGIN}/activity.json`,
   ];
 
@@ -113,6 +113,13 @@ export const GET: APIRoute = async () => {
         ['Surface', '7 days', '30 days', 'Recorded'],
         activity.surfaces.rows.map(row => [row.path ?? '', row.week, row.month, row.total])
       ),
+      '## Pages read by bots',
+      activity.botPages.rows.length > 0
+        ? table(
+            ['Page', '7 days', '30 days', 'Recorded'],
+            activity.botPages.rows.map(row => [row.path ?? '', row.week, row.month, row.total])
+          )
+        : 'No named bot has fetched an ordinary page yet.',
       '## By client',
       table(
         ['Client', 'Kind', '7 days', '30 days', 'Recorded'],
@@ -148,7 +155,7 @@ export const GET: APIRoute = async () => {
 
   sections.push(
     '## How this is counted',
-    "Two things are counted at the edge: a fetch of one of this site's agent surfaces, and a page served as Markdown to a client that asked for it. Ordinary page views are not. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
   );
 
   return new Response(`${sections.join('\n\n')}\n`, {

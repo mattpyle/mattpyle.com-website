@@ -58,6 +58,21 @@
           - cell "·"
           - cell "·"
           - cell "·"
+  - region "Pages read by bots":
+    - heading "Pages read by bots" [level=2]
+    - table:
+      - rowgroup:
+        - row "Page 7 days 30 days Recorded":
+          - columnheader "Page"
+          - columnheader "7 days"
+          - columnheader "30 days"
+          - columnheader "Recorded"
+      - rowgroup:
+        - row "· · · ·":
+          - cell "·"
+          - cell "·"
+          - cell "·"
+          - cell "·"
   - region "By client":
     - heading "By client" [level=2]
     - text: bot/agent
@@ -89,7 +104,7 @@
           - cell "·"
   - region "How this is counted":
     - heading "How this is counted" [level=2]
-    - paragraph: "Two things are counted at the edge: a fetch of one of this site's agent surfaces, and a page served as Markdown to a client that asked for it. Ordinary page views are not. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    - paragraph: "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
     - text: The same numbers, as data
     - link "activity.json":
       - /url: /activity.json
