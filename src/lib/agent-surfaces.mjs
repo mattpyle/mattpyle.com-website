@@ -63,6 +63,12 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  * well-known path itself, so a fetch of it is evidence that some crawler resolves ARD entry
  * sources at all — which is the whole question the catalogue was published to answer.
  *
+ * `/.well-known/ai-catalog.json` is ARD's predecessor path, served by a vercel.json rewrite onto
+ * ard.json rather than by a file of its own. It is listed separately from ard.json because that is
+ * the measurement: the two paths carry the same bytes, so the only thing a fetch of one rather
+ * than the other says is which dialect the client speaks, and a single merged line would throw
+ * exactly that away.
+ *
  * The Agent Skills entries are the instrument for that card's hypothesis. The index and each skill
  * are separate lines in the log on purpose: "something fetched the index" and "something that
  * fetched the index went on to fetch the skill" are different findings, and only the second one
@@ -73,6 +79,7 @@ export const WELL_KNOWN_SURFACE_PATHS = [
   '/.well-known/agent-card.json',
   '/.well-known/mcp-server',
   '/.well-known/ard.json',
+  '/.well-known/ai-catalog.json',
   '/.well-known/agent-skills/index.json',
   '/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md',
   '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',
