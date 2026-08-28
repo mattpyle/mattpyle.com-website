@@ -121,6 +121,7 @@ words:
   # Machine-appended, human-approved. Kept sorted within this section; the
   # curated groups above are hand-maintained and deliberately not re-sorted.
   - Agentmap
+  - AICatalogManifest
   - ArdEntry
   - ArdManifest
   - Kimi
