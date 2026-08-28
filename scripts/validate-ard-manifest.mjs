@@ -59,8 +59,15 @@ const DOCUMENT = fileURLToPath(new URL('../public/.well-known/ard.json', import.
 const ORIGIN = 'https://www.mattpyle.com';
 const PUBLISHER = 'mattpyle.com';
 
-/** Appendix C: urn:air:<publisher>:<namespace>:<name>, publisher pinned to this domain. */
-const IDENTIFIER_PATTERN = new RegExp(`^urn:air:${PUBLISHER.replace(/\./g, '\\.')}(?::[a-zA-Z0-9._-]+){2,}$`);
+/**
+ * Appendix C: urn:air:<publisher>:<namespace>:<name>, publisher pinned to this domain.
+ *
+ * Written as a literal rather than built from PUBLISHER. Interpolating a string into a RegExp
+ * means escaping it, and a hand-rolled escape that covers `.` but not `\` is what CodeQL's
+ * js/incomplete-sanitization flags — correctly, even though the input here is a constant two lines
+ * up. There is nothing dynamic to earn the risk, so the pattern says the domain itself.
+ */
+const IDENTIFIER_PATTERN = /^urn:air:mattpyle\.com(?::[a-zA-Z0-9._-]+){2,}$/;
 
 /** Decision 1. The spec's §4.4 example type for a markdown skill; the CLI's type list disagrees. */
 const SKILL_TYPE = 'application/ai-skill+md';
