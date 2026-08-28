@@ -69,7 +69,12 @@ Allow: /
 `;
 
 export const GET: APIRoute = ({ site }) => {
-  const body = `${crawlerRules}\nSitemap: ${new URL('/sitemap-index.xml', site)}\n`;
+  // The Agentmap directive is Agentic Resource Discovery's robots.txt mechanism (spec v0.91
+  // §5.1): it names an entry source, the way Sitemap names a URL source. It is one of three
+  // publishing aids for the same catalogue, alongside the well-known path itself and the
+  // rel="ard" link in Layout.astro. Unknown directives are ignored by robots.txt parsers, so it
+  // costs nothing to a crawler that has never heard of ARD.
+  const body = `${crawlerRules}\nSitemap: ${new URL('/sitemap-index.xml', site)}\nAgentmap: ${new URL('/.well-known/ard.json', site)}\n`;
 
   return new Response(body, {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },

@@ -1,0 +1,61 @@
+{
+  "entries": [
+    {
+      "identifier": "urn:air:mattpyle.com:agent:webmaster",
+      "displayName": "The mattpyle.com webmaster",
+      "type": "application/a2a-agent-card+json",
+      "url": "https://www.mattpyle.com/.well-known/agent-card.json",
+      "description": "The webmaster of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Two skills: it answers questions about the site (its writing, projects, changelog, scorecard, and agent-readable surfaces), and it audits any site you name for agent-readiness, returning the fast tier as a direct Message and the browser-rendered deep tier as a Task you poll to completion. Unauthenticated and public: no accounts, no payments, and no private data. Audits are rate limited, and the auditor obeys the target's robots.txt.",
+      "capabilities": ["ask-about-site", "audit-a-site"],
+      "tags": ["personal-site", "writing", "changelog", "agent-experience", "audit", "agent-readiness"],
+      "version": "0.2.0",
+      "representativeQueries": [
+        "what is mattpyle.com about",
+        "who is Matt Pyle and what has he written recently",
+        "what agent-readable surfaces does mattpyle.com expose",
+        "audit example.com for agent-readiness"
+      ]
+    },
+    {
+      "identifier": "urn:air:mattpyle.com:server:steward-audit",
+      "displayName": "steward-audit",
+      "type": "application/mcp-server-card+json",
+      "url": "https://www.mattpyle.com/.well-known/mcp-server",
+      "description": "Audits any website for agent-readiness over plain HTTP: robots.txt and its AI-agent rules, Content Signals, the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A discovery documents, and whether the homepage and a content page actually serve markdown when asked for it. It checks behaviour rather than presence. Call audit_site(url): the checks take seconds and the report comes back in the same call, as canonical JSON in structuredContent and as a markdown summary in the text content. No auth, no account, and nothing is stored. It is rate limited per caller and per UTC day; a refusal names which limit was hit and when to retry, and the caps in force are stated at https://www.mattpyle.com/steward. Further tools are listed by tools/list.",
+      "capabilities": ["audit_site"],
+      "tags": ["developer-tools", "seo", "accessibility", "llms-txt", "agents-md", "robots-txt"],
+      "representativeQueries": [
+        "audit example.com for agent-readiness",
+        "does example.com publish an llms.txt, and do its links resolve",
+        "check whether example.com really serves markdown when an agent asks for it",
+        "what do example.com's robots.txt rules say to AI crawlers"
+      ]
+    },
+    {
+      "identifier": "urn:air:mattpyle.com:skill:implement-markdown-negotiation",
+      "displayName": "implement-markdown-negotiation",
+      "type": "application/ai-skill+md",
+      "url": "https://www.mattpyle.com/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md",
+      "description": "Implement site-wide Markdown content negotiation, so every HTML page also answers `Accept: text/markdown` with a clean Markdown representation of itself. Covers the sibling URL rule, build-time conversion from the page's main landmark, edge negotiation with a fallback to HTML, and the traps that only surface in production: output roots, response headers, recursion, extraction, and registration drift. Use when adding Markdown representations to a site for AI agents, or when an agent-readiness check reports that a site does not serve Markdown.",
+      "tags": ["markdown", "content-negotiation", "agent-experience", "web-standards"],
+      "representativeQueries": [
+        "how do I make my site answer Accept: text/markdown with markdown",
+        "add markdown representations of my pages for AI agents",
+        "an agent-readiness check says my site does not serve markdown, how do I fix it"
+      ]
+    },
+    {
+      "identifier": "urn:air:mattpyle.com:skill:using-mattpyle-com",
+      "displayName": "using-mattpyle-com",
+      "type": "application/ai-skill+md",
+      "url": "https://www.mattpyle.com/.well-known/agent-skills/using-mattpyle-com/SKILL.md",
+      "description": "Work with mattpyle.com as an agent. Covers which discovery surface answers which question, fetching any page as Markdown instead of HTML, calling the site's A2A endpoint, using its in-browser WebMCP tools, and how to cite it. Use when reading, summarising, citing, or interacting with mattpyle.com.",
+      "tags": ["personal-site", "agent-experience", "markdown", "a2a", "webmcp", "citation"],
+      "representativeQueries": [
+        "how do I fetch a page from mattpyle.com as markdown instead of HTML",
+        "how should I cite mattpyle.com",
+        "how do I call the mattpyle.com A2A endpoint"
+      ]
+    }
+  ]
+}
