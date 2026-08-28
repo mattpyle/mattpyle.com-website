@@ -21,7 +21,7 @@
       "identifier": "urn:air:mattpyle.com:server:steward-audit",
       "displayName": "steward-audit",
       "type": "application/mcp-server-card+json",
-      "url": "https://www.mattpyle.com/.well-known/mcp-server",
+      "url": "https://www.mattpyle.com/mcp/server-card",
       "description": "Audits any website for agent-readiness over plain HTTP: robots.txt and its AI-agent rules, Content Signals, the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A discovery documents, and whether the homepage and a content page actually serve markdown when asked for it. It checks behaviour rather than presence. Call audit_site(url): the checks take seconds and the report comes back in the same call, as canonical JSON in structuredContent and as a markdown summary in the text content. No auth, no account, and nothing is stored. It is rate limited per caller and per UTC day; a refusal names which limit was hit and when to retry, and the caps in force are stated at https://www.mattpyle.com/steward. Further tools are listed by tools/list.",
       "capabilities": ["audit_site"],
       "tags": ["developer-tools", "seo", "accessibility", "llms-txt", "agents-md", "robots-txt"],

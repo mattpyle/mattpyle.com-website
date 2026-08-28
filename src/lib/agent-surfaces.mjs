@@ -21,6 +21,16 @@
  * The sitemaps are in for one reason: robots.txt names sitemap-index.xml, so it is a surface an
  * agent is told to fetch. Expect crawler noise there; it is separable by path.
  *
+ * `/mcp/server-card` is the only entry here that is not at the site root, and the only one whose
+ * path is derived rather than fixed: SEP-2127 reserves `<streamable-http-url>/server-card`, and
+ * this endpoint lives at /mcp. It is the canonical location of the Server Card, and its alias at
+ * `/.well-known/mcp/server-card.json` is listed separately below. Two paths, one document, one
+ * question: which convention does a client actually reach for.
+ *
+ * It is a sibling of /mcp and not /mcp itself, which the matcher note in middleware.ts is emphatic
+ * about keeping unmatched. Adding a static file beside a POST endpoint does not put the endpoint in
+ * the matcher, and tests/trailing-slash.test.mjs asserts exactly that with an equality check.
+ *
  * Deliberately out: /rss.xml (feed pollers would swamp the signal and a reader is not an agent),
  * favicons, /site.webmanifest, and OG images (browser furniture, no discovery meaning).
  */
@@ -31,6 +41,7 @@ export const AGENT_SURFACE_PATHS = [
   '/robots.txt',
   '/webmcp/tools.json',
   '/webmcp/index.json',
+  '/mcp/server-card',
   '/sitemap-index.xml',
   '/sitemap-0.xml',
 ];
@@ -69,6 +80,15 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  * than the other says is which dialect the client speaks, and a single merged line would throw
  * exactly that away.
  *
+ * `/.well-known/mcp/server-card.json` is the Server Card's scanner path, served by a vercel.json
+ * rewrite onto /mcp/server-card rather than by a file of its own, exactly as ai-catalog.json is
+ * onto ard.json. It is listed separately from the canonical path for the same reason the two
+ * catalogue paths are listed separately, and here the split is the whole experiment: SEP-2127's
+ * discovery.md argues that a server card does not belong under `.well-known` at all, while
+ * Cloudflare's scanner probes nowhere else. The two paths carry the same bytes, so the only thing a
+ * fetch of one rather than the other says is which of those two the client believes — which is
+ * precisely the finding, and a single merged line would throw it away.
+ *
  * The Agent Skills entries are the instrument for that card's hypothesis. The index and each skill
  * are separate lines in the log on purpose: "something fetched the index" and "something that
  * fetched the index went on to fetch the skill" are different findings, and only the second one
@@ -80,6 +100,7 @@ export const WELL_KNOWN_SURFACE_PATHS = [
   '/.well-known/mcp-server',
   '/.well-known/ard.json',
   '/.well-known/ai-catalog.json',
+  '/.well-known/mcp/server-card.json',
   '/.well-known/agent-skills/index.json',
   '/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md',
   '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',

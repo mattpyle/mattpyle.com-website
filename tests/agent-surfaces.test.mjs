@@ -51,20 +51,76 @@ test('the named well-known surfaces are the ones the site actually publishes', (
     '/.well-known/mcp-server',
     '/.well-known/ard.json',
     '/.well-known/ai-catalog.json',
+    '/.well-known/mcp/server-card.json',
     SKILLS_INDEX_PATH,
     ...readSkills().map((skill) => skillUrlFor(skill.name)),
   ];
   assert.deepEqual([...WELL_KNOWN_SURFACE_PATHS].sort(), expected.sort());
 
-  // The three hand-written documents are asserted to exist as files, which is what "actually
-  // publishes" means for them: neither is generated, so nothing else in the build would notice a
-  // listed path that serves a 404. The skills are covered by readSkills() reading their source.
-  // /.well-known/ai-catalog.json is deliberately not in this loop: it is an alias onto ard.json,
-  // and a file at that path would be the drift the alias exists to avoid. The assertion below is
-  // its equivalent.
-  for (const path of ['/.well-known/agent-card.json', '/.well-known/mcp-server', '/.well-known/ard.json']) {
+  // The hand-written documents are asserted to exist as files, which is what "actually publishes"
+  // means for them: none is generated, so nothing else in the build would notice a listed path that
+  // serves a 404. The skills are covered by readSkills() reading their source. The two alias paths,
+  // /.well-known/ai-catalog.json and /.well-known/mcp/server-card.json, are deliberately not in
+  // this loop: a file at either would be the drift the alias exists to avoid, and each has its own
+  // test below asserting the opposite.
+  for (const path of [
+    '/.well-known/agent-card.json',
+    '/.well-known/mcp-server',
+    '/.well-known/ard.json',
+    '/mcp/server-card',
+  ]) {
     const file = fileURLToPath(new URL(`../public${path}`, import.meta.url));
     assert.doesNotThrow(() => readFileSync(file), `${path} is listed as a surface but public${path} does not exist`);
+  }
+});
+
+test('the scanner path is an alias onto the Server Card, not a second card', () => {
+  // Same shape as the ai-catalog test below, and the same failure it guards: two files would be two
+  // places for one card to drift, and the stale one is the one an agent would read. It matters more
+  // here than for the catalogue, because these two paths belong to two readings of the same spec —
+  // SEP-2127's discovery.md argues a server card does not belong under .well-known, and Cloudflare's
+  // scanner probes nowhere else — so the temptation to let them say different things is real.
+  const aliasFile = fileURLToPath(new URL('../public/.well-known/mcp/server-card.json', import.meta.url));
+  assert.throws(
+    () => readFileSync(aliasFile),
+    'public/.well-known/mcp/server-card.json exists; the scanner path must stay a rewrite onto /mcp/server-card'
+  );
+
+  const vercelConfig = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../vercel.json', import.meta.url)), 'utf8')
+  );
+  assert.ok(
+    vercelConfig.rewrites?.some(
+      (rule) => rule.source === '/.well-known/mcp/server-card.json' && rule.destination === '/mcp/server-card'
+    ),
+    'vercel.json must rewrite /.well-known/mcp/server-card.json to /mcp/server-card'
+  );
+
+  // Headers are matched against the request path, before the rewrite, so the alias needs its own
+  // block and the two blocks have to agree. The card's media type is the whole point of the
+  // Content-Type header here: a client that asked for application/mcp-server-card+json and got
+  // application/json on one path but not the other has been told the two documents differ.
+  const headersFor = (source) => vercelConfig.headers.find((block) => block.source === source)?.headers;
+  assert.deepEqual(headersFor('/.well-known/mcp/server-card.json'), headersFor('/mcp/server-card'));
+
+  // The four CORS headers discovery.md marks MUST, on both paths. A browser-based client is the
+  // population this document exists for and the one a missing header locks out silently.
+  for (const source of ['/mcp/server-card', '/.well-known/mcp/server-card.json']) {
+    const keys = new Set(headersFor(source)?.map((header) => header.key));
+    for (const required of [
+      'Access-Control-Allow-Origin',
+      'Access-Control-Allow-Methods',
+      'Access-Control-Allow-Headers',
+      'Access-Control-Expose-Headers',
+    ]) {
+      assert.ok(keys.has(required), `${source} is missing ${required}`);
+    }
+    assert.ok(
+      headersFor(source)?.some(
+        (header) => header.key === 'Content-Type' && header.value.startsWith('application/mcp-server-card+json')
+      ),
+      `${source} must declare the Server Card media type`
+    );
   }
 });
 

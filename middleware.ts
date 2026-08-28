@@ -246,6 +246,13 @@ export default async function middleware(request: Request) {
 // *static file* fetch visible, and this route is a function that logs its own line. The
 // absent-from-matcher assertion in tests/trailing-slash.test.mjs is the registration.
 //
+// `/mcp/server-card` IS here, and it is not an exception to any of that. It is a static file — the
+// SEP-2127 Server Card, at the location that SEP reserves — sitting beside the endpoint rather than
+// being it, so it needs the matcher for the ordinary agent-surface reason: a static fetch is
+// invisible in this plan's logs otherwise. Every matcher entry is a literal path, so a POST to
+// /mcp does not match this one, and the assertions above are equality checks on /mcp and /mcp/
+// rather than prefix checks, which is what makes the distinction hold rather than merely look true.
+//
 // Then RETIRED_URL_MATCHER from src/lib/retired-urls.mjs: `/builds/:path*` and `/builds.md`,
 // which are neither negotiable pages nor agent surfaces. They are the reach of the retired-URL
 // redirect above — the section moved to /projects, and an unmatched old URL would 404 at the
@@ -285,6 +292,7 @@ export const config = {
     '/robots.txt',
     '/webmcp/tools.json',
     '/webmcp/index.json',
+    '/mcp/server-card',
     '/sitemap-index.xml',
     '/sitemap-0.xml',
     '/.well-known/:path*',

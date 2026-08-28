@@ -71,26 +71,44 @@ const CONTENT_TYPES = {
 /**
  * Content types for files with no extension, keyed by request path.
  *
- * One entry, and it mirrors the header vercel.json sets for the same path. `/.well-known/mcp-server`
- * is a JSON document whose path the discovery draft fixes without a suffix, so extension lookup
- * lands on `application/octet-stream` and an audit run against a local build would read a different
- * content type from the one production serves. Keep this in step with vercel.json's headers.
+ * Each entry mirrors the header vercel.json sets for the same path. `/.well-known/mcp-server` is a
+ * JSON document whose path the discovery draft fixes without a suffix, so extension lookup lands on
+ * `application/octet-stream` and an audit run against a local build would read a different content
+ * type from the one production serves. The Server Card paths are here for the other half of that
+ * problem: one of them is extension-less too, and both carry a media type
+ * (`application/mcp-server-card+json`) that no extension maps to, so the `.json` path would
+ * otherwise read as plain `application/json` locally and as the card media type on production —
+ * exactly the difference a client negotiating with `Accept` acts on. Keep this in step with
+ * vercel.json's headers.
  */
 const PATH_CONTENT_TYPES = {
   '/.well-known/mcp-server': 'application/json; charset=utf-8',
+  '/mcp/server-card': 'application/mcp-server-card+json; charset=utf-8',
+  '/.well-known/mcp/server-card.json': 'application/mcp-server-card+json; charset=utf-8',
 };
 
 /**
  * Request paths served from another path's file, mirroring vercel.json's `rewrites`.
  *
- * One entry. `/.well-known/ai-catalog.json` is the ARD predecessor path, and it is an alias rather
- * than a second file on purpose: the measured clients (Cloudflare's scanner, Hugging Face's
- * `hf discover`) resolve only the old name, and two files would be two places for the catalogue to
- * drift. Nothing is written under public/.well-known for it, so a local build would 404 the path
- * that production answers unless this map exists. Keep it in step with vercel.json's rewrites.
+ * Two entries, both aliases rather than second files on purpose, and for the same reason: two files
+ * would be two places for one document to drift.
+ *
+ * `/.well-known/ai-catalog.json` is the ARD predecessor path, and the measured clients
+ * (Cloudflare's scanner, Hugging Face's `hf discover`) resolve only the old name.
+ *
+ * `/.well-known/mcp/server-card.json` is the Server Card's scanner path. The card's canonical
+ * location is `/mcp/server-card`, which is what SEP-2127 reserves and what the catalogue points at;
+ * discovery.md argues against `.well-known` for a server card explicitly, on the grounds that a
+ * card is application-level rather than site-wide metadata. The alias is published anyway because
+ * isitagentready.com's check still probes only `.well-known` paths, and which path a client reaches
+ * for is the measurement this site exists to take.
+ *
+ * Nothing is written under public/.well-known for either, so a local build would 404 the paths that
+ * production answers unless this map exists. Keep it in step with vercel.json's rewrites.
  */
 const PATH_ALIASES = {
   '/.well-known/ai-catalog.json': '/.well-known/ard.json',
+  '/.well-known/mcp/server-card.json': '/mcp/server-card',
 };
 
 /**

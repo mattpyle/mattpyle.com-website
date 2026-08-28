@@ -1,0 +1,90 @@
+{
+  "$comment": "Transcribed from schema.json in github.com/modelcontextprotocol/ext-server-card at main, read 2026-08-27. The normative Server Card shape moved out of SEP-2127 into that repository, so the SEP itself is now a chartering document and its old serverInfo/endpoint/capabilities shape no longer exists. Transcribed rather than copied because scripts/lib/json-schema.mjs throws on any keyword it does not implement, and the published file carries `description` and `format` annotations it does not. Three deliberate narrowings, all of this site's own document rather than of the spec: `additionalProperties` is false throughout, so a typo'd key is a red build instead of an ignored line; `format: uri` is spelled as an https pattern; and Icon, Repository, and the Remote header and variable inputs are described only as far as this card uses them, which is not at all. The upstream file stays the authority; scripts/validate-mcp-discovery.mjs states how the transcription was checked against it.",
+  "$ref": "#/$defs/ServerCard",
+  "$defs": {
+    "ServerCard": {
+      "type": "object",
+      "required": ["$schema", "description", "name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "$comment": "'Must be the /v1/ Server Card schema URL under static.modelcontextprotocol.io/schemas/.' The pattern is the upstream one, verbatim. As of 2026-08-27 that URL 404s; the hosted v1 publish is a later step in the extension repository's graduation plan, and the schema asserts nothing about the URL resolving.",
+          "type": "string",
+          "pattern": "^https://static\\.modelcontextprotocol\\.io/schemas/v1/server-card\\.schema\\.json$"
+        },
+        "name": {
+          "$comment": "Reverse-DNS, exactly one forward slash separating namespace from server name.",
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "description": {
+          "$comment": "100 characters is the schema's own ceiling, and it is the tightest constraint on this document: the fast-tier-only rule and the no-cap-numbers rule both have to fit inside it.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "version": {
+          "$comment": "Equivalent of Implementation.version in the MCP specification. Version ranges are rejected upstream by prose rather than by the schema, so nothing here asserts that.",
+          "type": "string",
+          "maxLength": 255
+        },
+        "websiteUrl": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "remotes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Remote" }
+        },
+        "icons": {
+          "$comment": "Not used by this card. Left as an array of anything, so a future addition fails in the validator that adds it rather than here.",
+          "type": "array"
+        },
+        "repository": {
+          "$comment": "Not used by this card; see the note on icons.",
+          "type": "object"
+        },
+        "_meta": {
+          "$comment": "Reverse-DNS-namespaced extension metadata. Not used by this card.",
+          "type": "object"
+        }
+      }
+    },
+    "Remote": {
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$comment": "The transport served at this endpoint. Both upstream values are listed, so the schema stays a description of the spec rather than of today's card.",
+          "type": "string",
+          "enum": ["sse", "streamable-http"]
+        },
+        "url": {
+          "$comment": "The upstream pattern also admits a leading {template-variable}. Narrowed to a literal http(s) URL here: a card that cannot be used without first substituting a variable is not what this site publishes.",
+          "type": "string",
+          "pattern": "^https?://[^\\s]+$"
+        },
+        "supportedProtocolVersions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "headers": {
+          "$comment": "Not used by this endpoint, which takes no configured headers; see the note on icons.",
+          "type": "array"
+        },
+        "variables": {
+          "$comment": "Not used by this endpoint; see the note on icons.",
+          "type": "object"
+        }
+      }
+    }
+  }
+}
