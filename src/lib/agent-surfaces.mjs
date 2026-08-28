@@ -58,6 +58,11 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  * without being told the URL, which is the entire behaviour the discovery draft exists to enable.
  * Whether anything does that is a question the log can answer and nothing else here can.
  *
+ * `/.well-known/ard.json` is the same instrument aimed at ARD. Nothing on the site links it as a
+ * page; it is named only by the rel="ard" element, the robots.txt Agentmap line, and the
+ * well-known path itself, so a fetch of it is evidence that some crawler resolves ARD entry
+ * sources at all — which is the whole question the catalogue was published to answer.
+ *
  * The Agent Skills entries are the instrument for that card's hypothesis. The index and each skill
  * are separate lines in the log on purpose: "something fetched the index" and "something that
  * fetched the index went on to fetch the skill" are different findings, and only the second one
@@ -67,6 +72,7 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
 export const WELL_KNOWN_SURFACE_PATHS = [
   '/.well-known/agent-card.json',
   '/.well-known/mcp-server',
+  '/.well-known/ard.json',
   '/.well-known/agent-skills/index.json',
   '/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md',
   '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',

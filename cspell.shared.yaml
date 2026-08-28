@@ -120,4 +120,7 @@ words:
   # --- Added via `steward dict-add` ---
   # Machine-appended, human-approved. Kept sorted within this section; the
   # curated groups above are hand-maintained and deliberately not re-sorted.
+  - Agentmap
+  - ArdEntry
+  - ArdManifest
   - Kimi

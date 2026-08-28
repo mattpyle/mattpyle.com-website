@@ -246,6 +246,16 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     */}
     <link rel="describedby" type="text/markdown" href={new URL('/llms.txt', Astro.site)} />
     {/*
+      Agentic Resource Discovery (agenticresourcediscovery.org, spec v0.91) §5.1: a consumer
+      resolving this domain's entries MUST fetch /.well-known/ard.json and MUST honour a
+      rel="ard" link. The well-known path is the primary source and this element is the second
+      of the two mechanisms a consumer is required to obey, so it is the one cheap aid worth
+      emitting; the robots.txt `Agentmap` line is the third, and DNS records are deliberately
+      not published. It is site-wide for the same reason the describedby above is: an agent
+      that arrives on a post should find the catalogue without going back to `/`.
+    */}
+    <link rel="ard" href={new URL('/.well-known/ard.json', Astro.site)} />
+    {/*
       The latin subset of each face the page paints in the default appearance,
       and no more. JetBrains Mono and Source Serif 4 are retro's faces and are
       not preloaded: retro is a persisted client-side preference, so preloading
