@@ -25,22 +25,29 @@
  * from the first of those, for the reason the exemption below gives.
  */
 
-import { WELL_KNOWN_SURFACE_PATHS } from './agent-surfaces.mjs';
+import { AGENT_SURFACE_PATHS, WELL_KNOWN_SURFACE_PATHS } from './agent-surfaces.mjs';
 
 /**
  * Discovery documents whose path is fixed by a specification and carries no extension.
  *
  * `/.well-known/mcp-server` is the first: draft-serra-mcp-discovery-uri spells the path without a
  * suffix, so the final-segment rule below reads it as a page and would 308 it to a slash form that
- * serves nothing. A client fetching a well-known path is following a specification, not a link, and
- * it has no reason to expect a redirect there.
+ * serves nothing. A client fetching such a path is following a specification, not a link, and it
+ * has no reason to expect a redirect there.
  *
- * Named rather than exempting the whole `/.well-known/` subtree, because the subtree also holds
- * directory-shaped paths — `/.well-known/agent-skills` — that should keep redirecting. The list is
- * the one agent-surfaces.mjs already keeps of the well-known documents this site actually serves,
- * so a new one is exempt by being registered rather than by being remembered here.
+ * Derived from the two registered surface lists rather than written out, because the property that
+ * matters is "registered and extension-less", not "under `/.well-known/`". The subtree exemption
+ * would be wrong in both directions: it holds directory-shaped paths — `/.well-known/agent-skills`
+ * — that should keep redirecting, and since 2026-08-27 the site also serves `/mcp/server-card`,
+ * whose path SEP-2127 fixes as `<streamable-http-url>/server-card` and which lives nowhere near
+ * `.well-known`. Filtering both lists keeps the rule what it says it is, and a new document is
+ * exempt by being registered rather than by being remembered here.
  */
-const EXTENSIONLESS_DOCUMENTS = new Set(WELL_KNOWN_SURFACE_PATHS);
+const EXTENSIONLESS_DOCUMENTS = new Set(
+  [...AGENT_SURFACE_PATHS, ...WELL_KNOWN_SURFACE_PATHS].filter(
+    (path) => !path.slice(path.lastIndexOf('/') + 1).includes('.')
+  )
+);
 
 /**
  * The slash-form path to redirect to, or null to leave the request alone.

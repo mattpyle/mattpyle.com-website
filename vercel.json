@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/.well-known/ai-catalog.json", "destination": "/.well-known/ard.json" }
+    { "source": "/.well-known/ai-catalog.json", "destination": "/.well-known/ard.json" },
+    { "source": "/.well-known/mcp/server-card.json", "destination": "/mcp/server-card" }
   ],
   "redirects": [
     { "source": "/agent-traffic", "destination": "/activity/", "permanent": false },
@@ -30,6 +31,28 @@
         { "key": "Content-Type", "value": "application/json; charset=utf-8" },
         { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" },
         { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    },
+    {
+      "source": "/mcp/server-card",
+      "headers": [
+        { "key": "Content-Type", "value": "application/mcp-server-card+json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, If-None-Match" },
+        { "key": "Access-Control-Expose-Headers", "value": "ETag" }
+      ]
+    },
+    {
+      "source": "/.well-known/mcp/server-card.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/mcp-server-card+json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, If-None-Match" },
+        { "key": "Access-Control-Expose-Headers", "value": "ETag" }
       ]
     },
     {
