@@ -81,13 +81,27 @@ const PATH_CONTENT_TYPES = {
 };
 
 /**
+ * Request paths served from another path's file, mirroring vercel.json's `rewrites`.
+ *
+ * One entry. `/.well-known/ai-catalog.json` is the ARD predecessor path, and it is an alias rather
+ * than a second file on purpose: the measured clients (Cloudflare's scanner, Hugging Face's
+ * `hf discover`) resolve only the old name, and two files would be two places for the catalogue to
+ * drift. Nothing is written under public/.well-known for it, so a local build would 404 the path
+ * that production answers unless this map exists. Keep it in step with vercel.json's rewrites.
+ */
+const PATH_ALIASES = {
+  '/.well-known/ai-catalog.json': '/.well-known/ard.json',
+};
+
+/**
  * The file a URL path maps to, or null. Mirrors `serve`'s resolution order, which is what the
- * audits have been reading all along: exact file, then `.html`, then `index.html`.
+ * audits have been reading all along: exact file, then `.html`, then `index.html`. An aliased path
+ * resolves against the path it points at, which is how production answers it too.
  *
  * @param {string} pathname
  */
 function staticFileFor(pathname) {
-  const decoded = decodeURIComponent(pathname);
+  const decoded = PATH_ALIASES[pathname] ?? decodeURIComponent(pathname);
   const relative = normalize(decoded).replace(/^([/\\])+/, '');
   const candidate = resolve(root, relative);
 

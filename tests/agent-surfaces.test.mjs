@@ -50,6 +50,7 @@ test('the named well-known surfaces are the ones the site actually publishes', (
     '/.well-known/agent-card.json',
     '/.well-known/mcp-server',
     '/.well-known/ard.json',
+    '/.well-known/ai-catalog.json',
     SKILLS_INDEX_PATH,
     ...readSkills().map((skill) => skillUrlFor(skill.name)),
   ];
@@ -58,10 +59,40 @@ test('the named well-known surfaces are the ones the site actually publishes', (
   // The three hand-written documents are asserted to exist as files, which is what "actually
   // publishes" means for them: neither is generated, so nothing else in the build would notice a
   // listed path that serves a 404. The skills are covered by readSkills() reading their source.
+  // /.well-known/ai-catalog.json is deliberately not in this loop: it is an alias onto ard.json,
+  // and a file at that path would be the drift the alias exists to avoid. The assertion below is
+  // its equivalent.
   for (const path of ['/.well-known/agent-card.json', '/.well-known/mcp-server', '/.well-known/ard.json']) {
     const file = fileURLToPath(new URL(`../public${path}`, import.meta.url));
     assert.doesNotThrow(() => readFileSync(file), `${path} is listed as a surface but public${path} does not exist`);
   }
+});
+
+test('the ai-catalog path is an alias onto ard.json, not a second catalogue', () => {
+  // The whole point of the predecessor path is that it is a second name for one file. A file at
+  // the alias path would serve stale bytes the moment ard.json changed, which is the failure this
+  // asserts against, and the rewrite is what makes the path answer at all.
+  const aliasFile = fileURLToPath(new URL('../public/.well-known/ai-catalog.json', import.meta.url));
+  assert.throws(
+    () => readFileSync(aliasFile),
+    'public/.well-known/ai-catalog.json exists; the predecessor path must stay a rewrite onto ard.json'
+  );
+
+  const vercelConfig = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../vercel.json', import.meta.url)), 'utf8')
+  );
+  assert.ok(
+    vercelConfig.rewrites?.some(
+      (rule) => rule.source === '/.well-known/ai-catalog.json' && rule.destination === '/.well-known/ard.json'
+    ),
+    'vercel.json must rewrite /.well-known/ai-catalog.json to /.well-known/ard.json'
+  );
+
+  // Headers are matched against the request path, before the rewrite, so the alias needs its own
+  // block and the two blocks have to agree. A drifted Content-Type is the one difference a client
+  // on the old path would actually see.
+  const headersFor = (source) => vercelConfig.headers.find((block) => block.source === source)?.headers;
+  assert.deepEqual(headersFor('/.well-known/ai-catalog.json'), headersFor('/.well-known/ard.json'));
 });
 
 test('ordinary pages and reader furniture are not surfaces', () => {

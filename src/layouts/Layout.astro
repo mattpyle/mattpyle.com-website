@@ -256,6 +256,15 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     */}
     <link rel="ard" href={new URL('/.well-known/ard.json', Astro.site)} />
     {/*
+      The same catalogue under ARD's predecessor names, for consumers that have not caught up with
+      v0.91. Measured on 2026-08-27 (docs/work/ai-catalog-alias-path.md): `hf discover navigate`
+      fetched /.well-known/ai-catalog.json, took the 404, and stopped without ever trying ard.json
+      or this document's rel="ard" element; isitagentready.com reads rel="ai-catalog". The URL is a
+      vercel.json rewrite onto ard.json, never a second file, so there is one catalogue with two
+      names and nothing to drift.
+    */}
+    <link rel="ai-catalog" href={new URL('/.well-known/ai-catalog.json', Astro.site)} />
+    {/*
       The latin subset of each face the page paints in the default appearance,
       and no more. JetBrains Mono and Source Serif 4 are retro's faces and are
       not preloaded: retro is a persisted client-side preference, so preloading
