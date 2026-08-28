@@ -69,6 +69,18 @@ const CONTENT_TYPES = {
 };
 
 /**
+ * Content types for files with no extension, keyed by request path.
+ *
+ * One entry, and it mirrors the header vercel.json sets for the same path. `/.well-known/mcp-server`
+ * is a JSON document whose path the discovery draft fixes without a suffix, so extension lookup
+ * lands on `application/octet-stream` and an audit run against a local build would read a different
+ * content type from the one production serves. Keep this in step with vercel.json's headers.
+ */
+const PATH_CONTENT_TYPES = {
+  '/.well-known/mcp-server': 'application/json; charset=utf-8',
+};
+
+/**
  * The file a URL path maps to, or null. Mirrors `serve`'s resolution order, which is what the
  * audits have been reading all along: exact file, then `.html`, then `index.html`.
  *
@@ -124,7 +136,10 @@ const server = createServer(async (request, response) => {
   const file = staticFileFor(pathname);
   if (file) {
     response.writeHead(200, {
-      'Content-Type': CONTENT_TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
+      'Content-Type':
+        PATH_CONTENT_TYPES[pathname] ??
+        CONTENT_TYPES[extname(file).toLowerCase()] ??
+        'application/octet-stream',
       'Cache-Control': 'no-store',
     });
     createReadStream(file).pipe(response);

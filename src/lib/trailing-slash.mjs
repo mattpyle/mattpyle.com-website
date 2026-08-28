@@ -20,14 +20,32 @@
  * so a markdown request is served rather than redirected. And the matcher decides the blast radius,
  * so `/a2a` — deliberately not in it — is never reached by this rule at all.
  *
- * Pure and dependency-free so tests/trailing-slash.test.mjs can cover it without a deploy. Same
- * split as agent-surfaces.mjs, markdown-negotiation.mjs, and on-demand-routes.mjs.
+ * Pure so tests/trailing-slash.test.mjs can cover it without a deploy. Same split as
+ * agent-surfaces.mjs, markdown-negotiation.mjs, and on-demand-routes.mjs — and its one import is
+ * from the first of those, for the reason the exemption below gives.
  */
+
+import { WELL_KNOWN_SURFACE_PATHS } from './agent-surfaces.mjs';
+
+/**
+ * Discovery documents whose path is fixed by a specification and carries no extension.
+ *
+ * `/.well-known/mcp-server` is the first: draft-serra-mcp-discovery-uri spells the path without a
+ * suffix, so the final-segment rule below reads it as a page and would 308 it to a slash form that
+ * serves nothing. A client fetching a well-known path is following a specification, not a link, and
+ * it has no reason to expect a redirect there.
+ *
+ * Named rather than exempting the whole `/.well-known/` subtree, because the subtree also holds
+ * directory-shaped paths — `/.well-known/agent-skills` — that should keep redirecting. The list is
+ * the one agent-surfaces.mjs already keeps of the well-known documents this site actually serves,
+ * so a new one is exempt by being registered rather than by being remembered here.
+ */
+const EXTENSIONLESS_DOCUMENTS = new Set(WELL_KNOWN_SURFACE_PATHS);
 
 /**
  * The slash-form path to redirect to, or null to leave the request alone.
  *
- * Two paths are left alone, and both matter:
+ * Three paths are left alone, and all of them matter:
  *
  *   - Anything already ending in `/`, which is every canonical URL the site emits. Returning a
  *     target here would be a redirect loop.
@@ -36,12 +54,15 @@
  *     `.well-known` documents. An extension path is a file, not a page, and it has no slash form.
  *     Checking only the final segment is deliberate — `/.well-known/agent-skills/foo` has a dot in
  *     an earlier segment and is still a directory-shaped path.
+ *   - The extension-less well-known documents named above, which look like pages to the rule and
+ *     are files.
  *
  * @param {string} pathname
  * @returns {string | null}
  */
 export function trailingSlashRedirectFor(pathname) {
   if (pathname.endsWith('/')) return null;
+  if (EXTENSIONLESS_DOCUMENTS.has(pathname)) return null;
   const finalSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
   if (finalSegment.includes('.')) return null;
   return `${pathname}/`;

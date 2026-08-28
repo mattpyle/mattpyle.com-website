@@ -53,6 +53,7 @@ export const GET: APIRoute = async ({ site }) => {
   // "add a file in src/data/skills/" with no edit here.
   lines.push(...formatSkillsIndexLines(base, skillsIndex.skills));
   lines.push(`- [A2A Agent Card](${base}/.well-known/agent-card.json): this site as an A2A agent. Two skills, answered by a JSON-RPC 2.0 endpoint at ${base}/a2a (A2A 1.0, no auth): ask-about-site returns a direct Message about this site, and audit-a-site audits a site you name, its deep tier as a Task you poll with GetTask. Full calling notes are in agents.md.`);
+  lines.push(`- [MCP server discovery](${base}/.well-known/mcp-server): the discovery document for this site's MCP endpoint, per draft-serra-mcp-discovery-uri. It names the streamable-HTTP endpoint at ${base}/mcp, which needs no auth; audit_site(url) runs the fast audit and answers in the same call, and tools/list enumerates the rest. Full notes are on the Steward page.`);
   lines.push(`- [scorecard.json](${base}/scorecard.json): every scorecard run as JSON — the same numbers /scorecard displays.`);
   lines.push(`- [activity.json](${base}/activity.json): the agent-traffic counts as JSON — the same numbers /activity displays, at UTC-hour resolution.`);
   lines.push(`- [llms-full.txt](${base}/llms-full.txt): the full plain-text content export.`);

@@ -1,0 +1,20 @@
+{
+  "mcp_version": "2025-06-18",
+  "name": "steward-audit",
+  "description": "Audits any website for agent-readiness over plain HTTP: robots.txt and its AI-agent rules, Content Signals, the sitemap, llms.txt and whether its links resolve, agents.md, the well-known MCP and A2A discovery documents, and whether the homepage and a content page actually serve markdown when asked for it. It checks behaviour rather than presence. Call audit_site(url): the checks take seconds and the report comes back in the same call, as canonical JSON in structuredContent and as a markdown summary in the text content. No auth, no account, and nothing is stored. Ten audits per caller per hour, 500 across all callers per UTC day; a refusal names the limit and when to retry. Further tools are listed by tools/list.",
+  "endpoint": "https://www.mattpyle.com/mcp",
+  "transport": "http",
+  "trust_class": "public",
+  "auth": {
+    "required": false,
+    "methods": []
+  },
+  "capabilities": ["tools"],
+  "categories": ["developer-tools", "seo", "accessibility"],
+  "languages": ["en"],
+  "contact": "https://www.mattpyle.com/steward",
+  "docs": "https://www.mattpyle.com/steward",
+  "payment_required": false,
+  "last_updated": "2026-08-27T00:00:00Z",
+  "cache_ttl": 3600
+}

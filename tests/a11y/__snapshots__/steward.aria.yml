@@ -112,7 +112,12 @@
       - code: http
       - text: and
       - code: https
-      - text: are accepted, and addresses on private networks are refused before a connection is opened.
+      - text: are accepted, and addresses on private networks are refused before a connection is opened. The site's own discovery document is at
+      - link "/.well-known/mcp-server":
+        - /url: /.well-known/mcp-server
+      - text: "; it describes the fast tier, and"
+      - code: tools/list
+      - text: enumerates the rest.
     - heading "The deep tier" [level=3]
     - paragraph:
       - text: A deep audit takes longer than any MCP client holds a tool call open, so

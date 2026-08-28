@@ -238,7 +238,9 @@ const GUARANTEES = [
           text content. A <code>GET</code> on <a href={endpoint}>the endpoint itself</a> answers <code>405</code> with
           a worked example rather than a bare status. The unit audited is a site, not a page: any
           path in the URL is ignored, only <code>http</code> and <code>https</code> are accepted, and
-          addresses on private networks are refused before a connection is opened.
+          addresses on private networks are refused before a connection is opened. The site's own
+          discovery document is at <a href="/.well-known/mcp-server">/.well-known/mcp-server</a>; it
+          describes the fast tier, and <code>tools/list</code> enumerates the rest.
         </p>
 
         <h3>The deep tier</h3>
