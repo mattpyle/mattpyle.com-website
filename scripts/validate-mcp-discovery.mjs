@@ -33,6 +33,15 @@
  * serve. So the description has to name the fast tool and must not name either deep one. Written as
  * an assertion because the decision is invisible in the document itself — a later edit that adds a
  * sentence about `deep_audit` would look like an improvement and read as one.
+ *
+ * **No rate-limit numbers live in this document, and none should be added.** The caps come from the
+ * environment through readLimits/readDeepLimits, so the only surface that can state them without
+ * drifting is /steward, which renders the resolved values at build. A number copied into a static
+ * file agrees with the code until somebody sets the variable: `MCP_DEEP_RATE_PER_CALLER` was 4 on
+ * production while both this document's neighbours in agents.md and the code default said 2, and
+ * nothing noticed for a deploy. This cannot be asserted here — the build resolves the deployment's
+ * own environment, so an equality check would pass on Vercel and fail locally for the same correct
+ * file — so the rule is the docblock and the fix is to point at /steward instead.
  */
 
 import { readFileSync } from 'node:fs';

@@ -132,12 +132,7 @@ This site runs a public MCP server. It audits any site for agent-readiness, on t
 
 `deep_audit(url)` and `get_audit(workflowId, view)` are the browser-rendered tier. It renders up to three of the site's own pages and reports Lighthouse per-axis scores and axe-core violation counts, which takes minutes — longer than any MCP client holds a tool call open — so `deep_audit` returns a Temporal workflow ID straight away and `get_audit` reads it back: `view: "status"` until `done` is true, then `view: "report"` or `"summary"`. There are no findings in the `deep_audit` response and it says so. The discovery document above describes the fast tier only; find these two through `tools/list`.
 
-**What one call costs you**, on a budget shared with the A2A endpoint — a slot spent on either protocol is spent on both:
-
-| Tier | Per caller | Everyone together |
-|---|---|---|
-| Fast | 10 audits per hour | 500 audits per UTC day |
-| Deep | 2 audits per UTC day | 10 audits per UTC day |
+**What one call costs you.** Both tiers are capped per caller and across all callers, on a budget shared with the A2A endpoint — a slot spent on either protocol is spent on both. The fast tier is capped per hour and per UTC day, the deep tier per UTC day and far lower, because a deep audit spends minutes of browser time on a machine somebody pays for where a fast one spends seconds inside the function that answered you. **The caps in force are on [/steward](https://www.mattpyle.com/steward)**, which renders them from the environment this deployment actually enforces; a number written out here would be a copy that can drift, and one already had.
 
 A refusal is a JSON-RPC error with a `Retry-After` header naming which limit was hit and how long to wait. There is no key, no account, and no way to ask for more. `get_audit` is free: it reads a run you already paid for and makes no request at anybody's origin. The counters hold a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself.
 
