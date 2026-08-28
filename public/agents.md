@@ -199,16 +199,16 @@ The tools require no authentication, expose no personal data beyond the public b
 
 If you arrived here from a `steward-audit` line in your access log, [/steward](https://www.mattpyle.com/steward) is the page that string points at and the fuller answer. The short version:
 
-`steward-audit` is an agent-readiness auditor run from this site. It checks whether a site is legible to an AI agent: robots.txt, the sitemap, `llms.txt`, `agents.md`, the well-known discovery documents, whether pages that claim to serve markdown actually do, and — on its local deep tier only — Lighthouse and axe-core over a few rendered pages. It is a diagnostic rather than a crawler. Somebody asks for one URL and reads one report.
+`steward-audit` is an agent-readiness auditor run from this site. It checks whether a site is legible to an AI agent: robots.txt, the sitemap, `llms.txt`, `agents.md`, the well-known discovery documents, whether pages that claim to serve markdown actually do, and — on its deep tier only — Lighthouse and axe-core over a few rendered pages. It is a diagnostic rather than a crawler. Somebody asks for one URL and reads one report.
 
 | | |
 |---|---|
 | User-Agent | `steward-audit/0.2.0 (+https://www.mattpyle.com/steward)` |
-| Cost of one audit | Roughly a dozen HTTP requests. The local deep tier adds up to three of your pages loaded in a headless browser. |
+| Cost of one audit | Roughly a dozen HTTP requests. A deep audit adds up to three of your pages loaded in a headless browser. |
 | Frequency | Once, when a person or an agent asks for it. No schedule, no repeat visits, no crawl. |
 | Purpose | Producing a report for whoever ran it. Nothing is stored on this site or published anywhere. |
 
-The rendered pages are the expensive half, and they are the local tier only — the public endpoint above never opens a browser. When they do run, a headless browser loads the page and, like any browser, fetches that page's own images, scripts, and stylesheets. Those requests carry the same User-Agent as the rest of the audit, so everything one audit does is attributable to one visitor in your log.
+The rendered pages are the expensive half, and they are the deep tier only. When they do run, a headless browser loads the page and, like any browser, fetches that page's own images, scripts, and stylesheets. Those requests carry the same User-Agent as the rest of the audit, so everything one audit does is attributable to one visitor in your log.
 
 **It obeys your robots.txt.** Every URL the auditor requests is checked against your rules first, including each page it opens in the browser; only `/robots.txt` itself is fetched without asking. Anything you disallow is reported as "not checked", never as a finding against your site.
 
