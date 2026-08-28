@@ -97,3 +97,25 @@ test('the User-Agent points at a page this site actually serves', () => {
     readFileSync(fileURLToPath(new URL('../src/pages/steward.astro', import.meta.url))).length > 0
   );
 });
+
+test('the discovery document names the endpoint and the server', () => {
+  const manifest = JSON.parse(read('public/.well-known/mcp-server'));
+  assert.equal(manifest.endpoint, 'https://www.mattpyle.com/mcp');
+  assert.equal(manifest.docs, 'https://www.mattpyle.com/steward');
+  // The same required fields scripts/validate-mcp-discovery.mjs enforces in the build chain,
+  // asserted here too so a broken document fails a test run and not only a build.
+  for (const field of ['mcp_version', 'name', 'endpoint', 'transport']) {
+    assert.equal(typeof manifest[field], 'string', `${field} must be a string`);
+  }
+});
+
+test('the discovery document describes the fast tier and leaves the deep tier to tools/list', () => {
+  // The endpoint grew from one tool to three after this document was first written. The decision
+  // that survived the growth is that the document still describes the fast tier only: every agent
+  // that goes looking for an MCP server reads it, and a capped minutes-long tool advertised that
+  // widely is a different traffic shape from a synchronous one. The build validator asserts the
+  // same thing; it is here too so the decision fails a test run and not only a build.
+  const { description } = JSON.parse(read('public/.well-known/mcp-server'));
+  assert.match(description, /audit_site/);
+  assert.doesNotMatch(description, /deep_audit|get_audit/);
+});
