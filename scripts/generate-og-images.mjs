@@ -52,26 +52,25 @@ function naturalLineHeight(fontSize, lineHeightMultiplier) {
 }
 
 /**
- * The signature row every card ends on: the `mp/` chip, a hairline, the byline,
+ * The signature row every card ends on: the `mp/` chip, a hairline, the domain,
  * and an optional right-aligned date.
  *
- * `byline: false` drops the author and leaves the domain alone. The fallback
- * card already says "Matt Pyle" in 128px type, so repeating it in the signature
- * says the name three times on one image counting the mark.
+ * No byline. The mark is already the name in short form, and on the fallback the
+ * name is also the 128px headline, so "Matt Pyle — mattpyle.com" here said it a
+ * third time on one image (Matt, 2026-08-28). The domain is the one thing the
+ * row has to carry, because a share card is often the only place a reader sees
+ * where the page lives.
  */
-function renderSignatureRow(mono, { top, date, byline = true }) {
+function renderSignatureRow(mono, { top, date }) {
   const mark = renderMark(mono, { x: PADDING, y: top, height: MARK_HEIGHT });
 
   const dividerX = PADDING + mark.width + 22;
   const dividerHeight = 28;
   const dividerY = top + (MARK_HEIGHT - dividerHeight) / 2;
 
-  const nameFontSize = 18;
-  const nameX = dividerX + 1 + 22;
-  const nameBaseline = centeredBaseline(top, MARK_HEIGHT, mono, nameFontSize);
-  const author = byline ? 'Matt Pyle ' : '';
-  const domain = byline ? '— mattpyle.com' : 'mattpyle.com';
-  const authorWidth = metrics(mono, nameFontSize).widthOf(author);
+  const domainFontSize = 18;
+  const domainX = dividerX + 1 + 22;
+  const domainBaseline = centeredBaseline(top, MARK_HEIGHT, mono, domainFontSize);
 
   const dateSvg = date
     ? renderTextPath(mono, date, {
@@ -86,8 +85,7 @@ function renderSignatureRow(mono, { top, date, byline = true }) {
 
   return `${mark.svg}
   <rect x="${dividerX}" y="${dividerY.toFixed(1)}" width="1" height="${dividerHeight}" fill="${COLORS.rule}" />
-  ${author ? renderTextPath(mono, author, { x: nameX, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.text, role: 'author' }) : ''}
-  ${renderTextPath(mono, domain, { x: nameX + authorWidth, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.muted, role: 'domain' })}
+  ${renderTextPath(mono, 'mattpyle.com', { x: domainX, baseline: domainBaseline, fontSize: domainFontSize, fill: COLORS.muted, role: 'domain' })}
   ${dateSvg}`;
 }
 
@@ -146,9 +144,7 @@ function renderWritingCard({ title, date, eyebrow, accent = ACCENTS.writing, dis
  * repeats the homepage hero rather than inventing a second headline: the name,
  * with the surname in the agents magenta the H1 fills it with, over a
  * three-noun standfirst.
- *
- * The name is the headline, so the signature row below carries the domain only
- * (Matt, 2026-08-28).
+
  *
  * `height` varies because `twitter:image` is cropped 16:9 and `og:image` 1.91:1,
  * so the two are separate files at separate sizes.
@@ -186,7 +182,7 @@ function renderFallbackCard({ height, display, mono }) {
   ${renderTextPath(display, 'Matt ', { x: PADDING, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.ink, letterSpacing: nameLetterSpacing, role: 'name' })}
   ${renderTextPath(display, 'Pyle', { x: PADDING + firstWidth, baseline: nameBaseline, fontSize: nameFontSize, fill: ACCENTS.agents, letterSpacing: nameLetterSpacing, role: 'surname' })}
   ${statementSvg}
-  ${renderSignatureRow(mono, { top: bottomRowTop, byline: false })}
+  ${renderSignatureRow(mono, { top: bottomRowTop })}
 </svg>`;
 }
 
