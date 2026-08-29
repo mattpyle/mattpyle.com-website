@@ -4,12 +4,19 @@
  *
  * Posts grouped by year: a header row naming the year and its post count, then
  * one row per post — date, title and excerpt, read length. No tags and no
- * filter pills; the design bans both (constraint 4), so the tag radiogroup on
- * this page belongs to the legacy tree only.
+ * filter pills; the design bans both (constraint 4), and the legacy tag
+ * radiogroup this page used to also ship is deleted.
  *
- * Strict reverse-chronological order, which is a DEVIATION from the legacy list:
- * that one floats `featured: true` posts to the top. A year heading over a list
- * that is not in date order reads as a bug, and the grouping is the design.
+ * Strict reverse-chronological order. The legacy list floated `featured: true`
+ * posts to the top; a year heading over a list that is not in date order reads
+ * as a bug, and the grouping is the design.
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='writing-archive']` in retro.css.
+ * The module prefix is load-bearing twice: it outweighs the Astro-scoped
+ * selectors below, whose `[data-astro-cid-…]` counts as a class, and it fences
+ * off `.row`, `.row-title` and `.year-group`, which are the same generic names
+ * the homepage and changelog rows carry. Nothing here is appearance-aware.
  */
 import { formatSiteDate } from '../../lib/format-date.mjs';
 import { readingMinutes } from '../../lib/reading-time';
@@ -43,7 +50,7 @@ const groups = [...byYear.entries()]
   }));
 ---
 
-<section class="rd-section archive modern-skin" aria-labelledby="writing-archive-title">
+<section class="rd-section archive" data-module="writing-archive" aria-labelledby="writing-archive-title">
   {/*
     The list needs a name in the accessibility tree, and the design has no
     visible heading for it — the H1 above is the page's only headline. A

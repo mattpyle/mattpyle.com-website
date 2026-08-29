@@ -22,7 +22,7 @@ function yamlList(values: string[]): string {
 
 export const GET: APIRoute = async ({ params, site, request }) => {
   // middleware.ts proxies negotiated Markdown requests to this explicit endpoint.
-  // The direct /writing/<slug>.md URL also powers View and Copy in ArticleActions.
+  // The direct /writing/<slug>.md URL also powers view markdown and copy markdown in PostRail.
   //
   // Through formatLogLine, not a template literal: this runs before the collection lookup, so an
   // unmatched slug is logged too, and the slug is a live request path value that Astro has already

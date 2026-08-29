@@ -6,6 +6,12 @@
  * right-hand block — with the fill in WRITING BLUE. The spec's rule is that the
  * fill always takes the colour of the section it belongs to, which is why
  * `.rd-fill` (global.css) is parameterised rather than hard-coded to magenta.
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='writing-hero']` in retro.css. The
+ * module prefix there is what buys those rules the one extra attribute they
+ * need to outweigh the Astro-scoped selectors below, whose
+ * `[data-astro-cid-…]` counts as a class. Nothing here is appearance-aware.
  */
 ---
 
@@ -15,7 +21,7 @@
   unnamed <section> is not exposed as a region anyway — so the element was
   carrying the warning and nothing else.
 */}
-<div class="rd-section writing-hero modern-skin">
+<div class="rd-section writing-hero" data-module="writing-hero">
   <h1><span class="rd-fill rd-fill--writing">Writing</span></h1>
 
   <div class="hero-row">

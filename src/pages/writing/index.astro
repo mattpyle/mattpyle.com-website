@@ -1,8 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
-import PageHeader from '../../components/PageHeader.astro';
-import ArticleList from '../../components/ArticleList.astro';
 import WritingHero from '../../components/writing/WritingHero.astro';
 import WritingArchive from '../../components/writing/WritingArchive.astro';
 import { showDrafts } from '../../lib/show-drafts';
@@ -16,13 +14,7 @@ const markdownUrl = markdownSiblingFor('/writing/') ?? undefined;
 
 const allArticles = await getCollection('writing', ({ data }) => showDrafts || !data.draft);
 
-const articles = allArticles.sort((a, b) => {
-  if (a.data.featured && !b.data.featured) return -1;
-  if (!a.data.featured && b.data.featured) return  1;
-  return b.data.date.getTime() - a.data.date.getTime();
-});
-
-const allTags = [...new Set(articles.flatMap(a => a.data.tags))].sort();
+const articles = allArticles.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
 ---
 
 <Layout
@@ -31,29 +23,30 @@ const allTags = [...new Set(articles.flatMap(a => a.data.tags))].sort();
   markdownAlternate={markdownUrl}
 >
   {/*
-    TWO INDEXES IN ONE DOCUMENT, one shown per appearance — the same
-    construction src/pages/index.astro uses, and for the same reason: the
-    redesign rebuilds the MODERN appearance only, retro is a client-side
-    preference the server cannot read, so both trees ship and CSS chooses.
-    `.modern-skin` / `.retro-skin` in src/styles/retro.css do the choosing.
+    ONE INDEX, styled by both appearances.
 
-    A hidden subtree holds no tab stops and is absent from the accessibility
-    tree, so each appearance presents exactly one index.
+    The hero and the archive below are the page's whole body. Retro restyles this
+    same markup under `html[data-appearance='retro'] [data-module='writing-…']`
+    in src/styles/retro.css — the legacy PageHeader/ArticleList tree and the
+    `.retro-skin` wrapper that shipped a second copy of the index are deleted.
 
-    The two lists take the same collection and sort it differently on purpose:
-    the legacy list floats `featured` posts to the top, and the redesigned one is
-    strictly reverse-chronological because it groups by year. See
-    WritingArchive.astro.
+    Every retro rule for this body carries a `[data-module]` prefix, and that is
+    load-bearing twice over: Astro appends a `[data-astro-cid-…]` to each
+    component's own selectors and that attribute counts as a class, and the
+    archive's row classes (`.row`, `.row-title`, `.year-group`) are the same
+    generic names the homepage and changelog rows use, so an unprefixed rule
+    would reach surfaces this page does not own.
+
+    ONE SORT, strictly reverse-chronological. The legacy list floated
+    `featured: true` posts to the top; the archive groups by year, and a year
+    heading over a list that is not in date order reads as a bug. So the flag no
+    longer orders anything, and with the legacy list gone it has no renderer at
+    all — it survives as a schema field in src/content.config.ts.
+
+    Tags leave the HTML with that list too, and stay live as data: /llms.txt,
+    /llms-full.txt, the WebMCP post search and the A2A digest all read them from
+    the collection.
   */}
   <WritingHero />
   <WritingArchive articles={articles} />
-
-  <div class="retro-skin">
-    <PageHeader
-      eyebrow="Writing"
-      title="Writing"
-      subtitle="Growth, marketing, AI, and building things."
-    />
-    <ArticleList articles={articles} allTags={allTags} />
-  </div>
 </Layout>

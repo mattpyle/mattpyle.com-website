@@ -12,6 +12,13 @@
  * NOT SHIPPED: the spec's provenance panel at the foot of the article. Cut by
  * Matt on 2026-08-20 along with the /writing "Steward is holding one draft"
  * panel; both would have to be driven from real review state.
+ *
+ * SHOWN IN BOTH APPEARANCES since 2026-08-29. Its four actions are the only
+ * copy of them on the page now that the legacy ArticleActions section is
+ * deleted, so it can no longer be hidden in retro. Retro restyles this same
+ * markup under `html[data-appearance='retro'] [data-module='article']` in
+ * retro.css; that prefix is what outweighs the Astro-scoped selectors below,
+ * whose `[data-astro-cid-…]` counts as a class.
  */
 import { formatSiteDate } from '../../lib/format-date.mjs';
 import { chatGptUrl, claudeUrl } from '../../lib/article-actions.mjs';
@@ -37,7 +44,7 @@ const { date, readingLabel, headings, markdownUrl, canonicalUrl } = Astro.props;
 const contents = headings.filter(heading => heading.depth === 2);
 ---
 
-<aside class="post-rail modern-skin" aria-labelledby="post-rail-title">
+<aside class="post-rail" aria-labelledby="post-rail-title">
   <h2 id="post-rail-title" class="sr-only">About this post</h2>
 
   <div class="rail-block rail-meta">

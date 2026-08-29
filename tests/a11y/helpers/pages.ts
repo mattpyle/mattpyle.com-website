@@ -1,8 +1,8 @@
 /**
  * The page matrix for the a11y suite: every page template, plus every page with
  * interactive behaviour of its own. Pages that share a template still get their
- * own row when their interactive furniture differs (e.g. /writing and /projects
- * share ArticleList-ish layout but carry different FilterPills groups).
+ * own row when their interactive furniture differs (e.g. /projects and /changelog
+ * both list rows but carry different FilterPills groups).
  */
 
 export interface PageSpec {
@@ -77,22 +77,13 @@ export const PAGES: PageSpec[] = [
   {
     name: 'writing-index',
     path: '/writing',
-    why: 'Index template: the redesigned year-grouped archive, plus the legacy tag FilterPills radiogroup',
-    // Two trees ship here and the hidden one is absent from the accessibility
-    // tree, so this golden records whichever appearance the run is in — these
-    // rows are taken in modern. The legacy selectors are kept so the pruning
-    // still applies if a run ever takes this snapshot in retro.
-    //
-    // Order matters: the row is thinned to one first, then its tag chips, whose
-    // count is per-post and would otherwise churn the tree's shape.
-    snapshotKeepFirst: ['.archive .row', '[data-module="article-list"] .article-item', '.article-tags li'],
+    why: 'Index template: the year-grouped archive, one tree styled by both appearances',
+    // ONE TREE as of 2026-08-29 (one-dom phase 3): the legacy ArticleList and its
+    // tag FilterPills radiogroup are deleted, so these selectors are the whole
+    // page body in either appearance.
+    snapshotKeepFirst: ['.archive .row'],
     // The year header carries a post COUNT, which every published post changes.
-    snapshotRedact: [
-      '.archive .row',
-      '.archive .year-head',
-      '[data-module="article-list"] .article-item',
-      '.filter-status',
-    ],
+    snapshotRedact: ['.archive .row', '.archive .year-head'],
   },
   {
     name: 'projects-index',
@@ -138,25 +129,20 @@ export const PAGES: PageSpec[] = [
   {
     name: 'writing-entry',
     path: `/writing/${WRITING_ENTRY}`,
-    why: 'Article template: the redesigned sticky rail (in-page contents plus the four actions), and the legacy ArticleActions',
+    why: 'Article template: the sticky rail (in-page contents plus the four actions), one tree styled by both appearances',
+    // ONE TREE as of 2026-08-29 (one-dom phase 3): the legacy header, its tag
+    // list and the ArticleActions section are deleted, and the rail is shown in
+    // both appearances because it is the only copy of the four actions now.
     snapshotDrop: ['.prose > *'],
-    snapshotKeepFirst: ['.article-tags li'],
+    // The content-variable regions. The rail's contents list is built from the
+    // post's h2s, so it is the article by another name; its SHAPE — a nav named
+    // "On this page", one link per section — is what this golden is guarding,
+    // and that survives redaction.
+    //
+    // The fixture post is the oldest one, so it never has a next-post row and
+    // this golden does not cover it. `.post-next` is listed anyway, so the day
+    // an older post exists the golden records a shape rather than a title.
     snapshotRedact: [
-      '.page-title--article',
-      '.article-dek',
-      '.article-tags',
-      '.article-meta',
-      '.changelog-meta',
-      // Prev/next links are recomputed every time an entry ships either side.
-      '.entry-navigation',
-      // The redesigned tree's own content-variable regions. The rail's contents
-      // list is built from the post's h2s, so it is the article by another name;
-      // its SHAPE — a nav named "On this page", one link per section — is what
-      // this golden is guarding, and that survives redaction.
-      //
-      // The fixture post is the oldest one, so it never has a next-post row and
-      // this golden does not cover it. `.post-next` is listed anyway, so the day
-      // an older post exists the golden records a shape rather than a title.
       '.post-title',
       '.post-lead',
       '.rail-contents',
