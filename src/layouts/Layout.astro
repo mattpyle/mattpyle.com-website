@@ -250,8 +250,9 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
       resolving this domain's entries MUST fetch /.well-known/ard.json and MUST honour a
       rel="ard" link. The well-known path is the primary source and this element is the second
       of the two mechanisms a consumer is required to obey, so it is the one cheap aid worth
-      emitting; the robots.txt `Agentmap` line is the third, and DNS records are deliberately
-      not published. It is site-wide for the same reason the describedby above is: an agent
+      emitting; the two together are the whole advertisement. The spec's third mechanism, its
+      robots.txt directive, is not published — src/pages/robots.txt.ts says why — and DNS records
+      are deliberately not published either. It is site-wide for the same reason the describedby above is: an agent
       that arrives on a post should find the catalogue without going back to `/`.
     */}
     <link rel="ard" href={new URL('/.well-known/ard.json', Astro.site)} />

@@ -69,12 +69,17 @@ Allow: /
 `;
 
 export const GET: APIRoute = ({ site }) => {
-  // The Agentmap directive is Agentic Resource Discovery's robots.txt mechanism (spec v0.91
-  // §5.1): it names an entry source, the way Sitemap names a URL source. It is one of three
-  // publishing aids for the same catalogue, alongside the well-known path itself and the
-  // rel="ard" link in Layout.astro. Unknown directives are ignored by robots.txt parsers, so it
-  // costs nothing to a crawler that has never heard of ARD.
-  const body = `${crawlerRules}\nSitemap: ${new URL('/sitemap-index.xml', site)}\nAgentmap: ${new URL('/.well-known/ard.json', site)}\n`;
+  // Do not re-add an `Agentmap:` line here. Agentic Resource Discovery's robots.txt mechanism
+  // (spec v0.91 §5.1) names an entry source, the way Sitemap names a URL source, and it shipped
+  // here on 2026-08-27 on the assumption that a parser ignores a directive it does not know.
+  // Lighthouse does not ignore it. Its `robots-txt` audit validates every line against a fixed
+  // DIRECTIVE_SAFELIST (v13.4.0, core/audits/seo/robots-txt.js) and throws `Unknown directive` on
+  // anything off it; `content-signal` is on that list and `agentmap` is not. The line scored the
+  // audit 0 and cost 8 SEO points on all 24 pages in the 2026-08-28 nightly scorecard, the first
+  // Fail on a public metric. Removing it costs the catalogue nothing a consumer is required to
+  // read: ARD discovery still rides the well-known path itself and the rel="ard" link that
+  // Layout.astro emits on every page, which are the two mechanisms the spec makes mandatory.
+  const body = `${crawlerRules}\nSitemap: ${new URL('/sitemap-index.xml', site)}\n`;
 
   return new Response(body, {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
