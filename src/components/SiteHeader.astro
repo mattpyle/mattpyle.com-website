@@ -3,15 +3,16 @@
  * The redesigned sticky header (docs/projects/redesign/design-export/README.md §1,
  * mobile per docs/projects/redesign/design-mobile-nav/README.md, Option 3a).
  *
- * Renders alongside — not instead of — the legacy Nav.astro on a redesigned
- * route. Both are in the DOM; `.modern-skin` / `.retro-skin` in retro.css show
- * exactly one, the same way the retro homepage furniture has always worked.
- * That is what lets the redesign restyle the header without touching a single
- * retro rule: retro's selectors all hang off `[data-module='nav']`, which is the
- * OTHER element. Nothing here competes with them on specificity.
+ * The ONLY header on every route, in both appearances. Retro restyles this same
+ * markup under `html[data-appearance='retro'] [data-module='site-header']` in
+ * retro.css; the legacy Nav.astro it used to render beside is deleted.
  *
- * Never set `display` on the root element: the show/hide pair above sets it, and
- * an Astro-scoped rule carries a `[data-astro-cid-…]` and would win.
+ * Every rule below is now in a specificity contest with those retro rules, which
+ * it must lose. Astro appends a `[data-astro-cid-…]` to each selector here and
+ * that attribute counts as a class, so a retro selector needs one more
+ * class-or-attribute than its counterpart below — which is why every retro
+ * chrome rule is written as `html[data-appearance='retro'] [data-module='site-header'] …`
+ * rather than against the inner class alone.
  *
  * The nav colours are the spec's semantic set — each link is painted in the
  * colour of the section it leads to, and the current section is marked with a
@@ -83,9 +84,21 @@ const rowItems = mobileOrder.slice(0, 3).map((link, i) => ({ ...link, collapsibl
 const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible: i === 0 }));
 ---
 
-<header data-module="site-header" class="modern-skin">
+<header data-module="site-header">
   <div class="header-inner">
     <a href="/" class="wordmark" aria-label="Matt Pyle — home">mp/</a>
+    {/*
+      Retro-only furniture, on the same terms as RetroHomeFurniture.astro: it is
+      decorative, aria-hidden, behaviour-free, and `display: none` in modern (the
+      rule is in retro.css beside the rest of the furniture, so this element is
+      inert in modern regardless of stylesheet order). It is retro CONTENT, not a
+      duplicate of anything modern renders — the same complete arm/word/arm motif
+      as the homepage divider, which is the thing it is there to echo.
+    */}
+    <span class="nav-flourish" aria-hidden="true"><span class="nav-flourish-arm"
+      >&cedil;,&oslash;&curren;&ordm;&deg;`&deg;&ordm;&curren;&oslash;,&cedil;</span><span
+      class="nav-flourish-word">welcome</span><span class="nav-flourish-arm"
+      >&cedil;,&oslash;&curren;&ordm;&deg;`&deg;&ordm;&curren;&oslash;,&cedil;</span></span>
     <nav aria-label="Main navigation">
       <div class="nav-wide">
         {NAV_LINKS.map(({ label, href, section }) => (

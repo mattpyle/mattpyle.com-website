@@ -2,8 +2,6 @@
 import '../styles/global.css';
 import '../styles/retro.css';
 import { ClientRouter } from 'astro:transitions';
-import Nav from '../components/Nav.astro';
-import Footer from '../components/Footer.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
@@ -106,7 +104,7 @@ const twitterImageURL = new URL(image ?? '/og-fallback-twitter.png', Astro.site)
 const twitterCard = 'summary_large_image';
 
 // Person + WebSite ship on every page so the entity resolves the same way everywhere.
-// sameAs matches exactly the two links in Footer.astro / AboutGrid.astro — GitHub + LinkedIn
+// sameAs matches exactly the two links in SiteFooter.astro / AboutGrid.astro — GitHub + LinkedIn
 // only, no X/Twitter (see CLAUDE.md: that's a deliberate entity statement, not an omission).
 const jsonLdGraph: Record<string, unknown>[] = [
   {
@@ -284,19 +282,15 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     <a href="#main" class="skip-link">Skip to content</a>
     <AppearanceBanner />
     {/*
-      Every route ships BOTH sets of chrome and shows one, which is what lets the
-      redesign leave retro untouched (Matt, 2026-08-20). The pair is switched by
-      `.modern-skin` / `.retro-skin` in retro.css, the same construction the retro
-      homepage furniture has always used: nothing is injected or removed when the
-      appearance toggles, and a hidden subtree holds no tab stops and appears in
-      no accessibility tree.
+      One header and one footer per route, in both appearances. Retro restyles
+      this same markup through `html[data-appearance='retro'] [data-module='site-header']`
+      / `[data-module='site-footer']` in retro.css; nothing is injected, removed
+      or re-rendered when the appearance toggles.
     */}
     <SiteHeader />
-    <Nav />
     <main class="site-main" id="main">
       <slot />
     </main>
-    <Footer />
     <SiteFooter />
     <AppearanceUI />
     {/*

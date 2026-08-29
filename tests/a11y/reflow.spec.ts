@@ -11,37 +11,36 @@ import { installPageLoadCounter, gotoSettled } from './helpers/settle';
  * relies on it — the /webmcp agent snippets must not wrap mid-token). What fails
  * the criterion is the page itself scrolling sideways.
  *
- * Every page runs modern at 320 and 375, then retro at 320, 442 and 456. Retro is
- * a real appearance a visitor can select and persist, it restyles the header and
- * footer in much wider faces, and it had its own overflows that modern-only rows
- * could not see (the footer appearance toggle at 320, the nav row up to 443).
+ * Every page runs modern at 320 and 375, then retro at 320, 375, 442 and 456.
+ * Retro is a real appearance a visitor can select and persist, it restyles the
+ * one header and one footer in much wider faces (bold Verdana links, a Comic Sans
+ * wordmark), and it has had its own overflows that modern-only rows could not see.
  * Reflow is content-dependent per page, so retro gets the whole matrix rather than
  * one representative page.
  *
- * 320 is the only width 1.4.10 asks about. The other widths bracket the two nav
- * wrap rules, because each exists to satisfy a measured font metric — the modern
- * row needs 363px, the retro row 444px — and a metric is exactly the kind of
- * premise that goes stale without anything failing:
+ * 320 is the only width 1.4.10 asks about. The other widths bracket the header's
+ * link-count breakpoints, because each exists to satisfy a measured font metric —
+ * and a metric is exactly the kind of premise that goes stale without anything
+ * failing:
  *
- *   375  Outside modern's 375px rule, the narrowest width that keeps its single
- *        row, holding 12px of slack over the 363 it needs. This row was added on
- *        2026-08-20: renaming Builds to Projects widened the modern row from 352
- *        to 363 and quietly broke 360–362, with every existing row still green.
- *   442  Inside retro's rule, the widest width that overflows without it. Deleting
- *        or narrowing the wrap fails here. 443 would not: the overflow there is
- *        1px, inside the tolerance below, which is why this is 442 and not 444.
- *   456  Outside retro's rule, the narrowest width that keeps the single row,
- *        holding 12px of slack over the 444 the row needs. Anything that widens
- *        the row past 456 (a sixth nav link, a longer label, different platform
- *        metrics) fails here while 320 stays green, and the answer is to move the
- *        breakpoint rather than to relax this row.
- *
- * Measured, not assumed: against the pre-fix stylesheets the 320 and 442 retro
- * rows and the 375 modern rows fail on every page, and the 456 rows pass.
+ *   375  The three-to-two boundary in SiteHeader.astro: 375 and up puts three
+ *        links beside `more`, below it two. Run in BOTH appearances, because the
+ *        breakpoint was measured against 13px IBM Plex Mono and retro paints the
+ *        same row in bold Verdana. The modern row was added on 2026-08-20 (renaming
+ *        Builds to Projects widened the then-current row and quietly broke 360–362);
+ *        the retro row on 2026-08-28, when retro stopped having a header of its own
+ *        and started sharing this one.
+ *   442  Retro, inside what used to be its own header wrap rule. That rule is gone:
+ *        it existed because the legacy retro nav put five bold Verdana links on one
+ *        row, and the priority-plus header is narrower than that in any face. The
+ *        row is kept as coverage of the retro three-link band, not as a bracket.
+ *   456  Retro, the far side of the same band. Anything that widens the retro row —
+ *        a longer label, different platform metrics — fails here while 320 stays
+ *        green, and the answer is a breakpoint change rather than a relaxed row.
  */
 
 const MODERN_WIDTHS = [320, 375] as const;
-const RETRO_WIDTHS = [320, 442, 456] as const;
+const RETRO_WIDTHS = [320, 375, 442, 456] as const;
 
 test.use({ viewport: { width: 320, height: 720 } });
 

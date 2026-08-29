@@ -2,11 +2,11 @@
 /**
  * The redesigned footer (docs/projects/redesign/design-export/README.md §1, "Footer").
  *
- * Renders alongside the legacy Footer.astro on a redesigned route, exactly like
- * SiteHeader.astro beside Nav.astro: both are in the DOM, `.modern-skin` /
- * `.retro-skin` in retro.css show one. Retro's footer rules all hang off
- * `[data-module='footer']`, which is the other element, so nothing here can
- * reach them and nothing there can reach this. Do not set `display` on the root.
+ * The ONLY footer on every route, in both appearances. Retro restyles this same
+ * markup under `html[data-appearance='retro'] [data-module='site-footer']` in
+ * retro.css; the legacy Footer.astro it used to render beside is deleted. Every
+ * rule below is therefore in a specificity contest with a retro rule that has to
+ * win — see the note in SiteHeader.astro for how those retro selectors are built.
  *
  * The appearance toggle lives here as a mono link in the link row rather than as
  * the legacy pill button (Matt, 2026-08-20): the design has no appearance
@@ -18,7 +18,7 @@
  */
 ---
 
-<footer data-module="site-footer" class="modern-skin">
+<footer data-module="site-footer">
   <div class="footer-inner">
     <div class="footer-bio">
       <span class="footer-name">Matt Pyle</span>
@@ -47,9 +47,6 @@
           Footer only — the header nav deliberately stays at five links, and /activity is off it
           for the same reason (Matt, 2026-08-21). This link, the homepage agent panel's pointer and
           the cross-link on /scorecard are how /activity is reached.
-
-          The LEGACY footer is deliberately not given the same link: it renders on every page the
-          redesign has not converted, and those pages must stay byte-identical to the branch's tip.
         */}
         <a href="/activity/">activity</a>
         <a href="/webmcp/">webmcp</a>
@@ -63,6 +60,18 @@
         </button>
       </nav>
     </div>
+
+    {/*
+      Retro-only furniture, on the same terms as the header's flourish and
+      RetroHomeFurniture.astro: decorative, aria-hidden, behaviour-free, and
+      `display: none` in modern through a rule in retro.css. Retro content, not a
+      duplicate of anything the modern footer renders.
+    */}
+    <p class="retro-footer-badges" aria-hidden="true">
+      <span>[ Handcrafted ]</span>
+      <span>[ No framework ]</span>
+      <span>[ Human + agent readable ]</span>
+    </p>
 
     {/*
       The wink. Real text rather than an aria-hidden flourish: it is three short
