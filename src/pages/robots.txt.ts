@@ -73,7 +73,7 @@ export const GET: APIRoute = ({ site }) => {
   // (spec v0.91 §5.1) names an entry source, the way Sitemap names a URL source, and it shipped
   // here on 2026-08-27 on the assumption that a parser ignores a directive it does not know.
   // Lighthouse does not ignore it. Its `robots-txt` audit validates every line against a fixed
-  // DIRECTIVE_SAFELIST (v13.4.0, core/audits/seo/robots-txt.js) and throws `Unknown directive` on
+  // DIRECTIVE_SAFELIST (verified in v13.4.1, core/audits/seo/robots-txt.js) and throws `Unknown directive` on
   // anything off it; `content-signal` is on that list and `agentmap` is not. The line scored the
   // audit 0 and cost 8 SEO points on all 24 pages in the 2026-08-28 nightly scorecard, the first
   // Fail on a public metric. Removing it costs the catalogue nothing a consumer is required to
