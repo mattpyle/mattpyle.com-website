@@ -210,10 +210,54 @@ html[data-appearance='retro'] .nav-flourish-word {
   }
 }
 
+/* THE MASTHEAD. The redesign's wordmark reads `mp/`; retro's read MATT PYLE in
+   spaced gold Comic Sans, and that was the loudest 1997 thing in the header
+   (Matt, 2026-08-28). CSS cannot change text, so the glyphs are zeroed and the
+   name is painted as pseudo-content instead.
+
+   APPEARANCE ONLY. The anchor carries aria-label='Matt Pyle - home', so its
+   accessible name is the same string in both appearances and does not come from
+   the text this rule hides. tests/a11y/__snapshots__/*.aria.yml hold that: a
+   golden that moves for this change is a defect, not an update.
+
+   font-size: 0 rather than a clip: the anchor is a flex item in a row measured
+   at 320px, and a clipped-but-laid-out wordmark would still take its width. The
+   ::after sets its own px size for the same reason - an em here would resolve
+   against zero. */
 html[data-appearance='retro'] [data-module='site-header'] .wordmark {
   font-family: var(--retro-font-display);
   color: var(--retro-gold);
+  font-size: 0;
+  letter-spacing: normal;
+}
+
+html[data-appearance='retro'] [data-module='site-header'] .wordmark::after {
+  content: 'MATT PYLE';
   font-size: 16px;
+  letter-spacing: .08em;
+}
+
+/* THE MASTHEAD COSTS THE ROW ABOUT 60px, which is a link and a gap. Below 456
+   the retro row sheds its collapsible link into the `more` panel and the name
+   comes down a size, so the header fits at 320 with the loud wordmark rather
+   than losing the wordmark to fit. Both copies of that link already ship and
+   the component flips them at 374 in modern; this only moves the width retro
+   flips at. 456 is the width the legacy retro header needed for its own row,
+   re-used here because it is the same measurement: bold Verdana links and a
+   Comic Sans wordmark in a row that modern measures in IBM Plex Mono. */
+@media (max-width: 455.98px) {
+  html[data-appearance='retro'] [data-module='site-header'] .nav-row-link.is-collapsible {
+    display: none;
+  }
+
+  html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link.is-collapsible {
+    display: flex;
+  }
+
+  html[data-appearance='retro'] [data-module='site-header'] .wordmark::after {
+    font-size: 14px;
+    letter-spacing: .04em;
+  }
 }
 
 html[data-appearance='retro'] [data-module='site-header'] .wordmark:hover {
