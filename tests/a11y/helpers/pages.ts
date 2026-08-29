@@ -41,18 +41,14 @@ export const PAGES: PageSpec[] = [
     name: 'home',
     path: '/',
     why: 'Homepage template: hero, writing rows, project cards, the live scorecard panel, agent surfaces, changelog',
-    // The homepage ships two trees — the redesigned modern one and the legacy
-    // one retro still wears — and the hidden half is absent from the
-    // accessibility tree, so this golden records whichever appearance the run is
-    // in. These rows are taken in modern. The legacy selectors below are kept so
-    // the pruning still applies if a run ever takes this snapshot in retro.
-    snapshotKeepFirst: [
-      '.writing .row',
-      '.projects .card',
-      '.changelog .row',
-      '[data-module="activity-log"] .log-item',
-      '.article-list .article-item',
-    ],
+    // The homepage ships ONE tree as of 2026-08-28 (one-dom phase 2): both
+    // appearances style the same five sections, so these selectors are the whole
+    // page in either appearance and the legacy hero/activity-log/recent-writing
+    // rows they used to also list are gone with their components. What is still
+    // appearance-specific is retro-only FURNITURE — the marquee, the counter and
+    // the guest book block — which is display: none in modern and so absent from
+    // the tree these rows capture.
+    snapshotKeepFirst: ['.writing .row', '.projects .card', '.changelog .row'],
     snapshotRedact: [
       '.writing .row',
       '.projects .card',
@@ -64,9 +60,6 @@ export const PAGES: PageSpec[] = [
       '.headline-number',
       '.headline-caption',
       '.gate-score',
-      '[data-module="activity-log"] .log-item',
-      '.article-list .article-item',
-      '.filter-status',
     ],
   },
   {

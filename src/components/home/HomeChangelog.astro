@@ -9,6 +9,12 @@
  * Single column. A two-column version was drawn and rejected as hard to read.
  * The rows are not links, as the design has them: the section link goes to
  * /changelog, where every entry is one click from its full text.
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='home-changelog']` in retro.css. The
+ * module prefix there is what buys those rules the one extra attribute they
+ * need to outweigh the Astro-scoped selectors below, whose
+ * `[data-astro-cid-…]` counts as a class. Nothing here is appearance-aware.
  */
 import { formatSiteDate } from '../../lib/format-date.mjs';
 
@@ -25,7 +31,7 @@ interface Props {
 const { entries } = Astro.props;
 ---
 
-<section class="rd-section changelog modern-skin" aria-labelledby="home-changelog-title">
+<section class="rd-section changelog" data-module="home-changelog" aria-labelledby="home-changelog-title">
   <div class="rd-heading-row">
     <h2 id="home-changelog-title">Changelog</h2>
     <a href="/changelog/" class="rd-all-link">full changelog &rarr;</a>

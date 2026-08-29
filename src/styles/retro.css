@@ -72,10 +72,7 @@ html[data-appearance='retro'] [tabindex]:focus-visible {
 
 html[data-appearance='retro'] .prose h2,
 html[data-appearance='retro'] .prose h3,
-html[data-appearance='retro'] h1,
-html[data-appearance='retro'] .hero-eyebrow,
-html[data-appearance='retro'] .section-eyebrow,
-html[data-appearance='retro'] .log-title {
+html[data-appearance='retro'] h1 {
   font-family: var(--retro-font-display);
 }
 
@@ -88,8 +85,10 @@ html[data-appearance='retro'] .prose h2 {
 /* Period-correct glossy "ball bullet" GIFs, drawn in CSS — no emoji, they're
    anachronistic (post-2010) for a ~1997 skin. Decorative only. */
 html[data-appearance='retro'] .prose h2::before,
-html[data-appearance='retro'] .section-eyebrow::before,
-html[data-appearance='retro'] .log-title::before {
+html[data-appearance='retro'] [data-module='home-writing'] .rd-heading-row h2::before,
+html[data-appearance='retro'] [data-module='home-projects'] .rd-heading-row h2::before,
+html[data-appearance='retro'] [data-module='home-agents'] .rd-heading-row h2::before,
+html[data-appearance='retro'] [data-module='home-changelog'] .rd-heading-row h2::before {
   content: '';
   display: inline-block;
   width: 12px;
@@ -102,7 +101,6 @@ html[data-appearance='retro'] .log-title::before {
 }
 
 html[data-appearance='retro'] .prose a,
-html[data-appearance='retro'] .article-title,
 html[data-appearance='retro'] .entry-title {
   color: var(--retro-link);
 }
@@ -212,10 +210,54 @@ html[data-appearance='retro'] .nav-flourish-word {
   }
 }
 
+/* THE MASTHEAD. The redesign's wordmark reads `mp/`; retro's read MATT PYLE in
+   spaced gold Comic Sans, and that was the loudest 1997 thing in the header
+   (Matt, 2026-08-28). CSS cannot change text, so the glyphs are zeroed and the
+   name is painted as pseudo-content instead.
+
+   APPEARANCE ONLY. The anchor carries aria-label='Matt Pyle - home', so its
+   accessible name is the same string in both appearances and does not come from
+   the text this rule hides. tests/a11y/__snapshots__/*.aria.yml hold that: a
+   golden that moves for this change is a defect, not an update.
+
+   font-size: 0 rather than a clip: the anchor is a flex item in a row measured
+   at 320px, and a clipped-but-laid-out wordmark would still take its width. The
+   ::after sets its own px size for the same reason - an em here would resolve
+   against zero. */
 html[data-appearance='retro'] [data-module='site-header'] .wordmark {
   font-family: var(--retro-font-display);
   color: var(--retro-gold);
+  font-size: 0;
+  letter-spacing: normal;
+}
+
+html[data-appearance='retro'] [data-module='site-header'] .wordmark::after {
+  content: 'MATT PYLE';
   font-size: 16px;
+  letter-spacing: .08em;
+}
+
+/* THE MASTHEAD COSTS THE ROW ABOUT 60px, which is a link and a gap. Below 456
+   the retro row sheds its collapsible link into the `more` panel and the name
+   comes down a size, so the header fits at 320 with the loud wordmark rather
+   than losing the wordmark to fit. Both copies of that link already ship and
+   the component flips them at 374 in modern; this only moves the width retro
+   flips at. 456 is the width the legacy retro header needed for its own row,
+   re-used here because it is the same measurement: bold Verdana links and a
+   Comic Sans wordmark in a row that modern measures in IBM Plex Mono. */
+@media (max-width: 455.98px) {
+  html[data-appearance='retro'] [data-module='site-header'] .nav-row-link.is-collapsible {
+    display: none;
+  }
+
+  html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link.is-collapsible {
+    display: flex;
+  }
+
+  html[data-appearance='retro'] [data-module='site-header'] .wordmark::after {
+    font-size: 14px;
+    letter-spacing: .04em;
+  }
 }
 
 html[data-appearance='retro'] [data-module='site-header'] .wordmark:hover {
@@ -494,96 +536,332 @@ html[data-appearance='retro'] .retro-footer-badges span {
   padding: 2px 5px;
 }
 
-/* ── Hero: CTA buttons get the beveled period treatment ─────────────── */
+/* -- Homepage body ------------------------------------------------------
 
-html[data-appearance='retro'] .cta-primary,
-html[data-appearance='retro'] .cta-secondary {
+   Retro styles the SAME five sections the modern appearance does, from
+   src/components/home/: `[data-module='home-hero']`, `home-writing`,
+   `home-projects`, `home-agents`, `home-changelog`. There is no legacy
+   homepage any more - the old Hero, ActivityLog and RecentWriting components
+   are deleted, and with them the `.retro-skin` copy of the page.
+
+   RETRO NOW SHOWS ALL FIVE SECTIONS, Projects and Agent surfaces included,
+   which it never showed before (Matt, 2026-08-28). The two net-new ones are
+   restyled here rather than hidden: a hidden section would be the two-trees
+   pattern again, one appearance short.
+
+   Every selector carries its `[data-module='home-...']` prefix for the same
+   reason the header's rules do: Astro appends a `[data-astro-cid-...]` to each
+   component's own selectors and that attribute counts as a class, so a rule
+   written against the inner class alone ties and loses. Drop the prefix from
+   any rule below and the component's modern value silently comes back. */
+
+/* ── Hero ──────────────────────────────────────────────────────────────
+   The redesign's 176px Bricolage name in the display face at a period size.
+   `h1` already takes --retro-font-display from the base block above; the size,
+   tracking and leading are set here because the component's clamp() and its
+   -.045em tracking were drawn for a grotesque, not for Comic Sans. */
+html[data-appearance='retro'] [data-module='home-hero'] h1 {
+  font-size: 52px;
+  line-height: 1.08;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+/* The redesign's magenta fill under "Pyle" is a gradient background on an
+   inline block. Retro has no such device: the word takes the maroon the rest of
+   this skin gives a heading, and the underline goes away with the gradient. */
+html[data-appearance='retro'] [data-module='home-hero'] .rd-fill {
+  background-image: none;
+  padding: 0;
+  margin: 0;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-hero'] .rd-fill:hover,
+html[data-appearance='retro'] [data-module='home-hero'] .rd-fill:active {
+  background-size: 0 0;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-style: italic;
+  font-size: 21px;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+/* The agent pointer becomes a framed notice, the construction this file already
+   uses for the counter and the guest book, rather than the redesign's hairline
+   rule to the left of it. */
+html[data-appearance='retro'] [data-module='home-hero'] .hero-agent {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  padding: 14px 18px;
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+}
+
+html[data-appearance='retro'] [data-module='home-hero'] .hero-agent-copy {
   font-family: var(--retro-font-ui);
-  font-weight: bold;
-  border-radius: 0;
-  background: var(--retro-frame-bg);
-  border: 3px outset var(--retro-frame-border);
-  color: var(--retro-maroon);
-  box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
+  font-size: 12px;
+  color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] .cta-primary {
-  background: var(--retro-forest);
-  color: var(--retro-cream);
-  border-color: var(--retro-forest-hover);
-}
-
-html[data-appearance='retro'] .cta-primary:hover,
-html[data-appearance='retro'] .cta-secondary:hover {
-  color: var(--retro-gold);
-  background: var(--retro-forest);
-}
-
-html[data-appearance='retro'] .cta-primary:active,
-html[data-appearance='retro'] .cta-secondary:active {
-  border-style: inset;
-}
-
-/* ── Activity log (homepage widget) ──────────────────────────────────── */
-
-html[data-appearance='retro'] [data-module='activity-log'] {
-  background: var(--retro-frame-bg);
-  border: 4px ridge var(--retro-frame-border);
-  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
-}
-
-html[data-appearance='retro'] .log-header {
-  background: var(--retro-sidebar-bg);
-  border-bottom: 2px dashed var(--retro-frame-border);
-}
-
-html[data-appearance='retro'] .log-title {
-  color: var(--retro-maroon);
-}
-
-/* WCAG 1.4.10 reflow, retro only. The header's heading and "VIEW CHANGELOG"
-   link are both white-space: nowrap, so the panel's min-content width is their
-   sum, 304px in retro's faces against a 280px column at 320px viewport. The
-   panel is a grid item with the default min-width: auto, so that min-content
-   pushed the whole page sideways. Letting the header wrap drops min-content to
-   the wider of the two. Modern's narrower faces fit on one row and are left
-   alone; by 440 there is room for both. This breakpoint is its own measurement
-   and does not track the nav rule above, which moved to 456 on 2026-08-20. */
-@media (max-width: 439.98px) {
-  html[data-appearance='retro'] [data-module='activity-log'] .log-header {
-    flex-wrap: wrap;
-  }
-}
-
-html[data-appearance='retro'] .view-all {
+html[data-appearance='retro'] [data-module='home-hero'] .hero-agent-link {
   font-family: var(--retro-font-mono);
+  font-size: 15px;
   color: var(--retro-link);
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] .log-item + .log-item {
-  border-top: 1px dotted var(--retro-frame-border);
+html[data-appearance='retro'] [data-module='home-hero'] .hero-agent-link:hover {
+  color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] .log-date {
+/* ── Section heading rows ───────────────────────────────────────────────
+   One treatment for all four, so retro cannot drift between them the way the
+   components' own semantic colours cannot. The ball bullet is attached in the
+   base block at the top of this file, beside the .prose h2 that shares it. */
+html[data-appearance='retro'] [data-module='home-writing'] .rd-heading-row h2,
+html[data-appearance='retro'] [data-module='home-projects'] .rd-heading-row h2,
+html[data-appearance='retro'] [data-module='home-agents'] .rd-heading-row h2,
+html[data-appearance='retro'] [data-module='home-changelog'] .rd-heading-row h2 {
+  font-family: var(--retro-font-display);
+  font-size: 21px;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-writing'] .rd-all-link,
+html[data-appearance='retro'] [data-module='home-projects'] .rd-all-link,
+html[data-appearance='retro'] [data-module='home-agents'] .rd-all-link,
+html[data-appearance='retro'] [data-module='home-changelog'] .rd-all-link {
   font-family: var(--retro-font-mono);
-  color: var(--retro-ink);
+  font-size: 12px;
+  color: var(--retro-link);
+  text-decoration: underline;
 }
 
-html[data-appearance='retro'] .type-pill {
+html[data-appearance='retro'] [data-module='home-writing'] .rd-all-link:hover,
+html[data-appearance='retro'] [data-module='home-projects'] .rd-all-link:hover,
+html[data-appearance='retro'] [data-module='home-agents'] .rd-all-link:hover,
+html[data-appearance='retro'] [data-module='home-changelog'] .rd-all-link:hover {
+  color: var(--retro-maroon);
+}
+
+/* ── Writing rows ──────────────────────────────────────────────────────
+   The dashed separator the legacy recent-writing list wore, on the redesign's
+   two-column row. */
+html[data-appearance='retro'] [data-module='home-writing'] .row,
+html[data-appearance='retro'] [data-module='home-writing'] .rows-end {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='home-writing'] .row:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] [data-module='home-writing'] .row-date {
   font-family: var(--retro-font-mono);
-  background: var(--retro-gold);
-  color: var(--retro-ink);
-  border: 1px solid var(--retro-frame-border);
-  border-radius: 0;
+  font-size: 12px;
+  color: var(--retro-ink-muted);
 }
 
-html[data-appearance='retro'] .entry-title {
+html[data-appearance='retro'] [data-module='home-writing'] .row-title {
+  font-family: var(--retro-font-body);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: normal;
   color: var(--retro-link);
 }
 
-html[data-appearance='retro'] .log-link:hover .entry-title {
+html[data-appearance='retro'] [data-module='home-writing'] .row:hover .row-title {
   color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-writing'] .row-excerpt,
+html[data-appearance='retro'] [data-module='home-writing'] .empty {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* ── Project cards ─────────────────────────────────────────────────────
+   NET-NEW IN RETRO. Built from the ridge frame and hard drop shadow this file
+   already gives /projects' legacy cards, so the two read as one site rather
+   than as a section retro had not met before. */
+html[data-appearance='retro'] [data-module='home-projects'] .card {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  border-radius: 0;
+  box-shadow: 5px 5px 0 rgba(90, 60, 20, .25);
+}
+
+/* The lift is the redesign's, not the period's: a 1997 card does not float.
+   The frame goes maroon instead, which is the hover this file gives every
+   other bordered thing. */
+html[data-appearance='retro'] [data-module='home-projects'] .card:hover {
+  border-color: var(--retro-maroon);
+  transform: none;
+}
+
+html[data-appearance='retro'] [data-module='home-projects'] .card-image {
+  border-bottom: 2px dashed var(--retro-frame-border);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--retro-parchment-dark) 0 8px,
+    var(--retro-parchment-light) 8px 16px
+  );
+}
+
+html[data-appearance='retro'] [data-module='home-projects'] .card-chip {
+  font-family: var(--retro-font-mono);
+  font-size: 11px;
+  background: var(--retro-frame-bg);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='home-projects'] .card-name {
+  font-family: var(--retro-font-display);
+  font-size: 18px;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-projects'] .card-blurb {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* ── Agent surfaces ────────────────────────────────────────────────────
+   NET-NEW IN RETRO. The scorecard panel is the activity-log frame the legacy
+   hero used to carry - same 4px ridge, same 6px shadow, same dashed rule under
+   its header - so the widget retro lost with that hero comes back as this one. */
+html[data-appearance='retro'] [data-module='home-agents'] .panel {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  border-radius: 0;
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .panel-head {
+  border-bottom: 2px dashed var(--retro-frame-border);
+  padding-bottom: 12px;
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .panel-title {
+  font-family: var(--retro-font-display);
+  font-size: 17px;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .panel-link {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .panel-link:hover {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .headline-number {
+  font-family: var(--retro-font-display);
+  font-size: 42px;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .headline-caption {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .gates {
+  border-top: 1px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .gate-name,
+html[data-appearance='retro'] [data-module='home-agents'] .gate-score {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink);
+}
+
+/* The bar is a real <progress>, and the two engines expose its track and its
+   fill through pseudo-elements neither tolerates in the other's selector list -
+   one unknown pseudo drops the whole rule - so this is declared three times on
+   purpose, exactly as the component declares its own twice. The growth
+   animation and its reduced-motion clamp stay in the component; retro repaints
+   and nothing more. */
+html[data-appearance='retro'] [data-module='home-agents'] .gate-bar {
+  background: var(--retro-sidebar-bg);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+  height: 10px;
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .gate-bar::-webkit-progress-bar {
+  background: var(--retro-sidebar-bg);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .gate-bar::-webkit-progress-value {
+  background: var(--retro-forest);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .gate-bar::-moz-progress-bar {
+  background: var(--retro-forest);
+  border-radius: 0;
+}
+
+/* The three surfaces: the beveled parchment plate the `more` panel and the web
+   ring's buttons already use, one per row. */
+html[data-appearance='retro'] [data-module='home-agents'] .surface {
+  background: var(--retro-frame-bg);
+  border: 2px outset var(--retro-frame-border);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .25);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .surface:hover {
+  background: var(--retro-sidebar-bg);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .surface-path {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .surface-desc {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* ── Changelog rows ────────────────────────────────────────────────────
+   The dotted rule the legacy activity log put between its entries, on the
+   redesign's date/summary row. */
+html[data-appearance='retro'] [data-module='home-changelog'] .row {
+  border-top: 1px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='home-changelog'] .row-date {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='home-changelog'] .row-text {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
 }
 
 /* ── /writing list ────────────────────────────────────────────────────── */
@@ -709,6 +987,11 @@ html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
 html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
   background: var(--retro-sidebar-bg);
   color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] .type-pill {
+  background: var(--retro-gold);
+  color: var(--retro-ink);
 }
 
 /* Significance dots + legend: map the modern --color-sig-* tokens onto the
@@ -1347,8 +1630,9 @@ html[data-appearance='retro'] .retro-ad-caption {
   color: var(--retro-ink);
 }
 
-/* The hero CTA bevel verbatim — this is an <a>, and .cta-primary is one too, so nothing here is
-   claiming a button's affordance for a link. */
+/* A beveled anchor, not a button: this is an <a>, and the bevel is the plate treatment the web
+   ring's controls and the header's `more` panel already wear, so nothing here is claiming a
+   button's affordance for a link. */
 html[data-appearance='retro'] .retro-ad-cta {
   font-family: var(--retro-font-ui);
   color: var(--retro-cream);
@@ -1373,7 +1657,8 @@ html[data-appearance='retro'] .retro-ad-cta:active {
 /* ── The guest book, the webmaster note, and the web ring ──────────────────
    Colour / type / border / background only; every dimension is in the components' own scoped
    styles. All three reuse constructions already in this file rather than inventing new ones: the
-   activity-log frame, the .log-header bar, the /webmcp sunken field, and the .run-button bevel.
+   scorecard panel's ridge frame, its dashed header rule, the /webmcp sunken field, and the
+   .run-button bevel.
 
    Scoped through [data-module='…'] deliberately. Astro stamps a data-astro-cid attribute onto
    every compound in a component's scoped styles, so a bare `.gb-input` here would tie and lose;
@@ -1721,8 +2006,11 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
    converted page body still ships BOTH trees in the DOM - the new sections
    marked `.modern-skin`, the legacy ones marked `.retro-skin` - with exactly one
    displayed. Undoing that is the work of docs/work/one-dom-for-both-appearances,
-   phase by phase; the CHROME is done and no longer uses this pair at all. Retro
-   styles the one header and the one footer directly, in the two sections above.
+   phase by phase. Two surfaces are done and no longer use this pair at all: the
+   CHROME, and the HOMEPAGE BODY. Retro styles the one header, the one footer and
+   the five homepage sections directly, in the sections above. What remains here
+   is /about, /writing, /projects, /changelog, /scorecard, /activity, /steward
+   and /webmcp.
 
    This is the same construction as `.retro-furniture`, and for the same reason:
    nothing is injected, removed or re-rendered at toggle time, so the toggle

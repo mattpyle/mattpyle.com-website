@@ -4,6 +4,12 @@
  *
  * Two rows, from the real collection. No tags, no read-time column, no pills —
  * the homepage list is date, title, excerpt and nothing else (constraints 2 and 4).
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='home-writing']` in retro.css. The
+ * module prefix there is what buys those rules the one extra attribute they
+ * need to outweigh the Astro-scoped selectors below, whose
+ * `[data-astro-cid-…]` counts as a class. Nothing here is appearance-aware.
  */
 import { formatSiteDate } from '../../lib/format-date.mjs';
 
@@ -19,7 +25,7 @@ interface Props {
 const { articles } = Astro.props;
 ---
 
-<section class="rd-section writing modern-skin" aria-labelledby="home-writing-title">
+<section class="rd-section writing" data-module="home-writing" aria-labelledby="home-writing-title">
   <div class="rd-heading-row">
     <h2 id="home-writing-title">Writing</h2>
     <a href="/writing/" class="rd-all-link">all writing &rarr;</a>

@@ -4,8 +4,8 @@
  *
  * UTC, not local. Content dates are authored as calendar dates and coerced by
  * Zod to midnight UTC, so reading them back in a local zone west of Greenwich
- * renders the day before. The legacy RecentWriting.astro formatter already does
- * this; this module is the same rule in one place, in the case the design asks
+ * renders the day before. The legacy homepage formatters this module replaced
+ * already did this; it is the same rule in one place, in the case the design asks
  * for (`04 Aug 2026`, not `04 AUG 2026`).
  *
  * Not to be confused with the "dates are Matt's local date" rule in CLAUDE.md,

@@ -5,10 +5,16 @@
  * The H1 is the name and nothing else — no job title in a headline (constraint
  * 1), no eyebrow above it (constraint 2). The only decorative motion on the
  * whole page lives here.
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='home-hero']` in retro.css. The
+ * module prefix there is what buys those rules the one extra attribute they
+ * need to outweigh the Astro-scoped selectors below, whose
+ * `[data-astro-cid-…]` counts as a class. Nothing here is appearance-aware.
  */
 ---
 
-<section class="rd-section hero modern-skin">
+<section class="rd-section hero" data-module="home-hero">
   <h1>
     Matt{' '}
     {/*
