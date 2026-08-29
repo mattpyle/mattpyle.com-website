@@ -864,34 +864,17 @@ html[data-appearance='retro'] [data-module='home-changelog'] .row-text {
   color: var(--retro-ink);
 }
 
-/* ── /writing list ────────────────────────────────────────────────────── */
+/* ── /writing ─────────────────────────────────────────────────────────────
+   Retro styles the SAME index the modern appearance does — WritingHero and
+   WritingArchive. The legacy PageHeader/ArticleList tree is deleted, and with
+   it `.article-item`, `.article-desc`, `.article-date` and `.reading-time`,
+   which nothing else on the site used. `.tag-pill` below OUTLIVED that tree:
+   /projects, /changelog and the changelog entry page all still ship it.
 
-html[data-appearance='retro'] .article-item {
-  border-bottom: 2px dashed var(--retro-frame-border);
-}
-
-html[data-appearance='retro'] .article-item h2 a {
-  font-family: var(--retro-font-display);
-  color: var(--retro-maroon);
-}
-
-html[data-appearance='retro'] .article-item h2 a:hover {
-  color: var(--retro-link);
-}
-
-html[data-appearance='retro'] .article-date,
-html[data-appearance='retro'] .featured-badge,
-html[data-appearance='retro'] .reading-time {
-  font-family: var(--retro-font-mono);
-}
-
-html[data-appearance='retro'] .featured-badge {
-  color: var(--retro-maroon);
-}
-
-html[data-appearance='retro'] .article-desc {
-  font-family: var(--retro-font-body);
-}
+   The archive's class names are the generic ones (`.row`, `.row-title`,
+   `.year-group`), shared with the homepage and changelog rows this file already
+   styles, so every rule here carries the `[data-module='writing-archive']`
+   prefix. It is the fence as well as the specificity. */
 
 html[data-appearance='retro'] .tag-pill {
   font-family: var(--retro-font-mono);
@@ -899,6 +882,259 @@ html[data-appearance='retro'] .tag-pill {
   border: 1px solid var(--retro-frame-border);
   border-radius: 0;
   color: var(--retro-ink-muted);
+}
+
+/* The hero. The H1 takes the display face the rest of retro gives a headline;
+   the fill span is a modern device — a painted phrase in writing blue — and in
+   retro it is simply the maroon the page's other headings wear, so the headline
+   reads as one word rather than as two colours. */
+html[data-appearance='retro'] [data-module='writing-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='writing-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='writing-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+/* The subscribe block, as a filed card: the same ridge frame and hard shadow
+   this file gives every other bordered panel, instead of the redesign's
+   hairline rule. */
+html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 18px;
+}
+
+html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-copy {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-links {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+}
+
+html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-links a {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-links a:hover {
+  color: var(--retro-maroon);
+}
+
+/* The archive. The dashed rule is the one the legacy /writing list wore, moved
+   onto the redesign's row — the same move the homepage writing rows made in
+   phase 2, so the two lists still read as one site. */
+html[data-appearance='retro'] [data-module='writing-archive'] .row,
+html[data-appearance='retro'] [data-module='writing-archive'] .rows-end {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .row:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .row-date,
+html[data-appearance='retro'] [data-module='writing-archive'] .row-length {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .row-title {
+  font-family: var(--retro-font-display);
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .row:hover .row-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .row-excerpt,
+html[data-appearance='retro'] [data-module='writing-archive'] .empty {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* NET-NEW IN RETRO: the year headers. The legacy list had no grouping at all.
+   Built as a filed-drawer label — bold mono year over a double rule — which is
+   the register the rest of this file uses for a heading over a list. */
+html[data-appearance='retro'] [data-module='writing-archive'] .year-head {
+  border-bottom: 3px double var(--retro-frame-border);
+  padding-bottom: 6px;
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .year {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--retro-maroon);
+}
+
+/* The double rule under the year head already opens the group, so the first
+   row's dashed rule would draw a second line straight under it. Two heavy
+   rules 8px apart read as a mistake; one hairline pair does not, which is why
+   modern keeps both. */
+html[data-appearance='retro'] [data-module='writing-archive'] .year-head + .row {
+  border-top: 0;
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .year-count {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+/* ── The post page ────────────────────────────────────────────────────────
+   Retro styles the SAME post template the modern appearance does. The legacy
+   `.retro-skin` header and footer and the ArticleActions section are deleted;
+   the rail (PostRail.astro) carries the four actions in both appearances now.
+
+   THE TWO-COLUMN BODY IS KEPT, not flattened. A narrow left column of metadata
+   beside the article is a period layout, so retro dresses the rail as a
+   parchment sidebar panel rather than re-laying the page out. */
+
+html[data-appearance='retro'] [data-module='article'] .post-title {
+  font-family: var(--retro-font-display);
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-title .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-lead {
+  font-family: var(--retro-font-body);
+  font-size: 18px;
+  font-style: italic;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink-muted);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-back {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-back:hover {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .draft-banner {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-maroon);
+  background: var(--retro-cream);
+  border: 2px inset var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-body {
+  border-top: 3px double var(--retro-frame-border);
+}
+
+/* The reading measure the legacy article had. The shell gives the prose column
+   about 830px, which runs well past a comfortable line of 17.5px Georgia. */
+html[data-appearance='retro'] [data-module='article'] .prose {
+  max-width: 68ch;
+}
+
+/* The rail as a sidebar panel. Same ridge frame and hard shadow as every other
+   bordered block in this file, on the sidebar ground the guest book uses. */
+html[data-appearance='retro'] [data-module='article'] .post-rail {
+  background: var(--retro-sidebar-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 16px;
+}
+
+html[data-appearance='retro'] [data-module='article'] .rail-block + .rail-block {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='article'] .rail-meta {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='article'] .rail-contents a {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='article'] .rail-contents a:hover {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .rail-action {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='article'] .rail-action:hover:not(:disabled) {
+  color: var(--retro-maroon);
+}
+
+/* The next-post row, in the archive's own dashed treatment so the foot of a
+   post and the list it came from read the same. */
+html[data-appearance='retro'] [data-module='article'] .post-next {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-next:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-next-label {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-next-title {
+  font-family: var(--retro-font-display);
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .post-next:hover .post-next-title {
+  color: var(--retro-link);
 }
 
 /* ── /projects grid ─────────────────────────────────────────────────────── */
@@ -2006,10 +2242,11 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
    converted page body still ships BOTH trees in the DOM - the new sections
    marked `.modern-skin`, the legacy ones marked `.retro-skin` - with exactly one
    displayed. Undoing that is the work of docs/work/one-dom-for-both-appearances,
-   phase by phase. Two surfaces are done and no longer use this pair at all: the
-   CHROME, and the HOMEPAGE BODY. Retro styles the one header, the one footer and
-   the five homepage sections directly, in the sections above. What remains here
-   is /about, /writing, /projects, /changelog, /scorecard, /activity, /steward
+   phase by phase. Four surfaces are done and no longer use this pair at all: the
+   CHROME, the HOMEPAGE BODY, the /writing INDEX and the POST PAGE. Retro styles
+   the one header, the one footer, the five homepage sections, the writing hero
+   and archive, and the one post template directly, in the sections above. What
+   remains here is /about, /projects, /changelog, /scorecard, /activity, /steward
    and /webmcp.
 
    This is the same construction as `.retro-furniture`, and for the same reason:
