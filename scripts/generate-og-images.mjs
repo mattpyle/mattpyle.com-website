@@ -1,25 +1,36 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+/**
+ * Per-entry share cards for the writing and changelog collections, plus the two
+ * site-wide fallback cards.
+ *
+ * Wired as `predev`/`prebuild`, so every non-draft entry has a card by the time
+ * the build reads `image`. Output lands in `public/og/` and is gitignored.
+ *
+ * The identity, the fonts and the glyph-path rule live in `scripts/lib/brand.mjs`.
+ */
+
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { create as createFont } from 'fontkit';
-import wawoff2 from 'wawoff2';
 import { Resvg } from '@resvg/resvg-js';
 import { readWritingMetadata } from './lib/writing-metadata.mjs';
+import {
+  ACCENTS,
+  COLORS,
+  centeredBaseline,
+  loadBrandFonts,
+  loadVariableFont,
+  metrics,
+  renderMark,
+  renderTextPath,
+  wrapText,
+} from './lib/brand.mjs';
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const CANVAS_WIDTH = 1200;
 const CANVAS_HEIGHT = 630;
 const PADDING = 72;
 const TITLE_MAX_WIDTH = 1000;
-const COLORS = {
-  bg: '#faf7f0',
-  heading: '#231f18',
-  text: '#3a3428',
-  muted: '#6b6358',
-  label: '#7d6035',
-  border: '#e7e0d2',
-  accent: '#7a2e2e',
-};
+const MARK_HEIGHT = 44;
 
 function titleFontSize(title) {
   if (title.length <= 55) return 76;
@@ -35,109 +46,159 @@ function formatDate(isoDate) {
   return `${day} ${month} ${d.getUTCFullYear()}`;
 }
 
-/** @param {import('fontkit').Font} instance @param {number} fontSize */
-function metrics(instance, fontSize) {
-  const scale = fontSize / instance.unitsPerEm;
-  return {
-    ascent: instance.ascent * scale,
-    descent: Math.abs(instance.descent) * scale,
-    widthOf: (text, letterSpacing = 0) => {
-      const run = instance.layout(text);
-      return run.advanceWidth * scale + Math.max(0, run.glyphs.length - 1) * letterSpacing;
-    },
-  };
-}
-
-/** Vertical centering for a single-line text box within a row of height `rowHeight`, top at `rowTop`. */
-function centeredBaseline(rowTop, rowHeight, instance, fontSize) {
-  const { ascent, descent } = metrics(instance, fontSize);
-  const contentHeight = ascent + descent;
-  return rowTop + (rowHeight - contentHeight) / 2 + ascent;
-}
-
 /** Natural single-line box height for a font at a given size and CSS line-height multiplier. */
-function naturalLineHeight(instance, fontSize, lineHeightMultiplier) {
+function naturalLineHeight(fontSize, lineHeightMultiplier) {
   return fontSize * lineHeightMultiplier;
 }
 
-/** Greedy word-wrap using real glyph advances so lines never exceed maxWidth. */
-function wrapText(instance, text, fontSize, maxWidth, letterSpacing = 0) {
-  const { widthOf } = metrics(instance, fontSize);
-  const words = text.split(/\s+/);
-  const lines = [];
-  let current = '';
+/**
+ * The signature row every card ends on: the `mp/` chip, a hairline, the author
+ * and domain, and an optional right-aligned date.
+ */
+function renderSignatureRow(mono, { top, date }) {
+  const mark = renderMark(mono, { x: PADDING, y: top, height: MARK_HEIGHT });
 
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (current && widthOf(candidate, letterSpacing) > maxWidth) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) lines.push(current);
-  return lines;
+  const dividerX = PADDING + mark.width + 22;
+  const dividerHeight = 28;
+  const dividerY = top + (MARK_HEIGHT - dividerHeight) / 2;
+
+  const nameFontSize = 18;
+  const nameX = dividerX + 1 + 22;
+  const nameBaseline = centeredBaseline(top, MARK_HEIGHT, mono, nameFontSize);
+  const nameWidth = metrics(mono, nameFontSize).widthOf('Matt Pyle ');
+
+  const dateSvg = date
+    ? renderTextPath(mono, date, {
+      x: CANVAS_WIDTH - PADDING - metrics(mono, 16).widthOf(date, 0.96),
+      baseline: centeredBaseline(top, MARK_HEIGHT, mono, 16),
+      fontSize: 16,
+      fill: COLORS.muted,
+      letterSpacing: 0.96,
+      role: 'date',
+    })
+    : '';
+
+  return `${mark.svg}
+  <rect x="${dividerX}" y="${dividerY.toFixed(1)}" width="1" height="${dividerHeight}" fill="${COLORS.rule}" />
+  ${renderTextPath(mono, 'Matt Pyle ', { x: nameX, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.text, role: 'author' })}
+  ${renderTextPath(mono, '— mattpyle.com', { x: nameX + nameWidth, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.muted, role: 'domain' })}
+  ${dateSvg}`;
 }
 
 /**
- * Convert shaped glyphs to SVG paths using the same font instance used for
- * measurement. Native resvg does not support the WASM-only `fontBuffers`
- * option, so leaving text as `<text>` makes it silently use a platform font.
+ * A per-entry card. `accent` is the collection's semantic colour and is the only
+ * thing that changes between a writing card and a changelog card: it paints the
+ * short rule and the eyebrow, which is enough to tell the two apart at the size
+ * a timeline actually renders a share card.
  */
-function renderTextPath(instance, text, { x, baseline, fontSize, fill, letterSpacing = 0, role }) {
-  const run = instance.layout(text);
-  const scale = fontSize / instance.unitsPerEm;
-  const letterSpacingUnits = letterSpacing / scale;
-  let penX = 0;
+function renderWritingCard({ title, date, eyebrow, accent = ACCENTS.writing, display, mono }) {
+  const ruleHeight = 5;
+  const ruleWidth = 96;
+  const ruleTop = PADDING;
 
-  const paths = run.glyphs.map((glyph, index) => {
-    const position = run.positions[index];
-    const glyphX = penX + position.xOffset;
-    const glyphY = position.yOffset;
-    penX += position.xAdvance + (index < run.glyphs.length - 1 ? letterSpacingUnits : 0);
-    return `<path d="${glyph.path.toSVG()}" transform="translate(${glyphX.toFixed(3)} ${glyphY.toFixed(3)})" />`;
-  }).join('\n      ');
+  const eyebrowFontSize = 20;
+  const eyebrowTop = ruleTop + ruleHeight + 24;
+  const eyebrowLineHeight = naturalLineHeight(eyebrowFontSize, 1.2);
+  const eyebrowBaseline = centeredBaseline(eyebrowTop, eyebrowLineHeight, mono, eyebrowFontSize);
 
-  const roleAttribute = role ? ` data-role="${role}"` : '';
-  return `<g${roleAttribute} data-text="${escapeXml(text)}" transform="translate(${x.toFixed(3)} ${baseline.toFixed(3)}) scale(${scale.toFixed(6)} ${(-scale).toFixed(6)})" fill="${fill}">
-      ${paths}
-    </g>`;
+  const bottomRowTop = CANVAS_HEIGHT - PADDING - MARK_HEIGHT;
+
+  const fontSize = titleFontSize(title);
+  const titleLetterSpacing = fontSize * -0.03;
+  // Wrap against the untracked advance width. The rendered negative tracking
+  // only makes the result narrower, preserving a conservative right margin.
+  const titleLines = wrapText(display, title, fontSize, TITLE_MAX_WIDTH);
+  const titleLineHeight = fontSize * 1.04;
+  const titleBlockHeight = titleLines.length * titleLineHeight;
+
+  const titleZoneTop = eyebrowTop + eyebrowLineHeight;
+  const titleZoneHeight = bottomRowTop - titleZoneTop;
+  const titleTop = titleZoneTop + (titleZoneHeight - titleBlockHeight) / 2;
+
+  const { ascent, descent } = metrics(display, fontSize);
+  const halfLeading = (titleLineHeight - (ascent + descent)) / 2;
+  const titleLineSvg = titleLines.map((line, i) => renderTextPath(display, line, {
+    x: PADDING,
+    baseline: titleTop + i * titleLineHeight + halfLeading + ascent,
+    fontSize,
+    fill: COLORS.ink,
+    letterSpacing: titleLetterSpacing,
+    role: 'title-line',
+  })).join('\n    ');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}">
+  <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${COLORS.bg}" />
+  <rect x="${PADDING}" y="${ruleTop}" width="${ruleWidth}" height="${ruleHeight}" rx="2.5" ry="2.5" fill="${accent}" />
+  ${renderTextPath(mono, eyebrow.toUpperCase(), { x: PADDING, baseline: eyebrowBaseline, fontSize: eyebrowFontSize, fill: accent, letterSpacing: 3.2, role: 'eyebrow' })}
+  ${titleLineSvg}
+  ${renderSignatureRow(mono, { top: bottomRowTop, date })}
+</svg>`;
 }
 
-function escapeXml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+/**
+ * The site-wide fallback, used for every page that has no card of its own. It
+ * repeats the homepage hero rather than inventing a second headline: the name,
+ * with the surname in the agents magenta the H1 fills it with, over the site's
+ * one-sentence statement.
+ *
+ * `height` varies because `twitter:image` is cropped 16:9 and `og:image` 1.91:1,
+ * so the two are separate files at separate sizes.
+ */
+function renderFallbackCard({ height, display, mono }) {
+  const nameFontSize = 128;
+  const nameLetterSpacing = nameFontSize * -0.04;
+  const { ascent, descent } = metrics(display, nameFontSize);
+
+  const statement = 'This site is an experiment in building the web for its newest readers, and publishing what they see.';
+  const statementFontSize = 24;
+  const statementLineHeight = statementFontSize * 1.5;
+  const statementLines = wrapText(mono, statement, statementFontSize, 760);
+
+  const bottomRowTop = height - PADDING - MARK_HEIGHT;
+
+  const statementGap = 34;
+  const blockHeight = ascent + descent + statementGap + statementLines.length * statementLineHeight;
+  const blockTop = PADDING + (bottomRowTop - PADDING - blockHeight) / 2;
+
+  const nameBaseline = blockTop + ascent;
+  const firstWidth = metrics(display, nameFontSize).widthOf('Matt ', nameLetterSpacing);
+
+  const statementTop = blockTop + ascent + descent + statementGap;
+  const statementSvg = statementLines.map((line, i) => renderTextPath(mono, line, {
+    x: PADDING,
+    baseline: centeredBaseline(statementTop + i * statementLineHeight, statementLineHeight, mono, statementFontSize),
+    fontSize: statementFontSize,
+    fill: COLORS.text,
+    role: 'statement-line',
+  })).join('\n    ');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_WIDTH}" height="${height}" viewBox="0 0 ${CANVAS_WIDTH} ${height}">
+  <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${height}" fill="${COLORS.bg}" />
+  ${renderTextPath(display, 'Matt ', { x: PADDING, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.ink, letterSpacing: nameLetterSpacing, role: 'name' })}
+  ${renderTextPath(display, 'Pyle', { x: PADDING + firstWidth, baseline: nameBaseline, fontSize: nameFontSize, fill: ACCENTS.agents, letterSpacing: nameLetterSpacing, role: 'surname' })}
+  ${statementSvg}
+  ${renderSignatureRow(mono, { top: bottomRowTop })}
+</svg>`;
 }
 
-function loadVariableFont(publicPath) {
-  const woff2 = readFileSync(join(root, 'public', publicPath));
-  return wawoff2.decompress(woff2).then((ttf) => Buffer.from(ttf));
+/** All text is paths, so rasterisation has no platform font fallback and is
+ * deterministic between local Windows and Vercel. */
+function rasterise(svg) {
+  return new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng();
 }
 
 async function main() {
-  // wawoff2's decompress reuses a shared WASM output buffer, so these must run
-  // sequentially — Promise.all interleaves them and corrupts the first result.
-  const monoTtf = await loadVariableFont('fonts/jetbrains-mono-latin.woff2');
-  const serifTtf = await loadVariableFont('fonts/source-serif-4-latin.woff2');
-  const monoFont = createFont(monoTtf);
-  const serifFont = createFont(serifTtf);
-  const monoRegular = monoFont.getVariation({ wght: 400 });
-  const monoMedium = monoFont.getVariation({ wght: 500 });
-  const serifSemibold = serifFont.getVariation({ wght: 600 });
+  const { display, mono } = await loadBrandFonts();
 
   // Each content collection that needs per-entry share cards, with the eyebrow
-  // its card carries. Both render into public/og/<collection>/ (gitignored,
-  // regenerated every build).
+  // and the semantic colour its cards carry. Both render into
+  // public/og/<collection>/ (gitignored, regenerated every build).
   const collections = [
-    { dir: join(root, 'src', 'content', 'writing'), eyebrow: 'Writing', out: 'writing' },
-    { dir: join(root, 'src', 'content', 'changelog'), eyebrow: 'Changelog', out: 'changelog' },
+    { dir: join(root, 'src', 'content', 'writing'), eyebrow: 'Writing', out: 'writing', accent: ACCENTS.writing },
+    { dir: join(root, 'src', 'content', 'changelog'), eyebrow: 'Changelog', out: 'changelog', accent: ACCENTS.changelog },
   ];
 
-  for (const { dir, eyebrow, out } of collections) {
+  for (const { dir, eyebrow, out, accent } of collections) {
     const metadata = readWritingMetadata(dir);
     const outDir = join(root, 'public', 'og', out);
     mkdirSync(outDir, { recursive: true });
@@ -152,98 +213,28 @@ async function main() {
         title: entry.title,
         date: formatDate(entry.date),
         eyebrow,
-        monoRegular,
-        monoMedium,
-        serifSemibold,
+        accent,
+        display,
+        mono,
       });
 
-      // All text is converted to paths above, so rasterisation has no platform
-      // font fallback and is deterministic between local Windows and Vercel.
-      const resvg = new Resvg(svg, { font: { loadSystemFonts: false } });
-      const png = resvg.render().asPng();
-      writeFileSync(join(outDir, `${slug}.png`), png);
+      writeFileSync(join(outDir, `${slug}.png`), rasterise(svg));
       console.log(`generate-og-images: wrote og/${out}/${slug}.png`);
     }
   }
 }
 
-function renderWritingCard({ title, date, eyebrow, monoRegular, monoMedium, serifSemibold }) {
-  const contentTop = PADDING;
-  const contentBottom = CANVAS_HEIGHT - PADDING;
-  const availableHeight = contentBottom - contentTop;
-
-  const eyebrowFontSize = 20;
-  const eyebrowLineHeight = naturalLineHeight(monoMedium, eyebrowFontSize, 1.2);
-
-  const fontSize = titleFontSize(title);
-  const titleLetterSpacing = fontSize * -0.02;
-  // Wrap against the untracked advance width. The rendered negative tracking
-  // only makes the result narrower, preserving a conservative right margin.
-  const titleLines = wrapText(serifSemibold, title, fontSize, TITLE_MAX_WIDTH);
-  const titleLineHeight = fontSize * 1.06;
-  const titleBlockHeight = titleLines.length * titleLineHeight;
-
-  const bottomRowHeight = 40; // set by the 40x40 mark image, the tallest item in the row
-
-  const gap = (availableHeight - eyebrowLineHeight - titleBlockHeight - bottomRowHeight) / 2;
-
-  const eyebrowTop = contentTop;
-  const titleTop = eyebrowTop + eyebrowLineHeight + gap;
-  const bottomRowTop = titleTop + titleBlockHeight + gap;
-
-  const eyebrowBaseline = centeredBaseline(eyebrowTop, eyebrowLineHeight, monoMedium, eyebrowFontSize);
-
-  const titleLineSvg = titleLines.map((line, i) => {
-    const { ascent } = metrics(serifSemibold, fontSize);
-    const halfLeading = (titleLineHeight - (ascent + metrics(serifSemibold, fontSize).descent)) / 2;
-    const baseline = titleTop + i * titleLineHeight + halfLeading + ascent;
-    return renderTextPath(serifSemibold, line, {
-      x: PADDING,
-      baseline,
-      fontSize,
-      fill: COLORS.heading,
-      letterSpacing: titleLetterSpacing,
-      role: 'title-line',
-    });
-  }).join('\n    ');
-
-  const markSize = 40;
-  const markX = PADDING;
-  const markY = bottomRowTop;
-  const markRadius = markSize * 0.22;
-  const markFontSize = 27;
-  const markText = 'mp';
-  const markTextX = markX + (markSize - metrics(serifSemibold, markFontSize).widthOf(markText)) / 2;
-  const markTextBaseline = centeredBaseline(markY, markSize, serifSemibold, markFontSize);
-
-  const dividerX = markX + markSize + 20;
-  const dividerHeight = 28;
-  const dividerY = bottomRowTop + (bottomRowHeight - dividerHeight) / 2;
-
-  const nameFontSize = 18;
-  const nameX = dividerX + 1 + 20;
-  const nameBaseline = centeredBaseline(bottomRowTop, bottomRowHeight, monoRegular, nameFontSize);
-  const nameWidth = metrics(monoRegular, nameFontSize).widthOf('Matt Pyle ');
-
-  const dateFontSize = 16;
-  const dateX = CANVAS_WIDTH - PADDING;
-  const dateBaseline = centeredBaseline(bottomRowTop, bottomRowHeight, monoRegular, dateFontSize);
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}">
-  <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="${COLORS.bg}" />
-  ${renderTextPath(monoMedium, eyebrow.toUpperCase(), { x: PADDING, baseline: eyebrowBaseline, fontSize: eyebrowFontSize, fill: COLORS.label, letterSpacing: 3.2, role: 'eyebrow' })}
-  ${titleLineSvg}
-  <rect x="${markX}" y="${markY}" width="${markSize}" height="${markSize}" rx="${markRadius}" ry="${markRadius}" fill="${COLORS.heading}" />
-  ${renderTextPath(serifSemibold, markText, { x: markTextX, baseline: markTextBaseline, fontSize: markFontSize, fill: COLORS.bg, role: 'mark' })}
-  <rect x="${dividerX}" y="${dividerY.toFixed(1)}" width="1" height="${dividerHeight}" fill="${COLORS.border}" />
-  ${renderTextPath(monoRegular, 'Matt Pyle ', { x: nameX, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.text, role: 'author' })}
-  ${renderTextPath(monoRegular, '— mattpyle.com', { x: nameX + nameWidth, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.muted, role: 'domain' })}
-  ${renderTextPath(monoRegular, date, { x: dateX - metrics(monoRegular, dateFontSize).widthOf(date, 0.96), baseline: dateBaseline, fontSize: dateFontSize, fill: COLORS.label, letterSpacing: 0.96, role: 'date' })}
-  <rect x="0" y="${CANVAS_HEIGHT - 10}" width="${CANVAS_WIDTH}" height="10" fill="${COLORS.accent}" />
-</svg>`;
-}
-
-export { loadVariableFont, main, renderTextPath, renderWritingCard, wrapText };
+export {
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  loadVariableFont,
+  main,
+  rasterise,
+  renderFallbackCard,
+  renderTextPath,
+  renderWritingCard,
+  wrapText,
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
