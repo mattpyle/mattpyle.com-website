@@ -70,9 +70,10 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  * Whether anything does that is a question the log can answer and nothing else here can.
  *
  * `/.well-known/ard.json` is the same instrument aimed at ARD. Nothing on the site links it as a
- * page; it is named only by the rel="ard" element, the robots.txt Agentmap line, and the
- * well-known path itself, so a fetch of it is evidence that some crawler resolves ARD entry
- * sources at all — which is the whole question the catalogue was published to answer.
+ * page; it is named only by the rel="ard" element and the well-known path itself, so a fetch of it
+ * is evidence that some crawler resolves ARD entry sources at all — which is the whole question the
+ * catalogue was published to answer. ARD's robots.txt directive named it too until 2026-08-28;
+ * src/pages/robots.txt.ts says why it no longer does.
  *
  * `/.well-known/ai-catalog.json` is ARD's predecessor path, served by a vercel.json rewrite onto
  * ard.json rather than by a file of its own. It is listed separately from ard.json because that is
