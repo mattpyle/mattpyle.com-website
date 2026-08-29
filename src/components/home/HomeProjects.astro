@@ -14,6 +14,12 @@
  * empty frame than a decorative one. The chip is aria-hidden — it names a
  * missing asset, which is information for the eye and noise inside the card's
  * accessible name.
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='home-projects']` in retro.css. The
+ * module prefix there is what buys those rules the one extra attribute they
+ * need to outweigh the Astro-scoped selectors below, whose
+ * `[data-astro-cid-…]` counts as a class. Nothing here is appearance-aware.
  */
 
 interface Project {
@@ -47,7 +53,7 @@ function cardHref(project: Project): { href: string; external: boolean } {
 }
 ---
 
-<section class="rd-section projects modern-skin" aria-labelledby="home-projects-title">
+<section class="rd-section projects" data-module="home-projects" aria-labelledby="home-projects-title">
   <div class="rd-heading-row">
     <h2 id="home-projects-title">Projects</h2>
     <a href="/projects/" class="rd-all-link">all projects &rarr;</a>

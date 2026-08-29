@@ -1,7 +1,5 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import Hero from '../components/Hero.astro';
-import RecentWriting from '../components/RecentWriting.astro';
 import RetroHomeFurniture from '../components/RetroHomeFurniture.astro';
 import Guestbook from '../components/Guestbook.astro';
 import WebmasterNote from '../components/WebmasterNote.astro';
@@ -25,17 +23,6 @@ const recentArticles = (
 const changelogEntries = (
   await getCollection('changelog', ({ data }) => showDrafts || !data.draft)
 ).sort(compareChangelogEntries);
-
-// The legacy (retro) hero's activity rail takes four; the redesigned changelog
-// section takes five. Same source, sliced twice, so the two can never disagree
-// about which entry is newest.
-const activityItems = changelogEntries.slice(0, 4).map(({ id, data }) => ({
-  date: data.date,
-  href: `/changelog/${id}/`,
-  title: data.title,
-  type: data.type,
-  significance: data.significance,
-}));
 
 const changelogRows = changelogEntries.slice(0, 5).map(({ id, data }) => ({
   id,
@@ -66,52 +53,50 @@ const markdownUrl = markdownSiblingFor('/') ?? undefined;
   markdownAlternate={markdownUrl}
 >
   {/*
-    TWO HOMEPAGES IN ONE DOCUMENT, one shown per appearance.
+    ONE HOMEPAGE, styled by both appearances.
 
-    The redesign rebuilds the MODERN homepage only; retro stays exactly as it was
-    (Matt, 2026-08-20), and retro is a client-side preference the server cannot
-    read, so both trees have to ship and CSS has to choose. `.modern-skin` and
-    `.retro-skin` in src/styles/retro.css do the choosing — the same construction
-    the retro furniture below has always used, so nothing is injected, removed or
-    re-rendered when the toggle flips.
+    The five sections below are the homepage's whole body. Retro restyles this
+    same markup under `html[data-appearance='retro'] [data-module='home-…']` in
+    src/styles/retro.css — the legacy Hero, ActivityLog and RecentWriting
+    components are deleted, and with them the `.retro-skin` wrapper that used to
+    ship a second copy of the page. Both appearances now show all five sections,
+    Projects and Agent surfaces included, which retro never showed before
+    (Matt, 2026-08-28).
 
-    That is also what keeps retro's stylesheet untouched: it hooks onto
-    `.hero-eyebrow`, `.section-eyebrow`, `.article-title`, `[data-module='hero']`
-    and friends, which live only in the legacy tree. The redesigned sections
-    share none of those class names, so there is no rule to update and no
-    specificity contest to lose.
+    Every retro rule for this body carries a `[data-module]` prefix, and that is
+    load-bearing: Astro appends a `[data-astro-cid-…]` to each section's own
+    selectors and that attribute counts as a class, so a retro rule written
+    against the inner class alone silently loses to the component's own value.
 
-    A hidden subtree holds no tab stops and is absent from the accessibility
-    tree, so each appearance presents exactly one homepage to a keyboard or a
-    screen reader.
+    What stays duplicated is retro-only FURNITURE, not content: the marquee,
+    divider, construction banner and counter below the hero, and the guest book
+    block at the foot. Both are `display: none` in modern through
+    `.retro-furniture`, so nothing is injected, removed or re-rendered when the
+    appearance toggle flips.
   */}
   <HomeHero />
+  <RetroHomeFurniture />
   <HomeWriting articles={recentArticles} />
   <HomeProjects projects={featuredProjects} />
   <HomeAgents />
   <HomeChangelog entries={changelogRows} />
 
-  <div class="retro-skin">
-    <Hero activityItems={activityItems} />
-    <RetroHomeFurniture />
-    <RecentWriting articles={recentArticles} />
-    {/*
-      The guest book section: one inline block below RecentWriting, above the footer. Retro-only —
-      it is in the DOM in both modes and hidden in modern by `.retro-furniture`, so nothing is
-      injected or revealed at toggle time and the sidebar's `Sign the Guest Book ↓` anchor always
-      has a target. It spans the shell; its inner column is capped at the reading measure, because
-      guest-book messages are prose and 1000px runs past 100 characters.
+  {/*
+    The guest book section: one inline block below the changelog, above the footer. Retro-only —
+    it is in the DOM in both modes and hidden in modern by `.retro-furniture`, so nothing is
+    injected or revealed at toggle time and the counter's `Sign the Guest Book ↓` anchor always
+    has a target. It spans the shell; its inner column is capped at the reading measure, because
+    guest-book messages are prose and 1000px runs past 100 characters.
 
-      A `div`, not a `section`: it is a layout wrapper around three components that each carry their
-      own heading and their own labelled `<section>`, and a `<section>` with no heading of its own is
-      a markup validity warning (`npm run validate:html`) as well as an unnamed region.
-    */}
-    <div class="retro-furniture guestbook-section" id="guestbook">
-      <div class="guestbook-column">
-        <Guestbook />
-        <WebmasterNote />
-        <WebRing />
-      </div>
+    A `div`, not a `section`: it is a layout wrapper around three components that each carry their
+    own heading and their own labelled `<section>`, and a `<section>` with no heading of its own is
+    a markup validity warning (`npm run validate:html`) as well as an unnamed region.
+  */}
+  <div class="retro-furniture guestbook-section" id="guestbook">
+    <div class="guestbook-column">
+      <Guestbook />
+      <WebmasterNote />
+      <WebRing />
     </div>
   </div>
 </Layout>

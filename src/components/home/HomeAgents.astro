@@ -9,6 +9,12 @@
  * disagree about the latest run. Nothing is hardcoded — the mockup's numbers
  * happen to match the run of 20 Aug 2026 because that is the run it was drawn
  * against, not because they were copied.
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='home-agents']` in retro.css. The
+ * module prefix there is what buys those rules the one extra attribute they
+ * need to outweigh the Astro-scoped selectors below, whose
+ * `[data-astro-cid-…]` counts as a class. Nothing here is appearance-aware.
  */
 import { SCORECARD, passingGates, scorecardGates } from '../../data/scorecard';
 import { formatIsoDate } from '../../lib/format-date.mjs';
@@ -44,7 +50,7 @@ const SURFACES = [
 ] as const;
 ---
 
-<section class="rd-section agents modern-skin" aria-labelledby="home-agents-title">
+<section class="rd-section agents" data-module="home-agents" aria-labelledby="home-agents-title">
   <div class="rd-heading-row">
     <h2 id="home-agents-title">Agent surfaces</h2>
     {/*
