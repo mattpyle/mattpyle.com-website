@@ -52,8 +52,14 @@ function naturalLineHeight(fontSize, lineHeightMultiplier) {
 }
 
 /**
- * The signature row every card ends on: the `mp/` chip, a hairline, the author
- * and domain, and an optional right-aligned date.
+ * The signature row every card ends on: the `mp/` chip, a hairline, the domain,
+ * and an optional right-aligned date.
+ *
+ * No byline. The mark is already the name in short form, and on the fallback the
+ * name is also the 128px headline, so "Matt Pyle — mattpyle.com" here said it a
+ * third time on one image (Matt, 2026-08-28). The domain is the one thing the
+ * row has to carry, because a share card is often the only place a reader sees
+ * where the page lives.
  */
 function renderSignatureRow(mono, { top, date }) {
   const mark = renderMark(mono, { x: PADDING, y: top, height: MARK_HEIGHT });
@@ -62,10 +68,9 @@ function renderSignatureRow(mono, { top, date }) {
   const dividerHeight = 28;
   const dividerY = top + (MARK_HEIGHT - dividerHeight) / 2;
 
-  const nameFontSize = 18;
-  const nameX = dividerX + 1 + 22;
-  const nameBaseline = centeredBaseline(top, MARK_HEIGHT, mono, nameFontSize);
-  const nameWidth = metrics(mono, nameFontSize).widthOf('Matt Pyle ');
+  const domainFontSize = 18;
+  const domainX = dividerX + 1 + 22;
+  const domainBaseline = centeredBaseline(top, MARK_HEIGHT, mono, domainFontSize);
 
   const dateSvg = date
     ? renderTextPath(mono, date, {
@@ -80,8 +85,7 @@ function renderSignatureRow(mono, { top, date }) {
 
   return `${mark.svg}
   <rect x="${dividerX}" y="${dividerY.toFixed(1)}" width="1" height="${dividerHeight}" fill="${COLORS.rule}" />
-  ${renderTextPath(mono, 'Matt Pyle ', { x: nameX, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.text, role: 'author' })}
-  ${renderTextPath(mono, '— mattpyle.com', { x: nameX + nameWidth, baseline: nameBaseline, fontSize: nameFontSize, fill: COLORS.muted, role: 'domain' })}
+  ${renderTextPath(mono, 'mattpyle.com', { x: domainX, baseline: domainBaseline, fontSize: domainFontSize, fill: COLORS.muted, role: 'domain' })}
   ${dateSvg}`;
 }
 
@@ -138,8 +142,9 @@ function renderWritingCard({ title, date, eyebrow, accent = ACCENTS.writing, dis
 /**
  * The site-wide fallback, used for every page that has no card of its own. It
  * repeats the homepage hero rather than inventing a second headline: the name,
- * with the surname in the agents magenta the H1 fills it with, over the site's
- * one-sentence statement.
+ * with the surname in the agents magenta the H1 fills it with, over a
+ * three-noun standfirst.
+
  *
  * `height` varies because `twitter:image` is cropped 16:9 and `og:image` 1.91:1,
  * so the two are separate files at separate sizes.
@@ -149,7 +154,7 @@ function renderFallbackCard({ height, display, mono }) {
   const nameLetterSpacing = nameFontSize * -0.04;
   const { ascent, descent } = metrics(display, nameFontSize);
 
-  const statement = 'This site is an experiment in building the web for its newest readers, and publishing what they see.';
+  const statement = 'Growth, PLG, and the agentic web';
   const statementFontSize = 24;
   const statementLineHeight = statementFontSize * 1.5;
   const statementLines = wrapText(mono, statement, statementFontSize, 760);
