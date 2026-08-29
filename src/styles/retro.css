@@ -135,37 +135,54 @@ html[data-appearance='retro'] .prose pre code {
   color: var(--retro-ink);
 }
 
-/* ── Header / nav ─────────────────────────────────────────────────────── */
+/* -- Header / nav ------------------------------------------------------ */
 
-html[data-appearance='retro'] [data-module='nav'] {
+/* Retro styles the SAME header the modern appearance does - SiteHeader.astro,
+   `[data-module='site-header']`. There is no second header any more.
+
+   Every selector in this section is written as
+   `html[data-appearance='retro'] [data-module='site-header'] ...` rather than
+   against the inner class alone, and that is not decoration. Astro appends a
+   `[data-astro-cid-...]` to each of the component's own selectors, and that
+   attribute counts as a class, so `.wordmark` there is really `.wordmark[cid]`.
+   The module prefix is what buys this file the extra attribute it needs to win.
+   Drop it from any rule below and the component's own value silently comes
+   back. */
+
+html[data-appearance='retro'] [data-module='site-header'] {
   background: var(--retro-forest);
   border-bottom: 4px solid var(--retro-maroon);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  /* The redesign's mobile drop-shadow stands in for a scroll-linked one. Retro's
+     border is a hard 4px rule and a soft shadow under it reads as a smudge. */
+  box-shadow: none;
 }
 
-/* Text-art flourish replacing the starfield dots (which read as stray pixels
-   at nav height, not decoration). This is the *same complete construction* as
-   the homepage divider (RetroHomeFurniture.astro `.retro-divider`) —
-   arm + centred word + arm — rather than a lone half-cluster, which read as
-   lopsided and unfinished next to the divider it is meant to echo. Same
-   &cedil;/&oslash;/&curren;/&ordm;/&deg; motif, same type treatment, same
-   rainbow hue-cycle, so the two read as one motif.
+/* The redesign paints its 1px hairline as a ::after INSIDE the blurred box. The
+   4px maroon border above replaces it, and left alone it would draw a second,
+   paler line on top of the first. */
+html[data-appearance='retro'] [data-module='site-header']::after {
+  display: none;
+}
 
-   Three width bands, because this shares a 60px row with the logo and five
-   links and must never wrap or crowd them. Measured against a production
-   build: logo 101px + links 396px + 80px gutters = 577px of fixed cost, so
-   the full form (342px) needs 919px and the arms-only pair (268px) needs
-   845px just to fit flush. The thresholds add slack on top of that:
-     >= 1040px    full "arm welcome arm"      (>= 53px clear of its neighbours)
-     940-1039px   arms only - still symmetric and complete, just narrower
-     <= 939px     hidden entirely
-   The hide threshold moved up from 760px because below ~845px even the
-   arms-only pair overflows the row, and below ~940px it sits closer to the
-   links than the links sit to each other (26px). The alternative was falling
-   back to the lone half-cluster in that band, which is the exact
-   lopsidedness this change exists to remove.
-   Hidden by default so the element is inert in modern regardless of load
+/* Text-art flourish, the retro-only furniture SiteHeader.astro carries between
+   the wordmark and the nav. This is the *same complete construction* as the
+   homepage divider (RetroHomeFurniture.astro `.retro-divider`) - arm + centred
+   word + arm - rather than a lone half-cluster, which read as lopsided and
+   unfinished next to the divider it is meant to echo. Same motif, same type
+   treatment, same rainbow hue-cycle, so the two read as one thing.
+
+   Two width bands, because it shares the header row with the wordmark and five
+   links and must never wrap or crowd them. Measured against a production build
+   in retro's own faces (bold Verdana links, Comic Sans wordmark), which are
+   wider than the modern row this element used to be measured against:
+     >= 1130px    full "arm welcome arm", 55px clear of both neighbours
+     <= 1129px    hidden entirely
+   The arms-only middle band the legacy nav had is gone: the retro link row is
+   wide enough now that the band it would occupy is a few dozen pixels.
+
+   Hidden by default so the element is inert in modern regardless of stylesheet
    order; the nested spans inherit that. */
 html:not([data-appearance='retro']) .nav-flourish {
   display: none;
@@ -189,68 +206,71 @@ html[data-appearance='retro'] .nav-flourish-word {
   letter-spacing: 1.5px;
 }
 
-@media (max-width: 1039px) {
-  html[data-appearance='retro'] .nav-flourish-word {
-    display: none;
-  }
-}
-
-@media (max-width: 939px) {
+@media (max-width: 1129.98px) {
   html[data-appearance='retro'] .nav-flourish {
     display: none;
   }
 }
 
-html[data-appearance='retro'] .nav-logo {
+html[data-appearance='retro'] [data-module='site-header'] .wordmark {
   font-family: var(--retro-font-display);
   color: var(--retro-gold);
   font-size: 16px;
 }
 
-html[data-appearance='retro'] .nav-logo:hover {
+html[data-appearance='retro'] [data-module='site-header'] .wordmark:hover {
   color: var(--retro-cream);
 }
 
-html[data-appearance='retro'] .nav-link {
+/* One rule for all three link trees - the desktop row, the narrow row and the
+   `more` control - so retro cannot drift between them the way the component's
+   own `[data-section]` colours cannot. The `more` panel sits on parchment rather
+   than on the green bar, so its rows take their own colours below. */
+html[data-appearance='retro'] [data-module='site-header'] .header-link,
+html[data-appearance='retro'] [data-module='site-header'] .nav-row-link,
+html[data-appearance='retro'] [data-module='site-header'] .nav-more > summary {
   font-family: var(--retro-font-ui);
+  font-weight: bold;
   color: var(--retro-cream-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-html[data-appearance='retro'] .nav-link:hover,
-html[data-appearance='retro'] .nav-link.is-active {
+/* The current section keeps the redesign's 2px underline, which is drawn in
+   `currentColor` - so marking the label gold here marks the rule gold too, and
+   the two can no more drift in retro than they can in modern. */
+html[data-appearance='retro'] [data-module='site-header'] .header-link:hover,
+html[data-appearance='retro'] [data-module='site-header'] .nav-row-link:hover,
+html[data-appearance='retro'] [data-module='site-header'] .nav-more > summary:hover,
+html[data-appearance='retro'] [data-module='site-header'] .nav-more[open] > summary,
+html[data-appearance='retro'] [data-module='site-header'] .header-link[aria-current='page'],
+html[data-appearance='retro'] [data-module='site-header'] .nav-row-link[aria-current='page'] {
   color: var(--retro-gold);
-  border-bottom-color: var(--retro-gold);
 }
 
-/* WCAG 1.4.10 reflow, retro only. Nav.astro wraps the header below 360px, where
-   the modern faces stop fitting on one row. Retro's Comic Sans wordmark and bold
-   Verdana links need about 444px for that same row, so this extends the shipped
-   wrap pattern up to 456px (about 12px of slack over the measured need) instead
-   of moving the shared breakpoint and reflowing modern. Retro at 440 and up
-   keeps its single row. Selectors are scoped under [data-module='nav'] so they
-   outweigh Nav.astro's scoped rules, whose cid attribute counts as a class.
+/* The `more` panel: a beveled parchment menu rather than the redesign's blurred
+   white card. Dark ink on a light ground, which is why its rows do not take the
+   cream treatment above. */
+html[data-appearance='retro'] [data-module='site-header'] .nav-panel {
+  background: var(--retro-navbar-bg);
+  border: 2px outset var(--retro-frame-border);
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
+}
 
-   The 444 is per label set, not per link count: it was 429 until Builds was
-   renamed to Projects on 2026-08-20. tests/a11y/reflow.spec.ts brackets this
-   rule on both sides so the next label change fails there rather than in
-   somebody's browser. */
-@media (max-width: 455.98px) {
-  html[data-appearance='retro'] [data-module='nav'] .nav-inner {
-    flex-wrap: wrap;
-    height: auto;
-    padding-block: 10px;
-    row-gap: 8px;
-  }
+html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  color: var(--retro-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
-  html[data-appearance='retro'] [data-module='nav'] .nav-logo {
-    flex: 0 0 100%;
-  }
-
-  html[data-appearance='retro'] [data-module='nav'] nav {
-    flex: 0 0 100%;
-    flex-wrap: wrap;
-    gap: 8px 12px;
-  }
+html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link:hover,
+html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link[aria-current='page'] {
+  color: var(--retro-maroon);
 }
 
 /* ── Mode banner (bulletproof exit #1) ──────────────────────────────────
@@ -357,62 +377,111 @@ html[data-appearance='retro'] .retro-construction b {
   letter-spacing: 1px;
 }
 
-/* ── Footer ──────────────────────────────────────────────────────────── */
+/* -- Footer ------------------------------------------------------------ */
 
-html[data-appearance='retro'] [data-module='footer'] {
+/* The same single footer the modern appearance renders - SiteFooter.astro,
+   `[data-module='site-footer']`. The module prefix on every selector below is
+   load bearing for the same reason it is in the header section above. */
+
+html[data-appearance='retro'] [data-module='site-footer'] {
   background: var(--retro-forest);
-  color: var(--retro-cream-soft);
   border-top: 4px solid var(--retro-maroon);
+  color: var(--retro-cream-soft);
   font-family: var(--retro-font-ui);
+}
+
+/* Retro's footer has always been one centred column rather than the redesign's
+   bio-beside-wink pair. Re-skin, not re-layout: nothing moves in the DOM and
+   reading order is untouched - the two blocks stop sitting side by side and
+   centre instead. */
+html[data-appearance='retro'] [data-module='site-footer'] .footer-inner {
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
   text-align: center;
+  gap: 16px;
 }
 
-html[data-appearance='retro'] .retro-footer-badges {
-  justify-content: center;
+html[data-appearance='retro'] [data-module='site-footer'] .footer-bio {
+  align-items: center;
+  max-width: 62ch;
 }
 
-html[data-appearance='retro'] [data-module='footer'] nav a {
+html[data-appearance='retro'] [data-module='site-footer'] .footer-name {
+  font-family: var(--retro-font-display);
+  color: var(--retro-gold);
+}
+
+html[data-appearance='retro'] [data-module='site-footer'] .footer-blurb {
+  font-family: var(--retro-font-body);
   color: var(--retro-cream-soft);
 }
 
-/* WCAG 1.4.10 reflow: the footer's five links plus the appearance toggle sit on
-   one non-wrapping row, which Verdana pushes past 320px (the toggle overflowed
-   to right=326). Wrapping is retro-only because modern's narrower faces fit.
-   Scoped under [data-module='footer'] to outweigh Footer.astro's scoped rule. */
-html[data-appearance='retro'] [data-module='footer'] nav {
+/* WCAG 1.4.10 reflow: the link row plus the appearance pill is wider in Verdana
+   than in IBM Plex Mono and will not hold one line at 320px. Wrapping is
+   retro-only because the modern faces fit; tests/a11y/reflow.spec.ts runs retro
+   at 320 and is what holds this. */
+html[data-appearance='retro'] [data-module='site-footer'] .footer-links {
+  font-family: var(--retro-font-ui);
+  font-size: 13px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
-html[data-appearance='retro'] .appearance-toggle {
-  color: var(--retro-cream);
-  border-color: var(--retro-cream-soft);
+html[data-appearance='retro'] [data-module='site-footer'] .footer-links a {
+  color: var(--retro-cream-soft);
+  font-weight: bold;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-html[data-appearance='retro'] .appearance-toggle:hover {
+html[data-appearance='retro'] [data-module='site-footer'] .footer-links a:hover {
+  color: var(--retro-gold);
+}
+
+/* The legacy retro footer put the appearance control in a pill, and the pill is
+   what reads as a 1997 button; the redesign's plain-link treatment keeps modern.
+   MECHANICS untouched - still the one <button data-appearance-toggle> that
+   AppearanceUI.astro drives, restyled and nothing more. */
+html[data-appearance='retro'] [data-module='site-footer'] .appearance-toggle {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  font-size: 13px;
+  text-transform: none;
+  color: var(--retro-cream);
+  background: none;
+  border: 1px solid var(--retro-cream-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+html[data-appearance='retro'] [data-module='site-footer'] .appearance-toggle:hover {
   color: var(--retro-gold);
   border-color: var(--retro-gold);
 }
 
-html[data-appearance='retro'] [data-module='footer'] nav a:hover {
+html[data-appearance='retro'] [data-module='site-footer'] .footer-wink {
+  font-family: var(--retro-font-mono);
+  color: var(--retro-cream-soft);
+  text-align: center;
+}
+
+html[data-appearance='retro'] [data-module='site-footer'] .wink-last {
   color: var(--retro-gold);
 }
 
-html[data-appearance='retro'] [data-module='footer'] p {
-  color: var(--retro-cream-soft);
+/* Retro-only furniture in the shared footer (SiteFooter.astro), on the same
+   terms as the header flourish above: decorative, aria-hidden, inert in
+   modern. */
+html:not([data-appearance='retro']) .retro-footer-badges {
+  display: none;
 }
 
 html[data-appearance='retro'] .retro-footer-badges {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
-  margin: 0 0 8px;
-}
-
-html:not([data-appearance='retro']) .retro-footer-badges {
-  display: none;
+  margin: 0;
 }
 
 html[data-appearance='retro'] .retro-footer-badges span {
@@ -423,24 +492,6 @@ html[data-appearance='retro'] .retro-footer-badges span {
   font-family: var(--retro-font-mono);
   font-size: 10px;
   padding: 2px 5px;
-}
-
-/* ── Appearance toggle button ───────────────────────────────────────── */
-
-html[data-appearance='retro'] .appearance-toggle {
-  font-family: var(--retro-font-ui);
-}
-
-/* ── Nav links: push further period than the base treatment above ──── */
-
-html[data-appearance='retro'] .nav-link {
-  font-weight: bold;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-html[data-appearance='retro'] .nav-link.is-active {
-  border-bottom-color: var(--retro-gold);
 }
 
 /* ── Hero: CTA buttons get the beveled period treatment ─────────────── */
@@ -1665,27 +1716,22 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
   }
 }
 
-/* ── Appearance skins: the redesign beside the legacy chrome ──────────────
-   The redesign rebuilds the modern appearance surface by surface, and retro is
-   explicitly untouched by it (Matt, 2026-08-20). A redesigned route therefore
-   ships BOTH sets of chrome in the DOM — SiteHeader/SiteFooter and the new
-   homepage sections marked `.modern-skin`, Nav/Footer and the legacy homepage
-   sections marked `.retro-skin` — and exactly one is displayed.
+/* -- Appearance skins: the page bodies that still ship twice ---------------
+   The redesign rebuilt the modern appearance surface by surface, and each
+   converted page body still ships BOTH trees in the DOM - the new sections
+   marked `.modern-skin`, the legacy ones marked `.retro-skin` - with exactly one
+   displayed. Undoing that is the work of docs/work/one-dom-for-both-appearances,
+   phase by phase; the CHROME is done and no longer uses this pair at all. Retro
+   styles the one header and the one footer directly, in the two sections above.
 
-   This is the same construction as `.retro-furniture` above, and for the same
-   reason: nothing is injected, removed or re-rendered at toggle time, so the
-   toggle stays a CSS switch on one document rather than a re-render.
+   This is the same construction as `.retro-furniture`, and for the same reason:
+   nothing is injected, removed or re-rendered at toggle time, so the toggle
+   stays a CSS switch on one document rather than a re-render. A hidden subtree
+   is not in the accessibility tree and holds no tab stops, so the keyboard and
+   aria-golden rows in tests/a11y see one of each in either appearance.
 
-   It is also what keeps every retro rule in this file working untouched. Retro
-   styles the legacy chrome through `[data-module='nav']` and
-   `[data-module='footer']`; the redesigned pair are `[data-module='site-header']`
-   and `[data-module='site-footer']`, which no selector here mentions. There is
-   no specificity contest to lose (see the Astro-scoped-selector trap noted at
-   the top of this file).
-
-   A hidden subtree is not in the accessibility tree and holds no tab stops, so
-   the keyboard and aria-golden rows in tests/a11y see one header and one footer
-   in each appearance, not two. */
+   Do not reach for this pair for new work. Duplicating a subtree so the two
+   appearances can each have their own is the pattern the card exists to end. */
 
 html:not([data-appearance='retro']) .retro-skin {
   display: none;
