@@ -13,6 +13,15 @@
  * is an agents surface, so its prose links are magenta. The underline stays —
  * inside a paragraph, colour alone does not distinguish a link (WCAG 1.4.1).
  *
+ * IT CARRIES `data-module='about-body'` AND NO `.modern-skin`, since 2026-08-29:
+ * this is the only /about body in the document and retro restyles it in place,
+ * under that module prefix in src/styles/retro.css.
+ *
+ * ONE TRAP THE RETRO BLOCK HAD TO CLOSE: the H2s below sit OUTSIDE the `.prose`
+ * divs, as their siblings, so retro's global `.prose h2` rule — maroon, dotted
+ * underline, ball bullet — does not reach them and the module block gives them
+ * that treatment explicitly. Moving an H2 inside a `.prose` div would double it.
+ *
  * The four reach icons are VENDORED, one path each. The mockup pulled three from
  * cdn.simpleicons.org and masked the fourth from a jsdelivr copy of
  * bootstrap-icons; a CDN request would be a third-party dependency on the
@@ -75,7 +84,7 @@ const REACH = [
 ];
 ---
 
-<div class="rd-section about-body modern-skin">
+<div class="rd-section about-body" data-module="about-body">
   <div class="reading">
     <div class="prose">
       <p>

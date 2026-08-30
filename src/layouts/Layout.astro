@@ -104,8 +104,11 @@ const twitterImageURL = new URL(image ?? '/og-fallback-twitter.png', Astro.site)
 const twitterCard = 'summary_large_image';
 
 // Person + WebSite ship on every page so the entity resolves the same way everywhere.
-// sameAs matches exactly the two links in SiteFooter.astro / AboutGrid.astro — GitHub + LinkedIn
-// only, no X/Twitter (see CLAUDE.md: that's a deliberate entity statement, not an omission).
+// sameAs is GitHub + LinkedIn only, and deliberately no X/Twitter (see CLAUDE.md: that is an
+// entity statement, not an omission). It is NOT a mirror of any link list on the site:
+// SiteFooter.astro also links Bluesky, and /about's reach grid in AboutBody.astro links Bluesky
+// and the feed. Adding a profile to one of those lists is not a reason to add it here.
+// (It named AboutGrid.astro until 2026-08-29; that component is deleted.)
 const jsonLdGraph: Record<string, unknown>[] = [
   {
     '@type': 'Person',

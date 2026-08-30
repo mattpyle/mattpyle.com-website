@@ -16,6 +16,12 @@
  * right edge: `minmax(0, 68ch) 300px` with a 72px gap, declared in both. The
  * reading column is 68ch; the 300px column carries the agent block here and the
  * portrait rail below.
+ *
+ * IT CARRIES `data-module='about-hero'` AND NO `.modern-skin`, since 2026-08-29:
+ * this is the only /about hero in the document and retro restyles it in place,
+ * under that module prefix in src/styles/retro.css. The prefix is load-bearing —
+ * Astro appends a `[data-astro-cid-…]` to the selectors below and that attribute
+ * counts as a class, so a retro rule without it loses silently.
  */
 ---
 
@@ -24,7 +30,7 @@
   made: `npm run validate:html` names an h1 inside sectioning content, and an
   unnamed <section> is not exposed as a region anyway.
 */}
-<div class="rd-section about-hero modern-skin">
+<div class="rd-section about-hero" data-module="about-hero">
   <h1><span class="rd-fill rd-fill--ink">About</span></h1>
 
   <div class="hero-row">

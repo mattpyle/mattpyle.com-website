@@ -11,6 +11,10 @@
  * arrived from a log line might want to call rather than read about. It takes its
  * URL from the page rather than writing one out: the page already holds the
  * endpoint the rest of its copy quotes.
+ *
+ * IT CARRIES `data-module='steward-hero'` AND NO `.modern-skin`, since 2026-08-29:
+ * this is the only /steward hero in the document and retro restyles it in place,
+ * under that module prefix in src/styles/retro.css.
  */
 interface Props {
   /** The MCP endpoint, from the page. */
@@ -28,7 +32,7 @@ const endpointLabel = endpoint.replace(/^https?:\/\//, '');
   made: `npm run validate:html` names an h1 inside sectioning content, and an
   unnamed <section> is not exposed as a region anyway.
 */}
-<div class="rd-section steward-hero modern-skin">
+<div class="rd-section steward-hero" data-module="steward-hero">
   <h1><span class="rd-fill">Steward</span></h1>
 
   <div class="hero-row">

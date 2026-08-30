@@ -65,10 +65,11 @@ export const PAGES: PageSpec[] = [
   {
     name: 'about',
     path: '/about',
-    why: 'About template: the redesigned reading column, reach grid and portrait rail, plus the legacy bio grid',
-    // Two trees ship here and the hidden one is absent from the accessibility
-    // tree, so this golden records whichever appearance the run is in — these
-    // rows are taken in modern.
+    why: 'About template: the reading column, reach grid and portrait rail, one tree styled by both appearances',
+    // ONE TREE as of 2026-08-29 (one-dom phase 5): the legacy PageHeader and
+    // AboutGrid bio grid are deleted, so the hero and body below are the whole
+    // page in either appearance. The h1 reads "About" in both now; it was
+    // "Matt Pyle" in retro while the legacy tree shipped.
     //
     // Nothing on this page is content-variable: the copy is authored in the
     // template, not rendered from a collection, so there is nothing to redact and
@@ -256,10 +257,10 @@ export const PAGES: PageSpec[] = [
     name: 'steward',
     path: '/steward',
     why: 'Steward template: the check list, the log-identity and limits tables, and two focusable code blocks that must not wrap mid-token',
-    // Two trees ship here and the hidden one is absent from the accessibility tree, so this golden
-    // records whichever appearance the run is in — these rows are taken in modern. `.check-plain`
-    // is the legacy tree's gloss and `.check-detail` the redesigned one's; both are listed so the
-    // pruning still applies if a run ever takes this snapshot in retro.
+    // ONE TREE as of 2026-08-29 (one-dom phase 5): the legacy PageHeader and the inline
+    // `.steward-shell` are deleted, so the hero and the five bands below are the whole page in
+    // either appearance. `.check-plain` was the legacy tree's gloss and went with it; the
+    // surviving gloss is `.check-detail`.
     //
     // The one-sentence gloss on each check is editorial copy; the check titles beside it are
     // Steward's own words, and agents/steward/tests/lib/agent-audit-checks.test.ts already fails if
@@ -269,7 +270,7 @@ export const PAGES: PageSpec[] = [
     // THE COUNTS ARE NOT REDACTED and must not be: the check count, the per-category counts and the
     // four rate-limit caps are the whole point of the tables that carry them. They are hand-written
     // regexes in the golden, so the shape is pinned and the value is free.
-    snapshotRedact: ['.check-plain', '.check-detail'],
+    snapshotRedact: ['.check-detail'],
   },
   {
     name: 'webmcp',

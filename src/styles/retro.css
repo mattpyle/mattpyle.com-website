@@ -1676,54 +1676,581 @@ html[data-appearance='retro'] .page-link--disabled {
   text-decoration: none;
 }
 
-/* ── /about ───────────────────────────────────────────────────────────── */
+/* ── /about ───────────────────────────────────────────────────────────────
+   Retro styles the SAME page the modern appearance does — AboutHero and
+   AboutBody. The legacy PageHeader/AboutGrid tree is deleted, and with it
+   `.headshot`, `.identity-card`, `.id-name`, `.id-title`, `.id-org`,
+   `[data-module='about-grid']`, `[data-module='about-photo-col']`,
+   `[data-module='topics-grid']`, `.bullet`, `.connect-links`, `.connect-label`
+   and `.connect-handle`. Nothing else on the site used any of them, so the whole
+   block went rather than being retargeted — including the 4px maroon left border
+   on `.identity-card`, which is the border the phase-2 review flagged. It is
+   gone with the card it framed; there is no identity card in either appearance
+   now, so that question closes here.
 
-html[data-appearance='retro'] .headshot {
-  border: 4px ridge var(--retro-frame-border);
+   Retro loses the bio-and-links grid in the swap and takes the prose-led page
+   with the portrait rail, and its H1 reads "About" rather than "Matt Pyle". The
+   modern tree's content wins, which is the rule every surface in this conversion
+   has followed.
+
+   THE H2 EXPOSURE, checked before any rule below was written: AboutBody puts its
+   H2s OUTSIDE the `.prose` divs, as siblings, so the global
+   `html[data-appearance='retro'] .prose h2` rule near the top of this file —
+   maroon, dotted underline, ball bullet — does NOT reach them. They are given
+   that treatment explicitly here, so /about's headings match every other retro
+   page rather than silently rendering as plain redesign type. What the global
+   block DOES reach is this page's prose paragraphs, lists and links, which is
+   the wanted half and needs no rule. */
+
+html[data-appearance='retro'] [data-module='about-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
 }
 
-html[data-appearance='retro'] .identity-card {
+/* The fill span flattened to the headline's own maroon, so the H1 reads as one
+   word rather than as two colours. Same call /projects, /writing and /changelog
+   made; it is named in the handoff as the one gap every module has to close for
+   itself, because every existing `.rd-fill` rule is scoped to another module. */
+html[data-appearance='retro'] [data-module='about-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='about-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+/* The agent block as a filed card, exactly as /writing and /projects dress the
+   block in the same slot: ridge frame and hard shadow in place of the
+   redesign's hairline rule. */
+html[data-appearance='retro'] [data-module='about-hero'] .hero-agents {
   background: var(--retro-frame-bg);
-  border: 2px solid var(--retro-frame-border);
-  border-left: 4px solid var(--retro-maroon);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 18px;
 }
 
-html[data-appearance='retro'] .id-name {
-  font-family: var(--retro-font-display);
+html[data-appearance='retro'] [data-module='about-hero'] .hero-agents-copy {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='about-hero'] .hero-agents-links {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+}
+
+html[data-appearance='retro'] [data-module='about-hero'] .hero-agents-links a {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='about-hero'] .hero-agents-links a:hover {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='about-grid'] section h2 {
+/* The body headings, given the `.prose h2` treatment the global block cannot
+   reach — see the exposure note above. The ball bullet is repeated rather than
+   added to that selector list, because the global rule is keyed on `.prose h2`
+   and these H2s are deliberately not inside one. */
+html[data-appearance='retro'] [data-module='about-body'] h2 {
   font-family: var(--retro-font-display);
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: normal;
   color: var(--retro-maroon);
   border-bottom: 2px dotted var(--retro-frame-border);
+  padding-bottom: 4px;
 }
 
-html[data-appearance='retro'] [data-module='topics-grid'] li {
+html[data-appearance='retro'] [data-module='about-body'] h2::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: baseline;
+  background: radial-gradient(circle at 35% 30%, #fff, #e85d5d 45%, var(--retro-maroon));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+}
+
+/* The pull quote as a bordered notice on the cream ground, which is how this
+   file treats every set-apart sentence. The redesign's magenta left border goes
+   maroon with the rest of the page's accents. */
+html[data-appearance='retro'] [data-module='about-body'] .about-aside {
   font-family: var(--retro-font-body);
+  font-size: 17px;
+  background: var(--retro-cream);
+  border: 2px solid var(--retro-frame-border);
+  border-left: 4px solid var(--retro-maroon);
+  border-radius: 0;
+  color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] .bullet {
-  color: var(--retro-maroon);
+html[data-appearance='retro'] [data-module='about-body'] .about-divider,
+html[data-appearance='retro'] [data-module='about-body'] .rail-divider {
+  background: none;
+  height: 0;
+  border-top: 2px dotted var(--retro-frame-border);
 }
 
-html[data-appearance='retro'] .connect-links a {
+/* The reach grid as four filed cards. The redesign draws its hairlines with a
+   2px gap over a rule-coloured ground; retro gives each card its own ridge
+   frame instead, so the set reads as period furniture rather than as a modern
+   table with retro colours. */
+html[data-appearance='retro'] [data-module='about-body'] .reach {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  gap: 10px;
+  overflow: visible;
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .reach-card {
   background: var(--retro-frame-bg);
-  border: 2px outset var(--retro-frame-border);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  transition: none;
 }
 
-html[data-appearance='retro'] .connect-links a:hover {
+html[data-appearance='retro'] [data-module='about-body'] .reach-card:hover {
   background: var(--retro-sidebar-bg);
   border-color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] .connect-label,
-html[data-appearance='retro'] .connect-handle {
-  font-family: var(--retro-font-mono);
+html[data-appearance='retro'] [data-module='about-body'] .reach-icon {
+  color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] .connect-label {
+html[data-appearance='retro'] [data-module='about-body'] .reach-label {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .reach-card:hover .reach-label {
   color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .reach-detail,
+html[data-appearance='retro'] [data-module='about-body'] .reach-note {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+/* The portrait rail as a sidebar panel — the same construction the post page's
+   rail wears, so the two rails on this site do not read as two ideas. */
+html[data-appearance='retro'] [data-module='about-body'] .rail {
+  background: var(--retro-sidebar-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 16px;
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .rail-photo {
+  border: 4px ridge var(--retro-frame-border);
+  border-radius: 0;
+  background: var(--retro-frame-bg);
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .rail-caption {
+  font-family: var(--retro-font-body);
+  font-size: 14px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .rail-label {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .rail-value {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .rail-md {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .rail-md:hover {
+  color: var(--retro-maroon);
+}
+
+/* ── /steward ─────────────────────────────────────────────────────────────
+   Retro styles the SAME page the modern appearance does — StewardHero and
+   StewardBody. There was NO /steward block in this file before 2026-08-29:
+   retro rendered a hand-written legacy shell that lived inline in
+   src/pages/steward.astro and took its look from that page's own scoped styles
+   plus the global `.prose` rules near the top of this file. The shell is
+   deleted, and with it `.steward-shell`, `.check-group`, `.check-group-title`,
+   `.check-group-count`, `.check-group-summary`, `.check-list`, `.check-item`,
+   `.check-title`, `.check-severity` and `.check-plain`.
+
+   Retro loses the question-and-answer prose layout in the swap and takes
+   StewardBody's five bands. Every section survives and the order holds, which
+   is load-bearing on this page: the stranger who arrived from a log line gets
+   what visited, what it cost and how to refuse it before the page explains
+   itself.
+
+   The whole block is net-new. Nothing here is a colour the file did not already
+   have: the band head is the maroon-over-dotted-rule every retro heading wears,
+   the boxed elements are the ridge frame and hard shadow, and the code blocks
+   take the inset cream treatment the global `.prose pre` rule gives a snippet
+   elsewhere — repeated under this module because StewardBody carries no
+   `.prose` class at all, so that global rule does not reach it. */
+
+html[data-appearance='retro'] [data-module='steward-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='steward-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='steward-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+/* The endpoint block as a filed card, the same slot and the same treatment
+   /about's agent block and /projects' source block take. */
+html[data-appearance='retro'] [data-module='steward-hero'] .hero-endpoint {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 18px;
+}
+
+html[data-appearance='retro'] [data-module='steward-hero'] .hero-endpoint-label {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='steward-hero'] .hero-endpoint-link {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='steward-hero'] .hero-endpoint-link:hover {
+  color: var(--retro-maroon);
+}
+
+/* The band head: the ball-bulleted maroon heading every retro section carries.
+   The component's own hairline under `.band-body` becomes the dotted rule this
+   file uses everywhere else, so the band structure survives as a period
+   construction rather than as a modern one in brown. */
+html[data-appearance='retro'] [data-module='steward-body'] h2 {
+  font-family: var(--retro-font-display);
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] h2::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: baseline;
+  background: radial-gradient(circle at 35% 30%, #fff, #e85d5d 45%, var(--retro-maroon));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] h3 {
+  font-family: var(--retro-font-display);
+  font-size: 18px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .band-note {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .band-body {
+  border-top: 2px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .lead,
+html[data-appearance='retro'] [data-module='steward-body'] .secondary {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .lead {
+  font-size: 17px;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .secondary {
+  font-size: 15px;
+}
+
+/* The component darkens `strong` inside a lead or a secondary paragraph with its
+   own two-class rule, and darkens `.refusal p` with another, so both beat a
+   single-class retro rule on this module. Named here rather than left alone: a
+   modern ink token inside retro body copy is a cool grey word in a warm brown
+   paragraph, which reads as a rendering fault rather than as emphasis. */
+html[data-appearance='retro'] [data-module='steward-body'] .lead strong,
+html[data-appearance='retro'] [data-module='steward-body'] .secondary strong,
+html[data-appearance='retro'] [data-module='steward-body'] .refusal p {
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] a {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] a:visited {
+  color: var(--retro-link-visited);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] a:hover {
+  color: var(--retro-maroon);
+}
+
+/* Inline code and the snippets. Repeated from the global `.prose` rules rather
+   than shared with them: this component carries no `.prose` class, so those
+   selectors do not reach it, and a page whose subject is a curl line is the
+   last one that should render its code in modern chrome. */
+html[data-appearance='retro'] [data-module='steward-body'] code {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-cream);
+  border: 1px solid var(--retro-frame-border);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] pre {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-cream);
+  border: 2px inset var(--retro-frame-border);
+  border-radius: 0;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] pre code {
+  background: none;
+  border: none;
+  color: var(--retro-ink);
+}
+
+/* The refusal card's snippet needs the class in the selector, not just the
+   module prefix. StewardBody inverts this one block on purpose — the card is
+   the surface, so the code takes the page ground — and Astro scopes that rule
+   as `.refusal pre[data-astro-cid-…]`, one class plus one attribute, which TIES
+   the module-prefixed rule above and then wins on source order. Measured on the
+   served build: the block kept the modern `--bg` (a cool blue-grey) inside an
+   otherwise parchment page. Naming `.refusal` buys the extra class. */
+html[data-appearance='retro'] [data-module='steward-body'] .refusal pre {
+  background: var(--retro-cream);
+}
+
+/* The log-identity table, on the terms this file gives every retro table: a
+   ruled grid on the frame ground rather than the redesign's hairlines. */
+html[data-appearance='retro'] [data-module='steward-body'] .facts,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table {
+  font-family: var(--retro-font-body);
+  background: var(--retro-frame-bg);
+  border: 2px solid var(--retro-frame-border);
+}
+
+/* BOTH edges, not just the bottom. `.facts` rules its rows with `border-top`
+   and `.check-row` does the same, so a rule that set only `border-bottom` left
+   the modern hairline painting the edge that is actually drawn — measured on the
+   served build, a cool grey line across a parchment table. */
+html[data-appearance='retro'] [data-module='steward-body'] .facts th,
+html[data-appearance='retro'] [data-module='steward-body'] .facts td,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table th,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table td {
+  border-top-color: var(--retro-frame-border);
+  border-top-style: dotted;
+  border-bottom-color: var(--retro-frame-border);
+  border-bottom-style: dotted;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .facts th,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table th {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table .dim {
+  color: var(--retro-ink-muted);
+}
+
+/* The refusal panel. It is the one boxed element the modern page keeps, for the
+   reason its own comment gives — it is what an annoyed stranger came for — so
+   retro boxes it harder, in the frame every notice on this site wears. */
+html[data-appearance='retro'] [data-module='steward-body'] .refusal {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+}
+
+/* The tier pair's frame. `.tiers` draws its divider the way /about's reach grid
+   does — a 2px gap over a rule-coloured ground, inside one rounded border — so
+   retro has to unpaint the ground as well as the border, or the modern hairline
+   survives as a grey seam between two parchment cards. */
+html[data-appearance='retro'] [data-module='steward-body'] .tiers {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  gap: 10px;
+  overflow: visible;
+}
+
+/* The two tiers and the three deep-tier promises, as filed cards on the sidebar
+   ground. Deliberately the ridge frame rather than a maroon left accent: the
+   accent construction on this page would be the deleted `.identity-card`'s 4px
+   maroon border, which is the one the phase-2 review flagged as a question, and
+   this build is what retires it. */
+html[data-appearance='retro'] [data-module='steward-body'] .tier,
+html[data-appearance='retro'] [data-module='steward-body'] .guarantee {
+  background: var(--retro-sidebar-bg);
+  border: 3px ridge var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .tier-name,
+html[data-appearance='retro'] [data-module='steward-body'] .guarantees dt {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .tier-copy,
+html[data-appearance='retro'] [data-module='steward-body'] .guarantees dd {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink);
+}
+
+/* The check rows. A dotted rule between entries, which is the separator this
+   file already puts between the homepage's writing rows and the legacy activity
+   log's entries. */
+html[data-appearance='retro'] [data-module='steward-body'] .category-head h3 {
+  border-bottom: 2px dotted var(--retro-frame-border);
+  padding-bottom: 4px;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .category-purpose {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .category-count {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .check-rows {
+  border-bottom-color: var(--retro-frame-border);
+  border-bottom-style: dotted;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .check-row {
+  border-top-color: var(--retro-frame-border);
+  border-top-style: dotted;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .check-name {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .check-detail {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+/* Weight stays a word in ink, never a coloured pill — the component's own
+   comment makes that call and retro keeps it. The frame is the only change. */
+html[data-appearance='retro'] [data-module='steward-body'] .check-weight {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  background: var(--retro-cream);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .snippet-label {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .limits-note {
+  font-family: var(--retro-font-body);
+  font-size: 14px;
+  color: var(--retro-ink-muted);
+}
+
+/* The contact call to action as a beveled button, which is what this file does
+   with every standalone action link. */
+html[data-appearance='retro'] [data-module='steward-body'] .contact-link {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-frame-bg);
+  border: 2px outset var(--retro-frame-border);
+  border-radius: 0;
+  color: var(--retro-link);
+  text-decoration: underline;
+  padding: 8px 14px;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .contact-link:hover {
+  background: var(--retro-sidebar-bg);
+  border-color: var(--retro-maroon);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .contact-note {
+  font-family: var(--retro-font-body);
+  font-size: 14px;
+  color: var(--retro-ink-muted);
 }
 
 /* ── Filter pills ─────────────────────────────────────────────────────────
@@ -2490,13 +3017,14 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
    converted page body still ships BOTH trees in the DOM - the new sections
    marked `.modern-skin`, the legacy ones marked `.retro-skin` - with exactly one
    displayed. Undoing that is the work of docs/work/one-dom-for-both-appearances,
-   phase by phase. Seven surfaces are done and no longer use this pair at all:
+   phase by phase. Nine surfaces are done and no longer use this pair at all:
    the CHROME, the HOMEPAGE BODY, the /writing INDEX, the POST PAGE, /projects,
-   the /changelog LEDGER and the CHANGELOG ENTRY PAGE. Retro styles the one
-   header, the one footer, the five homepage sections, the writing hero and
-   archive, the one post template, the projects hero and board, the changelog
-   hero and log, and the one entry template directly, in the sections above.
-   What remains here is /about, /scorecard, /activity, /steward and /webmcp.
+   the /changelog LEDGER, the CHANGELOG ENTRY PAGE, /about and /steward. Retro
+   styles the one header, the one footer, the five homepage sections, the
+   writing hero and archive, the one post template, the projects hero and board,
+   the changelog hero and log, the one entry template, the about hero and body
+   and the steward hero and body directly, in the sections above.
+   What remains here is /scorecard, /activity and /webmcp.
 
    This is the same construction as `.retro-furniture`, and for the same reason:
    nothing is injected, removed or re-rendered at toggle time, so the toggle

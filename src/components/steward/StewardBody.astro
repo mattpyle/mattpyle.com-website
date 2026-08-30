@@ -19,6 +19,16 @@
  * RULE CONVENTION: every h2 is followed by one full-width hairline, then its
  * content at 26px. No exceptions on this page — `.band-body` carries both, so a
  * new band cannot forget.
+ *
+ * IT CARRIES `data-module='steward-body'` AND NO `.modern-skin`, since 2026-08-29:
+ * the legacy shell that lived inline in src/pages/steward.astro is deleted and
+ * these five bands are the only /steward body, in both appearances. Retro restyles
+ * them under that module prefix in src/styles/retro.css.
+ *
+ * NOTHING HERE CARRIES `.prose`, which is deliberate but has a cost the retro block
+ * pays: retro's global `.prose code` / `.prose pre` rules do not reach these
+ * snippets, so the module block repeats that treatment. Adding `.prose` to a band
+ * would pull in the whole overlay, not just the code rules.
  */
 interface Props {
   userAgent: string;
@@ -72,7 +82,7 @@ const GUARANTEES = [
 ];
 ---
 
-<div class="steward-body modern-skin">
+<div class="steward-body" data-module="steward-body">
   <section class="rd-section band" aria-labelledby="rd-steward-logs">
     <div class="band-head">
       <h2 id="rd-steward-logs">Did Steward just fetch your site?</h2>
