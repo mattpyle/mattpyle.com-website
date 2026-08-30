@@ -71,17 +71,26 @@ export const GET: APIRoute = async ({ site }) => {
   }
   lines.push('');
 
-  // The /writing page's tag filter mirrors its selection into a `?tag=` URL param
-  // (see FilterPills.astro), so a filtered view is a real, linkable URL — list it
-  // here rather than only describing the filter as an on-page interaction.
+  // TAGS AS PROSE, NOT AS LINKS. This block used to list each tag as a bullet linking
+  // `/writing/?tag=<tag>`, because the index's tag filter mirrored its selection into that
+  // param and a filtered view was therefore a real, linkable URL. Nothing has read the param
+  // since the filter was deleted with the index's legacy tree, so every one of those URLs
+  // answered 200 with an unfiltered page — the shape no validator catches, because the status
+  // code is fine and only the meaning is wrong.
+  //
+  // A PROSE LINE IS THE ONLY SHAPE THAT WORKS HERE. The format requires every list item inside
+  // a `##` section to lead with `[name](url)`, so a de-linked bullet is a conformance violation
+  // (`list-item-format`); the parser ignores non-bullet lines inside a section entirely, so a
+  // sentence passes. It carries the same two facts the bullets did, the tag names and their post
+  // counts, and it makes no promise about a URL. The `###` sub-heading went with the list: the
+  // parser never sees `###`, and a sub-heading over a single sentence reads as a stranded label.
   const writingTags = [...new Set(articles.flatMap(a => a.data.tags))].sort();
   if (writingTags.length > 0) {
-    lines.push('### Writing by tag');
-    lines.push('');
-    for (const tag of writingTags) {
+    const tagCounts = writingTags.map(tag => {
       const count = articles.filter(a => a.data.tags.includes(tag)).length;
-      lines.push(`- [${tag}](${base}/writing/?tag=${encodeURIComponent(tag)}): ${count} post${count === 1 ? '' : 's'}`);
-    }
+      return `${tag} (${count})`;
+    });
+    lines.push(`Tags used across these posts, with the number carrying each: ${tagCounts.join(', ')}. They are metadata, not pages — there is no per-tag URL to link.`);
     lines.push('');
   }
 

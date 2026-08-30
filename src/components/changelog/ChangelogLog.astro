@@ -21,6 +21,13 @@
  * FilterPills.astro under the redesign guard, and retro keeps the outset pills
  * from src/styles/retro.css. Hiding a year heading whose rows are all filtered
  * out is one `:has()` selector here; the legacy ledger needed a script for it.
+ *
+ * `syncUrlParam` makes a filtered view a real, linkable URL: `/changelog/?type=launch`
+ * opens with that filter selected. The deleted ledger's own FilterPills instance carried
+ * the prop and this one did not, so the URLs stopped working for one release; they are
+ * restored here rather than on a second instance. FilterPills reads the param off the
+ * CURRENT URL, so a paginated page keeps its own page number, and a value matching no
+ * pill falls back to "all" and drops itself from the URL.
  */
 import FilterPills from '../FilterPills.astro';
 import { formatSiteDate } from '../../lib/format-date.mjs';
@@ -73,6 +80,7 @@ for (const entry of entries) {
       noun="entry"
       nounPlural="entries"
       filterVerb="of type"
+      syncUrlParam="type"
     />
   </div>
 
