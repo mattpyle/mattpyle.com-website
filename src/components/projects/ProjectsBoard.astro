@@ -58,7 +58,7 @@ function cardHref(project: Project): { href: string; external: boolean } {
 }
 ---
 
-<section class="rd-section board modern-skin" aria-labelledby="projects-board-title">
+<section class="rd-section board" data-module="projects-board" aria-labelledby="projects-board-title">
   {/*
     The grid needs a name in the accessibility tree and the design has no
     visible heading for it — the H1 above is the page's only headline. Same
@@ -73,13 +73,9 @@ function cardHref(project: Project): { href: string; external: boolean } {
         return (
           /*
             THE ANCHOR llms.txt ADVERTISES. `/projects/#project-<id>` is the
-            address a project has (src/pages/llms.txt.ts), and an id has to be
-            unique in the document, so it lives on exactly one of the two trees.
-            It is on this one because a `display: none` element is not a scroll
-            target: in modern — the default appearance — the legacy card is
-            hidden, so an id there would be a fragment that lands nowhere. The
-            legacy card in ProjectsGrid.astro therefore no longer carries it, and
-            in retro the fragment resolves to the page rather than to the card.
+            address a project has (src/pages/llms.txt.ts). This page ships one
+            card grid in both appearances, so the fragment now lands on a
+            displayed card whichever appearance the reader is in.
           */
           <a
             id={`project-${project.id}`}

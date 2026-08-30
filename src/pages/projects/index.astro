@@ -1,8 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
-import PageHeader from '../../components/PageHeader.astro';
-import ProjectsGrid from '../../components/ProjectsGrid.astro';
 import ProjectsHero from '../../components/projects/ProjectsHero.astro';
 import ProjectsBoard from '../../components/projects/ProjectsBoard.astro';
 import { markdownSiblingFor } from '../../lib/markdown-negotiation.mjs';
@@ -28,29 +26,17 @@ const projects = allProjects.sort((a, b) => {
   markdownAlternate={markdownUrl}
 >
   {/*
-    TWO GRIDS IN ONE DOCUMENT, one shown per appearance — the same construction
-    src/pages/index.astro and src/pages/writing/index.astro use, and for the same
-    reason: the redesign rebuilds the MODERN appearance only, retro is a
-    client-side preference the server cannot read, so both trees ship and CSS
-    chooses. `.modern-skin` / `.retro-skin` in src/styles/retro.css do the
-    choosing.
+    ONE GRID, BOTH APPEARANCES. This page used to ship its content twice — the
+    two sections below for modern, a PageHeader plus ProjectsGrid tree marked
+    `.retro-skin` for retro — and CSS chose between them. Both appearances now
+    style this one tree, and the legacy component is deleted.
 
-    A hidden subtree holds no tab stops and is absent from the accessibility
-    tree, so each appearance presents exactly one grid.
-
-    Both take the same `projects` array in the same status-then-date order. The
-    redesigned tree drops the status FilterPills and the tag chips, which
-    constraint 4 bans; they belong to the legacy tree only.
+    What retro gave up to get here: the status FilterPills row and the per-card
+    tag pills. Neither is in the redesigned card, and the modern tree's content
+    wins wherever the two disagreed. Retro's rules live under
+    `[data-module='projects-hero']` and `[data-module='projects-board']` in
+    src/styles/retro.css.
   */}
   <ProjectsHero />
   <ProjectsBoard projects={projects} />
-
-  <div class="retro-skin">
-    <PageHeader
-      eyebrow="Side projects"
-      title="Projects"
-      subtitle="Software experiments — some built on Temporal, some not. Hobby projects, not a portfolio."
-    />
-    <ProjectsGrid projects={projects} />
-  </div>
 </Layout>

@@ -662,8 +662,11 @@ html:not([data-appearance='retro']) body.skin-redesign h1 ::selection {
    declarations, and a shell that drifts between sections is a misalignment you
    only see at one viewport width.
 
-   Not guarded against retro: the only markup carrying this class is inside a
-   `.modern-skin` subtree, which retro sets to `display: none`. */
+   Not guarded against retro, and no longer because the markup is hidden there:
+   the converted surfaces ship one tree now, so retro wears this shell too and
+   repaints inside it. That is deliberate — the shell is layout, and
+   docs/work/one-dom-for-both-appearances is a re-skin, not a re-layout. The
+   remaining `.modern-skin` surfaces are listed at the foot of retro.css. */
 .rd-section {
   max-width: var(--shell);
   margin: 0 auto;

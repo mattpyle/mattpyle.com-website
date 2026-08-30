@@ -6,7 +6,6 @@ description: "Testing Temporal workflows, deterministic standards, and agentic A
 seoTitle: "Hello, World! Or, why this post is a lie"
 seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI by building an editor for my website. The first post is the smoke test."
 tags: ["agents", "temporal", "tech"]
-featured: false
 draft: false
 ---
 

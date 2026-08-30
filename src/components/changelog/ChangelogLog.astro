@@ -6,19 +6,21 @@
  * the grouping the ledger already had: entries newest-first, grouped by the year
  * they shipped, one row each carrying date, title, summary.
  *
- * WHAT THE LEGACY LEDGER SHOWS AND THIS DOES NOT: the significance dot and the
- * legend that explains it, and the tag chips. Constraint 7 is that colour
- * carries section meaning and nothing is labelled with a swatch, and constraint
- * 4 bans chips — so significance and type are plain mono words at the end of the
- * row, which is where the writing index puts a post's read length.
+ * WHAT THE DELETED LEGACY LEDGER SHOWED AND THIS DOES NOT: the significance dot
+ * and the legend that explains it, and the tag chips. Constraint 7 is that
+ * colour carries section meaning and nothing is labelled with a swatch, and
+ * constraint 4 bans chips — so significance and type are plain mono words at the
+ * end of the row, which is where the writing index puts a post's read length.
+ * Both appearances read this one list.
  *
- * THE TYPE FILTER SURVIVES. Constraint 4 bans the pill VISUAL, not the function:
- * FilterPills' radiogroup restyles into mono text with a 2px bottom border under
- * the active one, which is the marker the design already uses for the current
- * section in the nav. Those rules are in FilterPills.astro under the redesign
- * guard. Hiding a year heading whose rows are all filtered out — the job
- * ChangelogLedger.astro does for the legacy tree in a script — is one `:has()`
- * selector here.
+ * THE TYPE FILTER SURVIVES, and since the legacy ledger was deleted it is the
+ * one filter the page has in either appearance. Constraint 4 bans the pill
+ * VISUAL, not the function: FilterPills' radiogroup restyles into mono text with
+ * a 2px bottom border under the active one, which is the marker the design
+ * already uses for the current section in the nav. Those rules are in
+ * FilterPills.astro under the redesign guard, and retro keeps the outset pills
+ * from src/styles/retro.css. Hiding a year heading whose rows are all filtered
+ * out is one `:has()` selector here; the legacy ledger needed a script for it.
  */
 import FilterPills from '../FilterPills.astro';
 import { formatSiteDate } from '../../lib/format-date.mjs';
@@ -53,7 +55,7 @@ for (const entry of entries) {
 }
 ---
 
-<section class="rd-section log modern-skin" aria-labelledby="changelog-log-title">
+<section class="rd-section log" data-module="changelog-log" aria-labelledby="changelog-log-title">
   {/*
     The list needs a name in the accessibility tree and the design has no visible
     heading for it — the H1 above is the page's only headline. Same answer as
@@ -74,7 +76,7 @@ for (const entry of entries) {
     />
   </div>
 
-  <div data-module="changelog-log">
+  <div class="log-rows">
     {groups.length > 0 ? groups.map(group => (
       <div class="year-group">
         {/*

@@ -71,7 +71,6 @@ title: "${yamlTitle}"
 date: ${date}
 description: "REPLACE: one to two sentences; drives the index card and meta description."
 tags: []
-featured: false
 draft: true
 ---
 

@@ -7,9 +7,10 @@
  * filter pills; the design bans both (constraint 4), and the legacy tag
  * radiogroup this page used to also ship is deleted.
  *
- * Strict reverse-chronological order. The legacy list floated `featured: true`
- * posts to the top; a year heading over a list that is not in date order reads
- * as a bug, and the grouping is the design.
+ * Strict reverse-chronological order. The legacy list floated a `featured` post
+ * to the top; a year heading over a list that is not in date order reads as a
+ * bug, and the grouping is the design. The flag itself is gone from the schema
+ * since 2026-08-29, having ordered and rendered nothing after that list went.
  *
  * RETRO RESTYLES THIS SAME MARKUP under
  * `html[data-appearance='retro'] [data-module='writing-archive']` in retro.css.

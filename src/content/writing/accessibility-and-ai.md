@@ -6,7 +6,6 @@ description: "AI built this site. Every automated tool gave it top marks. Then I
 seoTitle: "Accessibility, AI, and screen reader testing"
 seoDescription: "AI built this website and every automated tool gave it top marks. Then I used a screen reader for the first time and heard what those tools missed."
 tags: ["accessibility", "agents", "measurement"]
-featured: false
 draft: false
 ---
 

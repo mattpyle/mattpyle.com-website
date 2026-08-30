@@ -191,10 +191,11 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
      item — which is the marker the design already uses for the current section
      in the nav, so it needs no new idiom.
 
-     Guarded, so retro keeps the pills above. The other two groups on the site —
-     the tag filter on /writing and the status filter on /projects — sit inside a
-     `.retro-skin` subtree, which is `display: none` in modern, so these rules
-     only ever paint the changelog's redesigned group. */
+     Guarded, so retro keeps the pills above. This component now has exactly one
+     instance on the site — the changelog's type filter — and it is in a page
+     that ships one tree, so the guard is what separates the two appearances
+     rather than a `.retro-skin` wrapper. The /writing tag filter and the
+     /projects status filter both went with the legacy trees they sat in. */
   html:not([data-appearance='retro']) body.skin-redesign .filter-pills {
     gap: 8px 26px;
   }

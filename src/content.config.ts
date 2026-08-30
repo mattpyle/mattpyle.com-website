@@ -15,7 +15,6 @@ const writing = defineCollection({
     date:        z.coerce.date(),
     updated:     z.coerce.date().optional(),
     tags:        z.array(z.string()).default([]),
-    featured:    z.boolean().default(false),
     draft:       z.boolean().default(false),
     description: z.string(),
     image:       z.string().optional(),
