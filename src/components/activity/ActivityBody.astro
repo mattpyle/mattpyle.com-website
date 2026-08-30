@@ -40,6 +40,11 @@
  * the same thing — is refused in production. The bar heights are a ladder of classes at the foot of
  * this file instead: one rule per whole percent the geometry can produce. Same constraint that made
  * the homepage scorecard panel use a real `<progress>` element rather than a div with a width.
+ *
+ * IT CARRIES `data-module='activity-body'` AND NO `.modern-skin`, since 2026-08-29: this is the
+ * only /activity body in the document and retro restyles it in place, under that module prefix in
+ * src/styles/retro.css. The prefix is load-bearing — Astro appends a `[data-astro-cid-…]` to the
+ * selectors below and that attribute counts as a class, so a retro rule without it loses silently.
  */
 import { FAMILY_NOTES } from '../../lib/activity-summary.mjs';
 import { MAX_TABLE_ROWS } from '../../lib/agent-traffic.mjs';
@@ -67,7 +72,7 @@ function familyNote(family: string): string | undefined {
 }
 ---
 
-<div class="modern-skin">
+<div data-module="activity-body">
   {hasData && activity ? (
     <Fragment>
       <section class="rd-section band-counts" aria-labelledby="activity-counts-title">

@@ -5,8 +5,9 @@
  * Nu is the engine behind validator.w3.org, so "zero errors here" is the same claim the W3C
  * service makes. It runs against a *served* build rather than against `dist/client` on its own
  * for two reasons: the dev server renders differently from a production build (CLAUDE.md), and
- * /scorecard has no file in `dist/client` at all — it renders per request, so the only way to
- * validate the markup it actually ships is to ask a server for it.
+ * /activity has no file in `dist/client` at all — it renders per request, so the only way to
+ * validate the markup it actually ships is to ask a server for it. (/scorecard held that role
+ * until 2026-08-22, when the two pages split and it went back to prerendered.)
  *
  * Advisory, in the same spirit as spellcheck and the accessibility guard: never in the `build`
  * chain, red on a PR, deploys proceed. Malformed HTML degrades the accessibility tree that agents
