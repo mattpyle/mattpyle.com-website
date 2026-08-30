@@ -1,7 +1,5 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import PageHeader from '../components/PageHeader.astro';
-import AboutGrid from '../components/AboutGrid.astro';
 import AboutHero from '../components/about/AboutHero.astro';
 import AboutBody from '../components/about/AboutBody.astro';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
@@ -20,31 +18,18 @@ const markdownUrl = markdownSiblingFor('/about/') ?? undefined;
   markdownAlternate={markdownUrl}
 >
   {/*
-    TWO ABOUT PAGES IN ONE DOCUMENT, one shown per appearance — the same
-    construction src/pages/index.astro and src/pages/writing/index.astro use, and
-    for the same reason: the redesign rebuilds the MODERN appearance only, retro
-    is a client-side preference the server cannot read, so both trees ship and CSS
-    chooses. `.modern-skin` / `.retro-skin` in src/styles/retro.css do the
-    choosing.
+    ONE ABOUT PAGE, styled by both appearances. This page shipped its content
+    twice until 2026-08-29 — AboutHero and AboutBody for modern, a `.retro-skin`
+    div holding PageHeader and AboutGrid for retro — and CSS chose between them.
+    Both legacy pieces are deleted and `src/styles/retro.css` restyles the markup
+    below under `html[data-appearance='retro']`.
 
-    A hidden subtree holds no tab stops and is absent from the accessibility
-    tree, so each appearance presents exactly one page — including exactly one
-    h1, "About" in modern and "Matt Pyle" in retro.
-
-    The two trees carry the same facts in different words: the redesigned tree is
-    a prose-led page under the bundle's section structure, the legacy one is the
-    bio-plus-links grid it has always been. The headshot is the same file in both,
-    so a reader switching appearance pays for one image.
+    What retro gave up in the swap, so the diff is not mistaken for a loss: the
+    bio-and-links grid and its identity card are gone, retro takes the prose-led
+    page with the portrait rail, and the h1 reads "About" in both appearances
+    rather than "Matt Pyle" in retro. The redesigned tree's content won, which is
+    the rule every surface in this conversion has followed.
   */}
   <AboutHero />
   <AboutBody markdownUrl={markdownUrl} />
-
-  <div class="retro-skin">
-    <PageHeader
-      eyebrow="About"
-      title="Matt Pyle"
-      subtitle="Director of Growth at Temporal Technologies."
-    />
-    <AboutGrid />
-  </div>
 </Layout>

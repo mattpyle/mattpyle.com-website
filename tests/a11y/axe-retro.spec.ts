@@ -4,7 +4,7 @@ import type { Result } from 'axe-core';
 import { installPageLoadCounter, gotoSettled } from './helpers/settle';
 
 /**
- * axe against RETRO, on the same nine routes `.github/workflows/a11y.yml` audits with
+ * axe against RETRO, on the same eleven routes `.github/workflows/a11y.yml` audits with
  * `@axe-core/cli` in modern. The CLI can only audit what the server sends, and retro lives entirely
  * in client-side storage, so the second mode of a two-mode site had no automated audit at all: the
  * guest book, the webmaster note and the web ring are `display: none` in modern, and a contrast or
@@ -27,11 +27,14 @@ import { installPageLoadCounter, gotoSettled } from './helpers/settle';
  */
 
 /**
- * The routes the CLI audits in modern, in the order the workflow lists them, plus the two
- * changelog surfaces. Those two are a deliberate superset, added 2026-08-29: the one-DOM phase
- * that converted /changelog and the entry page wrote net-new retro styling on both, and the CLI
- * step cannot scan retro at all, so without these rows that styling would ship with no contrast
- * gate. Every restyled retro surface gets scanned; that is this file's premise.
+ * The routes the CLI audits in modern, in the order the workflow lists them.
+ *
+ * The two changelog surfaces were a deliberate superset when they were added on 2026-08-29: the
+ * one-DOM phase that converted /changelog and the entry page wrote net-new retro styling on both,
+ * and the CLI step cannot scan retro at all, so without these rows that styling would have shipped
+ * with no contrast gate. Later the same day the CLI list caught up — the phase-5 rider added both
+ * routes to the workflow — so the two lists match again and this is a mirror rather than a
+ * superset. The premise is unchanged either way: every restyled retro surface gets scanned.
  */
 const ROUTES = [
   '/',

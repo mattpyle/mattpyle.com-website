@@ -128,6 +128,8 @@ jobs:
             http://localhost:4321/about \
             http://localhost:4321/writing \
             http://localhost:4321/projects \
+            http://localhost:4321/changelog \
+            http://localhost:4321/changelog/public-scorecard/ \
             http://localhost:4321/scorecard \
             http://localhost:4321/activity \
             http://localhost:4321/steward \
