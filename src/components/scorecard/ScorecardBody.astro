@@ -21,6 +21,11 @@
  * the bundle painted the agentic-browsing gate magenta as the one gate the site exists to move,
  * and Matt overrode that at the PR #163 review (design-export-remaining/README.md) because one
  * differently coloured number among four reads as unexplained emphasis rather than as meaning.
+ *
+ * IT CARRIES `data-module='scorecard-body'` AND NO `.modern-skin`, since 2026-08-29: this is the
+ * only /scorecard body in the document and retro restyles it in place, under that module prefix in
+ * src/styles/retro.css. The prefix is load-bearing — Astro appends a `[data-astro-cid-…]` to the
+ * selectors below and that attribute counts as a class, so a retro rule without it loses silently.
  */
 import {
   SCORECARD,
@@ -124,7 +129,7 @@ const previousRuns = SCORECARD_HISTORY.map(run => ({
 }));
 ---
 
-<div class="modern-skin">
+<div data-module="scorecard-body">
   <section class="rd-section band-latest" aria-labelledby="scorecard-latest-title">
     <div class="band-head">
       <h2 id="scorecard-latest-title">Latest run</h2>

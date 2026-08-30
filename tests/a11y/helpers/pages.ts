@@ -165,11 +165,11 @@ export const PAGES: PageSpec[] = [
   {
     name: 'scorecard',
     path: '/scorecard',
-    why: 'Scorecard template: the redesigned gate row and previous-runs list, plus the legacy details/summary run history disclosures',
-    // Two trees ship here and the hidden one is absent from the accessibility
-    // tree, so this golden records whichever appearance the run is in — these
-    // rows are taken in modern. The legacy selectors are kept so the pruning
-    // still applies if a run ever takes this snapshot in retro.
+    why: 'Scorecard template: the redesigned gate row and previous-runs list',
+    // ONE TREE as of 2026-08-29 (one-dom phase 6): the inline `.scorecard-shell` is deleted, so the
+    // hero and the three bands below it are the whole page in either appearance. The legacy run
+    // history was a stack of `<details>`, and nothing on this page expands now; `.history-run`,
+    // `.status`, `.score-value` and the rest of that tree's selectors went with it.
     //
     // Every scorecard run rewrites src/data/scorecard-runs.json, so every number,
     // date and commentary line on this page is content-variable by construction.
@@ -182,36 +182,19 @@ export const PAGES: PageSpec[] = [
     //
     // The Agent traffic tables are gone from this page entirely — they moved to
     // /activity on 2026-08-22, which has its own row below.
-    snapshotKeepFirst: ['.run', '.history-run'],
+    snapshotKeepFirst: ['.run'],
     // `.run-date` and `.run-note`, never `.run` itself: the middle cell of a previous-run row is
     // its gates-passing COUNT, and `·` would assert nothing about it. It stays in the golden as a
     // hand-written regex, the way the changelog pager's count does.
-    snapshotRedact: [
-      '.provenance',
-      '.findings',
-      '.run-date',
-      '.run-note',
-      '#latest-run-title',
-      '.latest-time',
-      '.run-verdict',
-      '.status',
-      '.score-value',
-      '.score-description',
-      '.verification dd',
-      '.current-commentary',
-      '.history-header > p',
-      '.history-run',
-      '.history-footer > span',
-    ],
+    snapshotRedact: ['.provenance', '.findings', '.run-date', '.run-note'],
   },
   {
     name: 'activity',
     path: '/activity',
-    why: 'Activity template: the 24-column hour chart, the last-hour table and the four count tables, plus the legacy traffic block retro wears',
-    // Two trees ship here and the hidden one is absent from the accessibility
-    // tree, so this golden records whichever appearance the run is in — these
-    // rows are taken in modern. The legacy selectors are kept so the pruning
-    // still applies if a run ever takes this snapshot in retro.
+    why: 'Activity template: the 24-column hour chart, the last-hour table and the four count tables',
+    // ONE TREE as of 2026-08-29 (one-dom phase 6): the inline `.activity-shell` and its
+    // `#agent-traffic` section are deleted, so the hero and the six bands below it are the whole
+    // page in either appearance.
     //
     // This page reads a live store per request, so every figure on it is
     // content-variable. The suite serves it with AGENT_TRAFFIC_FIXTURE set (see
@@ -234,10 +217,6 @@ export const PAGES: PageSpec[] = [
       '.bot-page-table tbody tr',
       '.client-table tbody tr',
       '.markdown-table tbody tr',
-      'table[aria-labelledby="traffic-surfaces-title"] tbody tr',
-      'table[aria-labelledby="traffic-bot-pages-title"] tbody tr',
-      'table[aria-labelledby="traffic-clients-title"] tbody tr',
-      'table[aria-labelledby="traffic-markdown-title"] tbody tr',
     ],
     snapshotRedact: [
       '.stamp-rendered',
@@ -248,9 +227,6 @@ export const PAGES: PageSpec[] = [
       '.bot-page-table tbody tr',
       '.client-table tbody tr',
       '.markdown-table tbody tr',
-      '.freshness',
-      '#agent-traffic .num',
-      '#agent-traffic tbody tr',
     ],
   },
   {

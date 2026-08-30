@@ -1495,185 +1495,481 @@ html[data-appearance='retro'] [data-module='article'] .entry-step:hover .entry-s
   color: var(--retro-link);
 }
 
-/* ── /scorecard ───────────────────────────────────────────────────────── */
+/* ── /scorecard ───────────────────────────────────────────────────────────
+   Retro styles the SAME page the modern appearance does — ScorecardHero and
+   ScorecardBody. The legacy `.scorecard-shell` that lived inline in
+   src/pages/scorecard.astro is deleted, and with it `.latest-run`,
+   `.run-header`, `.history-header`, `.current-score`, `.current-scores`,
+   `.score-value`, `.score-heading`, `.status`, `.history-status`,
+   `.verification`, `.history-detail`, `.history-date`, `.history-number`,
+   `.history-result`, `.section-label`, `.history-run`, `.history-toggle`,
+   `.chevron`, `.history-columns`, `.page-number` and the `.page-link` pair.
+   Nothing else on the site used any of them, so the whole block went rather
+   than being retargeted — including the `[ + ]` / `[ − ]` caret swap, which had
+   nothing left to open: the legacy run history was a stack of `<details>`, and
+   ScorecardBody prints each run's commentary inline in a flat list. Nothing on
+   this page expands in either appearance now.
 
-html[data-appearance='retro'] .latest-run {
-  background: var(--retro-frame-bg);
-  border: 4px ridge var(--retro-frame-border);
-  border-top: 4px ridge var(--retro-frame-border);
-  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+   The panel construction survives the swap. The legacy latest-run box was a
+   ridge frame with a hard shadow, so the gate row and the run list take that
+   frame here rather than the redesign's hairlines, and the four scores keep the
+   maroon display face `.score-value` wore.
+
+   EVERY RULE BELOW NAMES THE COMPONENT'S OWN CLASSES, not just the module
+   prefix. Astro scopes a component rule as `.band-head h2[data-astro-cid-…]` —
+   two classes-worth plus one element — which ties a bare
+   `[data-module='scorecard-body'] h2` and then wins on source order. Matching
+   the component's class buys the extra one. */
+
+html[data-appearance='retro'] [data-module='scorecard-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
 }
 
-html[data-appearance='retro'] .run-header h2,
-html[data-appearance='retro'] .history-header h2 {
+/* The fill span flattened to the headline's own maroon, so the H1 reads as one
+   word rather than as two colours. Every other module closes this gap for
+   itself; the existing `.rd-fill` rules are each scoped to another one. */
+html[data-appearance='retro'] [data-module='scorecard-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='scorecard-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+/* The band heads: the ball-bulleted maroon heading every retro section wears.
+   Repeated rather than added to the global `.prose h2` list, because
+   ScorecardBody carries no `.prose` class and that rule does not reach it. */
+html[data-appearance='retro'] [data-module='scorecard-body'] .band-head h2,
+html[data-appearance='retro'] [data-module='scorecard-body'] .band-how h2 {
   font-family: var(--retro-font-display);
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: normal;
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] .current-score {
-  border-right-color: var(--retro-frame-border);
+html[data-appearance='retro'] [data-module='scorecard-body'] .band-head h2::before,
+html[data-appearance='retro'] [data-module='scorecard-body'] .band-how h2::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: baseline;
+  background: radial-gradient(circle at 35% 30%, #fff, #e85d5d 45%, var(--retro-maroon));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .45);
 }
 
-html[data-appearance='retro'] .current-scores,
-html[data-appearance='retro'] .run-header {
+/* The run's provenance line, in the typewriter face the legacy `.section-label`
+   and `.verification dd` wore. */
+html[data-appearance='retro'] [data-module='scorecard-body'] .provenance {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+  color: var(--retro-ink-muted);
+}
+
+/* The gate row as the filed panel the legacy latest-run box was: ridge frame and
+   hard shadow in place of the redesign's single hairline, with padding of its
+   own because the frame now draws an edge the numbers would otherwise touch. */
+html[data-appearance='retro'] [data-module='scorecard-body'] .gates {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+  padding: 0 18px 24px;
+}
+
+/* The dividers between cells, coloured on the ELEMENT rather than on the rule
+   that draws them. ScorecardBody redraws these borders three times — a left rule
+   at full width, a left rule on the even cell plus a top rule from the third at
+   900px, a top rule on every cell at 720px — and a retro rule that names only
+   `border-left-color` covers one of the three. Setting `border-color` on `.gate`
+   itself covers whichever edge is actually drawn at any width.
+
+   EVERY SHAPE THE COMPONENT WRITES IS RESTATED HERE, because Astro scopes EVERY
+   compound of a selector, not just the last one: `.gate + .gate` compiles to
+   `.gate[cid] + .gate[cid]`, four classes-worth, which beats a single-compound
+   retro rule. Measured on the served build — the cell divider kept modern's cool
+   grey inside a parchment panel until each shape got its own prefixed twin. */
+html[data-appearance='retro'] [data-module='scorecard-body'] .gate,
+html[data-appearance='retro'] [data-module='scorecard-body'] .gate + .gate,
+html[data-appearance='retro'] [data-module='scorecard-body'] .gate:first-child,
+html[data-appearance='retro'] [data-module='scorecard-body'] .gate:nth-child(even),
+html[data-appearance='retro'] [data-module='scorecard-body'] .gate:nth-child(n + 3) {
   border-color: var(--retro-frame-border);
 }
 
-html[data-appearance='retro'] .score-value {
+html[data-appearance='retro'] [data-module='scorecard-body'] .gate-score {
   font-family: var(--retro-font-display);
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] .score-heading h3,
-html[data-appearance='retro'] .status,
-html[data-appearance='retro'] .history-status,
-html[data-appearance='retro'] .verification dt,
-html[data-appearance='retro'] .history-detail dt,
-html[data-appearance='retro'] .verification dd,
-html[data-appearance='retro'] .history-detail dd,
-html[data-appearance='retro'] .history-date time,
-html[data-appearance='retro'] .history-number,
-html[data-appearance='retro'] .history-result,
-html[data-appearance='retro'] .section-label {
+html[data-appearance='retro'] [data-module='scorecard-body'] .gate-name {
   font-family: var(--retro-font-mono);
+  font-size: 15px;
+  color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] .history-run {
-  border-bottom-color: var(--retro-frame-border);
+html[data-appearance='retro'] [data-module='scorecard-body'] .findings,
+html[data-appearance='retro'] [data-module='scorecard-body'] .crosslink {
+  font-family: var(--retro-font-body);
+  font-size: 17px;
+  color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] .history-run summary {
+html[data-appearance='retro'] [data-module='scorecard-body'] .crosslink a,
+html[data-appearance='retro'] [data-module='scorecard-body'] .how-prose a {
+  color: var(--retro-link);
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  transition: none;
+}
+
+html[data-appearance='retro'] [data-module='scorecard-body'] .crosslink a:visited,
+html[data-appearance='retro'] [data-module='scorecard-body'] .how-prose a:visited {
+  color: var(--retro-link-visited);
+}
+
+html[data-appearance='retro'] [data-module='scorecard-body'] .crosslink a:hover,
+html[data-appearance='retro'] [data-module='scorecard-body'] .how-prose a:hover {
+  color: var(--retro-maroon);
+}
+
+/* The run list as a ruled archive on the frame ground, which is what the legacy
+   history list was. BOTH edges are named: `.runs` closes the group with a
+   `border-bottom` and each `.run` opens with a `border-top`, so recolouring only
+   one of them leaves the modern hairline painting the other. */
+html[data-appearance='retro'] [data-module='scorecard-body'] .runs {
   background: var(--retro-frame-bg);
-  font-family: var(--retro-font-ui);
+  border: 2px solid var(--retro-frame-border);
+  padding: 0 14px;
 }
 
-html[data-appearance='retro'] .history-run summary:hover {
-  background: var(--retro-sidebar-bg);
-}
-
-html[data-appearance='retro'] .history-detail {
-  background: var(--retro-frame-bg);
+html[data-appearance='retro'] [data-module='scorecard-body'] .run {
   border-top-color: var(--retro-frame-border);
+  border-top-style: dotted;
 }
 
-html[data-appearance='retro'] .history-toggle {
+/* The first row's rule is the frame's own inner edge; drawing a second one 2px
+   inside it reads as a doubled border. */
+html[data-appearance='retro'] [data-module='scorecard-body'] .run:first-child {
+  border-top: 0;
+}
+
+html[data-appearance='retro'] [data-module='scorecard-body'] .run-date,
+html[data-appearance='retro'] [data-module='scorecard-body'] .run-gates {
   font-family: var(--retro-font-mono);
-  color: var(--retro-maroon);
+  font-size: 15px;
+  color: var(--retro-ink);
 }
 
-/* Swap the CSS-drawn caret for a period [+]/[-] text indicator — a rotating
-   chevron reads as a modern accordion. Decorative only; the chevron was
-   already aria-hidden, and <details>/<summary> semantics still carry the
-   open/closed state for assistive tech. Markup and JS are untouched. */
-html[data-appearance='retro'] .chevron {
-  display: none;
+html[data-appearance='retro'] [data-module='scorecard-body'] .run-note {
+  font-family: var(--retro-font-body);
+  font-size: 16px;
+  color: var(--retro-ink-muted);
 }
 
-html[data-appearance='retro'] .history-toggle::after {
-  content: '[ + ]';
+html[data-appearance='retro'] [data-module='scorecard-body'] .how-prose {
+  font-family: var(--retro-font-body);
+  font-size: 17px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='scorecard-body'] .as-data {
+  border-left-color: var(--retro-frame-border);
+  border-left-style: dotted;
+  border-left-width: 2px;
+}
+
+html[data-appearance='retro'] [data-module='scorecard-body'] .as-data-label {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='scorecard-body'] .as-data-link {
   font-family: var(--retro-font-mono);
-  font-weight: bold;
-  color: var(--retro-maroon);
-  white-space: nowrap;
-}
-
-html[data-appearance='retro'] .history-run[open] .history-toggle::after {
-  content: '[ \2212 ]';
-}
-
-/* ── /activity, Agent traffic ─────────────────────────────────────────── */
-
-/* Every rule below hangs off #agent-traffic, and the id is doing real work rather than being
-   lazy about class names. Astro stamps its scoping attribute onto every compound of a page's
-   own selectors, so `.traffic thead th` in activity.astro compiles to three classes-worth of
-   specificity and outranks any plain `html[data-appearance='retro'] .traffic thead th` here,
-   however specific it looks. An id outranks all of it in one token and stays readable. The
-   section carries the id for its own sake; /agent-traffic redirects to /activity/, which is the
-   page these rules now style, and not to this anchor. */
-
-html[data-appearance='retro'] #agent-traffic .traffic-panel,
-html[data-appearance='retro'] #agent-traffic .traffic-empty,
-html[data-appearance='retro'] #agent-traffic .traffic-unavailable {
-  background: var(--retro-frame-bg);
-  border: 4px ridge var(--retro-frame-border);
-  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
-}
-
-html[data-appearance='retro'] #agent-traffic h2,
-html[data-appearance='retro'] #agent-traffic h3,
-html[data-appearance='retro'] #agent-traffic .num {
-  font-family: var(--retro-font-display);
-  color: var(--retro-maroon);
-}
-
-html[data-appearance='retro'] #agent-traffic .stat {
-  border-right-color: var(--retro-frame-border);
-  border-bottom-color: var(--retro-frame-border);
-}
-
-html[data-appearance='retro'] #agent-traffic .label,
-html[data-appearance='retro'] #agent-traffic .freshness,
-html[data-appearance='retro'] #agent-traffic .footnote,
-html[data-appearance='retro'] #agent-traffic th,
-html[data-appearance='retro'] #agent-traffic code,
-html[data-appearance='retro'] #agent-traffic td.family {
-  font-family: var(--retro-font-mono);
-}
-
-html[data-appearance='retro'] #agent-traffic table {
-  background: var(--retro-frame-bg);
-  border-color: var(--retro-frame-border);
-  font-family: var(--retro-font-ui);
-}
-
-html[data-appearance='retro'] #agent-traffic th,
-html[data-appearance='retro'] #agent-traffic td {
-  border-color: var(--retro-frame-border);
-}
-
-html[data-appearance='retro'] #agent-traffic th {
-  color: var(--retro-maroon);
-}
-
-html[data-appearance='retro'] #agent-traffic tbody tr:hover {
-  background: var(--retro-sidebar-bg);
-}
-
-/* The [+ ]/[- ] text needs more room than the 42px column the icon-only
-   chevron fit in — same grid, last track widened so the indicator doesn't
-   wrap or overflow into the metric columns. */
-html[data-appearance='retro'] .history-columns,
-html[data-appearance='retro'] .history-run summary {
-  grid-template-columns: minmax(150px, 1.25fr) repeat(4, minmax(92px, 1fr)) 56px;
-}
-
-@media (max-width: 820px) {
-  html[data-appearance='retro'] .history-columns,
-  html[data-appearance='retro'] .history-run summary {
-    grid-template-columns: minmax(132px, 1.25fr) repeat(4, minmax(70px, 1fr)) 48px;
-  }
-}
-
-html[data-appearance='retro'] .page-number {
-  border: 2px outset var(--retro-frame-border);
-  background: var(--retro-frame-bg);
-  font-family: var(--retro-font-mono);
-  color: var(--retro-maroon);
-}
-
-/* .page-link--disabled used var(--color-border), a near-invisible pale token on
-   parchment. var(--retro-ink-muted) is the same muted-ink brown already used for row meta
-   elsewhere in this file — dark enough to read as present-but-inactive (~6.3:1
-   on parchment) rather than gone. */
-html[data-appearance='retro'] .page-link {
-  font-family: var(--retro-font-mono);
+  font-size: 16px;
   color: var(--retro-link);
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] .page-link--disabled {
+html[data-appearance='retro'] [data-module='scorecard-body'] .as-data-link:hover {
+  color: var(--retro-maroon);
+}
+
+/* The `.as-data` rail turns into a top rule below 900px, so the retro border has
+   to move with it or a dotted left edge is left hanging beside a stacked block. */
+@media (max-width: 900px) {
+  html[data-appearance='retro'] [data-module='scorecard-body'] .as-data {
+    border-left: 0;
+    border-top: 2px dotted var(--retro-frame-border);
+  }
+}
+
+/* ── /activity ────────────────────────────────────────────────────────────
+   Retro styles the SAME page the modern appearance does — ActivityHero and
+   ActivityBody. This page had no legacy counterpart of its own: the block
+   marked `.retro-skin` was a copy of the Agent traffic section /scorecard used
+   to carry, kept so the rules that styled it could stay unchanged. It is
+   deleted, and with it `.activity-shell`, `#agent-traffic`, `.traffic-panel`,
+   `.traffic-empty`, `.traffic-unavailable`, `.statrow`, `.stat`, `.freshness`,
+   `.subsect`, `.footnote` and `.family-note`'s legacy twin. Nothing else on the
+   site used any of them.
+
+   Retro gains content in this swap rather than losing it. The legacy block had
+   four tables and three totals; ActivityBody has six bands, including the
+   24-bucket hour chart and the last-hour table the legacy markup never had. The
+   rendered stamp is the one thing that changes for the worse: it was localised
+   in the browser by a script that reached the legacy tree only, and it now
+   reads UTC in both appearances, which is the frame every other figure on the
+   page is already in.
+
+   THE ID IS GONE AND NOTHING REPLACES IT. The old rules hung off `#agent-traffic`
+   because an id outranks Astro's scoping attribute in one token. The module
+   prefix plus the component's own class does the same job here, so the id is not
+   reintroduced; nothing in the repo links to the fragment, and /agent-traffic
+   redirects to /activity/ rather than to an anchor. */
+
+html[data-appearance='retro'] [data-module='activity-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='activity-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='activity-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='activity-hero'] .hero-stamp {
+  border-left: 2px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='activity-hero'] .stamp-rendered {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
   color: var(--retro-ink-muted);
-  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  html[data-appearance='retro'] [data-module='activity-hero'] .hero-stamp {
+    border-left: 0;
+    border-top: 2px dotted var(--retro-frame-border);
+  }
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .band-head h2,
+html[data-appearance='retro'] [data-module='activity-body'] .band-how h2 {
+  font-family: var(--retro-font-display);
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .band-head h2::before,
+html[data-appearance='retro'] [data-module='activity-body'] .band-how h2::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: baseline;
+  background: radial-gradient(circle at 35% 30%, #fff, #e85d5d 45%, var(--retro-maroon));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+}
+
+/* The three totals as the filed panel the legacy `.traffic-panel` was. */
+html[data-appearance='retro'] [data-module='activity-body'] .counts {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+  padding: 0 18px 24px;
+}
+
+/* Coloured on the element, not on the rule: the divider is a left border at full
+   width and a top border below 900px, and naming one edge leaves the other
+   modern. Same correction as `.gate` above, including its restatement of every
+   shape the component writes: Astro scopes both compounds of `.count + .count`,
+   so a single-compound retro rule loses to it. */
+html[data-appearance='retro'] [data-module='activity-body'] .count,
+html[data-appearance='retro'] [data-module='activity-body'] .count + .count,
+html[data-appearance='retro'] [data-module='activity-body'] .count:first-child {
+  border-color: var(--retro-frame-border);
+}
+
+/* All three totals maroon, including the 24-hour one the modern page paints
+   `--agents`. The component gives that number its own two-class rule, so it is
+   named here or it keeps the magenta inside a parchment panel. */
+html[data-appearance='retro'] [data-module='activity-body'] .count-number,
+html[data-appearance='retro'] [data-module='activity-body'] .count--agents .count-number {
+  font-family: var(--retro-font-display);
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .count-label {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .chart {
+  border-bottom-color: var(--retro-frame-border);
+  border-bottom-width: 2px;
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .chart-bar {
+  background: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .chart-count,
+html[data-appearance='retro'] [data-module='activity-body'] .tick,
+html[data-appearance='retro'] [data-module='activity-body'] .chart-note,
+html[data-appearance='retro'] [data-module='activity-body'] .omitted {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .legend {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+  color: var(--retro-ink-muted);
+}
+
+/* The two classification swatches. Both are aria-hidden decoration, and the
+   legend beside them is what carries the meaning in words. */
+html[data-appearance='retro'] [data-module='activity-body'] .legend-swatch,
+html[data-appearance='retro'] [data-module='activity-body'] .marker--agent {
+  background: var(--retro-maroon);
+}
+
+/* The tables on the terms this file gives every retro table: a ruled grid on the
+   frame ground rather than the redesign's hairlines. The end cells get a little
+   padding so the text does not sit against the frame; nothing else moves,
+   because these tables are `table-layout: fixed` and a 320px viewport has no
+   room to give away. */
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table {
+  font-family: var(--retro-font-body);
+  background: var(--retro-frame-bg);
+  border: 2px solid var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table th:first-child,
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table td:first-child {
+  padding-left: 8px;
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table th:last-child,
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table td:last-child {
+  padding-right: 8px;
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table th {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-maroon);
+  border-bottom-color: var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table td {
+  color: var(--retro-ink);
+  border-bottom-color: var(--retro-frame-border);
+  border-bottom-style: dotted;
+}
+
+/* The component rules these three override are two classes plus the scope
+   attribute, so the class has to be named here as well as the module. Without
+   it the cells keep modern's cool `--ink` inside a warm brown table. */
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table td.c-client,
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table td.c-lead,
+html[data-appearance='retro'] [data-module='activity-body'] .hour-table td.c-num {
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table td.c-path {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .family-note {
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .band-empty {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* The lead empty state is the panel in its no-numbers form, so it takes the
+   panel's frame rather than the redesign's rule above it — the same call the
+   legacy `.traffic-unavailable` rule made. */
+html[data-appearance='retro'] [data-module='activity-body'] .band-empty--lead {
+  background: var(--retro-frame-bg);
+  border: 4px ridge var(--retro-frame-border);
+  box-shadow: 6px 6px 0 rgba(90, 60, 20, .3);
+  padding: 20px 22px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .how-prose {
+  font-family: var(--retro-font-body);
+  font-size: 17px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .as-data {
+  border-left-color: var(--retro-frame-border);
+  border-left-style: dotted;
+  border-left-width: 2px;
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .as-data-label {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .as-data-link {
+  font-family: var(--retro-font-mono);
+  font-size: 16px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .as-data-link:hover {
+  color: var(--retro-maroon);
+}
+
+@media (max-width: 900px) {
+  html[data-appearance='retro'] [data-module='activity-body'] .as-data {
+    border-left: 0;
+    border-top: 2px dotted var(--retro-frame-border);
+  }
 }
 
 /* ── /about ───────────────────────────────────────────────────────────────
@@ -3017,14 +3313,15 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
    converted page body still ships BOTH trees in the DOM - the new sections
    marked `.modern-skin`, the legacy ones marked `.retro-skin` - with exactly one
    displayed. Undoing that is the work of docs/work/one-dom-for-both-appearances,
-   phase by phase. Nine surfaces are done and no longer use this pair at all:
+   phase by phase. Eleven surfaces are done and no longer use this pair at all:
    the CHROME, the HOMEPAGE BODY, the /writing INDEX, the POST PAGE, /projects,
-   the /changelog LEDGER, the CHANGELOG ENTRY PAGE, /about and /steward. Retro
-   styles the one header, the one footer, the five homepage sections, the
-   writing hero and archive, the one post template, the projects hero and board,
-   the changelog hero and log, the one entry template, the about hero and body
-   and the steward hero and body directly, in the sections above.
-   What remains here is /scorecard, /activity and /webmcp.
+   the /changelog LEDGER, the CHANGELOG ENTRY PAGE, /about, /steward, /scorecard
+   and /activity. Retro styles the one header, the one footer, the five homepage
+   sections, the writing hero and archive, the one post template, the projects
+   hero and board, the changelog hero and log, the one entry template, the about
+   hero and body, the steward hero and body, the scorecard hero and body and the
+   activity hero and body directly, in the sections above.
+   What remains here is /webmcp.
 
    This is the same construction as `.retro-furniture`, and for the same reason:
    nothing is injected, removed or re-rendered at toggle time, so the toggle
