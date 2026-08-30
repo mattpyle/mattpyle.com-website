@@ -23,9 +23,10 @@ html[data-appearance='retro'] {
   --retro-frame-bg: #fffdf5;
   --retro-frame-border: #8a5a2b;
   --retro-ink: #33291a;
-  /* Formalised in Phase 3 after eleven bare copies of this hex accumulated in the file (tag-pill
-     text, hints, disabled page links, output status). 6.3:1 on parchment, 6.0:1 on the sidebar
-     ground — it carries real content, so it has to read as text, not as a grey. */
+  /* Formalised in Phase 3 after eleven bare copies of this hex accumulated in the file (hints,
+     disabled page links, output status, and the tag pills the one-DOM phases have since
+     deleted). 6.3:1 on parchment, 6.0:1 on the sidebar ground — it carries real content, so
+     it has to read as text, not as a grey. */
   --retro-ink-muted: #5a4a30;
   --retro-forest: #234327;
   --retro-forest-hover: #2f5a34;
@@ -100,8 +101,11 @@ html[data-appearance='retro'] [data-module='home-changelog'] .rd-heading-row h2:
   box-shadow: 0 1px 2px rgba(0, 0, 0, .45);
 }
 
-html[data-appearance='retro'] .prose a,
-html[data-appearance='retro'] .entry-title {
+/* `.entry-title` used to ride along here, for the legacy changelog footer's
+   prev/next links. That footer is deleted and the only surviving element with
+   the class is the changelog entry's H1, which is a headline and not a link —
+   so it is styled with the rest of the entry chrome further down instead. */
+html[data-appearance='retro'] .prose a {
   color: var(--retro-link);
 }
 
@@ -868,21 +872,14 @@ html[data-appearance='retro'] [data-module='home-changelog'] .row-text {
    Retro styles the SAME index the modern appearance does — WritingHero and
    WritingArchive. The legacy PageHeader/ArticleList tree is deleted, and with
    it `.article-item`, `.article-desc`, `.article-date` and `.reading-time`,
-   which nothing else on the site used. `.tag-pill` below OUTLIVED that tree:
-   /projects, /changelog and the changelog entry page all still ship it.
+   which nothing else on the site used. `.tag-pill` outlived that tree by one
+   phase and is gone too: /projects, /changelog and the changelog entry page
+   dropped their pills when they converted, and no markup carries the class.
 
    The archive's class names are the generic ones (`.row`, `.row-title`,
    `.year-group`), shared with the homepage and changelog rows this file already
    styles, so every rule here carries the `[data-module='writing-archive']`
    prefix. It is the fence as well as the specificity. */
-
-html[data-appearance='retro'] .tag-pill {
-  font-family: var(--retro-font-mono);
-  background: var(--retro-sidebar-bg);
-  border: 1px solid var(--retro-frame-border);
-  border-radius: 0;
-  color: var(--retro-ink-muted);
-}
 
 /* The hero. The H1 takes the display face the rest of retro gives a headline;
    the fill span is a modern device — a painted phrase in writing blue — and in
@@ -1137,121 +1134,365 @@ html[data-appearance='retro'] [data-module='article'] .post-next:hover .post-nex
   color: var(--retro-link);
 }
 
-/* ── /projects grid ─────────────────────────────────────────────────────── */
+/* ── /projects ────────────────────────────────────────────────────────────
+   Retro styles the SAME page the modern appearance does — ProjectsHero and
+   ProjectsBoard. The legacy PageHeader/ProjectsGrid tree is deleted, and with it
+   `.project-card`, `.card-desc`, `.status-label`, `.card-link`, `.no-link` and
+   `.card-links`, which nothing else on the site used. The status filter went
+   with it: the redesigned board has none, and the modern tree's content wins.
 
-html[data-appearance='retro'] .project-card {
-  background: var(--retro-frame-bg);
-  border: 3px ridge var(--retro-frame-border);
-  border-top-width: 3px;
-  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
-}
+   The board's class names are the generic `.card-*` set the homepage cards also
+   use, so every rule here carries the `[data-module='projects-board']` prefix.
+   It is the fence as well as the specificity — the unscoped `.card-date` rule
+   the deleted grid shipped would otherwise have painted this board too. */
 
-html[data-appearance='retro'] .project-card h2 {
-  font-family: var(--retro-font-display);
+/* The hero, on the /writing hero's terms: the H1 in the display face and the
+   maroon every retro headline wears, and the fill span — a modern device, a
+   painted phrase in projects green — flattened to that same maroon so the
+   headline reads as one word rather than as two colours. */
+html[data-appearance='retro'] [data-module='projects-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
   color: var(--retro-maroon);
-  font-size: 17px;
+  animation: none;
 }
 
-html[data-appearance='retro'] .card-desc {
+html[data-appearance='retro'] [data-module='projects-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='projects-hero'] .hero-statement {
   font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] .status-label,
-html[data-appearance='retro'] .card-date,
-html[data-appearance='retro'] .card-link,
-html[data-appearance='retro'] .no-link {
-  font-family: var(--retro-font-mono);
+/* The source block as a filed card, exactly as /writing dresses its subscribe
+   block: the ridge frame and hard shadow this file gives every bordered panel,
+   in place of the redesign's hairline rule. */
+html[data-appearance='retro'] [data-module='projects-hero'] .hero-source {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 18px;
 }
 
-html[data-appearance='retro'] .card-link {
+html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-copy {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-links {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+}
+
+html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-links a {
   color: var(--retro-link);
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] .card-links {
-  border-top: 1px dotted var(--retro-frame-border);
-}
-
-/* ── /changelog ledger ────────────────────────────────────────────────── */
-
-html[data-appearance='retro'] .year-label {
-  font-family: var(--retro-font-display);
+html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-links a:hover {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] .year-line {
-  background: repeating-linear-gradient(90deg, var(--retro-frame-border) 0 4px, transparent 4px 8px);
-}
-
-html[data-appearance='retro'] .lg-row:hover {
-  background: var(--retro-sidebar-bg);
-}
-
-/* The focus wash the ledger paints under the focused title link, in retro's palette. Scoped
-   under the module because the component's own rule is Astro-scoped and would otherwise
-   outrank a bare `.lg-row` selector here. */
-html[data-appearance='retro'] [data-module='changelog-ledger'] .lg-row:has(.lg-link:focus-visible) {
-  background: var(--retro-sidebar-bg);
-}
-
-html[data-appearance='retro'] .lg-title {
-  font-family: var(--retro-font-display);
-  color: var(--retro-maroon);
-  font-size: 16px;
-}
-
-html[data-appearance='retro'] .lg-row:hover .lg-title {
-  color: var(--retro-link);
-}
-
-html[data-appearance='retro'] .lg-summary {
-  font-family: var(--retro-font-body);
-}
-
-html[data-appearance='retro'] .lg-date {
-  font-family: var(--retro-font-mono);
-}
-
-html[data-appearance='retro'] .type-pill,
-html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
-  font-family: var(--retro-font-mono);
+/* The board. The card is the deleted grid's card: frame ground, ridge border,
+   hard drop shadow — the same treatment the homepage project card already
+   carries, so the two lists still read as one site. */
+html[data-appearance='retro'] [data-module='projects-board'] .card {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
   border-radius: 0;
-  border: 1px solid var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
 }
 
-html[data-appearance='retro'] [data-module='changelog-ledger'] .tag-pill {
-  background: var(--retro-sidebar-bg);
+html[data-appearance='retro'] [data-module='projects-board'] .card:hover {
+  border-color: var(--retro-maroon);
+}
+
+/* The placeholder hatch, repainted. It is diagonal machine ruling either way;
+   in projects green it is the one modern colour left on the page. */
+html[data-appearance='retro'] [data-module='projects-board'] .card-image {
+  border-bottom: 2px dashed var(--retro-frame-border);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--retro-parchment-dark) 0 8px,
+    var(--retro-parchment-light) 8px 16px
+  );
+}
+
+html[data-appearance='retro'] [data-module='projects-board'] .card-chip {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-cream);
+  border-color: var(--retro-frame-border);
+  border-radius: 0;
   color: var(--retro-ink-muted);
 }
 
-html[data-appearance='retro'] .type-pill {
-  background: var(--retro-gold);
+html[data-appearance='retro'] [data-module='projects-board'] .card-meta {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+}
+
+html[data-appearance='retro'] [data-module='projects-board'] .card-status {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='projects-board'] .card-date {
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='projects-board'] .card-name {
+  font-family: var(--retro-font-display);
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='projects-board'] .card:hover .card-name {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] [data-module='projects-board'] .card-blurb,
+html[data-appearance='retro'] [data-module='projects-board'] .empty {
+  font-family: var(--retro-font-body);
   color: var(--retro-ink);
 }
 
-/* Significance dots + legend: map the modern --color-sig-* tokens onto the
-   retro palette while keeping the three-way distinction (maroon / gold /
-   muted brown). Dots stay aria-hidden; only the legend labels get type. */
-html[data-appearance='retro'] .sig-dot--major {
-  background: var(--retro-maroon);
-}
+/* ── /changelog ───────────────────────────────────────────────────────────
+   Retro styles the SAME ledger the modern appearance does — ChangelogHero and
+   ChangelogLog. The legacy `.changelog-shell` tree is deleted, and with it
+   `.year-label`, `.year-line`, the whole `.lg-*` set, `.type-pill`, the
+   `.sig-dot` trio and the significance legend, which nothing else on the site
+   used. The type filter survives as the one filter the page has in either
+   appearance, wearing the outset pills in the filter-pills block below.
 
-html[data-appearance='retro'] .sig-dot--minor {
-  background: var(--retro-gold);
-}
+   The log's class names are the generic `.row-*` and `.year-*` set the homepage
+   and writing rows also use, so every rule here carries the
+   `[data-module='changelog-log']` prefix. It is the fence as well as the
+   specificity. */
 
-html[data-appearance='retro'] .sig-dot--patch {
-  background: #8a5a2b;
-}
-
-html[data-appearance='retro'] .legend-label,
-html[data-appearance='retro'] .legend-item {
-  font-family: var(--retro-font-mono);
-}
-
-html[data-appearance='retro'] .legend-label {
+html[data-appearance='retro'] [data-module='changelog-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
   color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='changelog-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='changelog-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+/* The facts block as a filed card, the same panel /writing and /projects give
+   the block beside their headline. */
+html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 18px;
+}
+
+html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts-copy {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts-links {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+}
+
+html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts-links a {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts-links a:hover {
+  color: var(--retro-maroon);
+}
+
+/* The rows, in the archive's dashed treatment so /writing and /changelog read
+   the same. */
+html[data-appearance='retro'] [data-module='changelog-log'] .log-row,
+html[data-appearance='retro'] [data-module='changelog-log'] .rows-end {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='changelog-log'] .log-row:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] [data-module='changelog-log'] .row-date,
+html[data-appearance='retro'] [data-module='changelog-log'] .row-kind {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+/* Type in maroon, significance left muted: the deleted ledger made the same
+   split, with the type in a gold pill and the significance in a legend the
+   redesign drops. */
+html[data-appearance='retro'] [data-module='changelog-log'] .row-type {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='changelog-log'] .row-title {
+  font-family: var(--retro-font-display);
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='changelog-log'] .log-row:hover .row-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] [data-module='changelog-log'] .row-summary,
+html[data-appearance='retro'] [data-module='changelog-log'] .empty {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
+/* The year head as a filed-drawer label — bold mono year over a double rule —
+   which is what /writing's archive already does with the same markup. */
+html[data-appearance='retro'] [data-module='changelog-log'] .year-head {
+  border-bottom: 3px double var(--retro-frame-border);
+  padding-bottom: 6px;
+}
+
+html[data-appearance='retro'] [data-module='changelog-log'] .year {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--retro-maroon);
+}
+
+/* The double rule already opens the group, so the first row's dashed rule would
+   draw a second line straight under it. Same call as the writing archive. */
+html[data-appearance='retro'] [data-module='changelog-log'] .year-head + .log-row {
+  border-top: 0;
+}
+
+/* The pager, on the page rather than in a component, so it carries no module of
+   its own — the class is unique to this one route. */
+html[data-appearance='retro'] .log-pager .pager-link {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] .log-pager .pager-link:hover {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] .log-pager .pager-count {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+/* ── The changelog entry page ─────────────────────────────────────────────
+   Retro styles the SAME entry template the modern appearance does. The legacy
+   `.retro-skin` header and footer are deleted, and with them the sig-chip, the
+   type pill and the tag pills.
+
+   THE ENTRY AND THE POST SHARE `data-module='article'`, so every rule here is
+   scoped by an `.entry-*` class, none of which exists on the post page. It runs
+   the other way too: nothing above scoped to `.post-*`, `.rail-*` or
+   `.post-body` can reach this page. The two share the `.draft-banner` and
+   `.prose` rules in the post-page block above, which is the intent — an entry
+   and a post read alike once the chrome is off. The `.entry-*` scoping matters
+   for a third reason: the guest book's rows use `.entry-lead` and `.entry-meta`
+   too, and a bare selector would repaint them on the homepage. */
+
+html[data-appearance='retro'] [data-module='article'] .entry-title {
+  font-family: var(--retro-font-display);
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-lead {
+  font-family: var(--retro-font-body);
+  font-size: 18px;
+  font-style: italic;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink-muted);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-back {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-back:hover {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-meta {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-type {
+  color: var(--retro-maroon);
+}
+
+/* The prev/next steps in the archive's dashed treatment, so the foot of an entry
+   and the log it came from read the same — the call the post page's
+   `.post-next` already made. */
+html[data-appearance='retro'] [data-module='article'] .entry-step {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-step:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-step-label {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-step-title {
+  font-family: var(--retro-font-display);
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .entry-step:hover .entry-step-title {
+  color: var(--retro-link);
 }
 
 /* ── /scorecard ───────────────────────────────────────────────────────── */
@@ -1421,7 +1662,7 @@ html[data-appearance='retro'] .page-number {
 }
 
 /* .page-link--disabled used var(--color-border), a near-invisible pale token on
-   parchment. var(--retro-ink-muted) is the same muted-ink brown already used for tag-pill text
+   parchment. var(--retro-ink-muted) is the same muted-ink brown already used for row meta
    elsewhere in this file — dark enough to read as present-but-inactive (~6.3:1
    on parchment) rather than gone. */
 html[data-appearance='retro'] .page-link {
@@ -1485,7 +1726,13 @@ html[data-appearance='retro'] .connect-label {
   color: var(--retro-maroon);
 }
 
-/* ── Filter pills (shared: writing, projects, changelog) ──────────────── */
+/* ── Filter pills ─────────────────────────────────────────────────────────
+   Two consumers, both of them net-new since this block was written as "shared":
+   FilterPills.astro's one surviving instance, the type filter on /changelog,
+   and /webmcp's local radiogroup, which wears the same `.filter-pill` class
+   without importing the component. The /writing and /projects groups these
+   rules were also written for are both deleted. Unscoped on purpose: the two
+   consumers want the identical control. */
 
 html[data-appearance='retro'] .filter-pill {
   font-family: var(--retro-font-mono);
@@ -1600,7 +1847,8 @@ html[data-appearance='retro'] [data-module='webmcp'] .panel-label {
   color: var(--retro-maroon);
 }
 
-/* The dashed rule already used by .year-line on /changelog. */
+/* The dashed rule the deleted /changelog ledger used on its year rows. The gradient is
+   written out here rather than shared, so the ledger's removal left it intact. */
 html[data-appearance='retro'] [data-module='webmcp'] .panel-rule {
   background: repeating-linear-gradient(90deg, var(--retro-frame-border) 0 4px, transparent 4px 8px);
 }
@@ -2242,12 +2490,13 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
    converted page body still ships BOTH trees in the DOM - the new sections
    marked `.modern-skin`, the legacy ones marked `.retro-skin` - with exactly one
    displayed. Undoing that is the work of docs/work/one-dom-for-both-appearances,
-   phase by phase. Four surfaces are done and no longer use this pair at all: the
-   CHROME, the HOMEPAGE BODY, the /writing INDEX and the POST PAGE. Retro styles
-   the one header, the one footer, the five homepage sections, the writing hero
-   and archive, and the one post template directly, in the sections above. What
-   remains here is /about, /projects, /changelog, /scorecard, /activity, /steward
-   and /webmcp.
+   phase by phase. Seven surfaces are done and no longer use this pair at all:
+   the CHROME, the HOMEPAGE BODY, the /writing INDEX, the POST PAGE, /projects,
+   the /changelog LEDGER and the CHANGELOG ENTRY PAGE. Retro styles the one
+   header, the one footer, the five homepage sections, the writing hero and
+   archive, the one post template, the projects hero and board, the changelog
+   hero and log, and the one entry template directly, in the sections above.
+   What remains here is /about, /scorecard, /activity, /steward and /webmcp.
 
    This is the same construction as `.retro-furniture`, and for the same reason:
    nothing is injected, removed or re-rendered at toggle time, so the toggle

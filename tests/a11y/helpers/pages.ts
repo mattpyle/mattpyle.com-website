@@ -88,29 +88,25 @@ export const PAGES: PageSpec[] = [
   {
     name: 'projects-index',
     path: '/projects',
-    why: 'Index template: the redesigned card grid, plus the legacy status FilterPills radiogroup',
-    // Two trees ship here and the hidden one is absent from the accessibility
-    // tree, so this golden records whichever appearance the run is in — these
-    // rows are taken in modern. The legacy selectors are kept so the pruning
-    // still applies if a run ever takes this snapshot in retro.
-    snapshotKeepFirst: ['.board .card', '[data-module="projects-grid"] .project-item', '.card-tags li'],
-    snapshotRedact: ['.board .card', '[data-module="projects-grid"] .project-item', '.filter-status'],
+    why: 'Index template: the card grid both appearances read',
+    // One tree since 2026-08-29, so this golden is the same in either
+    // appearance. The legacy grid, its status FilterPills and its tag pills are
+    // deleted, and their prune rules with them.
+    snapshotKeepFirst: ['.board .card'],
+    snapshotRedact: ['.board .card'],
   },
   {
     name: 'changelog-index',
     path: '/changelog',
-    why: 'Index template: the redesigned year-grouped log and its restyled type FilterPills, plus the legacy ledger and pagination',
-    // Two trees ship here and the hidden one is absent from the accessibility
-    // tree, so this golden records whichever appearance the run is in — these
-    // rows are taken in modern. The legacy selectors are kept so the pruning
-    // still applies if a run ever takes this snapshot in retro.
+    why: 'Index template: the year-grouped log, its type FilterPills and its pager, all read by both appearances',
+    // One tree since 2026-08-29, so this golden is the same in either
+    // appearance. The legacy ledger, its significance legend, its own
+    // FilterPills instance and its tag pills are deleted, and their prune rules
+    // with them — including a stale `.year-rule` entry the ledger never
+    // rendered under that name.
     snapshotKeepFirst: [
       '[data-module="changelog-log"] .log-row',
       '[data-module="changelog-log"] .year-group',
-      '[data-module="changelog-ledger"] .lg-row',
-      '[data-module="changelog-ledger"] .year-rule',
-      '.lg-tags--desktop .tag-pill',
-      '.lg-tags--mobile .tag-pill',
     ],
     // ONLY THE ROWS ARE REDACTED. Three regions on this page carry a COUNT that
     // every published entry changes — the hero's "N entries, latest …" line,
@@ -122,7 +118,6 @@ export const PAGES: PageSpec[] = [
     // sibling spec about what a forced regeneration does to them.
     snapshotRedact: [
       '[data-module="changelog-log"] .log-row',
-      '[data-module="changelog-ledger"] .lg-row',
       '.filter-status',
     ],
   },
@@ -152,20 +147,15 @@ export const PAGES: PageSpec[] = [
   {
     name: 'changelog-entry',
     path: `/changelog/${CHANGELOG_ENTRY}`,
-    why: 'Changelog entry template: the redesigned head and prev/next steps, plus the legacy header — the two share one .prose node, as the post page does',
+    why: 'Changelog entry template: the head, the prose and the prev/next steps, all read by both appearances',
+    // One tree since 2026-08-29. The legacy header and footer are deleted, and
+    // with them the sig-chip, the type pill and the tag pills; their prune rules
+    // go too.
     snapshotDrop: ['.prose > *'],
-    snapshotKeepFirst: ['.article-tags li'],
     snapshotRedact: [
-      '.page-title--article',
-      '.article-dek',
-      '.article-tags',
-      '.article-meta',
-      '.changelog-meta',
       // Prev/next links are recomputed every time an entry ships either side.
-      // `.entry-navigation` is the legacy nav; `.entry-nav` the redesigned one.
-      '.entry-navigation',
       '.entry-nav',
-      // The redesigned tree's own content-variable regions.
+      // The head's own content-variable regions.
       '.entry-title',
       '.entry-lead',
       '.entry-meta',

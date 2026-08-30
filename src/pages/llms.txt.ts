@@ -88,7 +88,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('## Projects');
   lines.push('');
   // Projects have no detail pages, so each bullet leads with the anchor of its card on /projects/
-  // (ProjectsGrid.astro puts the id on the card's heading). The llms.txt format says a list item leads
+  // (ProjectsBoard.astro puts the id on the card anchor). The llms.txt format says a list item leads
   // with a link to somewhere with more detail, and a bullet that is only bold text is a dead end for
   // a parser collecting links — Steward's own `llms-txt-list-items` check reports these, and this
   // section was the site's one failure against it.

@@ -41,11 +41,12 @@ test('links survive with their root-relative hrefs', () => {
 });
 
 test('a card-shaped link keeps its destination by moving onto the heading', () => {
-  // The changelog rows wrap a heading and a summary in one <a>. Left alone, turndown spreads
-  // the label over several lines and no markdown parser reads it back as a link.
+  // A project card and a changelog row are each one <a> wrapping block content. Left alone,
+  // turndown spreads the label over several lines and no markdown parser reads it back as a
+  // link. The class here is arbitrary: the rule matches on the shape, not on a class name.
   const markdown = pageToMarkdown(
     page(
-      '<h1>Changelog</h1><a href="/changelog/site-live" class="lg-row"><div><span>02 AUG 2026</span></div><div><h2>Site is live</h2><p>Summary text.</p></div></a>'
+      '<h1>Changelog</h1><a href="/changelog/site-live" class="card"><div><span>02 AUG 2026</span></div><div><h2>Site is live</h2><p>Summary text.</p></div></a>'
     )
   );
   assert.match(markdown, /## \[Site is live\]\(\/changelog\/site-live\)/);

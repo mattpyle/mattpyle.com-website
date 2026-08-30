@@ -37,11 +37,11 @@ const articles = allArticles.sort((a, b) => b.data.date.getTime() - a.data.date.
     generic names the homepage and changelog rows use, so an unprefixed rule
     would reach surfaces this page does not own.
 
-    ONE SORT, strictly reverse-chronological. The legacy list floated
-    `featured: true` posts to the top; the archive groups by year, and a year
-    heading over a list that is not in date order reads as a bug. So the flag no
-    longer orders anything, and with the legacy list gone it has no renderer at
-    all — it survives as a schema field in src/content.config.ts.
+    ONE SORT, strictly reverse-chronological. The legacy list floated a
+    `featured` post to the top; the archive groups by year, and a year heading
+    over a list that is not in date order reads as a bug. With the legacy list
+    gone the flag ordered and rendered nothing anywhere, so it was removed from
+    the schema and the scaffold on 2026-08-29.
 
     Tags leave the HTML with that list too, and stay live as data: /llms.txt,
     /llms-full.txt, the WebMCP post search and the A2A digest all read them from
