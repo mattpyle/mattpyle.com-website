@@ -3,9 +3,7 @@ title: Keystatic spike scratch post
 date: 2026-08-30
 tags: []
 draft: true
-description: >-
-  Scratch draft written inside the Keystatic editor to test what the writing
-  flow feels like. Spike artifact, not a post.
+description: Spike artifact, written in Keystatic.
 ---
 This paragraph exists to find out what writing in Keystatic feels like when the words matter more than the file. The test is deliberately ordinary: a few hundred words, a couple of headings, a list, a link, some inline code, and one image. Nothing here is meant to publish.
 
