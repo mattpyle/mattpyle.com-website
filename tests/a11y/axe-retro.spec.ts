@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import type { Result } from 'axe-core';
 import { installPageLoadCounter, gotoSettled } from './helpers/settle';
+import { RETRO_ROUTES } from '../../scripts/lib/retro-routes.mjs';
 
 /**
  * axe against RETRO, on the same eleven routes `.github/workflows/a11y.yml` audits with
@@ -27,7 +28,12 @@ import { installPageLoadCounter, gotoSettled } from './helpers/settle';
  */
 
 /**
- * The routes the CLI audits in modern, in the order the workflow lists them.
+ * The routes scanned in retro, imported rather than restated.
+ *
+ * The list lives in `scripts/lib/retro-routes.mjs` because two checks need the same one: this
+ * spec, and `scripts/retro-sweep.mjs`, which walks the computed styles of the same pages for
+ * surviving modern tokens. It mirrors the routes `.github/workflows/a11y.yml` audits with
+ * `@axe-core/cli` in modern.
  *
  * The two changelog surfaces were a deliberate superset when they were added on 2026-08-29: the
  * one-DOM phase that converted /changelog and the entry page wrote net-new retro styling on both,
@@ -36,19 +42,7 @@ import { installPageLoadCounter, gotoSettled } from './helpers/settle';
  * routes to the workflow — so the two lists match again and this is a mirror rather than a
  * superset. The premise is unchanged either way: every restyled retro surface gets scanned.
  */
-const ROUTES = [
-  '/',
-  '/about',
-  '/writing',
-  '/projects',
-  '/changelog',
-  '/changelog/public-scorecard/',
-  '/scorecard',
-  '/activity',
-  '/steward',
-  '/webmcp',
-  '/writing/accessibility-and-ai/',
-] as const;
+const ROUTES = RETRO_ROUTES;
 
 /**
  * A guest book entry written by an agent, seeded into storage for the homepage scans.

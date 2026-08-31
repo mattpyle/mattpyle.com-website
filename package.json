@@ -20,6 +20,7 @@
     "a11y:run": "playwright test",
     "a11y:axe": "axe",
     "validate:html": "node scripts/validate-html.mjs",
+    "sweep:retro": "node scripts/retro-sweep.mjs",
     "validate:llms-txt": "node --import tsx scripts/validate-llms-txt.mjs",
     "spellcheck": "cspell --no-progress \"src/content/**/*.md\" \"src/data/skills/**/*.md\"",
     "check": "astro check",
