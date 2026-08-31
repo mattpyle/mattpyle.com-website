@@ -159,30 +159,6 @@ body {
   min-height: 100vh;
 }
 
-/* ── Shared page introductions ────────────────────────────────────────────── */
-.page-title {
-  margin: 0;
-  color: var(--color-heading);
-  font-family: var(--font-serif);
-  font-size: clamp(52px, 7vw, 64px);
-  font-weight: 600;
-  letter-spacing: -.025em;
-  line-height: .98;
-}
-
-.page-title--article {
-  font-size: clamp(36px, 5.5vw, 52px);
-  line-height: 1.05;
-}
-
-.page-intro {
-  color: var(--color-muted);
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-style: normal;
-  line-height: 1.5;
-}
-
 a {
   color: var(--color-accent);
   text-decoration: none;
@@ -663,10 +639,9 @@ html:not([data-appearance='retro']) body.skin-redesign h1 ::selection {
    only see at one viewport width.
 
    Not guarded against retro, and no longer because the markup is hidden there:
-   the converted surfaces ship one tree now, so retro wears this shell too and
-   repaints inside it. That is deliberate — the shell is layout, and
-   docs/work/one-dom-for-both-appearances is a re-skin, not a re-layout. The
-   remaining `.modern-skin` surfaces are listed at the foot of retro.css. */
+   every surface ships one tree now, so retro wears this shell too and repaints
+   inside it. That is deliberate — the shell is layout, and
+   docs/work/one-dom-for-both-appearances is a re-skin, not a re-layout. */
 .rd-section {
   max-width: var(--shell);
   margin: 0 auto;

@@ -255,13 +255,15 @@ export const PAGES: PageSpec[] = [
     // ONE CARD, not six. Six would be six copies of one template, and the
     // catalog is generated, so a seventh tool is a data change rather than a
     // template one. The kept card is `describe_site`, the first — which is the
-    // no-inputs shape, so the schema table is deliberately outside this golden.
+    // no-inputs shape, so the schema table is deliberately outside this golden,
+    // and so is the `aria-pressed` choice control, which only `set_appearance`
+    // has. Neither absence is a defect.
     //
-    // Only the redesigned tree reaches this snapshot. Both trees ship and both
-    // carry `.tool-card`, but the hidden one is absent from the accessibility
-    // tree, so `keepFirst` sees the modern cards only. Its choice control is a
-    // pair of `aria-pressed` toggle buttons; the legacy tree keeps the roving
-    // radiogroup, and that tree is never what this file records.
+    // ONE TREE as of 2026-08-30 (one-dom phase 7): the legacy PageHeader and the
+    // inline `.webmcp-shell` are deleted, so the hero and the five bands below
+    // are the whole page in either appearance. This golden already recorded the
+    // redesigned tree — the hidden one was absent from the accessibility tree —
+    // so the conversion must not move it.
     snapshotKeepFirst: ['.tool-card'],
   },
 ];
