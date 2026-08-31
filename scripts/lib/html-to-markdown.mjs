@@ -23,12 +23,13 @@ const CONTROL_TAGS = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'DIALOG']
 // is the single class that marks all of it, so one rule covers every piece, present and
 // future. Decorative and hidden nodes go the same way.
 //
-// A redesigned page ships BOTH trees and lets CSS choose: the modern one, and the legacy one
-// marked `.retro-skin`, which retro.css hides in modern. Converted whole, that serves the page
-// twice in different words, which is the opposite of what the `.md` sibling is for. The
-// converter keeps the modern tree, the same way it keeps the modern appearance's furniture —
-// one class, one rule, and a page converted before the redesign is unaffected because it has
-// no `.retro-skin` subtree to drop.
+// `.retro-skin` is the second half of a pattern the site no longer uses. A page converted for the
+// redesign used to ship BOTH trees and let CSS choose: the modern one, and a legacy copy marked
+// `.retro-skin` that retro.css hid in modern. Converted whole, that served the page twice in
+// different words, which is the opposite of what the `.md` sibling is for. Every surface ships one
+// tree as of 2026-08-30 and no markup carries the class, so this rule now matches nothing — it is
+// kept as a cheap guard rather than removed, on the same terms as the `.retro-furniture` rule
+// beside it.
 function isDroppable(element) {
   if (NON_CONTENT_TAGS.has(element.tagName)) return true;
   if (CONTROL_TAGS.has(element.tagName)) return true;

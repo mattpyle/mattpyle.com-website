@@ -13,8 +13,11 @@
 {/*
   A div, not a section — the same call every other redesigned hero made: `npm run validate:html`
   names an h1 inside sectioning content, and an unnamed <section> is not exposed as a region.
+
+  `data-module` is retro.css's hook, per the hero/body split every other converted surface uses:
+  retro restyles this markup rather than being handed a hero of its own.
 */}
-<div class="rd-section webmcp-hero modern-skin">
+<div class="rd-section webmcp-hero" data-module="webmcp-hero">
   <h1><span class="rd-fill">WebMCP</span></h1>
 
   <div class="hero-row">

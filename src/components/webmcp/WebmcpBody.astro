@@ -6,26 +6,26 @@
  * them, and the machine-readable resources.
  *
  * THE CATALOG IS HANDED IN, NEVER READ HERE. src/pages/webmcp/index.astro builds it off the real
- * tool objects createTools() returns, and both appearances render from that one array — so the
- * redesigned tree cannot describe a tool the site does not register any more than the legacy tree
- * could. This component only lays it out.
+ * tool objects createTools() returns, and both appearances render from that one array — so this
+ * component cannot describe a tool the site does not register. It only lays the array out.
  *
- * IT SHARES THE PAGE'S SCRIPT HOOKS WITH THE LEGACY TREE, deliberately. `.tool-card`,
- * `.tool-console`, `[data-run]`, `[data-note]`, `[data-status]`, `[data-frame]`, `[data-output]`,
- * `.field-input`, `.mode-pills`, `.filter-pill` and `.copy-button` are the same names the legacy
- * markup uses, so ONE wiring script drives whichever tree the appearance shows. What differs
- * between the trees is supplied as data rather than as a second code path: the status vocabulary
- * and the idle comment come off `data-*` attributes on the console root, and the run button's
- * label is read back from the DOM rather than hard-coded.
+ * THE SCRIPT HOOKS BELONG TO THE PAGE, NOT TO THIS COMPONENT. `.tool-card`, `.tool-console`,
+ * `[data-run]`, `[data-note]`, `[data-status]`, `[data-frame]`, `[data-output]`, `.field-input`,
+ * `.mode-pills`, `.filter-pill` and `.copy-button` are the names the wiring script at the foot of
+ * index.astro queries for; renaming one here breaks the run controls with nothing failing at build.
+ * The wording a console prints is supplied as `data-*` attributes on the console root rather than
+ * living in the script, and the run button's label is read back from the DOM for the same reason:
+ * the editorial copy belongs beside the markup that shows it.
  *
- * EVERY id IS `rd-` PREFIXED. Both trees ship in one document, so a shared id would be a duplicate
- * — which `npm run validate:html` fails, and which would point a legacy `<label for>` at a hidden
- * input.
+ * THE CONTROL IDS ARE THE TOOL AND FIELD NAME, UNPREFIXED. They carried an `rd-` prefix while the
+ * page shipped a second, legacy tree in the same document, where a shared id would have been a
+ * duplicate `npm run validate:html` fails on and a `<label for>` pointing into a hidden subtree.
+ * One tree ships now, so the prefix named nothing. The band headings keep their own `rd-` ids: they
+ * are just names, and renaming a fragment target buys nothing.
  *
- * THE CHOICE BUTTONS ARE `aria-pressed`, NOT A RADIOGROUP. That is the bundle's call and it is the
- * one behavioural difference between the trees: the legacy tree's `set_appearance` control is a
- * roving-tabindex radiogroup, this one is two toggle buttons, and the shared script reads
- * `data-select` to know which contract to keep.
+ * THE CHOICE BUTTONS ARE `aria-pressed` TOGGLE BUTTONS, NOT A RADIOGROUP. That is the bundle's
+ * call: every button keeps its own tab stop, so there is no roving tabindex and no arrow-key
+ * contract, and `aria-pressed` is the selection the script reads.
  *
  * TWO DEVIATIONS FROM THE BUNDLE.
  *
@@ -47,7 +47,7 @@ import { ORIGIN_TRIAL_EXPIRY, WEBMCP_VERIFIED } from '../../data/webmcp-catalog.
 
 interface Field {
   name: string;
-  rdId: string;
+  id: string;
   label: string;
   required: boolean;
   type: string;
@@ -109,7 +109,7 @@ const RESOURCES = [
 const IDLE_COMMENT = '// Nothing has been called yet.';
 ---
 
-<div class="webmcp-modern modern-skin" data-module="webmcp">
+<div class="webmcp-modern" data-module="webmcp">
   <section class="rd-section band-standard" aria-labelledby="rd-standard-title">
     <h2 id="rd-standard-title">Where the standard stands today</h2>
     <dl class="standard-grid">
@@ -217,14 +217,13 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
               <div class="demo-field">
                 {field.control === 'pills' ? (
                   <>
-                    <span class="demo-label" id={`${field.rdId}-label`}>{field.label}</span>
+                    <span class="demo-label" id={`${field.id}-label`}>{field.label}</span>
                     <div
                       class="mode-pills demo-choices"
                       role="group"
-                      data-select="pressed"
                       data-field={field.name}
-                      aria-labelledby={`${field.rdId}-label`}
-                      aria-describedby={`${field.rdId}-hint`}
+                      aria-labelledby={`${field.id}-label`}
+                      aria-describedby={`${field.id}-hint`}
                     >
                       {field.options.map(option => (
                         <button
@@ -241,23 +240,23 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
                   </>
                 ) : (
                   <>
-                    <label class="demo-label" for={field.rdId}>{field.label}</label>
+                    <label class="demo-label" for={field.id}>{field.label}</label>
                     <input
                       class="field-input demo-input"
-                      id={field.rdId}
+                      id={field.id}
                       type={field.control === 'number' ? 'number' : 'text'}
                       value={field.value}
                       min={field.minimum}
                       max={field.maximum}
                       step={field.control === 'number' ? 1 : undefined}
-                      aria-describedby={`${field.rdId}-hint`}
+                      aria-describedby={`${field.id}-hint`}
                       data-field={field.name}
                       data-kind={field.control}
                       disabled
                     />
                   </>
                 )}
-                <p class="demo-hint" id={`${field.rdId}-hint`}>{field.hint}</p>
+                <p class="demo-hint" id={`${field.id}-hint`}>{field.hint}</p>
               </div>
             ))}
 
@@ -834,15 +833,14 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
   /* The blinking block is the only animated cue on the page, and the only thing
      reduced motion removes; the status word and the button label are static.
 
-     THE COLOUR IS SET HERE, not inherited. The legacy console's `.output-cursor`
-     rule is fully global — it has to be, because the script builds that element
-     — so it paints this pane's cursor in the legacy amber unless this rule names
-     a colour of its own. `--ink-6` is the same ink the dim "Calling …" line the
+     THE COLOUR IS SET HERE, not inherited: the script builds this element, so it
+     carries no scoping attribute and nothing but a `:global()` rule under this
+     root reaches it. `--ink-6` is the same ink the dim "Calling …" line the
      cursor sits on already uses, at 8.8:1 on the pane's white ground.
 
-     THE KEYFRAME NAME IS NOT the legacy one. Astro scopes selectors, not at-rule
-     names, so two `@keyframes webmcp-blink` in one document are one keyframe and
-     the later definition wins for both trees. Each tree owns its own blink. */
+     Astro scopes selectors, not at-rule names, so a keyframe name is global to
+     the document however it is declared here. This one stays distinct on that
+     ground alone. */
   .webmcp-modern :global(.output-cursor) {
     color: var(--ink-6);
     animation: webmcp-modern-blink 1s steps(1, end) infinite;

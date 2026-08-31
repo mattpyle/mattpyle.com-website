@@ -11,7 +11,6 @@
  * cannot document a tool the site doesn't register, or miss one it does.
  */
 import Layout from '../../layouts/Layout.astro';
-import PageHeader from '../../components/PageHeader.astro';
 import WebmcpHero from '../../components/webmcp/WebmcpHero.astro';
 import WebmcpBody from '../../components/webmcp/WebmcpBody.astro';
 import { createTools } from '../../lib/webmcp-tools.mjs';
@@ -80,10 +79,6 @@ const catalog = tools.map((tool: any) => {
     return {
       name,
       id: `${tool.name}-${name}`,
-      // The redesigned tree's own id for the same control. Both trees ship in one document, so
-      // every id in the modern one is prefixed rather than shared: a duplicate id fails
-      // `npm run validate:html` and would point a legacy `<label for>` at a hidden input.
-      rdId: `rd-${tool.name}-${name}`,
       label: fieldLabel(name, required.has(name)),
       required: required.has(name),
       type: schema.type as string,
@@ -131,10 +126,6 @@ const catalog = tools.map((tool: any) => {
   };
 });
 
-const total = String(catalog.length).padStart(2, '0');
-const readCount = catalog.filter(entry => entry.kind === 'read').length;
-const writeCount = catalog.length - readCount;
-
 const title = 'WebMCP';
 const seoTitle = 'WebMCP tools this site gives to AI agents';
 // 120-155 characters: long enough to survive a SERP, short enough not to be truncated in one.
@@ -146,7 +137,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const personId = `${new URL('/', Astro.site).toString()}#person`;
 const expiryLabel = formatVerifiedLabel(ORIGIN_TRIAL_EXPIRY);
 
-// The date the tools were last driven end to end, shown beside the Chrome build in both trees.
+// The date the tools were last driven end to end, shown beside the Chrome build it was done on.
 // public/agents.md cites an earlier build (150.0.7871.182, 2026-07-24) for the calling convention;
 // these are two measurements on two dates, and undated the pair reads as one of them being a typo.
 const verifiedLabel = formatVerifiedLabel(WEBMCP_VERIFIED.iso);
@@ -194,343 +185,19 @@ const breadcrumbs = [
   markdownAlternate={markdownUrl}
 >
   {/*
-    TWO /webmcp PAGES IN ONE DOCUMENT, one shown per appearance — the same construction
-    src/pages/scorecard.astro, about.astro and writing/index.astro use, and for the same reason:
-    the redesign rebuilds the MODERN appearance only, retro is a client-side preference the server
-    cannot read, so both trees ship and CSS chooses. `.modern-skin` / `.retro-skin` in
-    src/styles/retro.css do the choosing, and retro.css itself is untouched by this build.
+    ONE /webmcp PAGE. The hero and the five bands below are the whole page in either appearance;
+    retro restyles this markup in src/styles/retro.css rather than being handed a second tree.
+    The `.retro-skin` shell that used to sit here — a PageHeader plus an inline `.webmcp-shell`
+    saying the same facts in different words — is deleted, along with the ~500-line scoped
+    stylesheet that dressed it.
 
-    A hidden subtree holds no tab stops and is absent from the accessibility tree, so each
-    appearance presents exactly one page, with exactly one h1.
-
-    BOTH TREES ARE DRIVEN BY THE ONE SCRIPT AT THE FOOT OF THIS FILE, because both carry the same
-    hook names — the console roots, the run controls, the output panes and the copy buttons. The
-    script walks every `[data-module="webmcp"]` shell rather than the first, and takes its status
-    vocabulary, its idle comment and its run-button label from the DOM, so the two trees can differ
-    in wording without a second code path.
-
-    The legacy tree below keeps its own markup and its own stylesheet at the foot of this file:
-    apart from the six re-wrapped paragraphs (see scripts/check-inline-tag-wrapping.mjs) it is
-    carried whole, which is the same call the /scorecard reskin made.
+    THE SCRIPT AT THE FOOT OF THIS FILE DRIVES THE ONE TREE. It still reads its status vocabulary,
+    its idle comment and its run-button label off the DOM rather than hard-coding them, because
+    those strings are WebmcpBody's editorial copy and belong beside the markup that shows them.
   */}
   <WebmcpHero />
   <WebmcpBody catalog={catalog} expiryLabel={expiryLabel} verifiedLabel={verifiedLabel} />
 
-  <div class="retro-skin">
-
-  <PageHeader
-    eyebrow="Agent tools · Experiment"
-    title="WebMCP"
-    subtitle="The typed tools this site hands to an AI agent, what they return, and where the standard honestly stands."
-  />
-
-  <div class="webmcp-shell" data-module="webmcp">
-    <div class="prose intro">
-      <p>
-        WebMCP is a browser API that lets a page hand an AI agent a set of typed tools — real
-        functions with names, inputs, and return values — instead of leaving it to guess its way
-        through the interface. It is a W3C Community Group draft, available in Chrome behind an
-        origin trial, and the {catalog.length} tools below are the ones this site registers.
-      </p>
-      <p>
-        Run any of them here. The buttons call the same handler an agent calls, in this page — not a
-        live protocol round-trip.
-      </p>
-    </div>
-
-    <section class="state-of-play" aria-labelledby="state-of-play-title">
-      <h2 id="state-of-play-title">Where does WebMCP actually stand today?</h2>
-      <dl class="sop-list">
-        <div>
-          <dt>Spec status</dt>
-          <dd>
-            A <a href="https://webmachinelearning.github.io/webmcp/" rel="noopener">Draft Community
-            Group Report</a> of the W3C Web Machine Learning Community Group.
-          </dd>
-        </div>
-        <div>
-          <dt>Browser support</dt>
-          <dd>
-            An <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">origin trial in
-            Chrome</a>, available from Chrome 149. No other engine implements it currently.
-          </dd>
-        </div>
-        <div>
-          <dt>This site's token</dt>
-          <dd>
-            The origin-trial token embedded in these pages expires <time datetime={ORIGIN_TRIAL_EXPIRY}>{expiryLabel}</time>.
-            After that Chrome ignores it and the tools simply stop registering.
-          </dd>
-        </div>
-        <div>
-          <dt>Discovery</dt>
-          <dd>
-            Registration is purely the JavaScript API, so this page and <code>/webmcp/tools.json</code> are this
-            site's own implementation. Discovery paths and standards are evolving.
-          </dd>
-        </div>
-      </dl>
-    </section>
-
-    <section class="prose" aria-labelledby="what-is-webmcp">
-      <h2 id="what-is-webmcp">What is WebMCP, and why would a site bother?</h2>
-      <p>
-        An agent driving an ordinary web page has to infer everything: which element is the search
-        box, what a button does, whether a click worked. WebMCP replaces the inference with a
-        contract. A page calls <code>registerTool</code> with a name, a description, and a JSON
-        Schema for the inputs, and the agent gets a function it can call and a return value it can
-        parse — the same shape the Model Context Protocol gives a server-side tool, but running in
-        the page, with the page's own data and the visitor's own session.
-      </p>
-      <p>
-        The interesting part for a site like this one is that it costs nothing to be wrong about.
-        Registration is feature-detected and additive: on every browser that has no <code>modelContext</code> — which is currently every browser except Chrome behind a flag
-        or the origin trial — the code returns immediately, writes no DOM, and reads no layout.
-        Remove the tools and the site is byte-for-byte what it was.
-      </p>
-    </section>
-
-    <section aria-labelledby="tool-catalog-title">
-      <h2 id="tool-catalog-title" class="catalog-title">Which tools does this site register?</h2>
-      <p class="catalog-dek">
-        {catalog.length} tools: {readCount} that read published content, {writeCount} that write.
-        What they write is a preference and a guest-book entry, both in your own browser and
-        nowhere else. Definitions below are read from the live tool objects at build time, so they
-        stay in sync with what an agent receives.
-      </p>
-
-      <div class="tool-catalog">
-        {catalog.map((entry, index) => (
-          <article class:list={['tool-card', { 'tool-card--write': entry.kind === 'write' }]}>
-            <header class="tool-card-head">
-              <div class="tool-identity">
-                <p class="tool-index">Tool {String(index + 1).padStart(2, '0')} / {total}</p>
-                <h3 class="tool-name">{entry.name}</h3>
-              </div>
-              <span class:list={['tool-badge', `tool-badge--${entry.kind}`]}>{entry.kind}</span>
-            </header>
-
-            <p class="tool-desc">{entry.description}</p>
-
-            <div class="tool-block">
-              <p class="panel-label"><span>Inputs</span><span class="panel-rule" aria-hidden="true"></span></p>
-              {entry.fields.length === 0 ? (
-                <p class="value-line">None. Takes no arguments.</p>
-              ) : (
-                <table class="inputs-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Type</th>
-                      <th scope="col">Required</th>
-                      <th scope="col">Constraints</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entry.fields.map(field => (
-                      <tr>
-                        <td><span class="cell-label" aria-hidden="true">Name</span><code>{field.name}</code></td>
-                        <td><span class="cell-label" aria-hidden="true">Type</span>{field.type}</td>
-                        <td><span class="cell-label" aria-hidden="true">Required</span>{field.required ? 'Yes' : 'No'}</td>
-                        <td><span class="cell-label" aria-hidden="true">Constraints</span>{field.constraints}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div class="tool-block">
-              <p class="panel-label"><span>Returns</span><span class="panel-rule" aria-hidden="true"></span></p>
-              <p class="value-line">{entry.returns}</p>
-            </div>
-
-            <div class="tool-block tool-block--console">
-              <p class="panel-label"><span>Try it</span><span class="panel-rule" aria-hidden="true"></span></p>
-
-              <div class="tool-console" data-tool={entry.name}>
-                {entry.fields.length === 0 ? (
-                  <p class="value-line">No inputs — call it as-is.</p>
-                ) : (
-                  <div class="field-row">
-                    {entry.fields.map(field => (
-                      <div class:list={['field', `field--${field.control}`]}>
-                        {field.control === 'pills' ? (
-                          <>
-                            <span class="field-label" id={`${field.id}-label`}>{field.label}</span>
-                            <div
-                              class="mode-pills"
-                              role="radiogroup"
-                              aria-labelledby={`${field.id}-label`}
-                              aria-describedby={`${field.id}-hint`}
-                              data-field={field.name}
-                            >
-                              {field.options.map(option => (
-                                <button
-                                  type="button"
-                                  class:list={['filter-pill', { 'is-active': option === field.value }]}
-                                  role="radio"
-                                  aria-checked={option === field.value ? 'true' : 'false'}
-                                  tabindex={option === field.value ? 0 : -1}
-                                  data-value={option}
-                                  disabled
-                                >
-                                  {option}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <label class="field-label" for={field.id}>{field.label}</label>
-                            <input
-                              class="field-input"
-                              id={field.id}
-                              type={field.control === 'number' ? 'number' : 'text'}
-                              value={field.value}
-                              min={field.minimum}
-                              max={field.maximum}
-                              step={field.control === 'number' ? 1 : undefined}
-                              aria-describedby={`${field.id}-hint`}
-                              data-field={field.name}
-                              data-kind={field.control}
-                              disabled
-                            />
-                          </>
-                        )}
-                        <p class="field-hint" id={`${field.id}-hint`}>{field.hint}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div class="actions-row">
-                  <button type="button" class="run-button" data-run disabled>Run tool</button>
-                  <p class="action-note" data-note>Disabled — needs JavaScript.</p>
-                </div>
-
-                <div class="output-frame" data-frame>
-                  <div class="output-bar">
-                    <span class="output-label">Output · JSON</span>
-                    <span class="output-status" data-status>Unavailable</span>
-                  </div>
-                  <div
-                    class="output-body"
-                    role="region"
-                    aria-label={`Output from ${entry.name}`}
-                    tabindex="0"
-                    data-output
-                  >
-                    <pre class="output-pre"><span class="json-dim">// JavaScript is off, so nothing here can run.
-// The definitions, inputs and snippets on this page
-// are static text and still read fine without it.</span></pre>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="snippet-frame">
-              <div class="snippet-bar">
-                <span class="snippet-label">How an agent calls it</span>
-                <button type="button" class="copy-button" data-copy={entry.snippet} disabled>Copy</button>
-              </div>
-              {/* Focusable because it scrolls horizontally — the longer snippets overflow 588px
-                  and must never wrap mid-token, so a keyboard user needs to be able to scroll it
-                  (axe: scrollable-region-focusable). */}
-              <div
-                class="snippet-body"
-                role="region"
-                aria-label={`Snippet: how an agent calls ${entry.name}`}
-                tabindex="0"
-              >
-                <pre><code>{entry.snippet}</code></pre>
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      {/* `data-copy-status` rather than the id, because each tree carries its own announcer and
-          the script finds the one inside the shell it is wiring. The id stays: it is this tree's
-          only announcer and removing it would change the retro markup for nothing. */}
-      <p class="sr-only" id="webmcp-copy-status" data-copy-status role="status" aria-live="polite"></p>
-    </section>
-
-    <section class="prose" aria-labelledby="how-agents-use">
-      <h2 id="how-agents-use">How does an agent use these tools?</h2>
-      <p>
-        Every page on this site registers the tools on <code>document.modelContext</code> when the
-        page loads, including after a client-side navigation. An agent running inside the browser
-        discovers them from that object and invokes one by name. Nothing is exposed over the
-        network, there is no endpoint to hit, and there is no authentication — the tools live
-        entirely in the page you already have open.
-      </p>
-      <p>
-        Arguments go over as a <strong>JSON string</strong>, not an object — passing an object
-        throws <code>Failed to parse input arguments</code>. Results come back as a JSON string
-        too. The snippet in each card above is the exact call.
-      </p>
-      <p>
-        Because Chrome does not enforce the declared <code>inputSchema</code>, every handler
-        validates its own inputs — clamping <code>limit</code>, rejecting a blank <code>query</code>,
-        falling back to modern for an unknown <code>mode</code>, trimming an over-long
-        guest-book <code>name</code> or <code>message</code> to the same limits the visible form
-        enforces.
-      </p>
-    </section>
-
-    <section class="prose" aria-labelledby="how-to-test">
-      <h2 id="how-to-test">How can I test them myself?</h2>
-      <p>
-        The buttons on this page work everywhere, in any browser, with no setup — they call the
-        handler directly. What they do not exercise is the protocol.
-      </p>
-      <p>
-        For that you need Chrome from version 149 with the WebMCP origin trial, plus <code>chrome://flags/#enable-webmcp-testing</code>, and something on the agent side to
-        make the calls — the Model Context Tool Inspector extension is the straightforward option.
-        Chrome's <a href="https://developer.chrome.com/docs/ai/webmcp" rel="noopener">WebMCP
-        documentation</a> is the current reference for both.
-      </p>
-      <p>
-        All six tools have been driven that way, on Chrome {WEBMCP_VERIFIED.chrome} on <time datetime={WEBMCP_VERIFIED.iso}>{verifiedLabel}</time>, which is
-        where the calling convention above came from. A client running outside the page enumerated the six
-        and invoked every one against this production site. The read tools returned what the page
-        itself renders, <code>set_appearance</code> flipped this browser's view,
-        and <code>sign_guestbook</code> wrote an entry that appeared in the guest book while it was
-        open, badged as agent-written. Each claim here moves when it is measured, not when it
-        ships.
-      </p>
-    </section>
-
-    <section class="prose" aria-labelledby="machine-readable">
-      <h2 id="machine-readable">Where are the machine-readable resources?</h2>
-      <p>
-        If you are reading this as text rather than executing JavaScript on the live page, you
-        cannot call the tools — but you can read the same things they read.
-      </p>
-      <ul>
-        <li>
-          <a href="/webmcp/tools.json"><code>/webmcp/tools.json</code></a> — the tool manifest:
-          names, descriptions, input schemas, and an example call for each. Generated from the real
-          tool objects at build time.
-        </li>
-        <li>
-          <a href="/webmcp/index.json"><code>/webmcp/index.json</code></a> — the content index the
-          tools themselves read: the author entity, the section map, and every published article,
-          build, and changelog entry.
-        </li>
-        <li>
-          <a href="/llms.txt"><code>/llms.txt</code></a> and <a href="/llms-full.txt"><code>/llms-full.txt</code></a> — the site index and the
-          full content export.
-        </li>
-        <li>
-          <a href="/agents.md"><code>/agents.md</code></a> — how to read and cite this site.
-        </li>
-      </ul>
-    </section>
-  </div>
-
-  </div>
   <script>
     /**
      * The try-it controls.
@@ -555,23 +222,23 @@ const breadcrumbs = [
     let pending: Promise<any> | undefined;
     const getIndex = () => (pending ??= fetch('/webmcp/index.json').then((r) => r.json()));
 
-    const IDLE_LINES =
-      '// Nothing run yet. Press Run tool to call the handler\n// and print the JSON it returns here.';
+    /** The fallback idle comment, printed only if a console root ever ships without its own. */
+    const IDLE_LINES = '// Nothing has been called yet.';
 
     /**
      * The words a console prints for each state, read off the console root.
      *
-     * TWO TREES, ONE SCRIPT. The legacy tree and the redesigned tree say different things in the
-     * status slot — "Ready" against "not run yet" — and neither should be a second code path. The
-     * defaults below are the legacy tree's, so its markup carries no attributes it did not have
-     * before, and the redesigned tree supplies its own.
+     * DATA, NOT A CODE PATH. WebmcpBody supplies all five as `data-*` attributes, so the wording
+     * a visitor reads lives beside the markup that shows it rather than in this script. The
+     * fallbacks are what a console renders if an attribute is ever dropped, not a second tree's
+     * vocabulary.
      */
     function vocabulary(root: HTMLElement) {
       return {
-        idle: root.dataset.statusIdle ?? 'Ready',
-        running: root.dataset.statusRunning ?? 'Running…',
-        done: root.dataset.statusDone ?? 'Returned',
-        failed: root.dataset.statusFailed ?? 'Failed',
+        idle: root.dataset.statusIdle ?? 'not run yet',
+        running: root.dataset.statusRunning ?? 'running',
+        done: root.dataset.statusDone ?? 'returned',
+        failed: root.dataset.statusFailed ?? 'failed',
         idleLines: root.dataset.idleLines ?? IDLE_LINES,
       };
     }
@@ -624,8 +291,8 @@ const breadcrumbs = [
       const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('.field-input'));
       const groups = Array.from(root.querySelectorAll<HTMLElement>('.mode-pills'));
       const words = vocabulary(root);
-      // Read back rather than hard-coded: the legacy button says "Run tool" and the redesigned one
-      // says "Run <tool_name>", and the restore after a call has to put back whichever it was.
+      // Read back rather than hard-coded: the label is "Run <tool_name>", so the restore after a
+      // call has to put back this button's own words rather than a string kept in the script.
       const runLabel = runButton.textContent ?? 'Run tool';
 
       // The snippet panel lives outside the console, in the same card.
@@ -673,11 +340,8 @@ const breadcrumbs = [
           }
         }
         for (const group of groups) {
-          // Both selection contracts in one query: the legacy tree's radiogroup marks its choice
-          // with aria-checked, the redesigned tree's toggle buttons with aria-pressed.
-          const active = group.querySelector<HTMLButtonElement>(
-            '.filter-pill[aria-checked="true"], .filter-pill[aria-pressed="true"]'
-          );
+          // The choice buttons are toggle buttons, so `aria-pressed` is the selection contract.
+          const active = group.querySelector<HTMLButtonElement>('.filter-pill[aria-pressed="true"]');
           if (active) args[group.dataset.field!] = active.dataset.value;
         }
         return args;
@@ -731,53 +395,28 @@ const breadcrumbs = [
     }
 
     /**
-     * The `set_appearance` choice control, in either of the two contracts the page ships.
+     * The `set_appearance` choice control: a group of `aria-pressed` toggle buttons.
      *
-     * The legacy tree is a local radiogroup wearing .filter-pill's costume — FilterPills.astro is
-     * a URL-syncing widget, so it could not be reused — with roving tabindex, arrow keys and
-     * `aria-checked`. The redesigned tree is the bundle's pair of `aria-pressed` toggle buttons:
-     * every button is its own tab stop, so there is no roving tabindex to move and no arrow-key
-     * contract to keep. `data-select="pressed"` on the group is what says which one this is.
+     * NOT A RADIOGROUP, deliberately. Every button is its own tab stop, so there is no roving
+     * tabindex to move and no arrow-key contract to keep — which is also why nothing here takes
+     * focus away from where the visitor put it. The roving-tabindex radiogroup this function used
+     * to carry as a second contract belonged to the legacy tree and went with it.
      */
-    function wireRadiogroup(group: HTMLElement) {
+    function wirePillGroup(group: HTMLElement) {
       const pills = Array.from(group.querySelectorAll<HTMLButtonElement>('.filter-pill'));
-      const pressed = group.dataset.select === 'pressed';
-      const marker = pressed ? 'aria-pressed' : 'aria-checked';
 
-      function select(pill: HTMLButtonElement, focus = true) {
+      function select(pill: HTMLButtonElement) {
         pills.forEach((candidate) => {
           const active = candidate === pill;
           candidate.classList.toggle('is-active', active);
-          candidate.setAttribute(marker, active ? 'true' : 'false');
-          // Roving tabindex belongs to the radiogroup alone. Toggle buttons each keep their own
-          // tab stop, and taking one away would strand a keyboard user on the unselected choice.
-          if (!pressed) candidate.tabIndex = active ? 0 : -1;
+          candidate.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
-        if (focus) pill.focus();
-        // Bubbles to the console root, which rebuilds the snippet. Covers all three ways the
-        // selection moves: a click, an arrow key, and an appearance change from somewhere else.
+        // Bubbles to the console root, which rebuilds the snippet. Covers both ways the selection
+        // moves: a click, and an appearance change from somewhere else on the page.
         group.dispatchEvent(new CustomEvent(FIELD_CHANGE_EVENT, { bubbles: true }));
       }
 
-      pills.forEach((pill) => {
-        pill.addEventListener('click', () => select(pill, false));
-        if (pressed) return;
-        pill.addEventListener('keydown', (event) => {
-          const current = pills.indexOf(pill);
-          let next: number | null = null;
-          switch (event.key) {
-            case 'ArrowRight':
-            case 'ArrowDown': next = (current + 1) % pills.length; break;
-            case 'ArrowLeft':
-            case 'ArrowUp': next = (current - 1 + pills.length) % pills.length; break;
-            case 'Home': next = 0; break;
-            case 'End': next = pills.length - 1; break;
-            default: return;
-          }
-          event.preventDefault();
-          select(pills[next]);
-        });
-      });
+      pills.forEach((pill) => pill.addEventListener('click', () => select(pill)));
 
       return { pills, select };
     }
@@ -806,18 +445,17 @@ const breadcrumbs = [
     }
 
     document.addEventListener('astro:page-load', () => {
-      // EVERY shell, not the first. This page ships two trees, one per appearance, and the server
-      // cannot know which one the visitor will see — so both are wired and CSS decides which one
-      // is on screen. A hidden tree costs one pass of this loop and nothing else: its handlers
-      // never fire, because nothing in it is reachable.
+      // querySelectorAll rather than querySelector: the loop is what makes the wiring independent
+      // of how many consoles a shell holds and of how many shells a document holds, and it costs
+      // nothing to keep now that the page ships one.
       const shells = document.querySelectorAll<HTMLElement>('[data-module="webmcp"]');
       if (shells.length === 0) return;
 
       const tools = new Map<string, any>(createTools(getIndex).map((tool: any) => [tool.name, tool]));
 
       shells.forEach((shell) => {
-        // Each tree carries its own live region, so the announcement lands inside the tree the
-        // visitor is actually in rather than in the hidden one.
+        // The shell's own live region. Found by attribute rather than by id, so the announcement
+        // lands inside the shell being wired whatever the markup around it is called.
         const announcer = shell.querySelector<HTMLElement>('[data-copy-status]');
 
         // Per-element flags rather than a window global: ClientRouter re-runs this script on every
@@ -828,7 +466,7 @@ const breadcrumbs = [
           if (!tool) return;
           root.dataset.wired = 'true';
           root.querySelectorAll<HTMLElement>('.mode-pills').forEach((group) => {
-            const { pills, select } = wireRadiogroup(group);
+            const { pills, select } = wirePillGroup(group);
 
             // The mode pills are a STATE DISPLAY as well as an input: the footer toggle and an agent
             // calling set_appearance both change the appearance without touching them. Initialize from
@@ -836,7 +474,7 @@ const breadcrumbs = [
             const sync = () => {
               const current = getAppearance();
               const match = pills.find((pill) => pill.dataset.value === current);
-              if (match) select(match, false);
+              if (match) select(match);
             };
             sync();
             document.addEventListener(APPEARANCE_CHANGE_EVENT, sync);
@@ -856,519 +494,3 @@ const breadcrumbs = [
   </script>
 
 </Layout>
-
-<style>
-  .webmcp-shell {
-    max-width: var(--width-content);
-    margin: 0 auto;
-    padding: 0 var(--gutter) 88px;
-    display: flex;
-    flex-direction: column;
-    gap: 48px;
-  }
-
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  /* ── State of play ─────────────────────────────────────────────────────── */
-
-  .state-of-play {
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-top: 3px solid var(--color-heading);
-    padding: 24px 26px;
-  }
-
-  .state-of-play h2 {
-    margin: 0 0 18px;
-    color: var(--color-heading);
-    font-family: var(--font-serif);
-    font-size: 22px;
-    font-weight: 600;
-    line-height: 1.25;
-  }
-
-  .sop-list { margin: 0; display: flex; flex-direction: column; gap: 14px; }
-  .sop-list > div { display: grid; grid-template-columns: 140px 1fr; gap: 16px; }
-
-  .sop-list dt {
-    color: var(--color-label);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: .14em;
-    line-height: 1.7;
-    text-transform: uppercase;
-  }
-
-  .sop-list dd {
-    margin: 0;
-    color: var(--color-text);
-    font-family: var(--font-serif);
-    font-size: 15.5px;
-    line-height: 1.6;
-  }
-
-  .sop-list a {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    text-decoration-color: var(--color-accent-underline);
-  }
-
-  .sop-list a:hover { text-decoration-color: var(--color-accent); }
-
-  .sop-list code,
-  .catalog-dek code {
-    font-family: var(--font-mono);
-    font-size: .82em;
-    background: var(--color-surface-code);
-    border: 1px solid var(--color-border);
-    padding: 1px 5px;
-    color: var(--color-accent);
-  }
-
-  /* ── Catalog ───────────────────────────────────────────────────────────── */
-
-  .catalog-title {
-    margin: 0 0 14px;
-    color: var(--color-heading);
-    font-family: var(--font-serif);
-    font-size: 27px;
-    font-weight: 600;
-    line-height: 1.25;
-  }
-
-  .catalog-dek {
-    margin: 0 0 28px;
-    color: var(--color-text);
-    font-family: var(--font-serif);
-    font-size: 17.5px;
-    line-height: 1.8;
-  }
-
-  .tool-catalog { display: flex; flex-direction: column; gap: 28px; }
-
-  .tool-card {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 24px 26px;
-    background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-top: 2px solid var(--color-label);
-  }
-
-  .tool-card--write { border-top: 3px solid var(--color-accent); }
-
-  .tool-card-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .tool-identity { display: flex; flex-direction: column; gap: 5px; }
-
-  .tool-index {
-    margin: 0;
-    color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: .16em;
-    line-height: 1;
-    text-transform: uppercase;
-  }
-
-  .tool-name {
-    margin: 0;
-    color: var(--color-heading);
-    font-family: var(--font-mono);
-    font-size: 18px;
-    font-weight: 600;
-    line-height: 1.1;
-  }
-
-  /* Badges are the only FLAT 10px bordered objects in the card — never filled like the run
-     button, never beveled in retro. Shape alone says "you cannot press this". */
-  .tool-badge {
-    flex: 0 0 auto;
-    padding: 4px 9px;
-    border-radius: 0;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: .18em;
-    line-height: 1;
-    text-transform: uppercase;
-  }
-
-  .tool-badge--read {
-    color: var(--color-muted);
-    background: transparent;
-    border: 1px solid var(--color-border);
-    font-weight: 400;
-  }
-
-  .tool-badge--write {
-    color: var(--color-accent);
-    background: var(--color-accent-tint);
-    border: 1px solid var(--color-accent);
-    font-weight: 700;
-  }
-
-  .tool-desc {
-    margin: 0;
-    max-width: 60ch;
-    color: var(--color-text);
-    font-family: var(--font-serif);
-    font-size: 16px;
-    line-height: 1.6;
-  }
-
-  .tool-block { display: flex; flex-direction: column; }
-  .tool-block--console { padding-top: 18px; border-top: 1px solid var(--color-border); }
-
-  /* Section label + hairline — the /changelog year-rule construction, reused. */
-  .panel-label {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0 0 10px;
-    color: var(--color-heading);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-  }
-
-  .panel-rule { flex: 1; height: 1px; background: var(--color-border); }
-
-  /* Every line that ANSWERS a section label is one style — returns, "None. Takes no
-     arguments.", and "No inputs — call it as-is." are the same job. */
-  .value-line {
-    margin: 0;
-    color: var(--color-text);
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    line-height: 1.6;
-  }
-
-  .inputs-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--font-mono);
-    font-size: 13px;
-  }
-
-  .inputs-table th {
-    text-align: left;
-    padding: 0 12px 8px 0;
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-label);
-    font-size: 10px;
-    font-weight: normal;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-  }
-
-  .inputs-table td {
-    padding: 9px 12px 9px 0;
-    border-bottom: 1px solid var(--color-border);
-    vertical-align: top;
-  }
-
-  .inputs-table code {
-    background: var(--color-surface-code);
-    border: 1px solid var(--color-border);
-    padding: 1px 5px;
-    color: var(--color-accent);
-  }
-
-  .cell-label { display: none; }
-
-  /* ── Console ───────────────────────────────────────────────────────────── */
-
-  .tool-console { display: flex; flex-direction: column; gap: 14px; }
-
-  .field-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
-  .field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 180px; }
-  .field--number { flex: 0 1 104px; }
-
-  .field-label {
-    color: var(--color-text);
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
-
-  .field-input {
-    height: 36px;
-    padding: 8px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: 0;
-    background: var(--color-card);
-    color: var(--color-text);
-    font-family: var(--font-mono);
-    font-size: 13px;
-  }
-
-  .field-input:disabled { border-style: dashed; color: var(--color-muted); }
-
-  .field-hint {
-    margin: 0;
-    color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    line-height: 1.45;
-  }
-
-  .mode-pills { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
-
-  /* The .filter-pill treatment, authored locally: FilterPills.astro's styles are component-scoped,
-     and the component itself writes a ?param= to the URL and filters page items. Costume only. */
-  .filter-pill {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: .1em;
-    color: var(--color-muted);
-    border: 1px solid var(--color-border);
-    background: transparent;
-    padding: 5px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: background .15s ease, color .15s ease, border-color .15s ease;
-  }
-
-  .filter-pill:hover:not(:disabled) { color: var(--color-accent); border-color: var(--color-accent); }
-  .filter-pill.is-active { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
-  .filter-pill:disabled { border-style: dashed; cursor: default; }
-  .filter-pill.is-active:disabled { border-style: solid; opacity: .7; }
-
-  .actions-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-
-  /* Square + filled = the action. The only square filled thing in the card. */
-  .run-button {
-    padding: 10px 20px;
-    border: 1px solid var(--color-accent);
-    border-radius: 0;
-    background: var(--color-accent);
-    color: var(--color-bg);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: .12em;
-    cursor: pointer;
-    transition: background .15s ease;
-  }
-
-  .run-button:hover:not(:disabled) { background: var(--color-accent-hover); }
-
-  .run-button:active,
-  .run-button[data-running] {
-    background: var(--color-accent-hover);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .35);
-  }
-
-  .run-button:disabled:not([data-running]) {
-    background: transparent;
-    border: 1px dashed var(--color-border);
-    color: var(--color-muted);
-    cursor: default;
-  }
-
-  /* No transition until the console has painted its enabled state once. The disabled -> enabled
-     swap on load changes `color` instantly but `background` over 150ms, so a tool sampling
-     mid-transition sees near-white text on a background still part page-coloured and scores a
-     contrast failure the page never actually paints. It also meant the buttons visibly animated
-     themselves on load for no reason. `data-settled` lands after that first paint. */
-  .tool-console:not([data-settled]) .run-button,
-  .tool-console:not([data-settled]) .filter-pill { transition: none; }
-
-  .action-note {
-    margin: 0;
-    color: var(--color-muted);
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-  }
-
-  .output-frame,
-  .snippet-frame { border: 1px solid var(--color-border); }
-
-  /* The focus ring lives on the FRAME, not the scrollable body: in retro the body's ground is
-     near-black and --retro-link on it is 2.4:1. Out here it sits on parchment. */
-  .output-frame:has(.output-body:focus-visible),
-  .snippet-frame:has(.snippet-body:focus-visible) {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
-  }
-
-  .output-body:focus-visible,
-  .snippet-body:focus-visible { outline: none; }
-
-  .output-frame[data-state='error'] { border-top: 2px solid var(--color-danger); }
-
-  .output-bar,
-  .snippet-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 7px 12px;
-    background: var(--color-card);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .snippet-bar { padding: 6px 8px 6px 12px; }
-
-  .output-label,
-  .snippet-label,
-  .output-status {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-  }
-
-  .output-label,
-  .snippet-label { color: var(--color-label); }
-
-  /* The WORD is the state cue; colour is secondary. */
-  .output-status { color: var(--color-muted); }
-  .output-frame[data-state='running'] .output-status { color: var(--color-accent); }
-  .output-frame[data-state='success'] .output-status { color: var(--color-status-green); }
-  .output-frame[data-state='error'] .output-status { color: var(--color-danger); }
-
-  /* FIXED height in every state — this, not min-height, is what makes the first result shift
-     nothing, and it stops a long result shoving the snippet panel around. */
-  .output-body {
-    height: 200px;
-    overflow: auto;
-    padding: 14px 16px;
-    background: var(--color-surface-code);
-  }
-
-  /* THE OUTPUT PANEL'S CONTENTS ARE BUILT BY THE SCRIPT, so they never carry Astro's scoping
-     attribute and a plain scoped selector cannot reach them — every rule below that styles a
-     runtime-created element has to be :global(). Without it this panel silently fell back to the
-     UA's default monospace at 13px/normal instead of JetBrains Mono at 12.5px/1.6; retro looked
-     correct throughout only because retro.css is a plain global stylesheet. The snippet <pre> is
-     server-rendered and keeps normal scoping. */
-  :global(.output-pre),
-  .snippet-body pre {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    line-height: 1.6;
-    white-space: pre;
-  }
-
-  .snippet-body {
-    padding: 13px 16px;
-    background: var(--color-surface-code);
-    /* `scroll`, not the `auto` the rest of the site uses for code blocks: the snippet is rewritten
-       live from the controls, so with `auto` the scrollbar appears and disappears as you type and
-       the whole card jogs ~15px. Reserving the track keeps the panel a constant height. Costs
-       nothing on platforms with overlay scrollbars, where it never took space to begin with. */
-    overflow-x: scroll;
-  }
-
-  .snippet-body code { font-family: inherit; }
-
-  /* Editor-conventional JSON colouring. Every colour is a --json-* token (see global.css for the
-     assignment and its contrast working); retro re-points the same tokens, so there is not a single
-     mode-specific rule here. Highlighting stays emphasis, not information: indentation and the
-     brackets themselves already carry the structure, so the JSON reads fine in monochrome. */
-  :global(.json-key) { color: var(--json-key); }
-  :global(.json-string) { color: var(--json-string); }
-  :global(.json-number) { color: var(--json-number); }
-  :global(.json-keyword) { color: var(--json-keyword); }
-  :global(.json-punctuation) { color: var(--json-punctuation); }
-  :global(.json-dim) { color: var(--color-label); }
-
-  /* Bracket pair colorization: openers and their matching closers share a colour, cycling every
-     three levels of nesting. This is what makes a nested result scannable. */
-  :global(.json-bracket-0) { color: var(--json-bracket-0); }
-  :global(.json-bracket-1) { color: var(--json-bracket-1); }
-  :global(.json-bracket-2) { color: var(--json-bracket-2); }
-  .output-frame[data-state='error'] :global(.json-dim) { color: var(--color-danger); }
-
-  :global(.output-cursor) {
-    color: var(--color-label);
-    animation: webmcp-blink 1s step-end infinite;
-  }
-
-  @keyframes webmcp-blink { 50% { opacity: 0; } }
-
-  /* Underlined accent text, not a bordered chip: a 10px bordered chip was pixel-identical to the
-     READ badge, so the one pressable thing looked exactly like the one unpressable thing. */
-  .copy-button {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--color-accent);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    text-decoration-color: var(--color-accent-underline);
-    cursor: pointer;
-  }
-
-  .copy-button:hover:not(:disabled) {
-    color: var(--color-accent-hover);
-    text-decoration-color: var(--color-accent-hover);
-  }
-
-  .copy-button[data-state='copied'] { color: var(--color-status-green); text-decoration-color: var(--color-status-green); }
-  .copy-button[data-state='failed'] { color: var(--color-danger); text-decoration-color: var(--color-danger); }
-  .copy-button:disabled { color: var(--color-muted); text-decoration: none; cursor: default; }
-
-  @media (max-width: 600px) {
-    .webmcp-shell { padding: 0 var(--gutter-mobile) 60px; gap: 40px; }
-    .state-of-play,
-    .tool-card { padding: 18px 16px; }
-    .tool-card { gap: 16px; }
-    .sop-list > div { grid-template-columns: 1fr; gap: 4px; }
-
-    .field { flex: 1 1 100%; }
-    .field--number { flex: 1 1 100%; }
-    .actions-row { flex-direction: column; align-items: stretch; }
-    .run-button { min-height: 44px; width: 100%; }
-    .action-note { text-align: center; }
-
-    .output-body { height: 168px; padding: 12px; }
-    :global(.output-pre),
-    .snippet-body pre { font-size: 11.5px; }
-    .copy-button { padding: 7px 0 7px 10px; }
-
-    /* Same <table>, same DOM, same reading order — restacked, no horizontal scroll. */
-    .inputs-table thead { display: none; }
-    .inputs-table tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
-    .inputs-table td { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; border: 0; }
-    .cell-label {
-      display: block;
-      flex: 0 0 92px;
-      color: var(--color-label);
-      font-size: 9.5px;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .run-button,
-    .filter-pill,
-    .copy-button { transition: none; }
-    /* The block sits solid rather than blinking; nothing is lost, the other three cues are static. */
-    :global(.output-cursor) { animation: none; }
-  }
-</style>
