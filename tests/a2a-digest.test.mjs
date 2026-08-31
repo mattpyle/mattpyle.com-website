@@ -97,11 +97,15 @@ test('counts describe the truncation rather than hiding it', () => {
 test('the frontmatter reader throws on anything it does not understand', () => {
   // The reader exists to fail the build rather than silently drop a field; these are the shapes
   // it deliberately refuses.
+  // Block scalars and block sequences moved out of this list on 2026-08-30: they are legal YAML
+  // that an editor writes, so the reader now parses them, and frontmatter-readers.test.mjs owns
+  // that behaviour. What stays here is what the reader still refuses on purpose.
   const cases = [
-    ['---\ntitle: "ok"\nbody: |\n  block scalar\n---\n', /block scalar/],
-    ['---\ntitle: "ok"\nnested:\n  key: "value"\n---\n', /no value|nested maps/],
-    ['---\ntitle: "ok"\ntags:\n  - one\n---\n', /no value|nested maps/],
+    ['---\ntitle: "ok"\nnested:\n  key: "value"\n---\n', /nested map/],
+    ['---\ntitle: "ok"\nbody: |2\n  explicit indent\n---\n', /does not support/],
+    ['---\ntitle: "ok"\nanchored: &name value\n---\n', /does not support/],
     ['---\ntitle: A title: with a colon\n---\n', /quote it/],
+    ['---\ntitle: "unterminated\n---\n', /does not close/],
     ['no frontmatter at all\n', /no frontmatter/],
   ];
   for (const [source, expected] of cases) {
