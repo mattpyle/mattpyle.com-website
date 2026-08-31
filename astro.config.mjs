@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import vercel from '@astrojs/vercel';
+// SPIKE ONLY (spike/keystatic): React + the Keystatic admin integration.
+import react from '@astrojs/react';
+import keystatic from '@keystatic/astro';
 import { readWritingMetadata } from './scripts/lib/writing-metadata.mjs';
 import { SITE_ORIGIN } from './src/data/site-origin.mjs';
 import { ON_DEMAND_PAGES, resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
@@ -141,6 +144,9 @@ export default defineConfig({
     },
   },
   integrations: [
+    // SPIKE ONLY (spike/keystatic): these two mount the /keystatic admin UI.
+    react(),
+    keystatic(),
     sitemap({
       // The integration builds its list by walking the pages the build emitted, so an on-demand
       // page is invisible to it — /scorecard would silently drop out of the sitemap the moment it
