@@ -1,23 +1,30 @@
 ---
-title: "Hello, World! Or, this post is a lie."
+title: Hello, World! Or, this post is a lie.
 date: 2026-07-18
 updated: 2026-08-07
-description: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
-seoTitle: "Hello, World! Or, why this post is a lie"
-seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI by building an editor for my website. The first post is the smoke test."
-tags: ["agents", "temporal", "tech"]
+tags:
+  - agents
+  - temporal
+  - tech
 draft: false
+description: >-
+  Testing Temporal workflows, deterministic standards, and agentic AI to build
+  an editor for my website
+seoTitle: Hello, World! Or, why this post is a lie
+seoDescription: >-
+  Testing Temporal workflows, deterministic standards, and agentic AI by
+  building an editor for my website. The first post is the smoke test.
 ---
-
-I think I committed a cardinal sin. A "Hello, World!" post as the second published entry feels...off yet, here we are.
+I think I committed a venial sin. A "Hello, World!" post as the second published entry feels...off yet, here we are.
 
 ## Why this site exists
 
-This website has two primary purposes: 
-1. Encourage me to write more about the topics I care about and find interesting
-2. Learn and experiment with evolving website trends and development practices in the era of AI
+This website has two primary purposes:
 
-Those are the two I'll tell everyone but there's a reason this website is public under this domain name https://www.mattpyle.com. I'm looking to improve my personal brand. I've owned this domain since 2015. For a while it went nowhere, then, I did a lazy thing and, forwarded it my LinkedIn. Lame! This gave me the excuse of just leaving it. 
+1. Encourage me to write more about the topics I care about and find interesting
+1. Learn and experiment with evolving website trends and development practices in the era of AI
+
+Those are the two I'll tell everyone but there's a reason this website is public under this domain name https://www.mattpyle.com. I'm looking to improve my personal brand. I've owned this domain since 2015. For a while it went nowhere, then, I did a lazy thing and, forwarded it my LinkedIn. Lame! This gave me the excuse of just leaving it.
 
 I've never been good at self-promotion and advocacy so I'm utilising what I do find interesting such as playing, building, tinkering, and experimenting, and using that as a forcing-function to create, and write about, this very site, out in the open.
 
@@ -25,11 +32,12 @@ I've never been good at self-promotion and advocacy so I'm utilising what I do f
 
 ## Building in the open
 
-One of the goals of this website is to be as transparent as possible, while remaining safe and secure. The website codebase is available to view on my [Github profile](https://github.com/mattpyle/mattpyle.com-website), verified site test scores are published on the [scorecard](/scorecard/), there's a [changelog](/changelog/) where details on major site changes and features are shared. 
+One of the goals of this website is to be as transparent as possible, while remaining safe and secure. The website codebase is available to view on my [Github profile](https://github.com/mattpyle/mattpyle.com-website), verified site test scores are published on the [scorecard](/scorecard/), there's a [changelog](/changelog/) where details on major site changes and features are shared.
 
 This is just the start. As can be read on the changelog, a lot of experimental features, such as adding a [WebMCP surface](/changelog/webmcp-tools/), have been added in the short time since this site went live. Those features and changes are all in the pursuit of learning (something I enjoy) and will be written and shared here (something I'm learning to enjoy!).
 
 There are a few things currently .gitignored. Aside from environment variables, api keys, and config that has no reason to be public I'm currently not sharing:
+
 - Claude.md - *for Claude*
 - AGENTS.md - *for Codex*
 - Backlog.md - An evolving set of ideas for website features, builds, and content
@@ -66,6 +74,7 @@ Then, both Opus in Claude Code and Fable in Claude Chat told me **"You need to w
 Right now, I am *phoning in* in the rest of this post. I'm losing a bit of steam and, dear reader, you can be assured that this will be much better quality when it meets your eyes, all thanks to excessive amounts of coffee, the gentle nudges of my coding assistants, and Steward.
 
 However, the tech stack and tooling for this website is as follows:
+
 - [Astro 7](https://astro.build/blog/astro-7/) - a lightweight framework for content-driven sites, all content written in Markdown
 - Hosted on [Vercel](https://vercel.com) hobby tier for now (I'm not that popular!)
 - Using Claude Code and Codex to build
@@ -74,6 +83,7 @@ However, the tech stack and tooling for this website is as follows:
 - [CSpell](https://cspell.org/) - Since this is all markdown, I'm writing this very article in VS Code which surfaced the need to check my spelling. Vale does that, and is being built into Steward.
 
 By the time this post goes live, I hope to say:
+
 - Temporal server, workers, and workflows
 - [Vale](https://vale.sh/) is being used to check the quality of my writing mechanically and deterministically.
 
