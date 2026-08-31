@@ -124,6 +124,13 @@ html[data-appearance='retro'] .prose code {
   color: var(--retro-maroon);
 }
 
+/* The caption under a figure. The global rule sets the modern mono face and
+   nothing in this file had ever restated it, so a caption rendered in JetBrains
+   Mono on a page whose every other word is a system face. */
+html[data-appearance='retro'] .prose figcaption {
+  font-family: var(--retro-font-mono);
+}
+
 html[data-appearance='retro'] .prose pre {
   font-family: var(--retro-font-mono);
   background: var(--retro-cream);
@@ -646,6 +653,20 @@ html[data-appearance='retro'] [data-module='home-changelog'] .rd-all-link {
   text-decoration: underline;
 }
 
+/* The agents section link needs the heading row named as well. Three of the four
+   sections leave `.rd-all-link` its inherited colour, so the rule above reaches
+   them; HomeAgents paints its own in the section's magenta with
+   `.rd-heading-row .rd-all-link`, which compiles to two classes and two scoping
+   attributes and beats a rule naming the class alone. Restated compound for
+   compound, it lands one element higher and wins. */
+html[data-appearance='retro'] [data-module='home-agents'] .rd-heading-row .rd-all-link {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] [data-module='home-agents'] .rd-heading-row .rd-all-link:hover {
+  color: var(--retro-maroon);
+}
+
 html[data-appearance='retro'] [data-module='home-writing'] .rd-all-link:hover,
 html[data-appearance='retro'] [data-module='home-projects'] .rd-all-link:hover,
 html[data-appearance='retro'] [data-module='home-agents'] .rd-all-link:hover,
@@ -659,6 +680,16 @@ html[data-appearance='retro'] [data-module='home-changelog'] .rd-all-link:hover 
 html[data-appearance='retro'] [data-module='home-writing'] .row,
 html[data-appearance='retro'] [data-module='home-writing'] .rows-end {
   border-top: 2px dashed var(--retro-frame-border);
+}
+
+/* The row's OWN colour, not just its children's. The component sets
+   `color: var(--ink)` on the row so its two spans inherit one ink; retro
+   repaints both spans and left the row itself in modern ink, which nothing
+   renders as text and everything inherits as `currentColor` — so every border
+   side and the focus outline stayed a cool grey inside a warm page. Same
+   correction on every card and row container below. */
+html[data-appearance='retro'] [data-module='home-writing'] .row {
+  color: var(--retro-ink);
 }
 
 html[data-appearance='retro'] [data-module='home-writing'] .row:hover {
@@ -698,6 +729,7 @@ html[data-appearance='retro'] [data-module='home-projects'] .card {
   border: 3px ridge var(--retro-frame-border);
   border-radius: 0;
   box-shadow: 5px 5px 0 rgba(90, 60, 20, .25);
+  color: var(--retro-ink);
 }
 
 /* The lift is the redesign's, not the period's: a 1997 card does not float.
@@ -831,6 +863,7 @@ html[data-appearance='retro'] [data-module='home-agents'] .surface {
   border: 2px outset var(--retro-frame-border);
   border-radius: 0;
   box-shadow: 3px 3px 0 rgba(90, 60, 20, .25);
+  color: var(--retro-ink);
 }
 
 html[data-appearance='retro'] [data-module='home-agents'] .surface:hover {
@@ -942,6 +975,10 @@ html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-links
 html[data-appearance='retro'] [data-module='writing-archive'] .row,
 html[data-appearance='retro'] [data-module='writing-archive'] .rows-end {
   border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='writing-archive'] .row {
+  color: var(--retro-ink);
 }
 
 html[data-appearance='retro'] [data-module='writing-archive'] .row:hover {
@@ -1210,6 +1247,7 @@ html[data-appearance='retro'] [data-module='projects-board'] .card {
   border: 3px ridge var(--retro-frame-border);
   border-radius: 0;
   box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  color: var(--retro-ink);
 }
 
 html[data-appearance='retro'] [data-module='projects-board'] .card:hover {
@@ -1337,6 +1375,10 @@ html[data-appearance='retro'] [data-module='changelog-log'] .rows-end {
   border-top: 2px dashed var(--retro-frame-border);
 }
 
+html[data-appearance='retro'] [data-module='changelog-log'] .log-row {
+  color: var(--retro-ink);
+}
+
 html[data-appearance='retro'] [data-module='changelog-log'] .log-row:hover {
   background: var(--retro-sidebar-bg);
 }
@@ -1353,6 +1395,13 @@ html[data-appearance='retro'] [data-module='changelog-log'] .row-kind {
    redesign drops. */
 html[data-appearance='retro'] [data-module='changelog-log'] .row-type {
   color: var(--retro-maroon);
+}
+
+/* Muted in this file's brown rather than in the component's grey. Leaving it
+   alone kept the modern token: "muted" was the intent, and `var(--ink-6)` was
+   the only thing saying it. */
+html[data-appearance='retro'] [data-module='changelog-log'] .row-sig {
+  color: var(--retro-ink-muted);
 }
 
 html[data-appearance='retro'] [data-module='changelog-log'] .row-title {
@@ -1471,6 +1520,7 @@ html[data-appearance='retro'] [data-module='article'] .entry-type {
    `.post-next` already made. */
 html[data-appearance='retro'] [data-module='article'] .entry-step {
   border-top: 2px dashed var(--retro-frame-border);
+  color: var(--retro-ink);
 }
 
 html[data-appearance='retro'] [data-module='article'] .entry-step:hover {
@@ -2333,6 +2383,17 @@ html[data-appearance='retro'] [data-module='steward-body'] a {
   text-decoration: underline;
 }
 
+/* The underline's colour, restated for the three paragraph classes the component
+   names. It sets `text-decoration-color: var(--rule)` on `.lead a`, `.secondary a`
+   and `.limits-note a` — two compounds, so it outranks the single-compound rule
+   above and the hairline stayed a cool grey under a blue link. Matching it
+   compound for compound wins on the element count. */
+html[data-appearance='retro'] [data-module='steward-body'] .lead a,
+html[data-appearance='retro'] [data-module='steward-body'] .secondary a,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-note a {
+  text-decoration-color: var(--retro-link);
+}
+
 html[data-appearance='retro'] [data-module='steward-body'] a:visited {
   color: var(--retro-link-visited);
 }
@@ -2446,6 +2507,14 @@ html[data-appearance='retro'] [data-module='steward-body'] .guarantee {
   border-radius: 0;
 }
 
+/* Each guarantee is a filed card here, so the list's closing hairline has
+   nothing left to separate — and unpainted it kept the component's `--rule-2`
+   under the last card. Dropped rather than repainted, the same call `.tiers`
+   makes above. */
+html[data-appearance='retro'] [data-module='steward-body'] .guarantees {
+  border-bottom: 0;
+}
+
 html[data-appearance='retro'] [data-module='steward-body'] .tier-name,
 html[data-appearance='retro'] [data-module='steward-body'] .guarantees dt {
   font-family: var(--retro-font-mono);
@@ -2523,6 +2592,13 @@ html[data-appearance='retro'] [data-module='steward-body'] .limits-note {
   font-family: var(--retro-font-body);
   font-size: 14px;
   color: var(--retro-ink-muted);
+}
+
+/* The contact column's left rule, in the dotted brown this file divides with.
+   The component draws it in `--rule`, and a grey hairline down a parchment page
+   is the same defect the band bodies' top rules already fixed. */
+html[data-appearance='retro'] [data-module='steward-body'] .contact-aside {
+  border-left: 2px dotted var(--retro-frame-border);
 }
 
 /* The contact call to action as a beveled button, which is what this file does
