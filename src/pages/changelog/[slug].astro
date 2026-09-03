@@ -212,19 +212,9 @@ const markdownUrl = `/changelog/${entry.id}.md`;
 
   .prose { margin-top: 56px; }
 
-  .hero {
-    max-width: 68ch;
-    margin-top: 40px;
-    margin-bottom: 0;
-  }
-
-  .hero :global(img) {
-    display: block;
-    width: 100%;
-    height: auto;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-  }
+  /* Sizing and the image treatment moved to the "Article hero" block in
+     src/styles/global.css on 2026-09-02, when the post page gained the same
+     figure. Only the placement above is this page's. */
 
   /* The prose overlay in global.css paints links and the blockquote rule in
      WRITING blue, because it was written for the post page and a link inside a
