@@ -85,7 +85,7 @@ const markdownUrl = `/changelog/${entry.id}.md`;
 
     {hero && (
       <figure class="hero">
-        <Image src={hero} alt={heroAlt ?? ''} />
+        <Image src={hero} alt={heroAlt ?? ''} loading="eager" />
       </figure>
     )}
 
