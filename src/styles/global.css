@@ -289,6 +289,12 @@ textarea:focus-visible,
 
 .prose figure     { margin: 0; }
 .prose img        { display: block; max-width: 100%; height: auto; }
+/* Same treatment as an image, for the same reason: the <video> element carries
+   the file's intrinsic width, and 1574px would widen the document rather than
+   scale down. The reflow row of the a11y suite fails a horizontally scrolling
+   page. `height: auto` keeps the aspect ratio the width and height attributes
+   declare. */
+.prose video      { display: block; max-width: 100%; height: auto; }
 .prose figcaption {
   font-family: var(--font-mono);
   font-size: 11px;
