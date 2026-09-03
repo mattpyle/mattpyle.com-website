@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { SCORECARD } from '../data/scorecard';
 import { compareChangelogEntries } from '../lib/changelog-order';
+import { rewriteVideoTags } from '../lib/video-embed.mjs';
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -80,7 +81,10 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(article.data.description);
     lines.push('');
-    lines.push(article.body ?? '');
+    // Same rewrite the site's markdown pipeline runs, so the `<Video />` tag
+    // Keystatic stores reaches this export as a real element. See
+    // src/lib/video-embed.mjs.
+    lines.push(rewriteVideoTags(article.body ?? ''));
     lines.push('');
     lines.push('---');
     lines.push('');

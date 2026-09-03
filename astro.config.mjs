@@ -4,12 +4,14 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
+import { satteri } from '@astrojs/markdown-satteri';
 import sitemap from '@astrojs/sitemap';
 import vercel from '@astrojs/vercel';
 import { readWritingMetadata } from './scripts/lib/writing-metadata.mjs';
 import { SITE_ORIGIN } from './src/data/site-origin.mjs';
 import { ON_DEMAND_PAGES, resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
 import { PRE_PAINT_APPEARANCE_SCRIPT } from './src/lib/pre-paint-appearance.mjs';
+import { videoEmbedMdastPlugin } from './src/lib/video-embed.mjs';
 import { stripEmptySrcset } from './scripts/lib/empty-srcset.mjs';
 
 // Astro hashes the scripts it bundles. It does not hash is:inline scripts, in
@@ -75,7 +77,18 @@ export default defineConfig({
   // Build output does not depend on this either way: `build.format` is 'directory' (the
   // default), so every page is emitted as <route>/index.html and every canonical, sitemap
   // entry, and OG URL already carries the slash.
-  markdown: { syntaxHighlight: false },
+  // Astro 7 renders markdown through Sätteri, and naming the processor here is
+  // the only way to add a plugin to it: `markdown.remarkPlugins` is deprecated
+  // and @astrojs/markdown-remark is not installed. `satteri()` with no plugins is
+  // exactly the default, so the one plugin below is the whole difference.
+  //
+  // It rewrites the `<Video />` tag Keystatic writes into a post. See
+  // src/lib/video-embed.mjs for the shape it matches and for the two agent routes
+  // that share the same helper.
+  markdown: {
+    syntaxHighlight: false,
+    processor: satteri({ mdastPlugins: [videoEmbedMdastPlugin] }),
+  },
   vite: {
     ssr: {
       // @mattpyle/steward is a workspace package that ships TypeScript source

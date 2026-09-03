@@ -1,4 +1,5 @@
 import { config, fields, collection } from '@keystatic/core';
+import { block } from '@keystatic/core/content-components';
 
 /**
  * Keystatic admin config — DEV ONLY.
@@ -53,10 +54,66 @@ export default config({
         image: fields.text({ label: 'Image (OG card override)' }),
         seoTitle: fields.text({ label: 'SEO title' }),
         seoDescription: fields.text({ label: 'SEO description', multiline: true }),
-        content: fields.markdoc({
+        content: fields.mdx({
           label: 'Content',
-          // Plain .md on disk rather than Keystatic's default .mdoc.
+          // Plain .md on disk rather than Keystatic's default .mdx. The mdx
+          // field replaced fields.markdoc on 2026-08-31: markdoc serialises
+          // every table as a {% table %} tag, which the site's remark pipeline
+          // renders as literal text; mdx serialises tables as GFM pipe tables
+          // (mdast-util-gfm-table), which is what the site and its agent
+          // surfaces expect. Cost: the MDX parser reads a bare `<` or `{` in
+          // prose as JSX, so placeholder lines like <TODO: ...> refuse to
+          // open; keep those as plain text or inside code spans.
           extension: 'md',
+          // The one declared component. The MDX field accepts only components
+          // named here, and there is no raw-HTML block in the editor, so this is
+          // the only route from the editor to a real element in the page.
+          //
+          // It serialises to one self-closing line, which plain markdown parses
+          // as a block-level `html` node:
+          //
+          //   <Video src="/video/x.mp4" poster="/video/x.jpg" width={1574} height={820} />
+          //
+          // src/lib/video-embed.mjs turns that line into a <video> element, in
+          // the site's markdown pipeline and in the two agent routes that emit
+          // the body verbatim. Read its header before changing any name here: the
+          // rewrite matches this exact shape and leaves anything else untouched.
+          //
+          // Every field is required. `fields.text` serialises an empty string as
+          // `undefined`, which the serialiser writes as `poster={}` — a tag the
+          // rewrite rejects, leaving JSX in the published page.
+          //
+          // No ContentView: that needs this config renamed to .tsx and React in
+          // the editor. The site preview on `npm run dev` is the real check.
+          components: {
+            Video: block({
+              label: 'Video',
+              description: 'A self-hosted MP4 from public/video/, with a poster frame.',
+              schema: {
+                src: fields.text({
+                  label: 'MP4 path',
+                  description: 'Site-absolute, e.g. /video/chatgpt-site-tools.mp4',
+                  validation: { isRequired: true },
+                }),
+                poster: fields.text({
+                  label: 'Poster image path',
+                  description: 'Site-absolute, e.g. /video/chatgpt-site-tools-poster.jpg',
+                  validation: { isRequired: true },
+                }),
+                // Intrinsic pixel size of the file. Wrong numbers shift the
+                // layout as the poster loads; public/ gets no processing, so
+                // nothing derives them for you.
+                width: fields.integer({
+                  label: 'Width (px)',
+                  validation: { isRequired: true, min: 1 },
+                }),
+                height: fields.integer({
+                  label: 'Height (px)',
+                  validation: { isRequired: true, min: 1 },
+                }),
+              },
+            }),
+          },
           options: {
             image: {
               // Body images land in src/assets/writing/<slug>/, with a relative
