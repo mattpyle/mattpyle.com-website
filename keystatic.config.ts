@@ -54,6 +54,25 @@ export default config({
         image: fields.text({ label: 'Image (OG card override)' }),
         seoTitle: fields.text({ label: 'SEO title' }),
         seoDescription: fields.text({ label: 'SEO description', multiline: true }),
+        // The hero, at the head of the post body. A real asset rather than the
+        // string `image` above: the Zod schema declares it `image()`, so Astro
+        // optimises it and emits intrinsic dimensions, and a path that does not
+        // resolve fails the whole collection.
+        //
+        // Same `directory`/`publicPath` pair as the body images below, so a hero
+        // and a body image sit side by side in src/assets/writing/<slug>/ and
+        // both save the relative form `image()` resolves from the post's own
+        // file. An absolute `/src/...` path here would not resolve and would
+        // break every page in dev.
+        hero: fields.image({
+          label: 'Hero image',
+          directory: 'src/assets/writing',
+          publicPath: '../../assets/writing/',
+        }),
+        heroAlt: fields.text({
+          label: 'Hero alt text',
+          description: 'What the image tells the reader. Leave empty for a purely decorative hero, which renders alt="".',
+        }),
         content: fields.mdx({
           label: 'Content',
           // Plain .md on disk rather than Keystatic's default .mdx. The mdx
