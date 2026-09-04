@@ -1,0 +1,632 @@
+{
+  "schemaVersion": 1,
+  "slug": "how-to-implement-webmcp-on-a-website",
+  "collection": "writing",
+  "mode": "gate",
+  "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+  "contentSha256": "c0ba98840bcbb93a928150024ce177ed9db9dd8c00e40a6a7441d82795e3f532",
+  "reviewedAt": "2026-08-15T08:01:22.663Z",
+  "workflowId": "steward-review-how-to-implement-webmcp-on-a-website",
+  "runId": "01a0046e-c826-7674-89d9-13ebab414130",
+  "passes": [
+    {
+      "pass": "cspell",
+      "verdict": "block",
+      "findings": [
+        {
+          "id": "cspell-1",
+          "pass": "cspell",
+          "severity": "block",
+          "message": "\"somethin\" — did you mean \"something\"?",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 47,
+          "excerpt": "<TODO: Write somethin here. Outline was about tools.json and the webmcp page being built from the same objects. Unsure that lands>"
+        },
+        {
+          "id": "cspell-2",
+          "pass": "cspell",
+          "severity": "flag",
+          "message": "\"Gotchas\" is not in the dictionary (suggestions: gotcha, gotha, Gotha). Fix it, or add it to cspell.shared.yaml (`steward dict-add`) if it is jargon. — likely proper noun (suggest `steward dict-add Gotchas`): capitalised mid-sentence, where the position does not explain the capital",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 49,
+          "excerpt": "## WebMCP Gotchas"
+        }
+      ],
+      "startedAt": "2026-08-15T07:59:35.847Z",
+      "durationMs": 730,
+      "toolVersion": "cspell-lib unknown"
+    },
+    {
+      "pass": "vale",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "vale-3",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'implement' is too wordy.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 2,
+          "excerpt": "implement"
+        },
+        {
+          "id": "vale-13",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'be'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 13,
+          "excerpt": "be"
+        },
+        {
+          "id": "vale-4",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'validate' is too wordy.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 15,
+          "excerpt": "validate"
+        },
+        {
+          "id": "vale-1",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.ThereIs (error): Don't start a sentence with 'There are'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "There are"
+        },
+        {
+          "id": "vale-5",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'been implemented' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "been implemented"
+        },
+        {
+          "id": "vale-6",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'implement' is too wordy.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "implement"
+        },
+        {
+          "id": "vale-14",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-15",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'been'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "been"
+        },
+        {
+          "id": "vale-16",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-17",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 19,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-2",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.ThereIs (error): Don't start a sentence with 'There is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "There is"
+        },
+        {
+          "id": "vale-7",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'enumerate' is too wordy.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "enumerate"
+        },
+        {
+          "id": "vale-8",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'it is' is too wordy.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "it is"
+        },
+        {
+          "id": "vale-18",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-19",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-9",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'additional' is too wordy.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 25,
+          "excerpt": "additional"
+        },
+        {
+          "id": "vale-20",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 25,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-21",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'it's'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 25,
+          "excerpt": "it's"
+        },
+        {
+          "id": "vale-22",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 27,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-23",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'is'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 27,
+          "excerpt": "is"
+        },
+        {
+          "id": "vale-24",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'It's'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 27,
+          "excerpt": "It's"
+        },
+        {
+          "id": "vale-10",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.TooWordy (warning): 'monitor' is too wordy.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 29,
+          "excerpt": "monitor"
+        },
+        {
+          "id": "vale-11",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'are called' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 42,
+          "excerpt": "are called"
+        },
+        {
+          "id": "vale-25",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'are'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 42,
+          "excerpt": "are"
+        },
+        {
+          "id": "vale-12",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.Passive (warning): 'being built' may be passive voice. Use active voice if you can.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 47,
+          "excerpt": "being built"
+        },
+        {
+          "id": "vale-26",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'was'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 47,
+          "excerpt": "was"
+        },
+        {
+          "id": "vale-27",
+          "pass": "vale",
+          "severity": "flag",
+          "message": "write-good.E-Prime (suggestion): Try to avoid using 'being'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 47,
+          "excerpt": "being"
+        }
+      ],
+      "startedAt": "2026-08-15T07:59:35.849Z",
+      "durationMs": 423,
+      "toolVersion": "vale version 3.15.1"
+    },
+    {
+      "pass": "frontmatter",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "frontmatter-1",
+          "pass": "frontmatter",
+          "severity": "pass",
+          "message": "`src/content/writing/how-to-implement-webmcp-on-a-website.md` is untracked, which is the normal way drafts work here. Publish will work: Steward reads the file from your checkout and commits it in its own worktree. A copy of the draft stays behind in your checkout afterwards. Run `steward cleanup how-to-implement-webmcp-on-a-website` once the PR merges to remove it and fast-forward.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md"
+        }
+      ],
+      "startedAt": "2026-08-15T07:59:35.861Z",
+      "durationMs": 245
+    },
+    {
+      "pass": "claims_structure",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "claims-oversized-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "Suggested edit was too large to apply automatically (changes 11 tokens (limit 3)) and is recorded as a suggestion only. Placeholder text will be published verbatim if the draft goes live without being replaced; blanking it is safer than leaving the instruction string.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 4,
+          "excerpt": "description: \"REPLACE: one to two sentences; drives the index card and meta description.\"",
+          "evidence": "The model proposed replacing this with: \"description: \"\"\". Editorial patches are limited to mechanical-class edits (<= 3 tokens, <= 20 characters) — anything larger is a prose rewrite, which Steward never applies automatically."
+        },
+        {
+          "id": "claims-5",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "buried lede: The post opens with a prerequisite list before establishing what WebMCP is; the conceptual explanation ('What is WebMCP?') is deferred to line 19.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 10,
+          "excerpt": "To set up WebMCP on your website, you need:",
+          "evidence": "A reader who does not already know what WebMCP is cannot evaluate the prerequisite list. The real starting point for a how-to is the definition section, which appears nine lines later."
+        },
+        {
+          "id": "claims-3",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "self containment: This sentence is unintelligible when extracted: 'this website' and the relative link '/webmcp' resolve to nothing outside the original page context.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "There are 6 tools that have been implemented on this website to call via WebMCP. More detail on those tools is available to view on the [/webmcp page](/webmcp).",
+          "evidence": "AI answer engines that lift this paragraph will have no referent for 'this website' or the relative URL, making the claim about 6 tools unverifiable and the link non-functional."
+        },
+        {
+          "id": "claims-2",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "answer first: The section opens with a restatement of the heading rather than its conclusion; the key distinguishing fact — that WebMCP is not an MCP Server and has no backend endpoint — is buried mid-paragraph.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 19,
+          "excerpt": "## What is WebMCP?",
+          "evidence": "The first sentence ('WebMCP is a proposed web standard…') is scene-setting. The actionable insight ('it is not an MCP Server; there is no backend endpoint') does not appear until the third sentence."
+        },
+        {
+          "id": "claims-1",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The claim that Microsoft co-developed WebMCP is not sourced anywhere in the post and is not self-evidently the author's own observation.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "WebMCP is a proposed web standard, developed jointly by Google and Microsoft",
+          "evidence": "No link, citation, or specification document is provided to support Microsoft's joint authorship. The Chrome Origin Trial link points only to a Google property, which could contradict or simply not confirm the Microsoft claim."
+        },
+        {
+          "id": "claims-4",
+          "pass": "claims_structure",
+          "severity": "flag",
+          "message": "unsupported: The specific expiry date Nov 16, 2026 is stated as fact with no source linked in the post.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 27,
+          "excerpt": "Any generated token is currently set to expire at Nov 16, 2026 which is the end date for the Chrome Origin trial.",
+          "evidence": "The Origin Trial registration link is provided but the expiry date is not shown to come from that page or any other cited document; a reader cannot verify it from the post alone."
+        }
+      ],
+      "startedAt": "2026-08-15T07:59:36.104Z",
+      "durationMs": 18739,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/claims-structure.md",
+        "sha256": "e684e8d44b3d4c998178bd2e7ff67d8ce5b62d47fd63f5ae4132e949dcacd3d7",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "dictionaryProposals": [
+          {
+            "word": "WebMCP",
+            "disposition": "proper_noun",
+            "reason": "Name of the proposed browser standard discussed throughout the post."
+          },
+          {
+            "word": "modelContext",
+            "disposition": "proper_noun",
+            "reason": "Named browser API property (document.modelContext) specific to the WebMCP standard."
+          },
+          {
+            "word": "inputSchema",
+            "disposition": "proper_noun",
+            "reason": "Named field in the WebMCP tool registration object, used as a technical term."
+          }
+        ]
+      }
+    },
+    {
+      "pass": "build_audit",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "build_audit.lighthouse.best-practices",
+          "pass": "build_audit",
+          "severity": "flag",
+          "message": "Lighthouse best-practices scored 96, below the site floor of 100.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "evidence": "url: http://127.0.0.1:59501/writing/how-to-implement-webmcp-on-a-website/\nscore: 96\nfloor: 100"
+        }
+      ],
+      "startedAt": "2026-08-15T07:59:35.862Z",
+      "durationMs": 94915,
+      "metrics": {
+        "url": "http://127.0.0.1:59501/writing/how-to-implement-webmcp-on-a-website/",
+        "scores": {
+          "performance": 96,
+          "accessibility": 100,
+          "best-practices": 96,
+          "seo": 66,
+          "agentic-browsing": 100
+        },
+        "agenticChecks": [
+          {
+            "id": "agent-accessibility-tree",
+            "title": "Accessibility tree is well-formed",
+            "applicable": true,
+            "passed": true
+          },
+          {
+            "id": "cumulative-layout-shift",
+            "title": "Cumulative Layout Shift",
+            "applicable": true,
+            "passed": true
+          },
+          {
+            "id": "llms-txt",
+            "title": "llms.txt follows recommendations",
+            "applicable": true,
+            "passed": true
+          }
+        ],
+        "failedAudits": [
+          "cache-insight",
+          "errors-in-console",
+          "forced-reflow-insight",
+          "is-crawlable",
+          "network-dependency-tree-insight",
+          "render-blocking-insight",
+          "unused-css-rules"
+        ],
+        "axeViolations": 0,
+        "axeFiltered": 0,
+        "buildMs": 31999,
+        "axeMs": 4312,
+        "lighthouseMs": 27121,
+        "worktreeSha": "4db18256b0e6548b9acbadc233a04f99c9cc901d",
+        "npmCi": true
+      }
+    },
+    {
+      "pass": "tell_citations",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "tell-1",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "WebMCP is a proposed web standard, developed jointly by Google and Microsoft",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        },
+        {
+          "id": "tell-2",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 29,
+          "excerpt": "To test WebMCP locally within Chrome, you'll need to enable the flag by navigating to `chrome://flags/#enable-webmcp-testing` and relaunching after saving",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        },
+        {
+          "id": "tell-3",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 29,
+          "excerpt": "com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd) which allows you to inspect, monitor, and execute tools manually or with Gemini directly in the browser (*download and use at you",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        },
+        {
+          "id": "tell-4",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 34,
+          "excerpt": "description, inputSchema, and a handler>",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        },
+        {
+          "id": "tell-5",
+          "pass": "tell_citations",
+          "severity": "pass",
+          "message": "RULE_OF_THREE: triadic \"x, y, and z\" construction",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 51,
+          "excerpt": "limited reach, actual adoption and preference by agents>",
+          "evidence": "Mechanically matched: at least one comma-joined item before \"and\" closes the list."
+        }
+      ],
+      "startedAt": "2026-08-15T07:59:36.105Z",
+      "durationMs": 170,
+      "metrics": {
+        "tellCounts": {
+          "NOT_X_BUT_Y": 0,
+          "ZINGER_BOLDING": 0,
+          "RULE_OF_THREE": 5,
+          "EM_DASH_DENSITY": 0,
+          "UNIFORM_RHYTHM": 0,
+          "HEDGED_SYMMETRY": 0,
+          "STOCK_TRANSITIONS": 0,
+          "LIST_INFLATION": 0
+        },
+        "words": 445,
+        "densities": {
+          "RULE_OF_THREE": 1.12
+        }
+      }
+    },
+    {
+      "pass": "eprime_alternatives",
+      "verdict": "flag",
+      "findings": [
+        {
+          "id": "eprime-alt-2",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: The expletive 'There are' delays the real subject, and 'have been implemented' hides the actor; promoting the site as subject and using 'exposes' makes the sentence do its work immediately.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "There are 6 tools that have been implemented on this website to call via WebMCP.",
+          "evidence": "Suggested rewrite: \"This website exposes 6 tools callable via WebMCP.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-4",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: 'Is available to view' is a passive construction that adds three words to say nothing beyond 'is there'; a single verb handles it.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 17,
+          "excerpt": "More detail on those tools is available to view on the [/webmcp page](/webmcp).",
+          "evidence": "Suggested rewrite: \"More detail on those tools lives on the [/webmcp page](/webmcp).\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-1",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: Two short declarative sentences stall the reader with expletive openings; collapsing them into one keeps the momentum of the contrast already built by 'Despite the name'.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "it is not an MCP Server. There is no backend endpoint.",
+          "evidence": "Suggested rewrite: \"it runs no backend endpoint and exposes no MCP Server.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-3",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: This one is already strong — flagging only to note 'right' is doing light work where 'entirely' is more precise about scope; take or leave.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 21,
+          "excerpt": "It lives right inside the browser context, turning a website into a client-side tool surface.",
+          "evidence": "Suggested rewrite: \"It lives entirely inside the browser context, turning a website into a client-side tool surface.\". Advisory only; this is your call, and nothing here can be applied automatically."
+        },
+        {
+          "id": "eprime-alt-5",
+          "pass": "eprime_alternatives",
+          "severity": "flag",
+          "message": "E-Prime alternative: 'Extensive or expensive' are adjectives propped up by 'not'; naming what the reader actually wants to know (time and money) makes the reassurance concrete rather than abstract.",
+          "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+          "line": 25,
+          "excerpt": "it's not extensive or expensive",
+          "evidence": "Suggested rewrite: \"it costs little time or money\". Advisory only; this is your call, and nothing here can be applied automatically."
+        }
+      ],
+      "startedAt": "2026-08-15T08:01:10.977Z",
+      "durationMs": 11487,
+      "rubric": {
+        "path": "agents/steward/src/rubrics/eprime-alternatives.md",
+        "sha256": "c266fd3a3e8626ed2231739e5c0a9c603ec05e5be81b7cb31c9a5b1a275dcfdc",
+        "model": "claude-sonnet-4-6"
+      },
+      "metrics": {
+        "validationAttempts": 1,
+        "eprimeInstances": 15,
+        "maxSuggestions": 5,
+        "suggestionsReturned": 5,
+        "suggestionsCapped": 0,
+        "rejectedWorseTells": 0,
+        "rejectedNotFound": 0,
+        "rejectedNoOp": 0,
+        "droppedPatches": 0
+      }
+    }
+  ],
+  "patches": [
+    {
+      "id": "patch-1",
+      "findingId": "cspell-1",
+      "file": "src/content/writing/how-to-implement-webmcp-on-a-website.md",
+      "oldText": "somethin",
+      "newText": "something",
+      "rationale": "cspell: \"somethin\" is not a word; \"something\" is the unambiguous correction.",
+      "source": "mechanical",
+      "sourcePasses": [
+        "cspell"
+      ]
+    }
+  ],
+  "overall": "block",
+  "summary": "BLOCK — 1 blocking finding must be resolved before publish. cspell: block (2 findings); vale: flag (27 findings); frontmatter: pass (1 finding); claims_structure: flag (6 findings); build_audit: flag (1 finding); tell_citations: pass (5 findings); eprime_alternatives: flag (5 findings). 1 patch proposed.",
+  "human": {
+    "decision": "rejected",
+    "reason": "draft parked; will re-review when it revives",
+    "decidedAt": "2026-08-17T05:02:07.367Z"
+  },
+  "publish": {}
+}
