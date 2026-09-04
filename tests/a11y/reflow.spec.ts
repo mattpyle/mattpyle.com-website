@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { PAGES } from './helpers/pages';
+import { PAGES, publishedWritingPaths } from './helpers/pages';
 import { installPageLoadCounter, gotoSettled } from './helpers/settle';
 
 /**
@@ -37,6 +37,14 @@ import { installPageLoadCounter, gotoSettled } from './helpers/settle';
  *   456  Retro, the far side of the same band. Anything that widens the retro row —
  *        a longer label, different platform metrics — fails here while 320 stays
  *        green, and the answer is a breakpoint change rather than a relaxed row.
+ *
+ * EVERY PUBLISHED POST, not one representative one. The rest of the suite guards
+ * a template and one post is the whole template, but reflow is content-dependent:
+ * a post is only as wide as what its author wrote into it, and a wide markdown
+ * table in one post is a 1.4.10 failure no other post can see. The fixture post
+ * has no table, so the WebMCP how-to shipped a horizontally scrolling document in
+ * retro with this suite green. The post list is read from the content tree
+ * (helpers/pages.ts), so a post joins the matrix the day it publishes.
  */
 
 const MODERN_WIDTHS = [320, 375] as const;
@@ -90,7 +98,23 @@ function expectNoOverflow(
   ).toBeLessThanOrEqual(result.clientWidth + 1);
 }
 
-for (const spec of PAGES) {
+/**
+ * Every route this spec measures: the page matrix, plus every published post the
+ * matrix does not already name. Deduplicated by path, so the fixture post keeps
+ * its `writing-entry` name and does not run twice.
+ */
+const ROUTES: Array<{ name: string; path: string }> = (() => {
+  const routes = PAGES.map(spec => ({ name: spec.name, path: spec.path }));
+  const seen = new Set(routes.map(route => route.path));
+  for (const path of publishedWritingPaths()) {
+    if (seen.has(path)) continue;
+    seen.add(path);
+    routes.push({ name: `writing/${path.slice('/writing/'.length)}`, path });
+  }
+  return routes;
+})();
+
+for (const spec of ROUTES) {
   for (const width of MODERN_WIDTHS) {
     test(`${spec.name} (${spec.path}): no horizontal scroll at ${width}px`, async ({ page }) => {
       // Set before the first paint rather than resizing after, for the same reason
