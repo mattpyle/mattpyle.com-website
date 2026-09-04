@@ -95,6 +95,18 @@
   ],
   "writing": [
     {
+      "title": "How to implement WebMCP on a website",
+      "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website",
+      "markdownUrl": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website.md",
+      "date": "2026-09-03T00:00:00.000Z",
+      "updated": "2026-09-03T00:00:00.000Z",
+      "tags": [
+        "agents",
+        "tech"
+      ],
+      "description": "Add WebMCP to an existing website using Chrome's origin trial, document.modelContext, validated tool handlers, and six working examples."
+    },
+    {
       "title": "Hello, World! Or, this post is a lie.",
       "url": "https://www.mattpyle.com/writing/hello-world",
       "markdownUrl": "https://www.mattpyle.com/writing/hello-world.md",
@@ -283,7 +295,7 @@
     }
   ],
   "counts": {
-    "writing": 2,
+    "writing": 3,
     "projects": 1,
     "changelog": 13,
     "changelogListed": 10
