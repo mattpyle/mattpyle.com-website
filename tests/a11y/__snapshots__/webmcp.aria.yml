@@ -105,6 +105,11 @@
       - text: flipped that browser's view, and
       - code: sign_guestbook
       - text: wrote an entry that appeared while the guest book was open, badged as agent-written.
+    - paragraph:
+      - text: To do the same on a site you own, read
+      - link "how to implement WebMCP on a website":
+        - /url: /writing/how-to-implement-webmcp-on-a-website/
+      - text: .
   - region "Machine-readable resources":
     - heading "Machine-readable resources" [level=2]
     - 'link "/webmcp/tools.json The tool manifest: names, descriptions, input schemas, and an example call for each. Generated from the real tool objects at build time."':
