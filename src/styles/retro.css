@@ -2830,6 +2830,23 @@ html[data-appearance='retro'] [data-module='webmcp'] .band-prose strong {
   color: var(--retro-maroon);
 }
 
+/* Prose links, repeated from the `.standard-cell a` rules above for the same
+   reason: this file declares no bare `a` rule, so a compound with no rule of its
+   own falls through to the modern accent token. */
+html[data-appearance='retro'] [data-module='webmcp'] .band-prose a {
+  color: var(--retro-link);
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .band-prose a:visited {
+  color: var(--retro-link-visited);
+}
+
+html[data-appearance='retro'] [data-module='webmcp'] .band-prose a:hover {
+  color: var(--retro-maroon);
+}
+
 /* Inline code, repeated from the global `.prose code` rule for the same reason
    the headings are: this component is not `.prose`. */
 html[data-appearance='retro'] [data-module='webmcp'] code {

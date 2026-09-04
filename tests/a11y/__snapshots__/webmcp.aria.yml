@@ -105,6 +105,11 @@
       - text: flipped that browser's view, and
       - code: sign_guestbook
       - text: wrote an entry that appeared while the guest book was open, badged as agent-written.
+    - paragraph:
+      - text: The same setup on a site you own, from the origin trial token to the calling convention and the edges that caught this one, is written up in
+      - link "how to implement WebMCP on a website":
+        - /url: /writing/how-to-implement-webmcp-on-a-website/
+      - text: .
   - region "Machine-readable resources":
     - heading "Machine-readable resources" [level=2]
     - 'link "/webmcp/tools.json The tool manifest: names, descriptions, input schemas, and an example call for each. Generated from the real tool objects at build time."':
