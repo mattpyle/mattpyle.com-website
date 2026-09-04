@@ -1,5 +1,6 @@
 ---
 import { getCollection, render } from 'astro:content';
+import { Image } from 'astro:assets';
 import Layout from '../../layouts/Layout.astro';
 import PostRail from '../../components/writing/PostRail.astro';
 import { showDrafts } from '../../lib/show-drafts';
@@ -24,7 +25,7 @@ export async function getStaticPaths() {
 const { article, nextArticle } = Astro.props;
 const { Content, headings } = await render(article);
 
-const { title, date, updated, description, image, seoTitle, seoDescription } = article.data;
+const { title, date, updated, description, image, seoTitle, seoDescription, hero, heroAlt } = article.data;
 const markdownUrl = `/writing/${article.id}.md`;
 const canonicalUrl = new URL(`/writing/${article.id}/`, Astro.site).toString();
 const articleBody = article.body ?? '';
@@ -87,7 +88,7 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
       <p class="post-lead">{description}</p>
     </div>
 
-    <div class="post-body">
+    <div class:list={['post-body', hero && 'has-hero']}>
       <PostRail
         date={date}
         readingLabel={readingLabel}
@@ -95,6 +96,12 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
         markdownUrl={markdownUrl}
         canonicalUrl={canonicalUrl}
       />
+
+      {hero && (
+        <figure class="hero">
+          <Image src={hero} alt={heroAlt ?? ''} loading="eager" />
+        </figure>
+      )}
 
       <div class="prose">
         <Content />
@@ -198,6 +205,54 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
     border-top: 1px solid var(--rule);
   }
 
+  /* ── The hero ─────────────────────────────────────────────────────────────
+     Sized by the shared "Article hero" block in src/styles/global.css, which the
+     changelog entry page uses too. Placed here, and placed INSIDE the body grid
+     rather than between `.post-head` and `.post-body`, so the prose column's own
+     start and width position it: the 210px rail and the 56px gap are stated once
+     in `grid-template-columns` above and the figure inherits both. A sibling
+     above the grid would have to restate that geometry as a padding and keep it
+     in step through two re-layouts, and it would still be wrong in retro.
+
+     Everything below is under `.has-hero`, which the template sets only when the
+     post carries one. Explicit rows on a grid with nothing in row 1 would cost a
+     post without a hero a 56px row gap above its prose.
+
+     `.post-rail` spans both rows so its grid area — and so its sticky range —
+     stays the full height of the body, which is what it was when the grid had
+     one row. `align-items: start` still keeps the rail its own height.
+
+     `1 / 3`, not `1 / -1`: `-1` names the last line of the EXPLICIT grid, and
+     `.post-body` declares no rows at all, so `1 / -1` resolved to row 1 alone
+     and the hero row was sized by the rail — a 328px gap under the hero when
+     the rail was taller. `.has-hero` is set only when the hero and the prose
+     are both there, so two rows always exist here and `1 / 3` is exact.
+
+     `:global()` on that one selector: the rail is PostRail.astro's root element
+     and carries no `data-astro-cid` from this file (measured on the built page),
+     so a bare `.post-rail` here compiles to a selector that matches nothing —
+     the same trap the `.prose` comments on the changelog entry page record for
+     markdown-rendered children. */
+  .post-body.has-hero > :global(.post-rail) { grid-row: 1 / 3; }
+
+  .post-body.has-hero > .hero {
+    grid-column: 2;
+    grid-row: 1;
+    /* A `figure` carries a UA `margin: 1em 40px`. The changelog page overrides
+       the inline half with its own placement rule; the grid places this one, so
+       it has to be zeroed here or the hero starts 40px right of the prose. */
+    margin-inline: 0;
+    /* The 40px in global.css separates the changelog's hero from the meta row
+       above it. Here the body's own `padding-top` already does that, and the
+       56px row gap below separates it from the prose. */
+    margin-top: 0;
+  }
+
+  .post-body.has-hero > .prose {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
   /* ── Prose body ───────────────────────────────────────────────────────────
      Lives in src/styles/global.css (loaded on every page via Layout) so the
      changelog entry page shares the identical treatment with no extra stylesheet
@@ -240,6 +295,16 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
       grid-template-columns: minmax(0, 1fr);
       gap: 32px;
       margin-top: 44px;
+    }
+
+    /* One column, so the placements above have no column 2 to name — left set,
+       `grid-column: 2` would open an implicit second column and put the hero
+       and the prose outside the page. Back to source order: rail, hero, prose. */
+    .post-body.has-hero > :global(.post-rail),
+    .post-body.has-hero > .hero,
+    .post-body.has-hero > .prose {
+      grid-column: auto;
+      grid-row: auto;
     }
 
     .post-next {

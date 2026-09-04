@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { formatLogLine } from '../../lib/agent-surfaces.mjs';
 import { showDrafts } from '../../lib/show-drafts';
+import { rewriteVideoTags } from '../../lib/video-embed.mjs';
 
 // On-demand: this is the one route on the site that needs to run per-request
 // (see astro.config.mjs). Everything else stays prerendered.
@@ -52,7 +53,10 @@ export const GET: APIRoute = async ({ params, site, request }) => {
     '---',
   ].join('\n');
 
-  const body = `${frontmatter}\n\n# ${title}\n\n${article.body ?? ''}`;
+  // Through rewriteVideoTags: the body is emitted verbatim otherwise, and the
+  // `<Video />` tag Keystatic stores means nothing to a markdown reader. The site's
+  // markdown pipeline runs the same helper, so both surfaces carry the same element.
+  const body = `${frontmatter}\n\n# ${title}\n\n${rewriteVideoTags(article.body ?? '')}`;
 
   return new Response(body, {
     headers: {

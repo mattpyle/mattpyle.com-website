@@ -10,7 +10,7 @@ import { z } from 'astro/zod';
 
 const writing = defineCollection({
   loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/writing' }),
-  schema: z.object({
+  schema: ({ image }) => z.object({
     title:       z.string(),
     date:        z.coerce.date(),
     updated:     z.coerce.date().optional(),
@@ -21,6 +21,10 @@ const writing = defineCollection({
     /** Short, untruncated overrides for search engines — see CLAUDE.md "Authoring content". Leave unset unless the on-page title/description exceed SERP limits (~60/~155 chars). */
     seoTitle:       z.string().optional(),
     seoDescription: z.string().optional(),
+    /** Optional hero on the post page, at the prose measure. Note the field above: `image` is the OG card override and stays a plain string; this one is an asset the build optimises. */
+    hero:        image().optional(),
+    /** Alt text for an informative hero. Omit for a purely decorative one (renders alt=""). */
+    heroAlt:     z.string().optional(),
   }),
 });
 

@@ -1096,6 +1096,18 @@ html[data-appearance='retro'] [data-module='article'] .post-body {
   border-top: 3px double var(--retro-frame-border);
 }
 
+/* The optional hero on a post or an entry, framed the way this file frames every
+   other image-sized block. The shared rule in global.css draws it in `--rule`, a
+   modern oklch grey, which is a `sweep:retro` finding on any page that carries
+   one — and until the post page gained a hero, no swept route did. The figure
+   itself is scoped by `[data-module='article']` on both pages, which is why one
+   rule covers them both. */
+html[data-appearance='retro'] [data-module='article'] .hero img {
+  border: 3px ridge var(--retro-frame-border);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+}
+
 /* The reading measure the legacy article had. The shell gives the prose column
    about 830px, which runs well past a comfortable line of 17.5px Georgia. */
 html[data-appearance='retro'] [data-module='article'] .prose {
@@ -1144,9 +1156,17 @@ html[data-appearance='retro'] [data-module='article'] .rail-action:hover:not(:di
 }
 
 /* The next-post row, in the archive's own dashed treatment so the foot of a
-   post and the list it came from read the same. */
+   post and the list it came from read the same.
+
+   `color` alongside the border, which the `.entry-step` twin further down this
+   file already had: the page sets the anchor to `--ink`, its two children set
+   their own colours, and what is left painted in the modern grey is the row's
+   `currentColor` — its unset borders, its outline and its text decoration. The
+   sweep never saw it because this row renders only on a post that has a next
+   one, and the site has published exactly one post. */
 html[data-appearance='retro'] [data-module='article'] .post-next {
   border-top: 2px dashed var(--retro-frame-border);
+  color: var(--retro-ink);
 }
 
 html[data-appearance='retro'] [data-module='article'] .post-next:hover {

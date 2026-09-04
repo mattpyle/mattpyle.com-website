@@ -289,6 +289,12 @@ textarea:focus-visible,
 
 .prose figure     { margin: 0; }
 .prose img        { display: block; max-width: 100%; height: auto; }
+/* Same treatment as an image, for the same reason: the <video> element carries
+   the file's intrinsic width, and 1574px would widen the document rather than
+   scale down. The reflow row of the a11y suite fails a horizontally scrolling
+   page. `height: auto` keeps the aspect ratio the width and height attributes
+   declare. */
+.prose video      { display: block; max-width: 100%; height: auto; }
 .prose figcaption {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -963,5 +969,64 @@ html:not([data-appearance='retro']) body.skin-redesign .prose thead th {
   html:not([data-appearance='retro']) body.skin-redesign .prose blockquote {
     padding: 18px 20px;
     font-size: 19px;
+  }
+}
+
+/* ── Article hero ────────────────────────────────────────────────────────────
+   The optional `hero` figure a changelog entry and a writing post both render
+   from the same optional `hero`/`heroAlt` pair in src/content.config.ts. One
+   copy of the sizing and the image treatment, so the two pages cannot drift.
+
+   HERE RATHER THAN IN EITHER PAGE'S SCOPED <style>. An Astro-scoped rule
+   compiles to `.hero[data-astro-cid-…]` with a cid unique to the file it was
+   written in, so a rule authored on one of these two pages can never reach the
+   other. Sharing it means a stylesheet both pages already load, and every page
+   already loads this one — the same argument the `.prose` block above makes.
+
+   SCOPED TO `[data-module="article"]`, not a bare `.hero`:
+   src/components/home/HomeHero.astro uses that class for the homepage hero
+   section, which is neither a figure nor an image and must not take a 68ch cap.
+
+   APPEARANCE-BLIND, like the `.prose` block it sits beside. Retro overrides the
+   border colour only (src/styles/retro.css); the measure and the block image
+   are the same in both appearances, because a full-width unconstrained image is
+   a horizontal scrollbar at 320px in either one.
+
+   Each page still PLACES the figure itself — the changelog against the shell
+   gutter, the post inside its two-column body grid — because only the sizing is
+   shared and the two layouts genuinely differ. */
+[data-module="article"] .hero {
+  max-width: 68ch;
+  margin-top: 40px;
+  margin-bottom: 0;
+  /* THE FONT IS HERE TO SET THE MEASURE, not to style any text — the figure
+     holds an image and nothing else. `ch` resolves against the element's own
+     font, so 68ch on a figure set in the page's base font is not the same length
+     as 68ch on the prose beside it: the changelog's hero measured 668px against
+     its prose's 609px in retro, and 653px against 816px in modern. The pair
+     below is the base `.prose` block's own pair, and the redesign overlay
+     further down bumps this figure exactly where it bumps `.prose`. */
+  font-family: var(--font-serif);
+  font-size: 17.5px;
+}
+
+[data-module="article"] .hero img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+/* The redesign's half of the measure, mirroring the `.prose` overlay above line
+   for line, so the two keep agreeing. */
+html:not([data-appearance='retro']) body.skin-redesign [data-module="article"] .hero {
+  font-family: var(--font-body);
+  font-size: 20px;
+}
+
+@media (max-width: 720px) {
+  html:not([data-appearance='retro']) body.skin-redesign [data-module="article"] .hero {
+    font-size: 18px;
   }
 }

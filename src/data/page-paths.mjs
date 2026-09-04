@@ -32,4 +32,5 @@ export const PAGE_PATHS = [
   '/writing',
   '/writing/accessibility-and-ai',
   '/writing/hello-world',
+  '/writing/how-to-implement-webmcp-on-a-website',
 ];
