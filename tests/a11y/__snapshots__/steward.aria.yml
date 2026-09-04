@@ -50,7 +50,8 @@
       - code: /robots.txt
       - text: is fetched without asking. Anything you disallow is reported as “not checked”, never as a finding against your site.
     - heading "How to refuse it" [level=3]
-    - code: "User-agent: steward-audit Disallow: /"
+    - region "How to refuse it":
+      - code: "User-agent: steward-audit Disallow: /"
     - paragraph: One audit then costs you one request — robots.txt, read once. Nothing else about how this site treats you changes.
   - region "What Steward is":
     - heading "What Steward is" [level=2]
