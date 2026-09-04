@@ -199,7 +199,7 @@ You could use Chrome DevTools, you could use an extension with a Gemini token to
 
 The video above shows the ChatGPT desktop app, running the built-in browser, and a set of prompts to open this website (mattpyle.com), check for WebMCP tools, and execute them. Site Tools available on a valid website are displayed with an arrow next to the URL which turns blue when tools are being executed. The demo includes getting the most recent writing posts, turning the website CSS to retro mode, and signing the guest book.
 
-The Site Tools feature launch has put significant visibility and momentum behind WebMCP at a time I was questioning whether it'd take off. To support this feature launch, OpenAI announced a [WebMCP Challenge](https://www.netlify.com/blog/compete-openai-webmcp-challenge/), in collaboration with Netlify, to award creative implementations with prizes worth up to $36k. The competition closes at 1pm PT on September 3, 2026, so hurry!
+The Site Tools feature launch has put significant visibility and momentum behind WebMCP at a time I was questioning whether it'd take off. To support this feature launch, OpenAI announced a [WebMCP Challenge](https://www.netlify.com/blog/compete-openai-webmcp-challenge/), in collaboration with Netlify, to award creative implementations with prizes worth up to $36k. The competition closed on September 3, 2026.
 
 ## WebMCP gotchas
 
