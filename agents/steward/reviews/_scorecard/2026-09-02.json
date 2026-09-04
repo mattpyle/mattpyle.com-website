@@ -1,34 +1,34 @@
 {
-  "iso": "2026-09-03",
-  "timestamp": "2026-09-03T03:33:48-07:00",
-  "scope": "25 live pages",
+  "iso": "2026-09-02",
+  "timestamp": "2026-09-02T03:33:31-07:00",
+  "scope": "24 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Accessibility moved from Pass to Fail; Accessibility: 100/100 (Fail).",
+  "commentary": "All 24 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
       "value": "100",
       "maximum": "100",
-      "status": "Fail",
-      "description": "1 axe violation across 25 tested pages."
+      "status": "Pass",
+      "description": "The lowest Lighthouse accessibility score across 24 tested pages. No automated WCAG violations."
     },
     {
       "name": "Performance",
-      "value": "99",
+      "value": "100",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse performance score across 25 tested pages."
+      "description": "The lowest Lighthouse performance score across 24 tested pages."
     },
     {
       "name": "SEO",
       "value": "100",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse SEO score across 25 tested pages."
+      "description": "The lowest Lighthouse SEO score across 24 tested pages."
     },
     {
       "name": "Agentic Browsing",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-09-03",
+  "id": "2026-09-02",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -54,7 +54,7 @@
     {
       "url": "https://www.mattpyle.com/about/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -87,7 +87,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -98,7 +98,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -131,7 +131,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -303,22 +303,10 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0
-    },
-    {
-      "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
-      "scores": {
-        "performance": 100,
-        "accessibility": 100,
-        "best-practices": 96,
-        "seo": 100,
-        "agentic-browsing": 100
-      },
-      "axeViolations": 1
     }
   ],
-  "decision": "open-pr",
-  "reason": "Accessibility Pass→Fail",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/219",
+  "decision": "no-op",
+  "reason": "unchanged, published 4d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-09-03"
+  "archiveId": "2026-09-02"
 }
