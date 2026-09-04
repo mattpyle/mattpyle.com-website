@@ -95,7 +95,14 @@ const GUARANTEES = [
           and it does not come back on a schedule.
         </p>
 
-        <table class="facts">
+        {/*
+          `tabindex` on both wide tables, not just on the snippets: the narrow-width rule
+          below makes each one `display: block; overflow-x: auto`, so each becomes a
+          scroll region of its own on a phone. Static rather than conditional, because
+          whether a table overflows is a viewport fact the build cannot know. No
+          `role="region"`: that would replace the table semantics a screen reader needs.
+        */}
+        <table class="facts" tabindex="0">
           <caption class="sr-only">What one Steward request is</caption>
           <tbody>
             <tr>
@@ -141,8 +148,15 @@ const GUARANTEES = [
         thing an annoyed stranger came for.
       */}
       <div class="refusal">
-        <h3>How to refuse it</h3>
-        <pre><code>{refusalSnippet}</code></pre>
+        <h3 id="rd-refusal-label">How to refuse it</h3>
+        {/*
+          Focusable for the same reason the two snippets in the "Running one" band are:
+          the robots.txt block is wider than this box at a phone-narrow width and scrolls
+          inside it, so without a tab stop the end of the line is mouse-only (axe:
+          scrollable-region-focusable, serious, measured at 320px). Named by the heading
+          it sits under, which is the construction the other two use.
+        */}
+        <pre role="region" tabindex="0" aria-labelledby="rd-refusal-label"><code>{refusalSnippet}</code></pre>
         <p>
           One audit then costs you one request — robots.txt, read once. Nothing else about how this
           site treats you changes.
@@ -297,7 +311,7 @@ const GUARANTEES = [
 
         <div class="limits">
           <span class="snippet-label" id="rd-limits-label">Rate limits</span>
-          <table class="limits-table" aria-labelledby="rd-limits-label">
+          <table class="limits-table" tabindex="0" aria-labelledby="rd-limits-label">
             <thead>
               <tr>
                 <th scope="col">Tier</th>

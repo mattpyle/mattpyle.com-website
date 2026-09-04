@@ -12,6 +12,7 @@ import { SITE_ORIGIN } from './src/data/site-origin.mjs';
 import { ON_DEMAND_PAGES, resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
 import { PRE_PAINT_APPEARANCE_SCRIPT } from './src/lib/pre-paint-appearance.mjs';
 import { videoEmbedMdastPlugin } from './src/lib/video-embed.mjs';
+import { focusableScrollRegionsMdastPlugin } from './src/lib/focusable-scroll-regions.mjs';
 import { stripEmptySrcset } from './scripts/lib/empty-srcset.mjs';
 
 // Astro hashes the scripts it bundles. It does not hash is:inline scripts, in
@@ -80,14 +81,18 @@ export default defineConfig({
   // Astro 7 renders markdown through Sätteri, and naming the processor here is
   // the only way to add a plugin to it: `markdown.remarkPlugins` is deprecated
   // and @astrojs/markdown-remark is not installed. `satteri()` with no plugins is
-  // exactly the default, so the one plugin below is the whole difference.
+  // exactly the default, so the two plugins below are the whole difference.
   //
-  // It rewrites the `<Video />` tag Keystatic writes into a post. See
+  // The first rewrites the `<Video />` tag Keystatic writes into a post; see
   // src/lib/video-embed.mjs for the shape it matches and for the two agent routes
-  // that share the same helper.
+  // that share the same helper. The second puts `tabindex="0"` on every code
+  // block and table, so the boxes `.prose` makes horizontally scrollable can be
+  // reached by keyboard; see src/lib/focusable-scroll-regions.mjs.
   markdown: {
     syntaxHighlight: false,
-    processor: satteri({ mdastPlugins: [videoEmbedMdastPlugin] }),
+    processor: satteri({
+      mdastPlugins: [videoEmbedMdastPlugin, focusableScrollRegionsMdastPlugin],
+    }),
   },
   vite: {
     ssr: {

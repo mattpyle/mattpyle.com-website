@@ -144,9 +144,14 @@ jobs:
       # build on this job's server. Gating, not advisory: this is a real axe run, it is just driven
       # by a browser that can set localStorage before the first paint.
       #
-      # if: always() for the same reason the guard step below has it. --grep @axe selects only this
-      # spec, and the guard step's --grep-invert drops it, so the scan runs once per workflow.
-      - name: Run axe-core accessibility audit (retro appearance)
+      # @axe selects two specs, not one. tests/a11y/scrollable-region.spec.ts joined the tag on
+      # 2026-09-03: it asserts axe's `scrollable-region-focusable` (serious) at 320px, the width
+      # the CLI step never audits, by measuring scrollWidth against clientWidth rather than by
+      # injecting axe. Same class of finding, same gate. Both are dropped from the advisory guard
+      # step below by its --grep-invert, so each scan runs once per workflow.
+      #
+      # if: always() for the same reason the guard step below has it.
+      - name: Run axe-core accessibility audit (retro appearance, and 320px scroll regions)
         if: always()
         env:
           A11Y_REUSE_SERVER: '1'
@@ -168,9 +173,9 @@ jobs:
       #
       # --grep-invert drops two families. @golden is the aria snapshots: they match their golden as
       # a subset, so they are blind to additions and belong on the scorecard with a human reading
-      # the diff, not on a per-PR gate. @axe is the retro scan, which already ran as its own gating
-      # step above; leaving it in would scan every retro route twice and report a real axe violation as
-      # an advisory one.
+      # the diff, not on a per-PR gate. @axe is the retro scan and the 320px scroll-region check,
+      # which already ran as their own gating step above; leaving them in would scan every retro
+      # route twice and report a real axe violation as an advisory one.
       - name: Run accessibility guard checks (Playwright)
         if: always()
         env:
