@@ -106,7 +106,7 @@
       - code: sign_guestbook
       - text: wrote an entry that appeared while the guest book was open, badged as agent-written.
     - paragraph:
-      - text: The same setup on a site you own, from the origin trial token to the calling convention and the edges that caught this one, is written up in
+      - text: To do the same on a site you own, read
       - link "how to implement WebMCP on a website":
         - /url: /writing/how-to-implement-webmcp-on-a-website/
       - text: .

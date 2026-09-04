@@ -305,7 +305,7 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
         <p>The run controls above work in any browser with no setup, because they call the handler directly. What they do not exercise is the protocol.</p>
         <p>For that: Chrome 149 or later with the WebMCP origin trial, <code>chrome://flags/#enable-webmcp-testing</code>, and a client on the agent side — the Model Context Tool Inspector extension is the straightforward one.</p>
         <p>All six tools have been driven that way on Chrome {WEBMCP_VERIFIED.chrome}, on <time datetime={WEBMCP_VERIFIED.iso}>{verifiedLabel}</time>, against this production site. The read tools returned what the page renders, <code>set_appearance</code> flipped that browser's view, and <code>sign_guestbook</code> wrote an entry that appeared while the guest book was open, badged as agent-written.</p>
-        <p>The same setup on a site you own, from the origin trial token to the calling convention and the edges that caught this one, is written up in <a href="/writing/how-to-implement-webmcp-on-a-website/">how to implement WebMCP on a website</a>.</p>
+        <p>To do the same on a site you own, read <a href="/writing/how-to-implement-webmcp-on-a-website/">how to implement WebMCP on a website</a>.</p>
       </div>
     </section>
   </div>
