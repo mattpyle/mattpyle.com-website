@@ -519,9 +519,11 @@ function familyNote(family: string): string | undefined {
   .marker--agent { background: var(--agents); }
 
   /* ── Bands 4-5: the tables ──────────────────────────────────────────────── */
-  /* Real tables, styled as tables. `display: block` on a table drops its semantics from Chrome's
-     accessibility tree, which is what the aria goldens would notice; the responsive rules below
-     restructure ROWS instead, which leaves the table itself a table. */
+  /* Real tables, styled as tables: the responsive rules below restructure ROWS, never cells, so
+     the markup stays the four-column table the goldens assert. The hour table takes its table and
+     its two row groups out of table layout at ≤900px, which is what a grid row needs; the comment
+     on that rule says why, and records that Chrome's accessibility tree keeps table, rowgroup,
+     row, columnheader and cell through it. */
   .grid-table {
     width: 100%;
     border-collapse: collapse;
@@ -690,18 +692,46 @@ function familyNote(family: string): string | undefined {
     }
 
     /* The middle column goes to a second line rather than squeezing: client and count on the
-       first, the path beneath. The ROWS restructure, not the table, so the table keeps its
-       semantics. */
+       first, the path beneath.
+
+       The rows are grids, and a grid box is not a table row: inside a `table-row-group` CSS
+       wraps each one in an anonymous table-row and an anonymous table-cell, which puts the
+       whole row in column ONE. Measured on production on 2026-09-03: the row box was 9px, the
+       grid columns resolved to `9px 0px 68px`, and the 0px client cell plus the
+       `overflow-wrap: anywhere` above rendered `curl` as four stacked characters. Taking the
+       table and its two row groups out of table layout removes the anonymous wrapping, and the
+       grid rows then size against the table's own width.
+
+       `display: block` on the table itself is what the block above says drops table semantics
+       from Chrome's accessibility tree. It no longer does: with these three rules applied at
+       375px, `Accessibility.getFullAXTree` reports the same table, rowgroup, row, columnheader
+       and cell nodes as the desktop layout, counted through CDP rather than through Playwright's
+       DOM-derived aria snapshot, which cannot see the difference either way. The rows still
+       restructure rather than the cells, so the markup the goldens assert is untouched.
+
+       The header row becomes the same grid as the body rows so the two agree on where a column
+       starts, and it carries its own rule: a `border-bottom` on the cells would be broken by the
+       20px column gap, which is why the body rows already draw theirs on the `tr`. */
+    .hour-table,
+    .hour-table thead,
+    .hour-table tbody { display: block; }
+
     .hour-table thead .c-path { display: none; }
 
     .hour-table .c-client { width: auto; }
 
+    .hour-table thead tr,
     .hour-table tbody tr {
       display: grid;
       grid-template-columns: 9px minmax(0, 1fr) 110px;
       gap: 0 20px;
-      border-bottom: 1px solid var(--track);
     }
+
+    .hour-table thead tr { border-bottom: 1px solid var(--rule-2); }
+
+    .hour-table thead th { border-bottom: 0; }
+
+    .hour-table tbody tr { border-bottom: 1px solid var(--track); }
 
     .hour-table tbody td {
       border-bottom: 0;
@@ -709,8 +739,18 @@ function familyNote(family: string): string | undefined {
       padding-bottom: 4px;
     }
 
+    /* Explicit placement, all four cells. Auto-placement reads the DOM order — marker,
+       client, path, count — and a path that spans columns 2 to 3 takes a row of its own, which
+       pushed the count onto a third row below it. The row is two lines: client and count on the
+       first, path across the second. */
+    .hour-table tbody td.c-marker { grid-area: 1 / 1; }
+
+    .hour-table tbody td.c-client { grid-area: 1 / 2; }
+
+    .hour-table tbody td.c-num { grid-area: 1 / 3; }
+
     .hour-table tbody td.c-path {
-      grid-column: 2 / -1;
+      grid-area: 2 / 2 / 3 / -1;
       padding: 0 0 14px;
     }
   }
@@ -768,6 +808,7 @@ function familyNote(family: string): string | undefined {
 
     .hour-table .c-num { width: 68px; }
 
+    .hour-table thead tr,
     .hour-table tbody tr { grid-template-columns: 9px minmax(0, 1fr) 68px; }
 
     .how-prose { font-size: 18px; }

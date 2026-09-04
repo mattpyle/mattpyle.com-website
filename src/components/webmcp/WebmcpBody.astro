@@ -155,27 +155,39 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
 
             <p class="tool-desc">{entry.description}</p>
 
+            {/*
+              The wrapper scrolls, not the table. Four columns of identifiers, types and
+              constraints do not fit a 320px card at any type size, and the alternative to
+              scrolling is the mid-word break the `.schema-table th` rule below calls its last
+              resort — "Requi / red", "intege / r". `tabindex="0"` because a region that
+              scrolls has to be reachable by keyboard (WCAG 2.1.1, axe's
+              `scrollable-region-focusable`); the site-wide `[tabindex]:focus-visible` rules
+              draw the ring in both appearances. Same shape as the wrapper the markdown
+              pipeline puts around every prose table.
+            */}
             {entry.fields.length > 0 && (
-              <table class="schema-table">
-                <thead>
-                  <tr>
-                    <th scope="col" class="c-name">Input</th>
-                    <th scope="col" class="c-type">Type</th>
-                    <th scope="col" class="c-req">Required</th>
-                    <th scope="col" class="c-cons">Constraints</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entry.fields.map(field => (
+              <div class="schema-scroll" tabindex="0">
+                <table class="schema-table">
+                  <thead>
                     <tr>
-                      <td class="c-name">{field.name}</td>
-                      <td class="c-type">{field.type}</td>
-                      <td class="c-req">{field.required ? 'Yes' : 'No'}</td>
-                      <td class="c-cons">{field.constraints}</td>
+                      <th scope="col" class="c-name">Input</th>
+                      <th scope="col" class="c-type">Type</th>
+                      <th scope="col" class="c-req">Required</th>
+                      <th scope="col" class="c-cons">Constraints</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {entry.fields.map(field => (
+                      <tr>
+                        <td class="c-name">{field.name}</td>
+                        <td class="c-type">{field.type}</td>
+                        <td class="c-req">{field.required ? 'Yes' : 'No'}</td>
+                        <td class="c-cons">{field.constraints}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             <div class="tool-returns">
@@ -539,9 +551,13 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     text-wrap: pretty;
   }
 
+  .schema-scroll {
+    overflow-x: auto;
+    margin-top: 4px;
+  }
+
   .schema-table {
     width: 100%;
-    margin-top: 4px;
     border-collapse: collapse;
     table-layout: fixed;
   }
@@ -982,6 +998,17 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
        the flush-left first column is the alignment the mono identifiers read
        against, and it should not depend on which of two rules wins. */
     .schema-table { table-layout: auto; }
+
+    /* Auto layout alone still squeezes: the table is `width: 100%` of a 265px card, and
+       four columns of min-content do not fit it, so the cells break words instead.
+       Measured on production on 2026-09-03 at 320px: "Required" wanted 69px in modern and
+       67px in retro, and had 54px and 48px. `max-content` is the width every word stays
+       whole at — 331px at the widest of the four tables — and the wrapper scrolls the
+       difference. */
+    .schema-table {
+      width: max-content;
+      min-width: 100%;
+    }
 
     .schema-table .c-type,
     .schema-table .c-req,

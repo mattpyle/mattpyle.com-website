@@ -2040,6 +2040,20 @@ html[data-appearance='retro'] [data-module='activity-body'] .as-data-link:hover 
     border-left: 0;
     border-top: 2px dotted var(--retro-frame-border);
   }
+
+  /* Below 900px the last-hour rows are grids, so their separators move off the
+     cells (where the rules above recolour them) and onto the ROWS, which are new
+     ground. Without these two the phone view paints modern's cool hairlines
+     inside a parchment table. `sweep:retro` cannot see it: the sweep runs at
+     1280px, where neither rule applies. */
+  html[data-appearance='retro'] [data-module='activity-body'] .hour-table thead tr {
+    border-bottom-color: var(--retro-frame-border);
+  }
+
+  html[data-appearance='retro'] [data-module='activity-body'] .hour-table tbody tr {
+    border-bottom-color: var(--retro-frame-border);
+    border-bottom-style: dotted;
+  }
 }
 
 /* ── /about ───────────────────────────────────────────────────────────────

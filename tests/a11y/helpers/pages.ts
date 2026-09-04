@@ -1,3 +1,7 @@
+import { fileURLToPath } from 'node:url';
+
+import { readCollection } from '../../../scripts/lib/content-frontmatter.mjs';
+
 /**
  * The page matrix for the a11y suite: every page template, plus every page with
  * interactive behaviour of its own. Pages that share a template still get their
@@ -272,4 +276,24 @@ export function pageByName(name: string): PageSpec {
   const spec = PAGES.find(p => p.name === name);
   if (!spec) throw new Error(`No page spec named ${name}`);
   return spec;
+}
+
+/**
+ * Every published writing post, as a site path.
+ *
+ * Read from the content tree rather than listed here, so a post is covered the
+ * day it publishes rather than the day somebody remembers to add a row. Drafts
+ * are dropped for the same reason `getStaticPaths` drops them: the build does
+ * not emit them, so there is nothing to fetch.
+ *
+ * Reflow is the only check that runs the whole set. It is content-dependent —
+ * one wide table in one post is a WCAG 1.4.10 failure the other posts cannot
+ * see — while the goldens and the interaction checks guard a TEMPLATE, and one
+ * post is the whole template. `WRITING_ENTRY` above stays the golden's fixture.
+ */
+export function publishedWritingPaths(): string[] {
+  return readCollection(fileURLToPath(new URL('../../../src/content/writing/', import.meta.url)))
+    .filter(({ data }) => data.draft !== true)
+    .map(({ slug }) => `/writing/${slug}`)
+    .sort();
 }

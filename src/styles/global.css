@@ -259,6 +259,14 @@ textarea:focus-visible,
 .prose ol { margin: 0; padding-left: 24px; }
 .prose li { margin-bottom: 6px; }
 
+/* `overflow-wrap: break-word`, not `anywhere`: an inline identifier has no space
+   in it, so at 320px a long one is wider than the reading column and pushes the
+   whole document sideways — `await document.modelContext.getTools()` measured
+   300px in a 265px column, which is the WCAG 1.4.10 failure the reflow rows
+   catch. `break-word` breaks such a token only when it cannot fit; a token that
+   fits is left whole, which `anywhere` does not guarantee. A fenced block is a
+   different case and still scrolls rather than breaks: it is code to be copied,
+   and a line break inside it would be a lie about the source. */
 .prose code {
   font-family: var(--font-mono);
   font-size: .875em;
@@ -266,7 +274,10 @@ textarea:focus-visible,
   border: 1px solid var(--color-border);
   padding: 1px 5px;
   color: var(--color-accent);
+  overflow-wrap: break-word;
 }
+
+.prose pre code { overflow-wrap: normal; }
 
 .prose pre {
   margin: 0;
@@ -303,8 +314,27 @@ textarea:focus-visible,
   margin-top: 8px;
 }
 
+/* Every markdown table is wrapped in this at build time
+   (src/lib/focusable-scroll-regions.mjs), in BOTH appearances, and the wrapper is
+   what scrolls and what carries the tab stop. `overflow-x: auto` on the table
+   itself needs `display: block`, which stops it being a table for layout: the
+   columns lose their shared widths, which is what squeezed the WebMCP how-to's
+   Returns column to three characters a line at 320px while retro, which had no
+   rule at all, widened the whole document instead. */
+.prose-scroll { overflow-x: auto; }
+
+/* The table is as wide as it wants to be, floored at the wrapper and capped at
+   the width it already reads at. 38rem is the retro reading column at desktop —
+   the narrowest width either appearance renders a full-width table at today — so
+   a table that overflows a phone is laid out the way a desktop reader sees it and
+   scrolled, rather than re-flowed into columns three characters wide. A table
+   narrower than the wrapper is unaffected: `min-width` fills it out and nothing
+   scrolls. `min-width` beats `max-width` in CSS, which is what keeps the desktop
+   rendering byte-identical to the one this replaced. */
 .prose table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
+  max-width: 38rem;
   border-collapse: collapse;
   font-family: var(--font-mono);
   font-size: 14px;
@@ -933,11 +963,9 @@ html:not([data-appearance='retro']) body.skin-redesign .prose img {
   border-radius: var(--radius);
 }
 
-/* A wide table scrolls inside its own box rather than widening the page: the
-   reflow row of the a11y suite fails on a horizontally scrolling document. */
+/* Type only. The scrolling and the sizing are on `.prose-scroll` and `.prose
+   table` above, shared by both appearances. */
 html:not([data-appearance='retro']) body.skin-redesign .prose table {
-  display: block;
-  overflow-x: auto;
   font-family: var(--font-mono-plex);
   font-size: 15px;
   line-height: 1.5;
