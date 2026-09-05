@@ -26,6 +26,12 @@ import {
   temporalConnectionOptions,
 } from './config.js';
 import { log } from './lib/logger.js';
+import {
+  ActivityTracker,
+  RECYCLE_IDLE_MS,
+  shouldRecycle,
+  trackActivityExecution,
+} from './lib/recycle-policy.js';
 
 /**
  * The **hosted** worker: one process, one queue, no checkout.
@@ -144,11 +150,70 @@ function warnIfUnmonitored(): void {
   );
 }
 
+/**
+ * How often the recycle policy is consulted. Cheap — three numbers and a
+ * comparison — so the interval is set by how long a recycle may be late, not by
+ * what a check costs. Half a minute against a five-minute idle window means the
+ * worker exits within about 5.5 minutes of the last activity.
+ */
+const RECYCLE_CHECK_MS = 30_000;
+
+/**
+ * Watch the worker and shut it down once the recycle policy says to.
+ *
+ * The timers are `unref`'d so this loop can never be the reason the process
+ * stays alive: if the worker stops for any other reason, nothing here holds the
+ * event loop open. `triggered` resolves only for a real recycle; the caller
+ * races it against `worker.run()` and calls `stop()` on either outcome.
+ *
+ * `shutdown()` and not `process.exit()`: the point of exiting cleanly is that
+ * in-flight work drains first, and the SDK's shutdown is the only thing that
+ * does that. The policy already refuses to fire with work in flight, so the
+ * drain is normally instant; the grace period is the belt for the case where an
+ * activity started in the moments after the check.
+ */
+function watchForRecycle(
+  worker: Worker,
+  tracker: ActivityTracker,
+): { triggered: Promise<boolean>; stop: () => void } {
+  let timer: NodeJS.Timeout | undefined;
+  const triggered = new Promise<boolean>((resolve) => {
+    timer = setInterval(() => {
+      if (worker.getState() !== 'RUNNING') return;
+      const decision = shouldRecycle(tracker.state(), Date.now());
+      if (!decision.recycle) return;
+      clearInterval(timer);
+      log.info(
+        {
+          reason: decision.reason,
+          idleWindowMs: RECYCLE_IDLE_MS,
+          // The number this whole change exists for. Read it next to Railway's
+          // memory metric: this is the process, that is the cgroup, and the gap
+          // between them is page cache the restart also releases.
+          rssBytes: process.memoryUsage().rss,
+        },
+        'hosted worker recycling: draining, then exiting 0 for a fresh container',
+      );
+      worker.shutdown();
+      resolve(true);
+    }, RECYCLE_CHECK_MS);
+    timer.unref();
+  });
+  return {
+    triggered,
+    stop: () => {
+      if (timer) clearInterval(timer);
+    },
+  };
+}
+
 async function main() {
   assertPublishCredentials();
   warnIfUnmonitored();
 
   const connection = await NativeConnection.connect(temporalConnectionOptions());
+
+  const tracker = new ActivityTracker();
 
   const worker = await Worker.create({
     connection,
@@ -184,6 +249,11 @@ async function main() {
     // Chrome could hold the process past the platform's own kill deadline, and
     // the restart reads as a crash rather than a deploy.
     shutdownForceTime: '40 seconds',
+    // The only reason this worker has interceptors: the recycle policy needs to
+    // know when a browser activity ran and when the last activity finished, and
+    // the activities themselves are shared with the laptop worker, which must
+    // never recycle. Observing from out here keeps them ignorant of hosting.
+    interceptors: { activity: [trackActivityExecution(tracker)] },
   });
 
   log.info(
@@ -207,8 +277,18 @@ async function main() {
     WORKER_READY_LOG,
   );
 
-  await worker.run();
+  const running = worker.run();
+  const recycle = watchForRecycle(worker, tracker);
+  // Whichever comes first: the policy asking for a recycle, or the worker
+  // stopping for its own reasons (a SIGTERM from a deploy, a fatal error).
+  const recycled = await Promise.race([recycle.triggered, running.then(() => false)]);
+  recycle.stop();
+  await running;
   log.info({ queues: [QUEUE_AUDIT] }, 'steward hosted worker drained and stopped');
+  // Exit 0 and not 1. `main().catch` below exits 1, so the code is what tells a
+  // platform restart-on-failure from this deliberate one, and the recycle line
+  // above is what tells an operator reading the deploy log the same thing.
+  if (recycled) process.exit(0);
 }
 
 main().catch((err) => {
