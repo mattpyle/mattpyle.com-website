@@ -57,7 +57,7 @@ test('an activity in flight is never interrupted, however long the worker has be
   assert.match(decision.reason, /in flight/);
 });
 
-test('an activity that finished two minutes ago is inside the idle window: keep running', () => {
+test('a browser activity that finished two minutes ago is inside the window: keep running', () => {
   const decision = shouldRecycle(
     {
       lastBrowserActivityAt: NOW - 20 * 60 * 1000,
@@ -68,6 +68,43 @@ test('an activity that finished two minutes ago is inside the idle window: keep 
   );
   assert.equal(decision.recycle, false);
   assert.match(decision.reason, /120s ago/);
+});
+
+/**
+ * The rule the standalone fast tier made necessary.
+ *
+ * Before it, the public `audit_site` tool ran inside the Vercel function and this container saw a
+ * fast audit only as part of a deep run. It now serves `auditSiteFast` on its own queue, so a
+ * steadily-used endpoint means one every few minutes — and while the idle clock was stamped by any
+ * activity's finish, each of those postponed the recycle by five more minutes. A busy week would
+ * have held 1.5 GB open indefinitely, which is the exact bill the recycle exists to stop.
+ */
+test('fast audits do not postpone a recycle the browser work has already earned', () => {
+  const tracker = new ActivityTracker(() => NOW);
+  // What the tracker holds after a browser burst six minutes ago and a fast audit ten seconds ago.
+  tracker.start('auditRenderedPage');
+  tracker.finish('auditRenderedPage');
+  const state = {
+    ...tracker.state(),
+    lastBrowserActivityAt: NOW - 6 * 60 * 1000,
+    lastActivityFinishedAt: NOW - 6 * 60 * 1000,
+  };
+
+  const decision = shouldRecycle(state, NOW);
+  assert.equal(decision.recycle, true, 'the browser work has been idle six minutes: recycle');
+  assert.match(decision.reason, /idle/);
+});
+
+test('a fast audit in flight still blocks the exit', () => {
+  const tracker = new ActivityTracker(() => NOW);
+  tracker.start('auditRenderedPage');
+  tracker.finish('auditRenderedPage');
+  tracker.start('auditSiteFast');
+
+  const state = { ...tracker.state(), lastActivityFinishedAt: NOW - RECYCLE_IDLE_MS - 1000 };
+  const decision = shouldRecycle(state, NOW);
+  assert.equal(decision.recycle, false, 'the in-flight count is every kind of activity');
+  assert.match(decision.reason, /in flight/);
 });
 
 test('the idle window is exclusive at its own edge, so a tick early never recycles', () => {
@@ -115,7 +152,7 @@ test('the tracker records a browser activity, its end, and the in-flight count',
 test('a failed activity still ends, so a crash cannot strand the worker in flight', async () => {
   const tracker = new ActivityTracker(() => NOW);
   const inbound = trackActivityExecution(tracker)({
-    info: { activityType: 'auditSiteFast' },
+    info: { activityType: 'auditRenderedPage' },
   } as never).inbound;
 
   await assert.rejects(
@@ -126,12 +163,27 @@ test('a failed activity still ends, so a crash cannot strand the worker in fligh
   );
   const state = tracker.state();
   assert.equal(state.inFlight, 0, 'the finally must release the slot');
-  assert.equal(state.lastActivityFinishedAt, NOW);
-  assert.equal(
-    state.lastBrowserActivityAt,
-    null,
-    'a fetch-only activity must not arm the recycle policy',
-  );
+  assert.equal(state.lastActivityFinishedAt, NOW, 'a crashed render still left its memory behind');
+});
+
+test('a fast audit arms nothing and stamps nothing, in flight or finished', async () => {
+  const tracker = new ActivityTracker(() => NOW);
+  const inbound = trackActivityExecution(tracker)({
+    info: { activityType: 'auditSiteFast' },
+  } as never).inbound;
+
+  let inFlightDuring = 0;
+  await inbound!.execute!({ args: [], headers: {} } as never, (async () => {
+    inFlightDuring = tracker.state().inFlight;
+    return 'a report';
+  }) as never);
+
+  assert.equal(inFlightDuring, 1, 'it still holds a slot, so it cannot be exited out from under');
+  assert.deepEqual(tracker.state(), {
+    lastBrowserActivityAt: null,
+    lastActivityFinishedAt: null,
+    inFlight: 0,
+  });
 });
 
 /**
@@ -148,7 +200,7 @@ const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 
 
 test('the recycle is wired into the hosted worker and nowhere else', async () => {
   const hosted = await fs.readFile(path.join(SRC, 'worker-hosted.ts'), 'utf8');
-  assert.match(hosted, /watchForRecycle\(worker, tracker\)/);
+  assert.match(hosted, /watchForRecycle\(workers, tracker\)/);
   assert.match(hosted, /interceptors: \{ activity: \[trackActivityExecution\(tracker\)\] \}/);
 
   const local = await fs.readFile(path.join(SRC, 'worker.ts'), 'utf8');

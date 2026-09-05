@@ -85,3 +85,28 @@ test('the entry carries the names the /mcp function starts a workflow with', asy
     'steward-audit-example.com-deep-1a2b3c4d',
   );
 });
+
+test('the entry carries the names the fast tool starts a standalone activity with', async () => {
+  // Same argument as the test above, applied to the second consumer of this entry: the /mcp
+  // function starts `auditSiteFast` directly, so it needs the activity type, the queue and the ID
+  // scheme. A stale copy of any of the three on the site is a start nobody serves, which fails as
+  // a silent fallback into the function rather than as an error anybody would see.
+  const contract = await import('@mattpyle/steward/agent-audit/deep-contract');
+  assert.equal(contract.AUDIT_FAST_ACTIVITY_TYPE, 'auditSiteFast');
+  assert.equal(contract.AUDIT_FAST_TASK_QUEUE, 'steward-audit-fast');
+  assert.equal(
+    contract.fastAuditActivityIdFor('https://example.com', new Date('2026-09-04T17:42:11.000Z')),
+    'audit:https://example.com:2026-09-04T17',
+  );
+});
+
+test('the fast activity ID buckets by the UTC hour, not by the local one', async () => {
+  // The bucket is a machine key, and a local-time one would repeat an hour and skip an hour twice
+  // a year — two callers inside one "hour" that Temporal would see as two different IDs.
+  const contract = await import('@mattpyle/steward/agent-audit/deep-contract');
+  const early = contract.fastAuditActivityIdFor('https://example.com', new Date('2026-09-04T17:00:00.000Z'));
+  const late = contract.fastAuditActivityIdFor('https://example.com', new Date('2026-09-04T17:59:59.999Z'));
+  const next = contract.fastAuditActivityIdFor('https://example.com', new Date('2026-09-04T18:00:00.000Z'));
+  assert.equal(early, late, 'anything inside one UTC hour is one audit');
+  assert.notEqual(late, next, 'the next hour is a new audit');
+});

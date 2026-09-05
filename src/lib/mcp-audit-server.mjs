@@ -9,11 +9,15 @@
  * passes the function in. Same split as src/lib/a2a-responder.mjs and src/pages/a2a.ts.
  *
  * **Two tiers, two shapes, and the shape follows from the cost.** `audit_site` is the fast checks —
- * a dozen HTTP round trips, seconds — so it runs inside the function that answered the request and
- * the report comes back in the call. `deep_audit` renders pages in a real browser on a hosted
- * worker and takes minutes, past what any MCP client holds a tool call open for, so it returns a
- * durable handle and `get_audit` reads it back. Neither shape is a preference; each is the only one
- * its tier can have.
+ * a dozen HTTP round trips, seconds — so the report comes back in the call. `deep_audit` renders
+ * pages in a real browser on a hosted worker and takes minutes, past what any MCP client holds a
+ * tool call open for, so it returns a durable handle and `get_audit` reads it back. Neither shape
+ * is a preference; each is the only one its tier can have.
+ *
+ * *Where* the fast audit runs is a separate question from that shape, and it is the transport's to
+ * answer: it may run inside the function or as a standalone activity on a worker, and either way
+ * the caller gets the finished report in the call. This file never learns which — `runAudit` is
+ * injected — and the answer rides back on the document as `tool.path`.
  *
  * The deep half is registered only when the transport hands this file a Temporal connection, so a
  * deployment without one serves the fast tool alone and a test can drive that tool with no Temporal
@@ -288,7 +292,10 @@ const TOOL_DESCRIPTION =
   'nothing to poll and no second request to make. Takes seconds. structuredContent carries the ' +
   'canonical JSON, one entry per check with evidence and a fix; the text content is the same ' +
   'report as a markdown summary, ready to read to a person. The unit audited is a site, not a ' +
-  'page: any path in the URL is ignored.';
+  'page: any path in the URL is ignored. One result per site per clock hour (UTC) is shared with ' +
+  'other callers, so asking about a site somebody just asked about costs that site no second ' +
+  'visit; pass fresh: true to force an audit of your own. The report says which it was in ' +
+  'tool.path.';
 
 /**
  * Request shapes this endpoint refuses outright, before the rate limiter and before the transport.
@@ -378,7 +385,7 @@ export function originFor(url, normalise) {
  * story stated structurally rather than in a catch block.
  *
  * @param {{
- *   runAudit: (url: string) => Promise<any>,
+ *   runAudit: (url: string, options: { fresh: boolean, origin: string }) => Promise<any>,
  *   renderSummary: (audit: any) => string,
  *   normaliseTarget: (input: string) => { origin: string, url: URL },
  *   version: string,
@@ -416,6 +423,15 @@ export function createAuditServer({
             'The site to audit: https://example.com, or just example.com. Any path is ignored — ' +
               'the unit audited is a site.',
           ),
+        fresh: z
+          .boolean()
+          .optional()
+          .describe(
+            'Audit the site now rather than reusing the shared result for this UTC hour. Only ' +
+              'worth setting when you have just changed the site and want to see the change; it ' +
+              'costs the target a second visit and still counts against your rate limit exactly ' +
+              'as a shared result does.',
+          ),
       },
       outputSchema: AUDIT_OUTPUT_SHAPE,
       annotations: {
@@ -428,11 +444,13 @@ export function createAuditServer({
         openWorldHint: true,
       },
     },
-    async ({ url }) => {
+    async ({ url, fresh }) => {
       // Validated before the audit starts, so a caller who typed a hostname wrong is told so
-      // immediately rather than after the fetch layer refuses it.
-      originFor(url, normaliseTarget);
-      const audit = await runAudit(url);
+      // immediately rather than after the fetch layer refuses it. The origin it returns is also
+      // what the shared result is keyed on, so the key and the validation are one step: two
+      // spellings of one site cannot become two audits.
+      const origin = originFor(url, normaliseTarget);
+      const audit = await runAudit(url, { fresh: Boolean(fresh), origin });
       return {
         structuredContent: audit,
         content: [{ type: 'text', text: renderSummary(audit) }],

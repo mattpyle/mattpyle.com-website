@@ -247,6 +247,16 @@ export const QUEUE_HEAVY = 'steward-heavy';
 export { AUDIT_TASK_QUEUE as QUEUE_AUDIT } from './lib/agent-audit/deep-contract.js';
 
 /**
+ * The fast tier's queue, re-exported from the same contract for the same reason.
+ *
+ * A second queue rather than a second concurrency setting on the first: the
+ * audit queue's cap is worker-wide (see `HOSTED_ACTIVITY_CONCURRENCY` below), so
+ * the only way a public, synchronous tool stops waiting behind a page render is
+ * a queue whose worker never renders one.
+ */
+export { AUDIT_FAST_TASK_QUEUE as QUEUE_AUDIT_FAST } from './lib/agent-audit/deep-contract.js';
+
+/**
  * How many activities the **hosted** worker runs at once. One, and it is a
  * correctness rule rather than a tuning preference.
  *
@@ -279,6 +289,25 @@ export { AUDIT_TASK_QUEUE as QUEUE_AUDIT } from './lib/agent-audit/deep-contract
  * scope here.
  */
 export const HOSTED_ACTIVITY_CONCURRENCY = 1;
+
+/**
+ * How many activities the hosted worker's **fast** queue runs at once. Four.
+ *
+ * A throughput number rather than a correctness rule, which is the whole
+ * difference between this constant and the one above. `auditSiteFast` launches
+ * no browser, so nothing about it is unsafe to run twice in a process; it is a
+ * dozen HTTP round trips that spend almost all of their time waiting on
+ * somebody else's origin. The queue exists because the public `audit_site` tool
+ * is synchronous and a caller holds the call open, so the number is sized
+ * against callers arriving at once rather than against the work: four means
+ * three other people's audits do not delay the fourth.
+ *
+ * Bounded rather than left at the SDK's default of 100 because this is the same
+ * container that holds a Lighthouse run's memory, and an unbounded fan-in on a
+ * public endpoint is a way to reach the memory limit that the endpoint's own
+ * rate limiter would never show up in.
+ */
+export const HOSTED_FAST_ACTIVITY_CONCURRENCY = 4;
 
 /**
  * The exact line the worker logs once both queues are polling. `steward up`

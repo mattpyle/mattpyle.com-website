@@ -186,3 +186,49 @@ export interface PendingActivity {
   /** What the last attempt failed with, when there was one. */
   lastFailure?: string;
 }
+
+/**
+ * The fast tier's activity type. Started standalone from the /mcp function, and
+ * scheduled from `workflows/audit-site.ts` under the same name — one activity,
+ * two ways of invoking it, which is the property standalone activities exist to
+ * make true. The string is the exported function's name in
+ * `activities/agent-audit.ts`, because that is how the SDK registers it.
+ */
+export const AUDIT_FAST_ACTIVITY_TYPE = 'auditSiteFast';
+
+/**
+ * The fast tier's own task queue, polled by a second worker in the hosted
+ * container (`config.ts` re-exports it as `QUEUE_AUDIT_FAST`).
+ *
+ * Split from `AUDIT_TASK_QUEUE` for latency rather than for locality. The audit
+ * queue's worker takes one activity at a time — the serial-Lighthouse rule in
+ * `HOSTED_ACTIVITY_CONCURRENCY` — so a fast audit sharing that queue would sit
+ * behind a 90-second page render, or behind the nightly scorecard's twelve
+ * minutes, on a request a caller is holding open. A public tool cannot have that
+ * as its p99. Its worker runs no browser, so its concurrency is a throughput
+ * choice rather than a correctness one.
+ */
+export const AUDIT_FAST_TASK_QUEUE = 'steward-audit-fast';
+
+/**
+ * The activity ID for one standalone fast audit: `audit:<origin>:<UTC hour>`.
+ *
+ * The ID *is* the deduplication. Two agents asking about the same site in the
+ * same hour name the same activity, so with `USE_EXISTING` the second attaches
+ * to the first's run and with `REJECT_DUPLICATE` it reads the finished result
+ * back instead of auditing the site again. That is one visit to a stranger's
+ * origin per site per hour rather than one per caller, which is the courtesy
+ * this auditor's whole public story rests on.
+ *
+ * UTC and hour-granularity, deliberately. UTC because the ID is a machine bucket
+ * and a local-time bucket would repeat and skip an hour twice a year; hourly
+ * because a site's agent surfaces do not change in minutes, and because an
+ * agent-readiness answer an hour old is still a true answer about the site.
+ *
+ * `at` is passed in rather than read from the clock so this stays a pure
+ * function, the same rule `auditWorkflowIdFor` follows.
+ */
+export function fastAuditActivityIdFor(origin: string, at: Date): string {
+  const hour = at.toISOString().slice(0, 13);
+  return `audit:${origin}:${hour}`;
+}

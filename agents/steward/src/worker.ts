@@ -5,6 +5,7 @@ import {
   IS_TEMPORAL_CLOUD,
   NAMESPACE,
   QUEUE_AUDIT,
+  QUEUE_AUDIT_FAST,
   QUEUE_HEAVY,
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
@@ -41,13 +42,20 @@ process.on('unhandledRejection', (reason) => {
 });
 
 /**
- * One process, all three queues (spec §3).
+ * One process, every queue (spec §3).
  *
  * The laptop worker polls everything, which is what keeps `steward up` a single
  * command. The split is about who *else* may poll: `steward-audit` carries work
  * with no local dependency, so a hosted worker can serve that queue alone
  * (always-on-audit-worker card) while `reviewPost` and the scorecard's publish
  * leg stay here, where the working copy is.
+ *
+ * `steward-audit-fast` is here for a different reason: it is the queue the site's
+ * public `audit_site` tool starts a standalone `auditSiteFast` on, and serving it
+ * from the laptop is what lets `npm run dev` against `steward up` exercise the
+ * standalone path rather than only the in-function fallback. No concurrency cap
+ * and no recycle: this worker is operator-attended and must never exit
+ * mid-session.
  */
 async function main() {
   const connection = await NativeConnection.connect(temporalConnectionOptions());
@@ -58,11 +66,12 @@ async function main() {
     Worker.create({ ...common, taskQueue: QUEUE_LIGHT }),
     Worker.create({ ...common, taskQueue: QUEUE_HEAVY }),
     Worker.create({ ...common, taskQueue: QUEUE_AUDIT }),
+    Worker.create({ ...common, taskQueue: QUEUE_AUDIT_FAST }),
   ]);
 
   log.info(
     {
-      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT],
+      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT, QUEUE_AUDIT_FAST],
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',

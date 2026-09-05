@@ -14,8 +14,14 @@ import {
   SERVER_NAME,
   TOOL_NAME,
 } from '../lib/mcp-audit-server.mjs';
+import { createFastAuditRunner, withPath } from '../lib/mcp-fast-standalone.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
-import { readAuditView, readTemporalConfig, startDeepAudit } from '../lib/mcp-temporal.mjs';
+import {
+  getClient,
+  readAuditView,
+  readTemporalConfig,
+  startDeepAudit,
+} from '../lib/mcp-temporal.mjs';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
 /**
@@ -32,16 +38,21 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
  * links to it, and nothing in the build reads it. That is the progressive-enhancement rule this
  * whole experiment runs under, made checkable, exactly as the /a2a docblock states it.
  *
- * **Two tiers on one endpoint, per the stage-3 card's transport decision.** `audit_site` runs the
- * fast checks here, in this function, and answers in the call. `deep_audit` starts a durable
- * `auditSiteWorkflow` on Temporal Cloud and `get_audit` reads it back; the hosted worker does the
- * rendering. A second endpoint would be a second identity to explain to every site owner who found
- * the User-Agent in a log.
+ * **Two tiers on one endpoint, per the stage-3 card's transport decision.** `audit_site` answers in
+ * the call, with the finished report. `deep_audit` starts a durable `auditSiteWorkflow` on Temporal
+ * Cloud and `get_audit` reads it back; the hosted worker does the rendering. A second endpoint
+ * would be a second identity to explain to every site owner who found the User-Agent in a log.
  *
- * **The two tiers fail independently, and that is a property of the call graph.** Nothing in
- * `audit_site`'s path touches src/lib/mcp-temporal.mjs, so Temporal Cloud being unreachable leaves
- * the fast tier answering exactly as before while the deep tools return a JSON-RPC error saying so.
- * The deep tools are not even registered when the deployment carries no Temporal configuration.
+ * **The fast tier answers whether or not Cloud does.** It runs `auditSiteFast` as a standalone
+ * activity on the hosted worker where it can, and inside this function where it cannot — no
+ * configuration, a failed connect, nobody on the queue, or no result inside the budget. All four
+ * end with a finished report in the same call, and the answer names the path it took in
+ * `tool.path`. src/lib/mcp-fast-standalone.mjs owns that choice and the arithmetic of the shared
+ * budget; a caller never sees a Temporal error from the fast tool.
+ *
+ * The two tiers still fail independently, one step further out than they used to: the deep tools
+ * return a JSON-RPC error when Cloud is unreachable, and are not registered at all when the
+ * deployment carries no Temporal configuration, while the fast tool keeps answering.
  *
  * **Stateless, per the stage-2 card's transport decision.** `sessionIdGenerator: undefined`, so
  * every POST is self-contained: no session ID, no server-side session state, nothing for a second
@@ -81,6 +92,37 @@ const RATE_LIMITED_CODE = -32000;
  * tool alone rather than advertising two tools of which one always errors.
  */
 const DEEP_ENABLED = readTemporalConfig() !== null;
+
+/**
+ * The fast audit, run inside this function. The fallback, and the whole tool on a
+ * deployment with no Temporal configuration.
+ *
+ * `budgetMs` is a parameter rather than the constant because the standalone path
+ * hands it what is left of the one budget after a failed attempt — see
+ * mcp-fast-standalone.mjs on why a fresh budget there would be a platform 504.
+ */
+const auditInFunction = (url: string, budgetMs: number = AUDIT_BUDGET_MS) =>
+  runFastAudit(url, { policy: { totalBudgetMs: budgetMs } });
+
+/**
+ * How `audit_site` runs an audit on this deployment, decided once at module scope
+ * for the reason `DEEP_ENABLED` is: it is a property of the deployment.
+ *
+ * With a Temporal connection the audit is a standalone `auditSiteFast` on the
+ * hosted worker, shared with any other caller asking about the same site in the
+ * same UTC hour, and falling back into this function on any of the four triggers.
+ * Without one there is nothing to fall back from, so the in-function path is the
+ * only path and the document says so rather than leaving `tool.path` absent —
+ * "no field" and "ran here" are different facts and only one of them is true.
+ */
+const runAudit = DEEP_ENABLED
+  ? createFastAuditRunner({
+      getClient,
+      runInFunction: auditInFunction,
+      budgetMs: AUDIT_BUDGET_MS,
+      log: (fields) => log(fields),
+    })
+  : async (url: string) => withPath(await auditInFunction(url), 'function');
 
 /**
  * Every call, one line, with the outcome as a token rather than as prose — the same shape the
@@ -139,6 +181,14 @@ function tierFor(body: unknown): 'fast' | 'deep' | null {
   // alternative — trusting the name to decide whether to count — is a free-audit oracle for
   // anything the SDK later dispatches that this function has not been taught about.
   return 'fast';
+}
+
+/** What one request's audit did, for the success log line. Absent on a request that ran none. */
+type AuditFacts = { auditPath: string; ms: number };
+
+/** The two audit fields of the success log line, or nothing at all. */
+function auditFields(facts: AuditFacts | null): Record<string, string | number> {
+  return facts ? { auditPath: facts.auditPath, ms: facts.ms } : {};
 }
 
 function jsonResponse(payload: unknown, status: number, headers: Record<string, string> = {}) {
@@ -215,8 +265,24 @@ export const POST: APIRoute = async ({ request }) => {
 
   // Per request, both of them. A stateless transport holds no session, but it does hold the
   // in-flight request's streams, and a warm function instance serves more than one caller.
+  // Per request, so the success log line below can name the path this caller's audit took and how
+  // long it took. Module scope would be one instance's running total rather than one call's fact.
+  let audited: AuditFacts | null = null;
+
   const server = createAuditServer({
-    runAudit: (url: string) => runFastAudit(url, { policy: { totalBudgetMs: AUDIT_BUDGET_MS } }),
+    runAudit: async (url: string, options: { fresh: boolean; origin: string }) => {
+      const started = Date.now();
+      try {
+        const audit = await runAudit(url, options);
+        audited = { auditPath: String(audit.tool?.path ?? 'unknown'), ms: Date.now() - started };
+        return audit;
+      } catch (err) {
+        // A failed audit is still a measurement, and the one whose duration an operator most wants
+        // next to the outcome token. The error is re-thrown untouched for the SDK to render.
+        audited = { auditPath: 'error', ms: Date.now() - started };
+        throw err;
+      }
+    },
     renderSummary: renderMarkdownSummary,
     normaliseTarget,
     // The auditor's own version and User-Agent, carried through rather than restated: this endpoint
@@ -258,6 +324,13 @@ export const POST: APIRoute = async ({ request }) => {
       outcome: `ok/${(body as { method?: string })?.method ?? 'batch'}`,
       status: response.status,
       bytes: raw.length,
+      // `auditPath` rather than `path`, which this line already spends on the route. Present only
+      // on a request that actually ran an audit, so a handshake or a tools/list stays the three
+      // fields it has always been.
+      // Read through a local rather than off `audited` directly: every assignment to it happens
+      // inside the `runAudit` closure, so TypeScript's flow analysis still believes it is null
+      // here and narrows the property reads to `never`.
+      ...auditFields(audited as AuditFacts | null),
       ua,
     });
     return new Response(text, {
