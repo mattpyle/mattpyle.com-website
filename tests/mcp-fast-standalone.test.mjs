@@ -37,7 +37,7 @@ function auditFor(url, where) {
   };
 }
 
-/** The error the SDK raises when `REJECT_DUPLICATE` refuses a start. */
+/** The error the SDK raises when the reuse policy refuses a start. */
 function alreadyStarted() {
   const err = new Error('Activity execution already started');
   err.name = 'ActivityExecutionAlreadyStartedError';
@@ -108,7 +108,11 @@ test('a healthy start runs the activity on the fast queue and reports the standa
     'the ID is the origin and the UTC hour, which is what makes two callers one visit',
   );
   assert.equal(options.idConflictPolicy, 'USE_EXISTING');
-  assert.equal(options.idReusePolicy, 'REJECT_DUPLICATE');
+  assert.equal(
+    options.idReusePolicy,
+    'ALLOW_DUPLICATE_FAILED_ONLY',
+    'a completed run is shared, a failed one is replaced rather than locking the hour',
+  );
   assert.deepEqual(options.args, ['example.com', { budgetMs: 30_000 }]);
   assert.equal(options.retry.maximumAttempts, 2, 'every attempt is a billable Action and a visit');
   assert.equal(options.scheduleToStartTimeout, 8_000);
@@ -144,6 +148,31 @@ test('a start refused as a duplicate reads the finished result back and says it 
   assert.equal(calls.inFunction.length, 0, 'a dedup hit is a success, never a fallback');
 });
 
+test('a start after the hour ID failed runs again rather than reading the failure back', async () => {
+  // What `ALLOW_DUPLICATE_FAILED_ONLY` buys: the server lets the start through instead of raising
+  // `ActivityExecutionAlreadyStartedError`, so the module never reaches the read-back branch and
+  // the caller gets a fresh audit rather than the earlier run's failure and a fallback.
+  const { runner, calls } = runnerWith({
+    makeClient: (record) => ({
+      activity: {
+        start: async (type, options) => {
+          record.started.push({ type, options });
+          return { result: async () => auditFor('example.com', 'the replacement run') };
+        },
+        getHandle: () => assert.fail('a failed run is replaced, never read back'),
+      },
+    }),
+  });
+
+  const audit = await runner('example.com', { fresh: false, origin: 'https://example.com' });
+
+  assert.equal(audit.tool.path, 'standalone', 'a replacement run is not a shared one');
+  assert.equal(audit.ranBy, 'the replacement run');
+  assert.deepEqual(calls.handles, [], 'nothing is read back by handle');
+  assert.equal(calls.started[0].options.id, HOUR_ID, 'the replacement keeps the hour bucket');
+  assert.equal(calls.inFunction.length, 0, 'the hour is not sent through the fallback');
+});
+
 test('fresh: true adds a suffix and drops both dedup policies', async () => {
   const { runner, calls } = runnerWith({
     makeClient: clientReturning(auditFor('example.com', 'activity')),
@@ -159,7 +188,7 @@ test('fresh: true adds a suffix and drops both dedup policies', async () => {
   assert.equal(
     options.idReusePolicy,
     undefined,
-    'REJECT_DUPLICATE on a unique ID is a refusal waiting for the day the suffix repeats',
+    'a reuse policy on a unique ID is a rule waiting for the day the suffix repeats',
   );
 });
 
