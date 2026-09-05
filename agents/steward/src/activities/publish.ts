@@ -13,6 +13,8 @@ import {
   resolvePostPayload,
   type PostPayload,
 } from '../lib/post-payload.js';
+import { GENERATED_DATA, GENERATED_DATA_FILES } from '../lib/generated-data.js';
+import { runCancellable } from '../lib/proc.js';
 import { withWorktreeLock } from '../lib/worktree-lock.js';
 import { gh } from '../lib/github.js';
 import type { ReviewReport } from '../lib/report.js';
@@ -192,6 +194,39 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
 // ---------------------------------------------------------------------------
 
 /**
+ * Runs the committed-data generators against the worktree's content tree.
+ *
+ * Each script is spawned as `<node> <worktree>/scripts/<name>.mjs` — the
+ * worktree's own copy, under the same Node binary the worker runs on. The
+ * absolute script path is what makes this correct rather than the `cwd`: every
+ * generator resolves its output from `import.meta.url`, so running the primary
+ * checkout's copy would write the primary checkout's `src/data/`.
+ *
+ * No shell (design rule 8), and no `npm` — the scripts import nothing outside
+ * `node:` and the repo, so `node_modules` is not needed and a publish worktree
+ * that has never run an audit's `npm ci` still produces the right files.
+ *
+ * A non-zero exit is non-retryable, the way `MissingReference` is: it is a fact
+ * about the content tree the publish commit would create, and a second attempt
+ * reads the same tree. Failing here also means failing before the push, so a
+ * broken tree never reaches a PR.
+ */
+async function regenerateCommittedData(worktreeDir: string): Promise<void> {
+  for (const { script, output } of GENERATED_DATA) {
+    const res = await runCancellable(process.execPath, [path.join(worktreeDir, script)], {
+      cwd: worktreeDir,
+    });
+    if (res.exitCode !== 0) {
+      throw ApplicationFailure.nonRetryable(
+        `${script} failed (exit ${res.exitCode}) while regenerating ${output} for the publish ` +
+          `commit, so nothing was pushed:\n${res.stderr.slice(-4000)}`,
+        'GeneratorFailed',
+      );
+    }
+  }
+}
+
+/**
  * Writes the payload into the worktree and stages every path of it.
  *
  * Split out of `publishPost` so the git half is testable against a throwaway
@@ -203,10 +238,17 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
  * frontmatter; every other file is copied byte-for-byte from the author's
  * checkout, because nothing here has an opinion about its contents.
  *
+ * The committed `src/data/` files are then regenerated *in the worktree* and
+ * staged alongside the payload. They are not copied across from the author's
+ * checkout, because they are a function of the content tree this commit is
+ * creating rather than of anything the author has on disk: the generators read
+ * the post that was just written in and write what the site's tests will assert.
+ *
  * Returns the staged set, which is what makes the caller's idempotence check
  * cover the whole payload rather than only the markdown: a re-approve after a
  * park has to find nothing to commit even when the thing that would have
- * changed was an asset.
+ * changed was an asset. The generators write only on a difference, so a re-run
+ * against a base that already carries the post adds nothing to that set.
  */
 export async function writeAndStagePayload(args: {
   siteDir: string;
@@ -223,8 +265,11 @@ export async function writeAndStagePayload(args: {
     else await fs.copyFile(path.join(siteDir, rel), dest);
   }
 
-  await git(worktreeDir, ['add', '--', ...payload.files]);
-  const porcelain = await git(worktreeDir, ['status', '--porcelain', '--', ...payload.files]);
+  await regenerateCommittedData(worktreeDir);
+
+  const paths = [...payload.files, ...GENERATED_DATA_FILES];
+  await git(worktreeDir, ['add', '--', ...paths]);
+  const porcelain = await git(worktreeDir, ['status', '--porcelain', '--', ...paths]);
   return porcelain
     .split('\n')
     .map((line) => line.trim())

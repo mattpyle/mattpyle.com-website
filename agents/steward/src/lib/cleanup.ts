@@ -9,6 +9,7 @@ import {
   inProgressOperation,
   pathState,
 } from './git.js';
+import { GENERATED_DATA_FILES } from './generated-data.js';
 import { resolvePostPayload } from './post-payload.js';
 
 /**
@@ -71,9 +72,11 @@ export type CleanupResult =
       /** Untracked twins of the post's other payload files that were removed. */
       companionsDeleted: string[];
       /**
-       * Tracked payload files whose local edit was dropped because `origin/<base>`
-       * already carries those exact bytes. In practice: `cspell.shared.yaml`
-       * after a publish that carried a `dict-add`.
+       * Tracked files riding the publish commit whose local edit was dropped
+       * because `origin/<base>` already carries those exact bytes. In practice:
+       * `cspell.shared.yaml` after a publish that carried a `dict-add`, and the
+       * committed `src/data/` files after any local `npm run dev` regenerated
+       * them.
        */
       companionsRestored: string[];
       /** False when the checkout was already at origin's tip. */
@@ -245,11 +248,12 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
     }
   }
 
-  // --- Guard 1b: the rest of the post's payload -----------------------------
+  // --- Guard 1b: everything else riding the publish commit ------------------
   //
   // The post has not been the only file the publish carries since 2026-09-04:
-  // its asset folder, the `public/` files it names and, when it changed,
-  // `cspell.shared.yaml` all ride the same commit. Every one of them is an
+  // its asset folder, the `public/` files it names, `cspell.shared.yaml` when it
+  // changed, and the regenerated `src/data/` files all ride the same commit.
+  // Every one of them is an
   // untracked twin in this checkout for exactly the same reason the post is,
   // and `git pull` refuses on the FIRST such path the merge would overwrite —
   // so cleaning up the post alone leaves the pull blocked on the hero image
@@ -277,6 +281,15 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
     // were handled on the first run, or they are not there to handle.
   }
 
+  // The committed `src/data/` files ride the same commit, and they are in the
+  // pull's way for a reason the payload files are not: any `npm run dev` in this
+  // checkout after the publish regenerates them locally, so the merge arrives to
+  // find tracked files already modified and `git pull` refuses. They are added
+  // unconditionally rather than through the payload resolver because they exist
+  // whether or not the post still does — the resolver's `catch` above is exactly
+  // the run where the twin is gone and these are still dirty.
+  companions = [...new Set([...companions, ...GENERATED_DATA_FILES])];
+
   for (const companion of companions) {
     const state = await pathState(repoDir, companion);
     if (state === 'clean' || state === 'unknown') continue;
@@ -289,9 +302,9 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
     if (!(await matchesUpstream(repoDir, base, companion))) {
       return refuse(
         'lossless',
-        `${companion} travels with this post, and the copy on disk does not match the one ` +
-          `origin/${base} carries. It holds changes that exist nowhere else, so cleanup will ` +
-          `not touch it.`,
+        `${companion} rides this post's publish commit, and the copy on disk does not match ` +
+          `the one origin/${base} carries. It holds changes that exist nowhere else, so ` +
+          `cleanup will not touch it.`,
         [
           `git diff origin/${base} -- ${companion}`,
           `# then commit, stash or discard it, and:`,

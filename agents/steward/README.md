@@ -74,6 +74,15 @@ references relatively, every `public/` file the body or frontmatter names by roo
 build audit's worktree overlay reads the same resolver, so what gets audited and what gets committed
 cannot drift apart.
 
+The commit also carries the three committed files under `src/data/` that `npm run prebuild`
+generates — `page-paths.mjs`, `a2a-digest.json`, `agent-skills-index.json`. They are not resolved
+from your checkout: the publish leg runs those three scripts in its own worktree, against the
+content tree the commit is about to create, and stages whatever changed. Site tests assert the
+committed copy matches the generator's output, so a post-only commit left them stale and the PR's
+`Site tests & astro check` went red. `lib/generated-data.ts` names the three, and `steward cleanup`
+sweeps them from your checkout for the same reason it sweeps the dictionary. A generator that exits
+non-zero fails the publish non-retryably with its stderr, before the push.
+
 The cost is that a draft you never committed is still sitting in your checkout afterwards, along
 with untracked twins of its assets, and `git pull` refuses to move past the first one it would
 overwrite. `steward cleanup <slug>` is the reconciliation step for that. It removes the post and
