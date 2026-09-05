@@ -5,6 +5,7 @@
     "dockerfilePath": "agents/steward/Dockerfile",
     "watchPatterns": [
       "agents/steward/**",
+      "!agents/steward/reviews/**",
       "package.json",
       "package-lock.json",
       "railway.json",
