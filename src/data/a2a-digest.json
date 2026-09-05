@@ -95,6 +95,14 @@
   ],
   "writing": [
     {
+      "title": "Publish generated data fixture",
+      "url": "https://www.mattpyle.com/writing/publish-generated-data-fixture",
+      "markdownUrl": "https://www.mattpyle.com/writing/publish-generated-data-fixture.md",
+      "date": "2026-09-04T00:00:00.000Z",
+      "tags": [],
+      "description": "A throwaway draft used to prove that a publish PR carries the regenerated src/data files."
+    },
+    {
       "title": "How to implement WebMCP on a website",
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website",
       "markdownUrl": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website.md",
@@ -295,7 +303,7 @@
     }
   ],
   "counts": {
-    "writing": 3,
+    "writing": 4,
     "projects": 1,
     "changelog": 13,
     "changelogListed": 10
