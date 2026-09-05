@@ -67,10 +67,18 @@ Vercel deploy, and it's deliberately never automated. Re-sending `approve` after
 idempotent resume — it re-checks the live site, it does not re-run the publish.
 
 Steward never touches your working directory to do any of this: the branch, the commit, and the
-push all happen in its own git worktree. The cost is that a draft you never committed is still
-sitting in your checkout afterwards, a stale twin of the post that just went live, and `git pull`
-refuses to move past it. `steward cleanup <slug>` is the reconciliation step for that, guarded so
-it deletes only a file that is provably recoverable from `origin` and refuses rather than guesses.
+push all happen in its own git worktree. The commit carries the post's whole payload, not only its
+markdown: everything under `src/assets/<collection>/<slug>/`, any `src/assets/` file the post
+references relatively, every `public/` file the body or frontmatter names by root-relative path, and
+`cspell.shared.yaml` when a `dict-add` changed it. `lib/post-payload.ts` names that set, and the
+build audit's worktree overlay reads the same resolver, so what gets audited and what gets committed
+cannot drift apart.
+
+The cost is that a draft you never committed is still sitting in your checkout afterwards, along
+with untracked twins of its assets, and `git pull` refuses to move past the first one it would
+overwrite. `steward cleanup <slug>` is the reconciliation step for that. It removes the post and
+every companion the publish carried, guarded so it deletes only a file that is provably recoverable
+from `origin` and refuses rather than guesses.
 
 The review archive is split by the same publication line. `reviews/` is the committed dataset, but a
 review file quotes the post line by line and carries its critique, so while the post says

@@ -9,6 +9,7 @@ import {
   inProgressOperation,
   pathState,
 } from './git.js';
+import { resolvePostPayload } from './post-payload.js';
 
 /**
  * `steward cleanup <slug>` — post-publish reconciliation of the author's own
@@ -67,6 +68,14 @@ export type CleanupResult =
       ok: true;
       /** False when there was no twin to remove — the idempotent second run. */
       deleted: boolean;
+      /** Untracked twins of the post's other payload files that were removed. */
+      companionsDeleted: string[];
+      /**
+       * Tracked payload files whose local edit was dropped because `origin/<base>`
+       * already carries those exact bytes. In practice: `cspell.shared.yaml`
+       * after a publish that carried a `dict-add`.
+       */
+      companionsRestored: string[];
       /** False when the checkout was already at origin's tip. */
       pulled: boolean;
       base: string;
@@ -96,6 +105,16 @@ async function matchesUpstream(repoDir: string, base: string, posix: string): Pr
     const upstream = await git(repoDir, ['rev-parse', `origin/${base}:${posix}`]);
     const local = await git(repoDir, ['hash-object', '--', posix]);
     return upstream === local;
+  } catch {
+    return false;
+  }
+}
+
+/** True if `origin/<base>` holds anything at all at this path. */
+async function carriedUpstream(repoDir: string, base: string, posix: string): Promise<boolean> {
+  try {
+    await git(repoDir, ['cat-file', '-e', `origin/${base}:${posix}`]);
+    return true;
   } catch {
     return false;
   }
@@ -226,6 +245,74 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
     }
   }
 
+  // --- Guard 1b: the rest of the post's payload -----------------------------
+  //
+  // The post has not been the only file the publish carries since 2026-09-04:
+  // its asset folder, the `public/` files it names and, when it changed,
+  // `cspell.shared.yaml` all ride the same commit. Every one of them is an
+  // untracked twin in this checkout for exactly the same reason the post is,
+  // and `git pull` refuses on the FIRST such path the merge would overwrite —
+  // so cleaning up the post alone leaves the pull blocked on the hero image
+  // instead.
+  //
+  // Losslessness is proved differently here than for the post. There is no
+  // reviewed hash for an image, so the proof is `origin/<base>` already holding
+  // a byte-identical copy: what is on disk exists in published history, and
+  // removing it loses nothing. A companion that does NOT match is a refusal —
+  // the same call the tracked-file guard makes about the post.
+  const companionsDeleted: string[] = [];
+  const companionsRestored: string[] = [];
+  const handled = new Set<string>([posix]);
+
+  // Compared against HEAD rather than origin: the question here is what is dirty
+  // in this checkout and therefore in the pull's way, not what differed at
+  // publish time.
+  let companions: string[] = [];
+  try {
+    const payload = await resolvePostPayload(repoDir, relPath, { compareRef: 'HEAD' });
+    companions = payload.files.filter((f) => f !== payload.post);
+  } catch {
+    // No post on disk (the idempotent second run), or a reference that no longer
+    // resolves. Neither is a reason to refuse the fast-forward: the companions
+    // were handled on the first run, or they are not there to handle.
+  }
+
+  for (const companion of companions) {
+    const state = await pathState(repoDir, companion);
+    if (state === 'clean' || state === 'unknown') continue;
+
+    // A path origin does not carry is not in the merge's way, so it is none of
+    // cleanup's business: an image the author added after the publish, or a
+    // `public/` file the PR never picked up. Leaving it is the whole action.
+    if (!(await carriedUpstream(repoDir, base, companion))) continue;
+
+    if (!(await matchesUpstream(repoDir, base, companion))) {
+      return refuse(
+        'lossless',
+        `${companion} travels with this post, and the copy on disk does not match the one ` +
+          `origin/${base} carries. It holds changes that exist nowhere else, so cleanup will ` +
+          `not touch it.`,
+        [
+          `git diff origin/${base} -- ${companion}`,
+          `# then commit, stash or discard it, and:`,
+          `steward cleanup ${slug}`,
+        ],
+      );
+    }
+
+    handled.add(companion);
+    if (state === 'untracked') {
+      companionsDeleted.push(companion);
+    } else {
+      // Tracked and modified, with origin holding the identical bytes: the local
+      // edit is the same edit the merge brings in, so dropping it back to HEAD
+      // loses nothing and lets the fast-forward through. This is the dictionary
+      // after a publish that carried a `dict-add`; without it every such cleanup
+      // would refuse on a file whose content already agrees with origin.
+      companionsRestored.push(companion);
+    }
+  }
+
   // --- Guard 2: the checkout is on the base branch, mid-nothing -------------
   const branch = await currentBranch(repoDir);
   if (branch !== base) {
@@ -278,7 +365,7 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
-  const dirty = new Set((await dirtyPaths(repoDir)).filter((p) => p !== posix));
+  const dirty = new Set((await dirtyPaths(repoDir)).filter((p) => !handled.has(p)));
   const collisions = incoming.filter((p) => dirty.has(p));
   if (collisions.length > 0) {
     return refuse(
@@ -294,10 +381,25 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
   }
 
   // --- Act ------------------------------------------------------------------
+  //
+  // Every companion's bytes are held before it is touched, for the same reason
+  // the post's are: if the pull fails after all three guards passed, the disk
+  // goes back exactly as it was found.
+  const held = new Map<string, Buffer>();
+  for (const companion of [...companionsDeleted, ...companionsRestored]) {
+    held.set(companion, await fs.readFile(path.join(repoDir, companion)));
+  }
+
   let deleted = false;
   if (twin) {
     await fs.rm(abs);
     deleted = true;
+  }
+  for (const companion of companionsDeleted) {
+    await fs.rm(path.join(repoDir, companion));
+  }
+  for (const companion of companionsRestored) {
+    await git(repoDir, ['checkout', 'HEAD', '--', companion]);
   }
 
   try {
@@ -307,14 +409,27 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
     // author's disk goes back to how it was found rather than losing the twin to
     // a failure nobody predicted.
     if (twin) await fs.writeFile(abs, twin);
+    for (const [companion, bytes] of held) {
+      await fs.mkdir(path.dirname(path.join(repoDir, companion)), { recursive: true });
+      await fs.writeFile(path.join(repoDir, companion), bytes);
+    }
     return refuse(
       'fast-forward',
       `The fast-forward pull failed after every guard passed: ` +
         `${(err as Error).message.split('\n').slice(0, 3).join(' ')}. ` +
-        `Nothing was changed; the local file has been restored.`,
+        `Nothing was changed; the local files have been restored.`,
       [`git pull --ff-only origin ${base}`],
     );
   }
 
-  return { ok: true, deleted, pulled: target !== from, base, from, to: await headSha(repoDir) };
+  return {
+    ok: true,
+    deleted,
+    companionsDeleted,
+    companionsRestored,
+    pulled: target !== from,
+    base,
+    from,
+    to: await headSha(repoDir),
+  };
 }

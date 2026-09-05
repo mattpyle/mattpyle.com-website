@@ -8,6 +8,11 @@ import { log } from '../lib/logger.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { GITHUB_REPO, SITE_DIR, WORKTREE_DIR, postRelPath, type Collection } from '../config.js';
 import { git, worktreeExists } from '../lib/git.js';
+import {
+  MissingReferenceError,
+  resolvePostPayload,
+  type PostPayload,
+} from '../lib/post-payload.js';
 import { withWorktreeLock } from '../lib/worktree-lock.js';
 import { gh } from '../lib/github.js';
 import type { ReviewReport } from '../lib/report.js';
@@ -187,6 +192,53 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
 // ---------------------------------------------------------------------------
 
 /**
+ * Writes the payload into the worktree and stages every path of it.
+ *
+ * Split out of `publishPost` so the git half is testable against a throwaway
+ * repo: everything above it is GitHub calls and everything below it is a push,
+ * and the interesting question — *which paths does a publish actually stage?* —
+ * lives entirely here.
+ *
+ * The post is written from `postContent` because publishing rewrites its
+ * frontmatter; every other file is copied byte-for-byte from the author's
+ * checkout, because nothing here has an opinion about its contents.
+ *
+ * Returns the staged set, which is what makes the caller's idempotence check
+ * cover the whole payload rather than only the markdown: a re-approve after a
+ * park has to find nothing to commit even when the thing that would have
+ * changed was an asset.
+ */
+export async function writeAndStagePayload(args: {
+  siteDir: string;
+  worktreeDir: string;
+  payload: PostPayload;
+  postContent: string;
+}): Promise<string[]> {
+  const { siteDir, worktreeDir, payload, postContent } = args;
+
+  for (const rel of payload.files) {
+    const dest = path.join(worktreeDir, rel);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    if (rel === payload.post) await fs.writeFile(dest, postContent, 'utf8');
+    else await fs.copyFile(path.join(siteDir, rel), dest);
+  }
+
+  await git(worktreeDir, ['add', '--', ...payload.files]);
+  const porcelain = await git(worktreeDir, ['status', '--porcelain', '--', ...payload.files]);
+  return porcelain
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    // `XY path`; a rename's `old -> new` cannot occur here because every path is
+    // named explicitly, but taking the destination is still the honest read.
+    .map((line) => {
+      const rest = line.slice(line.indexOf(' ') + 1).trim().replace(/^"|"$/g, '');
+      const arrow = rest.lastIndexOf(' -> ');
+      return arrow === -1 ? rest : rest.slice(arrow + 4);
+    });
+}
+
+/**
  * `publishPost` (spec §8.7).
  *
  * **Idempotent by construction** — the workflow gives it 1 attempt, but a human
@@ -234,6 +286,26 @@ export async function publishPost(input: PublishPostInput): Promise<PublishPostR
 
   await git(SITE_DIR, ['fetch', 'origin', base]);
 
+  // --- Step 1b: what travels with the post ---------------------------------
+  //
+  // Resolved before the lock, against `origin/<base>` — the same commit the
+  // branch is about to be cut from, so the dictionary is judged against the
+  // tree the PR will diff against rather than against whatever the author's
+  // HEAD happens to be.
+  let payload;
+  try {
+    payload = await resolvePostPayload(SITE_DIR, relPath, { compareRef: `origin/${base}` });
+  } catch (err) {
+    if (err instanceof MissingReferenceError) {
+      throw ApplicationFailure.nonRetryable(err.message, 'MissingReference');
+    }
+    throw err;
+  }
+  log.info(
+    { activity: 'publishPost', slug: report.slug, files: payload.files },
+    'resolved the post payload',
+  );
+
   // --- Step 2: branch, in the WORKTREE, reset to base ----------------------
   //
   // **Design rule 3, and the first draft of this activity got it wrong.** The
@@ -264,19 +336,18 @@ export async function publishPost(input: PublishPostInput): Promise<PublishPostR
       await git(WORKTREE_DIR, ['checkout', '-B', branch, `origin/${base}`]);
       await git(WORKTREE_DIR, ['clean', '-fd', '-e', 'node_modules', '-e', 'dist']);
 
-      // --- Step 4: the frontmatter flip ------------------------------------
+      // --- Step 4 + 5: write the payload in, then stage it ------------------
       const today = new Date().toISOString().slice(0, 10);
       const flipped = flipDraftFrontmatter(raw, today);
+      const staged = await writeAndStagePayload({
+        siteDir: SITE_DIR,
+        worktreeDir: WORKTREE_DIR,
+        payload,
+        postContent: flipped.content,
+      });
 
-      const wtPath = path.join(WORKTREE_DIR, relPath);
-      await fs.mkdir(path.dirname(wtPath), { recursive: true });
-      await fs.writeFile(wtPath, flipped.content, 'utf8');
-
-      // --- Step 5: commit + push -------------------------------------------
       let committed = false;
-      await git(WORKTREE_DIR, ['add', '--', relPath]);
-      const staged = await git(WORKTREE_DIR, ['status', '--porcelain', '--', relPath]);
-      if (staged.trim()) {
+      if (staged.length > 0) {
         await git(WORKTREE_DIR, ['commit', '-m', `chore(steward): publish ${report.slug}`]);
         committed = true;
       } else {
