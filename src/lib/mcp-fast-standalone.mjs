@@ -43,14 +43,24 @@
  *
  * ## What `standalone-shared` does and does not claim
  *
- * Two policies do the deduplication, and they cover different states of the same
- * ID. `idConflictPolicy: USE_EXISTING` covers a *running* activity: the start
- * attaches to it and returns a handle to that run. `idReusePolicy:
- * REJECT_DUPLICATE` covers a *closed* one: the start is refused with
- * `ActivityExecutionAlreadyStartedError`, and this module reads the finished
- * result back through `client.activity.getHandle(id).result()`.
+ * Two policies do the deduplication, and between them they say what happens in
+ * each of an ID's three states. `idConflictPolicy: USE_EXISTING` covers a
+ * *running* activity. `idReusePolicy: ALLOW_DUPLICATE_FAILED_ONLY` covers a
+ * *closed* one, and it answers the two closed states differently.
  *
- * **Only the second is reported as `standalone-shared`.** The SDK's start
+ * | State of the ID | What the start does | Reported path |
+ * |---|---|---|
+ * | Running | attaches to that run and returns a handle to it | `standalone` |
+ * | Closed, completed | refused with `ActivityExecutionAlreadyStartedError`; this module reads the finished result back through `client.activity.getHandle(id).result()` | `standalone-shared` |
+ * | Closed, failed, cancelled, terminated or timed out | allowed; the hour's ID runs again | `standalone` |
+ *
+ * The third row is why the policy is not `REJECT_DUPLICATE`. That one refuses a
+ * closed ID whatever state it closed in, so the hour's first audit failing would
+ * lock the bucket: every later caller that hour reads the failure back, falls
+ * back to the function, and visits the site anyway. Sharing a *successful*
+ * answer is the point; sharing a failure costs a visit and buys nothing.
+ *
+ * **Only the middle row is reported as `standalone-shared`.** The SDK's start
  * response carries a run ID and nothing that distinguishes "I created this run"
  * from "I attached to yours" (`ActivityClient.startHandler` in
  * `@temporalio/client` 1.20.3), so an attach is indistinguishable here from a
@@ -247,9 +257,9 @@ async function standalone({ url, fresh, origin, getClient, now, randomSuffix }) 
   const client = await getClient();
   const base = fastAuditActivityIdFor(origin ?? url, now());
   // `fresh` skips both policies as well as adding the suffix. The suffix alone
-  // would be enough to miss the hour's ID, and leaving the policies on would
-  // then be two rules with nothing left to say — worse, `REJECT_DUPLICATE` on a
-  // unique ID is a refusal waiting for the day the suffix repeats.
+  // would be enough to miss the hour's ID, so leaving the policies on would be
+  // two rules with nothing left to say — and a reuse policy on an ID meant to be
+  // unique is a rule waiting for the day the suffix repeats.
   const id = fresh ? `${base}:${randomSuffix()}` : base;
 
   let handle;
@@ -264,14 +274,16 @@ async function standalone({ url, fresh, origin, getClient, now, randomSuffix }) 
       retry: { maximumAttempts: MAXIMUM_ATTEMPTS },
       ...(fresh
         ? {}
-        : { idConflictPolicy: 'USE_EXISTING', idReusePolicy: 'REJECT_DUPLICATE' }),
+        : { idConflictPolicy: 'USE_EXISTING', idReusePolicy: 'ALLOW_DUPLICATE_FAILED_ONLY' }),
     });
   } catch (err) {
     if (!isAlreadyStarted(err)) throw err;
-    // `REJECT_DUPLICATE` refused this start because an activity with this ID has
-    // already closed — which is to say somebody audited this site in this hour
-    // and the answer exists. Reading it back is the dedup working, not a
-    // failure, and it is the one case this module can honestly call shared.
+    // `ALLOW_DUPLICATE_FAILED_ONLY` refused this start, so an activity with this
+    // ID closed *successfully* — which is to say somebody audited this site in
+    // this hour and the answer exists. Reading it back is the dedup working, not
+    // a failure, and it is the one case this module can honestly call shared. A
+    // run that failed would not have refused the start at all; it would be
+    // running again above.
     handle = client.activity.getHandle(id);
     path = 'standalone-shared';
   }

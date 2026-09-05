@@ -215,10 +215,11 @@ export const AUDIT_FAST_TASK_QUEUE = 'steward-audit-fast';
  *
  * The ID *is* the deduplication. Two agents asking about the same site in the
  * same hour name the same activity, so with `USE_EXISTING` the second attaches
- * to the first's run and with `REJECT_DUPLICATE` it reads the finished result
- * back instead of auditing the site again. That is one visit to a stranger's
- * origin per site per hour rather than one per caller, which is the courtesy
- * this auditor's whole public story rests on.
+ * to the first's run and with `ALLOW_DUPLICATE_FAILED_ONLY` a completed run's
+ * result is read back instead of auditing the site again, while a failed run is
+ * replaced. That is one visit to a stranger's origin per site per hour rather
+ * than one per caller, which is the courtesy this auditor's whole public story
+ * rests on.
  *
  * UTC and hour-granularity, deliberately. UTC because the ID is a machine bucket
  * and a local-time bucket would repeat and skip an hour twice a year; hourly
