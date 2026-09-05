@@ -5,6 +5,12 @@ import { parseFrontmatter } from '../lib/frontmatter.js';
 import type { Finding, PassResult, ReviewMode, Verdict } from '../lib/report.js';
 import { worstVerdict } from '../lib/report.js';
 import { pathState } from '../lib/git.js';
+import {
+  MissingReferenceError,
+  describePayload,
+  resolvePostPayload,
+  type PostPayload,
+} from '../lib/post-payload.js';
 import { timed } from '../lib/logger.js';
 
 const DESCRIPTION_MIN = 20;
@@ -314,19 +320,43 @@ export async function checkFrontmatter(
     if (mode === 'gate') {
       const state = await pathState(SITE_DIR, file.split(path.sep).join('/'));
       const slug = path.basename(file).replace(/\.md$/, '');
+
+      // What actually travels, resolved rather than assumed.
+      //
+      // The old message promised "publish will work" for any untracked draft,
+      // which was true only for a post that referenced nothing outside itself.
+      // The first post with a hero image proved it wrong at `build_audit`
+      // (review `5372eb620069`), so the note now names the file set instead of
+      // asserting an outcome — and a reference that is not on disk becomes a
+      // block here, where the path is readable, rather than a build trace.
+      let payload: PostPayload | null = null;
+      if (state === 'untracked' || state === 'uncommitted') {
+        try {
+          payload = await resolvePostPayload(SITE_DIR, file);
+        } catch (err) {
+          if (err instanceof MissingReferenceError) {
+            add('block', err.message);
+          } else {
+            throw err;
+          }
+        }
+      }
+      const carries = payload ? describePayload(payload) : '';
+      const travels = carries ? `, along with ${carries}` : '';
+
       if (state === 'untracked') {
         add(
           'pass',
-          `\`${file}\` is untracked, which is the normal way drafts work here. Publish will ` +
-            `work: Steward reads the file from your checkout and commits it in its own ` +
-            `worktree. A copy of the draft stays behind in your checkout afterwards. Run ` +
+          `\`${file}\` is untracked, which is the normal way drafts work here. Steward reads ` +
+            `the file from your checkout and publishes it from its own worktree${travels}. A copy ` +
+            `of the draft stays behind in your checkout afterwards. Run ` +
             `\`steward cleanup ${slug}\` once the PR merges to remove it and fast-forward.`,
         );
       } else if (state === 'uncommitted') {
         add(
           'pass',
-          `\`${file}\` is tracked with uncommitted changes. Publish will work, since Steward ` +
-            `publishes the bytes on disk rather than the committed version, but the local file ` +
+          `\`${file}\` is tracked with uncommitted changes. Steward publishes the bytes on ` +
+            `disk rather than the committed version${travels}, but the local file ` +
             `stays as it is, and \`steward cleanup ${slug}\` refuses to touch a file git is ` +
             `holding a copy of, so reconcile this one with git yourself after the merge.`,
         );

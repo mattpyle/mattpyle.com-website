@@ -1301,6 +1301,12 @@ program
         ? `      removed the local draft twin: ${postRelPath(slug, collection)}`
         : `      no local twin to remove — already reconciled`,
     );
+    for (const companion of result.companionsDeleted) {
+      console.log(`      removed the local twin that travelled with it: ${companion}`);
+    }
+    for (const companion of result.companionsRestored) {
+      console.log(`      dropped the local edit origin already carries: ${companion}`);
+    }
     console.log(
       result.pulled
         ? `      fast-forwarded ${result.base}: ${result.from.slice(0, 8)} → ${result.to.slice(0, 8)}`

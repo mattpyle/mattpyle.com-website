@@ -1,6 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { run } from './proc.js';
+// Circular by design and safe: `post-payload.ts` imports `git()` and
+// `defaultBranch()` from here, and both modules touch each other only from
+// inside hoisted function bodies, never at module evaluation. The alternative —
+// resolving the payload in every caller and passing it in — would let a caller
+// overlay a set the resolver never named, which is the drift this build exists
+// to remove.
+import { resolvePostPayload, type PostPayload } from './post-payload.js';
 
 /**
  * Worktree management for the build audit (spec §8.5 step 1).
@@ -139,17 +146,28 @@ export interface SyncResult {
   created: boolean;
   /** Repo-relative path of the post file copied in from the primary checkout. */
   postFile: string;
+  /** Every repo-relative path copied in, post first. */
+  copied: string[];
+  /** The resolved payload, so the caller can report what travelled. */
+  payload: PostPayload;
 }
 
 /**
  * Ensures `worktreeDir` exists and matches the primary checkout's HEAD, then
- * overlays the (possibly uncommitted) post file.
+ * overlays the (possibly uncommitted) post **and everything it needs**.
  *
  * Detached HEAD, deliberately: a worktree may not check out a branch that is
  * already checked out in the primary tree, and the primary tree is exactly the
  * branch we want. Resetting to the *commit* sidesteps the restriction entirely
  * and is the more honest description of what this checkout is — a disposable
  * snapshot, not a place work happens.
+ *
+ * The overlay used to be one file. A draft's hero image, body images and any
+ * `public/` media it names are untracked in the author's checkout exactly as the
+ * draft is, so the reset tree held none of them and the build failed on the
+ * first reference it could not resolve. `resolvePostPayload` names the whole set
+ * and every file in it is overlaid the same way the post always was: the bytes
+ * on the human's disk win, committed-but-modified included.
  */
 export async function syncWorktree(
   repoDir: string,
@@ -175,14 +193,17 @@ export async function syncWorktree(
     await git(worktreeDir, ['clean', '-fdx', '-e', 'node_modules']);
   }
 
-  // Overlay the live post file. It may be uncommitted, or committed-but-modified;
-  // either way the bytes on the human's disk are the bytes that get audited.
-  const src = path.join(repoDir, postRelPath);
-  const dest = path.join(worktreeDir, postRelPath);
-  await fs.mkdir(path.dirname(dest), { recursive: true });
-  await fs.copyFile(src, dest);
+  // Overlay the live payload. Any of it may be uncommitted, or
+  // committed-but-modified; either way the bytes on the human's disk are the
+  // bytes that get audited.
+  const payload = await resolvePostPayload(repoDir, postRelPath);
+  for (const rel of payload.files) {
+    const dest = path.join(worktreeDir, rel);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.copyFile(path.join(repoDir, rel), dest);
+  }
 
-  return { worktreeDir, sha, created, postFile: postRelPath };
+  return { worktreeDir, sha, created, postFile: postRelPath, copied: payload.files, payload };
 }
 
 /**

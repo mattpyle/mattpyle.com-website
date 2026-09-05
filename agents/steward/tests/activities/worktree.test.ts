@@ -26,6 +26,12 @@ async function git(cwd: string, ...args: string[]) {
   await exec('git', args, { cwd });
 }
 
+async function write(root: string, rel: string, body: string) {
+  const abs = path.join(root, rel);
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await fs.writeFile(abs, body, 'utf8');
+}
+
 before(async () => {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-wt-'));
   repo = path.join(base, 'repo');
@@ -91,6 +97,67 @@ test('a hard reset discards edits made inside the worktree', async () => {
 
   // `clean -fdx` must remove it, or the next audit builds last run's files.
   await assert.rejects(() => fs.stat(strayPath));
+});
+
+test('overlays the whole payload, not only the markdown', async () => {
+  // The failure this covers, from review `5372eb620069`: a draft with a hero
+  // image audits against a worktree reset to a commit that has never seen the
+  // image, and the build fails on a content reference it cannot resolve. Every
+  // file below is untracked in the primary checkout, exactly as a real draft's
+  // assets are.
+  const withAssets = 'src/content/writing/post-with-assets.md';
+  await write(
+    repo,
+    withAssets,
+    [
+      '---',
+      'title: "assets"',
+      'draft: true',
+      'hero: ../../assets/writing/post-with-assets/hero.png',
+      '---',
+      '',
+      '![body](../../assets/writing/post-with-assets/body.png)',
+      '',
+      '<Video src="/video/demo.mp4" poster="/video/demo-poster.jpg" />',
+      '',
+    ].join('\n'),
+  );
+  await write(repo, 'src/assets/writing/post-with-assets/hero.png', 'hero-bytes');
+  await write(repo, 'src/assets/writing/post-with-assets/body.png', 'body-bytes');
+  await write(repo, 'public/video/demo.mp4', 'video-bytes');
+  await write(repo, 'public/video/demo-poster.jpg', 'poster-bytes');
+  await write(repo, 'cspell.shared.yaml', 'words:\n  - webmcp\n');
+
+  const result = await syncWorktree(repo, worktree, withAssets);
+
+  assert.deepEqual(result.copied, [
+    withAssets,
+    'src/assets/writing/post-with-assets/body.png',
+    'src/assets/writing/post-with-assets/hero.png',
+    'public/video/demo-poster.jpg',
+    'public/video/demo.mp4',
+    'cspell.shared.yaml',
+  ]);
+  for (const rel of result.copied) {
+    assert.equal(
+      await fs.readFile(path.join(worktree, rel), 'utf8'),
+      await fs.readFile(path.join(repo, rel), 'utf8'),
+      `${rel} should be byte-identical in the worktree`,
+    );
+  }
+  assert.equal(result.payload.dictionary, 'cspell.shared.yaml');
+});
+
+test('the payload survives the reset that discards everything else', async () => {
+  // `clean -fdx` removes the overlaid assets along with the rest of the
+  // untracked tree, so the copy has to happen after it, every run — not only on
+  // the run that created the worktree.
+  const heroInWorktree = path.join(worktree, 'src/assets/writing/post-with-assets/hero.png');
+  await fs.rm(heroInWorktree);
+
+  await syncWorktree(repo, worktree, 'src/content/writing/post-with-assets.md');
+
+  assert.equal(await fs.readFile(heroInWorktree, 'utf8'), 'hero-bytes');
 });
 
 test('npm ci is required initially, then cached on an unchanged lockfile', async () => {
