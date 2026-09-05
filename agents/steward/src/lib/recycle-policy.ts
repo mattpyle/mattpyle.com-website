@@ -30,10 +30,19 @@ import type {
  *   only answered fast audits is already at baseline, so recycling it buys
  *   nothing and costs a restart. Only `auditRenderedPage` and `auditLiveUrl`
  *   launch Chrome, so only they arm the policy.
- * - **Never straight after the last activity.** A workflow between two
+ * - **Never straight after the last browser activity.** A workflow between two
  *   activities has no activity in flight, and exiting there would drop the
  *   queue for the seconds it takes to come back. The idle window is what waits
  *   out the rest of a run.
+ * - **A fast audit is not idleness, and it is not busyness either.** Since the
+ *   public `audit_site` tool started running `auditSiteFast` as a standalone
+ *   activity on this container, a steadily-used endpoint means a fast audit
+ *   every few minutes — and an idle clock stamped by *any* activity would have
+ *   postponed the recycle for as long as those kept arriving, which is exactly
+ *   the memory the recycle exists to release. So only browser activities stamp
+ *   the clock. The in-flight count is unchanged and still counts every kind, so
+ *   a fast audit in progress still blocks the exit; it just cannot delay one
+ *   indefinitely once it has returned.
  *
  * The decision is a pure function of four numbers so the four cases are
  * testable without a worker, a clock, or Temporal.
@@ -52,7 +61,7 @@ export const BROWSER_ACTIVITY_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * How long after the last activity of any kind the worker counts as idle.
+ * How long after the last browser activity the worker counts as idle.
  *
  * Sized against a workflow's gaps, not against a page render. `auditSiteWorkflow`
  * moves from one activity to the next in well under a second, and
@@ -66,9 +75,15 @@ export const RECYCLE_IDLE_MS = 5 * 60 * 1000;
 export interface RecycleState {
   /** When a browser activity last started, or `null` if none has. */
   lastBrowserActivityAt: number | null;
-  /** When an activity of any kind last finished, or `null` if none has. */
+  /**
+   * When a **browser** activity last finished, or `null` if none has.
+   *
+   * Browser only, per the policy's third rule above: a fast audit finishing is
+   * not evidence that the memory a page render left behind is still being used,
+   * and treating it as such let a busy endpoint hold a 1.5 GB container open.
+   */
   lastActivityFinishedAt: number | null;
-  /** Activities currently executing in this process. */
+  /** Activities of every kind currently executing in this process. */
   inFlight: number;
 }
 
@@ -93,11 +108,14 @@ export function shouldRecycle(state: RecycleState, now: number): RecycleDecision
     // A browser activity started and nothing has finished, with nothing in
     // flight: the interceptor's `finally` did not run, so the accounting is
     // wrong. Keep polling rather than exiting on a state we cannot explain.
-    return { recycle: false, reason: 'no activity has finished yet' };
+    return { recycle: false, reason: 'no browser activity has finished yet' };
   }
   const idleMs = now - state.lastActivityFinishedAt;
   if (idleMs < RECYCLE_IDLE_MS) {
-    return { recycle: false, reason: `last activity finished ${Math.round(idleMs / 1000)}s ago` };
+    return {
+      recycle: false,
+      reason: `last browser activity finished ${Math.round(idleMs / 1000)}s ago`,
+    };
   }
   return {
     recycle: true,
@@ -125,9 +143,17 @@ export class ActivityTracker {
     }
   }
 
-  finish(): void {
+  /**
+   * `activityType` is required rather than optional: the idle clock is browser
+   * only now, and a caller that forgets to pass the type would silently stamp
+   * nothing at all — a worker that never recycles, which is the failure this
+   * whole file exists to avoid and the one nobody would notice.
+   */
+  finish(activityType: string): void {
     this.#inFlight = Math.max(0, this.#inFlight - 1);
-    this.#lastActivityFinishedAt = this.now();
+    if (BROWSER_ACTIVITY_TYPES.has(activityType)) {
+      this.#lastActivityFinishedAt = this.now();
+    }
   }
 
   state(): RecycleState {
@@ -162,7 +188,7 @@ export function trackActivityExecution(tracker: ActivityTracker): ActivityInterc
         try {
           return await next(input);
         } finally {
-          tracker.finish();
+          tracker.finish(ctx.info.activityType);
         }
       },
     },

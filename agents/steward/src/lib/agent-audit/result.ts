@@ -237,7 +237,26 @@ export interface AuditResult {
    * in their access log or refuse in robots.txt, which is the question a report
    * gets read for after the checks themselves.
    */
-  tool: { name: string; version: string; userAgent?: string };
+  tool: {
+    name: string;
+    version: string;
+    userAgent?: string;
+    /**
+     * How the caller's audit was run, on a surface that has more than one way of
+     * running it. Set by the /mcp endpoint on the document it returns:
+     * `standalone` for an activity it started on Temporal, `standalone-shared`
+     * for a result another caller's activity had already produced, `function`
+     * for one run inside the request that asked for it.
+     *
+     * Optional on the same argument `userAgent` is, and added without moving
+     * `SCHEMA_VERSION` for the same reason: a document written before the field
+     * existed is still a valid document, and every caller that cannot see the
+     * field is a caller that never had a choice of path to be told about.
+     * Nothing in the audit's own verdicts depends on it — the same checks run
+     * either way, which is the point of the activity being the same function.
+     */
+    path?: 'standalone' | 'standalone-shared' | 'function';
+  };
   target: {
     /** Exactly what the caller typed. */
     input: string;

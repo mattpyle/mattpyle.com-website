@@ -19,8 +19,10 @@ import {
   HEALTHCHECK_BASE,
   HOSTED_ACTIVITY_CONCURRENCY,
   IS_TEMPORAL_CLOUD,
+  HOSTED_FAST_ACTIVITY_CONCURRENCY,
   NAMESPACE,
   QUEUE_AUDIT,
+  QUEUE_AUDIT_FAST,
   TEMPORAL_ADDRESS,
   WORKER_READY_LOG,
   temporalConnectionOptions,
@@ -34,13 +36,26 @@ import {
 } from './lib/recycle-policy.js';
 
 /**
- * The **hosted** worker: one process, one queue, no checkout.
+ * The **hosted** worker: one process, two queues, no checkout.
  *
  * This is the entry the Railway container runs (always-on-audit-worker card,
- * leg 2b). `worker.ts` is unchanged and is still what `steward up` starts on
- * Matt's machine — that one registers all three queues, so the laptop can serve
- * everything when it happens to be on, and the two workers do not compete
- * because they claim different queues.
+ * leg 2b). `worker.ts` is unchanged in shape and is still what `steward up`
+ * starts on Matt's machine — that one registers every queue, so the laptop can
+ * serve everything when it happens to be on, and the two processes do not
+ * compete because they claim different queues.
+ *
+ * ## Why two `Worker`s in one process
+ *
+ * `steward-audit` takes one activity at a time, which is a correctness rule
+ * about Lighthouse rather than a throughput setting (`config.ts`'s
+ * `HOSTED_ACTIVITY_CONCURRENCY`). The public `audit_site` tool runs
+ * `auditSiteFast` as a standalone activity on this container and a caller holds
+ * that call open, so a fast audit on that queue would wait behind a 90-second
+ * page render or behind the nightly scorecard's twelve minutes. A second
+ * `Worker` on `steward-audit-fast`, registering `auditSiteFast` and nothing
+ * else, gives the public tool its own dispatch budget on the same connection and
+ * in the same process. Nothing about it is a second deployment: one container,
+ * one image, two pollers.
  *
  * ## Why this is a separate file rather than a flag on `worker.ts`
  *
@@ -96,6 +111,17 @@ const activities = {
   reportRunHealth,
   checkCredentialExpiry,
 };
+
+/**
+ * The fast queue's whole registry: one activity, and it is the same function the
+ * audit workflow schedules on the other queue.
+ *
+ * Written as its own object rather than as a slice of the map above because the
+ * list *is* the contract with the queue. Anything added here becomes work the
+ * public MCP endpoint can dispatch straight onto this container with no workflow
+ * in between, so growing it is a decision rather than a refactor.
+ */
+const fastActivities = { auditSiteFast };
 
 /**
  * The same `unhandledRejection` guard `worker.ts` carries, and for the same
@@ -173,13 +199,16 @@ const RECYCLE_CHECK_MS = 30_000;
  * activity started in the moments after the check.
  */
 function watchForRecycle(
-  worker: Worker,
+  workers: Worker[],
   tracker: ActivityTracker,
 ): { triggered: Promise<boolean>; stop: () => void } {
   let timer: NodeJS.Timeout | undefined;
   const triggered = new Promise<boolean>((resolve) => {
     timer = setInterval(() => {
-      if (worker.getState() !== 'RUNNING') return;
+      // Every worker, because they share this process's memory and this
+      // process's exit. One still starting up, or already draining, is a moment
+      // the policy cannot read, so the check waits for the next tick.
+      if (workers.some((worker) => worker.getState() !== 'RUNNING')) return;
       const decision = shouldRecycle(tracker.state(), Date.now());
       if (!decision.recycle) return;
       clearInterval(timer);
@@ -194,7 +223,7 @@ function watchForRecycle(
         },
         'hosted worker recycling: draining, then exiting 0 for a fresh container',
       );
-      worker.shutdown();
+      for (const worker of workers) worker.shutdown();
       resolve(true);
     }, RECYCLE_CHECK_MS);
     timer.unref();
@@ -256,18 +285,47 @@ async function main() {
     interceptors: { activity: [trackActivityExecution(tracker)] },
   });
 
+  /**
+   * The public MCP endpoint's queue. No workflows, no browser, and its own
+   * dispatch budget.
+   *
+   * `maxConcurrentActivityTaskExecutions` is four rather than one because
+   * nothing here launches Chrome, so the `marky` constraint that makes the other
+   * queue serial does not apply: a fast audit is a dozen HTTP round trips and is
+   * mostly waiting on somebody else's origin. Four is sized against the endpoint
+   * being public and synchronous — a caller's tool call must not queue behind
+   * three other callers' — and it is bounded rather than the SDK's default of
+   * 100 because this container also has to hold a Lighthouse run's memory.
+   *
+   * The same shutdown timings and the same interceptor as the other worker: one
+   * process exits once, and the recycle policy's in-flight count has to see both
+   * queues or it would exit while a fast audit was mid-flight.
+   */
+  const fastWorker = await Worker.create({
+    connection,
+    namespace: NAMESPACE,
+    activities: fastActivities,
+    taskQueue: QUEUE_AUDIT_FAST,
+    maxConcurrentActivityTaskExecutions: HOSTED_FAST_ACTIVITY_CONCURRENCY,
+    shutdownGraceTime: '20 seconds',
+    shutdownForceTime: '40 seconds',
+    interceptors: { activity: [trackActivityExecution(tracker)] },
+  });
+
   log.info(
     {
-      queues: [QUEUE_AUDIT],
+      queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST],
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
       activities: Object.keys(activities),
+      fastActivities: Object.keys(fastActivities),
       hosted: true,
       // In the ready line for the same reason `alerting` is: it is a fact a
       // deploy can change, and the operator reading this line after a deploy is
       // the person who would otherwise find out from a corrupted report.
       activityConcurrency: HOSTED_ACTIVITY_CONCURRENCY,
+      fastActivityConcurrency: HOSTED_FAST_ACTIVITY_CONCURRENCY,
       // Named in the ready line because the operator reads this line after every
       // deploy, and "alerting is off" is precisely the fact a deploy can change
       // by accident (a variable dropped from the Variables tab) and that nothing
@@ -277,14 +335,27 @@ async function main() {
     WORKER_READY_LOG,
   );
 
-  const running = worker.run();
-  const recycle = watchForRecycle(worker, tracker);
-  // Whichever comes first: the policy asking for a recycle, or the worker
-  // stopping for its own reasons (a SIGTERM from a deploy, a fatal error).
+  // Both, and the process lives exactly as long as the pair. `Promise.all`
+  // rather than a race: a worker that stops on its own (a SIGTERM from a deploy,
+  // a fatal error) has to take the other one down with it, or the container
+  // would sit half-serving a queue with nobody watching.
+  const running = Promise.all([worker.run(), fastWorker.run()]);
+  const workers = [worker, fastWorker];
+  const stopAll = () => {
+    for (const each of workers) if (each.getState() === 'RUNNING') each.shutdown();
+  };
+  running.catch(stopAll);
+  const recycle = watchForRecycle(workers, tracker);
+  // Whichever comes first: the policy asking for a recycle, or the workers
+  // stopping for their own reasons.
   const recycled = await Promise.race([recycle.triggered, running.then(() => false)]);
   recycle.stop();
+  stopAll();
   await running;
-  log.info({ queues: [QUEUE_AUDIT] }, 'steward hosted worker drained and stopped');
+  log.info(
+    { queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST] },
+    'steward hosted worker drained and stopped',
+  );
   // Exit 0 and not 1. `main().catch` below exits 1, so the code is what tells a
   // platform restart-on-failure from this deliberate one, and the recycle line
   // above is what tells an operator reading the deploy log the same thing.

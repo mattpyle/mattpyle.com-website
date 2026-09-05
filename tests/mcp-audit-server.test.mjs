@@ -41,9 +41,13 @@ function auditFor(url) {
 /** A connected client and the calls the fake auditor received. */
 async function connect({ runAudit } = {}) {
   const audited = [];
+  // What the tool passed the auditor beside the URL: the caller's `fresh` and the origin the
+  // shared result is keyed on. `audited` stays as it was so the older tests read unchanged.
+  const asked = [];
   const server = createAuditServer({
-    runAudit: runAudit ?? (async (url) => {
+    runAudit: runAudit ?? (async (url, options) => {
       audited.push(url);
+      asked.push({ url, ...options });
       return auditFor(url);
     }),
     renderSummary: (audit) => `# Audit of ${audit.target.origin}\n\n1 failure.`,
@@ -63,7 +67,13 @@ async function connect({ runAudit } = {}) {
   const client = new Client({ name: 'test', version: '0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
-  return { client, server, audited, close: () => Promise.all([client.close(), server.close()]) };
+  return {
+    client,
+    server,
+    audited,
+    asked,
+    close: () => Promise.all([client.close(), server.close()]),
+  };
 }
 
 test('the server announces itself and its instructions on initialize', async (t) => {
@@ -92,7 +102,17 @@ test('without a Temporal connection, audit_site is the only tool', async (t) => 
 
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((tool) => tool.name), [TOOL_NAME]);
-  assert.deepEqual(Object.keys(tools[0].inputSchema.properties ?? {}), ['url']);
+  assert.deepEqual(Object.keys(tools[0].inputSchema.properties ?? {}), ['url', 'fresh']);
+  assert.deepEqual(
+    tools[0].inputSchema.required ?? [],
+    ['url'],
+    'fresh is optional: a caller that has never heard of shared results still gets an audit',
+  );
+  assert.match(
+    tools[0].description,
+    /shared/,
+    'a caller has to be told the result may be another caller-s, before it reads a timestamp',
+  );
   assert.equal(tools[0].annotations?.readOnlyHint, true);
   assert.equal(tools[0].annotations?.openWorldHint, true);
 });
@@ -191,4 +211,39 @@ test('an audit that throws reaches the caller as a tool error', async (t) => {
   const result = await client.callTool({ name: TOOL_NAME, arguments: { url: 'http://169.254.169.254' } });
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /link-local/);
+});
+
+test('the tool passes the auditor the origin it validated, and fresh defaults to false', async (t) => {
+  const { client, asked, close } = await connect();
+  t.after(close);
+
+  await client.callTool({ name: TOOL_NAME, arguments: { url: 'example.com/a/path' } });
+  assert.deepEqual(asked, [{ url: 'example.com/a/path', fresh: false, origin: 'https://example.com' }]);
+});
+
+test('fresh rides through to the auditor, and the origin is the key either spelling produces', async (t) => {
+  const { client, asked, close } = await connect();
+  t.after(close);
+
+  await client.callTool({ name: TOOL_NAME, arguments: { url: 'https://example.com', fresh: true } });
+  await client.callTool({ name: TOOL_NAME, arguments: { url: 'example.com', fresh: false } });
+
+  assert.deepEqual(asked.map((call) => call.fresh), [true, false]);
+  assert.deepEqual(
+    asked.map((call) => call.origin),
+    ['https://example.com', 'https://example.com'],
+    'two spellings of one site must not become two audits',
+  );
+});
+
+test('a non-boolean fresh is refused by the schema before anything is audited', async (t) => {
+  const { client, asked, close } = await connect();
+  t.after(close);
+
+  const result = await client.callTool({
+    name: TOOL_NAME,
+    arguments: { url: 'https://example.com', fresh: 'yes' },
+  });
+  assert.equal(result.isError, true);
+  assert.deepEqual(asked, [], 'a refused call must not reach the auditor');
 });

@@ -34,11 +34,17 @@
  * call here is therefore bounded by an explicit deadline of its own rather than
  * by the function's.
  *
- * **3. The fast tier never touches this file.** `src/pages/mcp.ts` imports it,
- * but nothing in `audit_site`'s path calls into it, so Temporal Cloud being down
- * leaves the fast tier answering exactly as before. That is the stage-3 card's
- * last Done-when line, and it is a property of the call graph rather than of a
- * try/catch.
+ * **3. The fast tier answers whether or not Cloud does.** It used to answer by
+ * never touching this file at all; since `audit_site` started running
+ * `auditSiteFast` as a standalone activity, it touches the connection here and
+ * the property is held one step further out instead. `src/lib/mcp-fast-
+ * standalone.mjs` owns that: no configuration, a failed connect, a start nobody
+ * picks up, or no result inside the budget all end in the same place, which is
+ * the audit running inside this function and the answer saying so in
+ * `tool.path`. A caller never sees a Temporal error from the fast tool. The
+ * property is now held by tests against a fake client rather than by the shape
+ * of the call graph, which is a weaker guarantee honestly stated: see that
+ * file's docblock for what each of the four triggers costs in wall time.
  */
 
 import { Client, Connection, WorkflowNotFoundError } from '@temporalio/client';
@@ -98,7 +104,7 @@ export function readTemporalConfig(env = process.env) {
  * The SDK's calls have no per-call deadline, and an endpoint whose slowest path is
  * "wait for the platform to give up" cannot keep property 2 above.
  */
-function withDeadline(promise, ms, what) {
+export function withDeadline(promise, ms, what) {
   let timer;
   const deadline = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(`${what} did not answer within ${ms / 1000}s`)), ms);
@@ -121,12 +127,13 @@ export function resetTemporalClient() {
   clientPromise = null;
 }
 
-async function getClient() {
+export async function getClient() {
   const config = readTemporalConfig();
   if (!config) {
     throw new Error(
       'The deep tier is not configured on this deployment: no Temporal connection is set. ' +
-        'The fast audit_site tool is unaffected and still works.',
+        'The fast audit_site tool answers either way — it runs the audit in this function ' +
+        'when there is no Temporal to run it on.',
     );
   }
   if (!clientPromise) {
@@ -148,7 +155,8 @@ async function getClient() {
         clientPromise = null;
         throw new Error(
           `The deep tier could not reach Temporal: ${err instanceof Error ? err.message : String(err)}. ` +
-            'The fast audit_site tool runs in this function and is unaffected.',
+            'The fast audit_site tool answers either way — it falls back to running the audit ' +
+            'in this function.',
         );
       });
   }
