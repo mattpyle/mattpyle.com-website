@@ -3705,3 +3705,116 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-sep {
     animation: none;
   }
 }
+
+/* ── /audit ─────────────────────────────────────────────────────────────────
+   A COLOUR AND TYPE PASS, NOT THE RE-SKIN. The /audit re-skin is build 2 of
+   that page; what is here is the minimum that makes the page honest in retro —
+   no element resolves a modern colour token or a modern face — and it is
+   written as a token remap on the two module subtrees rather than as fifty
+   per-selector overrides.
+
+   WHY A REMAP HERE AND NOWHERE ELSE IN THIS FILE. Every other module block
+   below restyles named elements, because retro re-draws them: different rules,
+   different borders, different furniture. This page is not re-drawn yet, so a
+   per-selector block would be fifty rules that say "the same shape, in brown",
+   every one of which build 2 deletes. Remapping the tokens the page's own
+   scoped CSS already reads gets the same painted result from ten declarations,
+   and it fails in the safe direction: a rule added to AuditBody.astro tomorrow
+   is painted in retro without anyone remembering this block exists.
+
+   It is scoped to the two modules and inherits nothing outward: `:root` keeps
+   the modern values, so no other page can see these.
+
+   `npm run sweep:retro` is what holds this honest, over both /audit shapes —
+   the form and a rendered report — which is why RETRO_ROUTES lists the page
+   twice.
+   ───────────────────────────────────────────────────────────────────────── */
+html[data-appearance='retro'] [data-module='audit-hero'],
+html[data-appearance='retro'] [data-module='audit'] {
+  --ink: var(--retro-ink);
+  --ink-2: var(--retro-ink-muted);
+  --ink-4: var(--retro-ink-muted);
+  --ink-6: var(--retro-ink-muted);
+  --rule: var(--retro-frame-border);
+  --rule-2: var(--retro-frame-border);
+  --track: var(--retro-frame-border);
+  --surface: var(--retro-frame-bg);
+  --paper: var(--retro-frame-bg);
+  --bg: var(--retro-parchment);
+  --agents: var(--retro-maroon);
+  --agents-hover: var(--retro-link);
+  --agents-pressed: var(--retro-ink);
+  --control-border: var(--retro-frame-border);
+  /* A leaf green one step darker than modern's, for `--retro-frame-bg` text on
+     it: 7.9:1, measured. Retro's fail reuses maroon, which carries gold below. */
+  --status-pass: #2f5a1f;
+  --status-fail: var(--retro-maroon);
+  --font-display: var(--retro-font-display);
+  --font-body: var(--retro-font-body);
+  --font-mono-plex: var(--retro-font-mono);
+  --radius: 0;
+}
+
+/* Comic Sans at the modern clamp is a wall of text, and retro /scorecard draws
+   no rule under its H1 — so neither does this one. */
+html[data-appearance='retro'] [data-module='audit-hero'] h1 {
+  font-size: 40px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='audit-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='audit-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  animation: none;
+}
+
+/* The two controls take retro's UI face, the way every other retro button and
+   field does; the remap above would otherwise leave the button in Comic Sans
+   and the label in Courier. */
+html[data-appearance='retro'] [data-module='audit'] .audit-form label,
+html[data-appearance='retro'] [data-module='audit'] .audit-form input,
+html[data-appearance='retro'] [data-module='audit'] .audit-form button,
+html[data-appearance='retro'] [data-module='audit'] .rerun button {
+  font-family: var(--retro-font-ui);
+  font-size: 15px;
+}
+
+html[data-appearance='retro'] [data-module='audit'] .audit-form button,
+html[data-appearance='retro'] [data-module='audit'] .rerun button {
+  border: 2px outset var(--retro-frame-border);
+  color: var(--retro-gold);
+}
+
+html[data-appearance='retro'] [data-module='audit'] .audit-form input {
+  border: 2px inset var(--retro-frame-border);
+}
+
+/* The fail mark is maroon with gold on it, 7.2:1 — the pairing this file uses
+   wherever something has to read as a warning without leaving the palette. */
+html[data-appearance='retro'] [data-module='audit'] .mark--fail {
+  color: var(--retro-gold);
+}
+
+/* Section headings take the dotted maroon rule every other retro band carries,
+   in place of the modern hairline. */
+html[data-appearance='retro'] [data-module='audit'] .band-body,
+html[data-appearance='retro'] [data-module='audit'] .report-summary {
+  border-color: var(--retro-maroon);
+  border-style: dotted;
+  border-width: 0;
+}
+
+html[data-appearance='retro'] [data-module='audit'] .band-body { border-top-width: 2px; }
+
+html[data-appearance='retro'] [data-module='audit'] .report-summary { border-bottom-width: 2px; }

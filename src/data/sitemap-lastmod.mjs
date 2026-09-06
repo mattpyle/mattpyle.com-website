@@ -47,6 +47,7 @@ export const STATIC_ROUTE_LASTMOD = Object.freeze({
   '/': '2026-07-15',
   '/about/': '2026-07-15',
   '/activity/': '2026-08-22',
+  '/audit/': '2026-09-06',
   '/projects/': '2026-07-15',
   '/changelog/': '2026-07-17',
   '/scorecard/': '2026-07-18',
@@ -64,7 +65,7 @@ export const STATIC_ROUTE_LASTMOD = Object.freeze({
  * scripts/validate-sitemap.mjs checks by fetching-shape rather than by file existence. A page
  * added here without a STATIC_ROUTE_LASTMOD entry has no lastmod policy and fails the build.
  */
-export const ON_DEMAND_PAGES = Object.freeze(['/activity/']);
+export const ON_DEMAND_PAGES = Object.freeze(['/activity/', '/audit/']);
 
 /** @param {...(string | undefined)} dates */
 export function latestDate(...dates) {

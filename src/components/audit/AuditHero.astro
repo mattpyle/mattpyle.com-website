@@ -1,0 +1,55 @@
+---
+/**
+ * The /audit headline (design_handoff_audit/README.md, "Screens").
+ *
+ * The site's hero with no right-hand block — the same shape ScorecardHero.astro takes — with the
+ * fill left on its default `--agents`, because /audit is an agents surface. No fill variant class
+ * is added for that reason.
+ *
+ * THE H1 IS CONSTANT ON EVERY SHAPE OF THIS PAGE, including the report (card decision 11): the
+ * empty form, the four errors and a finished report all say "Audit a site", and on a report the
+ * audited origin is an h2 in the body beneath it. The inventory's `Agent-readiness audit: [origin]`
+ * pattern reduces to the origin alone, so the report reads as the page it was run from rather than
+ * as a document that replaced it.
+ *
+ * THE STATEMENT IS MATT'S, 2026-09-05, from a Claude Design mockup of this frame, and it replaces
+ * the bundle's prose lede: the site's hero idiom is a short statement in the display face, not a
+ * paragraph. It uses the shared `.rd-hero .hero-statement` rule (display face, 500, 30px, 32ch),
+ * which every hero has taken since the hero refactor landed.
+ *
+ * THE H1 CLAMP IS THE SHARED ONE, `clamp(74px, 12vw, 176px)`. The design file shows it resolved —
+ * 153px at the 1180 shell, 68px at 390 — because its frames are fixed-width; the clamp is what
+ * ships. The bundle's `--h1-rule` token is not built: `.rd-fill` already draws that rule at
+ * 0.07em, which is the same number (card decision 11).
+ *
+ * IT CARRIES `data-module='audit-hero'` AND NO `.modern-skin`: this is the only /audit hero in the
+ * document and retro restyles it in place, under that module prefix in src/styles/retro.css. The
+ * prefix is load-bearing — Astro appends a `[data-astro-cid-…]` to the selectors below and that
+ * attribute counts as a class, so a retro rule without it loses silently.
+ */
+import { PAGE_STATEMENT, PAGE_TITLE } from '../../data/audit-copy.mjs';
+---
+
+{/*
+  A div, not a section — the same call every other hero on the site made: `npm run validate:html`
+  names an h1 inside sectioning content, and an unnamed <section> is not exposed as a region anyway.
+*/}
+<div class="rd-section rd-hero audit-hero" data-module="audit-hero">
+  <h1><span class="rd-fill">{PAGE_TITLE}</span></h1>
+  <p class="hero-statement">{PAGE_STATEMENT}</p>
+</div>
+
+<style>
+  .audit-hero { padding-top: 72px; }
+
+  .audit-hero .hero-statement {
+    margin-top: 32px;
+    animation: riseIn .7s ease .12s both;
+  }
+
+  @media (max-width: 720px) {
+    .audit-hero { padding-top: 52px; }
+
+    .audit-hero .hero-statement { margin-top: 24px; }
+  }
+</style>

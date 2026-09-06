@@ -1,0 +1,135 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: mp/
+  - navigation "Main navigation":
+    - link "/writing":
+      - /url: /writing/
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
+      - /url: /changelog/
+    - link "/scorecard":
+      - /url: /scorecard/
+    - link "/about":
+      - /url: /about/
+- main:
+  - heading "Audit a site" [level=1]
+  - paragraph: Paste an address. See how ready a site is for AI agents.
+  - region "https://example.com":
+    - heading "https://example.com" [level=2]
+    - paragraph: ·
+    - paragraph: 5 of 13 checks passed
+    - heading "Crawlability" [level=3]
+    - term: Checked
+    - definition: "4"
+    - term: Passed
+    - definition: "2"
+    - term: Failed
+    - definition: "2"
+    - term: N/A
+    - definition: "0"
+    - heading "Discovery" [level=3]
+    - term: Checked
+    - definition: "3"
+    - term: Passed
+    - definition: "1"
+    - term: Failed
+    - definition: "2"
+    - term: N/A
+    - definition: "3"
+    - heading "Content access" [level=3]
+    - term: Checked
+    - definition: "2"
+    - term: Passed
+    - definition: "2"
+    - term: Failed
+    - definition: "0"
+    - term: N/A
+    - definition: "1"
+  - region "Fixes, most important first":
+    - heading "Fixes, most important first" [level=2]
+    - list:
+      - listitem:
+        - heading "robots.txt lets user-triggered AI agents read the site" [level=3]
+        - paragraph: Fail high Crawlability
+        - paragraph: "What was found: a blanket \"User-agent: * / Disallow: /\" blocks every agent, user-triggered ones included"
+        - paragraph: "Fix: Name the user-triggered agents you want to admit and allow them explicitly, above the blanket rule. A person pointing an assistant at your site is a reader, not a crawler, and the two are different questions."
+        - group: Evidence (1)
+      - listitem:
+        - heading "llms.txt exists and follows the spec" [level=3]
+        - paragraph: Fail medium Discovery
+        - paragraph: "What was found: 404 — the origin serves no llms.txt"
+        - paragraph: "Fix: Add an /llms.txt listing your main pages as markdown links. It is the file an assistant reads first when it wants to know what a site is for."
+        - group: Evidence (1)
+      - listitem:
+        - heading "agents.md exists and is markdown" [level=3]
+        - paragraph: Fail medium Discovery
+        - paragraph: "What was found: 200, but the response is text/html rather than markdown"
+        - paragraph: "Fix: Serve /agents.md as text/markdown. A brief that comes back as a rendered page is a brief an agent has to strip tags out of before it can read a word of it."
+        - group: Evidence (1)
+      - listitem:
+        - heading "Content Signals preferences are declared" [level=3]
+        - paragraph: Fail low Crawlability
+        - paragraph: "What was found: no Content-Signal directives in robots.txt and no Content-Signal response header"
+        - paragraph: "Fix: Add Content-Signal directives to robots.txt saying what your content may be used for. Silence is read as consent by some clients and as refusal by others, which is the one answer that helps nobody."
+        - group: Evidence (1)
+  - region "Every check":
+    - heading "Every check" [level=2]
+    - paragraph: All checks the run made, in the order they were run, whatever the verdict.
+    - heading "Crawlability" [level=3]
+    - paragraph: What the site says an agent may do.
+    - paragraph: 4 checks
+    - list "Crawlability":
+      - listitem: robots.txt exists and parses 200, 3 user-agent group(s), 1 sitemap declaration(s) Pass medium
+      - listitem: "robots.txt lets user-triggered AI agents read the site a blanket \"User-agent: * / Disallow: /\" blocks every agent, user-triggered ones included Fail high"
+      - listitem: Content Signals preferences are declared no Content-Signal directives in robots.txt and no Content-Signal response header Fail low
+      - listitem: A sitemap is declared in robots.txt and fetchable 200, 42 URL(s), parses as a urlset Pass high
+    - heading "Discovery" [level=3]
+    - paragraph: What an agent can find without being told where to look.
+    - paragraph: 6 checks
+    - list "Discovery":
+      - listitem: llms.txt exists and follows the spec 404 — the origin serves no llms.txt Fail medium
+      - listitem: The links in llms.txt resolve not run — there is no llms.txt to take links from N/A medium
+      - listitem: Every llms.txt list item leads with a markdown link not run — there is no llms.txt to read list items from N/A low
+      - listitem: agents.md exists and is markdown 200, but the response is text/html rather than markdown Fail medium
+      - listitem: An MCP server is discoverable at /.well-known/mcp-server 200, application/json, names an endpoint at https://example.com/mcp Pass low
+      - listitem: "An A2A agent card is published could not fetch: the connection was reset before any response arrived N/A low"
+    - heading "Content access" [level=3]
+    - paragraph: Whether the content comes back in a form a model can read.
+    - paragraph: 3 checks
+    - list "Content access":
+      - listitem: The homepage serves markdown when asked for it 200 with Content-Type text/markdown and a markdown body Pass high
+      - listitem: "A content page serves markdown when asked for it could not fetch: the connection was reset before any response arrived N/A high"
+      - listitem: The homepage advertises its alternates in a Link header the homepage Link header names an alternate of type text/markdown Pass low
+  - region "Notes on the run":
+    - heading "Notes on the run" [level=2]
+    - list:
+      - listitem: "Run with --fast: the rendered-experience checks (Lighthouse, axe) were skipped, so that category is empty rather than clean."
+  - region "The same report, for an agent":
+    - heading "The same report, for an agent" [level=2]
+    - list:
+      - listitem: "MCP: call audit_site on https://www.mattpyle.com/mcp with { \"url\": \"https://example.com\" }."
+      - listitem: "A2A: send \"audit https://example.com\" to https://www.mattpyle.com/a2a."
+    - paragraph: ·
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Social links":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
+      - /url: https://github.com/mattpyle
+    - link "linkedin (opens in a new tab)":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
+      - /url: /webmcp/
+    - button "Switch to retro mode"
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
+- status

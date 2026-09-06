@@ -1,0 +1,271 @@
+---
+/**
+ * /audit — the first door onto the agent-readiness audit that a person can walk through.
+ *
+ * Every other way to run this audit is agent-shaped: a CLI, an MCP client, an A2A client. This is
+ * a form. A visitor pastes an address, the server runs the fast tier, and the browser lands on a
+ * report at a URL they can share.
+ *
+ * **A GET never visits the target.** That is the load-bearing property of the whole design and the
+ * reason the POST answers with a 303 rather than rendering the report itself: the URL that carries
+ * a report is a URL strangers will paste into chat clients, and every link-preview bot that
+ * follows one must cost the audited site nothing. A GET reads a pointer from the store and reads
+ * the run back; it opens no connection to the origin it is reporting on, whoever asks and however
+ * often.
+ *
+ * **It is an on-demand route that imports the Steward workspace, and the rule
+ * (root CLAUDE.md, Steward section) says such a route has to say why.** Here is why: this page
+ * runs the same audit `/mcp` runs, through the same `agent-audit/fast` entry, with the same
+ * budget, the same standalone-activity path and the same in-function fallback
+ * (src/lib/fast-audit.mjs). The card's decision 3 settles it — the route is a further consumer of
+ * the existing entry and no new entry is added. The alternative would be a second auditor on the
+ * site, which is the one thing this page must not be: a report a person reads here and a report an
+ * agent reads through `/mcp` have to be the same document from the same run, or the page is a
+ * demo rather than a door.
+ *
+ * **It is deliberately absent from `config.matcher` in middleware.ts, exactly as `/mcp` and `/a2a`
+ * are, and for two of the same reasons plus one of its own.** The matcher is a closed whitelist —
+ * every entry has to be a negotiable page, an on-demand path, an agent surface or a retired URL,
+ * and a test holds that. Joining it as a *negotiable page* would have the middleware fetch an
+ * `/audit.md` sibling that does not exist yet; that is build 2's, with the markdown twin. Joining
+ * it as an *on-demand path* would be worse than useless: `canonicalOnDemandPath` exists to strip
+ * the query string, and this page's query string is the report. And the slash normalisation the
+ * matcher brings would 308 a form POST. So the page is reachable at both `/audit` and `/audit/` —
+ * the adapter registers `^/audit/?$` for every on-demand page — and the slash form is the
+ * canonical one, in the sitemap and in the `<link rel="canonical">` Layout emits.
+ *
+ * **The three states, and what decides each.**
+ *
+ * | Request | What happens |
+ * |---|---|
+ * | `GET /audit/` | the form, empty |
+ * | `GET /audit/?url=…` | the remembered report, or the form with the address in it and no message |
+ * | `POST /audit/` | count it, run it, remember it, 303 to the report |
+ *
+ * A GET that finds nothing renders no message at all, by decision (Matt, 2026-09-05): the page
+ * states no retention period, no expiry, and nothing about other callers' runs. Over-surfacing is
+ * a security question as well as a noise one.
+ *
+ * **The four error states each answer with their own status code**, with the page as the body:
+ * 429 with `Retry-After` when the limiter refuses, 400 for an address that cannot be audited, 502
+ * when the site did not answer, 504 when the run spent its budget. A 200 carrying an apology would
+ * be a lie to every non-browser client that ever fetches one of these URLs.
+ *
+ * The script that swaps the button to "Running…" is build 2's, and the page is built so that it is
+ * an enhancement rather than a repair: the live region is in the markup from first paint, empty,
+ * and without any script at all the browser's own loading indicator is the whole story.
+ */
+import Layout from '../layouts/Layout.astro';
+import AuditHero from '../components/audit/AuditHero.astro';
+import AuditBody from '../components/audit/AuditBody.astro';
+import { normaliseTarget } from '@mattpyle/steward/agent-audit/fast';
+import { fastAuditActivityIdFor } from '@mattpyle/steward/agent-audit/deep-contract';
+import { originFor } from '../lib/mcp-audit-server.mjs';
+import { createSiteFastAudit } from '../lib/fast-audit.mjs';
+import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
+import { getClient, withDeadline } from '../lib/mcp-temporal.mjs';
+import { readPointer, writePointer } from '../lib/audit-pointer.mjs';
+import { classifyRunFailure, formatTime, reportView, secondsLeftInHour } from '../lib/audit-report.mjs';
+import { fixtureAudit } from '../lib/audit-fixture.mjs';
+import { errorView } from '../data/audit-copy.mjs';
+import { STEWARD_FAST_CHECKS } from '../data/steward-audit-checks.mjs';
+import { GROUPS } from '../lib/audit-report.mjs';
+
+export const prerender = false;
+
+/**
+ * One line per request, with the outcome as a token rather than as prose — the same shape the
+ * `[mcp]`, `[a2a]` and `[agent-surface]` lines take, so whatever eventually reads these never has
+ * to parse a sentence. No IP: the limiter holds a keyed hash of one for an hour and nothing else
+ * on this site records one at all.
+ */
+function log(fields: Record<string, string | number>) {
+  console.log(
+    `[audit] ${Object.entries(fields)
+      .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+      .join(' ')}`
+  );
+}
+
+const runAudit = createSiteFastAudit({ log: (fields) => log(fields) });
+
+/** How long a read of a finished activity's result may take before the page gives up on it. */
+const RESULT_DEADLINE_MS = 5_000;
+
+/**
+ * The finished result of a standalone activity, or `null`.
+ *
+ * `client.activity.getHandle(id).result()` is the same read src/lib/mcp-fast-standalone.mjs makes
+ * when a start is refused because the hour's ID already completed — the dedup read, used here for
+ * a second purpose: this page's pointer names an activity, and the activity holds the document.
+ *
+ * Every failure is a null and the visitor sees the form with their address in it. A namespace that
+ * has aged the run out, a connection that will not open, a deployment with no Temporal at all: all
+ * of them are "there is no report to show", which is the one thing the page can say about any of
+ * them without inventing a fact about retention.
+ */
+async function readActivityResult(activityId: string) {
+  try {
+    const client = await getClient();
+    return await withDeadline(
+      client.activity.getHandle(activityId).result(),
+      RESULT_DEADLINE_MS,
+      'the audit worker'
+    );
+  } catch (err) {
+    log({ path: '/audit', outcome: 'result-read-failed', reason: err instanceof Error ? err.message : 'error' });
+    return null;
+  }
+}
+
+const now = new Date();
+const method = Astro.request.method;
+
+/** The whole of what the template renders, filled in by whichever branch below runs. */
+let address = '';
+let report: ReturnType<typeof reportView> | null = null;
+let failure: ReturnType<typeof errorView> | null = null;
+
+if (method === 'POST') {
+  const form = await Astro.request.formData();
+  address = String(form.get('url') ?? '').trim();
+
+  // Before the audit, never after: a refused caller must cost this site nothing at the target's
+  // origin, and a caller cannot hold ten slow audits open by never letting one finish. Same key,
+  // same caps and the same shared counters as /mcp — a visitor here and an agent there are the
+  // same caller spending the same budget, which is the only honest arrangement when both run the
+  // same auditor from the same addresses.
+  const verdict = await checkRateLimit({ ip: clientIpFrom(Astro.request.headers), tier: 'fast' });
+  if (!verdict.allowed) {
+    const retryAt = new Date(now.getTime() + verdict.retryAfterSeconds * 1000);
+    failure = errorView('rate-limited', { time: `${formatTime(retryAt)} UTC` });
+    Astro.response.headers.set('Retry-After', String(verdict.retryAfterSeconds));
+    log({
+      path: '/audit',
+      http: 'POST',
+      outcome: `rate-limited/${verdict.scope}`,
+      status: 429,
+      retryAfter: verdict.retryAfterSeconds,
+    });
+  } else {
+    let origin = '';
+    try {
+      origin = originFor(address, normaliseTarget);
+    } catch {
+      failure = errorView('bad-address');
+      log({ path: '/audit', http: 'POST', outcome: 'bad-address', status: 400 });
+    }
+
+    if (origin) {
+      const started = Date.now();
+      const audit = await runAudit(address, { fresh: false, origin });
+      const kind = classifyRunFailure(audit);
+      const toolPath = String(audit.tool?.path ?? 'unknown');
+      log({
+        path: '/audit',
+        http: 'POST',
+        outcome: kind ? `run/${kind}` : 'run/ok',
+        auditPath: toolPath,
+        ms: Date.now() - started,
+      });
+
+      if (kind) {
+        failure = errorView(kind, { origin });
+      } else {
+        // Which half of the envelope is written depends on where the run happened, and the two are
+        // not interchangeable: an activity's result can be read back from the namespace, and an
+        // in-function run exists nowhere but in this request. See src/lib/audit-pointer.mjs.
+        //
+        // The activity ID is rebuilt from the same origin and the clock, which is how
+        // mcp-fast-standalone.mjs built it a moment ago. A run that straddled the top of an hour
+        // would be named for the wrong bucket and read back as nothing, and the page would show the
+        // form with the address in it — the same answer it gives for every other kind of nothing,
+        // which is why this is a rebuild rather than a value threaded back out of the runner.
+        const remembered =
+          toolPath === 'standalone' || toolPath === 'standalone-shared'
+            ? { origin, activityId: fastAuditActivityIdFor(origin, now) }
+            : { origin, report: audit };
+        const written = await writePointer(remembered);
+        if (!written.ok) log({ path: '/audit', outcome: 'pointer-write-failed', reason: written.reason ?? 'error' });
+
+        return Astro.redirect(`/audit/?url=${encodeURIComponent(origin)}`, 303);
+      }
+    }
+  }
+} else {
+  const asked = Astro.url.searchParams.get('url');
+  if (asked) {
+    address = asked;
+    let origin = '';
+    try {
+      origin = originFor(asked, normaliseTarget);
+    } catch {
+      // A GET can carry an unauditable address too — a shared link, a typed URL, a crawler
+      // guessing. It is the same answer as on a POST and it costs the same nothing: this branch
+      // opens no connection either.
+      failure = errorView('bad-address');
+      log({ path: '/audit', http: 'GET', outcome: 'bad-address', status: 400 });
+    }
+
+    if (origin) {
+      // The fixture is the accessibility suite's and local preview's, and `!process.env.VERCEL` is
+      // what makes "never a deployment's" structural rather than a promise about who sets which
+      // variable. Vercel sets VERCEL=1 on every deployment, preview and production alike, so a
+      // stray AUDIT_REPORT_FIXTURE in a project's environment store cannot make this site publish
+      // an invented report about somebody else's origin. See src/lib/audit-fixture.mjs.
+      const audit =
+        process.env.AUDIT_REPORT_FIXTURE === '1' && !process.env.VERCEL
+          ? fixtureAudit({ now, origin })
+          : await (async () => {
+              const pointer = await readPointer({ origin });
+              if (!pointer) return null;
+              return pointer.report ?? (await readActivityResult(pointer.activityId!));
+            })();
+
+      if (audit) {
+        report = reportView(audit, now);
+        // The report is immutable for the rest of its hour and gains a Run again button at the top
+        // of the next one, so the edge may hold it exactly that long. This is what bounds the store
+        // reads a shared link can cost: the second and every later visitor inside the hour is
+        // served by the CDN.
+        Astro.response.headers.set(
+          'Cache-Control',
+          `public, s-maxage=${secondsLeftInHour(now)}, stale-while-revalidate=60`
+        );
+        log({ path: '/audit', http: 'GET', outcome: 'report', origin });
+      } else {
+        log({ path: '/audit', http: 'GET', outcome: 'no-report', origin });
+      }
+    }
+  }
+}
+
+if (failure) Astro.response.status = failure.status;
+
+/** The check catalogue for the empty page, grouped the way the report groups its rows. */
+const byGroup = GROUPS.map((group) => ({
+  ...group,
+  checks: STEWARD_FAST_CHECKS.filter((check) => check.category === group.id),
+}));
+
+const title = 'Audit a site';
+const seoTitle = 'Audit a site for AI agent readiness';
+const description =
+  'Paste a website address and read an agent-readiness audit in the browser: robots.txt and its ' +
+  'AI-agent rules, the sitemap, llms.txt, agents.md, the well-known discovery documents, and ' +
+  'whether the pages serve markdown when asked for it.';
+
+/**
+ * A rendered report is `noindex`, the bare page is not.
+ *
+ * The report is about somebody else's site and it is true of one hour; indexing it would put this
+ * site's name on a verdict about a stranger's, at a URL that outlives the run behind it. The form
+ * is the page worth finding.
+ */
+const noindex = Boolean(report);
+---
+
+<Layout title={title} seoTitle={seoTitle} description={description} noindex={noindex}>
+  <AuditHero />
+  <AuditBody address={address} failure={failure} report={report} byGroup={byGroup} />
+</Layout>
