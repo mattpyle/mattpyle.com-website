@@ -1844,11 +1844,14 @@ html[data-appearance='retro'] [data-module='activity-hero'] .stamp-rendered {
 }
 
 /* The stacked hero: the rule moves to the top of the block, because the block is
-   under the lede rather than beside it. 720px is the shared hero collapse in
-   global.css; it was 900px until 2026-09-05, when this hero left its own grid. */
+   under the lede rather than beside it, and the indent goes with it — the shared
+   16px is there to clear a left rule this block no longer has. 720px is the
+   shared hero collapse in global.css; it was 900px until 2026-09-05, when this
+   hero left its own grid. */
 @media (max-width: 720px) {
   html[data-appearance='retro'] [data-module='activity-hero'] .hero-stamp {
     border-left: 0;
+    padding-left: 0;
     border-top: 2px dotted var(--retro-frame-border);
   }
 }
