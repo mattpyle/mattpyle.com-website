@@ -4,7 +4,6 @@ import {
   AUDIT_VERSION,
   normaliseTarget,
   renderMarkdownSummary,
-  runFastAudit,
 } from '@mattpyle/steward/agent-audit/fast';
 import {
   createAuditServer,
@@ -14,14 +13,9 @@ import {
   SERVER_NAME,
   TOOL_NAME,
 } from '../lib/mcp-audit-server.mjs';
-import { createFastAuditRunner, withPath } from '../lib/mcp-fast-standalone.mjs';
+import { createSiteFastAudit, TEMPORAL_ENABLED } from '../lib/fast-audit.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
-import {
-  getClient,
-  readAuditView,
-  readTemporalConfig,
-  startDeepAudit,
-} from '../lib/mcp-temporal.mjs';
+import { readAuditView, startDeepAudit } from '../lib/mcp-temporal.mjs';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
 /**
@@ -66,63 +60,30 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
  */
 export const prerender = false;
 
-/**
- * The audit's whole wall-clock budget, deliberately well under the function's timeout.
- *
- * A slow target must produce a JSON-RPC answer that says the audit ran out of time, not a platform
- * 504 with no body — an agent can act on the first and can only guess at the second. Steward's own
- * default is 120s, which is right for a CLI run and wrong here; the fast tier against a healthy
- * site finishes in a few seconds, and the checks report a spent budget as evidence rather than as a
- * crash (see `BudgetExhaustedError` handling in checks.ts).
- *
- * 45s sits under the 60s floor every Vercel plan has offered, so the margin does not depend on
- * which plan this project is on or on the platform's current default.
- */
-const AUDIT_BUDGET_MS = 45_000;
-
 /** JSON-RPC's own code for an implementation-defined server error. */
 const RATE_LIMITED_CODE = -32000;
 
 /**
  * Whether this deployment can run a deep audit at all.
  *
- * Read once at module scope, because the answer is a property of the deployment rather than of a
- * request — the variables are set in Vercel's environment variable store and do not change under a
- * running instance. A deployment without them (a local `npm run dev`, a preview) serves the fast
- * tool alone rather than advertising two tools of which one always errors.
+ * A property of the deployment rather than of a request — the variables are set in Vercel's
+ * environment variable store and do not change under a running instance. A deployment without them
+ * (a local `npm run dev`, a preview) serves the fast tool alone rather than advertising two tools
+ * of which one always errors.
+ *
+ * The same fact decides how the fast tier runs, which is why it is read in one place now:
+ * src/lib/fast-audit.mjs, shared with /audit since 2026-09-06.
  */
-const DEEP_ENABLED = readTemporalConfig() !== null;
+const DEEP_ENABLED = TEMPORAL_ENABLED;
 
 /**
- * The fast audit, run inside this function. The fallback, and the whole tool on a
- * deployment with no Temporal configuration.
+ * How `audit_site` runs an audit on this deployment, composed once at module scope for the reason
+ * `DEEP_ENABLED` is read once: it is a property of the deployment.
  *
- * `budgetMs` is a parameter rather than the constant because the standalone path
- * hands it what is left of the one budget after a failed attempt — see
- * mcp-fast-standalone.mjs on why a fresh budget there would be a platform 504.
+ * The budget, the standalone-activity path and its fallback are src/lib/fast-audit.mjs's, shared
+ * verbatim with /audit so the two public doors onto the fast tier cannot diverge on any of them.
  */
-const auditInFunction = (url: string, budgetMs: number = AUDIT_BUDGET_MS) =>
-  runFastAudit(url, { policy: { totalBudgetMs: budgetMs } });
-
-/**
- * How `audit_site` runs an audit on this deployment, decided once at module scope
- * for the reason `DEEP_ENABLED` is: it is a property of the deployment.
- *
- * With a Temporal connection the audit is a standalone `auditSiteFast` on the
- * hosted worker, shared with any other caller asking about the same site in the
- * same UTC hour, and falling back into this function on any of the four triggers.
- * Without one there is nothing to fall back from, so the in-function path is the
- * only path and the document says so rather than leaving `tool.path` absent —
- * "no field" and "ran here" are different facts and only one of them is true.
- */
-const runAudit = DEEP_ENABLED
-  ? createFastAuditRunner({
-      getClient,
-      runInFunction: auditInFunction,
-      budgetMs: AUDIT_BUDGET_MS,
-      log: (fields) => log(fields),
-    })
-  : async (url: string) => withPath(await auditInFunction(url), 'function');
+const runAudit = createSiteFastAudit({ log: (fields) => log(fields) });
 
 /**
  * Every call, one line, with the outcome as a token rather than as prose — the same shape the

@@ -41,6 +41,15 @@ export async function markTabbables(page: Page): Promise<Tabbable[]> {
     function visible(el: Element): boolean {
       if ((el as HTMLElement).hidden) return false;
       if (el.closest('[hidden]')) return false;
+      // Content inside a CLOSED <details> is not tabbable, and the three checks below do
+      // not catch it: Chrome keeps client rects on it and puts the hiding on the details'
+      // own slot rather than on the descendant's computed style. /audit is the first page
+      // here to put a tab stop inside a disclosure — the focusable evidence scroll regions
+      // on its report — and without this line every one of them read as a tab stop the
+      // browser then skipped, which is a defect in the expectation rather than in the page.
+      // The <summary> itself is the disclosure's own control and stays.
+      const details = el.closest('details:not([open])');
+      if (details && el.closest('summary')?.parentElement !== details) return false;
       if (el.getClientRects().length === 0) return false;
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || cs.display === 'none' || cs.contentVisibility === 'hidden') {

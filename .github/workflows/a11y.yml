@@ -106,9 +106,16 @@ jobs:
       # AGENT_TRAFFIC_FIXTURE makes /activity render its tables rather than its
       # store-unavailable state, so axe actually scans the markup that ships. No
       # store exists on a runner, and never should.
+      #
+      # AUDIT_REPORT_FIXTURE is the same device for /audit: its report shape needs a
+      # finished run behind it, and a runner has neither a store to read a pointer from
+      # nor a Temporal namespace to read a result from. Without it the /audit report URL
+      # below would serve the empty form and the larger half of that page would ship
+      # never having been scanned.
       - name: Serve built site
         env:
           AGENT_TRAFFIC_FIXTURE: '1'
+          AUDIT_REPORT_FIXTURE: '1'
         run: node scripts/serve-built-site.mjs --port 4321 &
 
       - name: Wait for local server
@@ -134,6 +141,8 @@ jobs:
             http://localhost:4321/activity \
             http://localhost:4321/steward \
             http://localhost:4321/webmcp \
+            http://localhost:4321/audit \
+            'http://localhost:4321/audit?url=https://example.com' \
             http://localhost:4321/writing/accessibility-and-ai/
 
       # The CLI step above audits what the server sends, which is always modern: retro is a

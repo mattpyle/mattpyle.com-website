@@ -253,6 +253,34 @@ export const PAGES: PageSpec[] = [
     snapshotRedact: ['.check-detail'],
   },
   {
+    name: 'audit',
+    path: '/audit',
+    why: 'Audit template, empty: the only modern text input on the site, its submit button, its live region, and the check catalogue',
+    // The form shape. Nothing on it is content-variable: the label, the button, the note line and
+    // the thirteen check rows are all authored, and the check titles come from
+    // src/data/steward-audit-checks.mjs, which a test on the Steward side already holds equal to
+    // the audit. So there is nothing to redact and no count to protect.
+  },
+  {
+    name: 'audit-report',
+    path: '/audit?url=https://example.com',
+    why: 'Audit template, report: the counts grid, the ranked fix rows with their evidence disclosures, the per-group verdict rows and the agent block',
+    // A SECOND ROW FOR THE SAME TEMPLATE, because the two shapes share almost no markup: every
+    // structure worth a golden on this page — the status marks, the counts grid, the fix rows,
+    // the <details> disclosures — exists only once a run is behind it. The suite serves it with
+    // AUDIT_REPORT_FIXTURE=1 (see playwright.config.ts), which is what makes the counts, the
+    // verdicts and the fix ranking deterministic and therefore worth pinning.
+    //
+    // THE COUNTS AND VERDICTS ARE NOT REDACTED and must not be: `5 of 13 checks passed`, the four
+    // rows of each count column and the Pass/Fail/N/A word on every row are the whole point of
+    // this page, and `·` would assert nothing about any of them.
+    //
+    // The run stamp and the generated line are the two that move: both carry a clock reading
+    // taken relative to the moment the fixture was built, so they would churn the golden on every
+    // run.
+    snapshotRedact: ['.run-stamp', '.report-generated'],
+  },
+  {
     name: 'webmcp',
     path: '/webmcp',
     why: 'The most interactive page: aria-pressed choice buttons, inputs, run buttons, focusable scroll regions',

@@ -11,6 +11,7 @@ export const PAGE_PATHS = [
   '/',
   '/about',
   '/activity',
+  '/audit',
   '/changelog',
   '/changelog/agent-driven-retro-mode',
   '/changelog/agent-signed-guestbook',

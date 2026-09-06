@@ -1,0 +1,860 @@
+---
+/**
+ * Everything below the /audit hero: the form, the four error callouts, and the report
+ * (design_handoff_audit/README.md, "Screens"; every string from
+ * docs/projects/audit-page/content-inventory.md).
+ *
+ * TWO SHAPES, ONE COMPONENT. With a report it renders the report; without one it renders the form,
+ * with the address in the field if there is one and with a callout above it if the run failed. The
+ * two shapes share the H1 in the hero and nothing else, and they are one component because they
+ * are one page: a visitor arrives at the form, submits it, and lands back here with the report,
+ * and a second component would be a second copy of the page furniture that surrounds both.
+ *
+ * NOTHING HERE WRITES A SENTENCE. The page's own words are src/data/audit-copy.mjs, which is the
+ * content inventory as code and is what makes "the page says what the inventory says" a test
+ * rather than a promise. Everything a run contributes — check titles, observed lines, fixes,
+ * evidence, notes — comes off the result document through src/lib/audit-report.mjs and is never
+ * touched here.
+ *
+ * THREE STATUS WORDS. Pass, Fail, N/A, with `not-applicable` and `not-judged` merged on the page
+ * and kept apart in the JSON (Matt, 2026-09-05). THE WORD IS ALWAYS PRESENT and the fill repeats
+ * it: colour reinforces a status here and never carries it, which is the one place this site
+ * departs from /scorecard's stricter "colour carries no state at all" rule, by decision.
+ *
+ * THE ERROR CALLOUT IS NOT A RED FIELD. Surface ground, a 1px rule and a 3px `--agents` left
+ * border — the site's existing callout idiom (`global.css`, the blockquote block) — with the title
+ * in ink at h2 size and the body at 20px. No red, no icon, no exclamation. The register is the
+ * scorecard's: an instrument, courteous where it talks about somebody else's site.
+ *
+ * THE LIVE REGION IS IN THE MARKUP FROM FIRST PAINT, EMPTY. Build 2's script writes into it while
+ * a request is in flight; until then it is an empty `role="status"` line reserving its own height,
+ * because a live region inserted at the moment it has something to say is a live region a screen
+ * reader has not been watching.
+ *
+ * THE FORM SITS ON THE PAGE GROUND WITH NO CARD and a white input (card decision 11). The input's
+ * border is `--control-border` rather than `--rule`: `--rule` on white is under 3:1 and fails
+ * non-text contrast for a control boundary, and this is the site's first modern text input.
+ *
+ * RETRO IS A COLOUR PASS ONLY IN THIS BUILD. The full re-skin is build 2; what
+ * src/styles/retro.css carries today is enough that no element of this page resolves a modern
+ * colour token or a modern face in retro, which is what `npm run sweep:retro` measures.
+ */
+import {
+  AGENT,
+  COUNTS,
+  FOOTER,
+  FORM,
+  REPORT,
+  SECTIONS,
+} from '../../data/audit-copy.mjs';
+
+interface CheckRow {
+  id: string;
+  title: string;
+  observed: string;
+  severity: string;
+  status: string;
+  kind: string;
+}
+
+interface Props {
+  /** Whatever the visitor typed, echoed back into the field. Empty on the bare page. */
+  address: string;
+  /** One of the four failure states, already resolved to a title and a body. */
+  failure: { kind: string; status: number; title: string; body: string } | null;
+  /** The report, or null for every shape that is not one. */
+  report: {
+    origin: string;
+    ranDate: string;
+    ranTime: string;
+    requests: number;
+    seconds: string;
+    passed: number;
+    total: number;
+    aged: boolean;
+    groups: Array<{
+      id: string;
+      label: string;
+      summary: string;
+      checks: CheckRow[];
+      counts: { checked: number; passed: number; failed: number; na: number };
+    }>;
+    fixes: Array<
+      CheckRow & {
+        group: string;
+        fix: string;
+        evidence: Array<{ url: string; status: string; headers: string[]; excerpt: string; note: string }>;
+      }
+    >;
+    checks: CheckRow[];
+    notes: string[];
+    toolName: string;
+    toolVersion: string;
+    generatedDate: string;
+    generatedTime: string;
+  } | null;
+  /** The check catalogue, grouped, for the empty page's "What the audit checks". */
+  byGroup: Array<{
+    id: string;
+    label: string;
+    summary: string;
+    checks: Array<{ id: string; title: string; severity: string; plain: string }>;
+  }>;
+}
+
+const { address, failure, report, byGroup } = Astro.props;
+---
+
+<div class="audit-body" data-module="audit">
+  {failure && (
+    <section class="rd-section band band--callout" aria-labelledby="audit-error">
+      <div class="callout">
+        <h2 id="audit-error">{failure.title}</h2>
+        <p>{failure.body}</p>
+      </div>
+    </section>
+  )}
+
+  {!report && (
+    <>
+      {/*
+        A div, not a section: this band carries no heading, and an unnamed <section> is a region
+        with no name, which is worse for a screen reader than no region at all. The same call every
+        hero on this site makes.
+      */}
+      <div class="rd-section band band--form">
+        <form class="audit-form" method="post" action="/audit/">
+          <label for="audit-url">{FORM.label}</label>
+          <div class="field-row">
+            <input
+              id="audit-url"
+              name="url"
+              type="text"
+              inputmode="url"
+              autocomplete="url"
+              spellcheck="false"
+              autocapitalize="off"
+              required
+              placeholder={FORM.placeholder}
+              value={address}
+            />
+            <button type="submit">{FORM.button}</button>
+          </div>
+          {/*
+            Present and empty from first paint. Build 2's script writes FORM.runningStatus here on
+            submit; with no script this line reserves its height and says nothing, and the
+            browser's own loading indicator is the whole story.
+          */}
+          <p class="run-status" role="status" aria-live="polite"></p>
+        </form>
+
+        <p class="form-note">
+          {FORM.note} <a href="/steward/">{FORM.noteLink}</a>
+        </p>
+      </div>
+
+      <section class="rd-section band" aria-labelledby="audit-checks">
+        <div class="band-head">
+          <h2 id="audit-checks">{SECTIONS.checks}</h2>
+        </div>
+        <div class="band-body band-body--groups">
+          {byGroup.map(group => (
+            <div class="group">
+              <div class="group-head">
+                <h3 id={`audit-group-${group.id}`}>{group.label}</h3>
+                <p class="group-summary">{group.summary}</p>
+                <p class="group-count">{group.checks.length} checks</p>
+              </div>
+              <ul class="check-rows" role="list" aria-labelledby={`audit-group-${group.id}`}>
+                {group.checks.map(check => (
+                  <li class="check-row">
+                    <span class="check-text">
+                      <span class="check-name">{check.title}</span>
+                      <span class="check-detail">{check.plain}</span>
+                    </span>
+                    <span class="check-weight">{check.severity}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  )}
+
+  {report && (
+    <>
+      <section class="rd-section band band--head" aria-labelledby="audit-subject">
+        <div class="band-head">
+          <h2 id="audit-subject">{report.origin}</h2>
+        </div>
+        <div class="band-body">
+          <div class="run-line">
+            <p class="run-stamp">
+              {REPORT.ran(report.ranDate, report.ranTime)} · {REPORT.took(report.requests, report.seconds)}
+            </p>
+            {/*
+              A report run inside the current UTC hour is the report a fresh run would return —
+              the hour is the deduplication bucket the standalone activity ID uses — so Run again
+              is offered only outside it. Its own form, posting the origin, so it is the same
+              request the field above makes.
+            */}
+            {report.aged && (
+              <form method="post" action="/audit/" class="rerun">
+                <input type="hidden" name="url" value={report.origin} />
+                <button type="submit">{REPORT.rerun}</button>
+              </form>
+            )}
+          </div>
+
+          <p class="report-summary">{REPORT.summary(report.passed, report.total)}</p>
+
+          <div class="counts">
+            {report.groups.map(group => (
+              <div class="count-col">
+                <h3>{group.label}</h3>
+                <dl>
+                  <div class="count-row"><dt>{COUNTS.checked}</dt><dd>{group.counts.checked}</dd></div>
+                  <div class="count-row"><dt>{COUNTS.passed}</dt><dd>{group.counts.passed}</dd></div>
+                  <div class="count-row"><dt>{COUNTS.failed}</dt><dd>{group.counts.failed}</dd></div>
+                  <div class="count-row"><dt>{COUNTS.na}</dt><dd>{group.counts.na}</dd></div>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="rd-section band" aria-labelledby="audit-fixes">
+        <div class="band-head">
+          <h2 id="audit-fixes">{SECTIONS.fixes}</h2>
+        </div>
+        <div class="band-body">
+          {report.fixes.length === 0 ? (
+            <p class="fixes-none">{SECTIONS.fixesNone}</p>
+          ) : (
+            <ol class="fixes" role="list">
+              {report.fixes.map(fix => (
+                <li class="fix">
+                  <div class="fix-main">
+                    <h3>{fix.title}</h3>
+                    <p class="fix-meta">
+                      <span class={`mark mark--${fix.kind}`}>{fix.status}</span>
+                      <span class="fix-severity">{fix.severity}</span>
+                      <span class="fix-group">{fix.group}</span>
+                    </p>
+                    <p class="fix-line">
+                      <span class="fix-label">{SECTIONS.fixObserved}</span> {fix.observed}
+                    </p>
+                    <p class="fix-line">
+                      <span class="fix-label">{SECTIONS.fixDo}</span> {fix.fix}
+                    </p>
+                  </div>
+                  {fix.evidence.length > 0 && (
+                    <div class="fix-evidence">
+                      <details>
+                        <summary>{SECTIONS.evidence(fix.evidence.length)}</summary>
+                        {/*
+                          A named, focusable scroll region at every viewport, not only where it
+                          overflows: whether a header value or an excerpt overflows is a viewport
+                          fact the build cannot know, and a static tabindex is what the whole site
+                          does about that (a11y-manual-checks-suite.md, "Scroll regions at 320px").
+                        */}
+                        {fix.evidence.map(entry => (
+                          <pre
+                            class="evidence"
+                            role="region"
+                            tabindex="0"
+                            aria-label={`Evidence for ${fix.title}`}
+                          >{[
+                            entry.url,
+                            entry.status && `status: ${entry.status}`,
+                            ...entry.headers,
+                            entry.excerpt,
+                            entry.note,
+                          ].filter(Boolean).join('\n')}</pre>
+                        ))}
+                      </details>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </section>
+
+      <section class="rd-section band" aria-labelledby="audit-all">
+        <div class="band-head">
+          <h2 id="audit-all">{SECTIONS.allChecks}</h2>
+        </div>
+        <div class="band-body band-body--groups">
+          <p class="all-caption">{SECTIONS.allChecksCaption}</p>
+          {report.groups.map(group => (
+            <div class="group">
+              <div class="group-head">
+                <h3 id={`audit-result-${group.id}`}>{group.label}</h3>
+                <p class="group-summary">{group.summary}</p>
+                <p class="group-count">{group.checks.length} checks</p>
+              </div>
+              <ul class="check-rows" role="list" aria-labelledby={`audit-result-${group.id}`}>
+                {group.checks.map(check => (
+                  <li class="check-row check-row--result">
+                    <span class="check-text">
+                      <span class="check-name">{check.title}</span>
+                      <span class="check-detail">{check.observed}</span>
+                    </span>
+                    <span class="check-verdict">
+                      <span class={`mark mark--${check.kind}`}>{check.status}</span>
+                      <span class="check-weight">{check.severity}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {report.notes.length > 0 && (
+        <section class="rd-section band" aria-labelledby="audit-notes">
+          <div class="band-head">
+            <h2 id="audit-notes">{SECTIONS.notes}</h2>
+          </div>
+          <div class="band-body">
+            <ul class="notes" role="list">
+              {report.notes.map(note => <li>{note}</li>)}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      <section class="rd-section band" aria-labelledby="audit-agent">
+        <div class="band-head">
+          <h2 id="audit-agent">{AGENT.heading}</h2>
+        </div>
+        <div class="band-body">
+          <ul class="agent-lines" role="list">
+            <li>{AGENT.mcp(report.origin)}</li>
+            <li>{AGENT.a2a(report.origin)}</li>
+          </ul>
+          <p class="report-generated">
+            {FOOTER.generated(report.toolName, report.toolVersion, report.generatedDate, report.generatedTime)}
+          </p>
+        </div>
+      </section>
+    </>
+  )}
+</div>
+
+<style>
+  /* ── Shared band furniture ─────────────────────────────────────────────────
+     The same convention /steward uses: every h2 is followed by one full-width
+     hairline, carried by `.band-body` so a new band cannot forget it. */
+  .band { padding-top: 76px; }
+
+  .band--callout,
+  .band--form { padding-top: 44px; }
+
+  .band-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+    overflow-wrap: anywhere;
+  }
+
+  h3 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 23px;
+    letter-spacing: -.02em;
+    color: var(--ink);
+  }
+
+  .band-body {
+    border-top: 1px solid var(--rule-2);
+    padding-top: 26px;
+  }
+
+  /* ── The error callout ─────────────────────────────────────────────────────
+     The site's existing callout idiom: surface ground, 1px rule, 3px coloured
+     left border. No red field and no icon — the word is the whole message. */
+  .callout {
+    max-width: 640px;
+    padding: 22px 26px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--agents);
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .callout h2 {
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+
+  .callout p {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+
+  /* ── The form ──────────────────────────────────────────────────────────────
+     No card: it sits on the page ground with a white input (card decision 11). */
+  .audit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 640px;
+  }
+
+  .audit-form label {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink);
+  }
+
+  .field-row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .audit-form input {
+    flex: 1;
+    min-width: 0;
+    padding: 14px;
+    font-family: var(--font-body);
+    font-size: 18px;
+    color: var(--ink);
+    background: var(--surface);
+    /* NOT --rule: on white it is under 3:1 and fails non-text contrast for a
+       control boundary. --control-border is --ink-6, which clears it. */
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius);
+  }
+
+  .audit-form input::placeholder { color: var(--ink-6); }
+
+  .audit-form button,
+  .rerun button {
+    padding: 14px 22px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--paper);
+    background: var(--agents);
+    border: 1px solid var(--agents);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background-color 240ms ease;
+  }
+
+  .audit-form button:hover,
+  .rerun button:hover {
+    background: var(--agents-hover);
+    border-color: var(--agents-hover);
+  }
+
+  /* The in-flight treatment, one step darker than the agents colour. Build 2's
+     script sets `disabled`; the rule is here so the two halves ship together. */
+  .audit-form button[disabled] {
+    background: var(--agents-pressed);
+    border-color: var(--agents-pressed);
+    cursor: default;
+  }
+
+  /* Reserved from first paint so the line appearing does not move the page. */
+  .run-status {
+    margin: 0;
+    min-height: 15px;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .form-note {
+    margin: 16px 0 0;
+    max-width: 640px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-6);
+  }
+
+  .form-note a { color: var(--agents); }
+
+  .form-note a:hover { color: var(--agents-hover); }
+
+  /* ── Group grids: the check catalogue and the report's own rows ───────────── */
+  .band-body--groups {
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  .all-caption {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--ink-6);
+  }
+
+  .group {
+    display: grid;
+    grid-template-columns: 280px minmax(320px, 1fr);
+    gap: 64px;
+    align-items: start;
+  }
+
+  .group-head h3 { margin-bottom: 8px; }
+
+  .group-summary {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-6);
+  }
+
+  .group-count {
+    margin: 8px 0 0;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+  }
+
+  .check-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .check-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 90px;
+    gap: 24px;
+    align-items: baseline;
+    padding: 14px 0;
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .check-row--result { grid-template-columns: minmax(0, 1fr) 170px; }
+
+  .check-text {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .check-name {
+    font-size: 19px;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+
+  .check-detail {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-6);
+    overflow-wrap: anywhere;
+  }
+
+  .check-weight {
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    text-align: right;
+    color: var(--ink-6);
+  }
+
+  .check-verdict {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  /* ── The status mark ───────────────────────────────────────────────────────
+     The WORD is the status. The fill repeats it, and is deliberately none of
+     the four section colours so a status can never read as a section. */
+  .mark {
+    display: inline-block;
+    padding: 3px 9px;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    line-height: 1.35;
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink-6);
+    border: 1px solid var(--rule);
+  }
+
+  .mark--pass {
+    background: var(--status-pass);
+    border-color: var(--status-pass);
+    color: var(--paper);
+  }
+
+  .mark--fail {
+    background: var(--status-fail);
+    border-color: var(--status-fail);
+    color: var(--paper);
+  }
+
+  /* ── The report header ─────────────────────────────────────────────────────
+     The run line, the optional Run again button, the passed count. */
+  .run-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .run-stamp {
+    margin: 0;
+    font-family: var(--font-mono-plex);
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--ink-4);
+  }
+
+  .rerun { margin: 0; }
+
+  .report-summary {
+    margin: 26px 0 0;
+    padding-bottom: 20px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    color: var(--agents);
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  /* ── The counts grid ───────────────────────────────────────────────────────
+     Three columns with a left rule each, inside a rule top and bottom. */
+  .counts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 28px;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .count-col {
+    padding: 22px 28px;
+    border-left: 1px solid var(--rule);
+  }
+
+  .count-col:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .count-col h3 { font-size: 21px; }
+
+  .count-col dl {
+    margin: 12px 0 0;
+    font-family: var(--font-mono-plex);
+    font-size: 16px;
+  }
+
+  .count-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 0;
+  }
+
+  .count-row dt { color: var(--ink-6); }
+
+  .count-row dd {
+    margin: 0;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Fixes ─────────────────────────────────────────────────────────────────
+     Ranked high to low, each row the fix on the left and its evidence on the
+     right, with a rule under it. */
+  .fixes-none {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+
+  .fixes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .fix {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 44px;
+    align-items: start;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .fix:first-child { padding-top: 0; }
+
+  .fix-main {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .fix-meta {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin: 0;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+  }
+
+  .fix-line {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+
+  .fix-label {
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+  }
+
+  .fix-evidence summary {
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--agents);
+    cursor: pointer;
+  }
+
+  .fix-evidence summary:hover { color: var(--agents-hover); }
+
+  .evidence {
+    margin: 12px 0 0;
+    padding: 14px 16px;
+    max-width: 100%;
+    overflow-x: auto;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  /* ── Notes, the agent block and the footer line ───────────────────────────── */
+  .notes,
+  .agent-lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .notes li {
+    padding: 12px 0;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .notes li:first-child { border-top: 0; padding-top: 0; }
+
+  .agent-lines li {
+    padding: 14px 0;
+    font-family: var(--font-mono-plex);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    border-top: 1px solid var(--rule-2);
+    overflow-wrap: anywhere;
+  }
+
+  .agent-lines li:first-child { border-top: 0; padding-top: 0; }
+
+  .report-generated {
+    margin: 26px 0 0;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+  }
+
+  /* ── One collapse, at the sitewide 720px ─────────────────────────────────── */
+  @media (max-width: 720px) {
+    .band { padding-top: 56px; }
+
+    .band--callout,
+    .band--form { padding-top: 32px; }
+
+    h2 { font-size: 24px; }
+
+    /* The input and the button stack full width, both past the 44px tap target. */
+    .field-row { flex-direction: column; }
+
+    .audit-form input,
+    .audit-form button,
+    .rerun button {
+      width: 100%;
+      min-height: 48px;
+    }
+
+    .group {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    /* The severity word drops under the sentence rather than holding a column. */
+    .check-row,
+    .check-row--result {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .check-weight { text-align: left; }
+
+    .check-verdict { justify-content: flex-start; }
+
+    .counts { grid-template-columns: minmax(0, 1fr); }
+
+    .count-col {
+      padding: 18px 0;
+      border-left: 0;
+      border-top: 1px solid var(--rule-2);
+    }
+
+    .count-col:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    /* The disclosure moves under the fix. */
+    .fix {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+    }
+  }
+</style>

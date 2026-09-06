@@ -1,0 +1,75 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: mp/
+  - navigation "Main navigation":
+    - link "/writing":
+      - /url: /writing/
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
+      - /url: /changelog/
+    - link "/scorecard":
+      - /url: /scorecard/
+    - link "/about":
+      - /url: /about/
+- main:
+  - heading "Audit a site" [level=1]
+  - paragraph: Paste an address. See how ready a site is for AI agents.
+  - text: Website address
+  - textbox "Website address":
+    - /placeholder: example.com
+  - button "Run the audit"
+  - status
+  - paragraph:
+    - text: About a dozen requests to the site, obeying its robots.txt.
+    - link "What one audit does":
+      - /url: /steward/
+  - region "What the audit checks":
+    - heading "What the audit checks" [level=2]
+    - heading "Crawlability" [level=3]
+    - paragraph: What the site says an agent may do.
+    - paragraph: 4 checks
+    - list "Crawlability":
+      - listitem: robots.txt exists and parses There is a robots.txt, it is served as text, and its groups and rules parse. medium
+      - listitem: robots.txt lets user-triggered AI agents read the site The rules do not block the agents a person points at the site on purpose, which is a different question from whether they block training crawlers. high
+      - listitem: Content Signals preferences are declared The site states what its content may be used for, in robots.txt or in a response header, rather than leaving it to be assumed. low
+      - listitem: A sitemap is declared in robots.txt and fetchable robots.txt names a sitemap, and the sitemap at that URL is fetchable and parses. high
+    - heading "Discovery" [level=3]
+    - paragraph: What an agent can find without being told where to look.
+    - paragraph: 6 checks
+    - list "Discovery":
+      - listitem: llms.txt exists and follows the spec There is an llms.txt and it is the format the convention describes, not an HTML page under that name. medium
+      - listitem: The links in llms.txt resolve A sample of the URLs llms.txt points at are fetched, and they answer. medium
+      - listitem: Every llms.txt list item leads with a markdown link Each list item starts with a link, so a parser can read the file as a list of URLs rather than as prose. low
+      - listitem: agents.md exists and is markdown There is an agents.md brief, and it comes back as markdown rather than as a rendered page. medium
+      - listitem: An MCP server is discoverable at /.well-known/mcp-server If the site has an MCP server, a JSON document names its endpoint, so an agent can find it without being told the URL. Nothing to fix if there is no server. low
+      - listitem: An A2A agent card is published An A2A agent card is served at one of the two well-known paths, and it is JSON. low
+    - heading "Content access" [level=3]
+    - paragraph: Whether the content comes back in a form a model can read.
+    - paragraph: 3 checks
+    - list "Content access":
+      - listitem: "The homepage serves markdown when asked for it A request for the homepage with `Accept: text/markdown` returns markdown, not HTML with a markdown content type. high"
+      - listitem: A content page serves markdown when asked for it The same question against a real content page, taken from the site’s own sitemap rather than guessed. high
+      - listitem: "The homepage advertises its alternates in a Link header The homepage points at its own machine-readable alternates in a `Link` header, where a client sees them before parsing anything. low"
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Social links":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
+      - /url: https://github.com/mattpyle
+    - link "linkedin (opens in a new tab)":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
+      - /url: /webmcp/
+    - button "Switch to retro mode"
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
+- status

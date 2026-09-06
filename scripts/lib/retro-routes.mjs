@@ -10,6 +10,14 @@
  *
  * The list itself mirrors the routes `.github/workflows/a11y.yml` audits with `@axe-core/cli` in
  * modern, in the order the workflow lists them. Adding a route here adds it to both checks.
+ *
+ * /audit APPEARS TWICE, AND THE SECOND ENTRY CARRIES A QUERY STRING. The page has two shapes —
+ * the form, and a rendered report — and they share almost no markup: the counts grid, the fix
+ * rows, the evidence disclosures and the status marks exist only on the second. Scanning the
+ * form alone would leave the larger half of the page never audited in retro and never swept.
+ * The report shape needs a run behind it, so the server both consumers run against has to be
+ * started with AUDIT_REPORT_FIXTURE=1 (playwright.config.ts and the a11y workflow both set it;
+ * `npm run sweep:retro` needs it on the server it is pointed at).
  */
 export const RETRO_ROUTES = [
   '/',
@@ -22,5 +30,7 @@ export const RETRO_ROUTES = [
   '/activity',
   '/steward',
   '/webmcp',
+  '/audit',
+  '/audit?url=https://example.com',
   '/writing/accessibility-and-ai/',
 ];

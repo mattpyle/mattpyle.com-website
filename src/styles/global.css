@@ -562,6 +562,36 @@ textarea:focus-visible,
   --changelog:       oklch(0.45 0.11 65);
   --changelog-hover: oklch(0.32 0.1 65);
 
+  /* Status and control, added for /audit (design_handoff_audit).
+     ─────────────────────────────────────────────────────────────────────────
+     NOT SEMANTIC COLOURS. The four above name a section of this site; these
+     name a verdict about somebody else's, and they are deliberately none of
+     the four so a status can never read as a section — the leaf green is
+     chosen against the projects green for exactly that reason. On /audit the
+     WORD is always the status and a fill only repeats it (card decision 5),
+     which is the one place this site relaxes /scorecard's stricter rule that
+     no colour carries state at all.
+
+     Authored in oklch like the rest of the block; the design bundle's hex
+     values (#2f6b1f, #a4262c, #7d2a6c) are what these resolve to. Authoring
+     them as hex would also make them invisible to `npm run sweep:retro`,
+     which finds a modern token leaking into retro by looking for an oklch()
+     in the computed value. --paper on both status fills clears AA (6.4:1 and
+     7.1:1), measured. */
+  --status-pass:     oklch(0.471 0.125 140);
+  --status-fail:     oklch(0.475 0.162 24);
+  /* The submit button while a request is in flight: the agents colour one
+     step darker, and darker than --agents-hover so pressed and hovered are
+     not the same state wearing one paint. */
+  --agents-pressed:  oklch(0.432 0.14 337);
+  /* The 1px boundary of a text input. An alias rather than a fifth colour:
+     --rule on white is under 3:1 and fails non-text contrast for a control
+     boundary, and --ink-6 clears it at 7:1. The name exists because the ROLE
+     is new — this site had no modern text input before /audit — and a rule
+     that reads `border: 1px solid var(--ink-6)` is a rule the next component
+     will copy without the contrast argument attached. */
+  --control-border:  var(--ink-6);
+
   /* Tints — hover grounds and placeholder hatching */
   --tint-writing:  oklch(0.955 0.012 255);
   --tint-agents:   oklch(0.975 0.012 330);

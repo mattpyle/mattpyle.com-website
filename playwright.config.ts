@@ -45,7 +45,12 @@ export default defineConfig({
     // The traffic tables on /scorecard read a store that does not exist locally or on a runner.
     // Without this the section only ever renders its unavailable state, and its tables would ship
     // never having been scanned by axe, reflowed at 320px, or seen by the aria golden.
-    env: { AGENT_TRAFFIC_FIXTURE: '1' },
+    //
+    // AUDIT_REPORT_FIXTURE is the same device for /audit, whose report shape needs a finished
+    // run behind it and gets one from neither a store nor a Temporal namespace on a runner.
+    // Without it every /audit row in this suite would measure the empty form. See
+    // src/lib/audit-fixture.mjs.
+    env: { AGENT_TRAFFIC_FIXTURE: '1', AUDIT_REPORT_FIXTURE: '1' },
     // CI normally refuses to reuse a server, so a stale process cannot make a
     // run pass against yesterday's build. The a11y workflow is the deliberate
     // exception: it has already built once and served dist/client on this port
