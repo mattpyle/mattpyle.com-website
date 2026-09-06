@@ -93,5 +93,15 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
       font-size: 52px;
       line-height: .96;
     }
+
+    /* 44px tap targets, per the mobile spec. */
+    .hero-facts-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+      white-space: nowrap;
+    }
   }
 </style>
