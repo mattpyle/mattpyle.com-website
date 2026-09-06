@@ -12,6 +12,14 @@
  * URL from the page rather than writing one out: the page already holds the
  * endpoint the rest of its copy quotes.
  *
+ * THE HERO'S TYPE AND LAYOUT ARE `.rd-hero` IN global.css: the H1, the 32ch lede,
+ * the row, the right block's hairline shell and the 720px collapse. The endpoint
+ * block sat in a 320px grid column beside the lede until 2026-09-05, and stacked
+ * at 1000px with this page's body bands; it now sits on the shell's right edge and
+ * stacks with every other hero. The bands keep their own 1000px rule — the hero is
+ * one row of two things, and it is legible in two columns at widths where a band
+ * of cards is not.
+ *
  * IT CARRIES `data-module='steward-hero'` AND NO `.modern-skin`, since 2026-08-29:
  * this is the only /steward hero in the document and retro restyles it in place,
  * under that module prefix in src/styles/retro.css.
@@ -32,14 +40,14 @@ const endpointLabel = endpoint.replace(/^https?:\/\//, '');
   made: `npm run validate:html` names an h1 inside sectioning content, and an
   unnamed <section> is not exposed as a region anyway.
 */}
-<div class="rd-section steward-hero" data-module="steward-hero">
+<div class="rd-section rd-hero steward-hero" data-module="steward-hero">
   <h1><span class="rd-fill">Steward</span></h1>
 
   <div class="hero-row">
     <p class="hero-statement">
       The auditor behind the steward-audit User-Agent, and the agent that publishes this site.
     </p>
-    <div class="hero-endpoint">
+    <div class="hero-aside hero-endpoint">
       <span class="hero-endpoint-label">Audit endpoint</span>
       <a class="hero-endpoint-link" href={endpoint}>{endpointLabel}</a>
     </div>
@@ -49,44 +57,7 @@ const endpointLabel = endpoint.replace(/^https?:\/\//, '');
 <style>
   .steward-hero { padding-top: 72px; }
 
-  h1 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(74px, 12vw, 176px);
-    line-height: .92;
-    letter-spacing: -.045em;
-    color: var(--ink);
-    animation: riseIn .7s ease .05s both;
-  }
-
-  .hero-row {
-    display: grid;
-    grid-template-columns: minmax(0, 36ch) 320px;
-    gap: 72px;
-    align-items: end;
-    margin-top: 32px;
-    animation: riseIn .7s ease .12s both;
-  }
-
-  .hero-statement {
-    margin: 0;
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 30px;
-    line-height: 1.3;
-    letter-spacing: -.02em;
-    color: var(--ink-2);
-    text-wrap: pretty;
-  }
-
-  .hero-endpoint {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border-left: 1px solid var(--rule);
-    padding-left: 20px;
-  }
+  .hero-endpoint { gap: 10px; }
 
   .hero-endpoint-label {
     font-size: 18px;
@@ -102,32 +73,8 @@ const endpointLabel = endpoint.replace(/^https?:\/\//, '');
 
   .hero-endpoint-link:hover { color: var(--agents-hover); }
 
-  /* Every two-column band on this page stacks at 1000px, per the bundle's
-     responsive note. The hero goes with them so the page never has one band in
-     two columns and its neighbour in one. */
-  @media (max-width: 1000px) {
-    .hero-row {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 28px;
-    }
-
-    .hero-statement { max-width: 46ch; }
-  }
-
   @media (max-width: 720px) {
     .steward-hero { padding-top: 40px; }
-
-    h1 {
-      font-size: 68px;
-      line-height: .94;
-      letter-spacing: -.04em;
-    }
-
-    .hero-row { margin-top: 28px; }
-
-    .hero-statement { font-size: 24px; }
-
-    .hero-endpoint { padding-left: 16px; }
 
     /* 44px tap target, per the mobile spec. */
     .hero-endpoint-link {

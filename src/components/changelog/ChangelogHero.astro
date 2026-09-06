@@ -3,7 +3,7 @@
  * The /changelog headline.
  *
  * No mockup covers this page (Matt, 2026-08-21); it dresses like the writing
- * index, so this is WritingHero.astro's shape with the fill in CHANGELOG AMBER.
+ * index, so this is the site's hero shape with the fill in CHANGELOG AMBER.
  *
  * The right-hand block reports what the ledger holds — a real count off the
  * collection, not an invented one — and links the machine-readable form of the
@@ -11,6 +11,10 @@
  *
  * A paginated page says which page it is, in place of the count: page 2 showing
  * "37 entries" would be reporting the whole log while listing twenty of it.
+ *
+ * THE HERO'S TYPE AND LAYOUT ARE `.rd-hero` IN global.css: the H1, the 32ch
+ * lede, the row, the right block's hairline shell and the 720px collapse. This
+ * page keeps ONE type override, the mobile H1 below, and it is measured.
  */
 import { formatSiteDate } from '../../lib/format-date.mjs';
 
@@ -33,14 +37,14 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
   validate:html` names an h1 inside sectioning content, and an unnamed <section>
   is not exposed as a region anyway.
 */}
-<div class="rd-section changelog-hero" data-module="changelog-hero">
+<div class="rd-section rd-hero changelog-hero" data-module="changelog-hero">
   <h1><span class="rd-fill rd-fill--changelog">Changelog</span></h1>
 
   <div class="hero-row">
     <p class="hero-statement">
       What has shipped on this site — launches, features, and the occasional experiment.
     </p>
-    <div class="hero-facts">
+    <div class="hero-aside hero-facts">
       <span class="hero-facts-copy">
         {currentPage === 1 ? countLabel : `Page ${currentPage} of ${countLabel}`}{
           latest && <>, latest <time datetime={latest.toISOString()}>{formatSiteDate(latest)}</time></>
@@ -56,46 +60,7 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
 <style>
   .changelog-hero { padding-top: 78px; }
 
-  h1 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(74px, 12vw, 176px);
-    line-height: .92;
-    letter-spacing: -.045em;
-    color: var(--ink);
-    animation: riseIn .7s ease .05s both;
-  }
-
-  .hero-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 40px;
-    margin-top: 44px;
-    animation: riseIn .7s ease .12s both;
-  }
-
-  .hero-statement {
-    margin: 0;
-    max-width: 32ch;
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 30px;
-    line-height: 1.3;
-    letter-spacing: -.02em;
-    color: var(--ink-2);
-    text-wrap: pretty;
-  }
-
-  .hero-facts {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border-left: 1px solid var(--rule);
-    padding-left: 20px;
-  }
+  .hero-facts { gap: 10px; }
 
   .hero-facts-copy {
     font-size: 17px;
@@ -115,33 +80,18 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
   @media (max-width: 720px) {
     .changelog-hero { padding-top: 40px; }
 
-    h1 {
-      /* One word, and a long one: 68px overflows a 320px viewport where
-         "Writing" and "Projects" fit. Measured, not guessed. */
+    /* The one page that does not take the shared 68px. One word, and a long
+       one: 68px overflows a 320px viewport where "Writing" and "Projects" fit.
+       Measured, not guessed.
+
+       IT CARRIES THE RETRO GUARD, in `:global()` because Astro would otherwise
+       append its scoping attribute to `html` and the selector would never
+       match. Without the guard this rule outranks retro's own 44px H1 and
+       repaints it; with it, it only ever applies in modern, where it beats the
+       shared `.rd-hero` rule the way that rule's `:where()` guard intends. */
+    :global(html:not([data-appearance='retro'])) .changelog-hero h1 {
       font-size: 52px;
       line-height: .96;
-      letter-spacing: -.04em;
-    }
-
-    .hero-row {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 28px;
-      margin-top: 28px;
-    }
-
-    .hero-statement { font-size: 24px; }
-
-    .hero-facts { padding-left: 16px; }
-
-    /* 44px tap targets, per the mobile spec. */
-    .hero-facts-links a {
-      display: inline-flex;
-      align-items: center;
-      min-height: 44px;
-      padding: 10px 0;
-      font-size: 18px;
-      white-space: nowrap;
     }
   }
 </style>

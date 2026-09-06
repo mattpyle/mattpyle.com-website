@@ -3,8 +3,11 @@
  * The /about body: the reading column and the sticky portrait rail
  * (docs/projects/redesign/design-export-remaining/design_handoff_about_page).
  *
- * It shares the hero's grid — `minmax(0, 68ch) 300px`, 72px gap — so the page has
- * one right edge from the H1 down to the last fact row.
+ * The band's own grid is `minmax(0, 68ch) 300px` with a 72px gap: a 68ch reading
+ * column and the 300px portrait rail. The hero above declared the same grid until
+ * 2026-09-05, when it took the shared `.rd-hero` row in global.css and put its
+ * right block on the shell's right edge. The two are no longer one grid, and the
+ * page's right edge is the shell's on both.
  *
  * The prose sections wear the existing `.prose` overlay from global.css for their
  * type scale, and override exactly one thing: link colour. The overlay paints

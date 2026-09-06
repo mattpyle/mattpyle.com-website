@@ -6,6 +6,11 @@
  * 1), no eyebrow above it (constraint 2). The only decorative motion on the
  * whole page lives here.
  *
+ * THE HERO'S TYPE AND LAYOUT ARE `.rd-hero` IN global.css, shared with the other
+ * eight heroes: the H1, the 32ch lede, the row, the right block's hairline shell
+ * and the 720px collapse. What stays here is this hero's own right-block
+ * content — the agent pointer — and the padding above the headline.
+ *
  * RETRO RESTYLES THIS SAME MARKUP under
  * `html[data-appearance='retro'] [data-module='home-hero']` in retro.css. The
  * module prefix there is what buys those rules the one extra attribute they
@@ -14,7 +19,7 @@
  */
 ---
 
-<section class="rd-section hero" data-module="home-hero">
+<section class="rd-section rd-hero hero" data-module="home-hero">
   <h1>
     Matt{' '}
     {/*
@@ -30,7 +35,7 @@
       This site is an experiment in building the web for its newest readers, and publishing what
       they see.
     </p>
-    <div class="hero-agent">
+    <div class="hero-aside hero-agent">
       <span class="hero-agent-copy">Reading this as an agent?<br />Start here.</span>
       <a href="/llms.txt" class="hero-agent-link">llms.txt</a>
     </div>
@@ -40,46 +45,7 @@
 <style>
   .hero { padding-top: 78px; }
 
-  h1 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(74px, 12vw, 176px);
-    line-height: .92;
-    letter-spacing: -.045em;
-    color: var(--ink);
-    animation: riseIn .7s ease .05s both;
-  }
-
-  .hero-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 40px;
-    margin-top: 44px;
-    animation: riseIn .7s ease .12s both;
-  }
-
-  .hero-statement {
-    margin: 0;
-    max-width: 30ch;
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 30px;
-    line-height: 1.3;
-    letter-spacing: -.02em;
-    color: var(--ink-2);
-    text-wrap: pretty;
-  }
-
-  .hero-agent {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border-left: 1px solid var(--rule);
-    padding-left: 20px;
-  }
+  .hero-agent { gap: 10px; }
 
   .hero-agent-copy {
     font-size: 17px;
@@ -97,28 +63,14 @@
   @media (max-width: 720px) {
     .hero { padding-top: 40px; }
 
-    h1 {
-      font-size: 68px;
-      line-height: .94;
-      letter-spacing: -.04em;
-    }
-
-    .hero-row {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 28px;
-      margin-top: 28px;
-    }
-
-    .hero-statement { font-size: 24px; }
-
-    /* One inline row on mobile, per the 390px prototype. */
-    .hero-agent {
+    /* One inline row on mobile, per the 390px prototype. The shared collapse
+       stacks the block's children in a column; this hero is the one that wants
+       its label and link on one line. */
+    .hero .hero-agent {
       flex-direction: row;
       align-items: baseline;
       flex-wrap: wrap;
       gap: 14px;
-      padding-left: 16px;
     }
 
     .hero-agent-link {

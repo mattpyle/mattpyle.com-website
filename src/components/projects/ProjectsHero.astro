@@ -2,14 +2,17 @@
 /**
  * The /projects headline.
  *
- * No mockup covers this page (Matt, 2026-08-21). It takes the /writing hero's
- * shape — H1, then a statement beside a bordered right-hand block — with the
- * fill in PROJECTS GREEN, because the spec's rule is that the fill always wears
- * the colour of the section it belongs to.
+ * No mockup covers this page (Matt, 2026-08-21). It takes the site's hero shape
+ * — H1, then a statement beside a bordered right-hand block — with the fill in
+ * PROJECTS GREEN, because the spec's rule is that the fill always wears the
+ * colour of the section it belongs to.
  *
  * The right-hand block is Matt's GitHub profile, which is a real destination
  * already linked from the footer and /about. Constraint 10 rules out inventing
  * a count or a label to fill the slot, so nothing else goes here.
+ *
+ * THE HERO'S TYPE AND LAYOUT ARE `.rd-hero` IN global.css: the H1, the 32ch
+ * lede, the row, the right block's hairline shell and the 720px collapse.
  */
 ---
 
@@ -18,14 +21,14 @@
   validate:html` names an h1 inside sectioning content, and an unnamed <section>
   is not exposed as a region anyway.
 */}
-<div class="rd-section projects-hero" data-module="projects-hero">
+<div class="rd-section rd-hero projects-hero" data-module="projects-hero">
   <h1><span class="rd-fill rd-fill--projects">Projects</span></h1>
 
   <div class="hero-row">
     <p class="hero-statement">
       Software experiments, some built on Temporal and some not. Hobby projects, not a portfolio.
     </p>
-    <div class="hero-source">
+    <div class="hero-aside hero-source">
       <span class="hero-source-copy">The source is public.</span>
       <span class="hero-source-links">
         <a
@@ -42,46 +45,7 @@
 <style>
   .projects-hero { padding-top: 78px; }
 
-  h1 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(74px, 12vw, 176px);
-    line-height: .92;
-    letter-spacing: -.045em;
-    color: var(--ink);
-    animation: riseIn .7s ease .05s both;
-  }
-
-  .hero-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 40px;
-    margin-top: 44px;
-    animation: riseIn .7s ease .12s both;
-  }
-
-  .hero-statement {
-    margin: 0;
-    max-width: 32ch;
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 30px;
-    line-height: 1.3;
-    letter-spacing: -.02em;
-    color: var(--ink-2);
-    text-wrap: pretty;
-  }
-
-  .hero-source {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border-left: 1px solid var(--rule);
-    padding-left: 20px;
-  }
+  .hero-source { gap: 10px; }
 
   .hero-source-copy {
     font-size: 17px;
@@ -112,23 +76,6 @@
 
   @media (max-width: 720px) {
     .projects-hero { padding-top: 40px; }
-
-    h1 {
-      font-size: 68px;
-      line-height: .94;
-      letter-spacing: -.04em;
-    }
-
-    .hero-row {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 28px;
-      margin-top: 28px;
-    }
-
-    .hero-statement { font-size: 24px; }
-
-    .hero-source { padding-left: 16px; }
 
     /* 44px tap targets, per the mobile spec. */
     .hero-source-links a {

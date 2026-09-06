@@ -2,7 +2,7 @@
 /**
  * The /about headline (docs/projects/redesign/design-export-remaining/design_handoff_about_page).
  *
- * Same construction as WritingHero.astro — H1, then a statement beside a bordered
+ * Same construction as every other hero — H1, then a statement beside a bordered
  * right-hand block — with `.rd-fill--ink` on the H1, because /about's section colour
  * is ink: SiteHeader.astro gives this page's nav item `data-section="ink"`, and a
  * page's colour runs from its nav item to its headline.
@@ -12,10 +12,11 @@
  * own nav item. The agent block below is a different thing and stays magenta: those
  * ARE agent surfaces, and they are links rather than the page's identity.
  *
- * The hero row and the body band below it share ONE grid so the page has a single
- * right edge: `minmax(0, 68ch) 300px` with a 72px gap, declared in both. The
- * reading column is 68ch; the 300px column carries the agent block here and the
- * portrait rail below.
+ * THE HERO'S TYPE AND LAYOUT ARE `.rd-hero` IN global.css: the H1, the 32ch lede,
+ * the row, the right block's hairline shell and the 720px collapse. The hero and the
+ * body band shared one `minmax(0, 68ch) 300px` grid until 2026-09-05; they no longer
+ * do. The band keeps that grid for its portrait rail, and the hero's right block sits
+ * on the shell's right edge, which is where every page's does.
  *
  * IT CARRIES `data-module='about-hero'` AND NO `.modern-skin`, since 2026-08-29:
  * this is the only /about hero in the document and retro restyles it in place,
@@ -30,7 +31,7 @@
   made: `npm run validate:html` names an h1 inside sectioning content, and an
   unnamed <section> is not exposed as a region anyway.
 */}
-<div class="rd-section about-hero" data-module="about-hero">
+<div class="rd-section rd-hero about-hero" data-module="about-hero">
   <h1><span class="rd-fill rd-fill--ink">About</span></h1>
 
   <div class="hero-row">
@@ -42,7 +43,7 @@
       `.hero-subscribe`: a label over two mono links, both agent surfaces, both
       in the agents magenta.
     */}
-    <div class="hero-agents">
+    <div class="hero-aside hero-agents">
       <span class="hero-agents-copy">Reading this as an agent?</span>
       <span class="hero-agents-links">
         <a href="/agents.md">/agents.md</a>
@@ -55,45 +56,7 @@
 <style>
   .about-hero { padding-top: 78px; }
 
-  h1 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(74px, 12vw, 176px);
-    line-height: .92;
-    letter-spacing: -.045em;
-    color: var(--ink);
-    animation: riseIn .7s ease .05s both;
-  }
-
-  .hero-row {
-    display: grid;
-    grid-template-columns: minmax(0, 68ch) 300px;
-    gap: 72px;
-    align-items: end;
-    margin-top: 44px;
-    animation: riseIn .7s ease .12s both;
-  }
-
-  .hero-statement {
-    margin: 0;
-    max-width: 34ch;
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 30px;
-    line-height: 1.3;
-    letter-spacing: -.02em;
-    color: var(--ink-2);
-    text-wrap: pretty;
-  }
-
-  .hero-agents {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border-left: 1px solid var(--rule);
-    padding-left: 20px;
-  }
+  .hero-agents { gap: 10px; }
 
   .hero-agents-copy {
     font-size: 17px;
@@ -110,32 +73,8 @@
   .hero-agents-links a { color: var(--agents); }
   .hero-agents-links a:hover { color: var(--agents-hover); }
 
-  /* The grid collapses one step earlier than the type does: 300px + 68ch + 72px
-     stops fitting well before 720px, and a squeezed reading column is worse than
-     a stacked one. */
-  @media (max-width: 1000px) {
-    .hero-row {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 28px;
-    }
-
-    .hero-statement { max-width: 46ch; }
-  }
-
   @media (max-width: 720px) {
     .about-hero { padding-top: 40px; }
-
-    h1 {
-      font-size: 68px;
-      line-height: .94;
-      letter-spacing: -.04em;
-    }
-
-    .hero-row { margin-top: 28px; }
-
-    .hero-statement { font-size: 24px; }
-
-    .hero-agents { padding-left: 16px; }
 
     /* 44px tap targets, per the mobile spec. */
     .hero-agents-links a {
