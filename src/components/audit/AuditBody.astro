@@ -494,9 +494,24 @@ const { address, failure, report, byGroup } = Astro.props;
     color: var(--ink-6);
   }
 
-  .form-note a { color: var(--agents); }
+  /* UNDERLINED, and it has to be. This is the page's one link inside a run of
+     text, and `--agents` against the `--ink-6` around it is under 3:1 — which
+     is axe's `link-in-text-block` and the design system's own rule that colour
+     never carries state alone. The treatment is `.prose a`'s: a hairline
+     underline that darkens to the link's own colour on hover. */
+  .form-note a {
+    color: var(--agents);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--rule);
+    transition: color 240ms ease, text-decoration-color 240ms ease;
+  }
 
-  .form-note a:hover { color: var(--agents-hover); }
+  .form-note a:hover {
+    color: var(--agents-hover);
+    text-decoration-color: currentColor;
+  }
 
   /* ── Group grids: the check catalogue and the report's own rows ───────────── */
   .band-body--groups {
