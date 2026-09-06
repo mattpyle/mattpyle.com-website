@@ -12,12 +12,14 @@
 #
 #   docker build -f agents/steward/Dockerfile -t steward-audit-worker .
 #
-# `railway.json` sets `dockerfilePath` accordingly and Railway uses the repo
-# root as its context by default.
+# The Railway service's own `dockerfilePath` setting points here, and Railway
+# uses the repo root as its context by default.
 #
 # HOST-AGNOSTIC ON PURPOSE (stage-3 card's decision). Nothing below names
-# Railway. Everything Railway-specific lives in `railway.json`, so the
-# Serverless Workers migration can reuse this image unchanged
+# Railway. Everything Railway-specific — the restart policy, the watch
+# patterns, the Dockerfile path — lives on the Railway service, read with the
+# Railway MCP's `get-service-config` or in the dashboard, so the Serverless
+# Workers migration can reuse this image unchanged
 # (audit-worker-on-serverless-workers card).
 
 FROM node:24-bookworm-slim
@@ -99,7 +101,7 @@ USER node
 # **DO NOT SET A START COMMAND ON THE HOST.** Railway's `deploy.startCommand`,
 # and the equivalent on any other platform, replaces this ENTRYPOINT and makes
 # `npm` PID 1 again — which reintroduces both failures with no error and no log
-# line saying so. `railway.json` deliberately carries no `startCommand` for
+# line saying so. The Railway service deliberately carries no start command for
 # exactly this reason. The CMD below is the start command.
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["npm", "run", "worker:hosted", "--workspace", "@mattpyle/steward"]

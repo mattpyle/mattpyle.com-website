@@ -18,8 +18,11 @@ import type {
  * Lighthouse traces, Chromium profiles and page cache are all counted by the
  * cgroup, and nothing in this process can hand them back. A new container can.
  *
- * `railway.json` sets `restartPolicyType: ALWAYS`, so a clean exit is a restart
- * from the cached image in seconds, at the 0.29 GB baseline. The recycle is the
+ * The Railway service sets `restartPolicyType: ALWAYS`, so a clean exit is a
+ * restart in seconds, at the 0.29 GB baseline. Railway re-runs the start
+ * command inside the same container rather than starting a new one — the
+ * hostname does not change and no `Starting Container` line appears — and the
+ * memory still returns to the baseline, which is the point. The recycle is the
  * cheapest way to release memory whose owner we never had to identify.
  *
  * ## What the policy is careful about
