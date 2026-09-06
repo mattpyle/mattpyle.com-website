@@ -8,10 +8,17 @@
  * page — the counts grid, the fix rows, the evidence disclosures, the check tables — and none of
  * it renders without a run behind it.
  *
- * **Opt-in by `AUDIT_REPORT_FIXTURE=1`, never set in production.** It is read in exactly one
- * place, the GET branch of src/pages/audit.astro, and it short-circuits the pointer read only;
- * a POST still runs a real audit whatever this says, because a fixture that answered a POST
- * would make the page's whole reason for existing untestable.
+ * **Opt-in by `AUDIT_REPORT_FIXTURE=1`, and refused outright on a Vercel deployment.** The GET
+ * branch of src/pages/audit.astro reads it in exactly one place, and the condition there is
+ * `AUDIT_REPORT_FIXTURE === '1' && !process.env.VERCEL`. Vercel sets `VERCEL=1` on every
+ * deployment, preview and production alike, so the second half is what makes "never a deployment's"
+ * a property of the code rather than a promise about who sets which variable in a project's
+ * environment store. The failure it forecloses is the bad one: this site publishing an invented
+ * report about a stranger's origin, at a shareable URL, under its own name.
+ *
+ * It short-circuits the pointer read only. A POST still runs a real audit whatever either variable
+ * says, because a fixture that answered a POST would make the page's whole reason for existing
+ * untestable.
  *
  * **The spread is chosen, not plausible.** Every status the page can print appears, both merged
  * N/A sources appear (`not-applicable` and `error`, which render as the same word), all three

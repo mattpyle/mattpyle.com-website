@@ -208,11 +208,13 @@ if (method === 'POST') {
     }
 
     if (origin) {
-      // The fixture is the accessibility suite's and local preview's, never production's: the
-      // report is the larger half of this page and it renders only behind a real run. See
-      // src/lib/audit-fixture.mjs.
+      // The fixture is the accessibility suite's and local preview's, and `!process.env.VERCEL` is
+      // what makes "never a deployment's" structural rather than a promise about who sets which
+      // variable. Vercel sets VERCEL=1 on every deployment, preview and production alike, so a
+      // stray AUDIT_REPORT_FIXTURE in a project's environment store cannot make this site publish
+      // an invented report about somebody else's origin. See src/lib/audit-fixture.mjs.
       const audit =
-        process.env.AUDIT_REPORT_FIXTURE === '1'
+        process.env.AUDIT_REPORT_FIXTURE === '1' && !process.env.VERCEL
           ? fixtureAudit({ now, origin })
           : await (async () => {
               const pointer = await readPointer({ origin });
