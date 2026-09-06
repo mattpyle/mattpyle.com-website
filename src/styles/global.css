@@ -727,6 +727,114 @@ html:not([data-appearance='retro']) body.skin-redesign h1 ::selection {
   }
 }
 
+/* ── The page hero ───────────────────────────────────────────────────────────
+   One rule set for every page's hero: the H1, the lede, the row that carries
+   the lede beside the page's right-hand block, and the one collapse.
+
+   Nine components carried nine copies of this until 2026-09-05, and the copies
+   had drifted into two layouts: four flex rows with the right block on the
+   shell's right edge, four grids that parked it 72px after the lede and left
+   the page's right third empty, and three collapse breakpoints between them. A
+   hero component now brings its markup, its own right-block content and that
+   content's own styles, and nothing else.
+
+   THE SPLIT DOWN THIS BLOCK IS DELIBERATE. Type and colour carry the retro
+   guard, because retro repaints every hero per module in retro.css and those
+   rules have to win structurally rather than by out-specifying this file.
+   Layout, spacing and the lede's measure do not carry it: retro is a re-skin of
+   the SAME DOM and shares one layout, exactly as `.rd-section` above is shared.
+   A hero's retro rules restyle what this block paints and inherit what it
+   measures.
+
+   THE GUARD IS IN `:where()`, for the reason the `a { color: inherit }` rule
+   above states: these are defaults a component is expected to override, and at
+   the full guard's specificity a rule written on one class inside a component
+   loses to them silently. `:where()` contributes nothing, so the type rules
+   land where a component's own two-class selector can still beat them — which
+   is how ChangelogHero pins its 52px H1 and ScorecardHero its lede margin.
+
+   The right block is `.hero-aside` on every page, beside the component's own
+   class: a shared hook, so the next hero (the /audit page is the tenth) takes
+   the rule instead of copying one. Retro selects the component's class, never
+   this one, so its per-module treatments are untouched. */
+.rd-hero h1 {
+  margin: 0;
+  animation: riseIn .7s ease .05s both;
+}
+
+:where(html:not([data-appearance='retro'])) body.skin-redesign .rd-hero h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(74px, 12vw, 176px);
+  line-height: .92;
+  letter-spacing: -.045em;
+  color: var(--ink);
+}
+
+.rd-hero .hero-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  margin-top: 44px;
+  animation: riseIn .7s ease .12s both;
+}
+
+/* 32ch is the value the four flex heroes already used, and it is now the one
+   measure on all nine: about eight to ten words a line at 30px. The three grid
+   heroes had no max-width at all — their column track was the measure — so this
+   is what replaces the track they lost. */
+.rd-hero .hero-statement {
+  margin: 0;
+  max-width: 32ch;
+  line-height: 1.3;
+  text-wrap: pretty;
+}
+
+:where(html:not([data-appearance='retro'])) body.skin-redesign .rd-hero .hero-statement {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 30px;
+  letter-spacing: -.02em;
+  color: var(--ink-2);
+}
+
+/* The shell only: the hairline that separates the block from the lede and the
+   column it stacks its own content in. Gaps, type and colour stay with the
+   component, because the blocks are different things — a subscribe pair, a
+   rendered-at stamp, an endpoint. */
+.rd-hero .hero-aside {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--rule);
+  padding-left: 20px;
+}
+
+/* ONE collapse, at the sitewide 720px. The grid heroes stacked at 900px and
+   1000px, which is why /activity and /webmcp needed a left-rule-to-top-rule
+   swap and /about and /steward a second lede width: a two-column hero that
+   stacks early has a band of widths to dress. A hero that stacks with the rest
+   of the page does not. */
+@media (max-width: 720px) {
+  .rd-hero .hero-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 28px;
+    margin-top: 28px;
+  }
+
+  .rd-hero .hero-aside { padding-left: 16px; }
+
+  :where(html:not([data-appearance='retro'])) body.skin-redesign .rd-hero h1 {
+    font-size: 68px;
+  }
+
+  :where(html:not([data-appearance='retro'])) body.skin-redesign .rd-hero .hero-statement {
+    font-size: 24px;
+  }
+}
+
 /* The skip link is Layout.astro's, and it is painted on every page — off-screen,
    but painted — so its font-family decides whether a route downloads that face.
    Left on the legacy --font-mono it would pull JetBrains Mono onto a redesigned

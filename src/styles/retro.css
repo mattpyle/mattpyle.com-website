@@ -1843,9 +1843,15 @@ html[data-appearance='retro'] [data-module='activity-hero'] .stamp-rendered {
   color: var(--retro-ink-muted);
 }
 
-@media (max-width: 900px) {
+/* The stacked hero: the rule moves to the top of the block, because the block is
+   under the lede rather than beside it, and the indent goes with it — the shared
+   16px is there to clear a left rule this block no longer has. 720px is the
+   shared hero collapse in global.css; it was 900px until 2026-09-05, when this
+   hero left its own grid. */
+@media (max-width: 720px) {
   html[data-appearance='retro'] [data-module='activity-hero'] .hero-stamp {
     border-left: 0;
+    padding-left: 0;
     border-top: 2px dotted var(--retro-frame-border);
   }
 }
@@ -2766,11 +2772,10 @@ html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-statement {
 }
 
 /* The "same tools, as data" rail as a filed card — the slot and the treatment
-   /steward's endpoint block already takes. BOTH edges are replaced: the
-   component draws a left rule at full width and swaps it for a top rule below
-   900px, so a retro rule recolouring one would leave the modern hairline
-   painting the other. The frame covers both, and the narrow band restates it
-   because the component's own media rule sets `border-left: 0` there. */
+   /steward's endpoint block already takes. The frame replaces the shared
+   hairline on every edge, at every width: the hero drew a left rule and swapped
+   it for a top rule below 900px until 2026-09-05, and the narrow-band
+   restatement that swap needed went with it. */
 html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-data {
   background: var(--retro-frame-bg);
   border: 3px ridge var(--retro-frame-border);
@@ -2778,12 +2783,6 @@ html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-data {
   padding: 14px 18px;
 }
 
-@media (max-width: 900px) {
-  html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-data {
-    border: 3px ridge var(--retro-frame-border);
-    padding: 14px 18px;
-  }
-}
 
 html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-data-label {
   font-family: var(--retro-font-body);

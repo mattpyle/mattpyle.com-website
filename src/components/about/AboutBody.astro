@@ -3,8 +3,12 @@
  * The /about body: the reading column and the sticky portrait rail
  * (docs/projects/redesign/design-export-remaining/design_handoff_about_page).
  *
- * It shares the hero's grid — `minmax(0, 68ch) 300px`, 72px gap — so the page has
- * one right edge from the H1 down to the last fact row.
+ * The band's own grid is `minmax(0, 68ch) 300px` with a 72px gap: a 68ch reading
+ * column and the 300px portrait rail. The rail sits on the shell's right edge, in
+ * line with the hero's agent block above it, which is what `justify-content:
+ * space-between` below is for. The hero declared this same grid until 2026-09-05,
+ * when it took the shared `.rd-hero` row in global.css. The two are no longer one
+ * grid, and the page's right edge is the shell's on both.
  *
  * The prose sections wear the existing `.prose` overlay from global.css for their
  * type scale, and override exactly one thing: link colour. The overlay paints
@@ -227,9 +231,14 @@ const REACH = [
 </div>
 
 <style>
+  /* `space-between` puts the rail on the shell's right edge. The two tracks and
+     the gap come to 1025px inside an 1100px content box at 1280px, so without it
+     the free 75px sits to the RIGHT of the rail and the rail lands short of the
+     hero's agent block above it. The gap is the floor, not the measure. */
   .about-body {
     display: grid;
     grid-template-columns: minmax(0, 68ch) 300px;
+    justify-content: space-between;
     gap: 72px;
     align-items: start;
     padding-block: 64px 0;
