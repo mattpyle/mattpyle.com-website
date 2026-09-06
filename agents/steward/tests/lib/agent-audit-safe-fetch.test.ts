@@ -4,7 +4,7 @@ import http from 'node:http';
 import dns from 'node:dns/promises';
 import dnsCallback from 'node:dns';
 import type { AddressInfo } from 'node:net';
-import { AUDIT_AGENT_TOKEN, TOOL_VERSION } from '../../src/lib/agent-audit/checks.js';
+import { assembleResult, AUDIT_AGENT_TOKEN, TOOL_NAME, TOOL_VERSION } from '../../src/lib/agent-audit/checks.js';
 import {
   assertConnectableUrl,
   AUDIT_USER_AGENT,
@@ -394,6 +394,29 @@ test('the robots.txt token is the User-Agent product token', () => {
   // the site owner has no way to tell — the auditor keeps arriving and keeps reporting itself as
   // allowed. Two constants in two files, so nothing but this holds them together.
   assert.equal(AUDIT_USER_AGENT.split('/')[0], AUDIT_AGENT_TOKEN);
+});
+
+test('one name describes the auditor everywhere it says so', () => {
+  // The report was headed `steward audit-url` until 2026-09-06, which is the CLI verb that
+  // produces a report and not the thing that fetched anybody's site. Harmless while the only
+  // reader was whoever typed the verb, and not harmless once /audit shipped: a stranger finds
+  // `steward-audit` in their access log, follows the URL in the User-Agent, audits their own site,
+  // and reads a footer naming something they have never heard of.
+  //
+  // Asserted on a document `assembleResult` actually produced rather than on the constant, because
+  // the constant being right is not the property that matters — what a report says about itself is.
+  const report = assembleResult({
+    input: 'example.com',
+    origin: 'https://example.com',
+    startedAt: '2026-09-06T09:15:00.000Z',
+    finishedAt: '2026-09-06T09:15:03.200Z',
+    requests: 14,
+    checks: [],
+    notes: [],
+  });
+  assert.equal(report.tool.name, AUDIT_AGENT_TOKEN);
+  assert.equal(report.tool.name, AUDIT_USER_AGENT.split('/')[0]);
+  assert.equal(TOOL_NAME, AUDIT_AGENT_TOKEN);
 });
 
 test('one version describes the auditor everywhere it says so', () => {

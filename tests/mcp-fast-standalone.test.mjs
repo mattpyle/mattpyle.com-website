@@ -23,7 +23,7 @@ const HOUR_ID = 'audit:https://example.com:2026-09-04T17';
 function auditFor(url, where) {
   return {
     schemaVersion: 2,
-    tool: { name: 'steward audit-url', version: '0.2.0' },
+    tool: { name: 'steward-audit', version: '0.2.0' },
     target: { input: url, origin: 'https://example.com' },
     startedAt: '2026-09-04T17:42:11.000Z',
     finishedAt: '2026-09-04T17:42:15.000Z',
