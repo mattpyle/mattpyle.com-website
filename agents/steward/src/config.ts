@@ -378,13 +378,19 @@ export const SCORECARD_ARCHIVE_DIR = path.join(REVIEWS_DIR, '_scorecard');
 export const SCORECARD_ARCHIVE_REL = 'agents/steward/reviews/_scorecard';
 
 /**
- * The standing branch `archiveScorecardRun` appends to.
+ * The branch `archiveScorecardRun` appends to.
  *
- * One long-lived branch and one long-lived PR, not one per run, and that split
- * is the point: the run-log PR appearing *means something changed* (spec §6),
- * and it would stop meaning that if every no-op night opened one too. The
- * archive is written on every execution including no-ops (spec §5.2), so it
- * needs somewhere to accumulate that carries no signal. Matt merges it whenever.
+ * One branch and one PR, not one per run, and that split is the point: the
+ * run-log PR appearing *means something changed* (spec §6), and it would stop
+ * meaning that if every no-op night opened one too. The archive is written on
+ * every execution including no-ops (spec §5.2), so it needs somewhere to
+ * accumulate that carries no signal. Matt merges it whenever.
+ *
+ * The name outlives any one branch. Merging the archive PR deletes the branch,
+ * because that is this repository's setting, so `archiveScorecardRun` calls
+ * `ensureBranch` every run and recreates it off the default branch when it
+ * finds it gone. The records do not go with it: they merged to the default
+ * branch, which is where the fresh branch starts.
  */
 export const SCORECARD_ARCHIVE_BRANCH = 'steward/scorecard-archive';
 

@@ -485,7 +485,7 @@ export interface ArchiveScorecardRunResult {
  * archive is the only place that per-page detail survives at all — the public
  * run-log never carries it.
  *
- * ## It commits to a standing branch, not to the run's PR (2026-08-14)
+ * ## It commits to one accumulating branch, not to the run's PR (2026-08-14)
  *
  * The archive used to be a `writeFile` into the checkout, which left the record
  * untracked until somebody remembered to commit it. It now commits through the
@@ -495,11 +495,17 @@ export interface ArchiveScorecardRunResult {
  * Not the run's own PR branch. `publishScorecardRun` only runs when the result
  * changed or went stale, so a run-log PR appearing **means something changed**
  * (spec §6) — and it would stop meaning that the moment every no-op night
- * opened one to carry an archive record. One standing branch and one standing
- * PR keeps the signal where it belongs and gives the no-op nights somewhere to
- * accumulate. `SCORECARD_ARCHIVE_BRANCH` is created off the default branch once
- * and then only ever appended to; it is never reset, because unlike the run-log
- * branch its whole content is history nobody has merged yet.
+ * opened one to carry an archive record. One archive branch and one archive PR
+ * keeps the signal where it belongs and gives the no-op nights somewhere to
+ * accumulate. `ensureBranch` below creates `SCORECARD_ARCHIVE_BRANCH` off the
+ * default branch whenever it is absent, and every run after that appends to it.
+ * It is never reset while it exists, because until the archive PR merges its
+ * whole content is history nobody else has. Merging that PR ends the branch
+ * rather than resetting it: the repository deletes a branch on merge, the
+ * records land on the default branch, and the next night's `ensureBranch` cuts
+ * a fresh one from there. Nothing is lost either way — an unmerged branch keeps
+ * accumulating, and a merged one has already handed its records to the default
+ * branch.
  *
  * **The archive is append-only** (spec §5.2), which it was not until this
  * resolved a filename: a second run on a day already archived overwrote
@@ -567,10 +573,11 @@ export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promi
     body:
       'Per-run Scorecard records — public metrics plus the per-page raw scores the ' +
       'public run-log never carries (spec §5.2).\n\n' +
-      'This branch is **standing**: every run appends to it, including the no-op nights ' +
-      'that open no run-log PR of their own. That is the point — a `Scorecard: <id>` PR ' +
-      'appearing means a number moved, and it would stop meaning that if the archive rode ' +
-      'in it. Merge this whenever; nothing waits on it.\n\n' +
+      'Every run appends to this branch, including the no-op nights that open no run-log ' +
+      'PR of their own. That is the point — a `Scorecard: <id>` PR appearing means a number ' +
+      'moved, and it would stop meaning that if the archive rode in it. Merge this whenever; ' +
+      'nothing waits on it. Merging puts these records on the default branch and deletes the ' +
+      'branch, and the next run cuts a new one from there and carries on.\n\n' +
       `Most recent record: \`${archiveId}\` (${record.decision}).\n\n` +
       '---\n\n' +
       '*Opened by the Scorecard workflow. It never merges — that is deliberately a human act (design rule 2).*',
