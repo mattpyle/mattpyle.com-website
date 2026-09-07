@@ -119,6 +119,11 @@ export const CLIENT_FAMILIES = [
   { family: 'cohere-ai', match: /cohere-ai/i },
   { family: 'amazonbot', match: /amazonbot/i },
 
+  // This site's own auditor, which reads 25 pages here every night and audits other people's
+  // sites under the same token. Named like any other crawler, and above `other-bot` so the
+  // generic robot pattern can never claim it. /steward is the page the string links to.
+  { family: 'steward-audit', match: /^steward-audit\//i },
+
   // The script tells. Somebody at a terminal or a small program is the second most interesting row
   // on this page after the named agents, and it is the one a live agent task usually shows up as.
   { family: 'curl', match: /^curl\//i },
