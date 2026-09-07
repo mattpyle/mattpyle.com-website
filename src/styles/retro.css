@@ -1112,10 +1112,22 @@ html[data-appearance='retro'] [data-module='article'] .hero img {
   box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
 }
 
-/* The reading measure the legacy article had. The shell gives the prose column
-   about 830px, which runs well past a comfortable line of 17.5px Georgia. */
-html[data-appearance='retro'] [data-module='article'] .prose {
-  max-width: 68ch;
+/* The reading measure both article pages take, AS A LENGTH RATHER THAN `ch`.
+   It was 68ch, and a character measure gives each appearance a different column:
+   68ch of retro's 17.5px Source Serif 4 is 609px against modern's 816px of 20px
+   Plex Sans. Switching appearance therefore moved every line ending on the page,
+   and on the entry page, which has no rail beside the prose, the column also lost
+   a third of its width against the shell it sits in. 816px is modern's own
+   column, and a pixel width is the one thing the two fonts cannot pull apart.
+
+   The hero takes the same value, and so overrides the 68ch the shared "Article
+   hero" block in src/styles/global.css sets, for the same reason it sets one:
+   the figure and the prose under it are one column and must not resolve to two
+   widths. At 17.5px this is about 100 characters a line; if that reads long the
+   answer is the retro prose size, not the width. */
+html[data-appearance='retro'] [data-module='article'] .prose,
+html[data-appearance='retro'] [data-module='article'] .hero {
+  max-width: 816px;
 }
 
 /* The rail as a sidebar panel. Same ridge frame and hard shadow as every other
@@ -1499,12 +1511,18 @@ html[data-appearance='retro'] .log-pager .pager-count {
    for a third reason: the guest book's rows use `.entry-lead` and `.entry-meta`
    too, and a bare selector would repaint them on the homepage. */
 
+/* THE HEAD'S TWO CAPS ARE LENGTHS, for the reason the prose measure above is
+   one. Modern caps the title at 24ch and the lead at 40ch, and those resolve
+   against retro's smaller fonts to about 500px and 370px, so both wrapped far
+   short of the 816px column below them. 816px puts all three on one right edge.
+   The text still wraps earlier when it is short enough to. */
 html[data-appearance='retro'] [data-module='article'] .entry-title {
   font-family: var(--retro-font-display);
   font-size: 34px;
   line-height: 1.15;
   letter-spacing: normal;
   color: var(--retro-maroon);
+  max-width: 816px;
   animation: none;
 }
 
@@ -1515,6 +1533,7 @@ html[data-appearance='retro'] [data-module='article'] .entry-lead {
   font-weight: normal;
   letter-spacing: normal;
   color: var(--retro-ink-muted);
+  max-width: 816px;
   animation: none;
 }
 
