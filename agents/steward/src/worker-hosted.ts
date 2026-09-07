@@ -6,7 +6,7 @@ import {
   auditSiteFast,
   auditSiteFetchChecks,
 } from './activities/agent-audit.js';
-import { checkCredentialExpiry, reportRunHealth } from './activities/health.js';
+import { checkActionUsage, checkCredentialExpiry, reportRunHealth } from './activities/health.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -18,6 +18,7 @@ import {
 import {
   HEALTHCHECK_BASE,
   HOSTED_ACTIVITY_CONCURRENCY,
+  METRICS_API_KEY,
   IS_TEMPORAL_CLOUD,
   HOSTED_FAST_ACTIVITY_CONCURRENCY,
   NAMESPACE,
@@ -105,11 +106,14 @@ const activities = {
   readPublishedScorecard,
   publishScorecardRun,
   archiveScorecardRun,
-  // The scorecard's alerting leg. Both are one HTTPS POST to the alerting
-  // service and read `STEWARD_HEALTHCHECK_BASE` from the host's environment, so
-  // they satisfy the "nothing local" rule this list enforces.
+  // The scorecard's alerting leg. All three are HTTPS calls that read their
+  // configuration from the host's environment — `STEWARD_HEALTHCHECK_BASE` for
+  // the ping, and `TEMPORAL_METRICS_API_KEY` for the usage sample's second call,
+  // out to Temporal Cloud's metrics endpoint — so they satisfy the "nothing
+  // local" rule this list enforces.
   reportRunHealth,
   checkCredentialExpiry,
+  checkActionUsage,
 };
 
 /**
@@ -168,12 +172,26 @@ function assertPublishCredentials(): void {
  * watches.
  */
 function warnIfUnmonitored(): void {
-  if (HEALTHCHECK_BASE) return;
-  log.warn(
-    'STEWARD_HEALTHCHECK_BASE is unset — no run-health signals will be sent, so a failed or ' +
-      'bad-shaped nightly scorecard, and a dead worker, will pass unnoticed. Set it in the ' +
-      "host's environment (on Railway: the service's Variables tab).",
-  );
+  if (!HEALTHCHECK_BASE) {
+    log.warn(
+      'STEWARD_HEALTHCHECK_BASE is unset — no run-health signals will be sent, so a failed or ' +
+        'bad-shaped nightly scorecard, and a dead worker, will pass unnoticed. Set it in the ' +
+        "host's environment (on Railway: the service's Variables tab).",
+    );
+  }
+  // Its own warning rather than a clause in that one: the two variables switch
+  // off different things, and a worker with alerting configured but no metrics
+  // key is a worker whose spend surface is unwatched while every other check
+  // looks healthy — which is precisely the state that would otherwise go
+  // unnoticed for a month.
+  if (!METRICS_API_KEY) {
+    log.warn(
+      'TEMPORAL_METRICS_API_KEY is unset — the nightly run will not sample Temporal Cloud action ' +
+        'usage, so a runaway workflow burning actions will pass unnoticed until somebody opens ' +
+        "the Cloud usage page. Set it in the host's environment (on Railway: the service's " +
+        'Variables tab).',
+    );
+  }
 }
 
 /**
@@ -331,6 +349,10 @@ async function main() {
       // by accident (a variable dropped from the Variables tab) and that nothing
       // else would ever announce.
       alerting: HEALTHCHECK_BASE ? 'configured' : 'OFF',
+      // Beside `alerting` and for the same reason: a variable dropped from the
+      // Variables tab switches this check off silently, and the ready line after
+      // a deploy is the only place that fact ever surfaces.
+      actionUsage: METRICS_API_KEY ? 'configured' : 'OFF',
     },
     WORKER_READY_LOG,
   );

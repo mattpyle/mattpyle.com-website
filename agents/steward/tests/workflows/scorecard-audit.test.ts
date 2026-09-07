@@ -112,6 +112,16 @@ function mockActivities(overrides: MockOverrides = {}) {
         dueCount: 0,
       };
     },
+    checkActionUsage: async () => {
+      calls.push('checkActionUsage');
+      return {
+        signal: 'action-usage',
+        ok: true,
+        sent: true,
+        summary: 'Temporal Cloud action usage in a test namespace: 0.25/s foreground.',
+        foregroundPerSecond: 0.25,
+      };
+    },
   };
   return { activities, calls, archived, signals };
 }
@@ -606,9 +616,10 @@ test('a healthy scheduled run signals the nightly check and checks credentials f
   );
 
   assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', true]]);
-  // Before the fan-out, so a run that later dies on an expired token has
-  // already said which token it was.
-  assert.equal(calls[0], 'checkCredentialExpiry');
+  // Both before the fan-out, so a run that later dies on an expired token has
+  // already said which token it was — and, for the usage sample, so the minute
+  // it measures is the namespace at rest rather than this run's own burst.
+  assert.deepEqual(calls.slice(0, 2), ['checkActionUsage', 'checkCredentialExpiry']);
 });
 
 test('a healthy manual run signals nothing — it must not hold the dead-man\'s switch down', async () => {
@@ -623,6 +634,9 @@ test('a healthy manual run signals nothing — it must not hold the dead-man\'s 
 
   assert.deepEqual(signals, []);
   assert.ok(!calls.includes('checkCredentialExpiry'));
+  // The usage check has a one-day period of its own, so a manual run pinging it
+  // would hold that dead-man's switch down exactly as it would the nightly's.
+  assert.ok(!calls.includes('checkActionUsage'));
 });
 
 test('a completed run with one failed page fails its check, naming the page', async () => {

@@ -140,3 +140,23 @@ test('a non-http scheme is refused', async () => {
   assert.equal(outcome.sent, false);
   assert.match(outcome.reason ?? '', /http\(s\)/);
 });
+
+test('the action-usage signal resolves to its own check slug', async () => {
+  // A new signal costs a row in `HEALTH_CHECK_SLUGS` and no new configuration,
+  // which is the property that design was chosen for — but the check still has
+  // to exist under that exact name at the service, or every ping 404s. This is
+  // the assertion that pins the name the check was created under.
+  await withServer(
+    (_n, res) => res.end('OK'),
+    async (base, received) => {
+      const ok = await sendHealthPing('action-usage', OK_SHAPE, base);
+      assert.equal(ok.sent, true);
+      assert.equal(received[0].url, '/pingkey/steward-action-usage');
+
+      const bad = await sendHealthPing('action-usage', BAD_SHAPE, base);
+      assert.equal(bad.sent, true);
+      assert.equal(received[1].url, '/pingkey/steward-action-usage/fail');
+      assert.equal(received[1].body, BAD_SHAPE.summary);
+    },
+  );
+});

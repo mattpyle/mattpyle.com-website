@@ -139,6 +139,26 @@ export const GITHUB_REPO = process.env.STEWARD_GITHUB_REPO ?? 'mattpyle/mattpyle
  */
 export const HEALTHCHECK_BASE = (process.env.STEWARD_HEALTHCHECK_BASE ?? '').replace(/\/+$/, '');
 
+/**
+ * The Temporal Cloud OpenMetrics endpoint, and the key that reads it.
+ *
+ * A second credential rather than `TEMPORAL_API_KEY`: the metrics endpoint takes
+ * an account-level Metrics Read-Only role, and the key the workers connect with
+ * is namespace-scoped and cannot read it. Splitting them also means the sampler
+ * holds the narrower of the two.
+ *
+ * **Unset means the check is off**, the same contract `HEALTHCHECK_BASE` has and
+ * for the same reason: a fresh clone and every test process run without it, and
+ * a usage sample that cannot be taken must never be able to fail the run it
+ * rides on. The hosted worker's ready line says which state it is in.
+ *
+ * Read at execution time inside an activity, never a workflow input (spec §13).
+ */
+export const METRICS_API_KEY = process.env.TEMPORAL_METRICS_API_KEY ?? '';
+
+/** Account-wide: one endpoint serves every namespace, filtered by label. */
+export const METRICS_ENDPOINT = 'https://metrics.temporal.io/v1/metrics';
+
 export const MODEL = process.env.STEWARD_MODEL ?? 'claude-sonnet-4-6';
 
 export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
