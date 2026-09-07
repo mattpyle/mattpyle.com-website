@@ -147,7 +147,9 @@ const light = {
   // HTTP call itself and never throws — a second *activity* attempt would only
   // repeat a decision that already gave up, and a long deadline would let a
   // hanging monitoring service hold a finished run open.
-  alerting: wf.proxyActivities<Pick<typeof activities, 'reportRunHealth' | 'checkCredentialExpiry'>>({
+  alerting: wf.proxyActivities<
+    Pick<typeof activities, 'reportRunHealth' | 'checkCredentialExpiry' | 'checkActionUsage'>
+  >({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '1 minute',
     retry: { maximumAttempts: 1 },
@@ -247,11 +249,30 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
  * The credential check rides on the scheduled run (task 4): a daily job that
  * already exists, for a warning window measured in weeks. It runs **first**, so
  * a run that later dies on an expired token has already said so.
+ *
+ * The action-usage check (temporal-cloud-usage-alerting card, 2026-09-06) rides
+ * on the same run and runs **before even that**, for a reason particular to what
+ * it measures: it samples one minute of the namespace's own action rate, and by
+ * the time the fan-out is running, the busiest thing in that minute is this
+ * workflow. Sampling at the head reads the namespace at rest, which is the
+ * baseline a runaway loop has to stand out against.
+ *
+ * Both are scheduled-only. Each has a one-day period at the alerting service, so
+ * a manual run that pinged them would reset a window it is not evidence for —
+ * the same argument the `nightly-scorecard` check rests on.
  */
 export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promise<ScorecardAuditResult> {
   const scheduled = input.triggeredBy === 'schedule';
 
   if (scheduled) {
+    const usage = await light.alerting.checkActionUsage();
+    wf.log.info('action usage checked', {
+      ok: usage.ok,
+      sent: usage.sent,
+      foregroundPerSecond: usage.foregroundPerSecond,
+      summary: usage.summary,
+    });
+
     const expiry = await light.alerting.checkCredentialExpiry();
     wf.log.info('credential expiry checked', {
       due: expiry.dueCount,

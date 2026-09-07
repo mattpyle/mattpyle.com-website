@@ -1,9 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ACTION_RATE_ALERT_PER_SECOND,
   CREDENTIAL_WARNING_DAYS,
   HEALTH_CHECK_SLUGS,
   TRACKED_CREDENTIALS,
+  actionUsageShape,
+  actionUsageUnavailableShape,
   credentialExpiryShape,
   credentialsDueWithin,
   daysUntilExpiry,
@@ -197,4 +200,98 @@ test('a trailing slash on the configured base does not double up', () => {
 test('every signal has a distinct slug', () => {
   const slugs = Object.values(HEALTH_CHECK_SLUGS);
   assert.equal(new Set(slugs).size, slugs.length);
+});
+
+// --- the action-usage rule --------------------------------------------------
+
+/**
+ * The threshold rule, and the two bodies it produces.
+ *
+ * The bodies are asserted as hard as the verdict is, which is unusual for prose
+ * and deliberate here. The failing body is the whole of what Matt gets at three
+ * in the morning: if it does not name the workflow type, the alert says only
+ * that something is wrong and leaves the diagnosis where it started. The healthy
+ * body is the record the threshold gets tuned from — the alerting service keeps
+ * every ping's body, so a week of them is the dataset, and an OK body that said
+ * only "fine" would throw that away one night at a time.
+ */
+
+function sample(overrides: Partial<Parameters<typeof actionUsageShape>[0]> = {}) {
+  return {
+    namespace: 'steward.acct1',
+    foregroundPerSecond: 0.25,
+    billable: [
+      { actionType: 'signal_workflow', workflowType: 'scorecardAuditWorkflow', rate: 0.133 },
+      { actionType: 'start_workflow', workflowType: 'metricsProbeWorkflow', rate: 0.05 },
+    ],
+    idle: false,
+    ...overrides,
+  };
+}
+
+test('a rate below the threshold is a good shape, and says what it observed', () => {
+  const shape = actionUsageShape(sample());
+  assert.equal(shape.ok, true);
+  assert.match(shape.summary, /0\.25\/s/);
+  assert.match(shape.summary, /5\.00\/s/);
+  assert.match(shape.summary, /scorecardAuditWorkflow/);
+});
+
+test('a rate exactly at the threshold is still a good shape', () => {
+  // The rule is "above", not "at or above". A boundary that alerts is a
+  // boundary that alerts on the first night the threshold is tuned to the
+  // observed maximum, which is exactly how it will be tuned.
+  const shape = actionUsageShape(sample({ foregroundPerSecond: ACTION_RATE_ALERT_PER_SECOND }));
+  assert.equal(shape.ok, true);
+});
+
+test('a rate above the threshold fails, naming the rate, the threshold and where to look', () => {
+  const shape = actionUsageShape(sample({ foregroundPerSecond: 47.5 }));
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /47\.50\/s/);
+  assert.match(shape.summary, /5\.00\/s/);
+  assert.match(shape.summary, /cloud\.temporal\.io\/usage/);
+});
+
+test('a failing body names the top three billable rows and no more', () => {
+  const busy = sample({
+    foregroundPerSecond: 60,
+    billable: [
+      { actionType: 'start_workflow', workflowType: 'runawayLoop', rate: 40 },
+      { actionType: 'signal_workflow', workflowType: 'secondBusiest', rate: 12 },
+      { actionType: 'start_workflow', workflowType: 'thirdBusiest', rate: 3 },
+      { actionType: 'start_workflow', workflowType: 'fourthBusiest', rate: 1 },
+    ],
+  });
+  const shape = actionUsageShape(busy);
+  // The workflow type is the actionable half: it is what somebody terminates.
+  assert.match(shape.summary, /runawayLoop/);
+  assert.match(shape.summary, /secondBusiest/);
+  assert.match(shape.summary, /thirdBusiest/);
+  assert.ok(!shape.summary.includes('fourthBusiest'), 'four rows in an email is a list, not an alert');
+});
+
+test('an idle sample is a good shape that says the minute was idle, not zero', () => {
+  // The difference matters to whoever reads the check's history: "0.00/s" reads
+  // as a measurement and "no series at all" reads as the namespace at rest,
+  // and only one of them is what the endpoint actually reported.
+  const shape = actionUsageShape(sample({ foregroundPerSecond: 0, billable: [], idle: true }));
+  assert.equal(shape.ok, true);
+  assert.match(shape.summary, /idle/);
+  assert.ok(!shape.summary.includes('0.00/s'));
+});
+
+test('a good shape with no billable series still reads as a sentence', () => {
+  const shape = actionUsageShape(sample({ foregroundPerSecond: 0.05, billable: [] }));
+  assert.equal(shape.ok, true);
+  assert.match(shape.summary, /no billable series/);
+});
+
+test('a sample that could not be taken is a failure that names the reason', () => {
+  const shape = actionUsageUnavailableShape('steward.acct1', 'the metrics endpoint answered 401');
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /401/);
+  // And says the run itself is fine, because the first instinct on an alert at
+  // 03:42 is that the nightly scorecard broke.
+  assert.match(shape.summary, /Nothing else in the run is affected/);
 });

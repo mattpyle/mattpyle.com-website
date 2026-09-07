@@ -1,0 +1,75 @@
+# Captured from https://metrics.temporal.io/v1/metrics on 2026-09-06, verbatim except:
+# the account id is redacted to "acct1" and the second namespace is renamed.
+# This minute was genuinely idle: neither action family appears at all, which is what
+# the endpoint emits when there is nothing to report rather than a series reading zero.
+# TYPE temporal_cloud_v1_action_limit gauge
+# HELP temporal_cloud_v1_action_limit The current action per second limit for a namespace
+temporal_cloud_v1_action_limit{temporal_account="acct1",temporal_namespace="other-project.acct1"} 500.000 1788763500
+temporal_cloud_v1_action_limit{temporal_account="acct1",temporal_namespace="steward.acct1"} 500.000 1788763500
+# TYPE temporal_cloud_v1_action_on_demand_envelope_limit gauge
+# HELP temporal_cloud_v1_action_on_demand_envelope_limit The current action per second on-demand envelope limit for a namespace
+temporal_cloud_v1_action_on_demand_envelope_limit{temporal_account="acct1",temporal_namespace="other-project.acct1"} 500.000 1788763500
+temporal_cloud_v1_action_on_demand_envelope_limit{temporal_account="acct1",temporal_namespace="steward.acct1"} 500.000 1788763500
+# TYPE temporal_cloud_v1_approximate_backlog_count gauge
+# HELP temporal_cloud_v1_approximate_backlog_count Approximate number of tasks in a task queue
+temporal_cloud_v1_approximate_backlog_count{region="aws-us-east-1",task_priority="3",task_type="Activity",temporal_account="acct1",temporal_namespace="steward.acct1",temporal_task_queue="steward-audit"} 0.000 1788763560
+temporal_cloud_v1_approximate_backlog_count{region="aws-us-east-1",task_priority="3",task_type="Activity",temporal_account="acct1",temporal_namespace="steward.acct1",temporal_task_queue="steward-audit-fast"} 0.000 1788763560
+temporal_cloud_v1_approximate_backlog_count{region="aws-us-east-1",task_priority="3",task_type="Workflow",temporal_account="acct1",temporal_namespace="steward.acct1",temporal_task_queue="steward-audit"} 0.000 1788763560
+temporal_cloud_v1_approximate_backlog_count{region="aws-us-east-1",task_priority="3",task_type="Workflow",temporal_account="acct1",temporal_namespace="steward.acct1",temporal_task_queue="steward-audit-fast"} 0.000 1788763560
+temporal_cloud_v1_approximate_backlog_count{region="aws-us-west-2",task_priority="3",task_type="Activity",temporal_account="acct1",temporal_namespace="other-project.acct1",temporal_task_queue="hermes-daily-briefing-poc"} 0.000 1788763560
+temporal_cloud_v1_approximate_backlog_count{region="aws-us-west-2",task_priority="3",task_type="Workflow",temporal_account="acct1",temporal_namespace="other-project.acct1",temporal_task_queue="hermes-daily-briefing-poc"} 0.000 1788763560
+# TYPE temporal_cloud_v1_namespace_open_workflows gauge
+# HELP temporal_cloud_v1_namespace_open_workflows The number of open workflows in a namespace
+temporal_cloud_v1_namespace_open_workflows{region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 0.000 1788763500
+# TYPE temporal_cloud_v1_operations_count gauge
+# HELP temporal_cloud_v1_operations_count The number of operations per second for a namespace
+temporal_cloud_v1_operations_count{is_background="false",namespace_mode="active",operation="GetWorkflowExecutionHistory",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 0.333 1788763560
+temporal_cloud_v1_operations_count{is_background="false",namespace_mode="active",operation="RecordWorkerHeartbeat",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 0.050 1788763560
+temporal_cloud_v1_operations_count{is_background="false",namespace_mode="active",operation="RecordWorkerHeartbeat",region="aws-us-west-2",temporal_account="acct1",temporal_namespace="other-project.acct1"} 0.050 1788763560
+# TYPE temporal_cloud_v1_operations_limit gauge
+# HELP temporal_cloud_v1_operations_limit The current operations per second limit for a namespace
+temporal_cloud_v1_operations_limit{temporal_account="acct1",temporal_namespace="other-project.acct1"} 20000.000 1788763500
+temporal_cloud_v1_operations_limit{temporal_account="acct1",temporal_namespace="steward.acct1"} 20000.000 1788763500
+# TYPE temporal_cloud_v1_operations_on_demand_envelope_limit gauge
+# HELP temporal_cloud_v1_operations_on_demand_envelope_limit The current operations per second on-demand envelope limit for a namespace
+temporal_cloud_v1_operations_on_demand_envelope_limit{temporal_account="acct1",temporal_namespace="other-project.acct1"} 20000.000 1788763500
+temporal_cloud_v1_operations_on_demand_envelope_limit{temporal_account="acct1",temporal_namespace="steward.acct1"} 20000.000 1788763500
+# TYPE temporal_cloud_v1_poll_timeout_count gauge
+# HELP temporal_cloud_v1_poll_timeout_count The per second rate of occurrences where no tasks are available for a poller before timing out
+temporal_cloud_v1_poll_timeout_count{operation="TaskQueueMgr",region="aws-us-east-1",task_type="Activity",temporal_account="acct1",temporal_namespace="steward.acct1",temporal_task_queue="steward-audit"} 0.067 1788763560
+temporal_cloud_v1_poll_timeout_count{operation="TaskQueueMgr",region="aws-us-east-1",task_type="Activity",temporal_account="acct1",temporal_namespace="steward.acct1",temporal_task_queue="steward-audit-fast"} 0.150 1788763560
+temporal_cloud_v1_poll_timeout_count{operation="TaskQueueMgr",region="aws-us-east-1",task_type="Workflow",temporal_account="acct1",temporal_namespace="steward.acct1",temporal_task_queue="steward-audit"} 0.217 1788763560
+temporal_cloud_v1_poll_timeout_count{operation="TaskQueueMgr",region="aws-us-west-2",task_type="Activity",temporal_account="acct1",temporal_namespace="other-project.acct1",temporal_task_queue="hermes-daily-briefing-poc"} 0.150 1788763560
+temporal_cloud_v1_poll_timeout_count{operation="TaskQueueMgr",region="aws-us-west-2",task_type="Workflow",temporal_account="acct1",temporal_namespace="other-project.acct1",temporal_task_queue="hermes-daily-briefing-poc"} 0.117 1788763560
+# TYPE temporal_cloud_v1_poller_limit gauge
+# HELP temporal_cloud_v1_poller_limit The current concurrent task poller limit for a namespace
+temporal_cloud_v1_poller_limit{temporal_account="acct1",temporal_namespace="other-project.acct1"} 20000.000 1788763500
+temporal_cloud_v1_poller_limit{temporal_account="acct1",temporal_namespace="steward.acct1"} 20000.000 1788763500
+# TYPE temporal_cloud_v1_provisioned_capacity_tru_count gauge
+# HELP temporal_cloud_v1_provisioned_capacity_tru_count The number of Temporal Resource Units (TRUs) provisioned for a namespace
+temporal_cloud_v1_provisioned_capacity_tru_count{temporal_account="acct1",temporal_namespace="other-project.acct1"} 0.000 1788763500
+temporal_cloud_v1_provisioned_capacity_tru_count{temporal_account="acct1",temporal_namespace="steward.acct1"} 0.000 1788763500
+# TYPE temporal_cloud_v1_service_pending_requests gauge
+# HELP temporal_cloud_v1_service_pending_requests The number of pollers that are waiting for a task
+temporal_cloud_v1_service_pending_requests{operation="PollActivityTaskQueue",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 12.000 1788763560
+temporal_cloud_v1_service_pending_requests{operation="PollActivityTaskQueue",region="aws-us-west-2",temporal_account="acct1",temporal_namespace="other-project.acct1"} 9.000 1788763560
+temporal_cloud_v1_service_pending_requests{operation="PollWorkflowTaskQueue",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 17.000 1788763560
+temporal_cloud_v1_service_pending_requests{operation="PollWorkflowTaskQueue",region="aws-us-west-2",temporal_account="acct1",temporal_namespace="other-project.acct1"} 11.000 1788763560
+# TYPE temporal_cloud_v1_service_request_count gauge
+# HELP temporal_cloud_v1_service_request_count The number of RPC requests received by the service per second
+temporal_cloud_v1_service_request_count{operation="PollActivityTaskQueue",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 0.183 1788763560
+temporal_cloud_v1_service_request_count{operation="PollActivityTaskQueue",region="aws-us-west-2",temporal_account="acct1",temporal_namespace="other-project.acct1"} 0.150 1788763560
+temporal_cloud_v1_service_request_count{operation="PollWorkflowExecutionHistory",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 0.333 1788763560
+temporal_cloud_v1_service_request_count{operation="PollWorkflowTaskQueue",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 0.250 1788763560
+temporal_cloud_v1_service_request_count{operation="PollWorkflowTaskQueue",region="aws-us-west-2",temporal_account="acct1",temporal_namespace="other-project.acct1"} 0.183 1788763560
+temporal_cloud_v1_service_request_count{operation="RecordWorkerHeartbeat",region="aws-us-east-1",temporal_account="acct1",temporal_namespace="steward.acct1"} 0.050 1788763560
+temporal_cloud_v1_service_request_count{operation="RecordWorkerHeartbeat",region="aws-us-west-2",temporal_account="acct1",temporal_namespace="other-project.acct1"} 0.050 1788763560
+# TYPE temporal_cloud_v1_service_request_limit gauge
+# HELP temporal_cloud_v1_service_request_limit The current service requests per second limit for a namespace
+temporal_cloud_v1_service_request_limit{temporal_account="acct1",temporal_namespace="other-project.acct1"} 2000.000 1788763500
+temporal_cloud_v1_service_request_limit{temporal_account="acct1",temporal_namespace="steward.acct1"} 2000.000 1788763500
+# TYPE temporal_cloud_v1_service_request_on_demand_envelope_limit gauge
+# HELP temporal_cloud_v1_service_request_on_demand_envelope_limit The current service requests per second on-demand envelope limit for a namespace
+temporal_cloud_v1_service_request_on_demand_envelope_limit{temporal_account="acct1",temporal_namespace="other-project.acct1"} 2000.000 1788763500
+temporal_cloud_v1_service_request_on_demand_envelope_limit{temporal_account="acct1",temporal_namespace="steward.acct1"} 2000.000 1788763500
+# EOF
