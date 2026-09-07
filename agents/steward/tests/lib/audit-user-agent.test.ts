@@ -19,8 +19,9 @@ import { AUDIT_USER_AGENT } from '../../src/lib/agent-audit/safe-fetch.js';
  * scorecard.
  *
  * Stub runners rather than a real browser: what is under test is what each
- * tool was asked for, not what Chrome then did with it. `Verify 2` of this
- * build's handoff measured the same thing on the wire.
+ * tool was asked for, not what Chrome then did with it. To confirm the header
+ * actually reaches the wire, point `auditLiveUrl` at a local server that logs
+ * every request's `User-Agent`; each one starts with `steward-audit/`.
  */
 
 /** Every option the two tools were handed, captured. */
