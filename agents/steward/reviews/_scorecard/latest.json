@@ -1,13 +1,13 @@
 {
   "iso": "2026-09-06",
-  "timestamp": "2026-09-06T03:34:36-07:00",
+  "timestamp": "2026-09-06T22:47:55-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Coverage rose from 25 to 26 pages; all 26 pages passed all four public metrics.",
+  "commentary": "All 26 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "99",
+      "value": "98",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 26 tested pages."
@@ -54,7 +54,7 @@
     {
       "url": "https://www.mattpyle.com/about/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -65,7 +65,7 @@
     {
       "url": "https://www.mattpyle.com/activity/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 100,
         "seo": 100,
@@ -219,7 +219,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -230,7 +230,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-tools/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -274,7 +274,7 @@
     {
       "url": "https://www.mattpyle.com/webmcp/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -327,9 +327,8 @@
       "axeViolations": 0
     }
   ],
-  "decision": "open-pr",
-  "reason": "Coverage 25→26 pages",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/241",
+  "decision": "no-op",
+  "reason": "unchanged, published 0d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-09-06"
+  "archiveId": "2026-09-06-2"
 }
