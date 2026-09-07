@@ -41,9 +41,9 @@
         - row "Frequency Once, when a person or an agent asks. No schedule, no repeat visits, no crawl.":
           - rowheader "Frequency"
           - cell "Once, when a person or an agent asks. No schedule, no repeat visits, no crawl."
-        - row "What it collects Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known discovery documents — and the headers of a couple of pages. Nothing is stored here and nothing is published anywhere.":
+        - row "What it collects Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known discovery documents — and the headers of a couple of pages.":
           - rowheader "What it collects"
-          - cell "Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known discovery documents — and the headers of a couple of pages. Nothing is stored here and nothing is published anywhere."
+          - cell "Your public documents — robots.txt, the sitemap, llms.txt, agents.md, the well-known discovery documents — and the headers of a couple of pages."
     - paragraph:
       - strong: It obeys your robots.txt.
       - text: Every URL is checked against your rules before it is requested; only

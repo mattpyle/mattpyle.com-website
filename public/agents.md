@@ -160,6 +160,8 @@ The live pages register six WebMCP tools: four that read published content, and 
 | `set_appearance` | **write** | Switches this site between its modern appearance and a retro, 1990s-era skin. Requires `mode` (`modern` or `retro`). |
 | `sign_guestbook` | **write** | Appends an entry to the guest book on the homepage. Requires `name` (≤40 chars) and `message` (≤280 chars); both are trimmed rather than rejected. |
 
+**One more tool exists on one page.** `/audit/` declares `run_audit` in its address form's own markup (`toolname`, `tooldescription`, `toolparamdescription`), not in script, so it appears in `document.modelContext.getTools()` only while that page is open. It takes `url` and submits the same form a visitor uses: the audit runs on the server through the same rate limiter and 45-second budget as `/mcp` and `/a2a`, and the browser lands on the report at `/audit/?url=<origin>`. It is the one tool here that reaches beyond the calling browser, because it fetches the address given, about a dozen requests, obeying that site's robots.txt. Measured on Chrome 152.0.7977.76 on 2026-09-06. `/webmcp/tools.json` lists it under `pageTools`, apart from the six above.
+
 **Both write tools are client-local.** `set_appearance` stores a preference in the calling browser's own `localStorage` and sets an attribute on that page. `sign_guestbook` appends an entry to a `localStorage` key in that same browser. There is no server state to change and no other visitor to affect: an agent flipping retro mode or signing the book changes only the view in the browser it is driving, and nobody else will ever see the entry. The four read tools mutate nothing at all.
 
 **Entries signed by a tool are labelled as such.** The guest book records how each entry was written and renders agent-written entries with a visible `[SIGNED BY AGENT]` badge naming the `sign_guestbook` tool. The provenance is set by the code path that wrote the entry, not by a field the caller passes, so the form cannot claim to be an agent and the tool cannot disclaim being one. The claim it makes is narrow and true: this is what this browser's own stored data records. `localStorage` is user-editable, so it is evidence about one browser, not a signature.
@@ -203,7 +205,7 @@ If you arrived here from a `steward-audit` line in your access log, [/steward](h
 | User-Agent | `steward-audit/0.2.0 (+https://www.mattpyle.com/steward)` |
 | Cost of one audit | Roughly a dozen HTTP requests. A deep audit adds up to three of your pages loaded in a headless browser. |
 | Frequency | Once, when a person or an agent asks for it. No schedule, no repeat visits, no crawl. |
-| Purpose | Producing a report for whoever ran it. Nothing is stored on this site or published anywhere. |
+| Purpose | Producing a report for whoever ran it. |
 
 The rendered pages are the expensive half, and they are the deep tier only. When they do run, a headless browser loads the page and, like any browser, fetches that page's own images, scripts, and stylesheets. Those requests carry the same User-Agent as the rest of the audit, so everything one audit does is attributable to one visitor in your log.
 
