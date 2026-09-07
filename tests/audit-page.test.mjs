@@ -37,6 +37,59 @@ const componentSource = ['../src/components/audit/AuditHero.astro', '../src/comp
   .map((path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8'))
   .join('\n');
 
+/**
+ * The failure markers, read out of the Steward source that composes them.
+ *
+ * `classifyRunFailure` takes them as an argument, and the two routes that call it hand over the
+ * real `RUN_FAILURE_MARKERS` and `BLOCKED_REASON_MARKERS` from the `agent-audit/fast` entry. This
+ * suite cannot import that entry — it is TypeScript source and this is bare `node --test` — so it
+ * reads the frozen literals out of the files instead, the same "diff the literal rather than
+ * restate it" device tests/markdown-negotiation.test.mjs uses on middleware.ts's matcher.
+ *
+ * Restating the fragments here would rebuild exactly the copy this removed: a reworded message in
+ * Steward would leave the page misclassifying a run with this suite still green.
+ */
+function markersFrom(path, name) {
+  const source = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+  const block = source.match(new RegExp(`export const ${name} = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);`));
+  assert.ok(block, `${path} no longer exports ${name} as a frozen literal`);
+  const entries = [...block[1].matchAll(/(\w+):\s*'([^']*)'/g)].map((match) => [match[1], match[2]]);
+  assert.ok(entries.length > 0, `${name} carries no string markers`);
+  return Object.fromEntries(entries);
+}
+
+const MARKERS = {
+  ...markersFrom('../agents/steward/src/lib/agent-audit/checks.ts', 'RUN_FAILURE_MARKERS'),
+  ...markersFrom('../agents/steward/src/lib/agent-audit/safe-fetch.ts', 'BLOCKED_REASON_MARKERS'),
+};
+
+test('the markers the page classifies on are the ones Steward actually writes', () => {
+  // Both halves of the contract. The five names are what src/lib/audit-report.mjs reads off the
+  // object, so a rename in Steward that this file survived would leave the page matching
+  // `undefined`; and the two sentences are the ones the auditor composes, so a marker that stopped
+  // appearing in its own message would be a fragment nothing ever matches.
+  assert.deepEqual(Object.keys(MARKERS).sort(), [
+    'budgetExhausted',
+    'embeddedCredentials',
+    'privateAddress',
+    'robotsDisallowsAuditor',
+    'unsupportedScheme',
+  ]);
+
+  const checksSource = readFileSync(
+    fileURLToPath(new URL('../agents/steward/src/lib/agent-audit/checks.ts', import.meta.url)),
+    'utf8',
+  );
+  assert.ok(
+    checksSource.includes('RUN_FAILURE_MARKERS.budgetExhausted}`'),
+    'the aborted message must be composed from the marker, not written beside it',
+  );
+  assert.ok(
+    checksSource.includes('RUN_FAILURE_MARKERS.robotsDisallowsAuditor}'),
+    'the robots note must be composed from the marker, not written beside it',
+  );
+});
+
 /** A run document with every check in one state, which is what a blocked run really looks like. */
 function blockedRun(observed) {
   return {
@@ -89,12 +142,12 @@ test('a private address is the bad-address state, read off the run rather than o
   // The address guard does not stop the audit starting: it refuses each fetch, so the run finishes
   // as a document of thirteen errors. Classifying that as "the site did not answer" would tell a
   // visitor their own localhost was down, when in fact this auditor will never look at it.
-  assert.equal(classifyRunFailure(blockedRun('could not fetch: 127.0.0.1 resolves to a loopback address')), 'bad-address');
+  assert.equal(classifyRunFailure(blockedRun(`could not fetch: 127.0.0.1 ${MARKERS.privateAddress} a loopback address`), MARKERS), 'bad-address');
   assert.equal(errorView('bad-address').status, 400);
 });
 
 test('a site that does not answer is the refused state, with a 502', () => {
-  assert.equal(classifyRunFailure(blockedRun('could not fetch: DNS lookup failed: getaddrinfo ENOTFOUND nonexistent.invalid')), 'refused');
+  assert.equal(classifyRunFailure(blockedRun('could not fetch: DNS lookup failed: getaddrinfo ENOTFOUND nonexistent.invalid'), MARKERS), 'refused');
   const view = errorView('refused', { origin: 'https://nonexistent.invalid' });
   assert.equal(view.status, 502);
   assert.equal(view.title, 'https://nonexistent.invalid did not answer');
@@ -102,7 +155,7 @@ test('a site that does not answer is the refused state, with a 502', () => {
 });
 
 test('a spent budget is the timeout state, with a 504', () => {
-  assert.equal(classifyRunFailure(blockedRun('could not fetch: the audit ran out of its time budget')), 'timeout');
+  assert.equal(classifyRunFailure(blockedRun(`could not fetch: the audit ${MARKERS.budgetExhausted}`), MARKERS), 'timeout');
   const view = errorView('timeout', { origin: 'https://slow.example' });
   assert.equal(view.status, 504);
   assert.equal(view.body, 'https://slow.example answered too slowly to finish. Try again later.');
@@ -120,21 +173,21 @@ test('a verdict decided without a request does not make an unreachable run a rep
     observed: 'no sitemap declared in robots.txt, and none at the conventional paths',
     evidence: [{ url: 'https://example.org/sitemap.xml', note: 'DNS lookup failed' }],
   };
-  assert.equal(classifyRunFailure(unreachable), 'refused');
+  assert.equal(classifyRunFailure(unreachable, MARKERS), 'refused');
 });
 
 test('one HTTP response anywhere in the document makes it a report', () => {
   // The predicate is "did anything come back from the origin", and a status is the only thing an
   // unreachable run can never produce. A partial run carries its own notes and is a better answer
   // than an error page.
-  const partial = blockedRun('could not fetch: the audit ran out of its time budget');
+  const partial = blockedRun(`could not fetch: the audit ${MARKERS.budgetExhausted}`);
   partial.checks[0] = {
     ...partial.checks[0],
     status: 'pass',
     observed: '200, 2 user-agent group(s)',
     evidence: [{ url: 'https://example.org/robots.txt', status: 200 }],
   };
-  assert.equal(classifyRunFailure(partial), null);
+  assert.equal(classifyRunFailure(partial, MARKERS), null);
 });
 
 test('a site that refuses this auditor in robots.txt is the refused state', () => {
@@ -148,16 +201,16 @@ test('a site that refuses this auditor in robots.txt is the refused state', () =
     observed: '200, 1 user-agent group(s)',
     evidence: [{ url: 'https://example.org/robots.txt', status: 200 }],
   };
-  refused.notes = ['robots.txt disallows this auditor at the site root; the checks below that needed a fetch are reported as not-applicable rather than failed.'];
-  assert.equal(classifyRunFailure(refused), 'refused');
+  refused.notes = [`${MARKERS.robotsDisallowsAuditor}; the checks below that needed a fetch are reported as not-applicable rather than failed.`];
+  assert.equal(classifyRunFailure(refused, MARKERS), 'refused');
 });
 
 test('the timeout state wins over the refused state when both could be read', () => {
   // A budget that ran out before anything answered leaves later checks reporting transport failures
   // too. The budget is the cause and those failures are its consequence.
   const run = blockedRun('could not fetch: DNS lookup failed');
-  run.checks[0].observed = 'could not fetch: the audit ran out of its time budget';
-  assert.equal(classifyRunFailure(run), 'timeout');
+  run.checks[0].observed = `could not fetch: the audit ${MARKERS.budgetExhausted}`;
+  assert.equal(classifyRunFailure(run, MARKERS), 'timeout');
 });
 
 // ── Fresh or aged, at an hour boundary ────────────────────────────────────────

@@ -170,14 +170,11 @@ export function secondsLeftInHour(now) {
  * says a site failed twelve checks when it in fact declined to be checked at all. The note is
  * `checkRobots`'s own words, so this reads the auditor's finding rather than re-deriving it.
  *
- * The reason strings are `BlockedTargetError`'s own, from
- * `agents/steward/src/lib/agent-audit/safe-fetch.ts`:
- *
- * | Reason text | State | Why |
+ * | Marker | State | Why |
  * |---|---|---|
- * | `ran out of its time budget` | `timeout` | The budget, reported by `AuditContext` |
- * | `resolves to` | `bad-address` | The address guard refused a private or reserved address |
- * | `carries embedded credentials`, `unsupported scheme` | `bad-address` | The guard's other refusals |
+ * | `budgetExhausted` | `timeout` | The budget, reported by `AuditContext` |
+ * | `privateAddress` | `bad-address` | The address guard refused a private or reserved address |
+ * | `embeddedCredentials`, `unsupportedScheme` | `bad-address` | The guard's other refusals |
  * | anything else, including `DNS lookup failed` | `refused` | The site did not answer |
  *
  * A name that does not resolve is deliberately `refused` rather than `bad-address`: from the
@@ -186,15 +183,31 @@ export function secondsLeftInHour(now) {
  * both. `bad-address` is reserved for what the visitor typed being unauditable, which is the only
  * case where the fix is to type something else.
  *
+ * **THE MARKERS ARE PASSED IN, NOT WRITTEN HERE.** Every fragment above is a sentence Steward
+ * composes, and until 2026-09-06 this function matched hand-copied literals of them: nothing held
+ * the two sides together, so rewording an error message in `checks.ts` or `safe-fetch.ts` would
+ * have turned a refused private address into a "the site did not answer" page with no test going
+ * red. They are exported as `RUN_FAILURE_MARKERS` and `BLOCKED_REASON_MARKERS` from the
+ * `agent-audit/fast` entry now, and the caller hands them over.
+ *
+ * They are a parameter rather than an import for one reason: this module is imported by
+ * `tests/audit-page.test.mjs` under bare `node --test`, and the entry is TypeScript source that
+ * only the Vite build transpiles. An import here would take the whole suite with it. The routes
+ * that call this already import that entry, so the values reach the real call sites unchanged, and
+ * the test reads them out of the Steward source rather than restating them.
+ *
  * @param {{ checks?: Array<{ status: string, observed?: string, evidence?: Array<{ status?: number }> }>,
  *           notes?: string[] }} audit
+ * @param {{ budgetExhausted: string, robotsDisallowsAuditor: string, privateAddress: string,
+ *           embeddedCredentials: string, unsupportedScheme: string }} markers
+ *        `{ ...RUN_FAILURE_MARKERS, ...BLOCKED_REASON_MARKERS }` from `@mattpyle/steward/agent-audit/fast`
  * @returns {'timeout' | 'bad-address' | 'refused' | null}
  */
-export function classifyRunFailure(audit) {
+export function classifyRunFailure(audit, markers) {
   const checks = audit?.checks ?? [];
   const notes = audit?.notes ?? [];
 
-  if (notes.some((note) => note.includes('robots.txt disallows this auditor at the site root'))) {
+  if (notes.some((note) => note.includes(markers.robotsDisallowsAuditor))) {
     return 'refused';
   }
 
@@ -204,11 +217,11 @@ export function classifyRunFailure(audit) {
   if (answered) return null;
 
   const observed = checks.map((check) => check.observed ?? '').join(' | ');
-  if (observed.includes('ran out of its time budget')) return 'timeout';
+  if (observed.includes(markers.budgetExhausted)) return 'timeout';
   if (
-    observed.includes('resolves to') ||
-    observed.includes('carries embedded credentials') ||
-    observed.includes('unsupported scheme')
+    observed.includes(markers.privateAddress) ||
+    observed.includes(markers.embeddedCredentials) ||
+    observed.includes(markers.unsupportedScheme)
   ) {
     return 'bad-address';
   }

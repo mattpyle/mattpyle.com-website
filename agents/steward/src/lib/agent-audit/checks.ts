@@ -27,6 +27,25 @@ import {
 import { reportIntegrity } from './report-shape.js';
 
 /**
+ * The two findings a run reports in prose that a reader outside this file matches on.
+ *
+ * The same contract `BLOCKED_REASON_MARKERS` states in safe-fetch.ts, for the two sentences this
+ * file writes rather than that one: a spent budget, which lands in every subsequent check's
+ * `observed` line, and a site whose robots.txt refuses this auditor at the root, which lands in
+ * the report's notes. The site's /audit page reads both to decide whether it has a report or an
+ * error page (`classifyRunFailure` in src/lib/audit-report.mjs), and matched them as copied
+ * literals until these were named.
+ *
+ * Composed into the sentences below, so a reword either keeps the fragment or fails to compile.
+ */
+export const RUN_FAILURE_MARKERS = Object.freeze({
+  /** In `observed`, on every check that could not fetch after the budget ran out. */
+  budgetExhausted: 'ran out of its time budget',
+  /** In `notes`, when the site's robots.txt disallows this auditor at `/`. */
+  robotsDisallowsAuditor: 'robots.txt disallows this auditor at the site root',
+});
+
+/**
  * The fast tier's checks: what a stranger's site says about itself over plain
  * HTTP, in seconds, with no browser.
  *
@@ -182,7 +201,7 @@ class AuditContext {
       return { kind: 'ok', res: await this.fetcher.fetch(url, { headers }) };
     } catch (err) {
       if (err instanceof BudgetExhaustedError) {
-        this.aborted = 'the audit ran out of its time budget';
+        this.aborted = `the audit ${RUN_FAILURE_MARKERS.budgetExhausted}`;
         return { kind: 'error', url, message: this.aborted, fatal: true };
       }
       if (err instanceof BlockedTargetError) {
@@ -352,7 +371,7 @@ async function checkRobots(ctx: AuditContext): Promise<CheckResult> {
   const ourVerdict = isAllowed(parsed, AUDIT_AGENT_TOKEN, '/');
   if (!ourVerdict.allowed) {
     ctx.notes.push(
-      'robots.txt disallows this auditor at the site root; the checks below that needed a fetch ' +
+      `${RUN_FAILURE_MARKERS.robotsDisallowsAuditor}; the checks below that needed a fetch ` +
         'are reported as not-applicable rather than failed.',
     );
   }

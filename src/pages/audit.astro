@@ -58,7 +58,11 @@
 import Layout from '../layouts/Layout.astro';
 import AuditHero from '../components/audit/AuditHero.astro';
 import AuditBody from '../components/audit/AuditBody.astro';
-import { normaliseTarget } from '@mattpyle/steward/agent-audit/fast';
+import {
+  BLOCKED_REASON_MARKERS,
+  RUN_FAILURE_MARKERS,
+  normaliseTarget,
+} from '@mattpyle/steward/agent-audit/fast';
 import { fastAuditActivityIdFor } from '@mattpyle/steward/agent-audit/deep-contract';
 import { originFor } from '../lib/mcp-audit-server.mjs';
 import { createSiteFastAudit } from '../lib/fast-audit.mjs';
@@ -88,6 +92,12 @@ function log(fields: Record<string, string | number>) {
 }
 
 const runAudit = createSiteFastAudit({ log: (fields) => log(fields) });
+
+/**
+ * The prose fragments `classifyRunFailure` matches a finished run on, from the auditor that wrote
+ * them. See src/lib/audit-report.mjs for why they are handed over rather than imported there.
+ */
+const FAILURE_MARKERS = { ...RUN_FAILURE_MARKERS, ...BLOCKED_REASON_MARKERS };
 
 /** How long a read of a finished activity's result may take before the page gives up on it. */
 const RESULT_DEADLINE_MS = 5_000;
@@ -159,7 +169,7 @@ if (method === 'POST') {
     if (origin) {
       const started = Date.now();
       const audit = await runAudit(address, { fresh: false, origin });
-      const kind = classifyRunFailure(audit);
+      const kind = classifyRunFailure(audit, FAILURE_MARKERS);
       const toolPath = String(audit.tool?.path ?? 'unknown');
       log({
         path: '/audit',
