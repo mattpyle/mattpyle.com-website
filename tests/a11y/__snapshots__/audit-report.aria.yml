@@ -113,6 +113,7 @@
     - list:
       - listitem: "MCP: call audit_site on https://www.mattpyle.com/mcp with { \"url\": \"https://example.com\" }."
       - listitem: "A2A: send \"audit https://example.com\" to https://www.mattpyle.com/a2a."
+      - listitem: This page answers markdown when asked for it.
     - paragraph: ·
 - contentinfo:
   - text: Matt Pyle

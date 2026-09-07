@@ -1,6 +1,9 @@
 import type { APIRoute } from 'astro';
 import { createTools } from '../../lib/webmcp-tools.mjs';
-import { WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED } from '../../data/webmcp-catalog.mjs';
+// The one page tool's own description, from the page that declares it, so the manifest and the
+// attribute on the form cannot come apart.
+import { TOOL } from '../../data/audit-copy.mjs';
+import { WEBMCP_PAGE_TOOLS, WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED } from '../../data/webmcp-catalog.mjs';
 
 /**
  * The machine-readable tool manifest, prerendered to dist/webmcp/tools.json at build.
@@ -54,6 +57,27 @@ export function buildToolsPayload(base: string) {
         ...('notes' in notes ? { notes: notes.notes } : {}),
       };
     }),
+    /**
+     * Tools declared on one page in markup rather than registered site-wide in script.
+     *
+     * A separate key rather than more entries in `tools`, because the two are not interchangeable
+     * for a client reading this file: everything in `tools` is registered on every page of this
+     * site, and everything here exists only while the named page is open. Flattening them would
+     * tell an agent it can call `run_audit` from the homepage, which is false.
+     *
+     * `inputSchema` is absent on purpose. Chrome builds it from the form's controls at parse time,
+     * so this site does not author one, and copying what Chrome was observed to produce would be
+     * a claim about a browser's behaviour dressed up as a declaration of this site's.
+     */
+    pageTools: WEBMCP_PAGE_TOOLS.map((tool) => ({
+      name: tool.name,
+      page: `${base}${tool.page}`,
+      kind: tool.kind,
+      declaredBy: tool.declaredBy,
+      description: TOOL.description,
+      returns: tool.returns,
+      notes: tool.notes,
+    })),
   };
 }
 

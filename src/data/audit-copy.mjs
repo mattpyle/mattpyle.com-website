@@ -58,6 +58,28 @@ export const FORM = {
   noteLink: 'What one audit does',
 };
 
+/**
+ * What the form says to an agent, as opposed to what it says to a visitor.
+ *
+ * The two declarative WebMCP attributes on the address form (`toolname`, `tooldescription`) and
+ * the one on its input (`toolparamdescription`). Not in the content inventory, because nothing
+ * here is rendered: this is the description an agentic browser reads in a tool list, and it is in
+ * this module for the same reason every visible string is — so it is one sentence in one place,
+ * checked by tests/webmcp-catalog.test.mjs against what /webmcp says the site declares.
+ *
+ * The description says what the tool DOES rather than what the page is, because a tool list is
+ * read out of context: "run an agent-readiness audit" is actionable in a list of forty tools and
+ * "the audit page" is not.
+ */
+export const TOOL = {
+  name: 'run_audit',
+  description:
+    'Run an agent-readiness audit of a website and show the report: robots.txt and its AI-agent ' +
+    'rules, the sitemap, llms.txt, agents.md, the well-known discovery documents, and whether the ' +
+    'site serves markdown when asked for it. About a dozen requests to the site, obeying its robots.txt.',
+  param: 'The website address to audit, for example example.com or https://example.com.',
+};
+
 export const REPORT = {
   ran: (date, time) => `Run ${date} at ${time} UTC`,
   took: (requests, seconds) => `${requests} requests in ${seconds} seconds`,

@@ -37,9 +37,15 @@
  * border is `--control-border` rather than `--rule`: `--rule` on white is under 3:1 and fails
  * non-text contrast for a control boundary, and this is the site's first modern text input.
  *
- * RETRO IS A COLOUR PASS ONLY IN THIS BUILD. The full re-skin is build 2; what
- * src/styles/retro.css carries today is enough that no element of this page resolves a modern
- * colour token or a modern face in retro, which is what `npm run sweep:retro` measures.
+ * THE ADDRESS FORM IS A WEBMCP TOOL, DECLARED IN MARKUP. Three attributes and no script; see the
+ * comment above the form for what Chrome does with them and what was measured.
+ *
+ * RETRO IS A FULL RE-SKIN as of 2026-09-06 (src/styles/retro.css, the /audit block): Comic Sans
+ * display with no rule under the H1, maroon headings over dotted rules, Georgia body, Verdana for
+ * the two controls, Courier for machine facts, ridge and outset frames, no radii. It changes
+ * colour, type, borders and backgrounds only — every box, row and breakpoint below is shared, and
+ * `npm run sweep:retro` is what proves no element of this page still resolves a modern colour
+ * token or a modern face.
  */
 import {
   AGENT,
@@ -48,6 +54,7 @@ import {
   FORM,
   REPORT,
   SECTIONS,
+  TOOL,
 } from '../../data/audit-copy.mjs';
 
 interface CheckRow {
@@ -125,7 +132,35 @@ const { address, failure, report, byGroup } = Astro.props;
         hero on this site makes.
       */}
       <div class="rd-section band band--form">
-        <form class="audit-form" method="post" action="/audit/" data-audit-form>
+        {/*
+          DECLARED AS A WEBMCP TOOL, IN MARKUP AND NOTHING ELSE.
+
+          `toolname` and `tooldescription` on the form and `toolparamdescription` on the input are
+          the whole registration: measured on Chrome 152.0.7977.76 against production on
+          2026-09-06, Chrome reads them, builds the input schema from the form's own controls
+          (`required` on the field becomes `required` in the schema, `toolparamdescription` becomes
+          the property's description) and lists the tool from `document.modelContext.getTools()`
+          beside the six the site registers imperatively. A form with no `toolname` registers
+          nothing, and removing the form deregisters the tool.
+
+          So there is no script here, and that is the point: this is the site's first tool that is
+          a page rather than a function, and a browser without the API sees an ordinary form —
+          which is the same form the visitor uses, running the same audit through the same limiter
+          and the same budget. There is no second door.
+
+          It exists only on this page and only on this shape. A rendered report carries the Run
+          again form instead, which is deliberately not declared: its address field is a hidden
+          input with one fixed value, so a tool built from it would advertise a parameter that
+          cannot honestly be set.
+        */}
+        <form
+          class="audit-form"
+          method="post"
+          action="/audit/"
+          data-audit-form
+          toolname={TOOL.name}
+          tooldescription={TOOL.description}
+        >
           <label for="audit-url">{FORM.label}</label>
           <div class="field-row">
             <input
@@ -139,6 +174,7 @@ const { address, failure, report, byGroup } = Astro.props;
               required
               placeholder={FORM.placeholder}
               value={address}
+              toolparamdescription={TOOL.param}
             />
             <button type="submit" data-audit-submit>{FORM.button}</button>
           </div>
