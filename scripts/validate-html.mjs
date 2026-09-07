@@ -89,6 +89,33 @@ const EXCEPTIONS = [
     matches: (m) => /violates Content Security Policy \(meta tag\)/.test(m.message),
     why: 'Nu cannot resolve “self” for a document it did not fetch from an origin',
   },
+  {
+    id: 'webmcp-declarative',
+    // The three declarative WebMCP attributes on /audit's address form. They are how a page
+    // declares a tool in markup rather than registering it in script, and they are not in the HTML
+    // standard, so Nu is right — the same way it is right about `origin-trial` above, and for the
+    // same underlying reason: this site ships a browser capability that has no spec-blessed
+    // spelling yet.
+    //
+    // MEASURED BEFORE IT WAS SUPPRESSED, which is the bar an exception here has to clear. Chrome
+    // 152.0.7977.76, against production on 2026-09-06: the attributes register a real tool, Chrome
+    // builds its input schema from the form's own controls, and a form without `toolname`
+    // registers nothing. So this is three attributes doing work, not three attributes left in a
+    // template.
+    //
+    // The alternative is registering the tool in script instead. That is worse here, and the
+    // reason is the point of the whole thing: the declarative form makes the tool an agent calls
+    // and the form a person fills in the same object, so they cannot drift, and Chrome derives the
+    // schema from the accessible, validated markup rather than from a second hand-written copy of
+    // it. Swapping to script to satisfy a validator would trade the property for the ticked box.
+    //
+    // Narrow on purpose: the attribute names, not "unknown attributes on a form". Goes away when
+    // WebMCP's declarative attributes are standardised and Nu learns them, or when this site stops
+    // declaring the tool.
+    matches: (m) =>
+      /Attribute “(toolname|tooldescription|toolparamdescription)” not allowed on element/.test(m.message),
+    why: 'the declarative WebMCP attributes, which have no spec-blessed spelling yet',
+  },
 ];
 
 /** @returns {{ id: string, why: string } | undefined} the exception covering this message, if any */
