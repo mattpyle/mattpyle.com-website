@@ -31,7 +31,7 @@
  */
 
 import { chromium } from '@playwright/test';
-import { RETRO_ROUTES } from './lib/retro-routes.mjs';
+import { RETRO_ROUTES, RETRO_ROUTE_STATUS } from './lib/retro-routes.mjs';
 
 const args = process.argv.slice(2);
 function flag(name, fallback) {
@@ -129,8 +129,12 @@ async function openRetro(context, path) {
     }
   });
   const response = await page.goto(`${base}${path}`, { waitUntil: 'networkidle' });
-  if (!response || response.status() !== 200) {
-    throw new Error(`${path}: expected 200 from ${base}, got ${response?.status() ?? 'no response'}. Is the build served?`);
+  // Asserted rather than assumed: a 404 here means the build is not being served, and every clean
+  // sweep after it would be a sweep of nothing. /audit's error states answer with their own status
+  // codes by design, so those are declared beside the route list rather than loosening the check.
+  const expected = RETRO_ROUTE_STATUS[path] ?? 200;
+  if (!response || response.status() !== expected) {
+    throw new Error(`${path}: expected ${expected} from ${base}, got ${response?.status() ?? 'no response'}. Is the build served?`);
   }
   const appearance = await page.locator('html').getAttribute('data-appearance');
   if (appearance !== 'retro') {
