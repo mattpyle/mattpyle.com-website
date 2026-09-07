@@ -205,6 +205,24 @@ if (method === 'POST') {
   }
 } else {
   const asked = Astro.url.searchParams.get('url');
+
+  if (!asked) {
+    // THE BARE FORM IS BUILD-TIME DATA IN AN ON-DEMAND ROUTE, so the edge may keep it.
+    //
+    // Nothing on this shape is per-request: the H1, the statement, the empty field, the note line
+    // and the thirteen check rows all come from src/data/audit-copy.mjs and
+    // src/data/steward-audit-checks.mjs, both compiled into the bundle. It answered
+    // `max-age=0, must-revalidate` until 2026-09-06, which made every visit to the form a function
+    // invocation for a page that could not differ between two of them.
+    //
+    // An hour rather than a day, because a deployment is the only thing that changes this page and
+    // an hour bounds how long a stale check list can outlive one. It is set HERE and not on the
+    // three other shapes deliberately: a filled form and the four error states are all answers
+    // about one address, and two of them carry a status code that must never be held at the edge
+    // for a second visitor.
+    Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=60');
+  }
+
   if (asked) {
     address = asked;
     let origin = '';
