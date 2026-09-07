@@ -71,8 +71,11 @@ export async function runAxe(
   // flags are written to satisfy that. Flags arrive undashed because selenium's
   // `addArguments` is what receives them. `userAgent` and `chromeOptions` are
   // set by the caller that audits somebody else's site, where being attributable
-  // and being unable to reach that caller's network both matter; the two in-repo
-  // callers point at a local server they started and leave Chrome at its own.
+  // and being unable to reach that caller's network both matter. Of the two
+  // in-repo callers, `buildAndAuditDraft` points at a local server it started
+  // and leaves Chrome at its own string; `auditLiveUrl` loads the live site
+  // nightly and sends the same `steward-audit` identity, so those loads are
+  // attributable in the site's own log.
   const chromeOptions = ['headless', 'no-sandbox', 'disable-gpu', ...(opts.chromeOptions ?? [])];
   if (opts.userAgent) chromeOptions.push(`user-agent=${opts.userAgent}`);
 
@@ -183,20 +186,53 @@ export interface RawAudit {
 }
 
 /**
+ * The two tools `auditUrl` drives, as values rather than as imports.
+ *
+ * A test seam and nothing else: no production caller passes it, and the
+ * defaults are the real functions. It exists because the identity `auditUrl`
+ * sets has to land in three separate places, and the only way to see all three
+ * without launching Chrome twice is to be handed what each tool was asked.
+ */
+export interface AuditRunners {
+  axe: typeof runAxe;
+  lighthouse: typeof runLighthouse;
+}
+
+/**
  * Runs both tools against `url` and returns the raw, unthresholded result.
  *
  * The one function both callers share: `buildAndAuditDraft` (one local draft)
- * and `auditLiveUrl` (every live URL, nightly). Everything downstream of this
+ * and `auditLiveUrl` (every live URL, nightly). `userAgent`, when set, reaches
+ * all three places one identity has to be set: axe's Chrome, Lighthouse's
+ * emulated page, and the browser Lighthouse's gatherers fetch from.
+ * Everything downstream of this
  * — floors, floors' *values*, aggregation, findings vs. metrics — is caller
  * policy, per spec §2's "share the runner, not the job" rule.
  */
-export async function auditUrl(url: string, signal: AbortSignal): Promise<RawAudit> {
+export async function auditUrl(
+  url: string,
+  signal: AbortSignal,
+  opts: { userAgent?: string; runners?: AuditRunners } = {},
+): Promise<RawAudit> {
+  const axe = opts.runners?.axe ?? runAxe;
+  const lighthouse = opts.runners?.lighthouse ?? runLighthouse;
+
   const axeStarted = Date.now();
-  const { violations, raw: axeRaw } = await runAxe(url, signal);
+  const { violations, raw: axeRaw } = await axe(url, signal, { userAgent: opts.userAgent });
   const axeMs = Date.now() - axeStarted;
 
   const lhStarted = Date.now();
-  const lhr = await runLighthouse(url, signal);
+  // Three places for one identity: axe's Chrome above, then Lighthouse's
+  // `emulatedUserAgent` for the page it renders and the launch flag for the
+  // fetches its own gatherers make. See `runLighthouse` for why both.
+  const lhr = await lighthouse(url, signal, {
+    ...(opts.userAgent
+      ? {
+          flags: { emulatedUserAgent: opts.userAgent },
+          chromeFlags: [`--user-agent=${opts.userAgent}`],
+        }
+      : {}),
+  });
   const lighthouseMs = Date.now() - lhStarted;
 
   const metrics = lighthouseMetrics(lhr, url);

@@ -104,6 +104,8 @@ test('client kinds are the four the design distinguishes', () => {
   // A client that says it is a robot without saying which one has not named itself, and the marker
   // means "a named bot or agent". The mockup leaves this row's marker blank; so does this.
   assert.equal(clientKind('other-bot'), 'unknown');
+  // The site's own auditor names itself, so it takes the marker like any other named agent.
+  assert.equal(clientKind('steward-audit'), 'agent');
 });
 
 test('buildActivity hands every band its numbers from one read', () => {

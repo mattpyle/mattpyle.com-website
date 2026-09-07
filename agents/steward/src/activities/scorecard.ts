@@ -14,7 +14,9 @@ import {
   resetBranch,
   writeRepoFile,
 } from '../lib/github-contents.js';
+import { AUDIT_USER_AGENT } from '../lib/agent-audit/safe-fetch.js';
 import { auditUrl } from '../lib/audit-engine.js';
+import type { AuditRunners } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
 import { parsePageCount, validateCommentary } from '../lib/scorecard-aggregate.js';
 import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRecord } from '../lib/scorecard-aggregate.js';
@@ -169,14 +171,26 @@ export async function resolveRunStamp(timeZone: string): Promise<RunStamp> {
  * `buildAndAuditDraft` uses, for the same reason: Chrome + Lighthouse + axe
  * against one URL is easily tens of seconds, comfortably past the default
  * heartbeat timeout if left silent.
+ *
+ * Sends `AUDIT_USER_AGENT`, the same `steward-audit` identity Steward carries
+ * when it audits anybody else's site. These are 25 loads of mattpyle.com a
+ * night, and unlabelled they arrive as Chrome: `/activity` counts a page load
+ * only under a family `CLIENT_FAMILIES` names, so the site's own auditor was
+ * the one reader the page that names its readers never listed.
+ *
+ * `opts.runners` is `auditUrl`'s test seam, passed straight through; the
+ * workflow calls this with the URL alone.
  */
-export async function auditLiveUrl(url: string): Promise<PageAuditOutcome> {
+export async function auditLiveUrl(
+  url: string,
+  opts: { runners?: AuditRunners } = {},
+): Promise<PageAuditOutcome> {
   const ctx = Context.current();
   const signal = ctx.cancellationSignal;
   const pump = setInterval(() => ctx.heartbeat(`auditing ${url}`), 5_000);
   try {
     ctx.heartbeat(`auditing ${url}`);
-    const raw = await auditUrl(url, signal);
+    const raw = await auditUrl(url, signal, { userAgent: AUDIT_USER_AGENT, runners: opts.runners });
     return {
       url,
       ok: true,

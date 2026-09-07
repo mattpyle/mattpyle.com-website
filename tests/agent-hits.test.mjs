@@ -174,6 +174,18 @@ test('an unnamed crawler counts as a bot, not as a person', () => {
   assert.equal(classifyClient('Mozilla/5.0 (compatible; YandexRenderResourcesBot/1.0)'), 'other-bot');
 });
 
+test("the site's own auditor is a named family, not a nameless bot", () => {
+  // Steward reads 25 pages here every night and audits other people's sites under the same
+  // token. If the generic-bot rule ever climbed above it, /activity would show the one crawler
+  // this site can name with certainty as `other-bot`.
+  const steward = 'steward-audit/0.2.0 (+https://www.mattpyle.com/steward)';
+  assert.equal(classifyClient(steward), 'steward-audit');
+  assert.notEqual(classifyClient(steward), 'other-bot');
+  assert.ok(knownFamilies().includes('steward-audit'));
+  // A page load by it is a page load /activity stores.
+  assert.equal(isPageClient('steward-audit'), true);
+});
+
 test('garbage lands in other and mints no new family', () => {
   const garbage = '<script>alert(1)</script>   ' + 'x'.repeat(4000);
   assert.equal(classifyClient(garbage), FALLBACK_FAMILY);
