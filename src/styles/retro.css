@@ -1112,10 +1112,22 @@ html[data-appearance='retro'] [data-module='article'] .hero img {
   box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
 }
 
-/* The reading measure the legacy article had. The shell gives the prose column
-   about 830px, which runs well past a comfortable line of 17.5px Georgia. */
-html[data-appearance='retro'] [data-module='article'] .prose {
-  max-width: 68ch;
+/* The reading measure both article pages take, AS A LENGTH RATHER THAN `ch`.
+   It was 68ch, and a character measure resolves to a different width in each
+   appearance: 68ch of retro's 17.5px Source Serif 4 is 609px against modern's
+   816px of 20px Plex Sans. On the entry page, which has no rail to fill the
+   other side, that left 531px of empty parchment and read as a layout bug
+   rather than as a theme. 816px is modern's own column, and a pixel width is
+   the one thing the two fonts cannot pull apart.
+
+   The hero takes the same value, and so overrides the 68ch the shared "Article
+   hero" block in src/styles/global.css sets, for the same reason it sets one:
+   the figure and the prose under it are one column and must not resolve to two
+   widths. At 17.5px this is about 100 characters a line; if that reads long the
+   answer is the retro prose size, not the width. */
+html[data-appearance='retro'] [data-module='article'] .prose,
+html[data-appearance='retro'] [data-module='article'] .hero {
+  max-width: 816px;
 }
 
 /* The rail as a sidebar panel. Same ridge frame and hard shadow as every other
@@ -1498,6 +1510,41 @@ html[data-appearance='retro'] .log-pager .pager-count {
    and a post read alike once the chrome is off. The `.entry-*` scoping matters
    for a third reason: the guest book's rows use `.entry-lead` and `.entry-meta`
    too, and a bare selector would repaint them on the homepage. */
+
+/* THE ENTRY'S COLUMN, CENTRED IN THE SHELL. Modern's entry fills the shell — a
+   71px headline over a 1010px lead — so its prose against the left gutter reads
+   as a column under a masthead. Retro's title is 34px, so nothing spans the
+   shell and the same placement leaves the right half of the page empty. These
+   two rules put the head, the hero, the prose and the prev/next nav in one
+   816px column with equal margins instead.
+
+   SCOPED BY `:has(.entry-head)` rather than by a sibling combinator. Two of the
+   four nodes, `.hero` and `.prose`, carry no `.entry-*` class, and the post page
+   shares `[data-module='article']`, so they need a scope that names this page
+   without touching the DOM. `.entry-head ~ .prose` would also work, but it names
+   the node by where it sits relative to the head; `:has()` names the page once
+   and all four rules then read the same way.
+
+   `.entry-head` and `.entry-nav` carry `.rd-section`'s 40px gutter and `.prose`
+   carries none, so the cap on those two is 816px plus that gutter twice, and the
+   prose states the gutter itself in `min()`. That keeps the four left edges on
+   one value below 896px too, where the column stops being 816px wide.
+
+   ABOVE 720px ONLY. Below it src/pages/changelog/[slug].astro puts `.prose` and
+   `.hero` on the 20px mobile gutter and the column is narrower than 816px
+   anyway, so `margin-inline: auto` would resolve to 0 and eat that gutter. */
+@media (min-width: 721px) {
+  html[data-appearance='retro'] [data-module='article']:has(.entry-head) .entry-head,
+  html[data-appearance='retro'] [data-module='article']:has(.entry-head) .entry-nav {
+    max-width: calc(816px + 2 * var(--shell-gutter));
+  }
+
+  html[data-appearance='retro'] [data-module='article']:has(.entry-head) .hero,
+  html[data-appearance='retro'] [data-module='article']:has(.entry-head) .prose {
+    width: min(816px, 100% - 2 * var(--shell-gutter));
+    margin-inline: auto;
+  }
+}
 
 html[data-appearance='retro'] [data-module='article'] .entry-title {
   font-family: var(--retro-font-display);
