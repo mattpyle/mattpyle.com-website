@@ -65,7 +65,7 @@ export const AUDIT_AGENT_TOKEN = 'steward-audit';
  *
  * Derived rather than copied, so the two cannot drift: the auditor is one thing with one name
  * everywhere it identifies itself, which is the rule the User-Agent, the robots token and the MCP
- * server name already follow. `tests/lib/agent-audit-checks.test.ts` asserts that a produced
+ * server name already follow. `tests/lib/agent-audit-safe-fetch.test.ts` asserts that a produced
  * report names what the User-Agent announces.
  *
  * The CLI verb is still `steward audit-url`, and prose about the verb still says so. This is what
