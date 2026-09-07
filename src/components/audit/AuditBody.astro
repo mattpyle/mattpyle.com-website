@@ -26,10 +26,12 @@
  * in ink at h2 size and the body at 20px. No red, no icon, no exclamation. The register is the
  * scorecard's: an instrument, courteous where it talks about somebody else's site.
  *
- * THE LIVE REGION IS IN THE MARKUP FROM FIRST PAINT, EMPTY. Build 2's script writes into it while
- * a request is in flight; until then it is an empty `role="status"` line reserving its own height,
- * because a live region inserted at the moment it has something to say is a live region a screen
- * reader has not been watching.
+ * THE LIVE REGION IS IN THE MARKUP FROM FIRST PAINT, EMPTY, on both forms. The script at the foot
+ * of this file writes into it while a request is in flight; until then it is an empty
+ * `role="status"` line reserving its own height, because a live region inserted at the moment it
+ * has something to say is a live region a screen reader has not been watching. The report's Run
+ * again button carries its own, because it is the identical POST and a visitor who runs it from
+ * there is owed the identical announcement.
  *
  * THE FORM SITS ON THE PAGE GROUND WITH NO CARD and a white input (card decision 11). The input's
  * border is `--control-border` rather than `--rule`: `--rule` on white is under 3:1 and fails
@@ -123,7 +125,7 @@ const { address, failure, report, byGroup } = Astro.props;
         hero on this site makes.
       */}
       <div class="rd-section band band--form">
-        <form class="audit-form" method="post" action="/audit/">
+        <form class="audit-form" method="post" action="/audit/" data-audit-form>
           <label for="audit-url">{FORM.label}</label>
           <div class="field-row">
             <input
@@ -138,14 +140,14 @@ const { address, failure, report, byGroup } = Astro.props;
               placeholder={FORM.placeholder}
               value={address}
             />
-            <button type="submit">{FORM.button}</button>
+            <button type="submit" data-audit-submit>{FORM.button}</button>
           </div>
           {/*
-            Present and empty from first paint. Build 2's script writes FORM.runningStatus here on
+            Present and empty from first paint. The script writes FORM.runningStatus here on
             submit; with no script this line reserves its height and says nothing, and the
             browser's own loading indicator is the whole story.
           */}
-          <p class="run-status" role="status" aria-live="polite"></p>
+          <p class="run-status" role="status" aria-live="polite" data-audit-status></p>
         </form>
 
         <p class="form-note">
@@ -201,9 +203,16 @@ const { address, failure, report, byGroup } = Astro.props;
               request the field above makes.
             */}
             {report.aged && (
-              <form method="post" action="/audit/" class="rerun">
+              <form method="post" action="/audit/" class="rerun" data-audit-form>
                 <input type="hidden" name="url" value={report.origin} />
-                <button type="submit">{REPORT.rerun}</button>
+                <button type="submit" data-audit-submit>{REPORT.rerun}</button>
+                {/*
+                  The same empty live region the form on the other shape carries, for the same
+                  reason: this is the identical POST, and a visitor who runs it from here is owed
+                  the identical announcement. A region inserted at the moment it has something to
+                  say is a region no screen reader has been watching.
+                */}
+                <p class="run-status" role="status" aria-live="polite" data-audit-status></p>
               </form>
             )}
           </div>
@@ -469,15 +478,23 @@ const { address, failure, report, byGroup } = Astro.props;
     border-color: var(--agents-hover);
   }
 
-  /* The in-flight treatment, one step darker than the agents colour. Build 2's
-     script sets `disabled`; the rule is here so the two halves ship together. */
-  .audit-form button[disabled] {
+  /* The in-flight treatment, one step darker than the agents colour.
+     THE SCRIPT SETS `disabled` AND NOTHING ELSE. It never writes a `style`
+     attribute: `style-src` in vercel.json carries no `unsafe-inline`, so an
+     inline style is refused in production and the button would stay on
+     `--agents` while reading "Running…". The attribute is the whole signal and
+     this rule is the whole paint. */
+  .audit-form button[disabled],
+  .rerun button[disabled] {
     background: var(--agents-pressed);
     border-color: var(--agents-pressed);
     cursor: default;
   }
 
-  /* Reserved from first paint so the line appearing does not move the page. */
+  /* Reserved from first paint so the line appearing does not move the page.
+     No transition and no animation: text that fades in is text the axe CLI can
+     read mid-fade and fail for contrast, and this line is announced rather than
+     revealed. */
   .run-status {
     margin: 0;
     min-height: 15px;
@@ -485,6 +502,7 @@ const { address, failure, report, byGroup } = Astro.props;
     font-size: 15px;
     color: var(--ink);
   }
+
 
   .form-note {
     margin: 16px 0 0;
@@ -645,7 +663,14 @@ const { address, failure, report, byGroup } = Astro.props;
     color: var(--ink-4);
   }
 
-  .rerun { margin: 0; }
+  /* A column, so the live region under the button takes its own line rather
+     than stretching the run line's centred row. */
+  .rerun {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+  }
 
   .report-summary {
     margin: 26px 0 0;
@@ -873,3 +898,24 @@ const { address, failure, report, byGroup } = Astro.props;
     }
   }
 </style>
+<script>
+  import { wireRunningState } from '../../lib/audit-running-state.mjs';
+
+  /**
+   * The running state (src/lib/audit-running-state.mjs, which is where the reasoning lives).
+   *
+   * AN ASTRO <script>, NEVER A RAW INLINE ONE — the rule WebMCP.astro states: security.csp in
+   * astro.config.mjs hashes this file into the meta CSP script-src, and an inline script carries
+   * no hash and is blocked.
+   *
+   * Per-element rather than a window flag: ClientRouter re-runs this script on every soft
+   * navigation, and the form it wired may have been replaced by a fresh one.
+   */
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLFormElement>('[data-audit-form]').forEach((form) => {
+      if (form.dataset.wired) return;
+      form.dataset.wired = 'true';
+      wireRunningState(form, window);
+    });
+  });
+</script>

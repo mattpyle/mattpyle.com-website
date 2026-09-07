@@ -6,6 +6,7 @@ import test from 'node:test';
 import { originFor } from '../src/lib/mcp-audit-server.mjs';
 import { AGENT, COUNTS, ERRORS, FOOTER, FORM, PAGE_STATEMENT, PAGE_TITLE, REPORT, SECTIONS, errorView } from '../src/data/audit-copy.mjs';
 import { fixtureAudit } from '../src/lib/audit-fixture.mjs';
+import { wireRunningState } from '../src/lib/audit-running-state.mjs';
 import { pointerKeyFor, readPointer, writePointer } from '../src/lib/audit-pointer.mjs';
 import {
   classifyRunFailure,
@@ -111,6 +112,95 @@ function blockedRun(observed) {
     tool: { name: 'steward-audit', version: '0.2.0' },
   };
 }
+
+// ── The running state ─────────────────────────────────────────────────────────
+
+/**
+ * A form with the three elements the running state reaches for, and nothing else.
+ *
+ * Hand-built rather than a DOM library: the handler's whole surface is `querySelector`,
+ * `addEventListener`, a button's `disabled` and `textContent`, and the status line's
+ * `textContent`. A fake that small is readable in one screen, and it fails loudly if the handler
+ * ever starts reading layout — which is the one thing this script must never do.
+ */
+function fakeForm({ value = '', label = 'Run the audit', withStatus = true } = {}) {
+  const button = { disabled: false, textContent: label };
+  const status = withStatus ? { textContent: '' } : null;
+  const field = { value };
+  const listeners = new Map();
+  return {
+    button,
+    status,
+    field,
+    querySelector(selector) {
+      if (selector === '[data-audit-submit]') return button;
+      if (selector === '[data-audit-status]') return status;
+      if (selector === 'input[name="url"]') return field;
+      throw new Error(`the running state asked for an unexpected selector: ${selector}`);
+    },
+    addEventListener(type, handler) {
+      listeners.set(type, handler);
+    },
+    fire(type, event) {
+      listeners.get(type)?.(event);
+    },
+  };
+}
+
+test('a submit sets the label, the disabled attribute and the live region, and nothing else', () => {
+  // The three effects the design names, in one press. The button's background is deliberately not
+  // among them: the script sets `disabled` and the stylesheet paints it, because `style-src` in
+  // vercel.json has no `unsafe-inline` and an inline style would be refused in production only.
+  const form = fakeForm({ value: '  https://www.mattpyle.com  ' });
+  wireRunningState(form, { addEventListener() {} });
+
+  form.fire('submit');
+
+  assert.equal(form.button.textContent, FORM.running);
+  assert.equal(form.button.disabled, true);
+  assert.equal(form.status.textContent, 'Auditing https://www.mattpyle.com. This takes a few seconds.');
+});
+
+test('the live region names what the form is about to send, not what the page was rendered with', () => {
+  // Run again carries its origin in a hidden field, and the address form carries whatever has been
+  // typed since the page loaded. Both are the same read, which is why one handler serves both.
+  const rerun = fakeForm({ value: 'https://example.org', label: REPORT.rerun });
+  wireRunningState(rerun, { addEventListener() {} });
+  rerun.fire('submit');
+
+  assert.equal(rerun.status.textContent, FORM.runningStatus('https://example.org'));
+  assert.equal(rerun.button.textContent, FORM.running);
+});
+
+test('coming back to a restored page puts the form back to idle', () => {
+  // A form post leaves this page, and the back/forward cache restores it exactly as it was left:
+  // the button disabled, still reading "Running…", over a form that is not running anything. The
+  // label put back is the button's own, so Run again does not come back saying "Run the audit".
+  const form = fakeForm({ value: 'https://example.org', label: REPORT.rerun });
+  let restore;
+  wireRunningState(form, { addEventListener: (_type, handler) => (restore = handler) });
+
+  form.fire('submit');
+  restore({ persisted: true });
+
+  assert.equal(form.button.disabled, false);
+  assert.equal(form.button.textContent, REPORT.rerun);
+  assert.equal(form.status.textContent, '');
+
+  // An ordinary load fires the same event and must not undo a state that was just set.
+  form.fire('submit');
+  restore({ persisted: false });
+  assert.equal(form.button.disabled, true);
+});
+
+test('a form with no live region is left alone rather than half-wired', () => {
+  // Nothing else on the site posts to /audit, but a page that grew a third form without the region
+  // would otherwise get a disabled button and no announcement, which is worse than no script.
+  const form = fakeForm({ withStatus: false });
+  assert.equal(wireRunningState(form, { addEventListener() {} }), null);
+  form.fire('submit');
+  assert.equal(form.button.disabled, false);
+});
 
 // ── The four error states, each from its own cause ─────────────────────────────
 
