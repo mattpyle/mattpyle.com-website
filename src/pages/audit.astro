@@ -63,7 +63,6 @@ import {
   RUN_FAILURE_MARKERS,
   normaliseTarget,
 } from '@mattpyle/steward/agent-audit/fast';
-import { fastAuditActivityIdFor } from '@mattpyle/steward/agent-audit/deep-contract';
 import { originFor } from '../lib/mcp-audit-server.mjs';
 import { createSiteFastAudit } from '../lib/fast-audit.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
@@ -186,14 +185,16 @@ if (method === 'POST') {
         // not interchangeable: an activity's result can be read back from the namespace, and an
         // in-function run exists nowhere but in this request. See src/lib/audit-pointer.mjs.
         //
-        // The activity ID is rebuilt from the same origin and the clock, which is how
-        // mcp-fast-standalone.mjs built it a moment ago. A run that straddled the top of an hour
-        // would be named for the wrong bucket and read back as nothing, and the page would show the
-        // form with the address in it — the same answer it gives for every other kind of nothing,
-        // which is why this is a rebuild rather than a value threaded back out of the runner.
+        // THE ACTIVITY ID IS THE RUNNER'S OWN, carried out on `tool.activityId`. Rebuilding it here
+        // from the origin and this request's clock gave the same answer as the runner for every
+        // request but the one that matters: a run that starts at 13:59 and finishes at 14:00 is
+        // named for the 13:00 bucket and was remembered under the 14:00 one, so the redirect landed
+        // on a report that read back as nothing. A value threaded out of the one place that built
+        // it cannot be wrong about which hour it belongs to.
+        const activityId = audit.tool?.activityId;
         const remembered =
-          toolPath === 'standalone' || toolPath === 'standalone-shared'
-            ? { origin, activityId: fastAuditActivityIdFor(origin, now) }
+          activityId && (toolPath === 'standalone' || toolPath === 'standalone-shared')
+            ? { origin, activityId }
             : { origin, report: audit };
         const written = await writePointer(remembered);
         if (!written.ok) log({ path: '/audit', outcome: 'pointer-write-failed', reason: written.reason ?? 'error' });

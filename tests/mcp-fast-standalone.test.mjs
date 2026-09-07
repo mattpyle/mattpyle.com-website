@@ -308,3 +308,59 @@ test('withPath copies the document rather than writing into a shared result', ()
   assert.equal(shared.tool.path, undefined, 'the result another caller is holding is untouched');
   assert.equal(tagged.tool.name, shared.tool.name, 'the rest of the header rides along');
 });
+
+// ── The activity ID the run used, carried out on the document ─────────────────
+
+test('a run that crosses the top of the hour reports the ID it was actually named with', async () => {
+  // /audit remembers a finished run by its activity ID and reads the result back from the namespace
+  // on the GET that follows. It rebuilt the ID from the clock it took at the top of the request
+  // until 2026-09-06, which is the same value as the runner's for every request but this one: a run
+  // named a fraction of a second into the next hour is remembered under an ID no activity has, so
+  // the redirect lands on a report that reads back as nothing and the visitor gets the empty form.
+  const readings = [
+    new Date('2026-09-04T13:59:59.900Z'), // the clock the request took for itself
+    new Date('2026-09-04T14:00:00.100Z'), // the moment standalone() names the activity
+  ];
+  let index = 0;
+  const { runner, calls } = runnerWith({
+    makeClient: clientReturning(auditFor('example.com', 'activity')),
+    clock: () => readings[Math.min(index++, readings.length - 1)],
+  });
+
+  const audit = await runner('example.com', { fresh: false, origin: 'https://example.com' });
+
+  assert.equal(calls.started[0].options.id, 'audit:https://example.com:2026-09-04T14');
+  assert.equal(audit.tool.activityId, calls.started[0].options.id, 'the ID that started the run is the ID reported');
+  assert.notEqual(
+    audit.tool.activityId,
+    'audit:https://example.com:2026-09-04T13',
+    'the bucket a rebuild from the request clock would have named',
+  );
+});
+
+test('the dedup read reports the ID it read back, and an in-function run reports none', async () => {
+  // The shared path is the one where the ID matters most — the document came off somebody else's
+  // run, and this ID is the only handle on it. The in-function path has no activity at all, so the
+  // field is absent rather than empty, and the pointer stores the report itself instead.
+  const shared = runnerWith({
+    makeClient: (calls) => ({
+      activity: {
+        start: async () => {
+          throw alreadyStarted();
+        },
+        getHandle: (id) => {
+          calls.handles.push(id);
+          return { result: async () => auditFor('example.com', 'activity') };
+        },
+      },
+    }),
+  });
+  const reused = await shared.runner('example.com', { fresh: false, origin: 'https://example.com' });
+  assert.equal(reused.tool.path, 'standalone-shared');
+  assert.equal(reused.tool.activityId, HOUR_ID);
+
+  const local = runnerWith({ clientError: new Error('no connection') });
+  const inFunction = await local.runner('example.com', { fresh: false, origin: 'https://example.com' });
+  assert.equal(inFunction.tool.path, 'function');
+  assert.equal('activityId' in inFunction.tool, false, 'there is no activity to name');
+});

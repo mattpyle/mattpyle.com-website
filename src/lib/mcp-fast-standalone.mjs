@@ -190,9 +190,24 @@ function describeFailure(err) {
  * A copy rather than a mutation: the document may have come off a shared
  * activity's result, and writing into it would be writing into a value this
  * function does not own.
+ *
+ * **`activityId` rides along on the standalone paths, and it is load-bearing
+ * for /audit.** That page remembers a finished run by its activity ID and
+ * reads the result back from the namespace on the GET that follows. It used to
+ * rebuild the ID from the origin and the clock, the way `standalone()` builds
+ * it below — which is the same value for every request except the one that
+ * matters: a run that starts at 13:59 and finishes at 14:00 is named for the
+ * 13:00 bucket and would be remembered under the 14:00 one, so the report
+ * would read back as nothing and the visitor would get the empty form. The ID
+ * exists here, exactly once, so it leaves here rather than being derived
+ * again somewhere with a later clock.
+ *
+ * Absent on the in-function path, because there is no activity: that run
+ * exists nowhere but in the request that made it, which is why the pointer has
+ * a second envelope shape (src/lib/audit-pointer.mjs).
  */
-export function withPath(audit, path) {
-  return { ...audit, tool: { ...audit.tool, path } };
+export function withPath(audit, path, activityId) {
+  return { ...audit, tool: { ...audit.tool, path, ...(activityId ? { activityId } : {}) } };
 }
 
 /**
@@ -288,5 +303,5 @@ async function standalone({ url, fresh, origin, getClient, now, randomSuffix }) 
     path = 'standalone-shared';
   }
 
-  return withPath(await handle.result(), path);
+  return withPath(await handle.result(), path, id);
 }
