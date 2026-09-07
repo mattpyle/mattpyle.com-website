@@ -15,7 +15,7 @@ import { createAuditServer, originFor, SERVER_NAME, TOOL_NAME } from '../src/lib
 function auditFor(url) {
   return {
     schemaVersion: 2,
-    tool: { name: 'steward audit-url', version: '0.2.0' },
+    tool: { name: 'steward-audit', version: '0.2.0' },
     target: { input: url, origin: new URL(url.includes('://') ? url : `https://${url}`).origin },
     startedAt: '2026-08-12T15:00:00.000Z',
     finishedAt: '2026-08-12T15:00:04.000Z',

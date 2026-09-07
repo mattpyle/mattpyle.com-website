@@ -43,15 +43,6 @@ import { reportIntegrity } from './report-shape.js';
  * auditor arrives.
  */
 
-export const TOOL_NAME = 'steward audit-url';
-
-/**
- * The version stamped on every report, which is the auditor's version and not a
- * second number. `AUDIT_VERSION` in safe-fetch.ts is the source; see its
- * docblock for why there is exactly one.
- */
-export const TOOL_VERSION = AUDIT_VERSION;
-
 /**
  * The product token the auditor identifies as, and obeys robots.txt under.
  *
@@ -61,6 +52,33 @@ export const TOOL_VERSION = AUDIT_VERSION;
  * tests/lib/agent-audit-safe-fetch.test.ts holds the two together.
  */
 export const AUDIT_AGENT_TOKEN = 'steward-audit';
+
+/**
+ * The name every report puts on itself, and it is the agent token rather than a second string.
+ *
+ * It was `steward audit-url` until 2026-09-06, which is the CLI verb that produces a report and
+ * not the thing that fetched anybody's site. That was harmless while the only reader was whoever
+ * typed the verb. It stopped being harmless when /audit shipped: a stranger now finds
+ * `steward-audit` in their access log, follows the URL in the User-Agent, runs an audit of their
+ * own site, and reads a footer naming something they have never heard of. The one string they had
+ * to match on is the one string the report did not print.
+ *
+ * Derived rather than copied, so the two cannot drift: the auditor is one thing with one name
+ * everywhere it identifies itself, which is the rule the User-Agent, the robots token and the MCP
+ * server name already follow. `tests/lib/agent-audit-checks.test.ts` asserts that a produced
+ * report names what the User-Agent announces.
+ *
+ * The CLI verb is still `steward audit-url`, and prose about the verb still says so. This is what
+ * the auditor is called, not how you run it.
+ */
+export const TOOL_NAME = AUDIT_AGENT_TOKEN;
+
+/**
+ * The version stamped on every report, which is the auditor's version and not a
+ * second number. `AUDIT_VERSION` in safe-fetch.ts is the source; see its
+ * docblock for why there is exactly one.
+ */
+export const TOOL_VERSION = AUDIT_VERSION;
 
 // ---------------------------------------------------------------------------
 // Fetch plumbing shared by the checks

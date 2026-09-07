@@ -25,7 +25,7 @@ function connect({ startAudit, readView, deep = true } = {}) {
   const server = createAuditServer({
     runAudit: async (url) => ({
       schemaVersion: 2,
-      tool: { name: 'steward audit-url', version: '0.2.0' },
+      tool: { name: 'steward-audit', version: '0.2.0' },
       target: { input: url, origin: 'https://example.com' },
       startedAt: '2026-08-15T15:00:00.000Z',
       finishedAt: '2026-08-15T15:00:04.000Z',
@@ -252,7 +252,7 @@ const STATUS_DONE = {
 
 const REPORT = {
   schemaVersion: 2,
-  tool: { name: 'steward audit-url', version: '0.2.0', userAgent: 'steward-audit/0.2.0' },
+  tool: { name: 'steward-audit', version: '0.2.0', userAgent: 'steward-audit/0.2.0' },
   target: { input: 'example.com', origin: 'https://example.com' },
   startedAt: '2026-08-24T18:00:00.000Z',
   finishedAt: '2026-08-24T18:01:09.000Z',

@@ -40,7 +40,7 @@ function check(partial: Partial<CheckResult> & Pick<CheckResult, 'id'>): CheckRe
 function fixture(checks: CheckResult[]): AuditResult {
   return {
     schemaVersion: 1,
-    tool: { name: 'steward audit-url', version: '0.2.0' },
+    tool: { name: 'steward-audit', version: '0.2.0' },
     target: { input: 'example.com', origin: 'https://example.com' },
     startedAt: '2026-08-10T19:00:00.000Z',
     finishedAt: '2026-08-10T19:00:04.000Z',
