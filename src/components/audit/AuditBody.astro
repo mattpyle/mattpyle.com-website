@@ -347,6 +347,12 @@ const { address, failure, report, byGroup } = Astro.props;
           <ul class="agent-lines" role="list">
             <li>{AGENT.mcp(report.origin)}</li>
             <li>{AGENT.a2a(report.origin)}</li>
+            {/*
+              True since src/pages/audit.md.ts shipped, and rendered for the first time in the same
+              change. Build 1 left it out rather than print a claim about markdown on the page whose
+              subject is whether a site keeps that kind of claim.
+            */}
+            <li>{AGENT.markdown}</li>
           </ul>
           <p class="report-generated">
             {FOOTER.generated(report.toolName, report.toolVersion, report.generatedDate, report.generatedTime)}

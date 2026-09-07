@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { originFor } from '../src/lib/mcp-audit-server.mjs';
-import { AGENT, COUNTS, ERRORS, FOOTER, FORM, PAGE_STATEMENT, PAGE_TITLE, REPORT, SECTIONS, errorView } from '../src/data/audit-copy.mjs';
+import { AGENT, COUNTS, ERRORS, FOOTER, FORM, PAGE_DESCRIPTION, PAGE_SEO_TITLE, PAGE_STATEMENT, PAGE_TITLE, REPORT, SECTIONS, errorView } from '../src/data/audit-copy.mjs';
+import { STEWARD_FAST_CHECKS } from '../src/data/steward-audit-checks.mjs';
 import { fixtureAudit } from '../src/lib/audit-fixture.mjs';
 import { wireRunningState } from '../src/lib/audit-running-state.mjs';
+import { auditMarkdownDocument } from '../src/lib/audit-markdown.mjs';
+import { hasCuratedSibling } from '../src/lib/markdown-negotiation.mjs';
 import { pointerKeyFor, readPointer, writePointer } from '../src/lib/audit-pointer.mjs';
 import {
+  GROUPS,
   classifyRunFailure,
   formatDate,
   formatSeconds,
@@ -200,6 +204,115 @@ test('a form with no live region is left alone rather than half-wired', () => {
   assert.equal(wireRunningState(form, { addEventListener() {} }), null);
   form.fire('submit');
   assert.equal(form.button.disabled, false);
+});
+
+// ── The markdown twin ─────────────────────────────────────────────────────────
+
+/** Steward's renderer, stubbed. What it produces is its own tests' business, not this file's. */
+const renderSummary = (audit) => `# Agent-readiness audit: ${audit.target.origin}`;
+
+test('with no address, the twin is the page: its own words and all thirteen checks', () => {
+  const { body, maxAge } = auditMarkdownDocument({ asked: null, now: new Date('2026-09-05T13:30:00.000Z') });
+
+  // The frontmatter describes the page the way the HTML's <title> and meta description do, and
+  // points at the HTML as the canonical. A representation that claimed its own URL as canonical
+  // would invite a crawler to index the duplicate.
+  assert.ok(body.startsWith(`---\ntitle: "${PAGE_SEO_TITLE}"`));
+  assert.ok(body.includes(`description: "${PAGE_DESCRIPTION}"`), 'both representations describe the page identically');
+  assert.ok(body.includes(`canonical: https://www.mattpyle.com/audit/`));
+
+  assert.ok(body.includes(`# ${PAGE_TITLE}`));
+  assert.ok(body.includes(PAGE_STATEMENT));
+  assert.ok(body.includes(FORM.note), 'the cost line is the same sentence the form carries');
+  assert.ok(body.includes(`## ${SECTIONS.checks}`));
+
+  for (const check of STEWARD_FAST_CHECKS) {
+    assert.ok(body.includes(check.title), `the twin omits the check "${check.title}"`);
+  }
+  for (const group of GROUPS) {
+    assert.ok(body.includes(`### ${group.label}`), `the twin omits the ${group.label} group`);
+  }
+
+  // Compiled-in data on both sides, so the edge may hold it for the hour the HTML's empty branch
+  // is held for.
+  assert.equal(maxAge, 3600);
+});
+
+test('with a stored run, the twin is Steward’s own rendering of it, cached to the end of its hour', () => {
+  const now = new Date('2026-09-05T13:59:00.000Z');
+  const audit = fixtureAudit({ now, minutesAgo: 3 });
+  const { body, maxAge } = auditMarkdownDocument({
+    asked: 'example.com',
+    origin: 'https://example.com',
+    audit,
+    renderSummary,
+    now,
+  });
+
+  assert.ok(body.includes('# Agent-readiness audit: https://example.com'));
+  assert.equal(body.includes(`## ${SECTIONS.checks}`), false, 'a report is a report, not the catalogue too');
+  assert.equal(maxAge, 60, 'the report is immutable for the rest of its hour and no longer');
+});
+
+test('a failing store, a missing pointer and an aged-out run are one answer, which names the address', () => {
+  // The HTML page answers all three with the form and the address in the field and no message
+  // (Matt, 2026-09-05). A markdown reader has no field, so the address is named and nothing else
+  // is: no retention period, no expiry, nothing about other callers' runs.
+  for (const audit of [null, undefined]) {
+    const { body, maxAge } = auditMarkdownDocument({
+      asked: 'example.com',
+      origin: 'https://example.com',
+      audit,
+      renderSummary,
+      now: new Date('2026-09-05T13:30:00.000Z'),
+    });
+    assert.ok(body.includes('No stored report for https://example.com.'));
+    assert.ok(body.includes(`# ${PAGE_TITLE}`), 'the empty page comes with it, so the answer is usable');
+    assert.equal(maxAge, 3600);
+    assert.equal(/retention|expire|90 days/i.test(body), false, 'decision 9 holds in this representation too');
+  }
+});
+
+test('an address that cannot be audited is named back as it was given', () => {
+  // originFor threw, so there is no origin to name. The route answers 200 with this body rather
+  // than the 400 the HTML page answers: the middleware treats a non-2xx sibling as a miss and
+  // serves HTML instead, so a status code here would silently un-negotiate the request.
+  const { body } = auditMarkdownDocument({
+    asked: 'file:///etc/hosts',
+    origin: '',
+    renderSummary,
+    now: new Date('2026-09-05T13:30:00.000Z'),
+  });
+  assert.ok(body.includes('No stored report for file:///etc/hosts.'));
+});
+
+test('a run that reached no verdict about the site is not rendered as a report', () => {
+  // Thirteen errors against a name that does not resolve would render as "0 of 13 checks passed",
+  // which is a report about a site nothing ever connected to. Same predicate as the HTML's error
+  // states, same markers.
+  const { body } = auditMarkdownDocument({
+    asked: 'nonexistent.invalid',
+    origin: 'https://nonexistent.invalid',
+    audit: blockedRun('could not fetch: DNS lookup failed'),
+    failed: true,
+    renderSummary,
+    now: new Date('2026-09-05T13:30:00.000Z'),
+  });
+  assert.ok(body.includes('No stored report for https://nonexistent.invalid.'));
+  assert.equal(body.includes('Agent-readiness audit'), false);
+});
+
+test('the twin says nothing the page does not, and nothing about a run in its own voice', () => {
+  // The guard against this file growing prose. Every sentence in the empty shape is either the
+  // copy module's, the check catalogue's, or the one line about where to ask for a report — which
+  // exists because a browser has a form here and a reader of this file has only the URL.
+  const source = readFileSync(fileURLToPath(new URL('../src/lib/audit-markdown.mjs', import.meta.url)), 'utf8');
+  const rendered = auditMarkdownDocument({ asked: null, now: new Date('2026-09-05T13:30:00.000Z') }).body;
+  for (const invented of ['agent-ready', 'score', 'grade', 'we ', 'our ']) {
+    assert.equal(rendered.toLowerCase().includes(invented), false, `the twin invented "${invented}"`);
+  }
+  assert.ok(source.includes('renderSummary'), 'the report shape must be Steward’s renderer, passed in');
+  assert.equal(source.includes('checks passed'), false, 'the twin must not tally a run itself');
 });
 
 // ── The four error states, each from its own cause ─────────────────────────────
@@ -534,6 +647,7 @@ test('every string the page says in its own voice is the inventory’s, verbatim
     'MCP: call audit_site on https://www.mattpyle.com/mcp with { "url": "https://example.com" }.',
   );
   assert.equal(AGENT.a2a('https://example.com'), 'A2A: send "audit https://example.com" to https://www.mattpyle.com/a2a.');
+  assert.equal(AGENT.markdown, 'This page answers markdown when asked for it.');
 
   assert.equal(
     FOOTER.generated('steward-audit', '0.2.0', '05 Sep 2026', '13:12'),
@@ -541,12 +655,19 @@ test('every string the page says in its own voice is the inventory’s, verbatim
   );
 });
 
-test('the page claims no markdown twin, because it has not got one yet', () => {
-  // `agent.markdown` — "This page answers markdown when asked for it." — is the one inventory row
-  // deliberately not built. It arrives with the twin in build 2. Rendering it now would put a
-  // false claim on an agent-readiness report, which is the one page that cannot afford one.
-  assert.equal('markdown' in AGENT, false);
-  assert.equal(componentSource.includes('answers markdown'), false);
+test('the page claims a markdown twin, and the twin exists', () => {
+  // `agent.markdown` was the one inventory row build 1 deliberately did not build: the twin did not
+  // exist, and a false claim about markdown on an agent-readiness report is the one thing that page
+  // cannot afford. This is the assertion from the other side — the sentence renders, and the route
+  // that makes it true is on disk and registered as a curated sibling. Deleting the route to leave
+  // the line standing fails here, which is the only failure mode this line has.
+  assert.equal(AGENT.markdown, 'This page answers markdown when asked for it.');
+  assert.ok(componentSource.includes('AGENT.markdown'), 'the report must render the line');
+  assert.ok(
+    existsSync(fileURLToPath(new URL('../src/pages/audit.md.ts', import.meta.url))),
+    'the claim is only true while the route exists',
+  );
+  assert.equal(hasCuratedSibling('/audit.md'), true);
 });
 
 test('the components take their words from the copy module rather than writing their own', () => {

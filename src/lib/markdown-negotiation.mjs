@@ -87,10 +87,16 @@ export function markdownSiblingFor(pathname) {
 // /scorecard.md held this slot until 2026-08-22 and no longer does: the store read moved to
 // /activity, /scorecard went back to prerendering, and its sibling is an ordinary converted file
 // again. The exception follows the store read, not the page.
+//
+// /audit.md joined on 2026-09-06 for /activity's reason and one of its own. The page renders on
+// demand, so there is no built HTML file to convert — and the report shape is a document Steward
+// already writes: `renderMarkdownSummary` is the canonical markdown rendering of a run, so a
+// converted sibling would be a second, worse markdown report about the same run.
 const CURATED_SIBLINGS = [
   /^\/writing\/[^/]+\.md$/,
   /^\/changelog\/(?!\d+\.md$)[^/]+\.md$/,
   /^\/activity\.md$/,
+  /^\/audit\.md$/,
 ];
 
 /** @param {string} siblingPath @returns {boolean} */
@@ -112,6 +118,10 @@ export const NEGOTIABLE_PAGE_MATCHER = [
   '/about/',
   '/activity',
   '/activity/',
+  // Added 2026-09-06 with src/pages/audit.md.ts. Both forms on the page post to `/audit/` with the
+  // slash already on it, so the slash normalisation this entry brings never sees a POST.
+  '/audit',
+  '/audit/',
   '/scorecard',
   '/scorecard/',
   '/steward',

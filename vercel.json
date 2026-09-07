@@ -126,6 +126,20 @@
       ]
     },
     {
+      "source": "/audit",
+      "headers": [
+        { "key": "Link", "value": "</audit.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
+    },
+    {
+      "source": "/audit/",
+      "headers": [
+        { "key": "Link", "value": "</audit.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
+    },
+    {
       "source": "/projects",
       "headers": [
         { "key": "Link", "value": "</projects.md>; rel=\"alternate\"; type=\"text/markdown\"" },

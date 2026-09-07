@@ -32,6 +32,10 @@ const CURATED_ROUTES = [
   // src/pages/scorecard.md.ts on 2026-08-22, when the store read moved and /scorecard went back to
   // prerendering with an ordinary converted sibling.
   'src/pages/activity.md.ts',
+  // /audit renders on demand too, and its report shape is a document Steward already writes with
+  // `renderMarkdownSummary`. Deleting this route would leave the negotiation contract silently
+  // falling back to HTML on one of the site's audited routes.
+  'src/pages/audit.md.ts',
 ];
 for (const route of CURATED_ROUTES) {
   assert.ok(existsSync(join(root, route)), `curated markdown route is missing: ${route}`);

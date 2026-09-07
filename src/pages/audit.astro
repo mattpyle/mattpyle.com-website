@@ -23,16 +23,23 @@
  * agent reads through `/mcp` have to be the same document from the same run, or the page is a
  * demo rather than a door.
  *
- * **It is deliberately absent from `config.matcher` in middleware.ts, exactly as `/mcp` and `/a2a`
- * are, and for two of the same reasons plus one of its own.** The matcher is a closed whitelist —
- * every entry has to be a negotiable page, an on-demand path, an agent surface or a retired URL,
- * and a test holds that. Joining it as a *negotiable page* would have the middleware fetch an
- * `/audit.md` sibling that does not exist yet; that is build 2's, with the markdown twin. Joining
- * it as an *on-demand path* would be worse than useless: `canonicalOnDemandPath` exists to strip
- * the query string, and this page's query string is the report. And the slash normalisation the
- * matcher brings would 308 a form POST. So the page is reachable at both `/audit` and `/audit/` —
- * the adapter registers `^/audit/?$` for every on-demand page — and the slash form is the
- * canonical one, in the sitemap and in the `<link rel="canonical">` Layout emits.
+ * **It is in `config.matcher` in middleware.ts as a negotiable page, and as nothing else.** The
+ * matcher is a closed whitelist — every entry has to be a negotiable page, an on-demand path, an
+ * agent surface or a retired URL, and a test holds that. This page was outside it entirely until
+ * the markdown twin shipped on 2026-09-06, because joining as a negotiable page would have had the
+ * middleware fetch an `/audit.md` sibling that did not exist; src/pages/audit.md.ts is that
+ * sibling, so `/audit` and `/audit/` are both in `NEGOTIABLE_PAGE_MATCHER` now and `/audit.md` is
+ * in `CURATED_SIBLINGS`.
+ *
+ * The other two ways in are still refused, and both refusals are load-bearing. As an *on-demand
+ * path* it would be worse than useless: `canonicalOnDemandPath` exists to strip the query string,
+ * and this page's query string is the report, so every report URL would 308 to the empty form.
+ * And **the slash normalisation the matcher brings would 308 a form POST**, which is survivable
+ * here only because both forms in AuditBody.astro post to `/audit/` with the slash already on it —
+ * a POST to `/audit` would be redirected, and a client that does not re-issue a POST after a 308
+ * would lose the submission. The page is still reachable at both shapes (the adapter registers
+ * `^/audit/?$` for every on-demand page) and the slash form is still the canonical one, in the
+ * sitemap and in the `<link rel="canonical">` Layout emits.
  *
  * **The three states, and what decides each.**
  *
@@ -70,7 +77,7 @@ import { getClient, withDeadline } from '../lib/mcp-temporal.mjs';
 import { readPointer, writePointer } from '../lib/audit-pointer.mjs';
 import { classifyRunFailure, formatTime, reportView, secondsLeftInHour } from '../lib/audit-report.mjs';
 import { fixtureAudit } from '../lib/audit-fixture.mjs';
-import { errorView } from '../data/audit-copy.mjs';
+import { PAGE_DESCRIPTION, PAGE_SEO_TITLE, PAGE_TITLE, errorView } from '../data/audit-copy.mjs';
 import { STEWARD_FAST_CHECKS } from '../data/steward-audit-checks.mjs';
 import { GROUPS } from '../lib/audit-report.mjs';
 
@@ -277,12 +284,11 @@ const byGroup = GROUPS.map((group) => ({
   checks: STEWARD_FAST_CHECKS.filter((check) => check.category === group.id),
 }));
 
-const title = 'Audit a site';
-const seoTitle = 'Audit a site for AI agent readiness';
-const description =
-  'Paste a website address and read an agent-readiness audit in the browser: robots.txt and its ' +
-  'AI-agent rules, the sitemap, llms.txt, agents.md, the well-known discovery documents, and ' +
-  'whether the pages serve markdown when asked for it.';
+// From the copy module rather than written here, so this page and src/pages/audit.md.ts cannot
+// come to describe the same URL differently.
+const title = PAGE_TITLE;
+const seoTitle = PAGE_SEO_TITLE;
+const description = PAGE_DESCRIPTION;
 
 /**
  * A rendered report is `noindex`, the bare page is not.

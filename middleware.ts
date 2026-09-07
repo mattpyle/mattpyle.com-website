@@ -239,6 +239,16 @@ export default async function middleware(request: Request) {
 // MCP client is the population least likely to re-issue a POST after a redirect. Leaving them
 // unmatched is what keeps them answering at both shapes. Do not add either.
 //
+// `/audit` IS here, in both shapes, and it is the one page in this list that takes a POST. It was
+// deliberately absent until 2026-09-06 partly for the reason above — the slash rule would 308 a
+// form submission — and that reason has not gone away: it is survivable only because both forms in
+// src/components/audit/AuditBody.astro post to `/audit/` with the slash already on it, so the rule
+// never fires on one. A form on this site rewritten to post to `/audit` would lose its submission
+// on any client that does not re-issue a POST after a redirect. It joined because its markdown
+// twin (src/pages/audit.md.ts) now exists; `/audit.md` itself is deliberately NOT in this list,
+// because it needs neither the query canonicalisation (its query string is the report) nor a
+// surface log, and leaving it out means the proxy fetch above never re-enters this function at all.
+//
 // That also settles where `/mcp` is registered: nowhere. ON_DEMAND_PATHS and AGENT_SURFACE_PATHS
 // are both mirrored into the matcher by a test, so listing it in either would put it there by
 // the back door. It needs neither — query-string canonicalisation exists to protect a cached
@@ -276,6 +286,8 @@ export const config = {
     '/activity/',
     '/activity.md',
     '/activity.json',
+    '/audit',
+    '/audit/',
     '/scorecard',
     '/scorecard/',
     '/steward',
