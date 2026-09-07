@@ -143,6 +143,7 @@ jobs:
             http://localhost:4321/webmcp \
             http://localhost:4321/audit \
             'http://localhost:4321/audit?url=https://example.com' \
+            'http://localhost:4321/audit?url=file:///etc/hosts' \
             http://localhost:4321/writing/accessibility-and-ai/
 
       # The CLI step above audits what the server sends, which is always modern: retro is a

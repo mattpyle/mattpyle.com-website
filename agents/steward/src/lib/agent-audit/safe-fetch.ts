@@ -69,6 +69,29 @@ export const AUDIT_VERSION = '0.2.0';
  */
 export const AUDIT_USER_AGENT = `steward-audit/${AUDIT_VERSION} (+https://www.mattpyle.com/steward)`;
 
+/**
+ * The fragments of a `BlockedTargetError` reason that a reader outside this file matches on.
+ *
+ * A refused fetch does not reach the caller as an exception: `checks.ts` catches it and writes the
+ * reason into the check's `observed` line, so a consumer deciding what went wrong reads prose.
+ * The site's /audit page does exactly that (`classifyRunFailure` in src/lib/audit-report.mjs),
+ * and until these were named it did it by matching literals copied out of the lines below —
+ * copies nothing held still, so rewording an error message here would silently turn a refused
+ * private address into a "the site did not answer" page.
+ *
+ * Each value is the invariant fragment, and each message below is composed from it, so a reword
+ * either keeps the fragment or fails to compile. The exported constant is the contract; the rest
+ * of the sentence is free.
+ */
+export const BLOCKED_REASON_MARKERS = Object.freeze({
+  /** A hostname that resolved to a private, loopback or otherwise reserved address. */
+  privateAddress: 'resolves to',
+  /** A URL carrying a username or a password. */
+  embeddedCredentials: 'carries embedded credentials',
+  /** Anything that is not http or https. */
+  unsupportedScheme: 'unsupported scheme',
+});
+
 export interface FetchPolicy {
   /** How many `Location` hops to follow before giving up. */
   maxRedirects: number;
@@ -183,12 +206,15 @@ export async function vetConnectableUrl(
  */
 async function vetAndResolve(url: URL, policy: FetchPolicy): Promise<PinnedAddress[] | null> {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new BlockedTargetError(url.href, `unsupported scheme "${url.protocol}" — only http and https are fetched`);
+    throw new BlockedTargetError(
+      url.href,
+      `${BLOCKED_REASON_MARKERS.unsupportedScheme} "${url.protocol}" — only http and https are fetched`,
+    );
   }
   if (url.username || url.password) {
     // Credentials in a URL are both a smell and a way to make a target look
     // like a different host in a log line.
-    throw new BlockedTargetError(url.href, 'the URL carries embedded credentials');
+    throw new BlockedTargetError(url.href, `the URL ${BLOCKED_REASON_MARKERS.embeddedCredentials}`);
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const exempt = policy.allowedPrivateHosts.includes(hostname);
@@ -212,7 +238,12 @@ async function vetAndResolve(url: URL, policy: FetchPolicy): Promise<PinnedAddre
     for (const { address } of addresses) {
       const reason = classifyAddress(address);
       // One bad address refuses the whole name — see the docblock.
-      if (reason) throw new BlockedTargetError(url.href, `${hostname} resolves to ${reason}`);
+      if (reason) {
+        throw new BlockedTargetError(
+          url.href,
+          `${hostname} ${BLOCKED_REASON_MARKERS.privateAddress} ${reason}`,
+        );
+      }
     }
   }
   // Exempt or not, the connection is pinned to what this lookup returned. The

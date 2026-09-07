@@ -23,16 +23,23 @@
  * agent reads through `/mcp` have to be the same document from the same run, or the page is a
  * demo rather than a door.
  *
- * **It is deliberately absent from `config.matcher` in middleware.ts, exactly as `/mcp` and `/a2a`
- * are, and for two of the same reasons plus one of its own.** The matcher is a closed whitelist —
- * every entry has to be a negotiable page, an on-demand path, an agent surface or a retired URL,
- * and a test holds that. Joining it as a *negotiable page* would have the middleware fetch an
- * `/audit.md` sibling that does not exist yet; that is build 2's, with the markdown twin. Joining
- * it as an *on-demand path* would be worse than useless: `canonicalOnDemandPath` exists to strip
- * the query string, and this page's query string is the report. And the slash normalisation the
- * matcher brings would 308 a form POST. So the page is reachable at both `/audit` and `/audit/` —
- * the adapter registers `^/audit/?$` for every on-demand page — and the slash form is the
- * canonical one, in the sitemap and in the `<link rel="canonical">` Layout emits.
+ * **It is in `config.matcher` in middleware.ts as a negotiable page, and as nothing else.** The
+ * matcher is a closed whitelist — every entry has to be a negotiable page, an on-demand path, an
+ * agent surface or a retired URL, and a test holds that. This page was outside it entirely until
+ * the markdown twin shipped on 2026-09-06, because joining as a negotiable page would have had the
+ * middleware fetch an `/audit.md` sibling that did not exist; src/pages/audit.md.ts is that
+ * sibling, so `/audit` and `/audit/` are both in `NEGOTIABLE_PAGE_MATCHER` now and `/audit.md` is
+ * in `CURATED_SIBLINGS`.
+ *
+ * The other two ways in are still refused, and both refusals are load-bearing. As an *on-demand
+ * path* it would be worse than useless: `canonicalOnDemandPath` exists to strip the query string,
+ * and this page's query string is the report, so every report URL would 308 to the empty form.
+ * And **the slash normalisation the matcher brings would 308 a form POST**, which is survivable
+ * here only because both forms in AuditBody.astro post to `/audit/` with the slash already on it —
+ * a POST to `/audit` would be redirected, and a client that does not re-issue a POST after a 308
+ * would lose the submission. The page is still reachable at both shapes (the adapter registers
+ * `^/audit/?$` for every on-demand page) and the slash form is still the canonical one, in the
+ * sitemap and in the `<link rel="canonical">` Layout emits.
  *
  * **The three states, and what decides each.**
  *
@@ -58,8 +65,11 @@
 import Layout from '../layouts/Layout.astro';
 import AuditHero from '../components/audit/AuditHero.astro';
 import AuditBody from '../components/audit/AuditBody.astro';
-import { normaliseTarget } from '@mattpyle/steward/agent-audit/fast';
-import { fastAuditActivityIdFor } from '@mattpyle/steward/agent-audit/deep-contract';
+import {
+  BLOCKED_REASON_MARKERS,
+  RUN_FAILURE_MARKERS,
+  normaliseTarget,
+} from '@mattpyle/steward/agent-audit/fast';
 import { originFor } from '../lib/mcp-audit-server.mjs';
 import { createSiteFastAudit } from '../lib/fast-audit.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
@@ -67,7 +77,7 @@ import { getClient, withDeadline } from '../lib/mcp-temporal.mjs';
 import { readPointer, writePointer } from '../lib/audit-pointer.mjs';
 import { classifyRunFailure, formatTime, reportView, secondsLeftInHour } from '../lib/audit-report.mjs';
 import { fixtureAudit } from '../lib/audit-fixture.mjs';
-import { errorView } from '../data/audit-copy.mjs';
+import { PAGE_DESCRIPTION, PAGE_SEO_TITLE, PAGE_TITLE, errorView } from '../data/audit-copy.mjs';
 import { STEWARD_FAST_CHECKS } from '../data/steward-audit-checks.mjs';
 import { GROUPS } from '../lib/audit-report.mjs';
 
@@ -88,6 +98,12 @@ function log(fields: Record<string, string | number>) {
 }
 
 const runAudit = createSiteFastAudit({ log: (fields) => log(fields) });
+
+/**
+ * The prose fragments `classifyRunFailure` matches a finished run on, from the auditor that wrote
+ * them. See src/lib/audit-report.mjs for why they are handed over rather than imported there.
+ */
+const FAILURE_MARKERS = { ...RUN_FAILURE_MARKERS, ...BLOCKED_REASON_MARKERS };
 
 /** How long a read of a finished activity's result may take before the page gives up on it. */
 const RESULT_DEADLINE_MS = 5_000;
@@ -159,7 +175,7 @@ if (method === 'POST') {
     if (origin) {
       const started = Date.now();
       const audit = await runAudit(address, { fresh: false, origin });
-      const kind = classifyRunFailure(audit);
+      const kind = classifyRunFailure(audit, FAILURE_MARKERS);
       const toolPath = String(audit.tool?.path ?? 'unknown');
       log({
         path: '/audit',
@@ -176,14 +192,16 @@ if (method === 'POST') {
         // not interchangeable: an activity's result can be read back from the namespace, and an
         // in-function run exists nowhere but in this request. See src/lib/audit-pointer.mjs.
         //
-        // The activity ID is rebuilt from the same origin and the clock, which is how
-        // mcp-fast-standalone.mjs built it a moment ago. A run that straddled the top of an hour
-        // would be named for the wrong bucket and read back as nothing, and the page would show the
-        // form with the address in it — the same answer it gives for every other kind of nothing,
-        // which is why this is a rebuild rather than a value threaded back out of the runner.
+        // THE ACTIVITY ID IS THE RUNNER'S OWN, carried out on `tool.activityId`. Rebuilding it here
+        // from the origin and this request's clock gave the same answer as the runner for every
+        // request but the one that matters: a run that starts at 13:59 and finishes at 14:00 is
+        // named for the 13:00 bucket and was remembered under the 14:00 one, so the redirect landed
+        // on a report that read back as nothing. A value threaded out of the one place that built
+        // it cannot be wrong about which hour it belongs to.
+        const activityId = audit.tool?.activityId;
         const remembered =
-          toolPath === 'standalone' || toolPath === 'standalone-shared'
-            ? { origin, activityId: fastAuditActivityIdFor(origin, now) }
+          activityId && (toolPath === 'standalone' || toolPath === 'standalone-shared')
+            ? { origin, activityId }
             : { origin, report: audit };
         const written = await writePointer(remembered);
         if (!written.ok) log({ path: '/audit', outcome: 'pointer-write-failed', reason: written.reason ?? 'error' });
@@ -194,6 +212,24 @@ if (method === 'POST') {
   }
 } else {
   const asked = Astro.url.searchParams.get('url');
+
+  if (!asked) {
+    // THE BARE FORM IS BUILD-TIME DATA IN AN ON-DEMAND ROUTE, so the edge may keep it.
+    //
+    // Nothing on this shape is per-request: the H1, the statement, the empty field, the note line
+    // and the thirteen check rows all come from src/data/audit-copy.mjs and
+    // src/data/steward-audit-checks.mjs, both compiled into the bundle. It answered
+    // `max-age=0, must-revalidate` until 2026-09-06, which made every visit to the form a function
+    // invocation for a page that could not differ between two of them.
+    //
+    // An hour rather than a day, because a deployment is the only thing that changes this page and
+    // an hour bounds how long a stale check list can outlive one. It is set HERE and not on the
+    // three other shapes deliberately: a filled form and the four error states are all answers
+    // about one address, and two of them carry a status code that must never be held at the edge
+    // for a second visitor.
+    Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=60');
+  }
+
   if (asked) {
     address = asked;
     let origin = '';
@@ -248,12 +284,11 @@ const byGroup = GROUPS.map((group) => ({
   checks: STEWARD_FAST_CHECKS.filter((check) => check.category === group.id),
 }));
 
-const title = 'Audit a site';
-const seoTitle = 'Audit a site for AI agent readiness';
-const description =
-  'Paste a website address and read an agent-readiness audit in the browser: robots.txt and its ' +
-  'AI-agent rules, the sitemap, llms.txt, agents.md, the well-known discovery documents, and ' +
-  'whether the pages serve markdown when asked for it.';
+// From the copy module rather than written here, so this page and src/pages/audit.md.ts cannot
+// come to describe the same URL differently.
+const title = PAGE_TITLE;
+const seoTitle = PAGE_SEO_TITLE;
+const description = PAGE_DESCRIPTION;
 
 /**
  * A rendered report is `noindex`, the bare page is not.

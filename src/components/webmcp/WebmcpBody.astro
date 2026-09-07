@@ -43,7 +43,7 @@
  * taller than the rest of the page. The floor stays and a `max-height` joins it, which costs
  * nothing because the pane is already a focusable region.
  */
-import { ORIGIN_TRIAL_EXPIRY, WEBMCP_VERIFIED } from '../../data/webmcp-catalog.mjs';
+import { ORIGIN_TRIAL_EXPIRY, WEBMCP_PAGE_TOOLS, WEBMCP_VERIFIED } from '../../data/webmcp-catalog.mjs';
 
 interface Field {
   name: string;
@@ -300,6 +300,30 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     </div>
 
     <p class="sr-only" data-copy-status role="status" aria-live="polite"></p>
+  </section>
+
+  {/*
+    Band 6a: the tools that are not in the catalog above, because they are not registered the same
+    way. Short by design — a card each would say the same three fields twice — and a section rather
+    than a footnote on the catalog, because "registered on every page" and "exists only while one
+    page is open" is the distinction a client has to act on.
+  */}
+  <section class="rd-section band-page-tools" aria-labelledby="rd-page-tools-title">
+    <h2 id="rd-page-tools-title">Declared on a page</h2>
+    <div class="band-prose">
+      <p>These are not registered in script. They are forms this site already had, carrying <code>toolname</code> and <code>tooldescription</code> attributes, and Chrome builds the tool — input schema included — from the form's own controls when it parses the page. So the tool an agent calls and the form a visitor fills in are the same thing, and each one exists only while its page is open.</p>
+    </div>
+    <dl class="page-tool-list">
+      {WEBMCP_PAGE_TOOLS.map(tool => (
+        <div class="page-tool">
+          <dt>
+            <span class="page-tool-name">{tool.name}</span>
+            <a class="page-tool-page" href={tool.page}>{tool.page}</a>
+          </dt>
+          <dd>{tool.notes}</dd>
+        </div>
+      ))}
+    </dl>
   </section>
 
   <div class="rd-section band-columns">
@@ -898,6 +922,65 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     padding-top: 76px;
   }
 
+  /* ── Band 6a: tools declared on a page ──────────────────────────────────────
+     The resource list's row shape, borrowed rather than reinvented: a name in
+     mono on the left, a sentence on the right, one hairline per row. It is a
+     <dl> rather than a list of links because the name is the term and the
+     sentence defines it; the page it lives on is a link inside the term. */
+  .band-page-tools { padding-top: 76px; }
+
+  .page-tool-list {
+    margin: 26px 0 0;
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .page-tool {
+    display: grid;
+    grid-template-columns: 260px minmax(150px, 1fr);
+    gap: 32px;
+    align-items: baseline;
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .page-tool dt {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .page-tool-name {
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+    color: var(--agents);
+  }
+
+  .page-tool-page {
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--rule);
+    transition: color 240ms ease, text-decoration-color 240ms ease;
+  }
+
+  .page-tool-page:hover {
+    color: var(--agents-hover);
+    text-decoration-color: currentColor;
+  }
+
+  .page-tool dd {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
   /* ── Band 6: machine-readable resources ─────────────────────────────────── */
   .band-resources {
     /* No bottom padding: SiteFooter.astro opens with the spec's 96px margin-top,
@@ -977,6 +1060,7 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     .band-what,
     .band-catalog,
     .band-columns,
+    .band-page-tools,
     .band-resources { padding-top: 56px; }
 
     h2 { font-size: 26px; }
@@ -1030,7 +1114,8 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
       min-height: 44px;
     }
 
-    .resource-row {
+    .resource-row,
+    .page-tool {
       grid-template-columns: minmax(0, 1fr);
       gap: 6px;
     }

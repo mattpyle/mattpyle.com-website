@@ -24,6 +24,29 @@ export const PAGE_TITLE = 'Audit a site';
 /** The hero statement under the H1 (Matt, 2026-09-05), in place of the bundle's prose lede. */
 export const PAGE_STATEMENT = 'Paste an address. See how ready a site is for AI agents.';
 
+/**
+ * What the page calls itself to a machine: the `<title>` and the meta description.
+ *
+ * Here rather than in the route since 2026-09-06, because the markdown twin says the same two
+ * things in its frontmatter. Two representations of one URL describing themselves differently is
+ * the exact defect this module exists to make impossible.
+ */
+export const PAGE_SEO_TITLE = 'Audit a site for AI agent readiness';
+export const PAGE_DESCRIPTION =
+  'Paste a website address and read an agent-readiness audit in the browser: robots.txt and its ' +
+  'AI-agent rules, the sitemap, llms.txt, agents.md, the well-known discovery documents, and ' +
+  'whether the pages serve markdown when asked for it.';
+
+/**
+ * The line the markdown twin prints for an address it has no report for.
+ *
+ * Not in the content inventory: the HTML page answers this state with the form and the address in
+ * the field and no message at all (Matt, 2026-09-05), and a markdown reader has no field to read
+ * it out of. So it is named, and nothing more — no retention period, no expiry, nothing about
+ * other callers' runs, which is decision 9 held in the representation that cannot show a form.
+ */
+export const MARKDOWN_NO_REPORT = (address) => `No stored report for ${address}.`;
+
 export const FORM = {
   label: 'Website address',
   placeholder: 'example.com',
@@ -33,6 +56,28 @@ export const FORM = {
   runningStatus: (origin) => `Auditing ${origin}. This takes a few seconds.`,
   note: 'About a dozen requests to the site, obeying its robots.txt.',
   noteLink: 'What one audit does',
+};
+
+/**
+ * What the form says to an agent, as opposed to what it says to a visitor.
+ *
+ * The two declarative WebMCP attributes on the address form (`toolname`, `tooldescription`) and
+ * the one on its input (`toolparamdescription`). Not in the content inventory, because nothing
+ * here is rendered: this is the description an agentic browser reads in a tool list, and it is in
+ * this module for the same reason every visible string is — so it is one sentence in one place,
+ * checked by tests/webmcp-catalog.test.mjs against what /webmcp says the site declares.
+ *
+ * The description says what the tool DOES rather than what the page is, because a tool list is
+ * read out of context: "run an agent-readiness audit" is actionable in a list of forty tools and
+ * "the audit page" is not.
+ */
+export const TOOL = {
+  name: 'run_audit',
+  description:
+    'Run an agent-readiness audit of a website and show the report: robots.txt and its AI-agent ' +
+    'rules, the sitemap, llms.txt, agents.md, the well-known discovery documents, and whether the ' +
+    'site serves markdown when asked for it. About a dozen requests to the site, obeying its robots.txt.',
+  param: 'The website address to audit, for example example.com or https://example.com.',
 };
 
 export const REPORT = {
@@ -64,16 +109,18 @@ export const SECTIONS = {
 /**
  * The agent block.
  *
- * `agent.markdown` — "This page answers markdown when asked for it." — is deliberately absent.
- * The markdown twin of this page is not built yet, so the sentence would be false on the page that
- * makes it, which is the one claim an agent-readiness report cannot afford. It arrives with the
- * twin.
+ * `markdown` was deliberately absent through build 1, because the twin did not exist and the
+ * sentence would have been false on the one page that cannot afford a false claim: an
+ * agent-readiness report. src/pages/audit.md.ts shipped it on 2026-09-06 and the line is true now,
+ * which is why it renders. It is the same claim the audit's own `markdown-negotiation-*` checks
+ * make about somebody else's site, made about this one.
  */
 export const AGENT = {
   heading: 'The same report, for an agent',
   mcp: (origin) =>
     `MCP: call audit_site on https://www.mattpyle.com/mcp with { "url": "${origin}" }.`,
   a2a: (origin) => `A2A: send "audit ${origin}" to https://www.mattpyle.com/a2a.`,
+  markdown: 'This page answers markdown when asked for it.',
 };
 
 export const FOOTER = {

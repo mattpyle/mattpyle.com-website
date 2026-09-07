@@ -40,6 +40,45 @@ export const WEBMCP_VERIFIED = Object.freeze({ iso: '2026-08-02', chrome: '150.0
 export const ORIGIN_TRIAL_EXPIRY = '2026-11-17';
 
 /**
+ * Tools this site declares on one page, in markup, rather than registering site-wide in script.
+ *
+ * A different kind of thing from `WEBMCP_TOOL_NOTES` below, which is an editorial layer over tool
+ * objects that src/lib/webmcp-tools.mjs really builds. There is no object here to layer over: a
+ * declarative tool is three attributes on a form, and Chrome builds the tool — including the input
+ * schema, from the form's own controls — when it parses the page. So this list is what /webmcp and
+ * /webmcp/tools.json can say about a surface that exists only in another file's markup, and
+ * tests/webmcp-catalog.test.mjs joins the two by reading the `toolname` attributes out of `src/`:
+ * an entry here with no form, or a form with no entry here, fails there.
+ *
+ * MEASURED, not assumed. Chrome 152.0.7977.76, against production on 2026-09-06: a form carrying
+ * `toolname` and `tooldescription`, with `toolparamdescription` on its input, is listed by
+ * `document.modelContext.getTools()` beside the six registered in script, with
+ * `inputSchema` built from the form (`{"type":"object","properties":{"url":{"type":"string",
+ * "description":…}},"required":["url"]}` — `required` taken from the field's own `required`
+ * attribute). A form without `toolname` registers nothing; removing the form deregisters the tool.
+ * `WEBMCP_VERIFIED` is deliberately not advanced by that measurement: it covers the six site-wide
+ * tools driven end to end by an external client, and this was a page-side read of a tool list.
+ *
+ * The strings live in src/data/audit-copy.mjs beside the rest of that page's words, so the
+ * description an agent reads and the attribute the form carries cannot come apart.
+ */
+export const WEBMCP_PAGE_TOOLS = Object.freeze([
+  Object.freeze({
+    name: 'run_audit',
+    page: '/audit/',
+    kind: 'write',
+    declaredBy: 'form attributes',
+    returns:
+      'Nothing directly: submitting the form posts the address and the browser lands on the ' +
+      'rendered report at /audit/?url=<origin>, which also answers markdown when asked for it.',
+    notes:
+      'The same form a visitor uses, running the same audit through the same rate limiter and the ' +
+      "same 45-second budget as this site's /mcp and /a2a surfaces. It fetches the address given, " +
+      "about a dozen requests, obeying that site's robots.txt.",
+  }),
+]);
+
+/**
  * Per-tool editorial notes, keyed by the tool's registered `name`.
  *
  * - `kind`      — 'read' or 'write'. The catalog badge and the card's top rule.

@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { originFor } from '../src/lib/mcp-audit-server.mjs';
-import { AGENT, COUNTS, ERRORS, FOOTER, FORM, PAGE_STATEMENT, PAGE_TITLE, REPORT, SECTIONS, errorView } from '../src/data/audit-copy.mjs';
+import { AGENT, COUNTS, ERRORS, FOOTER, FORM, PAGE_DESCRIPTION, PAGE_SEO_TITLE, PAGE_STATEMENT, PAGE_TITLE, REPORT, SECTIONS, errorView } from '../src/data/audit-copy.mjs';
+import { STEWARD_FAST_CHECKS } from '../src/data/steward-audit-checks.mjs';
 import { fixtureAudit } from '../src/lib/audit-fixture.mjs';
+import { wireRunningState } from '../src/lib/audit-running-state.mjs';
+import { auditMarkdownDocument } from '../src/lib/audit-markdown.mjs';
+import { hasCuratedSibling } from '../src/lib/markdown-negotiation.mjs';
 import { pointerKeyFor, readPointer, writePointer } from '../src/lib/audit-pointer.mjs';
 import {
+  GROUPS,
   classifyRunFailure,
   formatDate,
   formatSeconds,
@@ -37,6 +42,59 @@ const componentSource = ['../src/components/audit/AuditHero.astro', '../src/comp
   .map((path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8'))
   .join('\n');
 
+/**
+ * The failure markers, read out of the Steward source that composes them.
+ *
+ * `classifyRunFailure` takes them as an argument, and the two routes that call it hand over the
+ * real `RUN_FAILURE_MARKERS` and `BLOCKED_REASON_MARKERS` from the `agent-audit/fast` entry. This
+ * suite cannot import that entry — it is TypeScript source and this is bare `node --test` — so it
+ * reads the frozen literals out of the files instead, the same "diff the literal rather than
+ * restate it" device tests/markdown-negotiation.test.mjs uses on middleware.ts's matcher.
+ *
+ * Restating the fragments here would rebuild exactly the copy this removed: a reworded message in
+ * Steward would leave the page misclassifying a run with this suite still green.
+ */
+function markersFrom(path, name) {
+  const source = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+  const block = source.match(new RegExp(`export const ${name} = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);`));
+  assert.ok(block, `${path} no longer exports ${name} as a frozen literal`);
+  const entries = [...block[1].matchAll(/(\w+):\s*'([^']*)'/g)].map((match) => [match[1], match[2]]);
+  assert.ok(entries.length > 0, `${name} carries no string markers`);
+  return Object.fromEntries(entries);
+}
+
+const MARKERS = {
+  ...markersFrom('../agents/steward/src/lib/agent-audit/checks.ts', 'RUN_FAILURE_MARKERS'),
+  ...markersFrom('../agents/steward/src/lib/agent-audit/safe-fetch.ts', 'BLOCKED_REASON_MARKERS'),
+};
+
+test('the markers the page classifies on are the ones Steward actually writes', () => {
+  // Both halves of the contract. The five names are what src/lib/audit-report.mjs reads off the
+  // object, so a rename in Steward that this file survived would leave the page matching
+  // `undefined`; and the two sentences are the ones the auditor composes, so a marker that stopped
+  // appearing in its own message would be a fragment nothing ever matches.
+  assert.deepEqual(Object.keys(MARKERS).sort(), [
+    'budgetExhausted',
+    'embeddedCredentials',
+    'privateAddress',
+    'robotsDisallowsAuditor',
+    'unsupportedScheme',
+  ]);
+
+  const checksSource = readFileSync(
+    fileURLToPath(new URL('../agents/steward/src/lib/agent-audit/checks.ts', import.meta.url)),
+    'utf8',
+  );
+  assert.ok(
+    checksSource.includes('RUN_FAILURE_MARKERS.budgetExhausted}`'),
+    'the aborted message must be composed from the marker, not written beside it',
+  );
+  assert.ok(
+    checksSource.includes('RUN_FAILURE_MARKERS.robotsDisallowsAuditor}'),
+    'the robots note must be composed from the marker, not written beside it',
+  );
+});
+
 /** A run document with every check in one state, which is what a blocked run really looks like. */
 function blockedRun(observed) {
   return {
@@ -58,6 +116,204 @@ function blockedRun(observed) {
     tool: { name: 'steward-audit', version: '0.2.0' },
   };
 }
+
+// ── The running state ─────────────────────────────────────────────────────────
+
+/**
+ * A form with the three elements the running state reaches for, and nothing else.
+ *
+ * Hand-built rather than a DOM library: the handler's whole surface is `querySelector`,
+ * `addEventListener`, a button's `disabled` and `textContent`, and the status line's
+ * `textContent`. A fake that small is readable in one screen, and it fails loudly if the handler
+ * ever starts reading layout — which is the one thing this script must never do.
+ */
+function fakeForm({ value = '', label = 'Run the audit', withStatus = true } = {}) {
+  const button = { disabled: false, textContent: label };
+  const status = withStatus ? { textContent: '' } : null;
+  const field = { value };
+  const listeners = new Map();
+  return {
+    button,
+    status,
+    field,
+    querySelector(selector) {
+      if (selector === '[data-audit-submit]') return button;
+      if (selector === '[data-audit-status]') return status;
+      if (selector === 'input[name="url"]') return field;
+      throw new Error(`the running state asked for an unexpected selector: ${selector}`);
+    },
+    addEventListener(type, handler) {
+      listeners.set(type, handler);
+    },
+    fire(type, event) {
+      listeners.get(type)?.(event);
+    },
+  };
+}
+
+test('a submit sets the label, the disabled attribute and the live region, and nothing else', () => {
+  // The three effects the design names, in one press. The button's background is deliberately not
+  // among them: the script sets `disabled` and the stylesheet paints it, because `style-src` in
+  // vercel.json has no `unsafe-inline` and an inline style would be refused in production only.
+  const form = fakeForm({ value: '  https://www.mattpyle.com  ' });
+  wireRunningState(form, { addEventListener() {} });
+
+  form.fire('submit');
+
+  assert.equal(form.button.textContent, FORM.running);
+  assert.equal(form.button.disabled, true);
+  assert.equal(form.status.textContent, 'Auditing https://www.mattpyle.com. This takes a few seconds.');
+});
+
+test('the live region names what the form is about to send, not what the page was rendered with', () => {
+  // Run again carries its origin in a hidden field, and the address form carries whatever has been
+  // typed since the page loaded. Both are the same read, which is why one handler serves both.
+  const rerun = fakeForm({ value: 'https://example.org', label: REPORT.rerun });
+  wireRunningState(rerun, { addEventListener() {} });
+  rerun.fire('submit');
+
+  assert.equal(rerun.status.textContent, FORM.runningStatus('https://example.org'));
+  assert.equal(rerun.button.textContent, FORM.running);
+});
+
+test('coming back to a restored page puts the form back to idle', () => {
+  // A form post leaves this page, and the back/forward cache restores it exactly as it was left:
+  // the button disabled, still reading "Running…", over a form that is not running anything. The
+  // label put back is the button's own, so Run again does not come back saying "Run the audit".
+  const form = fakeForm({ value: 'https://example.org', label: REPORT.rerun });
+  let restore;
+  wireRunningState(form, { addEventListener: (_type, handler) => (restore = handler) });
+
+  form.fire('submit');
+  restore({ persisted: true });
+
+  assert.equal(form.button.disabled, false);
+  assert.equal(form.button.textContent, REPORT.rerun);
+  assert.equal(form.status.textContent, '');
+
+  // An ordinary load fires the same event and must not undo a state that was just set.
+  form.fire('submit');
+  restore({ persisted: false });
+  assert.equal(form.button.disabled, true);
+});
+
+test('a form with no live region is left alone rather than half-wired', () => {
+  // Nothing else on the site posts to /audit, but a page that grew a third form without the region
+  // would otherwise get a disabled button and no announcement, which is worse than no script.
+  const form = fakeForm({ withStatus: false });
+  assert.equal(wireRunningState(form, { addEventListener() {} }), null);
+  form.fire('submit');
+  assert.equal(form.button.disabled, false);
+});
+
+// ── The markdown twin ─────────────────────────────────────────────────────────
+
+/** Steward's renderer, stubbed. What it produces is its own tests' business, not this file's. */
+const renderSummary = (audit) => `# Agent-readiness audit: ${audit.target.origin}`;
+
+test('with no address, the twin is the page: its own words and all thirteen checks', () => {
+  const { body, maxAge } = auditMarkdownDocument({ asked: null, now: new Date('2026-09-05T13:30:00.000Z') });
+
+  // The frontmatter describes the page the way the HTML's <title> and meta description do, and
+  // points at the HTML as the canonical. A representation that claimed its own URL as canonical
+  // would invite a crawler to index the duplicate.
+  assert.ok(body.startsWith(`---\ntitle: "${PAGE_SEO_TITLE}"`));
+  assert.ok(body.includes(`description: "${PAGE_DESCRIPTION}"`), 'both representations describe the page identically');
+  assert.ok(body.includes(`canonical: https://www.mattpyle.com/audit/`));
+
+  assert.ok(body.includes(`# ${PAGE_TITLE}`));
+  assert.ok(body.includes(PAGE_STATEMENT));
+  assert.ok(body.includes(FORM.note), 'the cost line is the same sentence the form carries');
+  assert.ok(body.includes(`## ${SECTIONS.checks}`));
+
+  for (const check of STEWARD_FAST_CHECKS) {
+    assert.ok(body.includes(check.title), `the twin omits the check "${check.title}"`);
+  }
+  for (const group of GROUPS) {
+    assert.ok(body.includes(`### ${group.label}`), `the twin omits the ${group.label} group`);
+  }
+
+  // Compiled-in data on both sides, so the edge may hold it for the hour the HTML's empty branch
+  // is held for.
+  assert.equal(maxAge, 3600);
+});
+
+test('with a stored run, the twin is Steward’s own rendering of it, cached to the end of its hour', () => {
+  const now = new Date('2026-09-05T13:59:00.000Z');
+  const audit = fixtureAudit({ now, minutesAgo: 3 });
+  const { body, maxAge } = auditMarkdownDocument({
+    asked: 'example.com',
+    origin: 'https://example.com',
+    audit,
+    renderSummary,
+    now,
+  });
+
+  assert.ok(body.includes('# Agent-readiness audit: https://example.com'));
+  assert.equal(body.includes(`## ${SECTIONS.checks}`), false, 'a report is a report, not the catalogue too');
+  assert.equal(maxAge, 60, 'the report is immutable for the rest of its hour and no longer');
+});
+
+test('a failing store, a missing pointer and an aged-out run are one answer, which names the address', () => {
+  // The HTML page answers all three with the form and the address in the field and no message
+  // (Matt, 2026-09-05). A markdown reader has no field, so the address is named and nothing else
+  // is: no retention period, no expiry, nothing about other callers' runs.
+  for (const audit of [null, undefined]) {
+    const { body, maxAge } = auditMarkdownDocument({
+      asked: 'example.com',
+      origin: 'https://example.com',
+      audit,
+      renderSummary,
+      now: new Date('2026-09-05T13:30:00.000Z'),
+    });
+    assert.ok(body.includes('No stored report for https://example.com.'));
+    assert.ok(body.includes(`# ${PAGE_TITLE}`), 'the empty page comes with it, so the answer is usable');
+    assert.equal(maxAge, 3600);
+    assert.equal(/retention|expire|90 days/i.test(body), false, 'decision 9 holds in this representation too');
+  }
+});
+
+test('an address that cannot be audited is named back as it was given', () => {
+  // originFor threw, so there is no origin to name. The route answers 200 with this body rather
+  // than the 400 the HTML page answers: the middleware treats a non-2xx sibling as a miss and
+  // serves HTML instead, so a status code here would silently un-negotiate the request.
+  const { body } = auditMarkdownDocument({
+    asked: 'file:///etc/hosts',
+    origin: '',
+    renderSummary,
+    now: new Date('2026-09-05T13:30:00.000Z'),
+  });
+  assert.ok(body.includes('No stored report for file:///etc/hosts.'));
+});
+
+test('a run that reached no verdict about the site is not rendered as a report', () => {
+  // Thirteen errors against a name that does not resolve would render as "0 of 13 checks passed",
+  // which is a report about a site nothing ever connected to. Same predicate as the HTML's error
+  // states, same markers.
+  const { body } = auditMarkdownDocument({
+    asked: 'nonexistent.invalid',
+    origin: 'https://nonexistent.invalid',
+    audit: blockedRun('could not fetch: DNS lookup failed'),
+    failed: true,
+    renderSummary,
+    now: new Date('2026-09-05T13:30:00.000Z'),
+  });
+  assert.ok(body.includes('No stored report for https://nonexistent.invalid.'));
+  assert.equal(body.includes('Agent-readiness audit'), false);
+});
+
+test('the twin says nothing the page does not, and nothing about a run in its own voice', () => {
+  // The guard against this file growing prose. Every sentence in the empty shape is either the
+  // copy module's, the check catalogue's, or the one line about where to ask for a report — which
+  // exists because a browser has a form here and a reader of this file has only the URL.
+  const source = readFileSync(fileURLToPath(new URL('../src/lib/audit-markdown.mjs', import.meta.url)), 'utf8');
+  const rendered = auditMarkdownDocument({ asked: null, now: new Date('2026-09-05T13:30:00.000Z') }).body;
+  for (const invented of ['agent-ready', 'score', 'grade', 'we ', 'our ']) {
+    assert.equal(rendered.toLowerCase().includes(invented), false, `the twin invented "${invented}"`);
+  }
+  assert.ok(source.includes('renderSummary'), 'the report shape must be Steward’s renderer, passed in');
+  assert.equal(source.includes('checks passed'), false, 'the twin must not tally a run itself');
+});
 
 // ── The four error states, each from its own cause ─────────────────────────────
 
@@ -89,12 +345,12 @@ test('a private address is the bad-address state, read off the run rather than o
   // The address guard does not stop the audit starting: it refuses each fetch, so the run finishes
   // as a document of thirteen errors. Classifying that as "the site did not answer" would tell a
   // visitor their own localhost was down, when in fact this auditor will never look at it.
-  assert.equal(classifyRunFailure(blockedRun('could not fetch: 127.0.0.1 resolves to a loopback address')), 'bad-address');
+  assert.equal(classifyRunFailure(blockedRun(`could not fetch: 127.0.0.1 ${MARKERS.privateAddress} a loopback address`), MARKERS), 'bad-address');
   assert.equal(errorView('bad-address').status, 400);
 });
 
 test('a site that does not answer is the refused state, with a 502', () => {
-  assert.equal(classifyRunFailure(blockedRun('could not fetch: DNS lookup failed: getaddrinfo ENOTFOUND nonexistent.invalid')), 'refused');
+  assert.equal(classifyRunFailure(blockedRun('could not fetch: DNS lookup failed: getaddrinfo ENOTFOUND nonexistent.invalid'), MARKERS), 'refused');
   const view = errorView('refused', { origin: 'https://nonexistent.invalid' });
   assert.equal(view.status, 502);
   assert.equal(view.title, 'https://nonexistent.invalid did not answer');
@@ -102,7 +358,7 @@ test('a site that does not answer is the refused state, with a 502', () => {
 });
 
 test('a spent budget is the timeout state, with a 504', () => {
-  assert.equal(classifyRunFailure(blockedRun('could not fetch: the audit ran out of its time budget')), 'timeout');
+  assert.equal(classifyRunFailure(blockedRun(`could not fetch: the audit ${MARKERS.budgetExhausted}`), MARKERS), 'timeout');
   const view = errorView('timeout', { origin: 'https://slow.example' });
   assert.equal(view.status, 504);
   assert.equal(view.body, 'https://slow.example answered too slowly to finish. Try again later.');
@@ -120,21 +376,21 @@ test('a verdict decided without a request does not make an unreachable run a rep
     observed: 'no sitemap declared in robots.txt, and none at the conventional paths',
     evidence: [{ url: 'https://example.org/sitemap.xml', note: 'DNS lookup failed' }],
   };
-  assert.equal(classifyRunFailure(unreachable), 'refused');
+  assert.equal(classifyRunFailure(unreachable, MARKERS), 'refused');
 });
 
 test('one HTTP response anywhere in the document makes it a report', () => {
   // The predicate is "did anything come back from the origin", and a status is the only thing an
   // unreachable run can never produce. A partial run carries its own notes and is a better answer
   // than an error page.
-  const partial = blockedRun('could not fetch: the audit ran out of its time budget');
+  const partial = blockedRun(`could not fetch: the audit ${MARKERS.budgetExhausted}`);
   partial.checks[0] = {
     ...partial.checks[0],
     status: 'pass',
     observed: '200, 2 user-agent group(s)',
     evidence: [{ url: 'https://example.org/robots.txt', status: 200 }],
   };
-  assert.equal(classifyRunFailure(partial), null);
+  assert.equal(classifyRunFailure(partial, MARKERS), null);
 });
 
 test('a site that refuses this auditor in robots.txt is the refused state', () => {
@@ -148,16 +404,16 @@ test('a site that refuses this auditor in robots.txt is the refused state', () =
     observed: '200, 1 user-agent group(s)',
     evidence: [{ url: 'https://example.org/robots.txt', status: 200 }],
   };
-  refused.notes = ['robots.txt disallows this auditor at the site root; the checks below that needed a fetch are reported as not-applicable rather than failed.'];
-  assert.equal(classifyRunFailure(refused), 'refused');
+  refused.notes = [`${MARKERS.robotsDisallowsAuditor}; the checks below that needed a fetch are reported as not-applicable rather than failed.`];
+  assert.equal(classifyRunFailure(refused, MARKERS), 'refused');
 });
 
 test('the timeout state wins over the refused state when both could be read', () => {
   // A budget that ran out before anything answered leaves later checks reporting transport failures
   // too. The budget is the cause and those failures are its consequence.
   const run = blockedRun('could not fetch: DNS lookup failed');
-  run.checks[0].observed = 'could not fetch: the audit ran out of its time budget';
-  assert.equal(classifyRunFailure(run), 'timeout');
+  run.checks[0].observed = `could not fetch: the audit ${MARKERS.budgetExhausted}`;
+  assert.equal(classifyRunFailure(run, MARKERS), 'timeout');
 });
 
 // ── Fresh or aged, at an hour boundary ────────────────────────────────────────
@@ -391,6 +647,7 @@ test('every string the page says in its own voice is the inventory’s, verbatim
     'MCP: call audit_site on https://www.mattpyle.com/mcp with { "url": "https://example.com" }.',
   );
   assert.equal(AGENT.a2a('https://example.com'), 'A2A: send "audit https://example.com" to https://www.mattpyle.com/a2a.');
+  assert.equal(AGENT.markdown, 'This page answers markdown when asked for it.');
 
   assert.equal(
     FOOTER.generated('steward-audit', '0.2.0', '05 Sep 2026', '13:12'),
@@ -398,12 +655,19 @@ test('every string the page says in its own voice is the inventory’s, verbatim
   );
 });
 
-test('the page claims no markdown twin, because it has not got one yet', () => {
-  // `agent.markdown` — "This page answers markdown when asked for it." — is the one inventory row
-  // deliberately not built. It arrives with the twin in build 2. Rendering it now would put a
-  // false claim on an agent-readiness report, which is the one page that cannot afford one.
-  assert.equal('markdown' in AGENT, false);
-  assert.equal(componentSource.includes('answers markdown'), false);
+test('the page claims a markdown twin, and the twin exists', () => {
+  // `agent.markdown` was the one inventory row build 1 deliberately did not build: the twin did not
+  // exist, and a false claim about markdown on an agent-readiness report is the one thing that page
+  // cannot afford. This is the assertion from the other side — the sentence renders, and the route
+  // that makes it true is on disk and registered as a curated sibling. Deleting the route to leave
+  // the line standing fails here, which is the only failure mode this line has.
+  assert.equal(AGENT.markdown, 'This page answers markdown when asked for it.');
+  assert.ok(componentSource.includes('AGENT.markdown'), 'the report must render the line');
+  assert.ok(
+    existsSync(fileURLToPath(new URL('../src/pages/audit.md.ts', import.meta.url))),
+    'the claim is only true while the route exists',
+  );
+  assert.equal(hasCuratedSibling('/audit.md'), true);
 });
 
 test('the components take their words from the copy module rather than writing their own', () => {

@@ -52,6 +52,30 @@ test('a curated route keeps precedence: an entry page maps onto its own .md.ts U
   assert.equal(hasCuratedSibling('/changelog/site-live.md'), true);
 });
 
+test('/audit negotiates to its curated twin, in both shapes, with the query intact', () => {
+  // Added 2026-09-06 with src/pages/audit.md.ts. The query string is the whole point here: the
+  // middleware derives the sibling from the path and copies the URL, so `/audit/?url=X` becomes
+  // `/audit.md?url=X` and the report negotiates as itself rather than as the empty page.
+  assert.equal(markdownSiblingFor('/audit'), '/audit.md');
+  assert.equal(markdownSiblingFor('/audit/'), '/audit.md');
+  assert.equal(hasCuratedSibling('/audit.md'), true);
+
+  // Curated, because the page renders on demand and there is no built HTML file to convert — and
+  // because the report shape is Steward's `renderMarkdownSummary`, which a converter could only
+  // approximate from the rendered page.
+  assert.equal(markdownSiblingFor('/audit.md'), null, 'the sibling must not itself negotiate');
+});
+
+test('/audit reaches the middleware in both shapes, which is what its POST depends on', () => {
+  // The slash-less entry is the one that earns the 308, and both forms in AuditBody.astro post to
+  // `/audit/` with the slash already on it — so the rule never fires on a submission. Dropping the
+  // slash-less entry would silently remove the redirect; dropping the slash form would 308 a POST
+  // to a client that may not re-issue it.
+  const matcher = matcherEntries();
+  assert.ok(matcher.includes('/audit') && matcher.includes('/audit/'));
+  assert.ok(!matcher.includes('/audit.md'), '/audit.md needs neither canonicalisation nor a surface log');
+});
+
 test('index pages and numeric changelog pagination convert like any other page', () => {
   // /writing.md and /changelog.md sit a level above the curated slug routes, so they never
   // collide with them; /changelog/2 is a pagination index, not an entry.

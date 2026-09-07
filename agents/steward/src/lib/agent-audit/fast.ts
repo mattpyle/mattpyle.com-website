@@ -31,6 +31,7 @@
 
 export {
   AUDIT_AGENT_TOKEN,
+  RUN_FAILURE_MARKERS,
   TOOL_NAME,
   TOOL_VERSION,
   normaliseTarget,
@@ -55,9 +56,20 @@ export {
   type LlmsTxtViolation,
 } from './llms-txt-conformance.js';
 
+/**
+ * The prose fragments a caller is allowed to match a finished run on.
+ *
+ * A fast audit almost never throws: a refused address, a site that will not answer and a spent
+ * budget all come back as a complete document whose checks carry the reason as prose. So a
+ * consumer that has to tell "this is a report" from "nothing was checked, and here is why" reads
+ * strings — and the site's /audit page does, in `classifyRunFailure`. These two objects are what
+ * makes that a contract rather than a copy: the messages below are composed from them, so a
+ * reword cannot silently retire a state on the page.
+ */
 export {
   AUDIT_USER_AGENT,
   AUDIT_VERSION,
+  BLOCKED_REASON_MARKERS,
   BlockedTargetError,
   BudgetExhaustedError,
   DEFAULT_POLICY,

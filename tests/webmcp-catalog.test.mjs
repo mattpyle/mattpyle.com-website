@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import './helpers/dom-stub.mjs';
 import { createTools } from '../src/lib/webmcp-tools.mjs';
-import { WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED, ORIGIN_TRIAL_EXPIRY } from '../src/data/webmcp-catalog.mjs';
+import { WEBMCP_PAGE_TOOLS, WEBMCP_TOOL_NOTES, WEBMCP_VERIFIED, ORIGIN_TRIAL_EXPIRY } from '../src/data/webmcp-catalog.mjs';
+import { TOOL as AUDIT_TOOL } from '../src/data/audit-copy.mjs';
+import { PAGE_PATHS } from '../src/data/page-paths.mjs';
 import { buildToolsPayload } from '../src/pages/webmcp/tools.json.ts';
 import { formatJson, tokenizeJson, BRACKET_DEPTH_COLOURS } from '../src/lib/format-json.mjs';
 import { buildToolSnippet } from '../src/lib/webmcp-snippet.mjs';
@@ -60,6 +62,99 @@ test('every registered tool has catalog notes, and every note has a tool', () =>
   const noteNames = Object.keys(WEBMCP_TOOL_NOTES).sort();
 
   assert.deepEqual(noteNames, toolNames, 'webmcp-catalog.mjs and webmcp-tools.mjs must name the same tools');
+});
+
+// ── Tools declared on a page, in markup ───────────────────────────────────────
+//
+// The catalog's join for the six site-wide tools reads the real tool objects. There are no objects
+// for a declarative tool: it is three attributes on a form, and Chrome builds the tool when it
+// parses the page. So the join on this side is against the markup itself — every `toolname` in
+// `src/` has a catalog entry, and every catalog entry has a form. Without it /webmcp could
+// advertise a tool no page declares, or a page could declare one /webmcp never mentions, which is
+// the same failure the six-tool join exists to prevent.
+
+/** Every `toolname="…"` (or `toolname={…}`) the site's own source declares, with the file it is in. */
+function declaredToolNames() {
+  const roots = [new URL('../src/components/', import.meta.url), new URL('../src/pages/', import.meta.url)];
+  const found = new Map();
+
+  const walk = (dir) => {
+    for (const entry of readdirSync(fileURLToPath(dir), { withFileTypes: true })) {
+      const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+      if (entry.isDirectory()) {
+        walk(child);
+        continue;
+      }
+      if (!/\.(astro|ts|mjs|html)$/.test(entry.name)) continue;
+      const source = readFileSync(fileURLToPath(child), 'utf8');
+      for (const match of source.matchAll(/\btoolname=(?:"([^"]+)"|\{([^}]+)\})/g)) {
+        found.set(match[1] ?? match[2].trim(), fileURLToPath(child));
+      }
+    }
+  };
+
+  roots.forEach(walk);
+  return found;
+}
+
+test('every page-scoped tool is declared by a form, and every declaring form is in the catalog', () => {
+  const declared = declaredToolNames();
+
+  // The one entry today is written as `toolname={TOOL.name}`, so the join runs through the copy
+  // module: the attribute and the catalog have to agree on the same constant, not on two literals.
+  assert.deepEqual(
+    [...declared.keys()].sort(),
+    ['TOOL.name'],
+    'a toolname attribute appeared or disappeared in src/ — add or remove its catalog entry',
+  );
+  assert.equal(AUDIT_TOOL.name, 'run_audit');
+
+  assert.deepEqual(
+    WEBMCP_PAGE_TOOLS.map((tool) => tool.name),
+    [AUDIT_TOOL.name],
+    'webmcp-catalog.mjs and the markup must name the same page-scoped tools',
+  );
+});
+
+test('a page-scoped tool never shares a name with a site-wide one', () => {
+  // They would be two different tools with one name in the same document. The site-wide six are
+  // registered on every page, including the page that declares this one.
+  const siteWide = new Set(tools.map((tool) => tool.name));
+  for (const tool of WEBMCP_PAGE_TOOLS) {
+    assert.equal(siteWide.has(tool.name), false, `${tool.name} is registered site-wide as well`);
+  }
+});
+
+test('each page-scoped tool names a page this site serves, and says what calling it does', () => {
+  for (const tool of WEBMCP_PAGE_TOOLS) {
+    assert.match(tool.page, /^\/[a-z0-9/-]*\/$/, `${tool.name}: page must be a canonical slash path`);
+    assert.ok(
+      PAGE_PATHS.includes(tool.page.replace(/\/$/, '')),
+      `${tool.name}: ${tool.page} is not a page this site publishes`,
+    );
+    assert.ok(['read', 'write'].includes(tool.kind), `${tool.name}: kind must be read or write`);
+    assert.ok(tool.returns.length > 0, `${tool.name}: needs a returns line`);
+    assert.ok(tool.notes.length > 0, `${tool.name}: needs its scope stated`);
+  }
+});
+
+test('the manifest lists page-scoped tools apart from site-wide ones, with their page', () => {
+  // Flattening the two would tell an agent it can call run_audit from the homepage, which is false:
+  // a declarative tool exists only while the page carrying its form is open.
+  const payload = buildToolsPayload(BASE);
+
+  assert.equal(payload.pageTools.length, WEBMCP_PAGE_TOOLS.length);
+  assert.equal(
+    payload.tools.some((entry) => entry.name === AUDIT_TOOL.name),
+    false,
+    'a page-scoped tool must not appear in the site-wide list',
+  );
+
+  const [entry] = payload.pageTools;
+  assert.equal(entry.name, AUDIT_TOOL.name);
+  assert.equal(entry.page, `${BASE}/audit/`);
+  assert.equal(entry.description, AUDIT_TOOL.description, 'the manifest and the form say the same thing');
+  assert.equal('inputSchema' in entry, false, 'Chrome builds the schema from the form; this site does not author one');
 });
 
 test('each note declares a kind and a returns line', () => {
