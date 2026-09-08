@@ -1,6 +1,6 @@
 {
   "iso": "2026-09-07",
-  "timestamp": "2026-09-07T03:33:49-07:00",
+  "timestamp": "2026-09-07T00:35:46-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -330,5 +330,5 @@
   "decision": "no-op",
   "reason": "unchanged, published 1d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-09-07-2"
+  "archiveId": "2026-09-07"
 }
