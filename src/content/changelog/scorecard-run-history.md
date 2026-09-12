@@ -5,7 +5,7 @@ seoTitle: "The Scorecard gets a memory of every run"
 seoDescription: "Redesigned /scorecard around a prominent latest run and a compact, expandable history, so score movement stays legible without a detail page."
 date: 2026-07-18
 publishedAt: 2026-07-18T00:22:47-07:00
-updated: 2026-07-18
+updated: 2026-09-11
 type: feature
 significance: minor
 tags: ["measurement", "performance", "accessibility", "agents"]
@@ -13,6 +13,8 @@ draft: false
 ---
 
 The Scorecard now separates the current result from the archive. The latest run keeps the full score descriptions, pass/fail state, scope, tools, entry method, and context. Older runs collapse into a four-column ledger inspired by the changelog and expand in place when their metadata or commentary matters.
+
+**Correction, 11 Sep 2026:** the in-place expansion did not survive the August redesign of /scorecard. PR #163 rebuilt the page around the current design system and cut per-run detail with it, so an older run is now a plain row with nothing to open. The paragraph above stands as the record of what shipped on 18 Jul 2026.
 
 ## The hypothesis
 
