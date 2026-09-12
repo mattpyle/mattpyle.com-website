@@ -152,11 +152,21 @@ const { address, failure, report, byGroup } = Astro.props;
           again form instead, which is deliberately not declared: its address field is a hidden
           input with one fixed value, so a tool built from it would advertise a parameter that
           cannot honestly be set.
+
+          A FULL-PAGE POST, NOT A ROUTER ONE. `data-astro-reload` keeps the ClientRouter out of
+          this submit. Handled by the router, the POST and its 303 go by fetch and leave a history
+          entry that Chrome 152 with WebMCP on refuses on back: the renderer is killed for a
+          malformed IPC (`RESULT_CODE_KILLED_BAD_MESSAGE`), reproduced 2026-09-11, and the tab has
+          to be closed. A real navigation is also what src/lib/audit-running-state.mjs was written
+          for — its `pageshow` undo of the "Running…" button only fires when the browser restores
+          this document from the back/forward cache, which a router-driven back never does. The
+          cost is the view transition on this one navigation, which the page does not need.
         */}
         <form
           class="audit-form"
           method="post"
           action="/audit/"
+          data-astro-reload
           data-audit-form
           toolname={TOOL.name}
           tooldescription={TOOL.description}
@@ -236,10 +246,11 @@ const { address, failure, report, byGroup } = Astro.props;
               A report run inside the current UTC hour is the report a fresh run would return —
               the hour is the deduplication bucket the standalone activity ID uses — so Run again
               is offered only outside it. Its own form, posting the origin, so it is the same
-              request the field above makes.
+              request the field above makes — and `data-astro-reload` for the same reason the
+              address form carries it, in the docblock above that form.
             */}
             {report.aged && (
-              <form method="post" action="/audit/" class="rerun" data-audit-form>
+              <form method="post" action="/audit/" class="rerun" data-astro-reload data-audit-form>
                 <input type="hidden" name="url" value={report.origin} />
                 <button type="submit" data-audit-submit>{REPORT.rerun}</button>
                 {/*
