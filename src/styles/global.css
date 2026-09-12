@@ -597,8 +597,6 @@ textarea:focus-visible,
   --tint-agents:   oklch(0.975 0.012 330);
   --hatch-projects-a:  oklch(0.93 0.014 155);
   --hatch-projects-b:  oklch(0.965 0.008 155);
-  --hatch-chip-ink:    oklch(0.34 0.05 155);
-  --hatch-chip-border: oklch(0.88 0.02 155);
 
   /* Type. --font-mono-plex rather than --font-mono because the legacy token is
      still JetBrains Mono on 20-odd unconverted pages; it takes the plain name

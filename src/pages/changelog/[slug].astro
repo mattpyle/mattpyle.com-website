@@ -40,6 +40,7 @@ const markdownUrl = `/changelog/${entry.id}.md`;
   modifiedTime={updated}
   noindex={draft}
   markdownAlternate={markdownUrl}
+  feedAlternate={{ href: '/changelog/rss.xml', title: 'Matt Pyle — Changelog' }}
   breadcrumbs={[
     { name: 'Home', url: '/' },
     { name: 'Changelog', url: '/changelog/' },

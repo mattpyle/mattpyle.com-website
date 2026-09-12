@@ -78,6 +78,7 @@ const markdownUrl = markdownSiblingFor(breadcrumbUrl) ?? undefined;
   seoDescription={seoDescription}
   breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'Changelog', url: breadcrumbUrl }]}
   markdownAlternate={markdownUrl}
+  feedAlternate={{ href: '/changelog/rss.xml', title: 'Matt Pyle — Changelog' }}
 >
   {/*
     ONE LEDGER, BOTH APPEARANCES. This page used to ship its content twice — the

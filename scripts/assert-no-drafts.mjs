@@ -24,7 +24,14 @@ const COLLECTIONS = [
 ];
 
 // The feeds a draft must never appear in, whatever the flag state.
-const FEED_FILES = ['llms.txt', 'llms-full.txt', 'sitemap-0.xml', 'sitemap-index.xml', 'rss.xml'];
+const FEED_FILES = [
+  'llms.txt',
+  'llms-full.txt',
+  'sitemap-0.xml',
+  'sitemap-index.xml',
+  'rss.xml',
+  'changelog/rss.xml',
+];
 
 /**
  * Matches a reference to exactly this entry, and not to an entry whose slug
