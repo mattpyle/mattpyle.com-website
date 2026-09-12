@@ -24,7 +24,8 @@
     - complementary "About this post":
       - heading "About this post" [level=2]
       - time: /\d+ Jul \d+/
-      - text: 8 min read
+      - text: 8 min read updated
+      - time: /\d+ Aug \d+/
       - navigation "·":
         - link "·":
           - /url: "#"

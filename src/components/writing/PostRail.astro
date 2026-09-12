@@ -31,13 +31,22 @@ interface Heading {
 
 interface Props {
   date: Date;
+  /** The post's `updated:` frontmatter, when it carries one. Rendered as a third meta line only when it differs from `date` — see the `.rail-meta` block below. */
+  updated?: Date;
   readingLabel: string;
   headings: Heading[];
   markdownUrl: string;
   canonicalUrl: string;
 }
 
-const { date, readingLabel, headings, markdownUrl, canonicalUrl } = Astro.props;
+const { date, updated, readingLabel, headings, markdownUrl, canonicalUrl } = Astro.props;
+
+// `updated:` already feeds JSON-LD `dateModified` and the sitemap's `lastmod`, so
+// a returning reader was the only visitor the site did not tell. Shown only when
+// it says something the publish date does not: an entry whose `updated` equals
+// its `date` has not been revised, and a third line reading the same day twice is
+// noise.
+const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : null;
 
 // h2 only. h3s would make the rail a nested outline, and the design's rail is a
 // flat list of the article's sections.
@@ -50,6 +59,9 @@ const contents = headings.filter(heading => heading.depth === 2);
   <div class="rail-block rail-meta">
     <time datetime={date.toISOString()}>{formatSiteDate(date)}</time>
     <span>{readingLabel}</span>
+    {revisedOn && (
+      <span>updated <time datetime={revisedOn.toISOString()}>{formatSiteDate(revisedOn)}</time></span>
+    )}
   </div>
 
   {contents.length > 0 && (
