@@ -14,7 +14,7 @@ draft: false
 
 The Scorecard now separates the current result from the archive. The latest run keeps the full score descriptions, pass/fail state, scope, tools, entry method, and context. Older runs collapse into a four-column ledger inspired by the changelog and expand in place when their metadata or commentary matters.
 
-**Correction, 11 Sep 2026:** the in-place expansion did not survive the August redesign of /scorecard. PR #163 rebuilt the page around the current design system and cut per-run detail with it, so an older run is now a plain row with nothing to open. The paragraph above stands as the record of what shipped on 18 Jul 2026.
+**Correction, 11 Sep 2026:** the in-place expansion did not survive the August redesign of /scorecard, and it went in two steps. PR #163 rebuilt the modern page without it on 22 Aug 2026, and PR #204 removed it from the retro appearance on 29 Aug 2026. An older run is a plain row in either appearance now, with nothing to open. The paragraph above stands as the record of what shipped on 18 Jul 2026.
 
 ## The hypothesis
 
