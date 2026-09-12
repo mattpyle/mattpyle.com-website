@@ -9,11 +9,11 @@
  * would have been the same mistake one level up. The grid stays two columns, so
  * the section grows into the design as entries land.
  *
- * The card top is a placeholder hatch, deliberately: there is no real screenshot
- * or diagram for any project yet, and the design would rather show an honest
- * empty frame than a decorative one. The chip is aria-hidden — it names a
- * missing asset, which is information for the eye and noise inside the card's
- * accessible name.
+ * The card top is the project's own screenshot when its frontmatter carries an
+ * `image`, and the placeholder hatch alone when it does not: the design would
+ * rather show an honest empty frame than a decorative one. The slot stays
+ * aria-hidden either way — the card's accessible name is the project title, so
+ * the image is decorative by construction and renders `alt=""`.
  *
  * RETRO RESTYLES THIS SAME MARKUP under
  * `html[data-appearance='retro'] [data-module='home-projects']` in retro.css. The
@@ -21,6 +21,7 @@
  * need to outweigh the Astro-scoped selectors below, whose
  * `[data-astro-cid-…]` counts as a class. Nothing here is appearance-aware.
  */
+import { Image } from 'astro:assets';
 
 interface Project {
   id: string;
@@ -29,6 +30,7 @@ interface Project {
     description: string;
     github?: string;
     live?: string;
+    image?: ImageMetadata;
   };
 }
 
@@ -70,7 +72,9 @@ function cardHref(project: Project): { href: string; external: boolean } {
           rel={external ? 'noopener noreferrer' : undefined}
         >
           <span class="card-image" aria-hidden="true">
-            <span class="card-chip">[ image: pending ]</span>
+            {project.data.image && (
+              <Image src={project.data.image} alt="" widths={[400, 800, 1200]} sizes="(max-width: 720px) 100vw, 50vw" />
+            )}
           </span>
           <span class="card-body">
             <span class="card-name">{project.data.title}</span>
@@ -114,10 +118,8 @@ function cardHref(project: Project): { href: string; external: boolean } {
   }
 
   .card-image {
-    display: flex;
-    align-items: flex-end;
+    display: block;
     aspect-ratio: 16 / 9;
-    padding: 14px;
     border-bottom: 1px solid var(--rule);
     background-image: repeating-linear-gradient(
       -45deg,
@@ -126,14 +128,14 @@ function cardHref(project: Project): { href: string; external: boolean } {
     );
   }
 
-  .card-chip {
-    font-family: var(--font-mono-plex);
-    font-size: 15px;
-    color: var(--hatch-chip-ink);
-    background: var(--paper);
-    border: 1px solid var(--hatch-chip-border);
-    border-radius: 3px;
-    padding: 5px 9px;
+  /* The image fills the slot edge to edge, so the hatch below it only shows for
+     a project that has no screenshot yet. `object-fit: cover` handles a source
+     whose ratio is not the slot's; the 16:9 crop means it has little to do. */
+  .card-image :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 
   .card-body {
@@ -179,7 +181,7 @@ function cardHref(project: Project): { href: string; external: boolean } {
       gap: 20px;
     }
 
-    .card-image { aspect-ratio: 16 / 10; padding: 12px; }
+    .card-image { aspect-ratio: 16 / 10; }
 
     .card-body { padding: 20px 20px 22px; }
 

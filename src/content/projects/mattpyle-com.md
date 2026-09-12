@@ -6,6 +6,7 @@ status: "live"
 live: "https://www.mattpyle.com"
 github: "https://github.com/mattpyle/mattpyle.com-website"
 date: 2026-07-13
+image: ../../assets/projects/mattpyle-com.png
 ---
 
 Built with Astro 7 (static output, no client-side framework, no backend) and deployed on Vercel. Content — writing and projects, including this entry — lives in typed Astro content collections, validated by Zod, rather than a CMS.

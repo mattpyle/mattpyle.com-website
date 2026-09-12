@@ -753,15 +753,6 @@ html[data-appearance='retro'] [data-module='home-projects'] .card-image {
   );
 }
 
-html[data-appearance='retro'] [data-module='home-projects'] .card-chip {
-  font-family: var(--retro-font-mono);
-  font-size: 11px;
-  background: var(--retro-frame-bg);
-  border: 1px solid var(--retro-frame-border);
-  border-radius: 0;
-  color: var(--retro-ink);
-}
-
 html[data-appearance='retro'] [data-module='home-projects'] .card-name {
   font-family: var(--retro-font-display);
   font-size: 18px;
@@ -1290,8 +1281,9 @@ html[data-appearance='retro'] [data-module='projects-board'] .card:hover {
   border-color: var(--retro-maroon);
 }
 
-/* The placeholder hatch, repainted. It is diagonal machine ruling either way;
-   in projects green it is the one modern colour left on the page. */
+/* The hatch behind the image slot, repainted. It is diagonal machine ruling
+   either way; in projects green it is the one modern colour left on the page.
+   A project with a screenshot covers it; one without shows it alone. */
 html[data-appearance='retro'] [data-module='projects-board'] .card-image {
   border-bottom: 2px dashed var(--retro-frame-border);
   background-image: repeating-linear-gradient(
@@ -1299,14 +1291,6 @@ html[data-appearance='retro'] [data-module='projects-board'] .card-image {
     var(--retro-parchment-dark) 0 8px,
     var(--retro-parchment-light) 8px 16px
   );
-}
-
-html[data-appearance='retro'] [data-module='projects-board'] .card-chip {
-  font-family: var(--retro-font-mono);
-  background: var(--retro-cream);
-  border-color: var(--retro-frame-border);
-  border-radius: 0;
-  color: var(--retro-ink-muted);
 }
 
 html[data-appearance='retro'] [data-module='projects-board'] .card-meta {
