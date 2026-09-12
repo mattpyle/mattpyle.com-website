@@ -30,7 +30,7 @@ const writing = defineCollection({
 
 const projects = defineCollection({
   loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/projects' }),
-  schema: z.object({
+  schema: ({ image }) => z.object({
     title:       z.string(),
     description: z.string(),
     tags:        z.array(z.string()).default([]),
@@ -38,6 +38,8 @@ const projects = defineCollection({
     live:        z.url().optional(),
     status:      z.enum(['live', 'in-progress', 'archived']),
     date:        z.coerce.date(),
+    /** Optional card thumbnail, an asset the build optimises. No alt field: the card's image slot is `aria-hidden` and the card's accessible name is the project title, so the image is decorative by construction and renders `alt=""`. A project without one keeps the placeholder hatch. */
+    image:       image().optional(),
   }),
 });
 

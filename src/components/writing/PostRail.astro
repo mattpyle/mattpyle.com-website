@@ -194,9 +194,17 @@ const contents = headings.filter(heading => heading.depth === 2);
        rule asks for one only when a scroll container has no focusable children;
        this one is nothing but links and a button, and focusing any of them
        scrolls it into view — so the keyboard reaches everything without a tab
-       stop on a wrapper. `dvh` first for the mobile toolbar, `vh` behind it. */
-    max-height: calc(100vh - 120px);
-    max-height: calc(100dvh - 120px);
+       stop on a wrapper. `dvh` first for the mobile toolbar, `vh` behind it.
+
+       Subtracting 112px rather than 120px trades 8px of the bottom gutter for
+       8px of rail, because content that lands within a pixel of the cap paints
+       a scrollbar for that one pixel: the longest post measured `scrollHeight`
+       681 against `clientHeight` 680 at 1280x800 on 2026-09-08. The boundary
+       does not go away, it moves. A longer table of contents, or a shorter
+       window, crosses it again and the rail scrolls, which is what the cap is
+       for. */
+    max-height: calc(100vh - 112px);
+    max-height: calc(100dvh - 112px);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
