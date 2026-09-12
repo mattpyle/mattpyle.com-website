@@ -152,8 +152,8 @@ test('the ai-catalog path is an alias onto ard.json, not a second catalogue', ()
 });
 
 test('ordinary pages and reader furniture are not surfaces', () => {
-  // /rss.xml and the icons are excluded on purpose; see the module comment.
-  for (const path of ['/', '/about/', '/writing/some-post/', '/rss.xml', '/favicon.ico', '/site.webmanifest']) {
+  // The two feeds and the icons are excluded on purpose; see the module comment.
+  for (const path of ['/', '/about/', '/writing/some-post/', '/rss.xml', '/changelog/rss.xml', '/favicon.ico', '/site.webmanifest']) {
     assert.equal(isAgentSurface(path), false, path);
   }
 });

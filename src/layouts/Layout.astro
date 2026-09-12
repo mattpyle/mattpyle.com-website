@@ -30,6 +30,12 @@ interface Props {
   modifiedTime?: Date;
   breadcrumbs?: Breadcrumb[];
   noindex?: boolean;
+  /**
+   * A second feed for this section, advertised beside the site-wide writing feed rather than
+   * instead of it — /changelog passes the changelog feed so a reader subscribing from that page
+   * gets what shipped, not what was written.
+   */
+  feedAlternate?: { href: string; title: string };
   /** Path to this page's raw-markdown variant (e.g. `/writing/<slug>.md`) — see src/pages/writing/[slug].md.ts. */
   markdownAlternate?: string;
   /** ISO 8601 duration (e.g. "PT6M") for the BlogPosting `timeRequired` field — see src/lib/reading-time.ts. Article pages only. */
@@ -55,6 +61,7 @@ const {
   breadcrumbs,
   noindex = false,
   markdownAlternate,
+  feedAlternate,
   readingTimeISO8601,
   extraJsonLd,
 } = Astro.props;
@@ -229,6 +236,9 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     <meta name="twitter:description" content={metaDescription} />
     <meta name="twitter:image" content={twitterImageURL} />
     <link rel="alternate" type="application/rss+xml" title="Matt Pyle — Writing" href={new URL('/rss.xml', Astro.site)} />
+    {feedAlternate && (
+      <link rel="alternate" type="application/rss+xml" title={feedAlternate.title} href={new URL(feedAlternate.href, Astro.site)} />
+    )}
     {markdownAlternate && (
       <link rel="alternate" type="text/markdown" href={new URL(markdownAlternate, Astro.site)} />
     )}

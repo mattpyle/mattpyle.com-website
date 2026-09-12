@@ -31,7 +31,8 @@
  * about keeping unmatched. Adding a static file beside a POST endpoint does not put the endpoint in
  * the matcher, and tests/trailing-slash.test.mjs asserts exactly that with an equality check.
  *
- * Deliberately out: /rss.xml (feed pollers would swamp the signal and a reader is not an agent),
+ * Deliberately out: /rss.xml and /changelog/rss.xml (feed pollers would swamp the signal and a
+ * reader is not an agent),
  * favicons, /site.webmanifest, and OG images (browser furniture, no discovery meaning).
  */
 export const AGENT_SURFACE_PATHS = [
