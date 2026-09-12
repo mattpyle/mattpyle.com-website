@@ -1,6 +1,6 @@
 {
-  "iso": "2026-09-11",
-  "timestamp": "2026-09-11T03:33:50-07:00",
+  "iso": "2026-09-09",
+  "timestamp": "2026-09-09T03:33:55-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-09-11",
+  "id": "2026-09-09",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -120,7 +120,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -142,7 +142,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -328,7 +328,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 5d ago (<= 7d threshold)",
+  "reason": "unchanged, published 3d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-09-11"
+  "archiveId": "2026-09-09"
 }
