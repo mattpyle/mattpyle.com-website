@@ -41,3 +41,13 @@ export {
   publishScorecardRun,
   archiveScorecardRun,
 } from './scorecard.js';
+// The findings gate, on `steward-findings`: GitHub API calls against the
+// findings repository and one Temporal visibility list, nothing local.
+export {
+  listSites,
+  readFindingsIndex,
+  readFinding,
+  writeFindingVerdict,
+  listOpenFindingWorkflows,
+  startFindingWorkflow,
+} from './findings.js';

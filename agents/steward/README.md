@@ -14,7 +14,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
 
 ## How it works
 
-**Three independent workflows**, all orchestrated by one Temporal worker:
+**Independent workflows**, all orchestrated by one Temporal worker:
 
 - **`reviewPost`** — reviews one piece of content: mechanical checks (spelling, frontmatter), prose
   linting ([Vale](https://vale.sh)), an LLM editorial pass, and — for unpublished drafts — a real
@@ -32,20 +32,29 @@ that's the property being dogfooded here, on a low-stakes, real target.
   local MCP server (`steward mcp-serve`) and by the site's public `/mcp` endpoint's `deep_audit` tool;
   both hand back a workflow ID immediately and serve the report by polling. `steward audit-url` runs
   the same engine in-process with no worker and no Temporal.
+- **`findingWorkflow`** and **`reconcileFindingsWorkflow`** — the gate for findings filed into a
+  separate findings repository by an inspector agent. One `findingWorkflow` per finding
+  (`finding/<site>/<key>`) waits for a `verdict` signal and completes with it; when the verdict came
+  from `steward finding approve|reject` it writes the verdict fields and the index line back through
+  the GitHub Contents API, guarded by the blob sha. An hourly Schedule runs the reconciler, which
+  starts a workflow for each new `proposed` finding and signals the ones whose file already carries a
+  verdict.
 
 ### Task queues and workers
 
-Three queues, split by **locality** — which worker is allowed to do the work, not how heavy it is:
+Five queues, split by **locality** — which worker is allowed to do the work, not how heavy it is:
 
 | Queue | Carries | Why it is where it is |
 |---|---|---|
 | `steward-light` | `reviewPost`'s passes | Reads the working copy and applies patches to local files |
 | `steward-heavy` | `buildAndAuditDraft` | Same working copy, plus a browser |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
+| `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
+| `steward-findings` | `findingWorkflow` and `reconcileFindingsWorkflow`, with their activities | Nothing local: the findings repository over the GitHub API, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **laptop worker** (`steward up`, `src/worker.ts`)
-registers all three. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
-`steward-audit` alone, and exactly the twelve activities those two workflows name: a worker that
+registers all of them. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
+the three queues that depend on nothing local, each with a hand-written activity map: a worker that
 claimed `snapshotDraft` would fail it, because the container has no drafts, and a failed task is
 worse than an unclaimed one.
 
@@ -124,6 +133,12 @@ steward cleanup my-draft-slug    # after the merge: drop the local draft twin an
 steward inbox                    # every review waiting on you, across every slug
 steward audit-url example.com    # agent-readiness checks against any site
 steward mcp-serve                # serve the audit over MCP, backed by local Temporal
+steward finding list             # open finding workflows, one per line
+steward finding status <key>     # waiting, writing or done, and the verdict
+steward finding approve <key>    # signal the verdict; the workflow writes it into the file
+steward finding reject <key> --reason "why"
+steward finding sync             # run the findings reconcile now
+steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
 ```
 
 `steward <verb> --help` prints the real options for each.

@@ -6,6 +6,7 @@ import {
   NAMESPACE,
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
+  QUEUE_FINDINGS,
   QUEUE_HEAVY,
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
@@ -67,11 +68,12 @@ async function main() {
     Worker.create({ ...common, taskQueue: QUEUE_HEAVY }),
     Worker.create({ ...common, taskQueue: QUEUE_AUDIT }),
     Worker.create({ ...common, taskQueue: QUEUE_AUDIT_FAST }),
+    Worker.create({ ...common, taskQueue: QUEUE_FINDINGS }),
   ]);
 
   log.info(
     {
-      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT, QUEUE_AUDIT_FAST],
+      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS],
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',

@@ -17,7 +17,7 @@
  * result. So the signal is read off the run's own record, which already knows
  * both facts and costs nothing to consult.
  *
- * ## Four signals, one transport
+ * ## Five signals, one transport
  *
  * The transport is an external dead-man's-switch service (healthchecks.io),
  * authorised on the card 2026-08-15, because nothing else in this stack can send
@@ -29,8 +29,9 @@
  * | `credential-expiry` | no tracked credential is near its expiry | the scheduled run |
  * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
  * | `run-shape` | fail-only: a completed run whose record is wrong | a manual scorecard run, and any deep audit |
+ * | `findings-reconcile` | the hourly findings reconciler ran | `reconcileFindingsWorkflow`, success and failure both |
  *
- * The first three carry the dead-man's half: a worker that never runs sends
+ * The first three, and `findings-reconcile`, carry the dead-man's half: a worker that never runs sends
  * nothing, the check's own period lapses, and the service emails about the
  * silence. That is the failure a liveness ping cannot detect from inside a dead
  * container. `run-shape` is fail-only and therefore has no period — a deep audit
@@ -41,7 +42,12 @@ import type { ActionUsageSample } from './action-usage.js';
 import { renderedNothing } from './agent-audit/report-shape.js';
 
 /** One check at the alerting service. */
-export type HealthSignal = 'nightly-scorecard' | 'credential-expiry' | 'action-usage' | 'run-shape';
+export type HealthSignal =
+  | 'nightly-scorecard'
+  | 'credential-expiry'
+  | 'action-usage'
+  | 'run-shape'
+  | 'findings-reconcile';
 
 /**
  * The slug each signal pings, which is also the check's name in the service's
@@ -57,6 +63,9 @@ export const HEALTH_CHECK_SLUGS: Record<HealthSignal, string> = {
   'credential-expiry': 'steward-credential-expiry',
   'action-usage': 'steward-action-usage',
   'run-shape': 'steward-run-shape',
+  // Hourly, from `reconcileFindingsWorkflow`: success and failure both, so a
+  // reconciler that stops running goes late at the service (period 1h, grace 30m).
+  'findings-reconcile': 'steward-findings-reconcile',
 };
 
 /**
