@@ -1,5 +1,4 @@
 import { ApplicationFailure } from '@temporalio/activity';
-import { GITHUB_REPO } from '../config.js';
 
 /**
  * Steward's one GitHub REST client, over plain `fetch` — extracted out of
@@ -55,7 +54,9 @@ export async function gh(pathname: string, init?: RequestInit): Promise<any> {
   }
   if (res.status === 404) {
     throw ApplicationFailure.nonRetryable(
-      `GitHub returned 404 for ${pathname}. Either ${GITHUB_REPO} is wrong or the token cannot see it.`,
+      // The path names the repository, which is not always GITHUB_REPO since the
+      // findings store (ARGUS_REPO) shares this client.
+      `GitHub returned 404 for ${pathname}. Either the repository or path is wrong, or the token cannot see it.`,
       'NotFound',
     );
   }

@@ -18,9 +18,14 @@ import { gh } from './github.js';
  * The trade is deliberate and worth naming: a worktree gives you the whole repo
  * atomically, and this gives you one file per call. That is fine here because
  * every write the Scorecard makes is a single append-only JSON file, and it is
- * the reason nothing else in Steward has been moved onto these helpers.
- * `publishPost` still drives a worktree, because publishing a post is a
+ * the reason `publishPost` still drives a worktree: publishing a post is a
  * multi-file change that wants to be one commit.
+ *
+ * **Two repositories since 2026-09-12.** Every function takes the repository as
+ * a parameter defaulting to `GITHUB_REPO`, so the scorecard's call sites are
+ * unchanged and the findings store (`activities/findings.ts`) passes
+ * `ARGUS_REPO`. A verdict edits one file and one index line, so the
+ * one-file-per-call shape fits it too.
  *
  * The Contents API is used rather than the Git Data API (blob → tree → commit →
  * ref) for the same reason `github.ts` uses `fetch` rather than `octokit`: one
@@ -29,14 +34,14 @@ import { gh } from './github.js';
  */
 
 /** `main`/`master`, whichever this repo actually uses. Never assumed. */
-export async function defaultBranch(): Promise<string> {
-  const repo = await gh(`/repos/${GITHUB_REPO}`);
-  return repo.default_branch as string;
+export async function defaultBranch(repo: string = GITHUB_REPO): Promise<string> {
+  const meta = await gh(`/repos/${repo}`);
+  return meta.default_branch as string;
 }
 
 /** The commit a branch currently points at. */
-export async function branchSha(branch: string): Promise<string> {
-  const ref = await gh(`/repos/${GITHUB_REPO}/git/ref/heads/${encodeURIComponent(branch)}`);
+export async function branchSha(branch: string, repo: string = GITHUB_REPO): Promise<string> {
+  const ref = await gh(`/repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
   return ref.object.sha as string;
 }
 
@@ -63,10 +68,14 @@ export interface RepoFile {
  * run-log grows about 1KB per run, so the line is years away and would arrive
  * unannounced. `download_url` carries the file at any size.
  */
-export async function readRepoFile(path: string, ref: string): Promise<RepoFile | undefined> {
+export async function readRepoFile(
+  path: string,
+  ref: string,
+  repo: string = GITHUB_REPO,
+): Promise<RepoFile | undefined> {
   let meta: any;
   try {
-    meta = await gh(`/repos/${GITHUB_REPO}/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`);
+    meta = await gh(`/repos/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`);
   } catch (err) {
     if (err instanceof ApplicationFailure && err.type === 'NotFound') return undefined;
     throw err;
@@ -86,6 +95,34 @@ export async function readRepoFile(path: string, ref: string): Promise<RepoFile 
   return { text: await res.text(), sha: meta.sha as string };
 }
 
+export interface RepoDirEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+}
+
+/**
+ * Lists one directory at one ref, or `undefined` if it is not there. The same
+ * Contents route as {@link readRepoFile}; a directory answers with an array.
+ */
+export async function listRepoDirectory(
+  path: string,
+  ref: string,
+  repo: string = GITHUB_REPO,
+): Promise<RepoDirEntry[] | undefined> {
+  let meta: any;
+  try {
+    meta = await gh(`/repos/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`);
+  } catch (err) {
+    if (err instanceof ApplicationFailure && err.type === 'NotFound') return undefined;
+    throw err;
+  }
+  if (!Array.isArray(meta)) {
+    throw ApplicationFailure.nonRetryable(`${path} at ${ref} is a file, not a directory.`, 'NotADirectory');
+  }
+  return meta.map((entry: any) => ({ name: entry.name, path: entry.path, type: entry.type }));
+}
+
 /**
  * Points `branch` at `sha`, creating it if it does not exist.
  *
@@ -96,9 +133,9 @@ export async function readRepoFile(path: string, ref: string): Promise<RepoFile 
  * is their only writer and a human's only interaction with one is merging the
  * PR that is open against it.
  */
-export async function resetBranch(branch: string, sha: string): Promise<void> {
+export async function resetBranch(branch: string, sha: string, repo: string = GITHUB_REPO): Promise<void> {
   try {
-    await gh(`/repos/${GITHUB_REPO}/git/refs`, {
+    await gh(`/repos/${repo}/git/refs`, {
       method: 'POST',
       body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }),
     });
@@ -109,16 +146,20 @@ export async function resetBranch(branch: string, sha: string): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     if (!/already exists/i.test(message)) throw err;
   }
-  await gh(`/repos/${GITHUB_REPO}/git/refs/heads/${encodeURIComponent(branch)}`, {
+  await gh(`/repos/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
     method: 'PATCH',
     body: JSON.stringify({ sha, force: true }),
   });
 }
 
 /** Creates the branch only if absent, and leaves an existing one where it is. */
-export async function ensureBranch(branch: string, fromSha: string): Promise<void> {
+export async function ensureBranch(
+  branch: string,
+  fromSha: string,
+  repo: string = GITHUB_REPO,
+): Promise<void> {
   try {
-    await gh(`/repos/${GITHUB_REPO}/git/refs`, {
+    await gh(`/repos/${repo}/git/refs`, {
       method: 'POST',
       body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromSha }),
     });
@@ -129,6 +170,8 @@ export async function ensureBranch(branch: string, fromSha: string): Promise<voi
 }
 
 export interface WriteFileInput {
+  /** `owner/name`. Defaults to `GITHUB_REPO`; the findings store passes `ARGUS_REPO`. */
+  repo?: string;
   path: string;
   /** UTF-8 content. Base64 encoding is this function's business, not the caller's. */
   text: string;
@@ -156,7 +199,7 @@ export async function writeRepoFile(input: WriteFileInput): Promise<WriteFileRes
   };
   if (input.sha) body.sha = input.sha;
 
-  const res = await gh(`/repos/${GITHUB_REPO}/contents/${encodeURI(input.path)}`, {
+  const res = await gh(`/repos/${input.repo ?? GITHUB_REPO}/contents/${encodeURI(input.path)}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   });

@@ -6,13 +6,15 @@ import { fileURLToPath } from 'node:url';
 import {
   HOSTED_ACTIVITY_CONCURRENCY,
   HOSTED_FAST_ACTIVITY_CONCURRENCY,
+  HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
+  QUEUE_FINDINGS,
 } from '../../src/config.js';
 
 /**
- * The hosted container runs two workers with two very different caps, and these
- * tests are what stops either drifting back to the SDK's default of 100.
+ * The hosted container runs three workers with their own caps, and these tests
+ * are what stops any of them drifting back to the SDK's default of 100.
  *
  * The audit queue's one is a correctness rule about Lighthouse; the fast queue's
  * four is a throughput choice for a public, synchronous tool. Swapping them would
@@ -60,9 +62,9 @@ test('each worker sets the option once, from its own constant, in queue order', 
   ].map((match) => match[1].trim());
   assert.deepEqual(
     assignments,
-    ['HOSTED_ACTIVITY_CONCURRENCY', 'HOSTED_FAST_ACTIVITY_CONCURRENCY'],
+    ['HOSTED_ACTIVITY_CONCURRENCY', 'HOSTED_FAST_ACTIVITY_CONCURRENCY', 'HOSTED_FINDINGS_ACTIVITY_CONCURRENCY'],
     'worker-hosted.ts must pass maxConcurrentActivityTaskExecutions once per worker, each from ' +
-      'its own constant — a third assignment, or a literal, is how a cap comes back off',
+      'its own constant — an extra assignment, or a literal, is how a cap comes back off',
   );
 });
 
@@ -72,10 +74,10 @@ test('the second worker serves the fast queue and registers nothing but the fast
   const queues = [...text.matchAll(/taskQueue:\s*([A-Z_]+)/g)].map((match) => match[1]);
   assert.deepEqual(
     queues,
-    ['QUEUE_AUDIT', 'QUEUE_AUDIT_FAST'],
-    'two workers, two queues, and the fast one is second',
+    ['QUEUE_AUDIT', 'QUEUE_AUDIT_FAST', 'QUEUE_FINDINGS'],
+    'three workers, three queues, and the fast one is second',
   );
-  assert.notEqual(QUEUE_AUDIT, QUEUE_AUDIT_FAST, 'sharing a queue would be sharing the cap');
+  assert.equal(new Set([QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS]).size, 3, 'sharing a queue would be sharing the cap');
 
   // The list is the contract with the queue, per the file's own docblock: anything in it becomes
   // work the public MCP endpoint can dispatch onto this container with no workflow in between.
@@ -94,7 +96,29 @@ test('the fast worker carries no workflow bundle, so it can never be given a dee
   const workflowPaths = [...(await source()).matchAll(/^\s*workflowsPath,$/gm)];
   assert.equal(
     workflowPaths.length,
-    1,
-    "only the audit queue's worker carries the workflow bundle; the fast queue is activities only",
+    2,
+    "the audit and findings workers carry the workflow bundle; the fast queue is activities only",
+  );
+});
+
+test('the findings worker runs a small bounded cap and registers only the findings activities', async () => {
+  assert.equal(HOSTED_FINDINGS_ACTIVITY_CONCURRENCY, 2);
+  const text = await source();
+  const map = text.match(/const findingsActivities = \{([^}]*)\}/);
+  assert.ok(map, "worker-hosted.ts must declare the findings queue's activity map by name");
+  assert.deepEqual(
+    map[1]
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+    [
+      'listSites',
+      'readFindingsIndex',
+      'readFinding',
+      'writeFindingVerdict',
+      'listOpenFindingWorkflows',
+      'startFindingWorkflow',
+      'reportRunHealth',
+    ],
   );
 });

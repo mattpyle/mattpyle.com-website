@@ -8,6 +8,14 @@ import {
 } from './activities/agent-audit.js';
 import { checkActionUsage, checkCredentialExpiry, reportRunHealth } from './activities/health.js';
 import {
+  listOpenFindingWorkflows,
+  listSites,
+  readFinding,
+  readFindingsIndex,
+  startFindingWorkflow,
+  writeFindingVerdict,
+} from './activities/findings.js';
+import {
   archiveScorecardRun,
   auditLiveUrl,
   publishScorecardRun,
@@ -21,9 +29,11 @@ import {
   METRICS_API_KEY,
   IS_TEMPORAL_CLOUD,
   HOSTED_FAST_ACTIVITY_CONCURRENCY,
+  HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
   NAMESPACE,
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
+  QUEUE_FINDINGS,
   TEMPORAL_ADDRESS,
   WORKER_READY_LOG,
   temporalConnectionOptions,
@@ -37,7 +47,10 @@ import {
 } from './lib/recycle-policy.js';
 
 /**
- * The **hosted** worker: one process, two queues, no checkout.
+ * The **hosted** worker: one process, three queues, no checkout.
+ *
+ * The third queue, `steward-findings` (2026-09-12), follows the second's shape
+ * and is described where it is created in `main()`.
  *
  * This is the entry the Railway container runs (always-on-audit-worker card,
  * leg 2b). `worker.ts` is unchanged in shape and is still what `steward up`
@@ -126,6 +139,24 @@ const activities = {
  * in between, so growing it is a decision rather than a refactor.
  */
 const fastActivities = { auditSiteFast };
+
+/**
+ * The findings queue's registry (findings-loop design, decision 18): the six
+ * findings activities, plus `reportRunHealth` because the reconciler pings its
+ * check from this queue. Four GitHub API calls against the findings repository,
+ * and a visibility list and a workflow start through the worker's own client;
+ * none opens a local file, so the "nothing local" rule above holds for this map
+ * too.
+ */
+const findingsActivities = {
+  listSites,
+  readFindingsIndex,
+  readFinding,
+  writeFindingVerdict,
+  listOpenFindingWorkflows,
+  startFindingWorkflow,
+  reportRunHealth,
+};
 
 /**
  * The same `unhandledRejection` guard `worker.ts` carries, and for the same
@@ -330,20 +361,44 @@ async function main() {
     interceptors: { activity: [trackActivityExecution(tracker)] },
   });
 
+  /**
+   * The findings gate's queue: `findingWorkflow`, `reconcileFindingsWorkflow`
+   * and their activities. Its own `Worker` for the fast queue's reason: a verdict
+   * write must not wait behind a 90-second page render on the audit queue, whose
+   * cap is one. It carries the workflow bundle because both its workflows run
+   * here.
+   *
+   * The same shutdown timings and interceptor as the other two, for the same
+   * reason: one process, one exit, one in-flight count.
+   */
+  const findingsWorker = await Worker.create({
+    connection,
+    namespace: NAMESPACE,
+    workflowsPath,
+    activities: findingsActivities,
+    taskQueue: QUEUE_FINDINGS,
+    maxConcurrentActivityTaskExecutions: HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
+    shutdownGraceTime: '20 seconds',
+    shutdownForceTime: '40 seconds',
+    interceptors: { activity: [trackActivityExecution(tracker)] },
+  });
+
   log.info(
     {
-      queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST],
+      queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS],
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
       activities: Object.keys(activities),
       fastActivities: Object.keys(fastActivities),
+      findingsActivities: Object.keys(findingsActivities),
       hosted: true,
       // In the ready line for the same reason `alerting` is: it is a fact a
       // deploy can change, and the operator reading this line after a deploy is
       // the person who would otherwise find out from a corrupted report.
       activityConcurrency: HOSTED_ACTIVITY_CONCURRENCY,
       fastActivityConcurrency: HOSTED_FAST_ACTIVITY_CONCURRENCY,
+      findingsActivityConcurrency: HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
       // Named in the ready line because the operator reads this line after every
       // deploy, and "alerting is off" is precisely the fact a deploy can change
       // by accident (a variable dropped from the Variables tab) and that nothing
@@ -357,12 +412,12 @@ async function main() {
     WORKER_READY_LOG,
   );
 
-  // Both, and the process lives exactly as long as the pair. `Promise.all`
+  // All three, and the process lives exactly as long as the set. `Promise.all`
   // rather than a race: a worker that stops on its own (a SIGTERM from a deploy,
   // a fatal error) has to take the other one down with it, or the container
   // would sit half-serving a queue with nobody watching.
-  const running = Promise.all([worker.run(), fastWorker.run()]);
-  const workers = [worker, fastWorker];
+  const running = Promise.all([worker.run(), fastWorker.run(), findingsWorker.run()]);
+  const workers = [worker, fastWorker, findingsWorker];
   const stopAll = () => {
     for (const each of workers) if (each.getState() === 'RUNNING') each.shutdown();
   };
@@ -375,7 +430,7 @@ async function main() {
   stopAll();
   await running;
   log.info(
-    { queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST] },
+    { queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS] },
     'steward hosted worker drained and stopped',
   );
   // Exit 0 and not 1. `main().catch` below exits 1, so the code is what tells a

@@ -18,7 +18,10 @@ import {
   MCP_HOST,
   MCP_PORT,
   NAMESPACE,
+  ARGUS_REPO,
+  FINDINGS_DEFAULT_SITE,
   QUEUE_AUDIT,
+  QUEUE_FINDINGS,
   QUEUE_LIGHT,
   temporalConnectionOptions,
   WEB_UI,
@@ -65,6 +68,23 @@ import {
   type TimeOfDay,
 } from './lib/scorecard-schedule.js';
 import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
+import {
+  findingWorkflowId,
+  isFindingSlug,
+  type FindingVerdict,
+} from './lib/findings.js';
+import {
+  FINDINGS_SCHEDULE_ACTIONS,
+  buildFindingsScheduleOptions,
+  isFindingsScheduleAction,
+  runFindingsScheduleAction,
+} from './lib/findings-schedule.js';
+import {
+  findingStateQuery,
+  verdictSignal,
+  type FindingState,
+  type FindingWorkflowResult,
+} from './workflows/finding.js';
 
 /**
  * `audit-url`'s default time budgets, per tier.
@@ -1657,6 +1677,210 @@ program
       }
     },
   );
+
+// ---------------------------------------------------------------------------
+// steward finding: the findings gate (findings-loop design, decisions 16 to 19)
+// ---------------------------------------------------------------------------
+
+function parseFindingSlug(label: string) {
+  return (value: string): string => {
+    if (!isFindingSlug(value)) {
+      fail(`Invalid ${label} "${value}". Lower case letters, digits and hyphens only.`);
+    }
+    return value;
+  };
+}
+
+/** How long `approve` and `reject` wait for the workflow to finish writing. */
+const FINDING_VERDICT_POLL_MS = 60_000;
+
+/**
+ * The open workflow for one finding, or a one-line refusal. A closed or missing
+ * workflow is the same answer to the operator: there is nothing to send a
+ * verdict to, and `list` shows what there is.
+ */
+async function openFindingHandle(c: Client, site: string, key: string) {
+  const id = findingWorkflowId(site, key);
+  const handle = c.workflow.getHandle(id);
+  let running = false;
+  try {
+    running = (await handle.describe()).status.name === 'RUNNING';
+  } catch (err) {
+    if (!(err instanceof WorkflowNotFoundError)) throw err;
+  }
+  if (!running) {
+    await c.connection.close();
+    fail(`No open workflow ${id}. \`steward finding list\` shows the open ones.`);
+  }
+  return handle;
+}
+
+async function sendFindingVerdict(site: string, key: string, status: FindingVerdict['status'], reason: string) {
+  const c = await client();
+  try {
+    const handle = await openFindingHandle(c, site, key);
+    const verdict: FindingVerdict = { status, reason, source: 'cli', at: new Date().toISOString() };
+    await handle.signal(verdictSignal, verdict);
+    console.log(`\n  ${status} signal sent to ${handle.workflowId}`);
+
+    const deadline = Date.now() + FINDING_VERDICT_POLL_MS;
+    let state: FindingState | undefined;
+    for (;;) {
+      const described = await handle.describe();
+      if (described.status.name !== 'RUNNING') break;
+      state = await handle.query(findingStateQuery);
+      if (state.status === 'done') break;
+      if (Date.now() > deadline) {
+        fail(
+          `Still ${state.status} after ${FINDING_VERDICT_POLL_MS / 1000}s. The signal is recorded; ` +
+            `check \`steward finding status ${key}\` or the workflow in ${WEB_UI}.`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    const result = (await handle.result()) as FindingWorkflowResult;
+    console.log(`  verdict: ${result.verdict.status} (source ${result.verdict.source})`);
+    if (result.verdict.source !== 'cli') {
+      console.log('  An earlier verdict from the file was recorded first, so nothing was written.');
+    }
+    console.log(`  commit: ${result.commitSha ?? 'none (the file already carried this verdict)'}`);
+    console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(handle.workflowId)}\n`);
+  } finally {
+    await c.connection.close();
+  }
+}
+
+const finding = program
+  .command('finding')
+  .description('The findings gate: list, inspect and decide Argus findings (steward/docs/record-a-finding-verdict.md)');
+
+finding
+  .command('list')
+  .option('--site <site>', 'only this site', parseFindingSlug('site'))
+  .description('Open finding workflows, one per line: ID and since when')
+  .action(async (opts: { site?: string }) => {
+    const c = await client();
+    try {
+      const rows: WorkflowExecutionInfo[] = [];
+      for await (const info of c.workflow.list({
+        query: "WorkflowType='findingWorkflow' AND ExecutionStatus='Running'",
+      })) {
+        if (opts.site && !info.workflowId.startsWith(`finding/${opts.site}/`)) continue;
+        rows.push(info);
+      }
+      rows.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      console.log('');
+      if (rows.length === 0) console.log('  No open finding workflows.');
+      for (const row of rows) {
+        const since = new Intl.DateTimeFormat('en-CA', {
+          timeZone: STEWARD_TIMEZONE,
+          dateStyle: 'short',
+          timeStyle: 'short',
+          hour12: false,
+        }).format(row.startTime);
+        console.log(`  ${row.workflowId}  since ${since}`);
+      }
+      console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('status')
+  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .description("A finding workflow's state: waiting, writing or done, and the verdict")
+  .action(async (key: string, opts: { site: string }) => {
+    const c = await client();
+    try {
+      const id = findingWorkflowId(opts.site, key);
+      let state: FindingState;
+      try {
+        state = await c.workflow.getHandle(id).query(findingStateQuery);
+      } catch (err) {
+        if (err instanceof WorkflowNotFoundError) fail(`No workflow ${id}. \`steward finding list\` shows the open ones.`);
+        throw err;
+      }
+      console.log('');
+      console.log(`  ${id}`);
+      console.log(`  status: ${state.status}`);
+      if (state.verdict) {
+        console.log(`  verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
+        if (state.verdict.reason) console.log(`  reason: ${state.verdict.reason}`);
+      }
+      if (state.commitSha) console.log(`  commit: ${state.commitSha}`);
+      console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('approve')
+  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .option('--reason <text>', 'optional note recorded as the verdict reason', 'Approved by Matt via steward finding approve.')
+  .description('Approve a finding: signal the workflow, which writes the verdict into the file')
+  .action(async (key: string, opts: { site: string; reason: string }) => {
+    await sendFindingVerdict(opts.site, key, 'approved', opts.reason);
+  });
+
+finding
+  .command('reject')
+  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .requiredOption('--reason <text>', 'why the finding was rejected')
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .description('Reject a finding: signal the workflow, which writes the verdict into the file')
+  .action(async (key: string, opts: { site: string; reason: string }) => {
+    if (!opts.reason.trim()) fail('--reason must say why.');
+    await sendFindingVerdict(opts.site, key, 'rejected', opts.reason);
+  });
+
+async function runFindingsSchedule(action: string, note?: string) {
+  if (!isFindingsScheduleAction(action)) {
+    fail(`Unknown action "${action}". Expected one of: ${FINDINGS_SCHEDULE_ACTIONS.join(', ')}.`);
+  }
+  if (note !== undefined && action !== 'pause' && action !== 'unpause') {
+    fail('--note applies to `pause` and `unpause` only.');
+  }
+  const options =
+    action === 'create'
+      ? buildFindingsScheduleOptions({ taskQueue: QUEUE_FINDINGS, input: { repo: ARGUS_REPO } })
+      : undefined;
+  const c = await client();
+  try {
+    const outcome = await runFindingsScheduleAction(action, {
+      schedule: c.schedule,
+      options,
+      note,
+      timeZone: STEWARD_TIMEZONE,
+    });
+    console.log('');
+    console.log(`  ${outcome.scheduleId}`);
+    for (const line of outcome.lines) console.log(`  ${line}`);
+    console.log('');
+  } finally {
+    await c.connection.close();
+  }
+}
+
+finding
+  .command('schedule')
+  .argument('<action>', `one of: ${FINDINGS_SCHEDULE_ACTIONS.join(' | ')}`)
+  .option('--note <text>', 'pause/unpause only — note recorded on the schedule')
+  .description('Manage the hourly findings reconcile Schedule')
+  .action(async (action: string, opts: { note?: string }) => {
+    await runFindingsSchedule(action, opts.note);
+  });
+
+finding
+  .command('sync')
+  .description('Run the findings reconcile now (the short form of `finding schedule trigger`)')
+  .action(async () => {
+    await runFindingsSchedule('trigger');
+  });
 
 program
   .command('mcp-serve')

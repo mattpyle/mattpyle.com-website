@@ -36,12 +36,14 @@ export interface FakeGitHub {
   pulls: Array<{ number: number; head: string; base: string; title: string; body: string; draft: boolean }>;
   /** Every request, as `METHOD /path`, for asserting call shape and count. */
   calls: string[];
+  /** The `owner/name` each request in `calls` addressed, index for index. */
+  repos: string[];
   file(branch: string, path: string): FakeRepoFile | undefined;
   json(branch: string, path: string): any;
   restore(): void;
 }
 
-const DEFAULT_BRANCH = 'master';
+const MASTER = 'master';
 
 /**
  * Content-addressed rather than a counter, because `readRepoFile` hands the sha
@@ -65,6 +67,8 @@ function response(status: number, body: unknown): Response {
 export interface FakeGitHubOptions {
   /** Files present on the default branch before anything runs. */
   seed?: Record<string, string>;
+  /** The seeded branch's name. `master` (the site repository) unless given; the findings store uses `main`. */
+  defaultBranch?: string;
 }
 
 /**
@@ -76,6 +80,7 @@ export interface FakeGitHubOptions {
  * they assert.
  */
 export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
+  const DEFAULT_BRANCH = options.defaultBranch ?? MASTER;
   const realFetch = globalThis.fetch;
   const previousToken = process.env.GITHUB_TOKEN;
   process.env.GITHUB_TOKEN = 'fake-token-for-tests';
@@ -89,6 +94,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
 
   const pulls: FakeGitHub['pulls'] = [];
   const calls: string[] = [];
+  const repos: string[] = [];
 
   globalThis.fetch = (async (input: any, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -99,6 +105,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     // The repo prefix is constant for every call this codebase makes.
     const route = url.pathname.replace(/^\/repos\/[^/]+\/[^/]+/, '');
     calls.push(`${method} ${route}`);
+    repos.push(/^\/repos\/([^/]+\/[^/]+)/.exec(url.pathname)?.[1] ?? '');
     const body = init?.body ? JSON.parse(String(init.body)) : {};
 
     // GET /repos/{owner}/{repo}
@@ -139,8 +146,23 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     if (method === 'GET' && contents) {
       const path = decodeURIComponent(contents[1]);
       const ref = url.searchParams.get('ref') ?? DEFAULT_BRANCH;
-      const file = branches.get(ref)?.get(path);
-      if (!file) return response(404, { message: 'Not Found' });
+      const tree = branches.get(ref);
+      const file = tree?.get(path);
+      if (!file) {
+        // A directory is any path some file sits under; the API answers with
+        // its immediate children, folders included.
+        const children = new Map<string, 'file' | 'dir'>();
+        for (const filePath of tree?.keys() ?? []) {
+          if (!filePath.startsWith(`${path}/`)) continue;
+          const [name, ...rest] = filePath.slice(path.length + 1).split('/');
+          children.set(name, rest.length > 0 ? 'dir' : 'file');
+        }
+        if (children.size === 0) return response(404, { message: 'Not Found' });
+        return response(
+          200,
+          [...children].map(([name, type]) => ({ name, path: `${path}/${name}`, type })),
+        );
+      }
       return response(200, {
         path,
         sha: file.sha,
@@ -212,6 +234,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     branches,
     pulls,
     calls,
+    repos,
     file: (branch, path) => branches.get(branch)?.get(path),
     json(branch, path) {
       const file = branches.get(branch)?.get(path);
