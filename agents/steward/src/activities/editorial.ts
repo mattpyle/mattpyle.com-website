@@ -141,8 +141,6 @@ export {
   FORMAT_DRIVEN_TELLS,
   VOICE_DRIVEN_TELLS,
   UNCLASSIFIED_TELLS,
-  DETERMINISTIC_TELLS,
-  LLM_JUDGED_TELLS,
 } from '../lib/tells.js';
 import { computeDeterministicTells, LLM_JUDGED_TELLS } from '../lib/tells.js';
 

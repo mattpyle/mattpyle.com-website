@@ -96,7 +96,7 @@ jobs:
       # static output under dist/client/ instead of writing straight into
       # dist/ — serve dist/client, not dist, or every route here 404s.
       #
-      # Not `npx serve` any more: /activity renders on demand (it reads the hit
+      # Not a static file server: /activity renders on demand (it reads the hit
       # store per request), so a static server 404s one of the nine routes
       # audited below. serve-built-site.mjs serves the same directory and falls
       # back to the adapter's render function, which is the ordering Vercel

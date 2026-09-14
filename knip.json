@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["temporal", "java"],
+  "workspaces": {
+    ".": {
+      "entry": ["astro.config.dev.mjs", "keystatic.config.ts"],
+      "ignoreDependencies": ["undici"]
+    },
+    "agents/steward": {
+      "ignoreDependencies": ["pino-pretty"]
+    }
+  }
+}
