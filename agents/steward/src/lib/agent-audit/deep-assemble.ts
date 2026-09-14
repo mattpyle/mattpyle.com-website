@@ -9,7 +9,7 @@ import {
   type DecisionClass,
   type Severity,
 } from './result.js';
-import type { AxeViolation, LighthouseLike } from '../audit-map.js';
+import { agenticChecks, type AgenticCheck, type AxeViolation, type LighthouseLike } from '../audit-map.js';
 
 /**
  * The deep tier's arithmetic, separated from the browser that produces its
@@ -50,6 +50,10 @@ export const MIN_PAGE_BUDGET_MS = 20_000;
  * The floor a category score has to clear. Lighthouse's own boundary for a
  * "good" score, not a number invented here — see `deep.ts`'s module docblock on
  * why the scorecard's floor of 100 does not transfer to somebody else's site.
+ *
+ * Not applied to `agentic-browsing`: Chrome documents that category as a
+ * fractional pass ratio with no weighted 0–100 score, so `agenticCheck` grades
+ * its sub-audits instead.
  */
 export const SCORE_FLOOR = 90;
 
@@ -86,11 +90,13 @@ const AXES: AxisSpec[] = [
   {
     key: 'agentic-browsing',
     id: 'lighthouse-agentic-browsing',
-    title: "Lighthouse's Agentic Browsing score clears 90 on the sampled pages",
+    title: "Every applicable Lighthouse Agentic Browsing check passes on the sampled pages",
     label: 'Agentic browsing',
     severity: 'high',
-    // Lighthouse 13's own category for this, and brand new. It aims at exactly
-    // the right thing and nobody has yet shown what a given score predicts.
+    // Lighthouse 13's own category for this, and brand new. Graded per
+    // sub-audit now, and each sub-audit is still a check Chrome describes as
+    // written while agentic-web standards are emerging: an llms.txt or a WebMCP
+    // schema is a convention, not a proven blocker.
     decisionClass: 'emergingConvention',
   },
   {
@@ -185,6 +191,15 @@ export interface RenderedPageOutcome {
   scores: Record<string, number | null> | null;
   lighthouseVersion: string | null;
   lighthouseError: string | null;
+  /**
+   * The page's graded Agentic Browsing sub-audits, as `agenticChecks` in
+   * `audit-map.ts` returns them. `null` when Lighthouse produced no result; an
+   * empty array when it ran without the category.
+   *
+   * Optional on read: an outcome recorded in workflow history before this field
+   * existed has no such key, and it still has to assemble.
+   */
+  agenticChecks?: AgenticCheck[] | null;
   violations: ReducedViolation[] | null;
   axeError: string | null;
   /** True when both tools failed and both failures were this page running out of time. */
@@ -204,9 +219,10 @@ export interface SkippedPage {
   robots: boolean;
 }
 
-/** Reduces a Lighthouse result to the scores and version the checks quote. */
+/** Reduces a Lighthouse result to the scores, agentic checks and version the checks quote. */
 export function reduceLighthouse(lhr: LighthouseLike): {
   scores: Record<string, number | null>;
+  agenticChecks: AgenticCheck[];
   version: string;
 } {
   const scores: Record<string, number | null> = {};
@@ -214,7 +230,7 @@ export function reduceLighthouse(lhr: LighthouseLike): {
     const score = lhr.categories?.[key]?.score;
     scores[key] = typeof score === 'number' ? Math.round(score * 100) : null;
   }
-  return { scores, version: lhr.lighthouseVersion ?? 'unknown version' };
+  return { scores, agenticChecks: agenticChecks(lhr), version: lhr.lighthouseVersion ?? 'unknown version' };
 }
 
 /** Reduces axe's violations to the rule, impact and element count evidence quotes. */
@@ -286,7 +302,11 @@ export interface AssembleInput {
 export function assembleDeepChecks(input: AssembleInput): CheckResult[] {
   const { pages, skipped, sampled, browserFailure, axeVersion } = input;
   return [
-    ...AXES.map((axis) => axisCheck(axis, pages, skipped, browserFailure, sampled)),
+    ...AXES.map((axis) =>
+      axis.key === 'agentic-browsing'
+        ? agenticCheck(axis, pages, skipped, browserFailure, sampled)
+        : axisCheck(axis, pages, skipped, browserFailure, sampled),
+    ),
     axeCheck(pages, skipped, browserFailure, sampled, axeVersion),
   ];
 }
@@ -391,8 +411,7 @@ function axisCheck(
 
   const withScores = scored.filter((s) => typeof s.score === 'number') as Array<{ url: string; score: number }>;
   if (withScores.length === 0) {
-    // Lighthouse ran and did not score this category — `agentic-browsing` on a
-    // Lighthouse older than 13, or a category that did not apply to the page.
+    // Lighthouse ran and did not score this category for any page.
     return check(
       spec,
       'not-applicable',
@@ -426,18 +445,135 @@ function axisCheck(
   );
 }
 
+/**
+ * The Agentic Browsing axis, graded as the pass ratio Chrome defines it as.
+ *
+ * Chrome's scoring page says the category "does not have a weighted average
+ * score from 0 to 100" and reports "a fractional score" instead, so this check
+ * reads the graded sub-audits (`agenticChecks` in `audit-map.ts`, the same
+ * extraction /scorecard renders) rather than the category's `score`.
+ *
+ * Per page it reports `passed/applicable` and names each failing sub-audit. It
+ * passes when every applicable sub-audit passes on every page that had one. A
+ * page where no sub-audit applied is said to be that, and counts toward neither
+ * verdict: nothing was graded on it.
+ */
+function agenticCheck(
+  axis: AxisSpec,
+  pages: RenderedPageOutcome[],
+  skipped: SkippedPage[],
+  browserFailure: string | null,
+  sampled: number,
+): CheckResult {
+  const spec = { id: axis.id, title: axis.title, severity: axis.severity, decisionClass: axis.decisionClass };
+  const ran = pages.filter((r) => r.scores);
+  const failedToRun = pages.filter((r) => !r.scores);
+  if (ran.length === 0) {
+    return noVerdict(spec, skipped, browserFailure, sampled, {
+      observed: nothingMeasured(pages, 'Lighthouse'),
+      evidence: failedToRun.map((r) => ({
+        url: r.url,
+        note: r.lighthouseError ?? 'Lighthouse produced no result',
+      })),
+    });
+  }
+
+  const graded = ran.map((r) => {
+    const version = r.lighthouseVersion ?? 'unknown version';
+    // `undefined` is an outcome recorded before the field existed; it carries no
+    // sub-audits to grade, which is a different fact from a category that is absent.
+    const checks = r.agenticChecks ?? null;
+    const applicable = (checks ?? []).filter((c) => c.applicable);
+    const failing = applicable.filter((c) => !c.passed);
+    return { url: r.url, version, checks, applicable: applicable.length, passed: applicable.length - failing.length, failing };
+  });
+
+  const noteFor = (g: (typeof graded)[number]): string => {
+    if (g.checks === null) return `Lighthouse ${g.version}: no Agentic Browsing sub-audits were recorded for this page`;
+    if (g.checks.length === 0) return `Lighthouse ${g.version} did not report the "agentic-browsing" category for this page`;
+    if (g.applicable === 0) return `Lighthouse ${g.version}: agentic-browsing has 0 applicable checks on this page`;
+    const failing = g.failing.length > 0 ? ` — failing: ${g.failing.map((c) => c.title).join('; ')}` : '';
+    return `Lighthouse ${g.version}: agentic-browsing ${g.passed}/${g.applicable} checks passed${failing}`;
+  };
+  const evidence: CheckEvidence[] = [
+    ...graded.map((g) => ({ url: g.url, note: noteFor(g) })),
+    ...failedToRun.map((r) => ({ url: r.url, note: r.lighthouseError ?? 'Lighthouse produced no result' })),
+    ...skipped.map((s) => ({ url: s.url, note: s.reason })),
+  ];
+
+  const scored = graded.filter((g) => g.applicable > 0);
+  if (scored.length === 0) {
+    const anyCategory = graded.some((g) => g.checks !== null && g.checks.length > 0);
+    return check(
+      spec,
+      'not-applicable',
+      anyCategory
+        ? `Lighthouse ran but no "agentic-browsing" check applied to any sampled page`
+        : `Lighthouse ran but returned no "agentic-browsing" checks for any sampled page`,
+      evidence,
+    );
+  }
+
+  const path = (url: string) => new URL(url).pathname;
+  const unscored = graded.filter((g) => g.applicable === 0);
+  const unscoredNote =
+    unscored.length > 0 ? `; no applicable checks on ${unscored.map((g) => path(g.url)).join(', ')}` : '';
+  const listing = scored.map((g) => `${path(g.url)} ${g.passed}/${g.applicable}`).join(', ');
+  // The worst page, as the other axes report: the lowest share passed, and on a
+  // tie the page with more failures.
+  const worst = scored.reduce((a, b) => {
+    const ra = a.passed / a.applicable;
+    const rb = b.passed / b.applicable;
+    return rb < ra || (rb === ra && b.failing.length > a.failing.length) ? b : a;
+  });
+  const metric: CheckMetric = {
+    label: axis.label,
+    value: worst.passed,
+    unit: 'ratio',
+    outOf: worst.applicable,
+    pages: scored.length,
+  };
+
+  const failingPages = scored.filter((g) => g.failing.length > 0);
+  if (failingPages.length === 0) {
+    return check(
+      spec,
+      'pass',
+      `every applicable agentic-browsing check passed on all ${scored.length} scored page(s): ${listing}${unscoredNote}`,
+      evidence,
+      undefined,
+      metric,
+    );
+  }
+  const failures = failingPages
+    .map((g) => `${path(g.url)} ${g.passed}/${g.applicable} (failing: ${g.failing.map((c) => c.title).join('; ')})`)
+    .join(', ');
+  const failingTitles = [...new Set(failingPages.flatMap((g) => g.failing.map((c) => c.title)))];
+  return check(
+    spec,
+    'fail',
+    `agentic-browsing checks failed on ${failingPages.length} of ${scored.length} scored page(s): ${failures}${unscoredNote}`,
+    evidence,
+    agenticFix(failingTitles),
+    metric,
+  );
+}
+
+function agenticFix(failing: string[]): string {
+  return (
+    "Lighthouse's Agentic Browsing category is a set of pass/fail checks, not a weighted score: " +
+    'it checks that the page exposes a usable accessibility tree, that the layout does not shift ' +
+    'under an agent mid-read, that llms.txt is there, and that any WebMCP tools have valid schemas. ' +
+    `The failing ${failing.length === 1 ? 'check is' : 'checks are'} ${failing.map((t) => `"${t}"`).join(', ')}; ` +
+    'run Lighthouse against the page yourself for the details behind each one.'
+  );
+}
+
 function axisFix(key: string): string {
   const shared =
     'Run Lighthouse against the page yourself for the audit list behind the score — the number is ' +
     'the summary, the failing audits are the work.';
   switch (key) {
-    case 'agentic-browsing':
-      return (
-        "Lighthouse 13's Agentic Browsing category is the one written for this: it checks that the " +
-        'page exposes a usable accessibility tree, that the layout does not shift under an agent ' +
-        'mid-read, and that llms.txt is there. It is the closest thing to a second opinion on this ' +
-        `whole report. ${shared}`
-      );
     case 'accessibility':
       return (
         'An agent reads the page through the accessibility tree, so this score is not only about ' +

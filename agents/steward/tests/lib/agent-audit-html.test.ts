@@ -127,8 +127,16 @@ test('the headline is the measured numbers, each with the sample it covers', () 
         status: 'pass',
         metric: { label: 'axe violations', value: 0, unit: 'count', pages: 3 },
       }),
+      check({
+        id: 'lighthouse-agentic-browsing',
+        category: 'rendered-experience',
+        status: 'fail',
+        metric: { label: 'Agentic browsing', value: 3, unit: 'ratio', outOf: 4, pages: 3 },
+      }),
     ]),
   );
+  // A ratio renders as n/m, with its own denominator.
+  assert.match(html, /<p class="tile-value">3<span class="tile-of">\/4<\/span><\/p>/);
   assert.match(html, /<p class="tile-label">Performance<\/p>/);
   assert.match(html, /<p class="tile-value">62<span class="tile-of"> \/ 100<\/span><\/p>/);
   // A count gets no denominator; a score does.
