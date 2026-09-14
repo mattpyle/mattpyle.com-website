@@ -27,14 +27,32 @@ import { isExpectedDraftNonFinding, type AxeViolation, type LighthouseLike } fro
 
 const PAGES = ['/', '/writing/hello/', '/projects/thing/', '/about/'];
 
-/** A Lighthouse result with the category scores a test cares about. */
-function lhr(scores: Record<string, number>): LighthouseLike {
-  return {
-    lighthouseVersion: '13.4.1',
-    categories: Object.fromEntries(
-      Object.entries(scores).map(([key, value]) => [key, { score: value / 100 }]),
-    ),
-  };
+/** The four graded Agentic Browsing sub-audits, with the ids a live run returns. */
+const AGENTIC_AUDITS: Record<string, string> = {
+  'agent-accessibility-tree': 'Accessibility tree is usable by agents',
+  'webmcp-schema-validity': 'WebMCP tool schemas are valid',
+  'cumulative-layout-shift': 'Cumulative Layout Shift',
+  'llms-txt': 'llms.txt is present',
+};
+
+/**
+ * A Lighthouse result with the category scores a test cares about. When
+ * `agentic-browsing` is among them, its four graded sub-audits come too, all
+ * passing unless `agentic` overrides one's score (`null` for not applicable).
+ */
+function lhr(scores: Record<string, number>, agentic: Record<string, number | null> = {}): LighthouseLike {
+  const categories: NonNullable<LighthouseLike['categories']> = Object.fromEntries(
+    Object.entries(scores).map(([key, value]) => [key, { score: value / 100 }]),
+  );
+  if (!('agentic-browsing' in scores)) return { lighthouseVersion: '13.4.1', categories };
+  categories['agentic-browsing'].auditRefs = [
+    ...Object.keys(AGENTIC_AUDITS).map((id) => ({ id, weight: 1 })),
+    { id: 'webmcp-registered-tools', weight: 0 },
+  ];
+  const audits: NonNullable<LighthouseLike['audits']> = Object.fromEntries(
+    Object.entries(AGENTIC_AUDITS).map(([id, title]) => [id, { title, score: id in agentic ? agentic[id] : 1 }]),
+  );
+  return { lighthouseVersion: '13.4.1', categories, audits };
 }
 
 const GOOD = lhr({ performance: 98, accessibility: 100, seo: 100, 'best-practices': 96, 'agentic-browsing': 100 });
@@ -336,8 +354,71 @@ test('Lighthouse without the agentic-browsing category reports not-applicable, n
 
   const agentic = check(checks, 'lighthouse-agentic-browsing');
   assert.equal(agentic.status, 'not-applicable');
-  assert.match(agentic.observed, /no "agentic-browsing" score/);
+  assert.match(agentic.observed, /no "agentic-browsing" checks/);
   assert.equal(check(checks, 'lighthouse-performance').status, 'pass');
+});
+
+test('agentic browsing reports passed/applicable per page and names the failing sub-audit', async () => {
+  // A category score of 95 would clear the old floor of 90. The ratio is what
+  // Chrome defines the category as, and one failing sub-audit fails the check.
+  const tools = runners({
+    async lighthouse(url) {
+      return url.endsWith('/writing/hello/')
+        ? lhr(
+            { performance: 98, accessibility: 100, seo: 100, 'best-practices': 96, 'agentic-browsing': 95 },
+            { 'llms-txt': 0 },
+          )
+        : GOOD;
+    },
+  });
+  const { checks } = await runDeepChecks(context(), { runners: tools, maxPages: 2 });
+
+  const agentic = check(checks, 'lighthouse-agentic-browsing');
+  assert.equal(agentic.status, 'fail');
+  assert.doesNotMatch(agentic.title, /90/);
+  assert.match(agentic.observed, /\/writing\/hello\/ 3\/4 \(failing: llms\.txt is present\)/);
+  const page = agentic.evidence.find((e) => e.url === 'https://example.test/writing/hello/');
+  assert.match(page?.note ?? '', /agentic-browsing 3\/4 checks passed — failing: llms\.txt is present/);
+  assert.match(agentic.evidence[0].note ?? '', /agentic-browsing 4\/4 checks passed$/);
+  assert.match(agentic.fix ?? '', /"llms\.txt is present"/);
+  assert.deepEqual(agentic.metric, { label: 'Agentic browsing', value: 3, unit: 'ratio', outOf: 4, pages: 2 });
+});
+
+test('agentic browsing counts only applicable sub-audits, and a page with none is not a pass', async () => {
+  const tools = runners({
+    async lighthouse(url) {
+      return url.endsWith('/writing/hello/')
+        ? lhr(
+            { performance: 98, accessibility: 100, seo: 100, 'best-practices': 96, 'agentic-browsing': 100 },
+            { 'agent-accessibility-tree': null, 'webmcp-schema-validity': null, 'cumulative-layout-shift': null, 'llms-txt': null },
+          )
+        : lhr(
+            { performance: 98, accessibility: 100, seo: 100, 'best-practices': 96, 'agentic-browsing': 100 },
+            { 'webmcp-schema-validity': null },
+          );
+    },
+  });
+  const { checks } = await runDeepChecks(context(), { runners: tools, maxPages: 2 });
+
+  const agentic = check(checks, 'lighthouse-agentic-browsing');
+  assert.equal(agentic.status, 'pass');
+  assert.match(agentic.observed, /on all 1 scored page\(s\): \/ 3\/3; no applicable checks on \/writing\/hello\//);
+  const empty = agentic.evidence.find((e) => e.url === 'https://example.test/writing/hello/');
+  assert.match(empty?.note ?? '', /0 applicable checks/);
+
+  // Every page with nothing applicable is not-applicable, never a pass.
+  const none = await runDeepChecks(context(), {
+    runners: runners({
+      async lighthouse() {
+        return lhr(
+          { performance: 98, accessibility: 100, seo: 100, 'best-practices': 96, 'agentic-browsing': 100 },
+          { 'agent-accessibility-tree': null, 'webmcp-schema-validity': null, 'cumulative-layout-shift': null, 'llms-txt': null },
+        );
+      },
+    }),
+    maxPages: 1,
+  });
+  assert.equal(check(none.checks, 'lighthouse-agentic-browsing').status, 'not-applicable');
 });
 
 // --- the whole verb, both tiers --------------------------------------------

@@ -133,9 +133,13 @@ export interface CheckMetric {
   /**
    * What the number is. `score` is 0–100 and higher is better; `count` is a
    * tally of findings, where zero is the good end. A renderer needs the
-   * direction before it can say anything about the number.
+   * direction before it can say anything about the number. `ratio` is checks
+   * passed out of `outOf` checks applicable, higher is better, and renders as
+   * `n/m`.
    */
-  unit: 'score' | 'count';
+  unit: 'score' | 'count' | 'ratio';
+  /** The denominator of a `ratio`: how many checks applied. Absent on the other units. */
+  outOf?: number;
   /**
    * How many pages the number covers, when it is an aggregate over a sample.
    *

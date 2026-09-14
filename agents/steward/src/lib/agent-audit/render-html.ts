@@ -192,8 +192,14 @@ function urlHtml(url: string): string {
  */
 function metricTile(check: CheckResult, metric: CheckMetric): string {
   // `/ 100` only on a score. A violation count has no denominator, and giving it
-  // one would turn "3 violations" into a mark out of a hundred.
-  const outOf = metric.unit === 'score' ? '<span class="tile-of"> / 100</span>' : '';
+  // one would turn "3 violations" into a mark out of a hundred. A ratio carries
+  // its own denominator, the checks that applied.
+  const outOf =
+    metric.unit === 'score'
+      ? '<span class="tile-of"> / 100</span>'
+      : metric.unit === 'ratio' && metric.outOf !== undefined
+        ? `<span class="tile-of">/${esc(String(metric.outOf))}</span>`
+        : '';
   const over =
     metric.pages === undefined
       ? ''

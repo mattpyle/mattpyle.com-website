@@ -96,6 +96,18 @@ test('a run that rendered a page assembles clean', async () => {
   assert.equal(audit.browserPages, 1);
 });
 
+test('a page outcome recorded before agenticChecks existed still assembles', async () => {
+  // The fixture above has no `agenticChecks` key, which is the shape an older
+  // workflow history replays with. It must not throw or read as a pass.
+  const audit = await assembleDeepAudit(
+    input({ pages: [renderedPage('https://example.com/')], sample: ['https://example.com/'], available: 1 }),
+  );
+  const agentic = audit.checks.find((c) => c.id === 'lighthouse-agentic-browsing');
+  assert.equal(agentic?.status, 'not-applicable');
+  assert.match(agentic?.evidence[0].note ?? '', /no Agentic Browsing sub-audits were recorded/);
+  assert.equal(audit.checks.find((c) => c.id === 'lighthouse-performance')?.status, 'pass');
+});
+
 test('a sample of zero assembles clean', async () => {
   // A site whose robots.txt refuses this auditor renders nothing, and that is the
   // site's answer rather than a broken run.

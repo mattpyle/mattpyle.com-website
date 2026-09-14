@@ -276,6 +276,7 @@ export async function renderPage(
     scores: null,
     lighthouseVersion: null,
     lighthouseError: null,
+    agenticChecks: null,
     violations: null,
     axeError: null,
     timedOut: false,
@@ -302,6 +303,7 @@ export async function renderPage(
       const reduced = reduceLighthouse(lhr);
       outcome.scores = reduced.scores;
       outcome.lighthouseVersion = reduced.version;
+      outcome.agenticChecks = reduced.agenticChecks;
     } catch (err) {
       outcome.lighthouseError = err instanceof Error ? err.message : String(err);
       lighthouseExpired = err instanceof DeadlineExceededError;
