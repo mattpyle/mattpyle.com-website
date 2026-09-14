@@ -67,7 +67,7 @@ npm run build    # production build to ./dist/
 > [!NOTE]
 > `npm run preview` (plain `astro preview`) doesn't work with the Vercel adapter in this
 > configuration. To check a production build locally, serve the output directly instead:
-> `npm run build && npx serve dist/client`.
+> `npm run build && npm run serve`.
 
 Other scripts:
 
@@ -95,7 +95,7 @@ For a faithful pre-publish check, build with drafts enabled and serve the output
 
 ```bash
 # bash
-SHOW_DRAFTS=true npm run build && npx serve dist/client
+SHOW_DRAFTS=true npm run build && npm run serve
 ```
 
 ```powershell
