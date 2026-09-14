@@ -101,7 +101,7 @@ SHOW_DRAFTS=true npm run build && npm run serve
 ```powershell
 # PowerShell
 $env:SHOW_DRAFTS = "true"; npm run build; Remove-Item Env:\SHOW_DRAFTS
-npx serve dist/client
+npm run serve
 ```
 
 A draft's generated share image is deliberately not built, so its OG meta points at a missing file
