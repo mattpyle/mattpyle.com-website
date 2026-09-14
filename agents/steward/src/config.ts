@@ -83,27 +83,6 @@ export const PROD_ORIGIN = process.env.STEWARD_PROD_ORIGIN ?? 'https://www.mattp
  */
 export const SITEMAP_URL = `${PROD_ORIGIN}/sitemap-index.xml`;
 
-/**
- * Used only for `--urls` overrides and offline tests — never a fallback the
- * workflow reaches for on its own. The live audit set always comes from the
- * sitemap; this exists so a manual run or a test can skip the network fetch.
- *
- * **Trailing slashes, because the site's canonical page shape has them**
- * (`build.format: 'directory'`, and `middleware.ts` 308s the slash-less form).
- * They were missing until 2026-08-15. Nothing was measuring a redirect, because
- * nothing imports this — it is specified in `scorecard-audit-spec.md` §5.4 and
- * has never had a caller — but a slash-less list here is a list that would
- * quietly audit six redirects the first time somebody reached for it.
- */
-export const SCORECARD_URLS_FALLBACK = [
-  '/',
-  '/about/',
-  '/writing/',
-  '/projects/',
-  '/changelog/',
-  '/scorecard/',
-] as const;
-
 /** Default staleness threshold for the publish gate (spec §6), CLI-overridable via `--max-age-days`. */
 export const SCORECARD_MAX_AGE_DAYS_DEFAULT = 7;
 
@@ -415,20 +394,9 @@ export const DRAFT_REVIEWS_DIR = path.join(
  * Where full per-run Scorecard records (including per-page raw scores) are
  * archived (spec §5.2) — a sibling of the review archive, same dataset
  * convention: committed on purpose, not scratch (spec §11).
- */
-export const SCORECARD_ARCHIVE_DIR = path.join(REVIEWS_DIR, '_scorecard');
-
-/**
- * The same directory as {@link SCORECARD_ARCHIVE_DIR}, addressed the way GitHub
- * addresses it: repo-relative, forward slashes, no host filesystem involved.
  *
- * Two constants rather than one derived from the other because they are not the
- * same fact. `SCORECARD_ARCHIVE_DIR` answers "where does this machine keep the
- * archive", follows `STEWARD_REVIEWS_DIR` into a temp directory under test, and
- * is meaningless in a container with no checkout. This answers "where does the
- * archive live in the repository", which is fixed for every reader and every
- * writer, and is what `archiveScorecardRun` commits against now that it writes
- * through the GitHub API instead of the filesystem.
+ * Repo-relative with forward slashes, because `archiveScorecardRun` commits
+ * against it through the GitHub API rather than writing to a local checkout.
  */
 export const SCORECARD_ARCHIVE_REL = 'agents/steward/reviews/_scorecard';
 
@@ -639,16 +607,6 @@ export function workflowIdFor(slug: string, collection: Collection = 'writing'):
     ? `steward-review-${slug}`
     : `steward-review-${collection}-${slug}`;
 }
-
-/**
- * The workflow ID for one `auditSiteWorkflow` execution.
- *
- * Re-exported rather than defined here since 2026-08-15: the site's `/mcp`
- * function has to build the same IDs, and it may not import this module, which
- * reads `.env` off disk at load. `lib/agent-audit/deep-contract.ts` is the copy
- * both surfaces share; see its docblock for why that entry was affordable.
- */
-export { auditWorkflowIdFor } from './lib/agent-audit/deep-contract.js';
 
 /**
  * Where the MCP server listens.

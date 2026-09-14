@@ -79,18 +79,6 @@ export async function readPieceMeta(
   };
 }
 
-export async function loadPiece(collection: Collection, slug: string): Promise<StudyPiece | null> {
-  try {
-    return JSON.parse(await fs.readFile(fileFor(collection, slug), 'utf8')) as StudyPiece;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    // Design rule 11: a study file that exists but will not parse is a bug, not
-    // an absence. Returning null would quietly drop a piece from the corpus and
-    // change the ranking without saying so.
-    throw new Error(`Could not read the study file for ${collection}/${slug}: ${(err as Error).message}`);
-  }
-}
-
 export async function savePiece(piece: StudyPiece): Promise<string> {
   await fs.mkdir(STUDY_DIR, { recursive: true });
   const target = fileFor(piece.collection, piece.slug);

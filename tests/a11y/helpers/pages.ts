@@ -300,12 +300,6 @@ export const PAGES: PageSpec[] = [
   },
 ];
 
-export function pageByName(name: string): PageSpec {
-  const spec = PAGES.find(p => p.name === name);
-  if (!spec) throw new Error(`No page spec named ${name}`);
-  return spec;
-}
-
 /**
  * Every published writing post, as a site path.
  *

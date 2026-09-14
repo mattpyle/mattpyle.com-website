@@ -24,7 +24,7 @@ import index from '../../../data/agent-skills-index.json';
  * The Content-Type below is what the RFC requires, but a prerendered route becomes a static file
  * and this header does not survive that: the platform serves it by extension. vercel.json pins
  * `application/json; charset=utf-8` on the path for the deployed answer. The header stays here so
- * the local `npx serve dist/client` audit and the dev server agree with production.
+ * the local `npm run serve` audit and the dev server agree with production.
  */
 
 export const GET: APIRoute = () =>

@@ -123,10 +123,6 @@ export function withDeadline(promise, ms, what) {
  */
 let clientPromise = null;
 
-export function resetTemporalClient() {
-  clientPromise = null;
-}
-
 export async function getClient() {
   const config = readTemporalConfig();
   if (!config) {

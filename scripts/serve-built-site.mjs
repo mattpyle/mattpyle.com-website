@@ -2,7 +2,7 @@
 /**
  * Serve a production build locally, including the routes that render on demand.
  *
- * `npx serve dist/client` was enough while every page prerendered to a file. /scorecard no longer
+ * A static file server was enough while every page prerendered to a file. /scorecard no longer
  * does — its Agent traffic section reads the hit store at request time — so a static server
  * answers 404 for one of the seven routes the accessibility audits cover, and for its `.md`
  * sibling. This serves dist/client exactly as before and falls back to the adapter's own render

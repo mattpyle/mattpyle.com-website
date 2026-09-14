@@ -31,7 +31,7 @@ import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRec
  *
  * Every activity in this file used to be a *local* activity: the run-log was
  * read out of `SITE_DIR`, the publish leg drove git in `WORKTREE_DIR`, and the
- * archive was a `writeFile` under `SCORECARD_ARCHIVE_DIR`. That is what pinned
+ * archive was a `writeFile` under the local reviews directory. That is what pinned
  * the whole scorecard run to Matt's laptop, and therefore what kept the daily
  * Schedule laptop-bound no matter where the Schedule itself lived
  * (always-on-audit-worker card, leg 2b).

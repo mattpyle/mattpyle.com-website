@@ -4,7 +4,7 @@
 // point is to convert what the page actually renders — one rule, no per-page authoring, and
 // a new page is covered the day it ships.
 //
-// Writes into both output roots. `dist/client` is what `npx serve dist/client` and the local
+// Writes into both output roots. `dist/client` is what `npm run serve` and the local
 // audits read; `.vercel/output/static` is what actually deploys (Build Output API), and the
 // adapter has already finished copying by the time this runs, so a file written only to
 // dist/client would never reach production.
