@@ -202,9 +202,9 @@ jobs:
           set +e
 
           # ---------------------------------------------------------------
-          # The private set. Source of truth is the "Gitignored files" table
-          # in CLAUDE.md, with the commented private-docs section of
-          # .gitignore as its implementation. A new private path goes in all
+          # The private set. Source of truth is the table in
+          # docs/reference/private-paths.md, with the commented private-docs
+          # section of .gitignore as its implementation. A new private path goes in all
           # three in the same change or this tripwire has a hole in it.
           #
           # Anchoring follows the ignore rules: `CLAUDE.md`, `.claude/` and
