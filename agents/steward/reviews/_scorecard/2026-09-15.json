@@ -1,6 +1,6 @@
 {
-  "iso": "2026-09-19",
-  "timestamp": "2026-09-19T03:33:34-07:00",
+  "iso": "2026-09-15",
+  "timestamp": "2026-09-15T03:33:42-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-09-19",
+  "id": "2026-09-15",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -142,7 +142,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -328,8 +328,8 @@
     }
   ],
   "decision": "open-pr",
-  "reason": "unchanged, but published run is 13d old (> 7d staleness threshold)",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/274",
+  "reason": "unchanged, but published run is 9d old (> 7d staleness threshold)",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/268",
   "dryRun": false,
-  "archiveId": "2026-09-19"
+  "archiveId": "2026-09-15"
 }
