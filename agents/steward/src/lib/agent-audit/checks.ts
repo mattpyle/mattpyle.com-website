@@ -1552,11 +1552,14 @@ async function runFastPass(input: string, opts: RunAuditOptions): Promise<FastPa
 
   // The content page comes from the sitemap rather than from a guess: an
   // arbitrary site has no path this tool can assume exists, and the sitemap is
-  // the site's own statement about which pages do.
+  // the site's own statement about which pages do. Its URLs are matched against
+  // where the homepage landed, not the address typed: an apex that redirects to
+  // `www.` lists `www.` URLs, and none of them share the apex's origin.
+  const siteOrigin = home.html ? new URL(home.html.url).origin : origin;
   const contentUrl = sitemap.urls.find((u) => {
     try {
       const parsed = new URL(u);
-      return parsed.origin === origin && parsed.pathname.replace(/\/+$/, '') !== '';
+      return parsed.origin === siteOrigin && parsed.pathname.replace(/\/+$/, '') !== '';
     } catch {
       return false;
     }
