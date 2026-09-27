@@ -271,6 +271,25 @@ async function mockThirdParty(): Promise<Mock> {
   };
 }
 
+/**
+ * An apex that 308-redirects every path to another origin, the way
+ * `mattpyle.com` sends everything to `www.mattpyle.com`.
+ */
+async function mockRedirector(target: string): Promise<Mock> {
+  const requests: string[] = [];
+  const server = http.createServer((req, res) => {
+    requests.push((req.url ?? '/').split('?')[0]);
+    res.writeHead(308, { location: `${target}${req.url ?? '/'}` });
+    res.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
 async function audit(t: { after: (fn: () => unknown) => void }, broken?: Break): Promise<AuditResult> {
   const mock = await mockSite(broken);
   t.after(() => mock.close());
@@ -412,6 +431,24 @@ test('the content page is taken from the sitemap, not guessed', async (t) => {
   const post = check(result, 'markdown-negotiation-content');
   assert.equal(post.status, 'not-applicable');
   assert.match(post.observed, /does not guess/);
+});
+
+test('an apex that redirects to www still gets its content page from the www sitemap', async (t) => {
+  // The sitemap lists the canonical host's URLs. Filtering them against the
+  // address typed, rather than where the homepage landed, matched none of them.
+  const site = await mockSite();
+  t.after(() => site.close());
+  const apex = await mockRedirector(site.origin);
+  t.after(() => apex.close());
+
+  const result = await runFastAudit(apex.origin, {
+    policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
+  });
+
+  const post = check(result, 'markdown-negotiation-content');
+  assert.equal(post.status, 'pass', post.observed);
+  assert.ok(site.requests.includes(POST_PATH), 'the content page was never fetched');
+  assert.equal(result.target.origin, apex.origin, 'the report no longer names the address typed');
 });
 
 test('a sitemap that exists but is undeclared is a finding, and is still used', async (t) => {
