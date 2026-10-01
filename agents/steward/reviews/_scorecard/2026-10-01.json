@@ -1,0 +1,179 @@
+{
+  "iso": "2026-10-01",
+  "timestamp": "2026-10-01T03:30:58-07:00",
+  "scope": "26 live pages",
+  "tools": [
+    "Lighthouse 13.4",
+    "axe-core 4.12"
+  ],
+  "entry": "Nightly · automated",
+  "commentary": "26 of 26 page(s) could not be audited (https://www.mattpyle.com/, https://www.mattpyle.com/about/, https://www.mattpyle.com/activity/, https://www.mattpyle.com/audit/, https://www.mattpyle.com/changelog/, https://www.mattpyle.com/changelog/agent-driven-retro-mode/, https://www.mattpyle.com/changelog/agent-signed-guestbook/, https://www.mattpyle.com/changelog/astro-rebuild/, https://www.mattpyle.com/changelog/homepage-activity-from-changelog/, https://www.mattpyle.com/changelog/light-theme/, https://www.mattpyle.com/changelog/markdown-post-variants/, https://www.mattpyle.com/changelog/public-changelog/, https://www.mattpyle.com/changelog/public-scorecard/, https://www.mattpyle.com/changelog/scorecard-run-history/, https://www.mattpyle.com/changelog/self-hosted-fonts/, https://www.mattpyle.com/changelog/site-live/, https://www.mattpyle.com/changelog/webmcp-resource-page/, https://www.mattpyle.com/changelog/webmcp-tools/, https://www.mattpyle.com/projects/, https://www.mattpyle.com/scorecard/, https://www.mattpyle.com/steward/, https://www.mattpyle.com/webmcp/, https://www.mattpyle.com/writing/, https://www.mattpyle.com/writing/accessibility-and-ai/, https://www.mattpyle.com/writing/hello-world/, https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/), which blocks a green Scorecard by design.",
+  "metrics": [
+    {
+      "name": "Accessibility",
+      "value": "0",
+      "maximum": "100",
+      "status": "Fail",
+      "description": "26 axe violations across 26 tested pages."
+    },
+    {
+      "name": "Performance",
+      "value": "0",
+      "maximum": "100",
+      "status": "Fail",
+      "description": "The lowest Lighthouse performance score across 26 tested pages."
+    },
+    {
+      "name": "SEO",
+      "value": "0",
+      "maximum": "100",
+      "status": "Fail",
+      "description": "The lowest Lighthouse SEO score across 26 tested pages."
+    },
+    {
+      "name": "Agentic Browsing",
+      "value": "0",
+      "maximum": "0",
+      "status": "Fail",
+      "description": "No Agentic Browsing checks were applicable on any successfully audited page."
+    }
+  ],
+  "id": "2026-10-01",
+  "perPage": [
+    {
+      "url": "https://www.mattpyle.com/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/about/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/activity/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/audit/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/light-theme/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/markdown-post-variants/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/public-changelog/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/public-scorecard/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/scorecard-run-history/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/self-hosted-fonts/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/site-live/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/webmcp-tools/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/projects/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/scorecard/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/steward/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/webmcp/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/hello-world/",
+      "scores": {},
+      "axeViolations": 0
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
+      "scores": {},
+      "axeViolations": 0
+    }
+  ],
+  "decision": "open-pr",
+  "reason": "Accessibility Pass→Fail",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/290",
+  "dryRun": false,
+  "archiveId": "2026-10-01"
+}
