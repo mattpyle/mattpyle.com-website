@@ -51,3 +51,6 @@ export {
   listOpenFindingWorkflows,
   startFindingWorkflow,
 } from './findings.js';
+// The fixer spike, on `steward-heavy`: it needs the checkout, a local Claude
+// Code login and git credentials, so it runs on the laptop worker only.
+export { runFixer } from './fixer.js';

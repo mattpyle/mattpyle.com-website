@@ -69,7 +69,7 @@ import { log } from '../lib/logger.js';
  * to a tool-failure flag, which is how the workflow's `guard` is supposed to
  * behave, but the audit itself produced nothing.
  */
-function npmCommand(args: string[]): { binary: string; args: string[] } {
+export function npmCommand(args: string[]): { binary: string; args: string[] } {
   if (process.platform !== 'win32') return { binary: 'npm', args };
   const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
   return { binary: process.execPath, args: [npmCli, ...args] };
