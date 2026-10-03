@@ -2,8 +2,8 @@
 /**
  * The post page's sticky rail (docs/projects/redesign/design-export/README.md §4).
  *
- * Three blocks separated by hairlines: the date and read time, the in-page
- * contents built from the article's own h2s, and four actions.
+ * Three blocks separated by hairlines: the author, date and read time, the
+ * in-page contents built from the article's own h2s, and five actions.
  *
  * The contents links are plain anchors — the spec is explicit that the landing
  * position comes from `scroll-margin-top` on the headings, not from JS. The one
@@ -13,7 +13,7 @@
  * Matt on 2026-08-20 along with the /writing "Steward is holding one draft"
  * panel; both would have to be driven from real review state.
  *
- * SHOWN IN BOTH APPEARANCES since 2026-08-29. Its four actions are the only
+ * SHOWN IN BOTH APPEARANCES since 2026-08-29. Its five actions are the only
  * copy of them on the page now that the legacy ArticleActions section is
  * deleted, so it can no longer be hidden in retro. Retro restyles this same
  * markup under `html[data-appearance='retro'] [data-module='article']` in
@@ -57,6 +57,12 @@ const contents = headings.filter(heading => heading.depth === 2);
   <h2 id="post-rail-title" class="sr-only">About this post</h2>
 
   <div class="rail-block rail-meta">
+    {/*
+      The byline, first so it is the highest line of the rail. A reader who lands
+      on a post from a search result otherwise meets the author's name only in
+      the footer, a full article below.
+    */}
+    <a href="/about/" class="rail-author">Matt Pyle</a>
     <time datetime={date.toISOString()}>{formatSiteDate(date)}</time>
     <span>{readingLabel}</span>
     {revisedOn && (
@@ -116,6 +122,19 @@ const contents = headings.filter(heading => heading.depth === 2);
         <path d="M19.5 7.5l-15 9"></path>
       </svg>
       <span>ask claude<span class="sr-only"> (opens in a new tab)</span></span>
+    </a>
+
+    {/*
+      The writing feed, at the point a reader has finished a post and wants the
+      next one. Same tab, like "view markdown": it is this site's own endpoint.
+    */}
+    <a href="/rss.xml" class="rail-action">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M4 11a9 9 0 0 1 9 9"></path>
+        <path d="M4 4a16 16 0 0 1 16 16"></path>
+        <circle cx="5" cy="19" r="1"></circle>
+      </svg>
+      <span>rss feed</span>
     </a>
 
     <p id="rail-copy-status" class="sr-only" role="status" aria-live="polite"></p>
@@ -238,6 +257,13 @@ const contents = headings.filter(heading => heading.depth === 2);
     color: var(--ink-6);
   }
 
+  .rail-author {
+    align-self: flex-start;
+    color: var(--ink);
+  }
+
+  .rail-author:hover { color: var(--writing); }
+
   .rail-contents { gap: 10px; }
 
   .rail-contents a {
@@ -310,6 +336,7 @@ const contents = headings.filter(heading => heading.depth === 2);
     }
 
     /* 44px tap targets on every small link, per the mobile spec. */
+    .rail-author,
     .rail-contents a,
     .rail-action {
       min-height: 44px;

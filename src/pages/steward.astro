@@ -42,7 +42,8 @@ const markdownUrl = markdownSiblingFor('/steward/') ?? undefined;
 const USER_AGENT = 'steward-audit/0.2.0 (+https://www.mattpyle.com/steward)';
 const AGENT_TOKEN = 'steward-audit';
 const ENDPOINT = 'https://www.mattpyle.com/mcp';
-const ISSUES_URL = 'https://github.com/mattpyle/mattpyle.com-website/issues';
+const REPO_URL = 'https://github.com/mattpyle/mattpyle.com-website';
+const ISSUES_URL = `${REPO_URL}/issues`;
 
 /**
  * The caps this deployment actually enforces, not the compile-time defaults.
@@ -167,6 +168,7 @@ const extraJsonLd = [
     userAgent={USER_AGENT}
     agentToken={AGENT_TOKEN}
     endpoint={ENDPOINT}
+    repoUrl={REPO_URL}
     issuesUrl={ISSUES_URL}
     refusalSnippet={refusalSnippet}
     callSnippet={callSnippet}

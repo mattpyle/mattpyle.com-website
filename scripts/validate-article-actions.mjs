@@ -21,12 +21,13 @@ const railHtml = railSection[0];
 assert.match(railHtml, /<h2[^>]*id="post-rail-title"[^>]*>About this post<\/h2>/);
 assert.match(railHtml, new RegExp(`href="${markdownUrl.replace('.', '\\.')}"[^>]*>`));
 
-for (const label of ['view markdown', 'copy markdown', 'ask chatgpt', 'ask claude']) {
+for (const label of ['view markdown', 'copy markdown', 'ask chatgpt', 'ask claude', 'rss feed']) {
   assert.ok(railHtml.includes(label), `expected rendered rail action label: ${label}`);
 }
 
 assert.ok(railHtml.includes(`href="${htmlAttribute(chatGptUrl(canonicalUrl))}"`), 'expected ChatGPT handoff URL');
 assert.ok(railHtml.includes(`href="${htmlAttribute(claudeUrl(canonicalUrl))}"`), 'expected Claude handoff URL');
+assert.match(railHtml, /<a href="\/rss\.xml"[^>]*class="rail-action"/, 'expected RSS action to the writing feed');
 assert.equal((railHtml.match(/target="_blank"/g) ?? []).length, 2, 'expected exactly two new-tab links');
 assert.equal((railHtml.match(/rel="noopener noreferrer"/g) ?? []).length, 2, 'expected safe rel on both new-tab links');
 assert.match(railHtml, /<button[^>]*class="rail-action"[^>]*disabled[^>]*data-rail-copy/);

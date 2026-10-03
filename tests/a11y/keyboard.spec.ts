@@ -102,6 +102,19 @@ for (const spec of PAGES) {
 
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(new RegExp('#main$'));
+
+      // Scrolling is not enough: focus has to land on <main> or inside it, or a
+      // screen reader announces no jump and the next Tab is the only evidence.
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const main = document.querySelector('#main');
+              return !!main && main.contains(document.activeElement);
+            }),
+          { message: `Activating the skip link on ${spec.path} left focus outside <main>` },
+        )
+        .toBe(true);
     });
   });
 }

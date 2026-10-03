@@ -3,7 +3,7 @@ title: "Raw-markdown post variants + content negotiation"
 summary: "Every post now has a token-efficient raw-markdown sibling at /writing/<slug>.md, and the canonical URL itself serves markdown when a request genuinely prefers it. Took three attempts to land the negotiation."
 seoDescription: "Every post now has a raw-markdown sibling at /writing/<slug>.md, and the canonical URL serves markdown when a request genuinely prefers it."
 date: 2026-07-16
-updated: 2026-07-17
+updated: 2026-10-02
 type: infra
 significance: minor
 tags: ["agents", "aeo"]
@@ -21,3 +21,7 @@ It took three attempts. A `vercel.json` rewrite proved dead on arrival because V
 ## What actually shipped
 
 The middleware does the Accept parsing and then `fetch()`es the already-working `.md` endpoint directly, relaying the response verbatim under the original URL — a reverse proxy inside the middleware rather than a routing trick. Verified live with a full curl matrix: HTML for browsers, markdown for agents that ask for it, and no cache cross-contamination between the two.
+
+## Doing this on your own site
+
+The whole approach is written up as a portable how-to: [Implement Markdown content negotiation](/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md). It covers deriving the sibling URL, negotiating on the `Accept` header with a fallback to HTML, and the build gate that keeps every registration in sync.

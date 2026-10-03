@@ -102,7 +102,13 @@ const markdownUrl = markdownSiblingFor(breadcrumbUrl) ?? undefined;
       {page.url.prev && <a href={page.url.prev} class="pager-link">&larr; newer entries</a>}
       {page.url.next && <a href={page.url.next} class="pager-link">older entries &rarr;</a>}
     </div>
-    <span class="pager-count">showing {shownThrough} of {page.total}</span>
+    {/*
+      `.pager-shown` is the number FilterPills rewrites while a type filter is
+      active (the `countSelector` prop in ChangelogLog.astro), so this line and
+      the rows above it never disagree. With no filter it is the running total
+      rendered here.
+    */}
+    <span class="pager-count">showing <span class="pager-shown">{shownThrough}</span> of {page.total}</span>
   </nav>
 </Layout>
 

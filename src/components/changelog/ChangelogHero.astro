@@ -6,8 +6,8 @@
  * index, so this is the site's hero shape with the fill in CHANGELOG AMBER.
  *
  * The right-hand block reports what the ledger holds — a real count off the
- * collection, not an invented one — and links the machine-readable form of the
- * same log. Both are live endpoints.
+ * collection, not an invented one — and links the log's own feed and the
+ * machine-readable form of the same log. All are live endpoints.
  *
  * A paginated page says which page it is, in place of the count: page 2 showing
  * "37 entries" would be reporting the whole log while listing twenty of it.
@@ -50,7 +50,14 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
           latest && <>, latest <time datetime={latest.toISOString()}>{formatSiteDate(latest)}</time></>
         }.
       </span>
+      {/*
+        The WritingHero.astro pairing: the feed in the colour of the section it
+        serves, the agent surface in the agents colour. The head already
+        advertises this feed to a feed reader; this is the link a person can
+        click.
+      */}
       <span class="hero-facts-links">
+        <a href="/changelog/rss.xml" class="link-changelog">rss.xml</a>
         <a href="/changelog.md" class="link-agents">changelog.md</a>
       </span>
     </div>
@@ -74,6 +81,8 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
     font-size: 19px;
   }
 
+  .link-changelog { color: var(--changelog); }
+  .link-changelog:hover { color: var(--changelog-hover); }
   .link-agents { color: var(--agents); }
   .link-agents:hover { color: var(--agents-hover); }
 

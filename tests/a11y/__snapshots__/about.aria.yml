@@ -49,7 +49,10 @@
       - text: explains every change in plain English, and the posts include the parts I got wrong. I write the words; the agents I build with help me ship them, and the site says so.
     - paragraph:
       - text: The day job is growth at
-      - strong: Temporal Technologies
+      - link "Temporal Technologies (opens in a new tab)":
+        - /url: https://temporal.io/
+        - strong: Temporal Technologies
+        - text: ""
       - text: ", which is where durable execution and a human in the loop stopped being abstractions to me. That belief is load-bearing in what runs here:"
       - link "the agent that reviews and publishes this site":
         - /url: /steward/
@@ -76,7 +79,10 @@
     - img "Matt Pyle"
     - paragraph: Growth by trade. Hobbyist builder otherwise.
     - separator
-    - text: day job Director of Growth, Temporal Technologies writing here since July 2026 this page as data
+    - text: day job Director of Growth,
+    - link "Temporal Technologies (opens in a new tab)":
+      - /url: https://temporal.io/
+    - text: /writing here since July \d+ this page as data/
     - link "about.md":
       - /url: /about.md
 - contentinfo:

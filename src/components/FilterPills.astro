@@ -22,9 +22,13 @@ interface Props {
   /** When set, the active pill is synced to and restored from this URL query-string param
    * (e.g. "tag"), so a filtered view survives reload and can be shared or deep-linked. */
   syncUrlParam?: string;
+  /** CSS selector for an element whose text is a count of the items shown. While a filter
+   * other than "all" is active its text becomes the number of visible items; "all" puts back
+   * whatever the server rendered. */
+  countSelector?: string;
 }
 
-const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlural, filterVerb, syncUrlParam } = Astro.props;
+const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlural, filterVerb, syncUrlParam, countSelector } = Astro.props;
 ---
 
 <div
@@ -38,6 +42,7 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
   data-noun-plural={nounPlural}
   data-filter-verb={filterVerb}
   data-sync-url-param={syncUrlParam}
+  data-count-selector={countSelector}
 >
   {pills.map((pill, i) => (
     <button
@@ -71,6 +76,13 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
       const items = document.querySelectorAll<HTMLElement>(itemSelector);
       if (!buttons.length || !status) return;
 
+      // The visible twin of the status line below. The server-rendered text is kept so
+      // "all" restores it exactly: on a paginated page that number is a running total
+      // of the archive, which this script cannot recompute from the rows it can see.
+      const countSelector = group.dataset.countSelector;
+      const count = countSelector ? document.querySelector<HTMLElement>(countSelector) : null;
+      const unfilteredCount = count?.textContent ?? '';
+
       function applyFilter(value: string, activeButton: HTMLButtonElement) {
         buttons.forEach(b => {
           const active = b === activeButton;
@@ -96,6 +108,8 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
         } else {
           status!.textContent = `Showing ${visible} ${nounFor(visible)} ${filterVerb} ${label}.`;
         }
+
+        if (count) count.textContent = value === 'all' ? unfilteredCount : String(visible);
 
         if (syncUrlParam) {
           const url = new URL(window.location.href);
