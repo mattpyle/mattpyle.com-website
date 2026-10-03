@@ -360,7 +360,10 @@ const REACH = [
     flex-direction: column;
     gap: 18px;
     position: sticky;
-    top: 40px;
+    /* Below the sticky header, which is 72px tall and paints over anything that
+       sticks higher. 96px is the offset PostRail.astro uses, so the site's two
+       rails stop at the same line. */
+    top: 96px;
   }
 
   .rail-photo {
