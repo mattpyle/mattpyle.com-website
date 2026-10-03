@@ -2,12 +2,11 @@
 /**
  * The Projects section (docs/projects/redesign/design-export/README.md §1, "Projects").
  *
- * Rendered from the real `projects` collection, which holds one entry today
- * (Matt, 2026-08-20). The design's two cards — Steward and WebMCP experiments —
- * are not in the collection, and constraint 10 says leave a placeholder rather
- * than invent a number or a label; inventing two content entries to fill a grid
- * would have been the same mistake one level up. The grid stays two columns, so
- * the section grows into the design as entries land.
+ * Rendered from the real `projects` collection, newest two. It held one entry
+ * until 2026-10-02 (Matt, 2026-08-20): constraint 10 says leave a placeholder
+ * rather than invent a number or a label, and inventing content entries to fill
+ * a grid would have been the same mistake one level up. Steward and Argus
+ * joined once each was a real, running project.
  *
  * The card top is the project's own screenshot when its frontmatter carries an
  * `image`, and the placeholder hatch alone when it does not: the design would
@@ -45,11 +44,17 @@ const SITE_ORIGIN = Astro.site ? new URL(Astro.site).origin : 'https://www.mattp
 /**
  * Where a card goes. There are no per-project detail pages, so the useful
  * destination is the project itself: its live URL, or its repository when the
- * live URL is this very site. /projects is the fallback, never a dead card.
+ * live URL is this very site. A live URL that is a page OF this site, such as
+ * /steward/, is the destination and opens in the same tab. /projects is the
+ * fallback, never a dead card.
  */
 function cardHref(project: Project): { href: string; external: boolean } {
   const { live, github } = project.data;
-  if (live && new URL(live).origin !== SITE_ORIGIN) return { href: live, external: true };
+  if (live) {
+    const url = new URL(live);
+    if (url.origin !== SITE_ORIGIN) return { href: live, external: true };
+    if (url.pathname !== '/') return { href: url.pathname, external: false };
+  }
   if (github) return { href: github, external: true };
   return { href: '/projects/', external: false };
 }

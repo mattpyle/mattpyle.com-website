@@ -23,7 +23,7 @@
     - /url: https://github.com/mattpyle
   - region "All projects":
     - heading "All projects" [level=2]
-    - link "· · · · ·":
+    - link "· · · ·":
       - /url: "#"
       - text: ""
       - time: ·
