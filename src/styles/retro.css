@@ -1659,6 +1659,13 @@ html[data-appearance='retro'] [data-module='scorecard-body'] .provenance {
   color: var(--retro-ink-muted);
 }
 
+/* A sentence, not a stamp, so it takes the body face the run notes use. */
+html[data-appearance='retro'] [data-module='scorecard-body'] .cadence {
+  font-family: var(--retro-font-body);
+  font-size: 16px;
+  color: var(--retro-ink-muted);
+}
+
 /* The gate row as the filed panel the legacy latest-run box was: ridge frame and
    hard shadow in place of the redesign's single hairline, with padding of its
    own because the frame now draws an edge the numbers would otherwise touch. */
