@@ -61,9 +61,9 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
     whole body. Retro restyles this same markup under
     `html[data-appearance='retro'] [data-module='article']` in
     src/styles/retro.css — the legacy `.retro-skin` header and footer, and the
-    ArticleActions section they carried, are deleted. The rail's four actions
-    (view markdown, copy markdown, ask ChatGPT, ask Claude) are the only copy of
-    them on the page now, which is why it is no longer hidden in retro.
+    ArticleActions section they carried, are deleted. The rail's five actions
+    (view markdown, copy markdown, ask ChatGPT, ask Claude, RSS feed) are the only
+    copy of them on the page now, which is why it is no longer hidden in retro.
 
     The guards below are `html:not([data-appearance='retro'])` on rules that
     still SPLIT the two appearances — the wrapper's own width, and the
