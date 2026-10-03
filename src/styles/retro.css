@@ -1140,6 +1140,15 @@ html[data-appearance='retro'] [data-module='article'] .rail-meta {
   color: var(--retro-ink-muted);
 }
 
+html[data-appearance='retro'] [data-module='article'] .rail-author {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='article'] .rail-author:hover {
+  color: var(--retro-maroon);
+}
+
 html[data-appearance='retro'] [data-module='article'] .rail-contents a {
   font-family: var(--retro-font-body);
   font-size: 15px;
