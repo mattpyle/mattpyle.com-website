@@ -22,6 +22,7 @@ import {
   FINDINGS_DEFAULT_SITE,
   QUEUE_AUDIT,
   QUEUE_FINDINGS,
+  QUEUE_HEAVY,
   QUEUE_LIGHT,
   temporalConnectionOptions,
   WEB_UI,
@@ -58,6 +59,7 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
+import { fixerSpikeWorkflow } from './workflows/fixer-spike.js';
 import {
   SCORECARD_SCHEDULE_ACTIONS,
   SCORECARD_SCHEDULE_DEFAULT_AT,
@@ -1880,6 +1882,44 @@ finding
   .description('Run the findings reconcile now (the short form of `finding schedule trigger`)')
   .action(async () => {
     await runFindingsSchedule('trigger');
+  });
+
+const fixer = program
+  .command('fixer')
+  .description('The fixer: Claude Code, headless, on a handoff');
+
+fixer
+  .command('spike')
+  .argument('<handoff-path>', 'a handoff under docs/handoffs/')
+  .option('--branch <branch>', 'the branch to create and push (default feat/<handoff name>)')
+  .description('Run Claude Code on one handoff in the fixer worktree and open a PR. Needs `steward up`')
+  .action(async (handoffArg: string, opts: { branch?: string }) => {
+    const abs = path.resolve(handoffArg);
+    try {
+      await fs.access(abs);
+    } catch {
+      fail(`${handoffArg} does not exist.`);
+    }
+    // Resolved HERE and frozen into the workflow input (design rule 3): the
+    // repo-relative path and the branch are decisions, never re-derived later.
+    const handoffPath = path.relative(SITE_DIR, abs).split(path.sep).join('/');
+    const slug = path.basename(abs, '.md');
+    const branch = opts.branch ?? `feat/${slug}`;
+
+    const c = await client();
+    try {
+      const workflowId = `steward-fixer-spike-${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+      console.log(`\n  starting the fixer on ${handoffPath}, branch ${branch}`);
+      console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
+      const prUrl = await c.workflow.execute(fixerSpikeWorkflow, {
+        workflowId,
+        taskQueue: QUEUE_HEAVY,
+        args: [{ handoffPath, branch }],
+      });
+      console.log(`  PR: ${prUrl}\n`);
+    } finally {
+      await c.connection.close();
+    }
   });
 
 program

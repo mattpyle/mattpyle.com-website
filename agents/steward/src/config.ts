@@ -71,6 +71,17 @@ export const WORKTREE_DIR =
   process.env.STEWARD_WORKTREE_DIR ??
   path.resolve(SITE_DIR, '..', 'mattpyle.com-steward-worktree');
 
+/**
+ * The fixer's own worktree, beside the build audit's rather than shared with it.
+ *
+ * A fixer run holds its checkout for as long as Claude Code works in it, which
+ * is tens of minutes. Sharing `WORKTREE_DIR` would mean sharing its lock, and a
+ * publish would wait behind a model.
+ */
+export const FIXER_WORKTREE_DIR =
+  process.env.STEWARD_FIXER_WORKTREE_DIR ??
+  path.resolve(SITE_DIR, '..', 'mattpyle.com-fixer-worktree');
+
 export const PROD_ORIGIN = process.env.STEWARD_PROD_ORIGIN ?? 'https://www.mattpyle.com';
 
 /**
