@@ -147,7 +147,7 @@ const REACH = [
           build with help me ship them, and the site says so.
         </p>
         <p>
-          The day job is growth at <strong>Temporal Technologies</strong>, which is where durable
+          The day job is growth at <a href="https://temporal.io/" target="_blank" rel="noopener noreferrer"><strong>Temporal Technologies</strong><span class="sr-only"> (opens in a new tab)</span></a>, which is where durable
           execution and a human in the loop stopped being abstractions to me. That belief is
           load-bearing in what runs here: <a href="/steward/">the agent that reviews and publishes
           this site</a> waits for me to approve a draft before anything ships.
@@ -214,7 +214,7 @@ const REACH = [
     <div class="rail-facts">
       <div class="rail-fact">
         <span class="rail-label">day job</span>
-        <span class="rail-value">Director of Growth, Temporal Technologies</span>
+        <span class="rail-value">Director of Growth, <a href="https://temporal.io/" target="_blank" rel="noopener noreferrer">Temporal Technologies<span class="sr-only"> (opens in a new tab)</span></a></span>
       </div>
       <div class="rail-fact">
         <span class="rail-label">writing here since</span>
@@ -415,6 +415,20 @@ const REACH = [
     font-size: 17px;
     line-height: 1.5;
     color: var(--ink);
+  }
+
+  /* The one link inside a line of rail text, so it carries the prose links'
+     underline: colour alone does not mark a link in running text (WCAG 1.4.1). */
+  .rail-value a {
+    color: var(--agents);
+    text-decoration: underline;
+    text-decoration-color: var(--rule);
+    text-underline-offset: 3px;
+  }
+
+  .rail-value a:hover {
+    color: var(--agents-hover);
+    text-decoration-color: currentColor;
   }
 
   .rail-md {

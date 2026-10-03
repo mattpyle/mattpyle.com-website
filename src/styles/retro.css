@@ -2285,6 +2285,15 @@ html[data-appearance='retro'] [data-module='about-body'] .rail-value {
   color: var(--retro-ink);
 }
 
+html[data-appearance='retro'] [data-module='about-body'] .rail-value a {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='about-body'] .rail-value a:hover {
+  color: var(--retro-maroon);
+}
+
 html[data-appearance='retro'] [data-module='about-body'] .rail-md {
   font-family: var(--retro-font-mono);
   font-size: 15px;
