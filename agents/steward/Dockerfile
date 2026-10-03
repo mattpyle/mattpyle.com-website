@@ -66,7 +66,38 @@ COPY agents/steward/package.json ./agents/steward/
 # which is a devDependency — omitting dev dependencies produces an image that
 # builds cleanly and then cannot start. That is the single easiest mistake to
 # make here, and it fails at runtime rather than at build time.
-RUN npm ci --workspace @mattpyle/steward --include-workspace-root=false
+#
+# THE DRIVER IS PAIRED WITH THE CHROMIUM ABOVE, HERE, AT BUILD TIME.
+# `chromedriver` (a dependency of @axe-core/cli) downloads its binary in a
+# postinstall script. By default it downloads the version the npm package
+# names, which is whatever `package-lock.json` pinned, and Debian moves
+# `chromium` on its own schedule. The 2026-09-27 rebuild pulled a Chromium newer
+# than the pinned driver 151: every session failed with `session not created:
+# This version of ChromeDriver only supports Chrome version 151`, and six
+# nightly scorecards audited 0 of 26 pages while the image built green.
+#
+# DETECT_CHROMEDRIVER_VERSION makes the installer read the installed browser's
+# version and download the driver for that major. INCLUDE_CHROMIUM is not
+# optional: without it the detector looks only for `google-chrome`, finds
+# nothing, prints `Your Chrome version is null` and falls back to the pinned
+# version without failing. Both are set on this command only, because nothing at
+# runtime reads them. This must stay below the apt layer, so a new Chromium
+# invalidates it.
+#
+# The lockfile pin stays. It is the fallback version and Dependabot's handle;
+# this image no longer depends on it.
+RUN DETECT_CHROMEDRIVER_VERSION=true INCLUDE_CHROMIUM=true \
+    npm ci --workspace @mattpyle/steward --include-workspace-root=false
+
+# The pairing above fails soft, so it is asserted. A mismatch, or a version that
+# cannot be read at all, stops the build here and the previous image keeps
+# serving. The alternative was learned the slow way: a worker that deploys,
+# starts, and scores every page zero.
+RUN chromium_major="$(chromium --version | grep -oE '[0-9]+' | head -n 1)" \
+  && driver_major="$(npx chromedriver --version | grep -oE '[0-9]+' | head -n 1)" \
+  && echo "chromium major: ${chromium_major:-unreadable}, chromedriver major: ${driver_major:-unreadable}" \
+  && test -n "$chromium_major" \
+  && test "$chromium_major" = "$driver_major"
 
 COPY agents/steward/ ./agents/steward/
 
