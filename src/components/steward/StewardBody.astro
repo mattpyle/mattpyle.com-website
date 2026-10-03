@@ -34,6 +34,7 @@ interface Props {
   userAgent: string;
   agentToken: string;
   endpoint: string;
+  repoUrl: string;
   issuesUrl: string;
   refusalSnippet: string;
   callSnippet: string;
@@ -52,6 +53,7 @@ const {
   userAgent,
   agentToken,
   endpoint,
+  repoUrl,
   issuesUrl,
   refusalSnippet,
   callSnippet,
@@ -352,7 +354,7 @@ const GUARANTEES = [
     <div class="band-body band-body--contact">
       <p class="lead">
         If Steward misbehaved on your site — ignored a rule, requested something it should not have,
-        or reported something that is not true — open an issue. It is the same repository the
+        or reported something that is not true — open an issue. It is <a href={repoUrl} rel="noopener">the same repository</a> the
         auditor's code lives in, and it is read.
       </p>
       <div class="contact-aside">

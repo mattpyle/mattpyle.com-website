@@ -192,7 +192,11 @@
       - text: "is free: it reads a run you already paid for and makes no request at anybody's origin."
   - region "Contact":
     - heading "Contact" [level=2]
-    - paragraph: If Steward misbehaved on your site — ignored a rule, requested something it should not have, or reported something that is not true — open an issue. It is the same repository the auditor's code lives in, and it is read.
+    - paragraph:
+      - text: If Steward misbehaved on your site — ignored a rule, requested something it should not have, or reported something that is not true — open an issue. It is
+      - link "the same repository":
+        - /url: https://github.com/mattpyle/mattpyle.com-website
+      - text: the auditor's code lives in, and it is read.
     - link "Open an issue":
       - /url: https://github.com/mattpyle/mattpyle.com-website/issues
     - text: Steward is an experiment on a personal site, not a supported service. It may change or be withdrawn without notice.
