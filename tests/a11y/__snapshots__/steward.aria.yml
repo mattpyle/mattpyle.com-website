@@ -98,7 +98,10 @@
       - code: https://www.mattpyle.com/mcp
       - text: — a stateless streamable-HTTP server with three tools. No account, no key.
       - code: audit_site(url)
-      - text: runs the fast checks and the report comes back in the call, with nothing to poll.
+      - text: runs the fast checks and the report comes back in the call, with nothing to poll. With no client to hand,
+      - link "the audit page":
+        - /url: /audit/
+      - text: runs the same fast checks from a form.
     - paragraph:
       - text: "Two renderings ship in one response: the canonical JSON in"
       - code: structuredContent
