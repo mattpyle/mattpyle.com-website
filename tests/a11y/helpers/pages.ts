@@ -298,6 +298,16 @@ export const PAGES: PageSpec[] = [
     // so the conversion must not move it.
     snapshotKeepFirst: ['.tool-card'],
   },
+  {
+    name: 'not-found',
+    path: '/404',
+    why: 'The 404 template: the hero, the agent block and the three ways back, one tree styled by both appearances',
+    // Read at /404, where the built page answers 200, so the suite's settle helpers see an
+    // ordinary navigation. A missed URL serves this same file with a 404 status.
+    //
+    // Nothing on it is content-variable: the copy and the three links are authored in the
+    // template, so there is nothing to redact and no count to protect.
+  },
 ];
 
 /**

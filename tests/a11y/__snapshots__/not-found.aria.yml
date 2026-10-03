@@ -1,0 +1,52 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: mp/
+  - navigation "Main navigation":
+    - link "/writing":
+      - /url: /writing/
+    - link "/projects":
+      - /url: /projects/
+    - link "/changelog":
+      - /url: /changelog/
+    - link "/scorecard":
+      - /url: /scorecard/
+    - link "/about":
+      - /url: /about/
+- main:
+  - heading "Not found" [level=1]
+  - paragraph: This page does not exist. The link that brought you here is out of date or mistyped.
+  - text: Reading this as an agent? Start from the map.
+  - link "llms.txt":
+    - /url: /llms.txt
+  - link "agents.md":
+    - /url: /agents.md
+  - navigation "Ways back in":
+    - heading "Ways back in" [level=2]
+    - 'link "/ The homepage: what this site is and what is new on it."':
+      - /url: /
+    - link "/writing Every post, newest first.":
+      - /url: /writing/
+    - link "/changelog What has shipped on this site, including pages that moved.":
+      - /url: /changelog/
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Social links":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
+      - /url: https://github.com/mattpyle
+    - link "linkedin (opens in a new tab)":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "webmcp":
+      - /url: /webmcp/
+    - button "Switch to retro mode"
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
+- status

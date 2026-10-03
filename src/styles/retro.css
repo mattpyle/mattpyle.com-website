@@ -2305,6 +2305,95 @@ html[data-appearance='retro'] [data-module='about-body'] .rail-md:hover {
   color: var(--retro-maroon);
 }
 
+/* ── The 404 page ─────────────────────────────────────────────────────────
+   Retro styles the SAME markup src/pages/404.astro ships: the hero on the
+   /projects hero's terms, the agent block as a filed card, and the three ways
+   back as the outset cards the homepage's agent surfaces wear. Both the hero
+   and the link list carry `data-module='not-found'`. */
+html[data-appearance='retro'] [data-module='not-found'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-size: 19px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .hero-agents {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 18px;
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .hero-agents-copy {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .hero-agents-links {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .hero-agents-links a {
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .hero-agents-links a:hover {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='not-found'] h2 {
+  font-family: var(--retro-font-display);
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  border-bottom: 2px dotted var(--retro-frame-border);
+  padding-bottom: 4px;
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .way {
+  background: var(--retro-frame-bg);
+  border: 2px outset var(--retro-frame-border);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgba(90, 60, 20, .25);
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .way:hover {
+  background: var(--retro-sidebar-bg);
+  border-color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .way .way-path {
+  font-family: var(--retro-font-mono);
+  font-size: 13px;
+  color: var(--retro-link);
+  text-decoration: underline;
+}
+
+html[data-appearance='retro'] [data-module='not-found'] .way-desc {
+  font-family: var(--retro-font-body);
+  color: var(--retro-ink);
+}
+
 /* ── /steward ─────────────────────────────────────────────────────────────
    Retro styles the SAME page the modern appearance does — StewardHero and
    StewardBody. There was NO /steward block in this file before 2026-08-29:
