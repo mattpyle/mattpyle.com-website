@@ -30,6 +30,7 @@
       - text: .
   - region "Previous runs":
     - heading "Previous runs" [level=2]
+    - paragraph: Measured every night. A run is logged when a score moves enough to matter, or after a week without one.
     - list:
       - listitem:
         - time: ·
