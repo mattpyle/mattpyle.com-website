@@ -1,6 +1,6 @@
 {
-  "iso": "2026-10-02",
-  "timestamp": "2026-10-02T03:30:57-07:00",
+  "iso": "2026-09-28",
+  "timestamp": "2026-09-28T03:31:05-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -38,7 +38,7 @@
       "description": "No Agentic Browsing checks were applicable on any successfully audited page."
     }
   ],
-  "id": "2026-10-02",
+  "id": "2026-09-28",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -173,7 +173,7 @@
   ],
   "decision": "open-pr",
   "reason": "Accessibility Pass→Fail",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/291",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/285",
   "dryRun": false,
-  "archiveId": "2026-10-02"
+  "archiveId": "2026-09-28"
 }
