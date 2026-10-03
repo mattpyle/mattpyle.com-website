@@ -1,0 +1,165 @@
+---
+/**
+ * The page a missed URL gets.
+ *
+ * Without this file Astro serves its own stock 404: no header, no footer and no
+ * link back into the site. This one wears the site's chrome through Layout, says
+ * plainly that the page does not exist, and offers the three places a lost
+ * reader most often wanted.
+ *
+ * The right-hand block is for the site's other readers. An agent that follows a
+ * stale link lands here too, and `/llms.txt` and `/agents.md` are the two
+ * documents that tell it where everything is.
+ *
+ * `noindex`: this is an error response, not a page of the site, so it stays out
+ * of the search index. The sitemap integration leaves it out by itself.
+ *
+ * RETRO RESTYLES THIS SAME MARKUP under
+ * `html[data-appearance='retro'] [data-module='not-found']` in retro.css.
+ */
+import Layout from '../layouts/Layout.astro';
+
+/** The ways back in, each in the colour of the section it leads to. */
+const WAYS_BACK = [
+  { path: '/', href: '/', tone: 'home', description: 'The homepage: what this site is and what is new on it.' },
+  { path: '/writing', href: '/writing/', tone: 'writing', description: 'Every post, newest first.' },
+  { path: '/changelog', href: '/changelog/', tone: 'changelog', description: 'What has shipped on this site, including pages that moved.' },
+] as const;
+---
+
+<Layout
+  title="Page not found"
+  description="This page does not exist. Start again from the homepage, the writing or the changelog."
+  noindex
+>
+  {/*
+    A div, not a section — the same call WritingHero.astro made: `npm run
+    validate:html` names an h1 inside sectioning content, and an unnamed <section>
+    is not exposed as a region anyway.
+  */}
+  <div class="rd-section rd-hero notfound-hero" data-module="not-found">
+    <h1><span class="rd-fill">Not found</span></h1>
+
+    <div class="hero-row">
+      <p class="hero-statement">
+        This page does not exist. The link that brought you here is out of date or mistyped.
+      </p>
+      <div class="hero-aside hero-agents">
+        <span class="hero-agents-copy">Reading this as an agent? Start from the map.</span>
+        <span class="hero-agents-links">
+          <a href="/llms.txt">llms.txt</a>
+          <a href="/agents.md">agents.md</a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <nav class="rd-section ways" data-module="not-found" aria-labelledby="not-found-ways-title">
+    <h2 id="not-found-ways-title">Ways back in</h2>
+    <div class="way-list">
+      {WAYS_BACK.map(way => (
+        <a href={way.href} class:list={['way', `way--${way.tone}`]}>
+          <span class="way-path">{way.path}</span>
+          <span class="way-desc">{way.description}</span>
+        </a>
+      ))}
+    </div>
+  </nav>
+</Layout>
+
+<style>
+  .notfound-hero { padding-top: 78px; }
+
+  .hero-agents { gap: 10px; }
+
+  .hero-agents-copy {
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .hero-agents-links {
+    display: flex;
+    column-gap: 20px;
+    font-family: var(--font-mono-plex);
+    font-size: 19px;
+  }
+
+  .hero-agents-links a { color: var(--agents); }
+  .hero-agents-links a:hover { color: var(--agents-hover); }
+
+  .ways { padding-top: 72px; }
+
+  h2 {
+    margin: 0 0 22px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -.025em;
+    color: var(--ink);
+  }
+
+  .way-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 760px;
+  }
+
+  /* The homepage's agent-surface card (HomeAgents.astro `.surface`): a fixed
+     first column so the three descriptions align down the stack. */
+  .way {
+    display: grid;
+    grid-template-columns: 130px minmax(0, 1fr);
+    gap: 20px;
+    align-items: baseline;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    color: var(--ink);
+    transition: border-color 220ms ease;
+  }
+
+  .way:hover { border-color: var(--ink-6); }
+
+  .way-path {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink);
+  }
+
+  .way--writing .way-path { color: var(--writing); }
+  .way--changelog .way-path { color: var(--changelog); }
+
+  .way-desc {
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+
+  @media (max-width: 720px) {
+    .notfound-hero { padding-top: 40px; }
+
+    /* 44px tap targets, per the mobile spec. */
+    .hero-agents-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 0;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+
+    .ways { padding-top: 48px; }
+
+    h2 { font-size: 26px; }
+
+    .way {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 18px 20px;
+    }
+  }
+</style>

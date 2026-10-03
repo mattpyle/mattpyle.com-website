@@ -135,6 +135,33 @@
   ],
   "projects": [
     {
+      "title": "Argus",
+      "url": "https://www.mattpyle.com/projects",
+      "date": "2026-09-07T00:00:00.000Z",
+      "status": "live",
+      "tags": [
+        "agents",
+        "Hermes",
+        "QA"
+      ],
+      "description": "A persona inspector. Each day it visits a site as one kind of visitor, such as a recruiter or a screen-reader user, and files what that visitor wanted and did not get. A finding waits for a verdict before anything is fixed."
+    },
+    {
+      "title": "Steward",
+      "url": "https://www.mattpyle.com/projects",
+      "date": "2026-07-18T00:00:00.000Z",
+      "status": "live",
+      "tags": [
+        "Temporal",
+        "TypeScript",
+        "MCP",
+        "accessibility"
+      ],
+      "description": "An agent-readiness auditor and this site's editorial agent, built on Temporal. It checks what a site tells an agent over plain HTTP, then opens the pages in a real browser for Lighthouse and axe-core. Each run is a durable workflow that survives a worker restart.",
+      "github": "https://github.com/mattpyle/mattpyle.com-website",
+      "live": "https://www.mattpyle.com/steward/"
+    },
+    {
       "title": "mattpyle.com",
       "url": "https://www.mattpyle.com/projects",
       "date": "2026-07-13T00:00:00.000Z",
@@ -296,7 +323,7 @@
   ],
   "counts": {
     "writing": 3,
-    "projects": 1,
+    "projects": 3,
     "changelog": 13,
     "changelogListed": 10
   }

@@ -30,9 +30,9 @@ const changelogRows = changelogEntries.slice(0, 5).map(({ id, data }) => ({
   summary: data.summary,
 }));
 
-// Newest first, two cards. The collection holds one entry today; the design's
-// Steward and WebMCP cards are not in it, and Matt chose to render what is real
-// rather than author two entries to fill the grid (2026-08-20).
+// Newest first, two cards. The collection held one entry until 2026-10-02: Matt
+// chose to render what is real rather than author entries to fill the grid
+// (2026-08-20). /projects lists every entry.
 const featuredProjects = (await getCollection('projects'))
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
   .slice(0, 2);

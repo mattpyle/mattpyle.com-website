@@ -33,7 +33,7 @@
     - heading "Projects" [level=2]
     - link "all projects →":
       - /url: /projects/
-    - link "· · ·":
+    - link "· ·":
       - /url: "#"
   - region "Agent surfaces":
     - heading "Agent surfaces" [level=2]
@@ -50,6 +50,8 @@
       - /url: /webmcp/
     - link "agents.md How to use this site as an agent, including what not to assume.":
       - /url: /agents.md
+    - link "/audit Paste an address and see how ready that site is for agents.":
+      - /url: /audit/
   - region "Changelog":
     - heading "Changelog" [level=2]
     - link "full changelog →":

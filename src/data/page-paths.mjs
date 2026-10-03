@@ -9,6 +9,7 @@
 
 export const PAGE_PATHS = [
   '/',
+  '/404',
   '/about',
   '/activity',
   '/audit',

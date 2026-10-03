@@ -14,8 +14,8 @@
  * chip visuals, which is also why the legacy card's tag list has no counterpart
  * here.
  *
- * Real collection entries only. The collection holds one today, and constraint
- * 10 says leave the grid short rather than invent an entry to fill it.
+ * Real collection entries only. Constraint 10 says leave the grid short rather
+ * than invent an entry to fill it.
  */
 import { Image } from 'astro:assets';
 import { formatSiteDate } from '../../lib/format-date.mjs';
@@ -50,12 +50,17 @@ const STATUS_LABELS: Record<string, string> = {
 /**
  * Where a card goes. There are no per-project detail pages, so the useful
  * destination is the project itself: its live URL, or its repository when the
- * live URL is this very site. /projects is the fallback, never a dead card.
- * Same rule as the homepage section, deliberately.
+ * live URL is this very site. A live URL that is a page OF this site, such as
+ * /steward/, is the destination and opens in the same tab. /projects is the
+ * fallback, never a dead card. Same rule as the homepage section, deliberately.
  */
 function cardHref(project: Project): { href: string; external: boolean } {
   const { live, github } = project.data;
-  if (live && new URL(live).origin !== SITE_ORIGIN) return { href: live, external: true };
+  if (live) {
+    const url = new URL(live);
+    if (url.origin !== SITE_ORIGIN) return { href: live, external: true };
+    if (url.pathname !== '/') return { href: url.pathname, external: false };
+  }
   if (github) return { href: github, external: true };
   return { href: '/projects/', external: false };
 }

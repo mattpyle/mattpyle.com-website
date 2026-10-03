@@ -180,6 +180,16 @@ const server = createServer(async (request, response) => {
 
   try {
     const rendered = await render(toWebRequest(request, origin));
+
+    // A miss gets the built 404 page with the 404 status, which is what Vercel does with
+    // dist/client/404.html. A 404 that carries its own body is a route's answer and is relayed.
+    const notFoundPage = rendered.status === 404 && !rendered.body ? staticFileFor('/404.html') : null;
+    if (notFoundPage) {
+      response.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      createReadStream(notFoundPage).pipe(response);
+      return;
+    }
+
     const headers = Object.fromEntries(rendered.headers.entries());
     response.writeHead(rendered.status, headers);
     if (rendered.body) {

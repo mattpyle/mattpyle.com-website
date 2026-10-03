@@ -1,8 +1,8 @@
 ---
 /**
  * The Agent surfaces section (docs/projects/redesign/design-export/README.md §1,
- * "Agent surfaces"): the live conformance scorecard beside the three surfaces an
- * agent can actually fetch.
+ * "Agent surfaces"): the live conformance scorecard beside the surfaces an
+ * agent can actually fetch, and the one page where a person can run the audit.
  *
  * Every number here comes from src/data/scorecard-runs.json through the same
  * SCORECARD derivation /scorecard renders, so the panel and the page can never
@@ -27,9 +27,12 @@ const passing = passingGates();
 const verifiedDate = formatIsoDate(SCORECARD.verified.iso);
 
 /**
- * The three surfaces, in the design's order and with its copy. Real routes: the
- * llms.txt and agents.md files are generated/served at the site root and /webmcp
- * is a page.
+ * The first three surfaces are the design's, in its order and with its copy.
+ * Real routes: the llms.txt and agents.md files are generated/served at the site
+ * root and /webmcp is a page.
+ *
+ * /audit is the fourth, added because nothing else on the homepage led to it.
+ * It is the same audit the MCP endpoint runs, behind a form a person can use.
  */
 const SURFACES = [
   {
@@ -46,6 +49,11 @@ const SURFACES = [
     path: 'agents.md',
     href: '/agents.md',
     description: 'How to use this site as an agent, including what not to assume.',
+  },
+  {
+    path: '/audit',
+    href: '/audit/',
+    description: 'Paste an address and see how ready that site is for agents.',
   },
 ] as const;
 ---
