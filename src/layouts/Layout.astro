@@ -301,7 +301,12 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
       or re-rendered when the appearance toggles.
     */}
     <SiteHeader />
-    <main class="site-main" id="main">
+    {/*
+      `tabindex="-1"` is what lets the skip link MOVE FOCUS here. Without it the
+      browser scrolls to `#main` and leaves focus on <body>, so a screen reader
+      announces no jump. -1 keeps <main> out of the Tab order.
+    */}
+    <main class="site-main" id="main" tabindex="-1">
       <slot />
     </main>
     <SiteFooter />
@@ -320,6 +325,12 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
 
 <style>
   .site-main { flex: 1; }
+
+  /* <main> takes focus only from the skip link, and a ring around the whole
+     page body marks nothing a reader can act on. The id is here for its
+     specificity: the sitewide `[tabindex]:focus-visible` rings in global.css
+     and retro.css outweigh a class. */
+  #main:focus-visible { outline: none; }
 
   .skip-link {
     position: absolute;
