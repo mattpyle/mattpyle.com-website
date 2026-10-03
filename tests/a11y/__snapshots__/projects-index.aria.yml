@@ -18,7 +18,6 @@
 - main:
   - heading "Projects" [level=1]
   - paragraph: Software experiments, some built on Temporal and some not. Hobby projects, not a portfolio.
-  - text: The source is public.
   - link "github.com/mattpyle (opens in a new tab)":
     - /url: https://github.com/mattpyle
   - region "All projects":

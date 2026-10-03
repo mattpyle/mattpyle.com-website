@@ -1255,12 +1255,6 @@ html[data-appearance='retro'] [data-module='projects-hero'] .hero-source {
   padding: 14px 18px;
 }
 
-html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-copy {
-  font-family: var(--retro-font-body);
-  font-size: 15px;
-  color: var(--retro-ink-muted);
-}
-
 html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-links {
   font-family: var(--retro-font-mono);
   font-size: 14px;
