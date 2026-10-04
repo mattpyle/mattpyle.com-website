@@ -1,6 +1,6 @@
 {
-  "iso": "2026-10-03",
-  "timestamp": "2026-10-03T03:34:02-07:00",
+  "iso": "2026-10-04",
+  "timestamp": "2026-10-04T03:33:47-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-10-03",
+  "id": "2026-10-04",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -327,8 +327,9 @@
       "axeViolations": 0
     }
   ],
-  "decision": "no-op",
-  "reason": "unchanged, published 7d ago (<= 7d threshold)",
+  "decision": "open-pr",
+  "reason": "unchanged, but published run is 8d old (> 7d staleness threshold)",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/305",
   "dryRun": false,
-  "archiveId": "2026-10-03"
+  "archiveId": "2026-10-04"
 }
