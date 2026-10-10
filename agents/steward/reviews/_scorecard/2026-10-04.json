@@ -1,6 +1,6 @@
 {
-  "iso": "2026-10-10",
-  "timestamp": "2026-10-10T03:34:27-07:00",
+  "iso": "2026-10-04",
+  "timestamp": "2026-10-04T03:33:47-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-10-10",
+  "id": "2026-10-04",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -274,7 +274,7 @@
     {
       "url": "https://www.mattpyle.com/webmcp/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -318,7 +318,7 @@
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -328,8 +328,8 @@
     }
   ],
   "decision": "open-pr",
-  "reason": "unchanged, but published run is 14d old (> 7d staleness threshold)",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/311",
+  "reason": "unchanged, but published run is 8d old (> 7d staleness threshold)",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/305",
   "dryRun": false,
-  "archiveId": "2026-10-10"
+  "archiveId": "2026-10-04"
 }
