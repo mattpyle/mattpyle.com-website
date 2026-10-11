@@ -3,4 +3,4 @@ export * from './scorecard-audit.js';
 export * from './audit-site.js';
 export * from './finding.js';
 export * from './reconcile-findings.js';
-export * from './fixer-spike.js';
+export * from './fix-finding.js';

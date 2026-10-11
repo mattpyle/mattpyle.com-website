@@ -216,3 +216,166 @@ export function planReconcile(site: string, index: FindingsIndexLine[], openIds:
   }
   return plan;
 }
+
+// ---------------------------------------------------------------------------
+// The fixer (findings-loop design, phase 5)
+// ---------------------------------------------------------------------------
+
+/** `fix/<site>/<key>`: a new execution beside `finding/<site>/<key>` (design decision 18). */
+export function fixWorkflowId(site: string, key: string): string {
+  return `fix/${site}/${key}`;
+}
+
+/** `sites/<site>/handoffs/<key>.md`, the generated handoff's home (design decision 20). */
+export function findingHandoffPath(site: string, key: string): string {
+  return `sites/${site}/handoffs/${key}.md`;
+}
+
+/** The fixer's own branch prefix, so its PRs are told apart from a person's at a glance. */
+export function fixBranch(key: string): string {
+  return `fix/finding-${key}`;
+}
+
+export interface FindingBullet {
+  /** The text before the first colon: `URL`, `Expected`, `Cause, from the source`. */
+  label: string;
+  text: string;
+}
+
+export interface ParsedFinding {
+  /** The H1, the finding in one line. */
+  title: string;
+  /** Each `##` section's body, keyed by its heading in lower case. */
+  sections: Record<string, string>;
+  /** The labelled bullets of "What happened", the cause excluded. */
+  evidence: FindingBullet[];
+  /** The bullet whose label starts with "Cause", or null when the finding names none. */
+  cause: string | null;
+  /** The body of "How to measure", or null. */
+  measure: string | null;
+}
+
+/** Argus hard-wraps its prose; a wrapped paragraph or bullet reads as one line here. */
+function unwrap(text: string): string {
+  return text.replace(/\s*\r?\n\s*/g, ' ').trim();
+}
+
+/**
+ * The finding's body, read for the fixer: the line, the evidence, the cause and
+ * the measure. The template is Argus's (`skills/argus-inspect/templates/finding.md`);
+ * a finding that lacks a part comes back with that part empty or null, and the
+ * caller decides whether it can be fixed without it.
+ */
+export function parseFindingBody(text: string): ParsedFinding {
+  const lines = text.split(/\r?\n/);
+  let start = 0;
+  if (lines[0] === '---') {
+    const close = lines.indexOf('---', 1);
+    if (close > 0) start = close + 1;
+  }
+  let title = '';
+  const sections: Record<string, string> = {};
+  let heading: string | null = null;
+  let buffer: string[] = [];
+  const flush = () => {
+    if (heading !== null) sections[heading] = buffer.join('\n').trim();
+    buffer = [];
+  };
+  for (const line of lines.slice(start)) {
+    const h1 = /^#\s+(.+?)\s*$/.exec(line);
+    const h2 = /^##\s+(.+?)\s*$/.exec(line);
+    if (h2) {
+      flush();
+      heading = h2[1].toLowerCase();
+    } else if (h1 && !title && heading === null) {
+      title = h1[1];
+    } else {
+      buffer.push(line);
+    }
+  }
+  flush();
+
+  const bullets: FindingBullet[] = [];
+  for (const raw of (sections['what happened'] ?? '').split(/\r?\n(?=- )/)) {
+    if (!raw.startsWith('- ')) continue;
+    const item = unwrap(raw.slice(2));
+    const colon = item.indexOf(': ');
+    if (colon > 0 && colon <= 40) bullets.push({ label: item.slice(0, colon), text: item.slice(colon + 2).trim() });
+    else bullets.push({ label: '', text: item });
+  }
+  const cause = bullets.find((b) => /^cause\b/i.test(b.label));
+  const measure = sections['how to measure'] ? unwrap(sections['how to measure']) : null;
+
+  return {
+    title: unwrap(title),
+    sections,
+    evidence: bullets.filter((b) => b !== cause),
+    cause: cause ? cause.text : null,
+    measure: measure || null,
+  };
+}
+
+/**
+ * Why a finding cannot go to the fixer, or null when it can (the card's
+ * decision 4): approved, a defect, with a cause named in the source and a
+ * measure to verify against. Opportunities and directions stay Matt's.
+ */
+export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding): string | null {
+  if (data.status !== 'approved') return `its status is ${String(data.status ?? 'unset')}, not approved`;
+  if (data.kind !== 'defect') return `its kind is ${String(data.kind ?? 'unset')}, not defect`;
+  if (!parsed.title) return 'it has no title line';
+  if (!parsed.cause) return 'its "What happened" names no cause';
+  if (!parsed.measure) return 'it has no "How to measure"';
+  return null;
+}
+
+/**
+ * The finding file with `status: fixing` and `links.pr` set and every other
+ * byte kept: the same line edit as {@link setFrontmatterVerdict}, for the two
+ * fields the fixer owns. `links` is a block mapping, so a later writer (the
+ * verifier's comment, an extracted rule) adds its own key beside `pr`.
+ */
+export function setFrontmatterFix(text: string, prUrl: string): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== '---') throw new Error('the finding has no frontmatter block');
+  const close = lines.indexOf('---', 1);
+  if (close < 0) throw new Error("the finding's frontmatter block is not closed");
+  const inBlock = (i: number) => i > 0 && i < close;
+
+  const statusAt = lines.findIndex((line, i) => inBlock(i) && /^status:/.test(line));
+  if (statusAt < 0) throw new Error('the finding has no status field');
+  lines[statusAt] = 'status: fixing';
+
+  const pr = `  pr: ${prUrl}`;
+  const linksAt = lines.findIndex((line, i) => inBlock(i) && /^links:/.test(line));
+  if (linksAt < 0) {
+    lines.splice(close, 0, 'links:', pr);
+    return lines.join(eol);
+  }
+  if (!/^links:\s*(\{\s*\})?\s*$/.test(lines[linksAt])) {
+    throw new Error('the finding\'s links field is not a block mapping');
+  }
+  lines[linksAt] = 'links:';
+  let end = linksAt + 1;
+  while (end < close && /^\s+\S/.test(lines[end])) end++;
+  const prAt = lines.findIndex((line, i) => i > linksAt && i < end && /^\s+pr:/.test(line));
+  if (prAt >= 0) lines[prAt] = pr;
+  else lines.splice(linksAt + 1, 0, pr);
+  return lines.join(eol);
+}
+
+/**
+ * The index with one finding's status replaced and every other byte kept,
+ * the verdict reason included: `fixing` is a state, not a verdict.
+ */
+export function setIndexStatus(text: string, key: string, status: string): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  const entry = parseFindingsIndex(text).find((e) => e.key === key);
+  if (!entry) throw new Error(`INDEX.md has no line for ${key}`);
+  const parts = lines[entry.lineNumber].split('|');
+  parts[1] = ` ${status} `;
+  lines[entry.lineNumber] = parts.join('|');
+  return lines.join(eol);
+}

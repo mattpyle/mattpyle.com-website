@@ -1,34 +1,50 @@
+import type { ParsedFinding } from './findings.js';
+
 /**
- * The fixer spike's pure half: what `runFixer` passes to Claude Code, what it
- * reads back, and what it writes into the PR.
+ * The fixer's pure half: the handoff it asks for, what `runFixer` passes to
+ * Claude Code, what it reads back, and what goes into the PR.
  *
- * Temporal-free and I/O-free like the rest of `lib/`, so the argv, the child's
- * environment and the stream reducer are testable without spawning a model.
+ * Temporal-free and I/O-free like the rest of `lib/`, so the template, the
+ * argv, the child's environment, the stream reducer and the PR body are
+ * testable without spawning a model.
  */
+
+// ---------------------------------------------------------------------------
+// What a headless run may do
+// ---------------------------------------------------------------------------
 
 /**
  * The tool allowlist a headless run gets.
  *
- * `--permission-mode acceptEdits` covers file edits inside the worktree and the
- * `--add-dir` directory; this list covers everything else a handoff's Verify
- * section asks for. In `-p` mode a tool outside it is denied rather than
- * prompted, and the denial is reported in the result event, so the list can
- * start narrow and grow from evidence.
+ * **No bare file tools.** `Read`, `Glob`, `Grep`, `Edit` and `Write` are left
+ * off on purpose: inside the worktree a read needs no rule and
+ * `--permission-mode acceptEdits` covers an edit, and outside it a call with no
+ * rule is denied. A bare `Read` would be a rule for every path on the machine,
+ * the private vault included. Measured with a probe run on 2026-10-10: a `Read`
+ * and a `Write` one directory above the working directory were both refused, as
+ * was `cat` of the same file.
+ *
+ * **Compound commands.** Claude Code matches each part of a compound command
+ * against the list separately, so `npm run build 2>&1 | tail -20` needs a rule
+ * for `tail` as well as for `npm run`. The read-only filters below are what the
+ * spike's refused calls piped into. The same probe ran a redirect, a pipe, an
+ * environment prefix, `;`, `&&` and `cd x &&` under this list.
+ *
+ * Two PowerShell forms stay refused whatever the list says, by the harness and
+ * not by a rule: a `$env:` assignment and a file redirect. The system prompt
+ * sends both to Bash.
  *
  * Both shells are listed because Claude Code on Windows offers both.
  */
 export const FIXER_ALLOWED_TOOLS = [
-  'Read',
-  'Glob',
-  'Grep',
-  'Edit',
-  'Write',
   'Skill',
   'TodoWrite',
   ...['Bash', 'PowerShell'].flatMap((shell) => [
     `${shell}(npm run *)`,
+    `${shell}(npm test*)`,
     `${shell}(npx playwright *)`,
     `${shell}(npx astro *)`,
+    `${shell}(npx tsc *)`,
     `${shell}(node *)`,
     `${shell}(curl *)`,
     `${shell}(git status*)`,
@@ -37,6 +53,13 @@ export const FIXER_ALLOWED_TOOLS = [
     `${shell}(git show*)`,
   ]),
   'Bash(SHOW_DRAFTS=true npm run *)',
+  'Bash(cd *)',
+  'Bash(tail *)',
+  'Bash(head *)',
+  'Bash(grep *)',
+  'Bash(wc *)',
+  'PowerShell(Select-Object *)',
+  'PowerShell(Select-String *)',
 ];
 
 /**
@@ -50,31 +73,29 @@ export const FIXER_DISALLOWED_TOOLS = ['Bash', 'PowerShell'].flatMap((shell) => 
   `${shell}(gh *)`,
 ]);
 
-/** The one-line opener the handoff convention uses. */
-export function fixerPrompt(handoffAbsPath: string): string {
-  return `Read ${handoffAbsPath} and do it.`;
+/** The handoff rides in the prompt itself: there is no file for the run to be pointed at. */
+export function fixerPrompt(handoff: string): string {
+  return `Do the handoff below. It is complete: every fact you need is in it or in this checkout.\n\n${handoff.trim()}\n`;
 }
 
 /**
  * What a headless run has to be told that a session at a keyboard would see for
- * itself: where it is, where the vault is, and who commits.
+ * itself: where it is, what is absent, who commits, and how to report.
  */
-export function fixerSystemPrompt(args: { branch: string; base: string; vaultDir: string }): string {
+export function fixerSystemPrompt(args: { branch: string; base: string }): string {
   return [
     'You are running headless inside a Steward activity. Nobody can answer a question, so decide and record the decision.',
     `The working directory is a git worktree already on branch ${args.branch}, cut from origin/${args.base}, with dependencies installed. Make every source change here.`,
-    `The private vault is outside this worktree, at ${args.vaultDir}. Every docs/ path in the handoff, the card and CLAUDE.md resolves there.`,
+    'The directories docs/ and steward/ are absent from this worktree on purpose. Skip any instruction in CLAUDE.md that needs them, and write no card, session note, build-log entry or changelog entry.',
+    'One finding, one fix: change what the handoff names and nothing beside it.',
     'Leave your changes uncommitted. The activity commits what is in the worktree, pushes the branch and opens the PR.',
+    'Use Bash for a command that sets an environment variable or redirects output to a file. PowerShell refuses both here.',
     'Stop any server you started before you finish.',
-    'Your final message is published verbatim in the public PR body. Write it for a stranger: what changed, then each Verify step with the command and its result. No vault paths and no process narrative.',
+    'End your final message with one fenced json block that reports every numbered Verify check, in this shape: {"checks":[{"n":1,"status":"pass","command":"npm test"}]}. "status" is pass, fail or not-run. "command" is the one command whose result decided it.',
   ].join('\n');
 }
 
-export function claudeArgs(args: {
-  prompt: string;
-  systemPrompt: string;
-  addDir: string;
-}): string[] {
+export function claudeArgs(args: { prompt: string; systemPrompt: string }): string[] {
   return [
     '-p',
     args.prompt,
@@ -95,8 +116,6 @@ export function claudeArgs(args: {
     FIXER_ALLOWED_TOOLS.join(','),
     '--disallowedTools',
     FIXER_DISALLOWED_TOOLS.join(','),
-    '--add-dir',
-    args.addDir,
   ];
 }
 
@@ -114,6 +133,10 @@ const STRIPPED_ENV = /^(ANTHROPIC_|TEMPORAL_|STEWARD_|GITHUB_TOKEN$|GH_TOKEN$|CL
 export function fixerChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(env).filter(([key]) => !STRIPPED_ENV.test(key)));
 }
+
+// ---------------------------------------------------------------------------
+// The event stream
+// ---------------------------------------------------------------------------
 
 export interface ClaudeRunState {
   /** The last thing the model did, for the heartbeat. */
@@ -198,46 +221,259 @@ export function reduceClaudeEvent(state: ClaudeRunState, line: string): ClaudeRu
   return state;
 }
 
+/** Longest final message an activity result carries. */
+export const FINAL_MESSAGE_MAX = 8_000;
+
+// ---------------------------------------------------------------------------
+// The handoff, generated from a finding
+// ---------------------------------------------------------------------------
+
+/** The sections a generated handoff has, in order. Nothing else is allowed at `##`. */
+export const HANDOFF_SECTIONS = ['Goal', 'What happened', 'Cause', 'Tasks', 'Verify', 'Out of scope'] as const;
+
+/** The longest title a generated handoff may carry: it becomes the commit subject and the PR title. */
+export const HANDOFF_TITLE_MAX = 72;
+
+/**
+ * The commands a generated Verify section may name. Fixed here, because the
+ * generator sees the finding and nothing of the repository.
+ */
+const REPO_COMMANDS = [
+  '`npm run build`: the production site build, with its validators.',
+  '`npm test`: the site tests under `tests/`.',
+  '`npm run check`: `astro check`.',
+  '`npm run a11y`: the build, then the Playwright accessibility suite.',
+  '`npm test -w @mattpyle/steward`: the tests for code under `agents/steward/`.',
+  '`npx tsc --noEmit -p agents/steward`: the type check for code under `agents/steward/`.',
+];
+
+/** The generator's whole system prompt. It replaces Claude Code's own. */
+export const HANDOFF_SYSTEM_PROMPT =
+  'You write build handoffs for a coding agent. You reply with the handoff in markdown and nothing else: no preamble, no code fence around it, no closing remark.';
+
+/**
+ * The fixed template `generateHandoff` sends, with one finding in it.
+ *
+ * The finding is the only document the model sees, and the handoff it writes is
+ * the only document the fixer sees, so the template asks for a handoff that
+ * stands alone and refuses the sections a vault handoff carries (`Read first`,
+ * `Document`, `Close`). {@link validateHandoff} holds the model to it.
+ */
+export function handoffGeneratorPrompt(args: { key: string; finding: string }): string {
+  return [
+    'Write a handoff for a headless coding session that will fix one approved finding on a website.',
+    'The session sees your handoff and a checkout of the site repository. It sees nothing else, and nobody can answer a question.',
+    '',
+    'Rules:',
+    '',
+    '1. The handoff stands alone. State every fact the builder needs. Name the files, lines and functions the finding names. Point at no other document.',
+    `2. The title is an imperative phrase of at most ${HANDOFF_TITLE_MAX - 2} characters that names the fix.`,
+    '3. Goal: one or two sentences. What a visitor gets once this is fixed.',
+    '4. What happened: the finding\'s observation, with the URL and the evidence it quotes.',
+    '5. Cause: the cause the finding names, with the file path and the function.',
+    '6. Tasks: numbered. The smallest change that fixes the cause. One finding, one fix, no adjacent tidying. Add a test when the finding\'s measure names one.',
+    '7. Verify: numbered checks, built from the finding\'s "How to measure". Each check is one command and its expected result. Then add the test command and the type check for the code the cause is in.',
+    '8. Out of scope: what the finding says to leave alone, then merging and deploying.',
+    '9. Plain short sentences. Use commas and colons, never an em dash.',
+    '',
+    'Commands that exist in the repository:',
+    '',
+    ...REPO_COMMANDS.map((line) => `- ${line}`),
+    '',
+    'Use exactly this structure, with these headings and no others:',
+    '',
+    '# Handoff: <title>',
+    '',
+    `Finding: \`${args.key}\``,
+    '',
+    ...HANDOFF_SECTIONS.flatMap((name) => [`## ${name}`, '']),
+    'The finding:',
+    '',
+    '<finding>',
+    args.finding.trim(),
+    '</finding>',
+  ].join('\n');
+}
+
+/** The model's reply as a handoff: an outer code fence and stray blank lines removed. */
+export function cleanHandoff(raw: string): string {
+  let text = raw.replace(/\r\n/g, '\n').trim();
+  const fenced = /^```(?:markdown|md)?\n([\s\S]*)\n```$/.exec(text);
+  if (fenced) text = fenced[1].trim();
+  return `${text}\n`;
+}
+
 export interface ParsedHandoff {
   /** The H1 without its `Handoff:` label. */
   title: string;
   /** The body of `## Verify`, or null when the handoff has none. */
   verify: string | null;
+  /** The numbered items of the Verify section, in order, each on one line. */
+  checks: string[];
 }
 
 export function parseHandoff(markdown: string): ParsedHandoff {
   const h1 = markdown.match(/^#\s+(.+?)\s*$/m);
   const title = (h1?.[1] ?? '').replace(/^Handoff:\s*/i, '').trim();
   const verify = markdown.match(/^##\s+Verify\s*\r?\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m);
-  return { title, verify: verify ? verify[1].trim() : null };
+  const body = verify ? verify[1].trim() : null;
+  const checks: string[] = [];
+  for (const line of (body ?? '').split(/\r?\n/)) {
+    const item = /^\s{0,3}\d+[.)]\s+(.*)$/.exec(line);
+    if (item) checks.push(item[1].trim());
+    else if (checks.length > 0 && /^\s+\S/.test(line)) checks[checks.length - 1] += ` ${line.trim()}`;
+  }
+  return { title, verify: body, checks };
 }
 
-/** Longest final message a PR body or an activity result carries. */
-export const FINAL_MESSAGE_MAX = 8_000;
+/**
+ * What is wrong with a generated handoff, as one line each; empty when it may
+ * go to the fixer. A handoff that fails here is never written or run.
+ */
+export function validateHandoff(markdown: string, key: string): string[] {
+  const problems: string[] = [];
+  const lines = markdown.split(/\r?\n/);
+  const parsed = parseHandoff(markdown);
 
-export function buildFixerPrBody(args: {
-  verify: string | null;
-  finalMessage: string | null;
+  if (!/^# Handoff: \S/.test(lines[0] ?? '')) problems.push('the first line is not "# Handoff: <title>"');
+  if (parsed.title.length > HANDOFF_TITLE_MAX) {
+    problems.push(`the title is ${parsed.title.length} characters, over ${HANDOFF_TITLE_MAX}`);
+  }
+  if (!markdown.includes(`Finding: \`${key}\``)) problems.push('the "Finding:" line with the key is missing');
+
+  const headings = lines.filter((line) => /^##\s/.test(line)).map((line) => line.replace(/^##\s+/, '').trim());
+  if (headings.join(' | ') !== HANDOFF_SECTIONS.join(' | ')) {
+    problems.push(`the sections are "${headings.join(', ')}", not "${HANDOFF_SECTIONS.join(', ')}"`);
+  }
+  if (lines.filter((line) => /^#\s/.test(line)).length !== 1) problems.push('there is not exactly one H1');
+  if (parsed.checks.length === 0) problems.push('the Verify section has no numbered check');
+  // The fixer's worktree has neither directory, and a path into one is a
+  // pointer at a document the handoff was told to stand without.
+  if (/(^|[\s`'"(])(docs|steward)\/[\w.-]/m.test(markdown)) {
+    problems.push('it points into docs/ or steward/, which the fixer cannot see');
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
+// What the run reported
+// ---------------------------------------------------------------------------
+
+export type FixerCheckStatus = 'pass' | 'fail' | 'not-run';
+
+export interface FixerCheckResult {
+  /** 1-based, the number of the Verify check in the handoff. */
+  n: number;
+  status: FixerCheckStatus;
+  /** The command that decided it, on one line, or null. */
+  command: string | null;
+}
+
+/**
+ * The check results in the model's final message: the last fenced json block,
+ * read strictly. Anything that is not a known status on a real check number is
+ * dropped, and a command is cut to one short line with no backticks.
+ *
+ * This is the only part of the final message that reaches the PR, and it is
+ * three narrow fields rather than prose, so the message's own framing (and its
+ * attribution line, which the spike published) stays in the activity result.
+ */
+export function parseFixerChecks(finalMessage: string | null, checkCount: number): FixerCheckResult[] {
+  if (!finalMessage) return [];
+  const blocks = [...finalMessage.matchAll(/```(?:json)?\s*\r?\n([\s\S]*?)\r?\n\s*```/g)];
+  for (const block of blocks.reverse()) {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(block[1]);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(parsed?.checks)) continue;
+    const results = new Map<number, FixerCheckResult>();
+    for (const entry of parsed.checks) {
+      const n = Number(entry?.n);
+      if (!Number.isInteger(n) || n < 1 || n > checkCount) continue;
+      if (entry.status !== 'pass' && entry.status !== 'fail' && entry.status !== 'not-run') continue;
+      const command =
+        typeof entry.command === 'string' && entry.command.trim()
+          ? clip(entry.command.replace(/[`\r\n|]+/g, ' ').replace(/\s+/g, ' ').trim(), 160)
+          : null;
+      results.set(n, { n, status: entry.status, command });
+    }
+    return [...results.values()].sort((a, b) => a.n - b.n);
+  }
+  return [];
+}
+
+// ---------------------------------------------------------------------------
+// The PR
+// ---------------------------------------------------------------------------
+
+/** One line of prose for a table cell. */
+const cell = (value: string) => value.replace(/[\r\n]+/g, ' ').replace(/\|/g, '\\|').trim();
+
+export interface FixerPrBodyInput {
+  key: string;
+  finding: ParsedFinding;
+  /** The handoff's Verify checks, in order. */
+  checks: string[];
+  results: FixerCheckResult[];
+  filesChanged: string[];
   exitCode: number;
   timedOut: boolean;
-}): string {
+}
+
+/** True when the run did not end the way a finished one does: killed at its limit, or a non-zero exit. */
+export function isIncompleteRun(run: { exitCode: number; timedOut: boolean }): boolean {
+  return run.timedOut || run.exitCode !== 0;
+}
+
+/**
+ * The PR body, written from the finding (the card's decision 5).
+ *
+ * Every sentence in it comes from the finding, the handoff's Verify list or
+ * git. The model's final message is not an input.
+ */
+export function buildFixerPrBody(input: FixerPrBodyInput): string {
+  const { finding } = input;
   const lines: string[] = [];
-  if (args.timedOut || args.exitCode !== 0) {
+  if (isIncompleteRun(input)) {
     lines.push(
-      `> **Incomplete run.** Claude Code ${args.timedOut ? 'was stopped at its time limit' : `exited ${args.exitCode}`}. This PR holds what it left behind.`,
+      `> **Incomplete run.** Claude Code ${input.timedOut ? 'was stopped at its time limit' : `exited ${input.exitCode}`}. This PR holds what it left behind.`,
       '',
     );
   }
-  lines.push('## What the run reported', '');
+  lines.push(`Fixes one finding from Argus, the site's inspector: ${finding.title}`, '');
+
+  lines.push('## Evidence', '');
+  for (const bullet of finding.evidence) {
+    lines.push(bullet.label ? `- ${bullet.label}: ${bullet.text}` : `- ${bullet.text}`);
+  }
+  lines.push('');
+
+  lines.push('## Cause', '', finding.cause ?? '_The finding names no cause._', '');
+
+  lines.push('## Changed', '');
+  for (const file of input.filesChanged) lines.push(`- \`${file}\``);
+  lines.push('');
+
+  lines.push('## Verify', '');
+  if (finding.measure) lines.push(`The finding's measure: ${finding.measure}`, '');
+  lines.push('| Check | Result | Command |', '|---|---|---|');
+  input.checks.forEach((check, i) => {
+    const result = input.results.find((r) => r.n === i + 1);
+    lines.push(
+      `| ${i + 1}. ${cell(check)} | ${result ? result.status : 'not reported'} | ${result?.command ? `\`${result.command}\`` : ''} |`,
+    );
+  });
+  lines.push('');
+
   lines.push(
-    args.finalMessage ? clip(args.finalMessage.trim(), FINAL_MESSAGE_MAX) : '_The run ended without a final message._',
+    `Finding: \`${input.key}\``,
     '',
-  );
-  if (args.verify) lines.push('## Verify steps it was given', '', args.verify, '');
-  lines.push(
     '---',
     '',
-    '*Written by Claude Code, headless, in a Steward activity. Steward never merges.*',
+    "*Opened by Steward's fixer: Claude Code, headless, on one approved finding. Steward never merges.*",
   );
   return lines.join('\n');
 }

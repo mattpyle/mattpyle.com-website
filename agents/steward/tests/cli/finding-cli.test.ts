@@ -52,6 +52,21 @@ test('a key that could traverse is refused before anything connects', async () =
   assert.match(out, /Invalid key/);
 });
 
+test('fix refuses a key or a site that could traverse, before anything connects', async () => {
+  const key = await runCli(['finding', 'fix', '../../etc']);
+  assert.equal(key.code, 1);
+  assert.match(key.out, /Invalid key/);
+  const site = await runCli(['finding', 'fix', 'some-key', '--site', 'a/b']);
+  assert.equal(site.code, 1);
+  assert.match(site.out, /Invalid site/);
+});
+
+test('the spike verb is gone: the fixer starts from a finding, not a handoff path', async () => {
+  const { code, out } = await runCli(['fixer', 'spike', 'docs/handoffs/x.md']);
+  assert.equal(code, 1);
+  assert.match(out, /unknown command 'fixer'/);
+});
+
 test('reject needs a reason', async () => {
   const { code, out } = await runCli(['finding', 'reject', 'some-key']);
   assert.equal(code, 1);
@@ -61,7 +76,7 @@ test('reject needs a reason', async () => {
 test('the finding verbs are listed in help', async () => {
   const { code, out } = await runCli(['finding', '--help']);
   assert.equal(code, 0);
-  for (const verb of ['list', 'status', 'approve', 'reject', 'schedule', 'sync']) {
+  for (const verb of ['list', 'status', 'approve', 'reject', 'fix', 'schedule', 'sync']) {
     assert.match(out, new RegExp(`\\b${verb}\\b`));
   }
 });
