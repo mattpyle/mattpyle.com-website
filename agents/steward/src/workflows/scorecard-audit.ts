@@ -557,10 +557,13 @@ export function buildCommentary(
       ? `all ${pageCount} page${pageCount === 1 ? '' : 's'} passed all four public metrics`
       : worst
           .map((m) => {
-            // The description is the reason the gate failed. The score alone can
-            // read "100/100 (Fail)" when axe, not Lighthouse, decided the status.
-            const reason = m.description?.trim().replace(/\.+$/, '');
-            return `${m.name}: ${reason || `${m.value}/${m.maximum}`} (${m.status})`;
+            // The score alone can read "100/100 (Fail)" when axe, not Lighthouse,
+            // decided the status, so an axe count rides beside it. Every other
+            // description says how the score was taken, which the score already
+            // carries, and stays out.
+            const description = m.description?.trim().replace(/\.+$/, '') ?? '';
+            const axe = /^\d+ axe violations?\b/.test(description) ? `, ${description}` : '';
+            return `${m.name}: ${m.value}/${m.maximum}${axe} (${m.status})`;
           })
           .join('; ');
 
