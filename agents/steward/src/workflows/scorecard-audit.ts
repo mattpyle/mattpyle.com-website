@@ -540,7 +540,7 @@ function withNote(note: string | undefined, draft: string): string {
  * rule 7 forbids, and `validateCommentary`/`assertTimelessCommentary` block
  * a violation before it can publish.
  */
-function buildCommentary(
+export function buildCommentary(
   perPage: PageAuditOutcome[],
   metrics: ScorecardRunRecord['metrics'],
   decision: PublishDecision,
@@ -555,7 +555,14 @@ function buildCommentary(
   const summary =
     worst.length === 0
       ? `all ${pageCount} page${pageCount === 1 ? '' : 's'} passed all four public metrics`
-      : worst.map((m) => `${m.name}: ${m.value}/${m.maximum} (${m.status})`).join('; ');
+      : worst
+          .map((m) => {
+            // The description is the reason the gate failed. The score alone can
+            // read "100/100 (Fail)" when axe, not Lighthouse, decided the status.
+            const reason = m.description?.trim().replace(/\.+$/, '');
+            return `${m.name}: ${reason || `${m.value}/${m.maximum}`} (${m.status})`;
+          })
+          .join('; ');
 
   const delta = describeChangeDelta(decision);
   const combined = delta ? `${delta}; ${summary}` : summary;
