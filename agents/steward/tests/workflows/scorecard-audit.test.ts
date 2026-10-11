@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { createTestEnv } from '../helpers/test-env.js';
 import { Worker } from '@temporalio/worker';
-import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js';
+import { buildCommentary, scorecardAuditWorkflow, type ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js';
 import type { PageAuditOutcome, PublishableRun } from '../../src/lib/scorecard-aggregate.js';
 import type { PublishedScorecard } from '../../src/activities/scorecard.js';
 
@@ -263,6 +263,56 @@ test('commentary states the plain pass fact, with no delta language, when nothin
   );
   assert.equal(result.decision, 'no-op');
   assert.match(result.record.commentary, /^All \d+ pages? passed all four public metrics\.$/);
+});
+
+test('buildCommentary puts the axe violation count beside the score of a gate that axe failed', () => {
+  // The axe gate fails a run whose Lighthouse score is still 100, so the score
+  // alone beside the status reads as a perfect result labelled a failure.
+  const commentary = buildCommentary(
+    [{ ...GREEN_PAGE, axeViolations: 1 }],
+    [
+      {
+        name: 'Accessibility',
+        value: '100',
+        maximum: '100',
+        status: 'Fail',
+        description: '1 axe violation across 25 tested pages.',
+      },
+    ],
+    { decision: 'open-pr', reason: 'Accessibility moved from Pass to Fail' },
+  );
+  assert.ok(
+    commentary.includes('Accessibility: 100/100, 1 axe violation across 25 tested pages (Fail)'),
+    commentary,
+  );
+  assert.ok(!commentary.includes('100/100 (Fail)'), commentary);
+});
+
+test('buildCommentary keeps the bare score for a gate whose description is generic', () => {
+  const commentary = buildCommentary(
+    [GREEN_PAGE],
+    [
+      {
+        name: 'Performance',
+        value: '94',
+        maximum: '100',
+        status: 'Partial',
+        description: 'The lowest Lighthouse performance score across 26 tested pages.',
+      },
+    ],
+    { decision: 'no-op', reason: 'unchanged' },
+  );
+  assert.ok(commentary.includes('Performance: 94/100 (Partial)'), commentary);
+  assert.ok(!commentary.includes('lowest Lighthouse'), commentary);
+});
+
+test('buildCommentary keeps the score for a gate that carries no description', () => {
+  const commentary = buildCommentary(
+    [GREEN_PAGE],
+    [{ name: 'Performance', value: '80', maximum: '100', status: 'Fail', description: '' }],
+    { decision: 'no-op', reason: 'unchanged' },
+  );
+  assert.ok(commentary.includes('Performance: 80/100 (Fail)'), commentary);
 });
 
 // ---------------------------------------------------------------------------
