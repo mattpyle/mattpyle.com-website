@@ -403,7 +403,7 @@ export function parseFixerChecks(finalMessage: string | null, checkCount: number
       if (entry.status !== 'pass' && entry.status !== 'fail' && entry.status !== 'not-run') continue;
       const command =
         typeof entry.command === 'string' && entry.command.trim()
-          ? clip(entry.command.replace(/[`\r\n|]+/g, ' ').replace(/\s+/g, ' ').trim(), 160)
+          ? clip(entry.command.replace(/[`\r\n]+/g, ' ').replace(/\s+/g, ' ').trim(), 160)
           : null;
       results.set(n, { n, status: entry.status, command });
     }
@@ -415,9 +415,6 @@ export function parseFixerChecks(finalMessage: string | null, checkCount: number
 // ---------------------------------------------------------------------------
 // The PR
 // ---------------------------------------------------------------------------
-
-/** One line of prose for a table cell. */
-const cell = (value: string) => value.replace(/[\r\n]+/g, ' ').replace(/\|/g, '\\|').trim();
 
 export interface FixerPrBodyInput {
   key: string;
@@ -466,12 +463,13 @@ export function buildFixerPrBody(input: FixerPrBodyInput): string {
 
   lines.push('## Verify', '');
   if (finding.measure) lines.push(`The finding's measure: ${finding.measure}`, '');
-  lines.push('| Check | Result | Command |', '|---|---|---|');
+  // A list rather than a table: a check or a command may carry a pipe, and a
+  // list needs nothing escaped.
   input.checks.forEach((check, i) => {
     const result = input.results.find((r) => r.n === i + 1);
-    lines.push(
-      `| ${i + 1}. ${cell(check)} | ${result ? result.status : 'not reported'} | ${result?.command ? `\`${result.command}\`` : ''} |`,
-    );
+    lines.push(`${i + 1}. ${check.replace(/[\r\n]+/g, ' ').trim()}`);
+    lines.push(`   - Result: ${result ? result.status : 'not reported'}`);
+    if (result?.command) lines.push(`   - Command: \`${result.command}\``);
   });
   lines.push('');
 

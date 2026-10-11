@@ -216,7 +216,7 @@ test('the check results are the last json block, read strictly', () => {
     '🤖 Generated with Claude Code',
   ].join('\n');
   assert.deepEqual(parseFixerChecks(message, 2), [
-    { n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward tail x' },
+    { n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward | tail x' },
     { n: 2, status: 'pass', command: 'npx tsc --noEmit -p agents/steward' },
   ]);
   assert.deepEqual(parseFixerChecks('No block here.', 2), []);
@@ -246,8 +246,11 @@ test('the PR body is the finding: its line, evidence, cause, measure, the checks
   assert.match(body, /## Cause\n\n`agents\/steward\/src\/workflows\/scorecard-audit\.ts` line 558, `buildCommentary\(\)` formats/);
   assert.match(body, /## Changed\n\n- `agents\/steward\/src\/workflows\/scorecard-audit\.ts`\n/);
   assert.match(body, /The finding's measure: A future run whose gate fails on axe violations/);
-  assert.match(body, /\| 1\. A unit test of `buildCommentary` .* \| pass \| `npm test -w @mattpyle\/steward` \|/);
-  assert.match(body, /\| 2\. `npx tsc --noEmit -p agents\/steward` is clean\. \| not reported \|  \|/);
+  assert.match(
+    body,
+    /\n1\. A unit test of `buildCommentary` .*\n   - Result: pass\n   - Command: `npm test -w @mattpyle\/steward`\n/,
+  );
+  assert.match(body, /\n2\. `npx tsc --noEmit -p agents\/steward` is clean\.\n   - Result: not reported\n\n/);
   assert.ok(body.includes(`Finding: \`${DEFECT_KEY}\``));
   assert.match(body, /Steward never merges\.\*$/);
   assert.doesNotMatch(body, /Incomplete run/);

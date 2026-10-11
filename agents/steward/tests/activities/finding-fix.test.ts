@@ -150,7 +150,7 @@ test('a finished run opens a ready PR titled from the handoff, with the body fro
   assert.equal(pull.draft, false);
   assert.equal(pull.title, 'Name the failing reason in scorecard commentary');
   assert.match(pull.body, /^Fixes one finding from Argus/);
-  assert.match(pull.body, /\| pass \| `npm test -w @mattpyle\/steward` \|/);
+  assert.match(pull.body, /- Result: pass\n   - Command: `npm test -w @mattpyle\/steward`/);
 });
 
 test('a non-zero exit with changes present opens a draft PR marked incomplete', async () => {
@@ -159,7 +159,7 @@ test('a non-zero exit with changes present opens a draft PR marked incomplete', 
   assert.equal(result.draft, true);
   assert.equal(fake.pulls[0].draft, true);
   assert.match(fake.pulls[0].body, /^> \*\*Incomplete run\.\*\* Claude Code exited 1\./);
-  assert.match(fake.pulls[0].body, /\| not reported \|/);
+  assert.match(fake.pulls[0].body, /- Result: not reported/);
 });
 
 test('a run killed at its time limit opens a draft PR that says so', async () => {
