@@ -1,71 +1,200 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { createInterface } from 'node:readline';
 import { ApplicationFailure, Context } from '@temporalio/activity';
+import { CancelledFailure } from '@temporalio/common';
 import { FIXER_WORKTREE_DIR, GITHUB_REPO, SITE_DIR, STEWARD_DIR } from '../config.js';
+import { runClaude } from '../lib/claude-runner.js';
+import { parseFindingBody } from '../lib/findings.js';
 import { git, needsInstall, recordInstall, worktreeExists } from '../lib/git.js';
+import { openOrUpdatePr, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
 import { gh } from '../lib/github.js';
 import { log } from '../lib/logger.js';
-import { killTree, runCancellable } from '../lib/proc.js';
+import { runCancellable } from '../lib/proc.js';
 import {
   FINAL_MESSAGE_MAX,
+  HANDOFF_SYSTEM_PROMPT,
   buildFixerPrBody,
   claudeArgs,
+  cleanHandoff,
   fixerChildEnv,
   fixerPrompt,
   fixerSystemPrompt,
-  initialClaudeRunState,
+  handoffGeneratorPrompt,
+  isIncompleteRun,
+  parseFixerChecks,
   parseHandoff,
-  reduceClaudeEvent,
-  type ClaudeRunState,
+  validateHandoff,
+  type FixerCheckResult,
 } from '../lib/fixer.js';
 import { npmCommand } from './build-audit.js';
 
 /**
- * `runFixer`: Claude Code, headless, on one handoff, in its own worktree.
+ * The fixer's three laptop activities: write the handoff, run Claude Code on
+ * it, open the PR. `fixFindingWorkflow` runs them in that order between a read
+ * of the finding and the write back to it.
  *
- * A spike. It answers what running `claude -p` inside an activity takes, and
- * the fixer workflow proper is built from what it reports, so the result
- * carries timings and the model's own account rather than only a PR URL.
+ * All three need this machine: the first two its Claude Code login, the second
+ * its checkout and git credentials. They run on `steward-heavy`, which only the
+ * laptop worker polls.
  *
- * The shape follows `buildAndAuditDraft`, the other activity that is minutes
+ * `runFixer` follows `buildAndAuditDraft`, the other activity that is minutes
  * long and owns a child process: a background heartbeat pump, the child killed
- * as a tree on cancellation, cleanup in `finally`. It adds one thing that
- * activity does not need, a deadline of its own on the child. The model's turn
- * is the only step with no natural end, and the commit, push and PR have to
- * fit inside the activity's `startToCloseTimeout` after it.
+ * as a tree on cancellation, cleanup in `finally`.
  */
 
 const HEARTBEAT_MS = 5_000;
 
+/** The findings repository's only branch. */
+const FINDINGS_BRANCH = 'main';
+
 /**
  * How long Claude Code may run. Fifteen minutes under the stub's 45, which is
- * a cold `npm ci` before it and the publish after it with room to spare.
+ * a cold `npm ci` before it and the commit and push after it with room to spare.
  */
 const CLAUDE_TIMEOUT_MS = 30 * 60_000;
+
+/**
+ * How long Claude Code may say nothing. The stream carries an event per turn
+ * and none during a tool call, and one Bash call may run for ten minutes, so
+ * the limit sits above that.
+ */
+const CLAUDE_STALL_MS = 12 * 60_000;
+
+/** The generator is one turn with no tools: four minutes is a hung call. */
+const GENERATOR_TIMEOUT_MS = 4 * 60_000;
 
 const INSTALL_STATE = path.join(STEWARD_DIR, '.cache', 'fixer-worktree-install.json');
 
 /** Project instructions the worktree lacks because they are gitignored. */
 const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'];
 
-export interface RunFixerInput {
-  /** Repo-relative path of the handoff, under `docs/handoffs/`. */
+// ---------------------------------------------------------------------------
+// generateHandoff
+// ---------------------------------------------------------------------------
+
+export interface GenerateHandoffInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  key: string;
+  /** The finding file as the workflow read it, frontmatter included. */
+  findingText: string;
+  /** `sites/<site>/handoffs/<key>.md` */
   handoffPath: string;
+}
+
+export interface GenerateHandoffResult {
+  /** The handoff, as written to the findings repository. */
+  handoff: string;
+  title: string;
+  /** The commit that wrote it, or null when the file already held this text. */
+  commitSha: string | null;
+  claude: { model: string | null; costUsd: number | null; durationMs: number | null };
+}
+
+/**
+ * One `claude -p` call, no tools, that turns a finding into a handoff, then
+ * one Contents API write of it (design decision 20).
+ *
+ * The call runs in an empty directory with `--safe-mode` and its own system
+ * prompt, so the finding is the only document in the model's context: no
+ * `CLAUDE.md`, no plugin, no hook. A reply that fails {@link validateHandoff}
+ * fails the activity, and the retry asks again.
+ */
+export async function generateHandoff(input: GenerateHandoffInput): Promise<GenerateHandoffResult> {
+  const ctx = Context.current();
+  const pump = setInterval(() => ctx.heartbeat('claude -p: writing the handoff'), HEARTBEAT_MS);
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-handoff-'));
+  try {
+    const run = await runClaude({
+      command: 'claude',
+      argv: [
+        '-p',
+        handoffGeneratorPrompt({ key: input.key, finding: input.findingText }),
+        '--output-format',
+        'stream-json',
+        '--verbose',
+        '--system-prompt',
+        HANDOFF_SYSTEM_PROMPT,
+        '--strict-mcp-config',
+        '--safe-mode',
+        '--tools',
+        '',
+      ],
+      cwd,
+      env: fixerChildEnv(process.env),
+      signal: ctx.cancellationSignal,
+      timeoutMs: GENERATOR_TIMEOUT_MS,
+      stallMs: GENERATOR_TIMEOUT_MS,
+    });
+    if (run.cancelled) throw new CancelledFailure('cancelled while the handoff was being written');
+    if (run.exitCode !== 0 || !run.state.finalMessage) {
+      throw new Error(
+        `claude -p exited ${run.exitCode}${run.timedOut || run.stalled ? ' (stopped at its time limit)' : ''} without a handoff. stderr: ${run.stderrTail || '(empty)'}`,
+      );
+    }
+
+    const handoff = cleanHandoff(run.state.finalMessage);
+    const problems = validateHandoff(handoff, input.key);
+    if (problems.length > 0) {
+      throw ApplicationFailure.create({
+        type: 'HandoffInvalid',
+        message: `The generated handoff for ${input.key} was refused: ${problems.join('; ')}.`,
+      });
+    }
+
+    ctx.heartbeat('writing the handoff to the findings repository');
+    const existing = await readRepoFile(input.handoffPath, FINDINGS_BRANCH, input.repo);
+    let commitSha: string | null = null;
+    if (existing?.text !== handoff) {
+      commitSha = (
+        await writeRepoFile({
+          repo: input.repo,
+          path: input.handoffPath,
+          text: handoff,
+          message: `handoff ${input.key}`,
+          branch: FINDINGS_BRANCH,
+          sha: existing?.sha,
+        })
+      ).commitSha;
+    }
+
+    const claude = { model: run.state.model, costUsd: run.state.costUsd, durationMs: run.state.durationMs };
+    log.info({ activity: 'generateHandoff', key: input.key, commitSha, ...claude }, 'handoff generated');
+    return { handoff, title: parseHandoff(handoff).title, commitSha, claude };
+  } finally {
+    clearInterval(pump);
+    await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// runFixer
+// ---------------------------------------------------------------------------
+
+export interface RunFixerInput {
+  key: string;
+  /** The handoff markdown. It rides in the prompt; the run is given no path. */
+  handoff: string;
   /** The branch to create and push. */
   branch: string;
 }
 
 export interface RunFixerResult {
-  prUrl: string;
   branch: string;
+  /** The site repository's default branch, which the PR points at. */
+  base: string;
   commitSha: string;
   filesChanged: string[];
+  /** The Verify results the run reported, read strictly from its final message. */
+  checks: FixerCheckResult[];
   claude: {
     exitCode: number;
     timedOut: boolean;
-    /** What the model said it did, capped at `FINAL_MESSAGE_MAX`. */
+    /**
+     * What the model said it did, capped at `FINAL_MESSAGE_MAX`. It stays here,
+     * in the workflow history: nothing publishes it.
+     */
     finalMessage: string | null;
     model: string | null;
     sessionId: string | null;
@@ -75,7 +204,7 @@ export interface RunFixerResult {
   };
   /** True when `npm ci` ran, false when the lockfile-hash cache held. */
   npmCi: boolean;
-  timingsMs: { worktree: number; install: number; claude: number; publish: number; total: number };
+  timingsMs: { worktree: number; install: number; claude: number; push: number; total: number };
 }
 
 /**
@@ -87,101 +216,34 @@ export interface RunFixerResult {
  */
 let busy: string | undefined;
 
-/** The handoff's absolute path, refused unless it is a markdown file under `docs/handoffs/`. */
-function resolveHandoff(handoffPath: string): string {
-  const root = path.join(SITE_DIR, 'docs', 'handoffs');
-  const abs = path.resolve(SITE_DIR, handoffPath);
-  if (path.dirname(abs) !== root || path.extname(abs) !== '.md') {
-    throw ApplicationFailure.nonRetryable(
-      `${handoffPath} is not a markdown file directly under docs/handoffs/.`,
-      'BadHandoffPath',
-    );
-  }
-  return abs;
-}
-
-interface ClaudeOutcome {
-  exitCode: number;
-  timedOut: boolean;
-  state: ClaudeRunState;
-  stderrTail: string;
-}
-
 /**
- * Spawns Claude Code and folds its event stream into `ClaudeRunState`.
+ * Claude Code, headless, on one handoff, in the fixer's own worktree. It ends
+ * with the branch pushed; `openFixerPr` opens the PR.
  *
- * Its own spawn rather than `runCancellable`, for three reasons that helper
- * does not cover: the environment is filtered rather than extended, stdout is
- * read as it arrives so the heartbeat can carry it, and stdin is closed.
- * `claude -p` reads a prompt from stdin when stdin is a pipe, and an open pipe
- * nobody writes to is a run that waits forever.
+ * **How a run can end**, and what the activity does with each:
+ *
+ * | The run | The activity |
+ * |---|---|
+ * | exits 0 with changes | commits, pushes, returns |
+ * | exits non-zero, or is killed at 30 minutes, with changes | the same, and the result says so, which makes the PR a draft |
+ * | ends any way with no changes | fails, `FixerProducedNothing` |
+ * | says nothing for 12 minutes | kills it and fails, `FixerStalled` |
+ * | is cancelled | kills it and reports the cancellation |
  */
-async function runClaude(args: {
-  argv: string[];
-  cwd: string;
-  signal: AbortSignal;
-  onActivity: (activity: string) => void;
-}): Promise<ClaudeOutcome> {
-  const child = spawn('claude', args.argv, {
-    cwd: args.cwd,
-    env: fixerChildEnv(process.env),
-    windowsHide: true,
-    shell: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  let state = initialClaudeRunState();
-  let stderrTail = '';
-  let timedOut = false;
-
-  createInterface({ input: child.stdout! }).on('line', (line) => {
-    state = reduceClaudeEvent(state, line);
-    args.onActivity(state.lastActivity);
-  });
-  child.stderr!.on('data', (c: Buffer) => {
-    stderrTail = (stderrTail + c.toString()).slice(-4000);
-  });
-
-  const kill = () => killTree(child.pid);
-  args.signal.addEventListener('abort', kill, { once: true });
-  const deadline = setTimeout(() => {
-    timedOut = true;
-    kill();
-  }, CLAUDE_TIMEOUT_MS);
-
-  try {
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', (code) => resolve(code ?? -1));
-    });
-    return { exitCode, timedOut, state, stderrTail };
-  } finally {
-    clearTimeout(deadline);
-    args.signal.removeEventListener('abort', kill);
-  }
-}
-
 export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
   const ctx = Context.current();
   const signal = ctx.cancellationSignal;
   const started = Date.now();
-  const handoffAbs = resolveHandoff(input.handoffPath);
 
-  let handoffRaw: string;
-  try {
-    handoffRaw = await fs.readFile(handoffAbs, 'utf8');
-  } catch {
-    throw ApplicationFailure.nonRetryable(`${input.handoffPath} does not exist.`, 'BadHandoffPath');
-  }
-  const handoff = parseHandoff(handoffRaw);
+  const handoff = parseHandoff(input.handoff);
   if (!handoff.title) {
-    throw ApplicationFailure.nonRetryable(`${input.handoffPath} has no H1 to title the PR with.`, 'BadHandoffPath');
+    throw ApplicationFailure.nonRetryable(`The handoff for ${input.key} has no H1 to title the commit with.`, 'HandoffInvalid');
   }
 
   if (busy) {
     throw ApplicationFailure.nonRetryable(`The fixer worktree is in use by ${busy}.`, 'FixerBusy');
   }
-  busy = input.handoffPath;
+  busy = input.key;
 
   let phase = 'starting';
   const pump = setInterval(() => ctx.heartbeat(phase), HEARTBEAT_MS);
@@ -222,6 +284,7 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
       step('npm ci');
       const ci = npmCommand(['ci']);
       const res = await runCancellable(ci.binary, ci.args, { cwd: FIXER_WORKTREE_DIR, signal });
+      if (signal.aborted) throw new CancelledFailure('cancelled during npm ci');
       if (res.exitCode !== 0) {
         throw new Error(`npm ci failed (exit ${res.exitCode}):\n${res.stderr.slice(-4000)}`);
       }
@@ -232,15 +295,17 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
     // --- 4. Claude Code -----------------------------------------------------
     step('claude -p: starting');
     const claudeStarted = Date.now();
-    const vaultDir = path.join(SITE_DIR, 'docs');
     const run = await runClaude({
+      command: 'claude',
       argv: claudeArgs({
-        prompt: fixerPrompt(handoffAbs),
-        systemPrompt: fixerSystemPrompt({ branch: input.branch, base, vaultDir }),
-        addDir: vaultDir,
+        prompt: fixerPrompt(input.handoff),
+        systemPrompt: fixerSystemPrompt({ branch: input.branch, base }),
       }),
       cwd: FIXER_WORKTREE_DIR,
+      env: fixerChildEnv(process.env),
       signal,
+      timeoutMs: CLAUDE_TIMEOUT_MS,
+      stallMs: CLAUDE_STALL_MS,
       onActivity: (activity) => {
         phase = `claude -p: ${activity}`;
       },
@@ -257,18 +322,28 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
       costUsd: run.state.costUsd,
       permissionDenials: run.state.permissionDenials,
     };
-    log.info({ activity: 'runFixer', handoff: input.handoffPath, claudeMs, ...claude }, 'claude -p exited');
-    if (signal.aborted) throw new Error('cancelled while Claude Code was running');
+    log.info(
+      { activity: 'runFixer', key: input.key, claudeMs, cancelled: run.cancelled, stalled: run.stalled, ...claude, finalMessage: undefined },
+      'claude -p exited',
+    );
+    if (run.cancelled) throw new CancelledFailure('cancelled while Claude Code was running');
+    if (run.stalled) {
+      throw ApplicationFailure.nonRetryable(
+        `Claude Code said nothing for ${CLAUDE_STALL_MS / 60_000} minutes and was stopped. ` +
+          `It was last seen at: ${run.state.lastActivity}. The worktree holds what it left.`,
+        'FixerStalled',
+      );
+    }
 
     // --- 5. Commit ----------------------------------------------------------
     step('committing');
-    const publishStarted = Date.now();
+    const pushStarted = Date.now();
     // `add -A` is safe here and nowhere else: this tree was reset to the base a
     // moment ago, so everything unignored in it is the run's own work.
     await git(FIXER_WORKTREE_DIR, ['add', '-A']);
     const staged = await git(FIXER_WORKTREE_DIR, ['diff', '--cached', '--name-only']);
     if (staged) {
-      await git(FIXER_WORKTREE_DIR, ['commit', '-m', handoff.title]);
+      await git(FIXER_WORKTREE_DIR, ['commit', '-m', handoff.title, '-m', `Finding: ${input.key}`]);
     }
     // Compared against the base rather than read off `staged`, so a run that
     // committed for itself despite the deny rule still counts as having worked.
@@ -290,51 +365,21 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
     // Same reason `publishPost` detaches: a branch checked out in any worktree
     // cannot be deleted, including by the human cleaning up after the merge.
     await git(FIXER_WORKTREE_DIR, ['checkout', '--detach']).catch(() => {});
-
-    // --- 7. The PR ----------------------------------------------------------
-    step('opening the PR');
-    const incomplete = run.timedOut || run.exitCode !== 0;
-    const body = buildFixerPrBody({
-      verify: handoff.verify,
-      finalMessage,
-      exitCode: run.exitCode,
-      timedOut: run.timedOut,
-    });
-    const title = handoff.title.charAt(0).toUpperCase() + handoff.title.slice(1);
-    const owner = GITHUB_REPO.split('/')[0];
-    const existing = await gh(
-      `/repos/${GITHUB_REPO}/pulls?head=${encodeURIComponent(`${owner}:${input.branch}`)}&state=open`,
-    );
-    let prUrl: string;
-    if (Array.isArray(existing) && existing.length > 0) {
-      prUrl = (
-        await gh(`/repos/${GITHUB_REPO}/pulls/${existing[0].number}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ title, body }),
-        })
-      ).html_url;
-    } else {
-      prUrl = (
-        await gh(`/repos/${GITHUB_REPO}/pulls`, {
-          method: 'POST',
-          body: JSON.stringify({ title, body, head: input.branch, base, draft: incomplete }),
-        })
-      ).html_url;
-    }
-    const publishMs = Date.now() - publishStarted;
+    const pushMs = Date.now() - pushStarted;
 
     return {
-      prUrl,
       branch: input.branch,
+      base,
       commitSha,
       filesChanged,
+      checks: parseFixerChecks(finalMessage, handoff.checks.length),
       claude,
       npmCi: install.needed,
       timingsMs: {
         worktree: worktreeMs,
         install: installMs,
         claude: claudeMs,
-        publish: publishMs,
+        push: pushMs,
         total: Date.now() - started,
       },
     };
@@ -342,4 +387,53 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
     clearInterval(pump);
     busy = undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// openFixerPr
+// ---------------------------------------------------------------------------
+
+export interface OpenFixerPrInput {
+  key: string;
+  /** The finding file, frontmatter included: the body is written from it. */
+  findingText: string;
+  /** The handoff, for its title and its Verify checks. */
+  handoff: string;
+  branch: string;
+  base: string;
+  filesChanged: string[];
+  checks: FixerCheckResult[];
+  exitCode: number;
+  timedOut: boolean;
+}
+
+export interface OpenFixerPrResult {
+  prUrl: string;
+  /** True when the run was incomplete and the PR was opened as a draft. */
+  draft: boolean;
+}
+
+/**
+ * Opens the PR for a pushed fixer branch, or updates the one already open
+ * against it, with the body {@link buildFixerPrBody} writes from the finding.
+ *
+ * An incomplete run (a non-zero exit, or the 30-minute kill) opens a draft and
+ * says so in the body's first line. Steward never merges either kind.
+ */
+export async function openFixerPr(input: OpenFixerPrInput): Promise<OpenFixerPrResult> {
+  const handoff = parseHandoff(input.handoff);
+  const draft = isIncompleteRun(input);
+  const body = buildFixerPrBody({
+    key: input.key,
+    finding: parseFindingBody(input.findingText),
+    checks: handoff.checks,
+    results: input.checks,
+    filesChanged: input.filesChanged,
+    exitCode: input.exitCode,
+    timedOut: input.timedOut,
+  });
+  const title = handoff.title.charAt(0).toUpperCase() + handoff.title.slice(1);
+  const prUrl = await openOrUpdatePr({ branch: input.branch, base: input.base, title, body, draft });
+  log.info({ activity: 'openFixerPr', key: input.key, prUrl, draft }, 'fixer PR open');
+  return { prUrl, draft };
 }

@@ -39,6 +39,12 @@ that's the property being dogfooded here, on a low-stakes, real target.
   the GitHub Contents API, guarded by the blob sha. An hourly Schedule runs the reconciler, which
   starts a workflow for each new `proposed` finding and signals the ones whose file already carries a
   verdict.
+- **`fixFindingWorkflow`**: the fixer, one execution per approved finding (`fix/<site>/<key>`),
+  started by `steward finding fix <key>`. Five activities: read the finding, generate a handoff from
+  it with one tool-less `claude -p` call, run Claude Code headless on that handoff in its own
+  worktree, open one PR whose body is written from the finding, and write `status: fixing` and the PR
+  link back. It takes a finding that is approved, `kind: defect`, with a cause and a measure, and
+  refuses any other. It never merges.
 
 ### Task queues and workers
 
@@ -47,7 +53,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | Queue | Carries | Why it is where it is |
 |---|---|---|
 | `steward-light` | `reviewPost`'s passes | Reads the working copy and applies patches to local files |
-| `steward-heavy` | `buildAndAuditDraft` | Same working copy, plus a browser |
+| `steward-heavy` | `buildAndAuditDraft`, and `fixFindingWorkflow` with its activities | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
 | `steward-findings` | `findingWorkflow` and `reconcileFindingsWorkflow`, with their activities | Nothing local: the findings repository over the GitHub API, and Temporal through the worker's client |
@@ -137,6 +143,7 @@ steward finding list             # open finding workflows, one per line
 steward finding status <key>     # waiting, writing or done, and the verdict
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"
+steward finding fix <key>        # approved defect to one PR: handoff, Claude Code, PR, status fixing
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
 ```

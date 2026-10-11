@@ -9,7 +9,9 @@ import {
   isFindingSlug,
   parseFindingsIndex,
   findingsIndexPath,
+  setFrontmatterFix,
   setFrontmatterVerdict,
+  setIndexStatus,
   setIndexVerdict,
   type FindingVerdictSource,
   type FindingVerdictStatus,
@@ -200,6 +202,117 @@ export async function writeFindingVerdict(input: WriteFindingVerdictInput): Prom
   log.info(
     { activity: 'writeFindingVerdict', key: input.key, status: input.status, findingCommitSha, indexCommitSha },
     'finding verdict written',
+  );
+  return { findingCommitSha, indexCommitSha, commitSha: indexCommitSha ?? findingCommitSha };
+}
+
+export interface WriteFindingFixInput {
+  repo: string;
+  site: string;
+  key: string;
+  findingPath: string;
+  indexPath: string;
+  prUrl: string;
+}
+
+export interface WriteFindingFixResult {
+  findingCommitSha: string | null;
+  indexCommitSha: string | null;
+  /** The last commit this call made. Null when both files already said `fixing` with this PR. */
+  commitSha: string | null;
+}
+
+/**
+ * Writes `status: fixing` and `links.pr` into the finding file, then `fixing`
+ * into its index line, once the fixer's PR is open.
+ *
+ * The same guard and the same idempotence as {@link writeFindingVerdict}: each
+ * file is written with the blob sha its read returned, a 409 from a concurrent
+ * Argus push is a plain `Error` the retry policy retries from a fresh read, and
+ * an unchanged file is skipped.
+ *
+ * **It moves a finding from `approved` only.** A finding that is already
+ * `fixing` is the retry case and passes. Any other status means somebody else
+ * moved it while the fixer ran (Argus setting `resolved`, a rejection), and the
+ * write refuses rather than overrule them; the PR stays open for Matt.
+ */
+export async function writeFindingFix(input: WriteFindingFixInput): Promise<WriteFindingFixResult> {
+  const message = `fixing ${input.key}: ${input.prUrl}`;
+
+  const finding = await readRepoFile(input.findingPath, BRANCH, input.repo);
+  if (!finding) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath} is not in ${input.repo} at ${BRANCH}, so the PR link has nowhere to go.`,
+      'FindingMissing',
+    );
+  }
+  const before = parseFrontmatter(finding.text).data as Record<string, unknown>;
+  if (before.status !== 'approved' && before.status !== 'fixing') {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath} is ${String(before.status)}, not approved, so it is not marked fixing. The PR is ${input.prUrl}.`,
+      'FindingMoved',
+    );
+  }
+  let findingText: string;
+  try {
+    findingText = setFrontmatterFix(finding.text, input.prUrl);
+  } catch (err) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath}: ${err instanceof Error ? err.message : String(err)}`,
+      'FindingMalformed',
+    );
+  }
+  const readBack = parseFrontmatter(findingText).data as { status?: unknown; links?: { pr?: unknown } };
+  if (readBack.status !== 'fixing' || readBack.links?.pr !== input.prUrl) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath}: the edited frontmatter did not read back as fixing with the PR link.`,
+      'FindingMalformed',
+    );
+  }
+
+  let findingCommitSha: string | null = null;
+  if (findingText !== finding.text) {
+    const written = await writeRepoFile({
+      repo: input.repo,
+      path: input.findingPath,
+      text: findingText,
+      message,
+      branch: BRANCH,
+      sha: finding.sha,
+    });
+    findingCommitSha = written.commitSha;
+  }
+
+  const index = await readRepoFile(input.indexPath, BRANCH, input.repo);
+  if (!index) {
+    throw ApplicationFailure.nonRetryable(`${input.indexPath} is not in ${input.repo} at ${BRANCH}.`, 'FindingMissing');
+  }
+  let indexText: string;
+  try {
+    indexText = setIndexStatus(index.text, input.key, 'fixing');
+  } catch (err) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.indexPath}: ${err instanceof Error ? err.message : String(err)}`,
+      'FindingMissing',
+    );
+  }
+
+  let indexCommitSha: string | null = null;
+  if (indexText !== index.text) {
+    const written = await writeRepoFile({
+      repo: input.repo,
+      path: input.indexPath,
+      text: indexText,
+      message,
+      branch: BRANCH,
+      sha: index.sha,
+    });
+    indexCommitSha = written.commitSha;
+  }
+
+  log.info(
+    { activity: 'writeFindingFix', key: input.key, prUrl: input.prUrl, findingCommitSha, indexCommitSha },
+    'finding marked fixing',
   );
   return { findingCommitSha, indexCommitSha, commitSha: indexCommitSha ?? findingCommitSha };
 }

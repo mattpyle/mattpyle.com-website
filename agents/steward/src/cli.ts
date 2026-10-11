@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   Client,
   Connection,
+  WorkflowExecutionAlreadyStartedError,
   WorkflowNotFoundError,
   type ScheduleOptions,
   type WorkflowExecutionInfo,
@@ -59,7 +60,11 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
-import { fixerSpikeWorkflow } from './workflows/fixer-spike.js';
+import {
+  fixFindingStateQuery,
+  fixFindingWorkflow,
+  type FixFindingInput,
+} from './workflows/fix-finding.js';
 import {
   SCORECARD_SCHEDULE_ACTIONS,
   SCORECARD_SCHEDULE_DEFAULT_AT,
@@ -71,7 +76,12 @@ import {
 } from './lib/scorecard-schedule.js';
 import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 import {
+  findingHandoffPath,
+  findingPath,
   findingWorkflowId,
+  findingsIndexPath,
+  fixBranch,
+  fixWorkflowId,
   isFindingSlug,
   type FindingVerdict,
 } from './lib/findings.js';
@@ -1884,39 +1894,78 @@ finding
     await runFindingsSchedule('trigger');
   });
 
-const fixer = program
-  .command('fixer')
-  .description('The fixer: Claude Code, headless, on a handoff');
-
-fixer
-  .command('spike')
-  .argument('<handoff-path>', 'a handoff under docs/handoffs/')
-  .option('--branch <branch>', 'the branch to create and push (default feat/<handoff name>)')
-  .description('Run Claude Code on one handoff in the fixer worktree and open a PR. Needs `steward up`')
-  .action(async (handoffArg: string, opts: { branch?: string }) => {
-    const abs = path.resolve(handoffArg);
-    try {
-      await fs.access(abs);
-    } catch {
-      fail(`${handoffArg} does not exist.`);
-    }
-    // Resolved HERE and frozen into the workflow input (design rule 3): the
-    // repo-relative path and the branch are decisions, never re-derived later.
-    const handoffPath = path.relative(SITE_DIR, abs).split(path.sep).join('/');
-    const slug = path.basename(abs, '.md');
-    const branch = opts.branch ?? `feat/${slug}`;
-
+finding
+  .command('fix')
+  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .description('Fix an approved defect: generate a handoff, run Claude Code on it, open one PR. Needs `steward up`')
+  .action(async (key: string, opts: { site: string }) => {
+    // Resolved HERE and frozen into the workflow input (design rule 10): the
+    // repository, the paths and the branch are decisions, never re-derived.
+    const input: FixFindingInput = {
+      site: opts.site,
+      key,
+      repo: ARGUS_REPO,
+      findingPath: findingPath(opts.site, key),
+      indexPath: findingsIndexPath(opts.site),
+      handoffPath: findingHandoffPath(opts.site, key),
+      branch: fixBranch(key),
+      stopAfter: 'pr',
+    };
+    const workflowId = fixWorkflowId(opts.site, key);
     const c = await client();
     try {
-      const workflowId = `steward-fixer-spike-${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-      console.log(`\n  starting the fixer on ${handoffPath}, branch ${branch}`);
+      const started = Date.now();
+      let handle;
+      try {
+        handle = await c.workflow.start(fixFindingWorkflow, { workflowId, taskQueue: QUEUE_HEAVY, args: [input] });
+      } catch (err) {
+        if (!(err instanceof WorkflowExecutionAlreadyStartedError)) throw err;
+        await c.connection.close();
+        fail(`${workflowId} is already running. Watch it in ${WEB_UI}.`);
+      }
+      console.log(`\n  fixing ${key}, branch ${input.branch}`);
       console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
-      const prUrl = await c.workflow.execute(fixerSpikeWorkflow, {
-        workflowId,
-        taskQueue: QUEUE_HEAVY,
-        args: [{ handoffPath, branch }],
+
+      // The result is the answer; the query only says which of the five steps
+      // a run that takes minutes has reached.
+      let done = false;
+      const result = handle.result().finally(() => {
+        done = true;
       });
-      console.log(`  PR: ${prUrl}\n`);
+      result.catch(() => undefined);
+      let step = '';
+      while (!done) {
+        try {
+          const state = await handle.query(fixFindingStateQuery);
+          if (state.step !== step) {
+            step = state.step;
+            console.log(`  ${paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(5), DIM)}  ${step}`);
+          }
+        } catch {
+          /* no worker yet, or the workflow just closed: the result says which */
+        }
+        await Promise.race([result.catch(() => undefined), new Promise((r) => setTimeout(r, 5000))]);
+      }
+      const fixed = await result;
+
+      const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+      console.log('');
+      console.log(`  PR: ${fixed.prUrl}${fixed.draft ? '  (draft: the run was incomplete)' : ''}`);
+      console.log(`  commit: ${fixed.commitSha}  (${fixed.filesChanged.length} files)`);
+      console.log(`  finding: status fixing, commit ${fixed.findingCommitSha ?? 'none (it already said so)'}`);
+      console.log(
+        `  wall time: ${seconds(Date.now() - started)}  (Claude Code ${seconds(fixed.run.timingsMs.claude)}, exit ${fixed.run.exitCode})`,
+      );
+      console.log(`  turns: ${fixed.run.numTurns ?? 'unknown'}   model: ${fixed.run.model ?? 'unknown'}`);
+      console.log(
+        `  total_cost_usd: ${fixed.run.costUsd ?? 'unknown'}  (handoff ${fixed.run.handoffCostUsd ?? 'unknown'}), at API rates`,
+      );
+      if (fixed.run.permissionDenials.length > 0) {
+        console.log(`  refused tool calls: ${fixed.run.permissionDenials.length}`);
+        for (const denial of fixed.run.permissionDenials) console.log(`    ${denial}`);
+      }
+      console.log('');
     } finally {
       await c.connection.close();
     }

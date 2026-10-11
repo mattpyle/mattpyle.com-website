@@ -28,7 +28,8 @@ const BROWSER_ACTIVITIES = [
   ['../../src/workflows/scorecard-audit.ts', 'auditLiveUrl'],
   ['../../src/workflows/review-post.ts', 'buildAndAuditDraft'],
   // Not a browser: a model turn, which hangs the same way and for longer.
-  ['../../src/workflows/fixer-spike.ts', 'runFixer'],
+  ['../../src/workflows/fix-finding.ts', 'runFixer'],
+  ['../../src/workflows/fix-finding.ts', 'generateHandoff'],
 ] as const;
 
 /**
