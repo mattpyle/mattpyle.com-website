@@ -39,7 +39,16 @@ test('the allowlist carries no bare file tool, so no path outside the worktree i
 test('the allowlist covers the parts of the compound commands the spike saw refused', () => {
   // `npm run build 2>&1 | tail -20`, `cd agents/steward && npm test`, and the
   // environment prefix: each part needs its own rule.
-  for (const rule of ['Bash(npm run *)', 'Bash(tail *)', 'Bash(cd *)', 'Bash(npm test*)', 'Bash(SHOW_DRAFTS=true npm run *)']) {
+  // `npx tsc --noEmit; echo "tsc=$?"` is the form the first live run had refused.
+  for (const rule of [
+    'Bash(npm run *)',
+    'Bash(tail *)',
+    'Bash(cd *)',
+    'Bash(npm test*)',
+    'Bash(npx tsc *)',
+    'Bash(echo *)',
+    'Bash(SHOW_DRAFTS=true npm run *)',
+  ]) {
     assert.ok(FIXER_ALLOWED_TOOLS.includes(rule), rule);
   }
   assert.ok(FIXER_ALLOWED_TOOLS.includes('PowerShell(Select-Object *)'));

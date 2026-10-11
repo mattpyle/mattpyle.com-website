@@ -28,7 +28,11 @@ import type { ParsedFinding } from './findings.js';
  * against the list separately, so `npm run build 2>&1 | tail -20` needs a rule
  * for `tail` as well as for `npm run`. The read-only filters below are what the
  * spike's refused calls piped into. The same probe ran a redirect, a pipe, an
- * environment prefix, `;`, `&&` and `cd x &&` under this list.
+ * environment prefix, `;`, `&&` and `cd x &&` under this list. `echo`, `ls` and
+ * `cat` came from the first live run, which had four calls refused for them
+ * (`npx tsc ...; echo "tsc=$?"`). A second probe confirmed that the harness
+ * still refuses all three on a path outside the working directory, rule or no
+ * rule, so they widen nothing beyond the worktree.
  *
  * Two PowerShell forms stay refused whatever the list says, by the harness and
  * not by a rule: a `$env:` assignment and a file redirect. The system prompt
@@ -58,6 +62,9 @@ export const FIXER_ALLOWED_TOOLS = [
   'Bash(head *)',
   'Bash(grep *)',
   'Bash(wc *)',
+  'Bash(echo *)',
+  'Bash(ls *)',
+  'Bash(cat *)',
   'PowerShell(Select-Object *)',
   'PowerShell(Select-String *)',
 ];
