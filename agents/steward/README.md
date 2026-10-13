@@ -45,7 +45,14 @@ that's the property being dogfooded here, on a low-stakes, real target.
   headless on that handoff in its own worktree and then run the handoff's Verify commands, open one
   PR whose body is written from the finding and those results, and write `status: fixing` and the PR
   link back. It takes a finding that is approved, `kind: defect`, with a cause and a measure, and
-  refuses any other. It never merges.
+  refuses any other. It never merges. A generated handoff carries a `verify` list in its frontmatter:
+  the finding's measure as checks against production.
+- **`verifyFindingWorkflow`**: the verifier, one execution per run (`verify/<site>/<key>/<stamp>`),
+  started by `steward finding verify <key>` once a fix is merged and deployed. It reads the finding,
+  confirms the fixer's PR is merged, reads the handoff's `verify` list (generating it with the
+  read-only generator when an older handoff has none), measures each check against production with
+  Steward's own fetch and Chromium, and writes `resolved` or `reopened` with the measured values. An
+  empty list writes nothing. No command from a list is ever spawned.
 
 ### Task queues and workers
 
@@ -54,7 +61,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | Queue | Carries | Why it is where it is |
 |---|---|---|
 | `steward-light` | `reviewPost`'s passes | Reads the working copy and applies patches to local files |
-| `steward-heavy` | `buildAndAuditDraft`, and `fixFindingWorkflow` with its activities | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
+| `steward-heavy` | `buildAndAuditDraft`, and `fixFindingWorkflow` and `verifyFindingWorkflow` with their activities | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
 | `steward-findings` | `findingWorkflow` and `reconcileFindingsWorkflow`, with their activities | Nothing local: the findings repository over the GitHub API, and Temporal through the worker's client |
@@ -145,6 +152,7 @@ steward finding status <key>     # waiting, writing or done, and the verdict
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"
 steward finding fix <key>        # approved defect to one PR: handoff, Claude Code, PR, status fixing
+steward finding verify <key>     # fixing finding to resolved or reopened, measured on production
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
 ```

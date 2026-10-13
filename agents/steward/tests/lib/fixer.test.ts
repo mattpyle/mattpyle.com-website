@@ -30,6 +30,7 @@ import {
   DEFECT_KEY,
   OPPORTUNITY_FINDING,
   OPPORTUNITY_KEY,
+  ORIGIN,
 } from '../helpers/finding-fixtures.js';
 
 // --- What a headless run may do ----------------------------------------------
@@ -139,7 +140,7 @@ for (const [name, key, finding] of [
   ['an opportunity', OPPORTUNITY_KEY, OPPORTUNITY_FINDING],
 ] as const) {
   test(`the generator's template on ${name}: the finding, the key and the seven sections, and no vault section`, () => {
-    const prompt = handoffGeneratorPrompt({ key, finding });
+    const prompt = handoffGeneratorPrompt({ key, finding, origin: ORIGIN });
     assert.ok(prompt.includes(`Finding: \`${key}\``));
     assert.ok(prompt.includes(`<finding>\n${finding.trim()}\n</finding>`), 'the finding rides whole, between its tags');
     const skeleton = prompt.slice(prompt.indexOf('# Handoff: <title>'), prompt.indexOf('The finding:'));
@@ -173,21 +174,21 @@ test('the generator runs with the three read-only tools: no shell, no write tool
 
 test('the template is the same for every finding but for the key', () => {
   const fixed = (key: string, finding: string) => {
-    const prompt = handoffGeneratorPrompt({ key, finding });
+    const prompt = handoffGeneratorPrompt({ key, finding, origin: ORIGIN });
     return prompt.slice(0, prompt.indexOf('<finding>')).replace(key, 'KEY');
   };
   assert.equal(fixed(DEFECT_KEY, DEFECT_FINDING), fixed(OPPORTUNITY_KEY, OPPORTUNITY_FINDING));
 });
 
 test('a handoff in the template passes, with or without a code fence around it', () => {
-  assert.deepEqual(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY), []);
+  assert.deepEqual(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY, ORIGIN), []);
   const fenced = cleanHandoff(`\`\`\`markdown\r\n${DEFECT_HANDOFF.trim()}\r\n\`\`\`\r\n`);
   assert.equal(fenced, DEFECT_HANDOFF);
 });
 
 test('a handoff is refused for each way it can leave the template', () => {
   const refused = (markdown: string, pattern: RegExp) => {
-    const problems = validateHandoff(markdown, DEFECT_KEY).join('; ');
+    const problems = validateHandoff(markdown, DEFECT_KEY, ORIGIN).join('; ');
     assert.match(problems, pattern);
   };
   refused(`Here is the handoff.\n\n${DEFECT_HANDOFF}`, /first line/);
@@ -205,7 +206,7 @@ test('a handoff is refused for each way it can leave the template', () => {
     /title is 73 characters/,
   );
   // A path under agents/steward/ is the repository's, not the vault's.
-  assert.deepEqual(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY), []);
+  assert.deepEqual(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY, ORIGIN), []);
 });
 
 test('parseHandoff takes the title without its label and the Verify checks one per line', () => {

@@ -61,6 +61,22 @@ test('fix refuses a key or a site that could traverse, before anything connects'
   assert.match(site.out, /Invalid site/);
 });
 
+test('verify takes one key or --all-fixing, never both or neither, and refuses before anything connects', async () => {
+  const neither = await runCli(['finding', 'verify']);
+  assert.equal(neither.code, 1);
+  assert.match(neither.out, /Give one finding key, or --all-fixing/);
+  const both = await runCli(['finding', 'verify', 'some-key', '--all-fixing']);
+  assert.equal(both.code, 1);
+  assert.match(both.out, /Give one finding key, or --all-fixing/);
+  const key = await runCli(['finding', 'verify', '../../etc']);
+  assert.equal(key.code, 1);
+  assert.match(key.out, /Invalid key/);
+  // The checks run against one origin, and the origin is this site's.
+  const site = await runCli(['finding', 'verify', 'some-key', '--site', 'temporal-io']);
+  assert.equal(site.code, 1);
+  assert.match(site.out, /production origin of mattpyle-com only, not temporal-io/);
+});
+
 test('the spike verb is gone: the fixer starts from a finding, not a handoff path', async () => {
   const { code, out } = await runCli(['fixer', 'spike', 'docs/handoffs/x.md']);
   assert.equal(code, 1);

@@ -3,12 +3,15 @@ import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 import { QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
+import { gh } from '../lib/github.js';
 import { log } from '../lib/logger.js';
 import {
   findingWorkflowId,
   isFindingSlug,
   parseFindingsIndex,
+  parsePrUrl,
   findingsIndexPath,
+  setFindingVerification,
   setFrontmatterFix,
   setFrontmatterVerdict,
   setIndexStatus,
@@ -16,7 +19,9 @@ import {
   type FindingVerdictSource,
   type FindingVerdictStatus,
   type FindingsIndexLine,
+  type Verification,
 } from '../lib/findings.js';
+import { readHandoffVerify, validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
 
 /**
  * The findings store's activities (findings-loop design, "The store and the
@@ -313,6 +318,181 @@ export async function writeFindingFix(input: WriteFindingFixInput): Promise<Writ
   log.info(
     { activity: 'writeFindingFix', key: input.key, prUrl: input.prUrl, findingCommitSha, indexCommitSha },
     'finding marked fixing',
+  );
+  return { findingCommitSha, indexCommitSha, commitSha: indexCommitSha ?? findingCommitSha };
+}
+
+export interface FixPrState {
+  prUrl: string;
+  merged: boolean;
+  /** ISO 8601, or null while the PR is unmerged. */
+  mergedAt: string | null;
+}
+
+/**
+ * Whether the fixer's PR is merged. The verifier measures production, and a
+ * fix that is not merged cannot be there: without this read, a `fixing`
+ * finding whose PR is still open would be measured, fail and be reopened.
+ */
+export async function readFixPr(prUrl: string): Promise<FixPrState> {
+  const pr = parsePrUrl(prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
+  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  return { prUrl, merged: data.merged === true, mergedAt: (data.merged_at as string | null) ?? null };
+}
+
+export interface ReadVerifyBlockInput {
+  repo: string;
+  /** `sites/<site>/handoffs/<key>.md` */
+  handoffPath: string;
+  /** The production origin every check must name. */
+  origin: string;
+}
+
+export interface ReadVerifyBlockResult {
+  /** The handoff as it is in the findings repository. */
+  handoff: string;
+  /** False when the handoff's frontmatter has no `verify` key: it predates the block. */
+  hasBlock: boolean;
+  checks: VerifyCheck[];
+}
+
+/**
+ * The generated handoff of a finding and the `verify` block in it.
+ *
+ * A handoff with no `verify` key is a result, not a failure: the workflow
+ * generates the block. A block that is there and fails
+ * {@link validateVerifyBlock} is a failure, since a block Steward would not
+ * have written is one it does not run.
+ */
+export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<ReadVerifyBlockResult> {
+  const file = await readRepoFile(input.handoffPath, BRANCH, input.repo);
+  if (!file) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.handoffPath} is not in ${input.repo} at ${BRANCH}. The verifier reads a finding's checks from its generated handoff.`,
+      'HandoffMissing',
+    );
+  }
+  const verify = readHandoffVerify(file.text);
+  if (!verify.present) return { handoff: file.text, hasBlock: false, checks: [] };
+  const { checks, problems } = validateVerifyBlock(verify.raw, input.origin);
+  if (problems.length > 0) {
+    throw ApplicationFailure.nonRetryable(
+      `The verify block in ${input.handoffPath} was refused: ${problems.join('; ')}.`,
+      'VerifyBlockInvalid',
+    );
+  }
+  return { handoff: file.text, hasBlock: true, checks };
+}
+
+export interface WriteFindingVerificationInput {
+  repo: string;
+  site: string;
+  key: string;
+  findingPath: string;
+  indexPath: string;
+  verification: Verification;
+}
+
+export interface WriteFindingVerificationResult {
+  findingCommitSha: string | null;
+  indexCommitSha: string | null;
+  /** The last commit this call made. Null when both files already held this result. */
+  commitSha: string | null;
+}
+
+/**
+ * Writes the verifier's result into the finding file, then into its index
+ * line: `resolved` with `resolved_run`, or `reopened`, and the `## Verification`
+ * section with each measured value.
+ *
+ * The same guard and the same idempotence as {@link writeFindingVerdict}.
+ *
+ * **It moves a finding from `fixing` only.** A file that already holds this
+ * run's status is the retry case and passes. Any other status means somebody
+ * moved the finding while the checks ran, and the write refuses.
+ */
+export async function writeFindingVerification(
+  input: WriteFindingVerificationInput,
+): Promise<WriteFindingVerificationResult> {
+  const { status } = input.verification;
+  const message = `verify ${input.key}: ${status}`;
+
+  const finding = await readRepoFile(input.findingPath, BRANCH, input.repo);
+  if (!finding) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath} is not in ${input.repo} at ${BRANCH}, so the result has nowhere to go.`,
+      'FindingMissing',
+    );
+  }
+  const before = parseFrontmatter(finding.text).data as Record<string, unknown>;
+  const retry = before.status === status && finding.text.includes(input.verification.workflowId);
+  if (before.status !== 'fixing' && !retry) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath} is ${String(before.status)}, not fixing, so it is not marked ${status}.`,
+      'FindingMoved',
+    );
+  }
+  let findingText: string;
+  try {
+    findingText = setFindingVerification(finding.text, input.verification);
+  } catch (err) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath}: ${err instanceof Error ? err.message : String(err)}`,
+      'FindingMalformed',
+    );
+  }
+  const readBack = parseFrontmatter(findingText).data as Record<string, unknown>;
+  if (readBack.status !== status || (readBack.key !== undefined && readBack.key !== input.key)) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath}: the edited frontmatter did not read back as ${status} for ${input.key}.`,
+      'FindingMalformed',
+    );
+  }
+
+  let findingCommitSha: string | null = null;
+  if (findingText !== finding.text) {
+    const written = await writeRepoFile({
+      repo: input.repo,
+      path: input.findingPath,
+      text: findingText,
+      message,
+      branch: BRANCH,
+      sha: finding.sha,
+    });
+    findingCommitSha = written.commitSha;
+  }
+
+  const index = await readRepoFile(input.indexPath, BRANCH, input.repo);
+  if (!index) {
+    throw ApplicationFailure.nonRetryable(`${input.indexPath} is not in ${input.repo} at ${BRANCH}.`, 'FindingMissing');
+  }
+  let indexText: string;
+  try {
+    indexText = setIndexStatus(index.text, input.key, status);
+  } catch (err) {
+    throw ApplicationFailure.nonRetryable(
+      `${input.indexPath}: ${err instanceof Error ? err.message : String(err)}`,
+      'FindingMissing',
+    );
+  }
+
+  let indexCommitSha: string | null = null;
+  if (indexText !== index.text) {
+    const written = await writeRepoFile({
+      repo: input.repo,
+      path: input.indexPath,
+      text: indexText,
+      message,
+      branch: BRANCH,
+      sha: index.sha,
+    });
+    indexCommitSha = written.commitSha;
+  }
+
+  log.info(
+    { activity: 'writeFindingVerification', key: input.key, status, findingCommitSha, indexCommitSha },
+    'finding verification written',
   );
   return { findingCommitSha, indexCommitSha, commitSha: indexCommitSha ?? findingCommitSha };
 }
