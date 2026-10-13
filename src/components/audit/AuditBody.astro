@@ -56,6 +56,7 @@ import {
   SECTIONS,
   TOOL,
 } from '../../data/audit-copy.mjs';
+import { splitInlineCode } from '../../lib/inline-code.mjs';
 
 interface CheckRow {
   id: string;
@@ -218,7 +219,7 @@ const { address, failure, report, byGroup } = Astro.props;
                   <li class="check-row">
                     <span class="check-text">
                       <span class="check-name">{check.title}</span>
-                      <span class="check-detail">{check.plain}</span>
+                      <span class="check-detail">{splitInlineCode(check.plain).map(part => (part.code ? <code>{part.text}</code> : part.text))}</span>
                     </span>
                     <span class="check-weight">{check.severity}</span>
                   </li>
@@ -656,6 +657,17 @@ const { address, failure, report, byGroup } = Astro.props;
     line-height: 1.55;
     color: var(--ink-6);
     overflow-wrap: anywhere;
+  }
+
+  /* The inline code treatment /steward gives the same descriptions. */
+  .check-detail code {
+    font-family: var(--font-mono-plex);
+    font-size: .85em;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink-2);
   }
 
   .check-weight {

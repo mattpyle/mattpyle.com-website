@@ -51,9 +51,15 @@
     - paragraph: Whether the content comes back in a form a model can read.
     - paragraph: 3 checks
     - list "Content access":
-      - listitem: "The homepage serves markdown when asked for it A request for the homepage with `Accept: text/markdown` returns markdown, not HTML with a markdown content type. high"
+      - listitem:
+        - text: The homepage serves markdown when asked for it A request for the homepage with
+        - code: "Accept: text/markdown"
+        - text: returns markdown, not HTML with a markdown content type. high
       - listitem: A content page serves markdown when asked for it The same question against a real content page, taken from the site’s own sitemap rather than guessed. high
-      - listitem: "The homepage advertises its alternates in a Link header The homepage points at its own machine-readable alternates in a `Link` header, where a client sees them before parsing anything. low"
+      - listitem:
+        - text: The homepage advertises its alternates in a Link header The homepage points at its own machine-readable alternates in a
+        - code: Link
+        - text: header, where a client sees them before parsing anything. low
 - contentinfo:
   - text: Matt Pyle
   - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
