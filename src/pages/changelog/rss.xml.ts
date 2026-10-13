@@ -28,7 +28,11 @@ export async function GET(context: APIContext) {
     title: 'Matt Pyle — Changelog',
     description:
       'What shipped on mattpyle.com. Features, experiments, content and infrastructure changes on a personal site used as a testbed for agent-ready web standards.',
-    site: context.site!,
+    // `site` is the channel link, the feed's home in a reader, so it points at
+    // /changelog/ and not the site root. It is also the base for the item links,
+    // which stay correct because they are root-relative: a leading `/` resolves
+    // against the origin.
+    site: new URL('/changelog/', context.site),
     items: entries.map((entry) => ({
       title: entry.data.title,
       description: entry.data.summary,
