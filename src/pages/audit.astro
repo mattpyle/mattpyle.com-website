@@ -80,6 +80,7 @@ import { fixtureAudit } from '../lib/audit-fixture.mjs';
 import { PAGE_DESCRIPTION, PAGE_SEO_TITLE, PAGE_TITLE, errorView } from '../data/audit-copy.mjs';
 import { STEWARD_FAST_CHECKS } from '../data/steward-audit-checks.mjs';
 import { GROUPS } from '../lib/audit-report.mjs';
+import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 export const prerender = false;
 
@@ -139,6 +140,7 @@ const method = Astro.request.method;
 
 /** The whole of what the template renders, filled in by whichever branch below runs. */
 let address = '';
+let markdownQuery = '';
 let report: ReturnType<typeof reportView> | null = null;
 let failure: ReturnType<typeof errorView> | null = null;
 
@@ -232,6 +234,7 @@ if (method === 'POST') {
 
   if (asked) {
     address = asked;
+    markdownQuery = `?url=${encodeURIComponent(asked)}`;
     let origin = '';
     try {
       origin = originFor(asked, normaliseTarget);
@@ -290,6 +293,12 @@ const title = PAGE_TITLE;
 const seoTitle = PAGE_SEO_TITLE;
 const description = PAGE_DESCRIPTION;
 
+// The head link names the document negotiation would serve for this same URL. The path comes from
+// the negotiation map, so the link and the sibling the middleware serves cannot drift; on this page
+// the query string is the report, so it rides along. Layout wants the prop absent rather than null.
+const markdownSibling = markdownSiblingFor('/audit/');
+const markdownUrl = markdownSibling ? `${markdownSibling}${markdownQuery}` : undefined;
+
 /**
  * A rendered report is `noindex`, the bare page is not.
  *
@@ -300,7 +309,13 @@ const description = PAGE_DESCRIPTION;
 const noindex = Boolean(report);
 ---
 
-<Layout title={title} seoTitle={seoTitle} description={description} noindex={noindex}>
+<Layout
+  title={title}
+  seoTitle={seoTitle}
+  description={description}
+  noindex={noindex}
+  markdownAlternate={markdownUrl}
+>
   <AuditHero />
   <AuditBody address={address} failure={failure} report={report} byGroup={byGroup} />
 </Layout>
