@@ -32,6 +32,47 @@ test('tables survive as tables', () => {
   assert.match(markdown, /\| `limit` \| integer \|/);
 });
 
+test('a row-header table becomes a list of labelled facts', () => {
+  // The shape Astro builds for the Steward facts table: no thead, a caption, and a scoped-style
+  // attribute on every element.
+  const markdown = pageToMarkdown(
+    page(
+      '<h1>Steward</h1><table class="facts" tabindex="0" data-astro-cid-x=""><caption class="sr-only" data-astro-cid-x="">What one Steward request is</caption><tbody data-astro-cid-x="">' +
+        '<tr data-astro-cid-x=""><th scope="row" data-astro-cid-x="">User-Agent</th><td data-astro-cid-x=""><code data-astro-cid-x="">steward-audit/1.0</code></td></tr>' +
+        '<tr data-astro-cid-x=""><th scope="row" data-astro-cid-x="">Frequency</th><td data-astro-cid-x="">Once, when a person or an agent asks.</td></tr>' +
+        '</tbody></table>'
+    )
+  );
+  assert.match(markdown, /^-\s+\*\*User-Agent:\*\* `steward-audit\/1\.0`$/m);
+  assert.match(markdown, /^-\s+\*\*Frequency:\*\* Once, when a person or an agent asks\.$/m);
+  for (const leftover of ['data-astro-cid', '<table', '<th', '<td']) {
+    assert.equal(markdown.includes(leftover), false, leftover);
+  }
+
+  const caption = markdown.indexOf('What one Steward request is');
+  assert.notEqual(caption, -1);
+  assert.equal(caption < markdown.search(/^-\s+\*\*/m), true);
+});
+
+test('a thead table with row headers in its body is still a pipe table', () => {
+  const markdown = pageToMarkdown(
+    page(
+      '<h1>Limits</h1><table><thead><tr><th>Tier</th><th>Cap</th></tr></thead><tbody><tr><th scope="row">Fast</th><td>10</td></tr></tbody></table>'
+    )
+  );
+  assert.match(markdown, /\| Tier \| Cap \|/);
+  assert.match(markdown, /\| --- \| --- \|/);
+  assert.match(markdown, /\| Fast \| 10 \|/);
+  assert.equal(markdown.includes('**'), false);
+});
+
+test('a table with no heading row and only data cells is still kept as HTML', () => {
+  const markdown = pageToMarkdown(
+    page('<h1>Page</h1><table><tbody><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></tbody></table>')
+  );
+  assert.equal(markdown.includes('<table'), true);
+});
+
 test('links survive with their root-relative hrefs', () => {
   const markdown = pageToMarkdown(page('<h1>Page</h1><p>See <a href="/writing/">the writing</a>.</p>'));
   assert.match(markdown, /\[the writing\]\(\/writing\/\)/);

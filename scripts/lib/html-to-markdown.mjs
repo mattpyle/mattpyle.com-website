@@ -152,6 +152,52 @@ function hoistBlockLinks(root) {
   }
 }
 
+// The gfm plugin converts a table only when its first row is a heading row, and keeps every
+// other table as raw HTML, scoped-style attributes and all. A row-header table (no `thead`,
+// each row one `th` then one `td`) is a list of labelled facts, and markdown has a shape for
+// that: one `**Label:** value` item per row. The caption is content and goes ahead of the
+// list as a paragraph. Any other table without a heading row is left to the plugin.
+function isRowHeaderTable(table) {
+  if (asArray(table.children).some((child) => child.tagName === 'THEAD')) return false;
+  const rows = asArray(table.rows);
+  if (rows.length === 0) return false;
+  return rows.every((row) => {
+    const cells = asArray(row.children);
+    return cells.length === 2 && cells[0].tagName === 'TH' && cells[1].tagName === 'TD';
+  });
+}
+
+function listRowHeaderTables(root) {
+  for (const table of asArray(root.getElementsByTagName('table'))) {
+    if (!isRowHeaderTable(table)) continue;
+
+    const document = table.ownerDocument;
+    const list = document.createElement('ul');
+    for (const row of asArray(table.rows)) {
+      const [header, cell] = asArray(row.children);
+      const label = document.createElement('strong');
+      while (header.firstChild) label.appendChild(header.firstChild);
+      label.appendChild(document.createTextNode(':'));
+
+      const item = document.createElement('li');
+      item.appendChild(label);
+      item.appendChild(document.createTextNode(' '));
+      while (cell.firstChild) item.appendChild(cell.firstChild);
+      list.appendChild(item);
+    }
+
+    const parent = table.parentNode;
+    const caption = asArray(table.children).find((child) => child.tagName === 'CAPTION');
+    if (caption) {
+      const paragraph = document.createElement('p');
+      while (caption.firstChild) paragraph.appendChild(caption.firstChild);
+      parent.insertBefore(paragraph, table);
+    }
+    parent.insertBefore(list, table);
+    parent.removeChild(table);
+  }
+}
+
 function prune(node) {
   for (const child of asArray(node.children)) {
     if (isDroppable(child)) child.remove();
@@ -188,6 +234,7 @@ export function pageToMarkdown(html) {
   const root = document.getElementById('main-content');
   prune(root);
   hoistBlockLinks(root);
+  listRowHeaderTables(root);
   separateAdjacentElements(root);
 
   const body = service.turndown(root).trim();
