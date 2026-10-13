@@ -159,7 +159,24 @@ test('a non-zero exit with changes present opens a draft PR marked incomplete', 
   assert.equal(result.draft, true);
   assert.equal(fake.pulls[0].draft, true);
   assert.match(fake.pulls[0].body, /^> \*\*Incomplete run\.\*\* Claude Code exited 1\./);
-  assert.match(fake.pulls[0].body, /- Result: not reported/);
+  assert.match(fake.pulls[0].body, /- Result: not-run/);
+});
+
+test('a finished run with a failed check opens a draft PR that says a check failed', async () => {
+  fake = installFakeGitHub();
+  const result = await openFixerPr(
+    prInput({
+      checks: [
+        { n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward' },
+        { n: 2, status: 'pass', command: 'npx tsc --noEmit -p agents/steward' },
+      ],
+    }),
+  );
+  assert.equal(result.draft, true);
+  assert.equal(fake.pulls[0].draft, true);
+  assert.match(fake.pulls[0].body, /^> \*\*A check failed\.\*\* Steward ran the Verify commands on this branch after the run\./);
+  assert.doesNotMatch(fake.pulls[0].body, /Incomplete run/);
+  assert.match(fake.pulls[0].body, /- Result: fail\n   - Command: `npm test -w @mattpyle\/steward`/);
 });
 
 test('a run killed at its time limit opens a draft PR that says so', async () => {

@@ -10,6 +10,7 @@ import { createTestEnv } from '../helpers/test-env.js';
 import { fixFindingStateQuery, fixFindingWorkflow, type FixFindingInput } from '../../src/workflows/fix-finding.js';
 import type { WriteFindingFixInput } from '../../src/activities/findings.js';
 import type { GenerateHandoffInput, OpenFixerPrInput, RunFixerInput, RunFixerResult } from '../../src/activities/fixer.js';
+import { opensAsDraft } from '../../src/lib/fixer.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, OPPORTUNITY_FINDING } from '../helpers/finding-fixtures.js';
 
@@ -52,7 +53,7 @@ const RUN: RunFixerResult = {
     permissionDenials: [],
   },
   npmCi: false,
-  timingsMs: { worktree: 1, install: 2, claude: 3, push: 4, total: 10 },
+  timingsMs: { worktree: 1, install: 2, claude: 3, checks: 5, push: 4, total: 15 },
 };
 
 interface Mocks {
@@ -81,7 +82,9 @@ function mockActivities(mocks: Mocks = {}) {
         handoff: DEFECT_HANDOFF,
         title: 'Name the failing reason in scorecard commentary',
         commitSha: 'c-handoff',
-        claude: { model: 'claude-x', costUsd: 0.05, durationMs: 20_000 },
+        base: 'master',
+        baseSha: 'c-base',
+        claude: { model: 'claude-x', costUsd: 0.05, durationMs: 20_000, numTurns: 9 },
       };
     },
     runFixer: async (input: RunFixerInput) => {
@@ -92,7 +95,7 @@ function mockActivities(mocks: Mocks = {}) {
     openFixerPr: async (input: OpenFixerPrInput) => {
       calls.push('openFixerPr');
       seen.pr = input;
-      return { prUrl: PR, draft: input.timedOut || input.exitCode !== 0 };
+      return { prUrl: PR, draft: opensAsDraft(input) };
     },
     writeFindingFix: async (input: WriteFindingFixInput) => {
       calls.push('writeFindingFix');
@@ -165,8 +168,14 @@ test('pass: five activities in order, the PR from the finding, and fixing writte
   // The finding the gate judged is the text the handoff and the PR are made from.
   assert.equal(seen.generate!.findingText, DEFECT_FINDING);
   assert.equal(seen.generate!.handoffPath, `sites/mattpyle-com/handoffs/${DEFECT_KEY}.md`);
-  // The handoff rides inline and the branch carries the fixer's prefix.
-  assert.deepEqual(seen.run, { key: DEFECT_KEY, handoff: DEFECT_HANDOFF, branch: `fix/finding-${DEFECT_KEY}` });
+  // The handoff rides inline, the branch carries the fixer's prefix, and the
+  // fix is cut from the commit the handoff was written against.
+  assert.deepEqual(seen.run, {
+    key: DEFECT_KEY,
+    handoff: DEFECT_HANDOFF,
+    branch: `fix/finding-${DEFECT_KEY}`,
+    baseSha: 'c-base',
+  });
   assert.equal(seen.pr!.findingText, DEFECT_FINDING);
   assert.deepEqual(seen.pr!.checks, RUN.checks);
   assert.ok(!JSON.stringify(seen.pr).includes('Generated with Claude Code'), 'the final message never reaches the PR activity');
@@ -180,6 +189,7 @@ test('pass: five activities in order, the PR from the finding, and fixing writte
   assert.equal(result.findingCommitSha, 'c-index');
   assert.equal(result.run.numTurns, 40);
   assert.equal(result.run.costUsd, 1.2);
+  assert.deepEqual(result.run.checks, RUN.checks);
   assert.ok(!JSON.stringify(result).includes('Generated with Claude Code'), 'nor the workflow result');
 });
 
@@ -253,6 +263,22 @@ test('a non-zero exit with changes present: a draft PR marked incomplete', async
   assert.equal(result.draft, true);
   assert.equal(result.run.exitCode, 1);
   assert.equal(seen.write!.prUrl, PR);
+});
+
+test('a failed check on a finished run: a draft PR, and the finding is still marked fixing', async () => {
+  const checks = [{ n: 1, status: 'fail' as const, command: 'npm test -w @mattpyle/steward' }];
+  const { activities, calls, seen } = mockActivities({ runFixer: async () => ({ ...RUN, checks }) });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(fixFindingWorkflow, {
+      workflowId: 'fix/mattpyle-com/check-failed',
+      taskQueue: QUEUE,
+      args: [input()],
+    }),
+  );
+  assert.deepEqual(seen.pr!.checks, checks);
+  assert.equal(seen.pr!.exitCode, 0);
+  assert.equal(result.draft, true);
+  assert.deepEqual(calls.slice(-2), ['openFixerPr', 'writeFindingFix']);
 });
 
 test('a stalled run fails the workflow on the first attempt: no PR, nothing written back', async () => {

@@ -60,15 +60,18 @@ export async function run(
  * On Windows, killing the `npm` process does **not** kill the `node` it spawned;
  * `taskkill /T` is the only reliable way to take down the tree, and orphaned
  * builds are exactly what this leg's verification looks for.
+ *
+ * `env` is added to the worker's own environment. `exactEnv` replaces it, for
+ * a child that must not inherit the worker's secrets.
  */
 export async function runCancellable(
   binary: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal } = {},
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; exactEnv?: NodeJS.ProcessEnv; signal?: AbortSignal } = {},
 ): Promise<RunResult> {
   const child = spawn(binary, args, {
     cwd: options.cwd,
-    env: options.env ? { ...process.env, ...options.env } : process.env,
+    env: options.exactEnv ?? (options.env ? { ...process.env, ...options.env } : process.env),
     windowsHide: true,
     shell: false,
   });

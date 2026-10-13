@@ -1951,13 +1951,16 @@ finding
 
       const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
       console.log('');
-      console.log(`  PR: ${fixed.prUrl}${fixed.draft ? '  (draft: the run was incomplete)' : ''}`);
+      console.log(`  PR: ${fixed.prUrl}${fixed.draft ? '  (draft: the run was incomplete or a check failed)' : ''}`);
       console.log(`  commit: ${fixed.commitSha}  (${fixed.filesChanged.length} files)`);
       console.log(`  finding: status fixing, commit ${fixed.findingCommitSha ?? 'none (it already said so)'}`);
       console.log(
         `  wall time: ${seconds(Date.now() - started)}  (Claude Code ${seconds(fixed.run.timingsMs.claude)}, exit ${fixed.run.exitCode})`,
       );
       console.log(`  turns: ${fixed.run.numTurns ?? 'unknown'}   model: ${fixed.run.model ?? 'unknown'}`);
+      for (const check of fixed.run.checks) {
+        console.log(`  check ${check.n}: ${check.status}${check.command ? `  ${check.command}` : ''}`);
+      }
       console.log(
         `  total_cost_usd: ${fixed.run.costUsd ?? 'unknown'}  (handoff ${fixed.run.handoffCostUsd ?? 'unknown'}), at API rates`,
       );

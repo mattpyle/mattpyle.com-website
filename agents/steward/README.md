@@ -41,8 +41,9 @@ that's the property being dogfooded here, on a low-stakes, real target.
   verdict.
 - **`fixFindingWorkflow`**: the fixer, one execution per approved finding (`fix/<site>/<key>`),
   started by `steward finding fix <key>`. Five activities: read the finding, generate a handoff from
-  it with one tool-less `claude -p` call, run Claude Code headless on that handoff in its own
-  worktree, open one PR whose body is written from the finding, and write `status: fixing` and the PR
+  it with one `claude -p` run that reads the checkout through read-only tools, run Claude Code
+  headless on that handoff in its own worktree and then run the handoff's Verify commands, open one
+  PR whose body is written from the finding and those results, and write `status: fixing` and the PR
   link back. It takes a finding that is approved, `kind: defect`, with a cause and a measure, and
   refuses any other. It never merges.
 

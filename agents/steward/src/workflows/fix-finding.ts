@@ -60,7 +60,7 @@ export interface FixFindingResult {
   site: string;
   key: string;
   prUrl: string;
-  /** True when the run was incomplete and the PR is a draft. */
+  /** True when the run was incomplete or a check failed, and the PR is a draft. */
   draft: boolean;
   branch: string;
   commitSha: string;
@@ -78,7 +78,9 @@ export interface FixFindingResult {
     /** What the handoff generation would cost at API rates. */
     handoffCostUsd: number | null;
     permissionDenials: string[];
-    timingsMs: { worktree: number; install: number; claude: number; push: number; total: number };
+    timingsMs: { worktree: number; install: number; claude: number; checks: number; push: number; total: number };
+    /** The Verify checks as Steward ran them. */
+    checks: { n: number; status: 'pass' | 'fail' | 'not-run'; command: string | null }[];
   };
 }
 
@@ -102,22 +104,22 @@ const reading = wf.proxyActivities<Pick<typeof activities, 'readFinding'>>({
 });
 
 // Two attempts: a reply the validator refuses is worth one more ask, and no
-// more than that, since each attempt is a model call.
+// more than that, since each attempt is a model run that reads the checkout.
 const generating = wf.proxyActivities<Pick<typeof activities, 'generateHandoff'>>({
   taskQueue: QUEUE_HEAVY,
-  startToCloseTimeout: '6 minutes',
+  startToCloseTimeout: '15 minutes',
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 2, nonRetryableErrorTypes: GITHUB_PERMANENT },
 });
 
 // One attempt: a second would spend another model turn on the same handoff and
 // force-push over whatever the first left. The heartbeat timeout is what turns
-// a dead worker into a failure in a minute rather than in forty-five, and the
+// a dead worker into a failure in a minute rather than in seventy-five, and the
 // cancellation type makes a cancelled workflow wait until the process tree is
 // down before it reports cancelled.
 const fixing = wf.proxyActivities<Pick<typeof activities, 'runFixer'>>({
   taskQueue: QUEUE_HEAVY,
-  startToCloseTimeout: '45 minutes',
+  startToCloseTimeout: '75 minutes',
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 1 },
   cancellationType: wf.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
@@ -171,7 +173,12 @@ export async function fixFindingWorkflow(input: FixFindingInput): Promise<FixFin
   });
 
   state.step = 'fixing';
-  const run = await fixing.runFixer({ key: input.key, handoff: generated.handoff, branch: input.branch });
+  const run = await fixing.runFixer({
+    key: input.key,
+    handoff: generated.handoff,
+    branch: input.branch,
+    baseSha: generated.baseSha,
+  });
 
   state.step = 'opening';
   const pr = await opening.openFixerPr({
@@ -217,6 +224,7 @@ export async function fixFindingWorkflow(input: FixFindingInput): Promise<FixFin
       handoffCostUsd: generated.claude.costUsd,
       permissionDenials: run.claude.permissionDenials,
       timingsMs: run.timingsMs,
+      checks: run.checks,
     },
   };
 }
