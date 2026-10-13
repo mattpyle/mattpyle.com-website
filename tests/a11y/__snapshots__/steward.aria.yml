@@ -70,20 +70,20 @@
     - paragraph: What the site says an agent may do.
     - paragraph: /\d+ checks/
     - list "Crawlability":
-      - listitem: robots.txt exists and parses · medium
-      - listitem: robots.txt lets user-triggered AI agents read the site · high
-      - listitem: Content Signals preferences are declared · low
-      - listitem: A sitemap is declared in robots.txt and fetchable · high
+      - listitem: "robots.txt exists and parses · (weight: medium )"
+      - listitem: "robots.txt lets user-triggered AI agents read the site · (weight: high )"
+      - listitem: "Content Signals preferences are declared · (weight: low )"
+      - listitem: "A sitemap is declared in robots.txt and fetchable · (weight: high )"
     - heading "Discovery" [level=3]
     - paragraph: What an agent can find without being told where to look.
     - paragraph: /\d+ checks/
     - list "Discovery":
-      - listitem: llms.txt exists and follows the spec · medium
-      - listitem: The links in llms.txt resolve · medium
-      - listitem: Every llms.txt list item leads with a markdown link · low
-      - listitem: agents.md exists and is markdown · medium
-      - listitem: An MCP server is discoverable at /.well-known/mcp-server · low
-      - listitem: An A2A agent card is published · low
+      - listitem: "llms.txt exists and follows the spec · (weight: medium )"
+      - listitem: "The links in llms.txt resolve · (weight: medium )"
+      - listitem: "Every llms.txt list item leads with a markdown link · (weight: low )"
+      - listitem: "agents.md exists and is markdown · (weight: medium )"
+      - listitem: "An MCP server is discoverable at /.well-known/mcp-server · (weight: low )"
+      - listitem: "An A2A agent card is published · (weight: low )"
     - heading "Content access" [level=3]
     - paragraph: Whether the content comes back in a form a model can read.
     - paragraph: /\d+ checks/
@@ -91,12 +91,12 @@
       - listitem:
         - text: The homepage serves markdown when asked for it ·
         - code: ·
-        - text: · high
-      - listitem: A content page serves markdown when asked for it · high
+        - text: "· (weight: high )"
+      - listitem: "A content page serves markdown when asked for it · (weight: high )"
       - listitem:
         - text: The homepage advertises its alternates in a Link header ·
         - code: ·
-        - text: · low
+        - text: "· (weight: low )"
   - region "Running an audit yourself":
     - heading "Running an audit yourself" [level=2]
     - paragraph:
