@@ -223,15 +223,16 @@ const GUARANTEES = [
             {category.checks.map(check => (
               <li class="check-row">
                 <span class="check-text">
-                  <span class="check-name">{check.title}</span>
+                  <b class="check-name">{check.title}</b>
                   <span class="check-detail">{splitInlineCode(check.plain).map(part => (part.code ? <code>{part.text}</code> : part.text))}</span>
                 </span>
                 {/*
                   Weight is a word in ink, never a coloured pill: severity is not
                   one of the four semantic colours, and a magenta "high" would
                   read as "agents".
+                  The hidden label gives the markdown sibling and screen readers a labelled weight.
                 */}
-                <span class="check-weight">{check.severity}</span>
+                <span class="check-weight"><span class="sr-only">(weight:</span> {check.severity}<span class="sr-only">)</span></span>
               </li>
             ))}
           </ul>
@@ -680,6 +681,7 @@ const GUARANTEES = [
   }
 
   .check-name {
+    font-weight: inherit;
     font-size: 19px;
     line-height: 1.4;
     color: var(--ink);
