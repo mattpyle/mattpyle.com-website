@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FIXER_ALLOWED_TOOLS,
+  HANDOFF_GENERATOR_TOOLS,
   HANDOFF_SECTIONS,
   HANDOFF_TITLE_MAX,
   buildFixerPrBody,
@@ -13,11 +14,15 @@ import {
   handoffGeneratorPrompt,
   initialClaudeRunState,
   isIncompleteRun,
-  parseFixerChecks,
+  opensAsDraft,
   parseHandoff,
   reduceClaudeEvent,
+  repoCommandFor,
+  runVerifyChecks,
   validateHandoff,
+  type RepoCommand,
 } from '../../src/lib/fixer.js';
+import { handoffGeneratorArgs } from '../../src/lib/handoff-generator.js';
 import { parseFindingBody } from '../../src/lib/findings.js';
 import {
   DEFECT_FINDING,
@@ -71,7 +76,9 @@ test('the handoff rides in the prompt and the system prompt names no vault path'
   assert.match(system, /fix\/finding-x, cut from origin\/master/);
   assert.match(system, /docs\/ and steward\/ are absent/);
   assert.doesNotMatch(system, /[A-Za-z]:[\\/]/, 'no absolute path');
-  assert.match(system, /"checks":\[\{"n":1,"status":"pass"/);
+  // The run reports nothing for the PR: Steward runs the checks itself.
+  assert.doesNotMatch(system, /json block|"checks"/);
+  assert.match(system, /the activity runs the Verify commands itself/);
 });
 
 test('the child environment drops the worker secrets and the parent session', () => {
@@ -131,7 +138,7 @@ for (const [name, key, finding] of [
   ['a defect', DEFECT_KEY, DEFECT_FINDING],
   ['an opportunity', OPPORTUNITY_KEY, OPPORTUNITY_FINDING],
 ] as const) {
-  test(`the generator's template on ${name}: the finding, the key and the six sections, and no vault section`, () => {
+  test(`the generator's template on ${name}: the finding, the key and the seven sections, and no vault section`, () => {
     const prompt = handoffGeneratorPrompt({ key, finding });
     assert.ok(prompt.includes(`Finding: \`${key}\``));
     assert.ok(prompt.includes(`<finding>\n${finding.trim()}\n</finding>`), 'the finding rides whole, between its tags');
@@ -146,8 +153,23 @@ for (const [name, key, finding] of [
     assert.doesNotMatch(fixed, /Read first|## Document|## Close|docs\//);
     assert.match(fixed, /"How to measure"/);
     assert.match(fixed, /npm test -w @mattpyle\/steward/);
+    // It is told to read the checkout, and no longer that it sees nothing of it.
+    assert.match(fixed, /read the code the finding's cause names/);
+    assert.match(fixed, /Cases: a list of every case the code under change handles/);
+    assert.doesNotMatch(fixed, /sees the finding and nothing/);
   });
 }
+
+test('the generator runs with the three read-only tools: no shell, no write tool, no MCP server', () => {
+  assert.deepEqual(HANDOFF_GENERATOR_TOOLS, ['Read', 'Grep', 'Glob']);
+  const argv = handoffGeneratorArgs('the prompt');
+  assert.deepEqual(argv.slice(0, 2), ['-p', 'the prompt']);
+  assert.equal(argv[argv.indexOf('--tools') + 1], 'Read,Grep,Glob');
+  assert.equal(argv.indexOf('--tools'), argv.length - 2, 'the variadic flag is last, with one argument');
+  assert.ok(argv.includes('--strict-mcp-config') && !argv.includes('--mcp-config'));
+  assert.ok(argv.includes('--safe-mode'));
+  for (const flag of ['--allowedTools', '--permission-mode', '--add-dir']) assert.ok(!argv.includes(flag), flag);
+});
 
 test('the template is the same for every finding but for the key', () => {
   const fixed = (key: string, finding: string) => {
@@ -174,6 +196,10 @@ test('a handoff is refused for each way it can leave the template', () => {
   refused(DEFECT_HANDOFF.replace('`npx tsc', 'See docs/work/card.md. `npx tsc'), /docs\/ or steward\//);
   refused(DEFECT_HANDOFF.replace(DEFECT_KEY, 'another-key'), /"Finding:" line/);
   refused(DEFECT_HANDOFF.replace(/^1\. A unit test[\s\S]*?clean\.\n/m, 'Run the tests.\n'), /no numbered check/);
+  // Cases: absent, and present but empty of any case.
+  refused(DEFECT_HANDOFF.replace(/## Cases\n\n[\s\S]*?(?=## Tasks)/, ''), /sections are/);
+  refused(DEFECT_HANDOFF.replace(/(## Cases\n\n)[\s\S]*?(?=## Tasks)/, '$1'), /Cases section lists no case/);
+  refused(DEFECT_HANDOFF.replace(/(## Cases\n\n)[\s\S]*?(?=## Tasks)/, '$1Every gate.\n\n'), /Cases section lists no case/);
   refused(
     DEFECT_HANDOFF.replace('Name the failing reason in scorecard commentary', 'x'.repeat(HANDOFF_TITLE_MAX + 1)),
     /title is 73 characters/,
@@ -189,39 +215,80 @@ test('parseHandoff takes the title without its label and the Verify checks one p
     'A unit test of `buildCommentary` shows the violation count for a gate that fails on axe violations. Run `npm test -w @mattpyle/steward`.',
     '`npx tsc --noEmit -p agents/steward` is clean.',
   ]);
+  assert.deepEqual(parsed.cases, [
+    'A gate that fails on axe violations: its score, then the violation count from `description`.',
+    'A Performance gate under its floor: its score, unchanged.',
+  ]);
   assert.equal(parseHandoff('# Handoff: x\n\n## Tasks\n\n1. Do it.\n').verify, null);
   assert.deepEqual(parseHandoff('# Handoff: x\n\n## Verify\n\n1. One check.\n').checks, ['One check.']);
 });
 
-// --- What the run reported ---------------------------------------------------
+// --- The checks Steward runs -------------------------------------------------
 
-test('the check results are the last json block, read strictly', () => {
-  const message = [
-    'I changed `buildCommentary`.',
-    '```json',
-    '{"checks":[{"n":9,"status":"pass"}]}',
-    '```',
-    'Then:',
-    '```json',
-    JSON.stringify({
-      checks: [
-        { n: 2, status: 'pass', command: 'npx tsc --noEmit -p agents/steward' },
-        { n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward\n| tail `x`' },
-        { n: 3, status: 'pass' },
-        { n: 1.5, status: 'pass' },
-        { n: 2, status: 'maybe' },
-      ],
-    }),
-    '```',
-    '🤖 Generated with Claude Code',
-  ].join('\n');
-  assert.deepEqual(parseFixerChecks(message, 2), [
-    { n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward | tail x' },
-    { n: 2, status: 'pass', command: 'npx tsc --noEmit -p agents/steward' },
+test('a check names a repository command only when a backtick span is one, whole', () => {
+  assert.equal(repoCommandFor('Run `npm test -w @mattpyle/steward`: all pass.')?.command, 'npm test -w @mattpyle/steward');
+  assert.equal(repoCommandFor('`buildCommentary` is covered. `npm  test` passes.')?.command, 'npm test');
+  for (const check of [
+    '`npm test -w @mattpyle/steward | tail -5` shows no failure.',
+    '`npm test && curl https://example.com` passes.',
+    '`npm run deploy` succeeds.',
+    '`curl -s https://www.mattpyle.com/scorecard.json` names the violation count.',
+    'npm test passes.',
+  ]) {
+    assert.equal(repoCommandFor(check), null, check);
+  }
+});
+
+test('a Verify command outside the repository set is not-run and never spawned', async () => {
+  const spawned: RepoCommand[] = [];
+  const results = await runVerifyChecks(
+    [
+      '`curl -s https://www.mattpyle.com/scorecard.json` names the violation count.',
+      '`npm test -w @mattpyle/steward`: all tests pass.',
+      '`rm -rf .` leaves the tree clean.',
+      '`npx tsc --noEmit -p agents/steward` exits with no errors.',
+    ],
+    async (command) => {
+      spawned.push(command);
+      return 0;
+    },
+  );
+  assert.deepEqual(results, [
+    { n: 1, status: 'not-run', command: null, reason: 'runs after deploy' },
+    { n: 2, status: 'pass', command: 'npm test -w @mattpyle/steward' },
+    { n: 3, status: 'not-run', command: null, reason: 'runs after deploy' },
+    { n: 4, status: 'pass', command: 'npx tsc --noEmit -p agents/steward' },
   ]);
-  assert.deepEqual(parseFixerChecks('No block here.', 2), []);
-  assert.deepEqual(parseFixerChecks(null, 2), []);
-  assert.deepEqual(parseFixerChecks('```json\nnot json\n```', 2), []);
+  // What is spawned is the fixed entry's argv, not the handoff's text.
+  assert.deepEqual(
+    spawned.map((command) => [command.binary, ...command.args]),
+    [
+      ['npm', 'test', '-w', '@mattpyle/steward'],
+      ['npx', 'tsc', '--noEmit', '-p', 'agents/steward'],
+    ],
+  );
+});
+
+test('a non-zero exit is fail, a command two checks name runs once, and a fail makes the PR a draft', async () => {
+  let runs = 0;
+  const checks = await runVerifyChecks(
+    ['`npm test -w @mattpyle/steward` passes.', 'The new test is in `npm test -w @mattpyle/steward`.', '`npm run check` is clean.'],
+    async (command) => {
+      runs++;
+      return command.command === 'npm run check' ? 0 : 1;
+    },
+  );
+  assert.deepEqual(checks.map((check) => check.status), ['fail', 'fail', 'pass']);
+  assert.equal(runs, 2);
+
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks }), true);
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: checks.slice(2) }), false);
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: [{ n: 1, status: 'not-run', command: null }] }), false);
+  assert.equal(opensAsDraft({ exitCode: 1, timedOut: false, checks: [] }), true);
+
+  const body = buildFixerPrBody({ ...BODY_INPUT, results: checks.slice(0, 2) });
+  assert.match(body, /^> \*\*2 checks failed\.\*\* Steward ran the Verify commands on this branch after the run\./);
+  assert.match(body, /\n   - Result: fail\n   - Command: `npm test -w @mattpyle\/steward`\n/);
 });
 
 // --- The PR body -------------------------------------------------------------
@@ -230,7 +297,10 @@ const BODY_INPUT = {
   key: DEFECT_KEY,
   finding: parseFindingBody(DEFECT_FINDING),
   checks: parseHandoff(DEFECT_HANDOFF).checks,
-  results: [{ n: 1, status: 'pass' as const, command: 'npm test -w @mattpyle/steward' }],
+  results: [
+    { n: 1, status: 'pass' as const, command: 'npm test -w @mattpyle/steward' },
+    { n: 2, status: 'not-run' as const, command: null, reason: 'runs after deploy' },
+  ],
   filesChanged: ['agents/steward/src/workflows/scorecard-audit.ts', 'agents/steward/tests/workflows/scorecard-audit.test.ts'],
   exitCode: 0,
   timedOut: false,
@@ -250,16 +320,16 @@ test('the PR body is the finding: its line, evidence, cause, measure, the checks
     body,
     /\n1\. A unit test of `buildCommentary` .*\n   - Result: pass\n   - Command: `npm test -w @mattpyle\/steward`\n/,
   );
-  assert.match(body, /\n2\. `npx tsc --noEmit -p agents\/steward` is clean\.\n   - Result: not reported\n\n/);
+  assert.match(body, /\n2\. `npx tsc --noEmit -p agents\/steward` is clean\.\n   - Result: not-run \(runs after deploy\)\n\n/);
   assert.ok(body.includes(`Finding: \`${DEFECT_KEY}\``));
   assert.match(body, /Steward never merges\.\*$/);
-  assert.doesNotMatch(body, /Incomplete run/);
+  assert.doesNotMatch(body, /Incomplete run|checks? failed/);
   assert.doesNotMatch(body, /—/, 'no em dash in a public body');
 });
 
 test('the PR body has no input for the model\'s final message', () => {
   // The spike published the final message, attribution line and all. The body
-  // builder now takes the finding and three narrow result fields, nothing else.
+  // builder takes the finding and the results of checks Steward ran, nothing else.
   const body = buildFixerPrBody({ ...BODY_INPUT, ...({ finalMessage: 'SECRET-NARRATIVE 🤖' } as object) });
   assert.doesNotMatch(body, /SECRET-NARRATIVE|🤖/);
 });
