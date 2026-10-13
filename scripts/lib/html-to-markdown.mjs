@@ -18,6 +18,12 @@ const NON_CONTENT_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
 // to a reader who only has the text. Their surrounding prose stays.
 const CONTROL_TAGS = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'DIALOG']);
 
+// External links carry this hint in an `.sr-only` span. It tells a screen-reader user about
+// browser behaviour, and markdown has no tab to open, so in link text it is noise an agent
+// quotes back. Only this exact text goes: other `.sr-only` text (a visually hidden heading,
+// a table caption) is content to a reader who only has the text, and stays.
+const NEW_TAB_HINT = '(opens in a new tab)';
+
 // Retro-only furniture (the marquee, the under-construction badge, the guest book, the web
 // ring) sits in the DOM on every render and is hidden by CSS in modern. `.retro-furniture`
 // is the single class that marks all of it, so one rule covers every piece, present and
@@ -37,6 +43,12 @@ function isDroppable(element) {
   if (element.classList?.contains('retro-skin')) return true;
   if (element.hasAttribute('hidden')) return true;
   if (element.getAttribute('aria-hidden') === 'true') return true;
+  if (
+    element.classList?.contains('sr-only') &&
+    element.textContent.replace(/\s+/g, ' ').trim() === NEW_TAB_HINT
+  ) {
+    return true;
+  }
   return false;
 }
 
