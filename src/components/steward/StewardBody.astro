@@ -30,6 +30,8 @@
  * snippets, so the module block repeats that treatment. Adding `.prose` to a band
  * would pull in the whole overlay, not just the code rules.
  */
+import { splitInlineCode } from '../../lib/inline-code.mjs';
+
 interface Props {
   userAgent: string;
   agentToken: string;
@@ -222,7 +224,7 @@ const GUARANTEES = [
               <li class="check-row">
                 <span class="check-text">
                   <span class="check-name">{check.title}</span>
-                  <span class="check-detail">{check.plain}</span>
+                  <span class="check-detail">{splitInlineCode(check.plain).map(part => (part.code ? <code>{part.text}</code> : part.text))}</span>
                 </span>
                 {/*
                   Weight is a word in ink, never a coloured pill: severity is not

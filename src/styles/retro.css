@@ -4075,6 +4075,15 @@ html[data-appearance='retro'] [data-module='audit'] .agent-lines li {
   font-family: var(--retro-font-body);
 }
 
+/* A term set as code inside a check description, as /steward sets it. */
+html[data-appearance='retro'] [data-module='audit'] .check-detail code {
+  font-family: var(--retro-font-mono);
+  background: var(--retro-cream);
+  border: 1px solid var(--retro-frame-border);
+  border-radius: 0;
+  color: var(--retro-maroon);
+}
+
 html[data-appearance='retro'] [data-module='audit'] .check-name { color: var(--retro-ink); }
 
 /* ONE SIDE AT A TIME, ALWAYS. `border-style: dotted` on its own restyles all four

@@ -15,7 +15,8 @@
  * `id`, `title`, `category` and `severity` are Steward's own words for each check, copied verbatim
  * so a reader of the page and a reader of a report see the same names. `plain` is this file's own:
  * one sentence naming what the check asks of a site, for someone who is reading about the auditor
- * rather than reading a report from it.
+ * rather than reading a report from it. It may mark a term as code with a pair of backticks, and
+ * that is the only markup it carries.
  *
  * NO TOP-LEVEL SIDE EFFECTS — this is imported at build time.
  */

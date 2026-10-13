@@ -88,9 +88,15 @@
     - paragraph: Whether the content comes back in a form a model can read.
     - paragraph: /\d+ checks/
     - list "Content access":
-      - listitem: The homepage serves markdown when asked for it · high
+      - listitem:
+        - text: The homepage serves markdown when asked for it ·
+        - code: ·
+        - text: · high
       - listitem: A content page serves markdown when asked for it · high
-      - listitem: The homepage advertises its alternates in a Link header · low
+      - listitem:
+        - text: The homepage advertises its alternates in a Link header ·
+        - code: ·
+        - text: · low
   - region "Running an audit yourself":
     - heading "Running an audit yourself" [level=2]
     - paragraph:
