@@ -94,6 +94,41 @@ test('behaviour, decoration and interactive controls are not content', () => {
   assert.match(markdown, /Kept\./);
 });
 
+test('the sr-only new-tab hint is dropped from link text and other sr-only text stays', () => {
+  const hint = '<span class="sr-only"> (opens in a new tab)</span>';
+  const links = [
+    [
+      `<p>Growth at <a href="https://temporal.io/" target="_blank" rel="noopener noreferrer"><strong>Temporal Technologies</strong>${hint}</a>, daily.</p>`,
+      '[**Temporal Technologies**](https://temporal.io/)',
+    ],
+    [`<a href="https://temporal.io">Temporal${hint}</a>`, '[Temporal](https://temporal.io)'],
+    // The about reach card: the hint is an element sibling of another span, with no
+    // whitespace between tags.
+    [
+      `<a href="https://bsky.app/profile/mattpyle.com"><svg aria-hidden="true"><path d="M0 0"/></svg><span class="reach-text"><span class="reach-label">bluesky</span><span class="reach-detail">@mattpyle.com</span></span>${hint}</a>`,
+      '[bluesky @mattpyle.com](https://bsky.app/profile/mattpyle.com)',
+    ],
+    [`<a href="https://example.com/"><span>ask claude${hint}</span></a>`, '[ask claude](https://example.com/)'],
+  ];
+  for (const [html, expected] of links) {
+    const markdown = pageToMarkdown(page(`<h1>Page</h1>${html}`));
+    assert.equal(markdown.includes(expected), true, expected);
+    assert.equal(markdown.includes('opens in a new tab'), false, expected);
+  }
+
+  const heading = pageToMarkdown(page('<h1>Projects</h1><h2 class="sr-only">All projects</h2>'));
+  assert.match(heading, /^## All projects$/m);
+
+  const label = pageToMarkdown(page('<h1>Activity</h1><p><span class="sr-only">bot or agent</span></p>'));
+  assert.match(label, /bot or agent/);
+
+  const prose = pageToMarkdown(page('<h1>Page</h1><p>This link (opens in a new tab) is described in prose.</p>'));
+  assert.equal(prose.includes('(opens in a new tab)'), true);
+
+  const substring = pageToMarkdown(page('<h1>Page</h1><p>Note<span class="wm-sr-only"> (opens in a new tab)</span></p>'));
+  assert.equal(substring.includes('(opens in a new tab)'), true);
+});
+
 test('adjacent element siblings do not concatenate into one word', () => {
   // The changelog rows are three CSS-blocked spans with no whitespace between them; naive
   // conversion yields "02 AUG 2026featureA guest book an agent can sign".
