@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { CancelledFailure } from '@temporalio/common';
-import { FIXER_WORKTREE_DIR, GITHUB_REPO, SITE_DIR, STEWARD_DIR } from '../config.js';
+import { FIXER_WORKTREE_DIR, GITHUB_REPO, PROD_ORIGIN, SITE_DIR, STEWARD_DIR } from '../config.js';
 import { runClaude } from '../lib/claude-runner.js';
 import { parseFindingBody } from '../lib/findings.js';
 import { git, needsInstall, recordInstall, worktreeExists } from '../lib/git.js';
@@ -23,7 +23,8 @@ import {
   type FixerCheckResult,
   type RepoCommand,
 } from '../lib/fixer.js';
-import { draftHandoff } from '../lib/handoff-generator.js';
+import { draftHandoff, draftVerifyBlock } from '../lib/handoff-generator.js';
+import { readHandoffVerify, validateVerifyBlock, withVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
 import { npmCommand } from './build-audit.js';
 
 /**
@@ -95,6 +96,22 @@ async function fetchBase(): Promise<string> {
 }
 
 /**
+ * The fixer worktree, detached at the head of the default branch, for a model
+ * that only reads. The copied instruction files are removed: what the model
+ * writes is published to the findings repository, and they are private.
+ */
+async function checkoutBaseForReading(): Promise<{ base: string; baseSha: string }> {
+  const base = await fetchBase();
+  const baseSha = await git(SITE_DIR, ['rev-parse', `origin/${base}`]);
+  await git(FIXER_WORKTREE_DIR, ['checkout', '--force', '--detach', baseSha]);
+  await git(FIXER_WORKTREE_DIR, ['clean', '-fd']);
+  for (const name of INSTRUCTION_FILES) {
+    await fs.rm(path.join(FIXER_WORKTREE_DIR, name), { force: true });
+  }
+  return { base, baseSha };
+}
+
+/**
  * npm or npx under the current Node binary, skipping the `.cmd` shim for the
  * reason `npmCommand` gives.
  */
@@ -117,6 +134,8 @@ export interface GenerateHandoffInput {
   findingText: string;
   /** `sites/<site>/handoffs/<key>.md` */
   handoffPath: string;
+  /** The production origin the handoff's verify checks name. The site's own when absent. */
+  origin?: string;
 }
 
 export interface GenerateHandoffResult {
@@ -149,19 +168,14 @@ export async function generateHandoff(input: GenerateHandoffInput): Promise<Gene
   let phase = 'preparing the checkout';
   const pump = setInterval(() => ctx.heartbeat(phase), HEARTBEAT_MS);
   try {
-    const base = await fetchBase();
-    const baseSha = await git(SITE_DIR, ['rev-parse', `origin/${base}`]);
-    await git(FIXER_WORKTREE_DIR, ['checkout', '--force', '--detach', baseSha]);
-    await git(FIXER_WORKTREE_DIR, ['clean', '-fd']);
-    for (const name of INSTRUCTION_FILES) {
-      await fs.rm(path.join(FIXER_WORKTREE_DIR, name), { force: true });
-    }
+    const { base, baseSha } = await checkoutBaseForReading();
 
     phase = 'claude -p: starting';
     const draft = await draftHandoff({
       key: input.key,
       findingText: input.findingText,
       cwd: FIXER_WORKTREE_DIR,
+      origin: input.origin ?? PROD_ORIGIN,
       signal: ctx.cancellationSignal,
       onActivity: (activity) => {
         phase = `claude -p: ${activity}`;
@@ -199,6 +213,110 @@ export async function generateHandoff(input: GenerateHandoffInput): Promise<Gene
 
     log.info({ activity: 'generateHandoff', key: input.key, commitSha, baseSha, ...draft.claude }, 'handoff generated');
     return { handoff, title: parseHandoff(handoff).title, commitSha, base, baseSha, claude: draft.claude };
+  } finally {
+    clearInterval(pump);
+    busy = undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// generateVerifyBlock
+// ---------------------------------------------------------------------------
+
+export interface GenerateVerifyBlockInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  key: string;
+  /** The finding file as the workflow read it, frontmatter included. */
+  findingText: string;
+  /** `sites/<site>/handoffs/<key>.md` */
+  handoffPath: string;
+  /** The production origin every check must name. */
+  origin: string;
+}
+
+export interface GenerateVerifyBlockResult {
+  checks: VerifyCheck[];
+  /** The commit that wrote the block into the handoff, or null when it was already there. */
+  commitSha: string | null;
+  /** The site commit the model read, or null when no model ran. */
+  baseSha: string | null;
+  claude: { model: string | null; costUsd: number | null; durationMs: number | null; numTurns: number | null };
+}
+
+/**
+ * Writes the `verify` block for a handoff that predates it: one `claude -p`
+ * run with the handoff generator's read-only tools, then one Contents API
+ * write of the block into the handoff's frontmatter.
+ *
+ * The run reads the head of the default branch, which holds the merged fix, so
+ * a check expects what the site serves now. A reply {@link validateVerifyBlock}
+ * refuses fails the activity, and the retry asks again.
+ *
+ * **Safe to retry.** The handoff is read first, and one that already carries a
+ * valid block is returned as it is, with no model run and no write.
+ */
+export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Promise<GenerateVerifyBlockResult> {
+  const ctx = Context.current();
+  const noRun = { model: null, costUsd: null, durationMs: null, numTurns: null };
+  const read = async () => {
+    const file = await readRepoFile(input.handoffPath, FINDINGS_BRANCH, input.repo);
+    if (!file) {
+      throw ApplicationFailure.nonRetryable(`${input.handoffPath} is not in ${input.repo}.`, 'HandoffMissing');
+    }
+    return file;
+  };
+
+  const existing = readHandoffVerify((await read()).text);
+  if (existing.present) {
+    const block = validateVerifyBlock(existing.raw, input.origin);
+    if (block.problems.length === 0) return { checks: block.checks, commitSha: null, baseSha: null, claude: noRun };
+  }
+
+  claimWorktree(input.key);
+  let phase = 'preparing the checkout';
+  const pump = setInterval(() => ctx.heartbeat(phase), HEARTBEAT_MS);
+  try {
+    const { baseSha } = await checkoutBaseForReading();
+
+    phase = 'claude -p: starting';
+    const draft = await draftVerifyBlock({
+      key: input.key,
+      findingText: input.findingText,
+      handoff: existing.body,
+      cwd: FIXER_WORKTREE_DIR,
+      origin: input.origin,
+      signal: ctx.cancellationSignal,
+      onActivity: (activity) => {
+        phase = `claude -p: ${activity}`;
+      },
+    });
+    if (draft.cancelled) throw new CancelledFailure('cancelled while the verify block was being written');
+    if (draft.problems.length > 0) {
+      throw ApplicationFailure.create({
+        type: 'VerifyBlockInvalid',
+        message: `The generated verify block for ${input.key} was refused: ${draft.problems.join('; ')}.`,
+      });
+    }
+    if (!draft.checks) {
+      throw new Error(
+        `claude -p exited ${draft.exitCode}${draft.timedOut || draft.stalled ? ' (stopped at its time limit)' : ''} without a verify block. stderr: ${draft.stderrTail || '(empty)'}`,
+      );
+    }
+
+    phase = 'writing the verify block to the findings repository';
+    const file = await read();
+    const { commitSha } = await writeRepoFile({
+      repo: input.repo,
+      path: input.handoffPath,
+      text: withVerifyBlock(file.text, draft.checks),
+      message: `verify block ${input.key}`,
+      branch: FINDINGS_BRANCH,
+      sha: file.sha,
+    });
+
+    log.info({ activity: 'generateVerifyBlock', key: input.key, commitSha, baseSha, ...draft.claude }, 'verify block generated');
+    return { checks: draft.checks, commitSha, baseSha, claude: draft.claude };
   } finally {
     clearInterval(pump);
     busy = undefined;

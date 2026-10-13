@@ -1,4 +1,5 @@
 import type { ParsedFinding } from './findings.js';
+import { readHandoffVerify, validateVerifyBlock, verifyBlockGuide } from './verify-checks.js';
 
 /**
  * The fixer's pure half: the handoff it asks for, what `runFixer` passes to
@@ -289,11 +290,14 @@ export const HANDOFF_SYSTEM_PROMPT =
  * vault handoff carries (`Read first`, `Document`, `Close`).
  * {@link validateHandoff} holds the model to it.
  *
+ * The frontmatter's `verify` list is the finding's measure as data, for
+ * `verifyFindingWorkflow` to run against production once the fix is live.
+ *
  * Cases exists because a finding quotes one example and the code under change
  * handles several: the first generated handoff fixed the example and broke a
  * case the finding never showed.
  */
-export function handoffGeneratorPrompt(args: { key: string; finding: string }): string {
+export function handoffGeneratorPrompt(args: { key: string; finding: string; origin: string }): string {
   return [
     'Write a handoff for a headless coding session that will fix one approved finding on a website.',
     'Your working directory is a checkout of the site repository at the commit the fix will branch from. The session sees your handoff and that same checkout. It sees nothing else, and nobody can answer a question.',
@@ -312,12 +316,24 @@ export function handoffGeneratorPrompt(args: { key: string; finding: string }): 
     '8. Verify: numbered checks, built from the finding\'s "How to measure". Each check is one command in backticks and its expected result. Then add the test command and the type check for the code the cause is in.',
     '9. Out of scope: what the finding says to leave alone, then merging and deploying.',
     '10. Plain short sentences. Use commas and colons, never an em dash.',
+    '11. The handoff opens with YAML frontmatter that holds one key, `verify`: the checks Steward runs against production after the fix is deployed. The session that does the handoff ignores it.',
+    '',
+    'The `verify` list:',
+    '',
+    ...verifyBlockGuide(args.origin),
     '',
     'Commands that exist in the repository. Write one exactly as it is here, with nothing piped onto it:',
     '',
     ...REPO_COMMANDS.map((entry) => `- \`${entry.command}\`: ${entry.about}`),
     '',
     'Use exactly this structure, with these headings and no others:',
+    '',
+    '---',
+    'verify:',
+    '  - url: <a URL on the production origin>',
+    '    kind: <kind>',
+    '    expect: <what the kind expects>',
+    '---',
     '',
     '# Handoff: <title>',
     '',
@@ -368,7 +384,8 @@ function listItems(body: string | null, marker: RegExp): string[] {
   return items;
 }
 
-export function parseHandoff(markdown: string): ParsedHandoff {
+export function parseHandoff(handoff: string): ParsedHandoff {
+  const markdown = readHandoffVerify(handoff).body;
   const h1 = markdown.match(/^#\s+(.+?)\s*$/m);
   const title = (h1?.[1] ?? '').replace(/^Handoff:\s*/i, '').trim();
   const verify = sectionBody(markdown, 'Verify');
@@ -383,11 +400,19 @@ export function parseHandoff(markdown: string): ParsedHandoff {
 /**
  * What is wrong with a generated handoff, as one line each; empty when it may
  * go to the fixer. A handoff that fails here is never written or run.
+ *
+ * `origin` is the production origin its `verify` checks must name. The list
+ * may be empty; the key may not be missing.
  */
-export function validateHandoff(markdown: string, key: string): string[] {
+export function validateHandoff(handoff: string, key: string, origin: string): string[] {
   const problems: string[] = [];
+  const verify = readHandoffVerify(handoff);
+  const markdown = verify.body;
   const lines = markdown.split(/\r?\n/);
-  const parsed = parseHandoff(markdown);
+  const parsed = parseHandoff(handoff);
+
+  if (!verify.present) problems.push('the frontmatter has no "verify" list');
+  else problems.push(...validateVerifyBlock(verify.raw, origin).problems);
 
   if (!/^# Handoff: \S/.test(lines[0] ?? '')) problems.push('the first line is not "# Handoff: <title>"');
   if (parsed.title.length > HANDOFF_TITLE_MAX) {

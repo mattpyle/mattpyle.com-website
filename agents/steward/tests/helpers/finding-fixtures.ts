@@ -98,8 +98,27 @@ export const OPPORTUNITY_FINDING = [
   '',
 ].join('\n');
 
-/** A handoff the generator's template asks for, as a model would return it. */
+/** The PR a fixer run opened for the defect. */
+export const FIX_PR = 'https://github.com/mattpyle/mattpyle.com-website/pull/312';
+
+/** The defect once `writeFindingFix` has marked it: `fixing`, with the PR link. */
+export const FIXING_FINDING = DEFECT_FINDING.replace('status: approved', 'status: fixing').replace(
+  'references: []',
+  ['references: []', 'links:', `  pr: ${FIX_PR}`].join('\n'),
+);
+
+/** The production origin the fixtures' handoffs are validated against. */
+export const ORIGIN = 'https://www.mattpyle.com';
+
+/**
+ * A handoff the generator's template asks for, as a model would return it. Its
+ * verify list is empty: the finding's measure is a unit test.
+ */
 export const DEFECT_HANDOFF = [
+  '---',
+  'verify: []',
+  '---',
+  '',
   '# Handoff: Name the failing reason in scorecard commentary',
   '',
   `Finding: \`${DEFECT_KEY}\``,

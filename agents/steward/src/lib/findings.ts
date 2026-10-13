@@ -365,6 +365,126 @@ export function setFrontmatterFix(text: string, prUrl: string): string {
   return lines.join(eol);
 }
 
+// ---------------------------------------------------------------------------
+// The verifier (findings-loop design, phase 5)
+// ---------------------------------------------------------------------------
+
+/** What a verify run decides. `unverifiable` writes nothing: the handoff's block is empty. */
+export type VerifyOutcome = 'resolved' | 'reopened' | 'unverifiable';
+
+/** `2026-10-13T041233Z` from an ISO instant: the stamp in a verify workflow's ID. */
+export function verifyStamp(at: string): string {
+  return at.replace(/\.\d+Z$/, 'Z').replace(/[-:]/g, '').replace(/^(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+}
+
+/** `2026-10-13T0412Z`, the shape Argus gives a run ID, for `resolved_run`. */
+export function verifyRunId(at: string): string {
+  return verifyStamp(at).replace(/\d{2}Z$/, 'Z');
+}
+
+/**
+ * `verify/<site>/<key>/<stamp>`: one execution per verify run, so a finding
+ * verified twice has two histories.
+ */
+export function verifyWorkflowId(site: string, key: string, at: string): string {
+  return `verify/${site}/${key}/${verifyStamp(at)}`;
+}
+
+/**
+ * Why a finding cannot be verified, or null when it can: the verifier takes
+ * `fixing` findings, the ones a merged fixer PR left behind.
+ */
+export function verifyRefusal(data: Record<string, unknown>): string | null {
+  if (data.status !== 'fixing') return `its status is ${String(data.status ?? 'unset')}, not fixing`;
+  if (!parsePrUrl(fixPrUrl(data))) return 'it has no links.pr to a pull request';
+  return null;
+}
+
+/** The fixer's PR, as `writeFindingFix` left it in `links.pr`. */
+export function fixPrUrl(data: Record<string, unknown>): string {
+  const links = data.links;
+  const pr = typeof links === 'object' && links !== null ? (links as Record<string, unknown>).pr : undefined;
+  return typeof pr === 'string' ? pr : '';
+}
+
+/** `owner/name` and the number from a GitHub pull request URL, or null for anything else. */
+export function parsePrUrl(url: string): { repo: string; number: number } | null {
+  const match = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/.exec(url);
+  return match ? { repo: match[1], number: Number(match[2]) } : null;
+}
+
+/** One measured check, as the Verification section prints it. */
+export interface VerificationRow {
+  n: number;
+  url: string;
+  kind: string;
+  pass: boolean;
+  expected: string;
+  measured: string;
+}
+
+export interface Verification {
+  status: 'resolved' | 'reopened';
+  /** ISO 8601, when the checks ran. */
+  at: string;
+  workflowId: string;
+  rows: VerificationRow[];
+}
+
+/** The `## Verification` section: the outcome, then each check with both values. */
+export function buildVerificationSection(verification: Verification): string {
+  const lines = [
+    '## Verification',
+    '',
+    `Steward ran this finding's checks against production at ${verification.at}. Outcome: ${verification.status}. Workflow \`${verification.workflowId}\`.`,
+    '',
+  ];
+  for (const row of verification.rows) {
+    lines.push(
+      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${row.url}. Expected: ${row.expected}. Measured: ${row.measured}.`,
+    );
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The finding file with the verifier's result in it and every other byte kept:
+ * `status`, `resolved_run` when it resolved, and one `## Verification` section
+ * at the end of the body. A section from an earlier run is replaced, so the
+ * file holds the latest measurement.
+ */
+export function setFindingVerification(text: string, verification: Verification): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== '---') throw new Error('the finding has no frontmatter block');
+  const close = lines.indexOf('---', 1);
+  if (close < 0) throw new Error("the finding's frontmatter block is not closed");
+  const inBlock = (i: number) => i > 0 && i < close;
+
+  const statusAt = lines.findIndex((line, i) => inBlock(i) && /^status:/.test(line));
+  if (statusAt < 0) throw new Error('the finding has no status field');
+  lines[statusAt] = `status: ${verification.status}`;
+
+  let head = lines.slice(0, close);
+  if (verification.status === 'resolved') {
+    const run = `resolved_run: ${verifyRunId(verification.at)}`;
+    const runAt = head.findIndex((line, i) => i > 0 && /^resolved_run:/.test(line));
+    if (runAt >= 0) head[runAt] = run;
+    else head = [...head, run];
+  }
+
+  const body = lines.slice(close);
+  const sectionAt = body.findIndex((line) => /^##\s+Verification\s*$/.test(line));
+  if (sectionAt >= 0) {
+    let end = body.findIndex((line, i) => i > sectionAt && /^##\s/.test(line));
+    if (end < 0) end = body.length;
+    body.splice(sectionAt, end - sectionAt);
+  }
+  while (body.length > 1 && body[body.length - 1].trim() === '') body.pop();
+  body.push('', ...buildVerificationSection(verification).split('\n'), '');
+  return [...head, ...body].join(eol);
+}
+
 /**
  * The index with one finding's status replaced and every other byte kept,
  * the verdict reason included: `fixing` is a state, not a verdict.

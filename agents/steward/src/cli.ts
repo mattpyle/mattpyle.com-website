@@ -25,6 +25,7 @@ import {
   QUEUE_FINDINGS,
   QUEUE_HEAVY,
   QUEUE_LIGHT,
+  PROD_ORIGIN,
   temporalConnectionOptions,
   WEB_UI,
   SITEMAP_URL,
@@ -83,8 +84,16 @@ import {
   fixBranch,
   fixWorkflowId,
   isFindingSlug,
+  verifyWorkflowId,
   type FindingVerdict,
 } from './lib/findings.js';
+import { readFindingsIndex } from './activities/findings.js';
+import {
+  verifyFindingStateQuery,
+  verifyFindingWorkflow,
+  type VerifyFindingInput,
+  type VerifyFindingResult,
+} from './workflows/verify-finding.js';
 import {
   FINDINGS_SCHEDULE_ACTIONS,
   buildFindingsScheduleOptions,
@@ -2051,6 +2060,122 @@ function describeCliError(err: unknown): string {
   }
   return best || (err instanceof Error ? err.message : String(err));
 }
+
+/**
+ * One verify run, start to result. The input is resolved HERE and frozen into
+ * the workflow (design rule 10): the repository, the paths, the origin and the
+ * instant the ID is stamped with.
+ */
+async function verifyOneFinding(c: Client, site: string, key: string): Promise<VerifyFindingResult> {
+  const at = new Date().toISOString();
+  const input: VerifyFindingInput = {
+    site,
+    key,
+    repo: ARGUS_REPO,
+    findingPath: findingPath(site, key),
+    indexPath: findingsIndexPath(site),
+    handoffPath: findingHandoffPath(site, key),
+    origin: PROD_ORIGIN,
+    at,
+  };
+  const workflowId = verifyWorkflowId(site, key, at);
+  const started = Date.now();
+  const handle = await c.workflow.start(verifyFindingWorkflow, { workflowId, taskQueue: QUEUE_HEAVY, args: [input] });
+  console.log(`\n  verifying ${key}`);
+  console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
+
+  let done = false;
+  const result = handle.result().finally(() => {
+    done = true;
+  });
+  result.catch(() => undefined);
+  let step = '';
+  while (!done) {
+    try {
+      const state = await handle.query(verifyFindingStateQuery);
+      if (state.step !== step) {
+        step = state.step;
+        console.log(`  ${paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(5), DIM)}  ${step}`);
+      }
+    } catch {
+      /* no worker yet, or the workflow just closed: the result says which */
+    }
+    await Promise.race([result.catch(() => undefined), new Promise((r) => setTimeout(r, 3000))]);
+  }
+  const verified = await result;
+
+  console.log('');
+  if (verified.generated) {
+    console.log(
+      `  verify block: generated, commit ${verified.handoffCommitSha ?? 'none'}  (total_cost_usd ${verified.generateCostUsd ?? 'unknown'}, at API rates)`,
+    );
+  }
+  for (const [i, check] of verified.block.entries()) {
+    const row = verified.checks.find((r) => r.n === i + 1);
+    console.log(`  check ${i + 1}: ${check.kind} ${check.url}`);
+    console.log(`    expect: ${JSON.stringify(check.expect)}`);
+    if (row) {
+      console.log(`    expected: ${row.expected}`);
+      console.log(`    measured: ${row.measured}`);
+      console.log(`    ${row.pass ? paint('pass', GREEN) : paint('fail', RED)}`);
+    }
+  }
+  if (verified.outcome === 'unverifiable') {
+    console.log(`  ${BOLD}unverifiable${RESET}: the handoff's verify block is empty. Nothing was written.`);
+  } else {
+    const colour = verified.outcome === 'resolved' ? GREEN : RED;
+    console.log(
+      `  ${BOLD}${paint(verified.outcome, colour)}${RESET}  finding commit ${verified.findingCommitSha ?? 'none (it already said so)'}`,
+    );
+  }
+  console.log('');
+  return verified;
+}
+
+finding
+  .command('verify')
+  .argument('[key]', 'finding key', parseFindingSlug('key'))
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .option('--all-fixing', "every `fixing` finding of the site, one at a time")
+  .description(
+    "Verify a fixed finding on production: run its handoff's checks and write resolved or reopened. Needs `steward up`",
+  )
+  .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean }) => {
+    if (Boolean(key) === Boolean(opts.allFixing)) fail('Give one finding key, or --all-fixing.');
+    // The origin is this site's. Another site's would ride in its own config.
+    if (opts.site !== FINDINGS_DEFAULT_SITE) {
+      fail(`verify knows the production origin of ${FINDINGS_DEFAULT_SITE} only, not ${opts.site}.`);
+    }
+    const keys = key
+      ? [key]
+      : (await readFindingsIndex(ARGUS_REPO, opts.site)).filter((line) => line.status === 'fixing').map((line) => line.key);
+    if (keys.length === 0) {
+      console.log(`\n  No finding of ${opts.site} is fixing.\n`);
+      return;
+    }
+    const c = await client();
+    const outcomes: { key: string; outcome: string }[] = [];
+    try {
+      for (const one of keys) {
+        try {
+          outcomes.push({ key: one, outcome: (await verifyOneFinding(c, opts.site, one)).outcome });
+        } catch (err) {
+          if (!opts.allFixing) throw err;
+          // One finding's failure must not stop the rest of the list.
+          const cause = describeCliError(err);
+          console.log(`  ${paint('failed', RED)}: ${cause}\n`);
+          outcomes.push({ key: one, outcome: `failed: ${cause}` });
+        }
+      }
+      if (opts.allFixing) {
+        console.log(`  ${BOLD}${keys.length} fixing finding${keys.length === 1 ? '' : 's'}${RESET}`);
+        for (const row of outcomes) console.log(`  ${row.key}  ${row.outcome}`);
+        console.log('');
+      }
+    } finally {
+      await c.connection.close();
+    }
+  });
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(`\n  ${describeCliError(err)}\n`);
