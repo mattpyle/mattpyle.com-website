@@ -49,8 +49,9 @@ that's the property being dogfooded here, on a low-stakes, real target.
   the finding's measure as checks against production.
 - **`verifyFindingWorkflow`**: the verifier, one execution per run (`verify/<site>/<key>/<stamp>`),
   started by `steward finding verify <key>` once a fix is merged and deployed. It reads the finding,
-  confirms the fixer's PR is merged, reads the handoff's `verify` list (generating it with the
-  read-only generator when an older handoff has none), measures each check against production with
+  confirms the fixer's PR is merged, reads the finding's own `verify` list (falling back to the
+  handoff's only when the finding has no `verify` key, and generating that with the read-only
+  generator when an older handoff has none), measures each check against production with
   Steward's own fetch and Chromium, and writes `resolved` or `reopened` with the measured values. An
   empty list writes nothing. No command from a list is ever spawned.
 

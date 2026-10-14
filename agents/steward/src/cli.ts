@@ -84,6 +84,7 @@ import {
   fixBranch,
   fixWorkflowId,
   isFindingSlug,
+  verifySourceLabel,
   verifyWorkflowId,
   type FindingVerdict,
 } from './lib/findings.js';
@@ -2105,6 +2106,7 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
   const verified = await result;
 
   console.log('');
+  console.log(`  checks from: ${verifySourceLabel(verified.source)}`);
   if (verified.generated) {
     console.log(
       `  verify block: generated, commit ${verified.handoffCommitSha ?? 'none'}  (total_cost_usd ${verified.generateCostUsd ?? 'unknown'}, at API rates)`,
@@ -2121,7 +2123,7 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
     }
   }
   if (verified.outcome === 'unverifiable') {
-    console.log(`  ${BOLD}unverifiable${RESET}: the handoff's verify block is empty. Nothing was written.`);
+    console.log(`  ${BOLD}unverifiable${RESET}: the ${verified.source === 'finding' ? "finding's" : "handoff's"} verify block is empty. Nothing was written.`);
   } else {
     const colour = verified.outcome === 'resolved' ? GREEN : RED;
     console.log(

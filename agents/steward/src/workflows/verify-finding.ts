@@ -1,7 +1,13 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 // Pure, no imports of its own: the refusal rule and the ID the CLI holds.
-import { fixPrUrl, verifyRefusal, verifyWorkflowId, type VerifyOutcome } from '../lib/findings.js';
+import {
+  fixPrUrl,
+  verifyRefusal,
+  verifyWorkflowId,
+  type VerifyBlockSource,
+  type VerifyOutcome,
+} from '../lib/findings.js';
 
 /**
  * `verifyFindingWorkflow`: one execution per verify run,
@@ -9,8 +15,13 @@ import { fixPrUrl, verifyRefusal, verifyWorkflowId, type VerifyOutcome } from '.
  * `reopened` (findings-loop design, phase 5).
  *
  * Up to six activities, in order: read the finding, read its PR, read the
- * `verify` block in its generated handoff, generate the block when the handoff
- * has none, run the checks against production, write the result back.
+ * `verify` block, generate one when neither the finding nor its handoff has
+ * one, run the checks against production, write the result back.
+ *
+ * **Whose block.** The finding's own `verify` key when it has one: the
+ * finder's measure, written before any fix existed. The handoff's block, or a
+ * generated one, only when the finding has no key. The result and the
+ * `## Verification` section name which.
  *
  * **The gate** is {@link verifyRefusal} and a merged PR. A finding that is not
  * `fixing`, or whose fix is not merged, ends the workflow before a check runs:
@@ -23,8 +34,9 @@ import { fixPrUrl, verifyRefusal, verifyWorkflowId, type VerifyOutcome } from '.
  *
  * **What rides where** (design rule 10). The repository, the three paths, the
  * production origin and the run's instant are in the input, resolved by the
- * CLI. Whether the block is generated is decided from an activity result, the
- * handoff as it was read, so it replays from history. Nothing here reads
+ * CLI. Where the block comes from, and so whether one is generated, is decided
+ * inside `readVerifyBlock` and returned in its result, so it replays from
+ * history. Nothing here reads
  * config, the environment or the clock.
  *
  * **Three endings.** Every check passes: `resolved`. Any check fails:
@@ -72,6 +84,8 @@ export interface VerifyFindingResult {
   /** The block as it was run: `{url, kind, expect}` per check. */
   block: { url: string; kind: string; expect: unknown }[];
   checks: VerifyFindingCheck[];
+  /** Where the checks came from: the finding's own block, the handoff's, or one this run generated. */
+  source: VerifyBlockSource;
   /** True when this run wrote the block into the handoff. */
   generated: boolean;
   /** The commit that wrote the block, or null. */
@@ -153,16 +167,20 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
     );
   }
 
-  const handoff = await reading.readVerifyBlock({
+  const read = await reading.readVerifyBlock({
     repo: input.repo,
+    findingPath: input.findingPath,
+    findingText: finding.text,
     handoffPath: input.handoffPath,
     origin: input.origin,
   });
+  // A result recorded before `source` existed carries only `hasBlock`.
+  const source: VerifyBlockSource = read.source ?? (read.hasBlock ? 'handoff' : 'generated');
 
-  let block = handoff.checks;
+  let block = read.checks;
   let handoffCommitSha: string | null = null;
   let generateCostUsd: number | null = null;
-  if (!handoff.hasBlock) {
+  if (source === 'generated') {
     state.step = 'generating';
     const generated = await generating.generateVerifyBlock({
       repo: input.repo,
@@ -182,7 +200,8 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
     outcome: 'unverifiable',
     block,
     checks: [],
-    generated: !handoff.hasBlock,
+    source,
+    generated: source === 'generated',
     handoffCommitSha,
     findingCommitSha: null,
     ranAt: null,
@@ -208,6 +227,7 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
       status: outcome,
       at: run.ranAt,
       workflowId: verifyWorkflowId(input.site, input.key, input.at),
+      source,
       rows: run.results,
     },
   });

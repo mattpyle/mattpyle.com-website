@@ -51,6 +51,10 @@ interface Mocks {
   merged?: boolean;
   /** The block in the handoff, or `null` for a handoff that predates it. */
   block?: VerifyCheck[] | null;
+  /** The finding's own block, which wins over the handoff's. Undefined for a finding with no `verify` key. */
+  own?: VerifyCheck[];
+  /** Leave `source` off the read result, as a history recorded before it existed does. */
+  legacyRead?: boolean;
   /** What the generator writes when the handoff has none. */
   generated?: VerifyCheck[];
   runFindingChecks?: (input: RunFindingChecksInput) => Promise<never>;
@@ -80,7 +84,10 @@ function mockActivities(mocks: Mocks = {}) {
     readVerifyBlock: async (input: ReadVerifyBlockInput) => {
       calls.push('readVerifyBlock');
       seen.read = input;
-      return { handoff: DEFECT_HANDOFF, hasBlock: block !== null, checks: block ?? [] };
+      if (mocks.own) return { handoff: null, hasBlock: true, checks: mocks.own, source: 'finding' as const };
+      const read = { handoff: DEFECT_HANDOFF, hasBlock: block !== null, checks: block ?? [] };
+      if (mocks.legacyRead) return read;
+      return { ...read, source: block === null ? ('generated' as const) : ('handoff' as const) };
     },
     generateVerifyBlock: async (input: GenerateVerifyBlockInput) => {
       calls.push('generateVerifyBlock');
@@ -186,12 +193,20 @@ test('pass: read, read the block, run, write. The finding is resolved with the m
   assert.equal(result.ranAt, '2026-10-13T04:12:40.000Z');
 
   assert.equal(seen.pr, FIX_PR);
-  assert.deepEqual(seen.read, { repo: 'mattpyle/argus', handoffPath: input().handoffPath, origin: ORIGIN });
+  assert.deepEqual(seen.read, {
+    repo: 'mattpyle/argus',
+    findingPath: input().findingPath,
+    findingText: FIXING,
+    handoffPath: input().handoffPath,
+    origin: ORIGIN,
+  });
+  assert.equal(result.source, 'handoff');
   assert.deepEqual(seen.run, { key: DEFECT_KEY, checks: [RIGHT] });
   assert.deepEqual(seen.write!.verification, {
     status: 'resolved',
     at: '2026-10-13T04:12:40.000Z',
     workflowId: `verify/mattpyle-com/${DEFECT_KEY}/2026-10-13T041233Z`,
+    source: 'handoff',
     rows: result.checks,
   });
 });
@@ -242,8 +257,44 @@ test('generate-then-run: a handoff with no block gets one from the generator, an
   assert.deepEqual(seen.run!.checks, [RIGHT]);
   assert.equal(result.outcome, 'resolved');
   assert.equal(result.generated, true);
+  assert.equal(result.source, 'generated');
+  assert.equal(seen.write!.verification.source, 'generated');
   assert.equal(result.handoffCommitSha, 'c-block');
   assert.equal(result.generateCostUsd, 0.31);
+});
+
+test("finding's block: its checks run, nothing is generated, and the write names the finding", async () => {
+  const { activities, calls, seen } = mockActivities({ own: [RIGHT, RIGHT], block: [WRONG] });
+  const result = await withWorker(activities, async () => (await start(input())).result());
+
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'runFindingChecks', 'writeFindingVerification']);
+  assert.deepEqual(seen.run!.checks, [RIGHT, RIGHT]);
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(result.source, 'finding');
+  assert.equal(result.generated, false);
+  assert.equal(seen.write!.verification.source, 'finding');
+});
+
+test("finding's empty block: unverifiable, and nothing is generated even though the handoff has no block", async () => {
+  const { activities, calls } = mockActivities({ own: [], block: null });
+  const result = await withWorker(activities, async () => (await start(input())).result());
+
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock']);
+  assert.equal(result.outcome, 'unverifiable');
+  assert.equal(result.source, 'finding');
+  assert.equal(result.generated, false);
+});
+
+test('a read result recorded before source existed still branches on hasBlock', async () => {
+  const kept = mockActivities({ block: [RIGHT], legacyRead: true });
+  const fromHandoff = await withWorker(kept.activities, async () => (await start(input())).result());
+  assert.equal(fromHandoff.source, 'handoff');
+  assert.ok(!kept.calls.includes('generateVerifyBlock'));
+
+  const bare = mockActivities({ block: null, legacyRead: true });
+  const generated = await withWorker(bare.activities, async () => (await start(input())).result());
+  assert.equal(generated.source, 'generated');
+  assert.ok(bare.calls.includes('generateVerifyBlock'));
 });
 
 test('generate-then-unverifiable: a generated empty block ends the run with nothing written to the finding', async () => {
