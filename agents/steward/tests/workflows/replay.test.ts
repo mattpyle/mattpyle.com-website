@@ -235,3 +235,43 @@ test(
     );
   },
 );
+
+/**
+ * ## `findingWorkflow`: two `'verdict'` histories, from before the lifecycle
+ *
+ * The lifecycle (fixer-merge-and-verify) taught `findingWorkflow` a second stop
+ * point, `'resolved'`. Executions started before it carry `stopAfter:
+ * 'verdict'`, and one was still open on the Temporal Cloud namespace when the
+ * change was built, so the `'verdict'` path must issue exactly the commands it
+ * always did. Both fixtures are real executions exported from the Cloud
+ * namespace on 2026-10-13:
+ *
+ * - `finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard`: a CLI
+ *   approve, so the verdict signal then `writeFindingVerdict`. 15 events.
+ * - `finding/mattpyle-com/direction-no-dark-mode--sitewide`: a file-source
+ *   reject from the reconciler, so the signal and no activity. 9 events.
+ *
+ * **Verified able to fail**: a `wf.sleep('1 second')` injected after the
+ * verdict condition failed both with a nondeterminism error. The probe was
+ * reverted and both re-run green.
+ */
+const findingCliHistoryPath = fileURLToPath(new URL('../fixtures/histories/finding-verdict-cli.json', import.meta.url));
+const findingFileHistoryPath = fileURLToPath(new URL('../fixtures/histories/finding-verdict-file.json', import.meta.url));
+
+test('a verdict-only finding history with a CLI approve replays against current workflow code', { timeout: 120_000 }, async () => {
+  const history = JSON.parse(await fs.readFile(findingCliHistoryPath, 'utf8'));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});
+
+test('a verdict-only finding history with a file reject replays against current workflow code', { timeout: 120_000 }, async () => {
+  const history = JSON.parse(await fs.readFile(findingFileHistoryPath, 'utf8'));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/direction-no-dark-mode--sitewide',
+  );
+});

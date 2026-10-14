@@ -103,6 +103,7 @@ import {
 } from './lib/findings-schedule.js';
 import {
   findingStateQuery,
+  fixSignal,
   verdictSignal,
   type FindingState,
   type FindingWorkflowResult,
@@ -1737,6 +1738,24 @@ async function openFindingHandle(c: Client, site: string, key: string) {
   return handle;
 }
 
+/**
+ * The finding's open workflow when it runs the whole lifecycle, or undefined
+ * when there is none or it stops at the verdict. The stop point is read from
+ * the workflow's state, which carries its input's `stopAfter`; a worker older
+ * than the lifecycle answers without one, which is `'verdict'`.
+ */
+async function resolvedFindingHandle(c: Client, site: string, key: string) {
+  const handle = c.workflow.getHandle(findingWorkflowId(site, key));
+  try {
+    if ((await handle.describe()).status.name !== 'RUNNING') return undefined;
+  } catch (err) {
+    if (err instanceof WorkflowNotFoundError) return undefined;
+    throw err;
+  }
+  const state = await handle.query(findingStateQuery);
+  return state.stopAfter === 'resolved' ? handle : undefined;
+}
+
 async function sendFindingVerdict(site: string, key: string, status: FindingVerdict['status'], reason: string) {
   const c = await client();
   try {
@@ -1761,12 +1780,19 @@ async function sendFindingVerdict(site: string, key: string, status: FindingVerd
       await new Promise((r) => setTimeout(r, 1000));
     }
 
-    const result = (await handle.result()) as FindingWorkflowResult;
-    console.log(`  verdict: ${result.verdict.status} (source ${result.verdict.source})`);
-    if (result.verdict.source !== 'cli') {
+    // A `resolved` run stays open past the verdict, so its state, not its
+    // result, carries what was recorded.
+    const stillOpen = (await handle.describe()).status.name === 'RUNNING';
+    const recorded = stillOpen && state ? state : ((await handle.result()) as FindingWorkflowResult);
+    const recordedVerdict = recorded.verdict as FindingVerdict;
+    console.log(`  verdict: ${recordedVerdict.status} (source ${recordedVerdict.source})`);
+    if (recordedVerdict.source !== 'cli') {
       console.log('  An earlier verdict from the file was recorded first, so nothing was written.');
     }
-    console.log(`  commit: ${result.commitSha ?? 'none (the file already carried this verdict)'}`);
+    console.log(`  commit: ${recorded.commitSha ?? 'none (the file already carried this verdict)'}`);
+    if (stillOpen && recordedVerdict.status === 'approved') {
+      console.log(`  The workflow waits for \`steward finding fix ${key}\`.`);
+    }
     console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(handle.workflowId)}\n`);
   } finally {
     await c.connection.close();
@@ -1828,6 +1854,9 @@ finding
       console.log('');
       console.log(`  ${id}`);
       console.log(`  status: ${state.status}`);
+      if (state.step) console.log(`  step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`);
+      if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
+      if (state.lastFixError) console.log(`  last fix failed: ${state.lastFixError}`);
       if (state.verdict) {
         console.log(`  verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
         if (state.verdict.reason) console.log(`  reason: ${state.verdict.reason}`);
@@ -1925,6 +1954,25 @@ finding
     const workflowId = fixWorkflowId(opts.site, key);
     const c = await client();
     try {
+      // A finding whose workflow was started with `stopAfter: 'resolved'` runs
+      // its own fix as a child: signal it rather than start a second one.
+      const lifecycle = await resolvedFindingHandle(c, opts.site, key);
+      if (lifecycle) {
+        const state = await lifecycle.query(findingStateQuery);
+        if (state.verdict?.status !== 'approved') {
+          fail(`${lifecycle.workflowId} has no approved verdict yet. Approve it first.`);
+        }
+        if (state.step !== 'waiting-fix' && state.step !== 'waiting-verdict') {
+          fail(`${lifecycle.workflowId} is ${state.step}, not waiting for a fix.`);
+        }
+        await lifecycle.signal(fixSignal, { source: 'cli', at: new Date().toISOString() });
+        console.log(`\n  fix signal sent to ${lifecycle.workflowId}`);
+        console.log(`  It runs ${workflowId} as a child, then waits for the merge, the deploy and the verify.`);
+        console.log(`  \`steward finding status ${key}\` shows the step.`);
+        console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(lifecycle.workflowId)}\n`);
+        return;
+      }
+
       const started = Date.now();
       let handle;
       try {

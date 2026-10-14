@@ -515,3 +515,70 @@ export function setIndexStatus(text: string, key: string, status: string): strin
   lines[entry.lineNumber] = parts.join('|');
   return lines.join(eol);
 }
+
+// ---------------------------------------------------------------------------
+// The lifecycle: merge wait, deploy wait (fixer-merge-and-verify)
+// ---------------------------------------------------------------------------
+
+/**
+ * The finding file back at `approved` after its fixer PR closed unmerged, every
+ * other byte kept: `status`, and one line under `## Fix attempts` naming the
+ * closed PR. Lines from earlier attempts stay, so the file holds every closed
+ * PR. `links.pr` keeps the closed PR until the next fix writes its own.
+ */
+export function setFindingReturned(text: string, prUrl: string, at: string): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== '---') throw new Error('the finding has no frontmatter block');
+  const close = lines.indexOf('---', 1);
+  if (close < 0) throw new Error("the finding's frontmatter block is not closed");
+
+  const statusAt = lines.findIndex((line, i) => i > 0 && i < close && /^status:/.test(line));
+  if (statusAt < 0) throw new Error('the finding has no status field');
+  lines[statusAt] = 'status: approved';
+
+  const note = `- ${at}: ${prUrl} closed unmerged. The finding is approved again.`;
+  if (lines.includes(note)) return lines.join(eol);
+
+  const sectionAt = lines.findIndex((line, i) => i > close && /^##\s+Fix attempts\s*$/.test(line));
+  if (sectionAt >= 0) {
+    let end = lines.findIndex((line, i) => i > sectionAt && /^##\s/.test(line));
+    if (end < 0) end = lines.length;
+    while (end > sectionAt + 1 && lines[end - 1].trim() === '') end--;
+    lines.splice(end, 0, note);
+    return lines.join(eol);
+  }
+  while (lines.length > close + 1 && lines[lines.length - 1].trim() === '') lines.pop();
+  lines.push('', '## Fix attempts', '', note, '');
+  return lines.join(eol);
+}
+
+/** One GitHub deployment with its newest status, as the deploy wait reads them. */
+export interface DeploymentRecord {
+  id: number;
+  sha: string;
+  /** The newest status's state: `success`, `failure`, `in_progress`, `inactive` and so on. */
+  state: string;
+}
+
+/**
+ * The deployment production serves: the newest one whose newest status is
+ * `success`. Vercel posts its `Production` deployment to GitHub when the build
+ * completes, with one `success` status, so a newer failed or pending one is
+ * skipped and the one before it is still live. `undefined` when none succeeded.
+ *
+ * `deployments` is newest first, as GitHub lists them.
+ */
+export function liveDeployment(deployments: DeploymentRecord[]): DeploymentRecord | undefined {
+  return deployments.find((d) => d.state === 'success');
+}
+
+/**
+ * Whether a compare from the merge commit to the live commit says the live one
+ * contains it. GitHub's `compare/<base>...<head>` answers `identical` or `ahead`
+ * when every commit of `base` is in `head`; `behind` and `diverged` mean it is
+ * not.
+ */
+export function compareContains(status: string): boolean {
+  return status === 'identical' || status === 'ahead';
+}

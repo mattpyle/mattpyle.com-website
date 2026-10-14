@@ -34,13 +34,21 @@ that's the property being dogfooded here, on a low-stakes, real target.
   the same engine in-process with no worker and no Temporal.
 - **`findingWorkflow`** and **`reconcileFindingsWorkflow`** — the gate for findings filed into a
   separate findings repository by an inspector agent. One `findingWorkflow` per finding
-  (`finding/<site>/<key>`) waits for a `verdict` signal and completes with it; when the verdict came
-  from `steward finding approve|reject` it writes the verdict fields and the index line back through
-  the GitHub Contents API, guarded by the blob sha. An hourly Schedule runs the reconciler, which
-  starts a workflow for each new `proposed` finding and signals the ones whose file already carries a
-  verdict.
+  (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict came from `steward finding
+  approve|reject` it writes the verdict fields and the index line back through the GitHub Contents
+  API, guarded by the blob sha. Its input's `stopAfter` says where it ends. `'verdict'` completes
+  with the verdict. `'resolved'` carries an approved finding the rest of the way in the same
+  execution: it waits for a `fix` signal, runs `fixFindingWorkflow` as a child, polls the PR until
+  it merges or closes (every 5 minutes, up to 30 days), polls GitHub's `Production` deployments until
+  production serves a commit containing the merge (every 2 minutes, up to 24 hours), then runs
+  `verifyFindingWorkflow` as a child and completes with `resolved`, `reopened` or `unverifiable`. A PR
+  closed unmerged writes `status: approved` back with a note, and the run waits for the next `fix`.
+  Either wait timing out ends the run with the finding still `fixing`. An hourly Schedule runs the
+  reconciler, which starts a `'resolved'` workflow for each new `proposed` finding and signals the
+  ones whose file already carries a verdict.
 - **`fixFindingWorkflow`**: the fixer, one execution per approved finding (`fix/<site>/<key>`),
-  started by `steward finding fix <key>`. Five activities: read the finding, generate a handoff from
+  started as a child of a `'resolved'` `findingWorkflow`, or alone by `steward finding fix <key>` for
+  a finding whose workflow stops at the verdict. Five activities: read the finding, generate a handoff from
   it with one `claude -p` run that reads the checkout through read-only tools, run Claude Code
   headless on that handoff in its own worktree and then run the handoff's Verify commands, open one
   PR whose body is written from the finding and those results, and write `status: fixing` and the PR
@@ -48,7 +56,8 @@ that's the property being dogfooded here, on a low-stakes, real target.
   refuses any other. It never merges. A generated handoff carries a `verify` list in its frontmatter:
   the finding's measure as checks against production.
 - **`verifyFindingWorkflow`**: the verifier, one execution per run (`verify/<site>/<key>/<stamp>`),
-  started by `steward finding verify <key>` once a fix is merged and deployed. It reads the finding,
+  started as the lifecycle's last child once production serves the merge, or by `steward finding
+  verify <key>` by hand. It reads the finding,
   confirms the fixer's PR is merged, reads the finding's own `verify` list (falling back to the
   handoff's only when the finding has no `verify` key, and generating that with the read-only
   generator when an older handoff has none), measures each check against production with
@@ -65,7 +74,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-heavy` | `buildAndAuditDraft`, and `fixFindingWorkflow` and `verifyFindingWorkflow` with their activities | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
-| `steward-findings` | `findingWorkflow` and `reconcileFindingsWorkflow`, with their activities | Nothing local: the findings repository over the GitHub API, and Temporal through the worker's client |
+| `steward-findings` | `findingWorkflow` and `reconcileFindingsWorkflow`, with their activities, including the lifecycle's merge and deploy waits | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **laptop worker** (`steward up`, `src/worker.ts`)
 registers all of them. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
@@ -149,10 +158,10 @@ steward inbox                    # every review waiting on you, across every slu
 steward audit-url example.com    # agent-readiness checks against any site
 steward mcp-serve                # serve the audit over MCP, backed by local Temporal
 steward finding list             # open finding workflows, one per line
-steward finding status <key>     # waiting, writing or done, and the verdict
+steward finding status <key>     # the verdict, and the lifecycle step for a 'resolved' run
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"
-steward finding fix <key>        # approved defect to one PR: handoff, Claude Code, PR, status fixing
+steward finding fix <key>        # signal the finding's lifecycle, or start the fixer alone for an older finding
 steward finding verify <key>     # fixing finding to resolved or reopened, measured on production
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
