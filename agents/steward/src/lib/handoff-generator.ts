@@ -115,6 +115,8 @@ export function verifyBlockPrompt(args: { key: string; finding: string; handoff:
     '',
     ...verifyBlockGuide(args.origin),
     '',
+    'Build the checks from the finding\'s "How to measure" and nothing else, as the handoff\'s Verify section reads it.',
+    '',
     'Reply with exactly this YAML document:',
     '',
     'verify:',

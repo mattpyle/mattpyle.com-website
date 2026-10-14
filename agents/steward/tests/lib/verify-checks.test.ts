@@ -9,6 +9,7 @@ import {
   readHandoffVerify,
   runChecks,
   validateVerifyBlock,
+  verifyBlockGuide,
   withVerifyBlock,
   type CheckRunner,
   type VerifyCheck,
@@ -201,8 +202,9 @@ test('both generators are told the same six kinds and the one origin, and the bl
   for (const prompt of [whole, block]) {
     assert.match(prompt, /`url` is a full URL on https:\/\/www\.mattpyle\.com and nowhere else/);
     assert.match(prompt, /`status`, `header`, `text`, `markdown`, `selector`, `js`/);
-    assert.match(prompt, /cannot be a check: write `verify: \[\]`/);
+    assert.match(prompt, /cannot be a check, the retro appearance aside: write `verify: \[\]`/);
     assert.match(prompt, /\nverify:\n  - url: <a URL on the production origin>/);
+    assert.match(prompt, /Build the checks from the finding's "How to measure" and nothing else/);
   }
   assert.ok(whole.indexOf('---\nverify:') < whole.indexOf('# Handoff: <title>'), 'the block opens the handoff');
   assert.ok(block.includes(`<finding>\n${DEFECT_FINDING.trim()}\n</finding>`));
@@ -213,6 +215,31 @@ test('both generators are told the same six kinds and the one origin, and the bl
   assert.equal(argv[argv.indexOf('--system-prompt') + 1], VERIFY_BLOCK_SYSTEM_PROMPT);
   assert.equal(argv[argv.indexOf('--tools') + 1], HANDOFF_GENERATOR_TOOLS.join(','));
   assert.ok(argv.includes('--safe-mode') && argv.includes('--strict-mcp-config'));
+});
+
+test('the guide is the schema alone: it names no finding section, and its source rule is each caller\'s own', () => {
+  const guide = verifyBlockGuide(ORIGIN).join('\n');
+  for (const section of ['How to measure', 'What happened', 'What would serve them', 'Why it matters', 'Who wanted what']) {
+    assert.ok(!guide.includes(section), `the guide names "${section}"`);
+  }
+  assert.doesNotMatch(guide, /Build the checks from/);
+});
+
+test('the guide teaches the retro check: a js expression that sets the attribute, then measures a non-empty match', () => {
+  const guide = verifyBlockGuide(ORIGIN).join('\n');
+  assert.match(guide, /The retro appearance is the one page state a check may set\./);
+  assert.match(guide, /a `js` check whose expression sets `document\.documentElement\.dataset\.appearance = 'retro'` before it measures/);
+  assert.match(guide, /fails on an empty match/);
+  assert.match(guide, /a state a visitor has to set up cannot be a check, the retro appearance aside/);
+
+  // The worked example in the rule is itself a block the validator admits.
+  const example = /`expect: (\{expression: "\(\(\) => \{ document[^`]*\})`/.exec(guide)?.[1];
+  assert.ok(example, 'the rule carries an example expect');
+  assert.match(example, /cells\.length > 0 && /);
+  const { raw } = parseVerifyReply(`verify:\n  - url: "${ORIGIN}/steward/"\n    kind: "js"\n    expect: ${example}\n`);
+  const admitted = validateVerifyBlock(raw, ORIGIN);
+  assert.deepEqual(admitted.problems, []);
+  assert.equal((admitted.checks[0].expect as { equals: unknown }).equals, true);
 });
 
 // ---------------------------------------------------------------------------
