@@ -3,6 +3,10 @@ import type { APIContext } from 'astro';
 import { getCollection } from 'astro:content';
 import { compareChangelogEntries } from '../../lib/changelog-order';
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // The changelog's own feed, alongside /rss.xml rather than merged into it: the two
 // have different subjects, and a reader who subscribed to posts never asked to hear
 // about every infrastructure change. /changelog advertised only the writing feed
@@ -35,7 +39,8 @@ export async function GET(context: APIContext) {
     site: new URL('/changelog/', context.site),
     items: entries.map((entry) => ({
       title: entry.data.title,
-      description: entry.data.summary,
+      // `summary` is plain text, a reader parses an RSS description as HTML, and rss() only escapes it for XML.
+      description: escapeHtml(entry.data.summary),
       pubDate: entry.data.publishedAt ?? entry.data.date,
       link: `/changelog/${entry.id}/`,
     })),
