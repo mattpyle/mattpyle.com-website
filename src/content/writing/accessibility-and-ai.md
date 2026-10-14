@@ -1,7 +1,7 @@
 ---
 title: "Accessibility, AI, and testing with screen readers"
 date: 2026-07-13
-updated: 2026-08-07
+updated: 2026-07-31
 description: "AI built this site. Every automated tool gave it top marks. Then I installed a screen reader for the first time, spent an evening fumbling with it, and heard what my site actually sounds like."
 seoTitle: "Accessibility, AI, and screen reader testing"
 seoDescription: "AI built this website and every automated tool gave it top marks. Then I used a screen reader for the first time and heard what those tools missed."
