@@ -8,11 +8,14 @@ import {
 } from './activities/agent-audit.js';
 import { checkActionUsage, checkCredentialExpiry, reportRunHealth } from './activities/health.js';
 import {
+  awaitFixPrMerge,
+  awaitProductionDeploy,
   listOpenFindingWorkflows,
   listSites,
   readFinding,
   readFindingsIndex,
   startFindingWorkflow,
+  writeFindingReturned,
   writeFindingVerdict,
 } from './activities/findings.js';
 import {
@@ -141,9 +144,10 @@ const activities = {
 const fastActivities = { auditSiteFast };
 
 /**
- * The findings queue's registry (findings-loop design, decision 18): the six
+ * The findings queue's registry (findings-loop design, decision 18): the nine
  * findings activities, plus `reportRunHealth` because the reconciler pings its
- * check from this queue. Four GitHub API calls against the findings repository,
+ * check from this queue. Five GitHub API calls against the findings repository,
+ * the lifecycle's two waits against the site repository's PR and deployments,
  * and a visibility list and a workflow start through the worker's own client;
  * none opens a local file, so the "nothing local" rule above holds for this map
  * too.
@@ -153,6 +157,9 @@ const findingsActivities = {
   readFindingsIndex,
   readFinding,
   writeFindingVerdict,
+  writeFindingReturned,
+  awaitFixPrMerge,
+  awaitProductionDeploy,
   listOpenFindingWorkflows,
   startFindingWorkflow,
   reportRunHealth,

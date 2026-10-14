@@ -1,0 +1,195 @@
+{
+  "events": [
+    {
+      "eventId": "1",
+      "eventTime": "2026-09-14T04:05:01.553821030Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
+      "version": "102541",
+      "taskId": "28462551",
+      "workflowExecutionStartedEventAttributes": {
+        "workflowType": {
+          "name": "findingWorkflow"
+        },
+        "taskQueue": {
+          "name": "steward-findings",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJzaXRlIjoibWF0dHB5bGUtY29tIiwia2V5IjoiZGlyZWN0aW9uLW5vLWRhcmstbW9kZS0tc2l0ZXdpZGUiLCJyZXBvIjoibWF0dHB5bGUvYXJndXMiLCJmaW5kaW5nUGF0aCI6InNpdGVzL21hdHRweWxlLWNvbS9maW5kaW5ncy9kaXJlY3Rpb24tbm8tZGFyay1tb2RlLS1zaXRld2lkZS5tZCIsImluZGV4UGF0aCI6InNpdGVzL21hdHRweWxlLWNvbS9maW5kaW5ncy9JTkRFWC5tZCIsInN0b3BBZnRlciI6InZlcmRpY3QifQ=="
+            }
+          ]
+        },
+        "workflowTaskTimeout": "10s",
+        "originalExecutionRunId": "01a09e16-fbf1-7c83-b65a-7dbcb8ad879b",
+        "identity": "25@76b16b928ec6",
+        "firstExecutionRunId": "01a09e16-fbf1-7c83-b65a-7dbcb8ad879b",
+        "attempt": 1,
+        "firstWorkflowTaskBackoff": "0s",
+        "header": {
+          "fields": {}
+        },
+        "workflowId": "finding/mattpyle-com/direction-no-dark-mode--sitewide"
+      }
+    },
+    {
+      "eventId": "2",
+      "eventTime": "2026-09-14T04:05:01.553940835Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "version": "102541",
+      "taskId": "28462552",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "steward-findings",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "3",
+      "eventTime": "2026-09-14T04:05:01.568728965Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "version": "102541",
+      "taskId": "28462557",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "2",
+        "identity": "25@76b16b928ec6",
+        "requestId": "d128565b-58b7-45ad-9941-842b1a25f91a",
+        "historySizeBytes": "570",
+        "workerVersion": {
+          "buildId": "@temporalio/worker@1.20.3+fdde4653fde50e9de9da03827f29ca4c32f68c9ad15f230acdf1de7472db33cd"
+        }
+      }
+    },
+    {
+      "eventId": "4",
+      "eventTime": "2026-09-14T04:05:01.664355162Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "version": "102541",
+      "taskId": "28462561",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "2",
+        "startedEventId": "3",
+        "identity": "25@76b16b928ec6",
+        "workerVersion": {
+          "buildId": "@temporalio/worker@1.20.3+fdde4653fde50e9de9da03827f29ca4c32f68c9ad15f230acdf1de7472db33cd"
+        },
+        "sdkMetadata": {
+          "coreUsedFlags": [
+            1,
+            2,
+            3
+          ],
+          "sdkName": "temporal-typescript",
+          "sdkVersion": "1.20.3"
+        },
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "5",
+      "eventTime": "2026-09-27T05:05:02.223541867Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED",
+      "version": "102541",
+      "taskId": "52331723",
+      "workflowExecutionSignaledEventAttributes": {
+        "signalName": "verdict",
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJzdGF0dXMiOiJyZWplY3RlZCIsInJlYXNvbiI6IkZhaXIsIGJ1dCBub3QgdXJnZW50LiBJdCBpcyBvbiB0aGUgYmFja2xvZyBhcyBpdHMgb3duIGNhcmQuIERvIG5vdCByZS1maWxlLiIsInNvdXJjZSI6ImZpbGUiLCJhdCI6IjIwMjYtMDktMjdUMDU6MDU6MDIuMTA0WiJ9"
+            }
+          ]
+        },
+        "identity": "history-service",
+        "externalWorkflowExecution": {
+          "workflowId": "steward-findings-reconcile-scheduled-2026-09-27T05:05:00Z",
+          "runId": "01a0e140-90a6-7633-87ad-fd9ba647be18"
+        },
+        "requestId": "0d01164b-f22d-4d64-808e-6129d5593e9c"
+      }
+    },
+    {
+      "eventId": "6",
+      "eventTime": "2026-09-27T05:05:02.223553756Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "version": "102541",
+      "taskId": "52331724",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "25@76b16b928ec6-d0bc2580d08b42748416b0205a452316",
+          "kind": "TASK_QUEUE_KIND_STICKY",
+          "normalName": "steward-findings"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "7",
+      "eventTime": "2026-09-27T05:05:02.235571591Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "version": "102541",
+      "taskId": "52331728",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "6",
+        "identity": "26@0519deeda5f5",
+        "requestId": "694a3750-f54c-4476-8de2-865cdb0c7501",
+        "historySizeBytes": "1436",
+        "workerVersion": {
+          "buildId": "@temporalio/worker@1.20.3+fdde4653fde50e9de9da03827f29ca4c32f68c9ad15f230acdf1de7472db33cd"
+        }
+      }
+    },
+    {
+      "eventId": "8",
+      "eventTime": "2026-09-27T05:05:02.332831214Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "version": "102541",
+      "taskId": "52331733",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "6",
+        "startedEventId": "7",
+        "identity": "26@0519deeda5f5",
+        "workerVersion": {
+          "buildId": "@temporalio/worker@1.20.3+fdde4653fde50e9de9da03827f29ca4c32f68c9ad15f230acdf1de7472db33cd"
+        },
+        "sdkMetadata": {
+          "langUsedFlags": [
+            2
+          ]
+        },
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "9",
+      "eventTime": "2026-09-27T05:05:02.332946289Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED",
+      "version": "102541",
+      "taskId": "52331734",
+      "workflowExecutionCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJzaXRlIjoibWF0dHB5bGUtY29tIiwia2V5IjoiZGlyZWN0aW9uLW5vLWRhcmstbW9kZS0tc2l0ZXdpZGUiLCJ2ZXJkaWN0Ijp7InN0YXR1cyI6InJlamVjdGVkIiwicmVhc29uIjoiRmFpciwgYnV0IG5vdCB1cmdlbnQuIEl0IGlzIG9uIHRoZSBiYWNrbG9nIGFzIGl0cyBvd24gY2FyZC4gRG8gbm90IHJlLWZpbGUuIiwic291cmNlIjoiZmlsZSIsImF0IjoiMjAyNi0wOS0yN1QwNTowNTowMi4xMDRaIn0sImNvbW1pdFNoYSI6bnVsbH0="
+            }
+          ]
+        },
+        "workflowTaskCompletedEventId": "8"
+      }
+    }
+  ]
+}

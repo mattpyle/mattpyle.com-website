@@ -177,3 +177,30 @@ test('a failed read fails the run and pings the check as failed', async () => {
   assert.equal(s.pings[0].ok, false);
   assert.match(s.pings[0].summary, /401/);
 });
+
+test('a new finding of a known site starts at resolved, with its paths, branch and origin frozen in', async () => {
+  const s = store({
+    'mattpyle-com': header(['m-one | proposed | Title | ']),
+    'site-e': header(['e-one | proposed | Title | ']),
+  });
+  await withWorker(s.activities, async () => {
+    await reconcileOnce();
+    const known = await client.workflow.getHandle(findingWorkflowId('mattpyle-com', 'm-one')).query(findingStateQuery);
+    assert.equal(known.stopAfter, 'resolved');
+    assert.equal(known.step, 'waiting-verdict');
+    const unknown = await client.workflow.getHandle(findingWorkflowId('site-e', 'e-one')).query(findingStateQuery);
+    assert.equal(unknown.stopAfter, 'verdict', 'a site with no production origin cannot verify, so it stops at the verdict');
+
+    const history = await client.workflow.getHandle(findingWorkflowId('mattpyle-com', 'm-one')).fetchHistory();
+    const payload = history.events?.[0]?.workflowExecutionStartedEventAttributes?.input?.payloads?.[0]?.data;
+    const started = JSON.parse(Buffer.from(payload as Uint8Array).toString('utf8'));
+    assert.deepEqual(
+      { handoffPath: started.handoffPath, branch: started.branch, origin: started.origin },
+      {
+        handoffPath: 'sites/mattpyle-com/handoffs/m-one.md',
+        branch: 'fix/finding-m-one',
+        origin: 'https://www.mattpyle.com',
+      },
+    );
+  });
+});

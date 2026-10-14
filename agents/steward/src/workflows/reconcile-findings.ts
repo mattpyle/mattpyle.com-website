@@ -17,7 +17,9 @@ import { verdictSignal } from './finding.js';
  * For every site folder in the findings repository it reads `INDEX.md` and
  * compares it with the running finding workflows:
  *
- * - a `proposed` line with no open workflow gets one started;
+ * - a `proposed` line with no open workflow gets one started, with
+ *   `stopAfter: 'resolved'`, so it runs gate, fix and verify in one execution
+ *   (design decision 18). Workflows started earlier keep their `'verdict'`;
  * - an `approved` or `rejected` line whose workflow is still open gets the
  *   `verdict` signal with source `file`, carrying the reason from the line;
  * - everything else is unchanged.
@@ -109,7 +111,7 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
         repo: input.repo,
         findingPath: findingPath(site, line.key),
         indexPath: findingsIndexPath(site),
-        stopAfter: 'verdict',
+        stopAfter: 'resolved',
       });
       if (outcome === 'started') counts.started++;
       else counts.unchanged++;

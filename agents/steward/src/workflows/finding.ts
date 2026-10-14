@@ -2,36 +2,66 @@ import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
 // same objects the reconciler and the CLI hold.
-import type { FindingVerdict } from '../lib/findings.js';
+import {
+  fixWorkflowId,
+  parsePrUrl,
+  verifyWorkflowId,
+  type FindingVerdict,
+  type VerifyOutcome,
+} from '../lib/findings.js';
+import { fixFindingWorkflow } from './fix-finding.js';
+import { verifyFindingWorkflow } from './verify-finding.js';
 
 /**
- * `findingWorkflow`: one execution per finding, `finding/<site>/<key>`, that
- * waits for Matt's verdict (findings-loop design, decisions 16 to 19).
+ * `findingWorkflow`: one execution per finding, `finding/<site>/<key>`. It
+ * waits for Matt's verdict (findings-loop design, decisions 16 to 19) and,
+ * started with `stopAfter: 'resolved'`, carries an approved finding through its
+ * fix to `resolved` or `reopened` (fixer-merge-and-verify, decisions 1 to 8).
  *
  * The gate is the `verdict` signal, and it has two senders. `steward finding
  * approve|reject` sends it with source `cli`, and this workflow writes the
  * verdict into the finding file and its index line. The hourly reconciler sends
  * it with source `file` when the verdict is already in the file (Discord through
- * Argus, or an edit in Obsidian), and this workflow writes nothing. Either way it
- * completes with the verdict as its result.
+ * Argus, or an edit in Obsidian), and this workflow writes nothing.
  *
- * **What rides where** (design rule 10). The repository, the two paths and the
- * stop point are in the input, so an open workflow keeps the arguments it was
- * started with whatever config says later. The verdict, its reason and its source
- * are in the signal, so the history records who decided what. Nothing here reads
- * config or the environment.
+ * **`stopAfter`** is where the run ends.
  *
- * **`stopAfter`** is `'verdict'` in phase 2, the only value this code knows. A
- * later phase (handoff generation, verification) starts new executions with a
- * later stop point rather than teaching open ones a new ending, so no workflow
- * started today ever replays through code it never ran.
+ * - `'verdict'`: it completes with the verdict, as every execution started
+ *   before the lifecycle shipped does. That path issues exactly the commands it
+ *   always did, so those histories replay unchanged.
+ * - `'resolved'`: after an `approved` verdict it waits for the `fix` signal
+ *   (decision 2: not on approve, while the fix needs the laptop). Then the fix
+ *   runs as a child, `fixFindingWorkflow` as it is, on the heavy queue; the
+ *   merge wait and the deploy wait poll from here, on `steward-findings`; and
+ *   `verifyFindingWorkflow` runs as a child. Its outcome is this run's result.
+ *   A rejected verdict ends the run as `'verdict'` does.
+ *
+ * **What rides where** (design rule 10). The repository, the paths, the branch,
+ * the production origin and the stop point are in the input, so an open
+ * workflow keeps the arguments it was started with whatever config says later.
+ * The verdict and the fix request are signals, so the history records who
+ * decided what. Nothing here reads config or the environment.
+ *
+ * **The two waits** are Temporal's infrequent-polling pattern (decision 7): an
+ * activity that fails with a retryable error until it is done, retried at a
+ * fixed interval. Retries are not history events. Either wait timing out ends
+ * the run with the finding still `fixing` (decision 8), and the result says
+ * which; `steward finding verify` closes it by hand.
+ *
+ * **A PR closed unmerged** writes `status: approved` back with a note, and the
+ * run waits for the next `fix`. So does a fix child that fails: the finding is
+ * still approved, and a second `fix` is the retry.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
 // scorecard-audit.ts gives: config.ts touches `node:path` and `process.env`.
 const QUEUE_FINDINGS = 'steward-findings';
+const QUEUE_HEAVY = 'steward-heavy';
 
-export type FindingStopAfter = 'verdict';
+/** The GitHub deployment environment Vercel's integration posts production to. */
+const PRODUCTION_ENVIRONMENT = 'Production';
+
+export type FindingStopAfter = 'verdict' | 'resolved';
 
 export interface FindingWorkflowInput {
   site: string;
@@ -43,26 +73,84 @@ export interface FindingWorkflowInput {
   /** `sites/<site>/findings/INDEX.md` */
   indexPath: string;
   stopAfter: FindingStopAfter;
+  /** `sites/<site>/handoffs/<key>.md`. Required for `'resolved'`. */
+  handoffPath?: string;
+  /** The fixer's branch in the site repository. Required for `'resolved'`. */
+  branch?: string;
+  /** The production origin every verify check must name. Required for `'resolved'`. */
+  origin?: string;
 }
+
+/**
+ * How a run ended. `verdict` and `rejected` end at the gate. The three verify
+ * outcomes end the lifecycle. The two timeouts and `verify-failed` end it with
+ * the finding still `fixing`.
+ */
+export type FindingOutcome = 'verdict' | 'rejected' | VerifyOutcome | 'merge-timeout' | 'deploy-timeout' | 'verify-failed';
 
 export interface FindingWorkflowResult {
   site: string;
   key: string;
   verdict: FindingVerdict;
-  /** The last commit the write made, when the verdict came by CLI and changed the files. */
+  /** The last commit the verdict write made, when the verdict came by CLI and changed the files. */
   commitSha: string | null;
+  /** Absent from results recorded before the lifecycle. */
+  outcome?: FindingOutcome;
+  /** One line on how the run ended, for the CLI and the Web UI. */
+  note?: string;
+  /** The last fixer PR, or null when no fix opened one. */
+  prUrl?: string | null;
+  mergeSha?: string | null;
+  /** The commit production served when the deploy wait ended. */
+  liveSha?: string | null;
+  verifyWorkflowId?: string | null;
+  /** How many `fix` signals started a fix. */
+  fixAttempts?: number;
 }
+
+/**
+ * Where the run is. `waiting-verdict` until the verdict, then for a
+ * `'resolved'` run one of the lifecycle steps, and `done` when it ends.
+ */
+export type FindingStep =
+  | 'waiting-verdict'
+  | 'waiting-fix'
+  | 'fixing'
+  | 'waiting-merge'
+  | 'waiting-deploy'
+  | 'verifying'
+  | 'done';
 
 export interface FindingState {
   site: string;
   key: string;
+  /**
+   * The verdict gate's own state: `done` once the verdict is recorded and
+   * written. A `'resolved'` run is still open then; `step` says where.
+   */
   status: 'waiting' | 'writing' | 'done';
   verdict: FindingVerdict | null;
   commitSha: string | null;
+  /** Absent from a worker older than the lifecycle; read it as `'verdict'`. */
+  stopAfter?: FindingStopAfter;
+  step?: FindingStep;
+  prUrl?: string | null;
+  /** Why the last fix child failed, while the run waits for the next `fix`. */
+  lastFixError?: string | null;
+}
+
+/** The `fix` signal's payload: who asked, and when. */
+export interface FixRequest {
+  source: 'cli';
+  /** ISO 8601, the sender's clock. */
+  at: string;
 }
 
 export const verdictSignal = wf.defineSignal<[FindingVerdict]>('verdict');
+export const fixSignal = wf.defineSignal<[FixRequest]>('fix');
 export const findingStateQuery = wf.defineQuery<FindingState>('state');
+
+const GITHUB_PERMANENT = ['AuthError', 'NotFound', 'UnprocessableRequest'];
 
 /**
  * Five attempts with backoff, because the retryable failure here is a real one:
@@ -70,14 +158,41 @@ export const findingStateQuery = wf.defineQuery<FindingState>('state');
  * GitHub answers with 409 and the next attempt resolves from a fresh read. The
  * rest are permanent and named so they fail on the first attempt.
  */
-const writing = wf.proxyActivities<Pick<typeof activities, 'writeFindingVerdict'>>({
+const writing = wf.proxyActivities<Pick<typeof activities, 'writeFindingVerdict' | 'writeFindingReturned'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
   retry: {
     maximumAttempts: 5,
     initialInterval: '2 seconds',
     backoffCoefficient: 2,
-    nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest', 'FindingMissing', 'FindingMalformed'],
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMissing', 'FindingMalformed', 'FindingMoved'],
+  },
+});
+
+// The merge wait: every 5 minutes for up to 30 days. No `maximumAttempts`, so
+// no attempt cap; the schedule-to-close bound ends it. A PR a person has not
+// merged yet is the normal case, not a failure.
+const merging = wf.proxyActivities<Pick<typeof activities, 'awaitFixPrMerge'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  scheduleToCloseTimeout: '30 days',
+  retry: {
+    initialInterval: '5 minutes',
+    backoffCoefficient: 1,
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMalformed'],
+  },
+});
+
+// The deploy wait: every 2 minutes for up to 24 hours. A Vercel build takes
+// about three, so a day is a deploy that is not coming.
+const deploying = wf.proxyActivities<Pick<typeof activities, 'awaitProductionDeploy'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  scheduleToCloseTimeout: '24 hours',
+  retry: {
+    initialInterval: '2 minutes',
+    backoffCoefficient: 1,
+    nonRetryableErrorTypes: GITHUB_PERMANENT,
   },
 });
 
@@ -93,10 +208,38 @@ function isVerdict(value: unknown): value is FindingVerdict {
   );
 }
 
+/** A wait that ran out its schedule-to-close bound, rather than failing outright. */
+function isTimeout(err: unknown): boolean {
+  return err instanceof wf.ActivityFailure && (err.retryState === 'TIMEOUT' || err.cause instanceof wf.TimeoutFailure);
+}
+
+/** The innermost specific message of a failure chain. */
+function describeError(err: unknown): string {
+  let current: unknown = err;
+  let best = '';
+  for (let depth = 0; current instanceof Error && depth < 6; depth++) {
+    if (current.message && !/^(Activity task failed|Child Workflow execution failed)$/.test(current.message)) {
+      best = current.message;
+    }
+    current = (current as Error).cause;
+  }
+  return best || (err instanceof Error ? err.message : String(err));
+}
+
+function nowIso(): string {
+  return new Date(Date.now()).toISOString();
+}
+
 export async function findingWorkflow(input: FindingWorkflowInput): Promise<FindingWorkflowResult> {
-  if (input.stopAfter !== 'verdict') {
+  if (input.stopAfter !== 'verdict' && input.stopAfter !== 'resolved') {
     throw wf.ApplicationFailure.nonRetryable(
       `stopAfter "${String(input.stopAfter)}" is not a stop point this workflow knows.`,
+      'UnknownStopPoint',
+    );
+  }
+  if (input.stopAfter === 'resolved' && (!input.handoffPath || !input.branch || !input.origin)) {
+    throw wf.ApplicationFailure.nonRetryable(
+      'stopAfter "resolved" needs handoffPath, branch and origin in the input.',
       'UnknownStopPoint',
     );
   }
@@ -107,6 +250,10 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     status: 'waiting',
     verdict: null,
     commitSha: null,
+    stopAfter: input.stopAfter,
+    step: 'waiting-verdict',
+    prUrl: null,
+    lastFixError: null,
   };
 
   wf.setHandler(findingStateQuery, () => state);
@@ -130,6 +277,22 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     state.verdict = verdict;
   });
 
+  // A `fix` counts only while the run waits for one, or is about to: an
+  // approved verdict and no fix in flight. One sent during a fix is dropped, so
+  // a double send never queues a second fixer run behind the first.
+  const fix = { requested: false };
+  wf.setHandler(fixSignal, (request) => {
+    const accepting =
+      input.stopAfter === 'resolved' &&
+      state.verdict?.status === 'approved' &&
+      (state.step === 'waiting-verdict' || state.step === 'waiting-fix');
+    if (!accepting) {
+      wf.log.info('ignoring a fix signal', { key: input.key, step: state.step, at: request?.at });
+      return;
+    }
+    fix.requested = true;
+  });
+
   await wf.condition(() => state.verdict !== null);
   const verdict = state.verdict as unknown as FindingVerdict;
 
@@ -148,7 +311,147 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     });
     state.commitSha = written.commitSha;
   }
-
   state.status = 'done';
-  return { site: input.site, key: input.key, verdict, commitSha: state.commitSha };
+
+  const base = { site: input.site, key: input.key, verdict, commitSha: state.commitSha };
+  if (input.stopAfter === 'verdict') {
+    state.step = 'done';
+    return base;
+  }
+  if (verdict.status === 'rejected') {
+    state.step = 'done';
+    return { ...base, outcome: 'rejected', note: 'Rejected at the gate.' };
+  }
+
+  return await lifecycle(input as Required<FindingWorkflowInput>, state, base, fix);
+}
+
+/**
+ * Fix, merge, deploy, verify, looping back to the fix wait when a PR closes
+ * unmerged or a fix child fails.
+ */
+async function lifecycle(
+  input: Required<FindingWorkflowInput>,
+  state: FindingState,
+  base: Pick<FindingWorkflowResult, 'site' | 'key' | 'verdict' | 'commitSha'>,
+  fix: { requested: boolean },
+): Promise<FindingWorkflowResult> {
+  let fixAttempts = 0;
+  const end = (outcome: FindingOutcome, note: string, extra: Partial<FindingWorkflowResult> = {}): FindingWorkflowResult => {
+    state.step = 'done';
+    return { ...base, outcome, note, prUrl: state.prUrl ?? null, fixAttempts, ...extra };
+  };
+
+  for (;;) {
+    state.step = 'waiting-fix';
+    await wf.condition(() => fix.requested);
+    fix.requested = false;
+    fixAttempts++;
+
+    state.step = 'fixing';
+    let prUrl: string;
+    try {
+      const fixed = await wf.executeChild(fixFindingWorkflow, {
+        workflowId: fixWorkflowId(input.site, input.key),
+        taskQueue: QUEUE_HEAVY,
+        args: [
+          {
+            site: input.site,
+            key: input.key,
+            repo: input.repo,
+            findingPath: input.findingPath,
+            indexPath: input.indexPath,
+            handoffPath: input.handoffPath,
+            branch: input.branch,
+            stopAfter: 'pr',
+          },
+        ],
+      });
+      prUrl = fixed.prUrl;
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      state.lastFixError = describeError(err);
+      wf.log.warn('the fix failed; waiting for the next fix signal', { key: input.key, error: state.lastFixError });
+      continue;
+    }
+    state.prUrl = prUrl;
+    state.lastFixError = null;
+
+    state.step = 'waiting-merge';
+    let merge;
+    try {
+      merge = await merging.awaitFixPrMerge(prUrl);
+    } catch (err) {
+      if (isTimeout(err)) {
+        return end('merge-timeout', `${prUrl} was not merged or closed within 30 days. The finding is still fixing.`);
+      }
+      throw err;
+    }
+
+    if (merge.state === 'closed') {
+      await writing.writeFindingReturned({
+        repo: input.repo,
+        site: input.site,
+        key: input.key,
+        findingPath: input.findingPath,
+        indexPath: input.indexPath,
+        prUrl,
+        at: nowIso(),
+      });
+      continue;
+    }
+
+    const mergeSha = merge.mergeSha as string;
+    const pr = parsePrUrl(prUrl);
+    if (!pr) throw wf.ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
+
+    state.step = 'waiting-deploy';
+    let deploy;
+    try {
+      deploy = await deploying.awaitProductionDeploy({ repo: pr.repo, mergeSha, environment: PRODUCTION_ENVIRONMENT });
+    } catch (err) {
+      if (isTimeout(err)) {
+        return end(
+          'deploy-timeout',
+          `Production did not serve ${mergeSha.slice(0, 7)} within 24 hours. The finding is still fixing.`,
+          { mergeSha },
+        );
+      }
+      throw err;
+    }
+
+    state.step = 'verifying';
+    const at = nowIso();
+    const verifyId = verifyWorkflowId(input.site, input.key, at);
+    try {
+      const verified = await wf.executeChild(verifyFindingWorkflow, {
+        workflowId: verifyId,
+        taskQueue: QUEUE_HEAVY,
+        args: [
+          {
+            site: input.site,
+            key: input.key,
+            repo: input.repo,
+            findingPath: input.findingPath,
+            indexPath: input.indexPath,
+            handoffPath: input.handoffPath,
+            origin: input.origin,
+            at,
+          },
+        ],
+      });
+      return end(verified.outcome, `Verified on production at ${deploy.liveSha.slice(0, 7)}: ${verified.outcome}.`, {
+        mergeSha,
+        liveSha: deploy.liveSha,
+        verifyWorkflowId: verifyId,
+      });
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      return end('verify-failed', `The verify failed: ${describeError(err)}. The finding is still fixing.`, {
+        mergeSha,
+        liveSha: deploy.liveSha,
+        verifyWorkflowId: verifyId,
+      });
+    }
+  }
 }

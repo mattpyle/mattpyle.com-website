@@ -52,6 +52,9 @@ export {
   readFixPr,
   readVerifyBlock,
   writeFindingVerification,
+  awaitFixPrMerge,
+  awaitProductionDeploy,
+  writeFindingReturned,
   listOpenFindingWorkflows,
   startFindingWorkflow,
 } from './findings.js';
