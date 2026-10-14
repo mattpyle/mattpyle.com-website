@@ -2594,12 +2594,27 @@ html[data-appearance='retro'] [data-module='steward-body'] .refusal pre {
 }
 
 /* The log-identity table, on the terms this file gives every retro table: a
-   ruled grid on the frame ground rather than the redesign's hairlines. */
+   ruled grid on the frame ground rather than the redesign's hairlines. The end
+   cells get 8px so the text does not sit against the frame. */
 html[data-appearance='retro'] [data-module='steward-body'] .facts,
 html[data-appearance='retro'] [data-module='steward-body'] .limits-table {
   font-family: var(--retro-font-body);
   background: var(--retro-frame-bg);
   border: 2px solid var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .facts th:first-child,
+html[data-appearance='retro'] [data-module='steward-body'] .facts td:first-child,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table th:first-child,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table td:first-child {
+  padding-left: 8px;
+}
+
+html[data-appearance='retro'] [data-module='steward-body'] .facts th:last-child,
+html[data-appearance='retro'] [data-module='steward-body'] .facts td:last-child,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table th:last-child,
+html[data-appearance='retro'] [data-module='steward-body'] .limits-table td:last-child {
+  padding-right: 8px;
 }
 
 /* BOTH edges, not just the bottom. `.facts` rules its rows with `border-top`
