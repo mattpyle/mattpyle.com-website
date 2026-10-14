@@ -8,6 +8,39 @@ function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+// Item bodies are written for their own pages, where the title is the `#`.
+// Here the title is a `###`, so every body heading drops to `####` or deeper
+// to keep the outline nested. Lines inside fenced code blocks are left alone.
+function demoteHeadings(body: string): string {
+  let fence: { char: string; length: number } | null = null;
+  return body
+    .split('\n')
+    .map((line) => {
+      const fenceMatch = line.match(/^ {0,3}(`{3,}|~{3,})/);
+      if (fence) {
+        if (
+          fenceMatch &&
+          fenceMatch[1][0] === fence.char &&
+          fenceMatch[1].length >= fence.length &&
+          line.slice(fenceMatch[0].length).trim() === ''
+        ) {
+          fence = null;
+        }
+        return line;
+      }
+      if (fenceMatch) {
+        fence = { char: fenceMatch[1][0], length: fenceMatch[1].length };
+        return line;
+      }
+      const heading = line.match(/^( {0,3})(#{1,6})(?=[ \t]|$)/);
+      if (!heading) return line;
+      const level = heading[2].length;
+      const demoted = '#'.repeat(Math.min(6, Math.max(4, level + 2)));
+      return heading[1] + demoted + line.slice(heading[0].length);
+    })
+    .join('\n');
+}
+
 export const GET: APIRoute = async ({ site }) => {
   // Derive the host from astro.config.mjs `site` so this file can never emit a
   // different host than the canonicals and sitemap do.
@@ -84,7 +117,7 @@ export const GET: APIRoute = async ({ site }) => {
     // Same rewrite the site's markdown pipeline runs, so the `<Video />` tag
     // Keystatic stores reaches this export as a real element. See
     // src/lib/video-embed.mjs.
-    lines.push(rewriteVideoTags(article.body ?? ''));
+    lines.push(demoteHeadings(rewriteVideoTags(article.body ?? '')));
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -103,7 +136,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(project.data.description);
     lines.push('');
-    lines.push(project.body ?? '');
+    lines.push(demoteHeadings(project.body ?? ''));
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -123,7 +156,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(entry.data.summary);
     lines.push('');
-    lines.push(entry.body ?? '');
+    lines.push(demoteHeadings(entry.body ?? ''));
     lines.push('');
     lines.push('---');
     lines.push('');
