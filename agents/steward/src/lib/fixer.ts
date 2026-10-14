@@ -322,6 +322,8 @@ export function handoffGeneratorPrompt(args: { key: string; finding: string; ori
     '',
     ...verifyBlockGuide(args.origin),
     '',
+    'Build the checks from the finding\'s "How to measure" and nothing else, the same measure as the Verify section.',
+    '',
     'Commands that exist in the repository. Write one exactly as it is here, with nothing piped onto it:',
     '',
     ...REPO_COMMANDS.map((entry) => `- \`${entry.command}\`: ${entry.about}`),

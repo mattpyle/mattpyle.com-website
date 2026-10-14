@@ -43,6 +43,10 @@ const STRING_MAX = 2_000;
 /**
  * What a generator is told about the block. One text for both prompts, so a
  * handoff written whole and a block written alone follow the same rules.
+ *
+ * The schema only: it names no finding section. Each caller says where its
+ * checks come from, and Argus's `argus-inspect` skill carries a copy of this
+ * text under its own source rule.
  */
 export function verifyBlockGuide(origin: string): string[] {
   return [
@@ -55,9 +59,10 @@ export function verifyBlockGuide(origin: string): string[] {
     '- `selector`: the page rendered in a browser. `expect: {selector: "footer nav", count: 1}`, or `{selector: "h1", text: "the trimmed text of the first match"}`, or `{selector: "footer nav", attribute: "aria-label", equals: "Footer"}`.',
     '- `js`: an expression evaluated in the rendered page. `expect: {expression: "document.title", equals: "the JSON value it returns"}`.',
     '',
-    'Build the checks from the finding\'s "How to measure" and nothing else. Every check passes on production once the fix is live and fails before it.',
+    'Every check passes on production once the fix is live and fails before it.',
     'Prefer `status`, `header`, `text` and `markdown`. Use `selector` or `js` only when the fact exists in the rendered page alone.',
-    'Quote every string in double quotes. A measure that is a unit test, a judgement, a future event or a state a visitor has to set up cannot be a check: write `verify: []`.',
+    'The retro appearance is the one page state a check may set. Its stylesheet loads on every page and applies when `<html>` carries `data-appearance="retro"`. A check in retro is a `js` check whose expression sets `document.documentElement.dataset.appearance = \'retro\'` before it measures, and fails on an empty match: `expect: {expression: "(() => { document.documentElement.dataset.appearance = \'retro\'; const cells = [...document.querySelectorAll(\'.facts td\')]; return cells.length > 0 && cells.every((cell) => getComputedStyle(cell).paddingLeft === \'8px\'); })()", equals: true}`.',
+    'Quote every string in double quotes. A measure that is a unit test, a judgement, a future event or a state a visitor has to set up cannot be a check, the retro appearance aside: write `verify: []`.',
   ];
 }
 
