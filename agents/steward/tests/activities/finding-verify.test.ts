@@ -62,6 +62,7 @@ function input(status: 'resolved' | 'reopened', overrides: Partial<WriteFindingV
       status,
       at: AT,
       workflowId: verifyWorkflowId('mattpyle-com', DEFECT_KEY, AT),
+      source: 'finding',
       rows: [
         {
           n: 1,
@@ -93,38 +94,79 @@ async function failure(run: Promise<unknown>): Promise<ApplicationFailure> {
 
 test('a handoff with a block is read as its checks, and an empty block is a block', async () => {
   seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK) });
-  const read = await readVerifyBlock({ repo: REPO, handoffPath: HANDOFF, origin: ORIGIN });
+  const read = await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN });
   assert.equal(read.hasBlock, true);
   assert.deepEqual(read.checks, [{ url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { count: 0, of: '100/100 (Fail)' } }]);
 
   fake!.restore();
   seed();
-  assert.deepEqual(await readVerifyBlock({ repo: REPO, handoffPath: HANDOFF, origin: ORIGIN }), {
+  assert.deepEqual(await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }), {
     handoff: DEFECT_HANDOFF,
     hasBlock: true,
     checks: [],
+    source: 'handoff',
   });
 });
 
 test('a handoff that predates the block is a result, not a failure', async () => {
   const bare = DEFECT_HANDOFF.replace('---\nverify: []\n---\n\n', '');
   seed({ handoff: bare });
-  assert.deepEqual(await readVerifyBlock({ repo: REPO, handoffPath: HANDOFF, origin: ORIGIN }), {
+  assert.deepEqual(await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }), {
     handoff: bare,
     hasBlock: false,
     checks: [],
+    source: 'generated',
   });
 });
 
 test('a block Steward would not have written is refused, and a missing handoff too', async () => {
   seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK.replace(ORIGIN, 'https://example.com')) });
-  const invalid = await failure(readVerifyBlock({ repo: REPO, handoffPath: HANDOFF, origin: ORIGIN }));
+  const invalid = await failure(readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }));
   assert.equal(invalid.type, 'VerifyBlockInvalid');
   assert.equal(invalid.nonRetryable, true);
   assert.match(invalid.message, /not the production origin/);
 
-  const missing = await failure(readVerifyBlock({ repo: REPO, handoffPath: 'sites/mattpyle-com/handoffs/none.md', origin: ORIGIN }));
+  const missing = await failure(readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, handoffPath: 'sites/mattpyle-com/handoffs/none.md' }));
   assert.equal(missing.type, 'HandoffMissing');
+});
+
+/** The finding with a `verify` key of its own, set after its `status`. */
+const withOwnBlock = (block: string) => FIXING.replace('status: fixing', `status: fixing\n${block}`);
+
+test("the finding's own block wins: its checks run, and the handoff is not read", async () => {
+  const two = [BLOCK, `  - url: ${ORIGIN}/scorecard/`, '    kind: status', '    expect: 200'].join('\n');
+  // The handoff's block would be refused, and the path given is not even there.
+  seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK.replace(ORIGIN, 'https://example.com')) });
+  const read = await readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, findingText: withOwnBlock(two), handoffPath: 'sites/mattpyle-com/handoffs/none.md' });
+  assert.deepEqual(read, {
+    handoff: null,
+    hasBlock: true,
+    checks: [
+      { url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { count: 0, of: '100/100 (Fail)' } },
+      { url: `${ORIGIN}/scorecard/`, kind: 'status', expect: 200 },
+    ],
+    source: 'finding',
+  });
+});
+
+test("a finding's empty block is the finder's verdict: no checks, and no fallback to the handoff", async () => {
+  seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK) });
+  assert.deepEqual(await readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, findingText: withOwnBlock('verify: []') }), {
+    handoff: null,
+    hasBlock: true,
+    checks: [],
+    source: 'finding',
+  });
+});
+
+test("an invalid block on the finding fails naming the finding, and never falls back to the handoff's", async () => {
+  seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK) });
+  for (const bad of [BLOCK.replace('kind: text', 'kind: grep'), 'verify:', 'verify: {url: x}']) {
+    const invalid = await failure(readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, findingText: withOwnBlock(bad) }));
+    assert.equal(invalid.type, 'VerifyBlockInvalid');
+    assert.equal(invalid.nonRetryable, true);
+    assert.ok(invalid.message.startsWith(`The verify block in ${FINDING} was refused: `), invalid.message);
+  }
 });
 
 // ---------------------------------------------------------------------------

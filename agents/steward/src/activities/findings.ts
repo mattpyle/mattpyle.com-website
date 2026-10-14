@@ -20,6 +20,7 @@ import {
   type FindingVerdictStatus,
   type FindingsIndexLine,
   type Verification,
+  type VerifyBlockSource,
 } from '../lib/findings.js';
 import { readHandoffVerify, validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
 
@@ -343,6 +344,10 @@ export async function readFixPr(prUrl: string): Promise<FixPrState> {
 
 export interface ReadVerifyBlockInput {
   repo: string;
+  /** `sites/<site>/findings/<key>.md`, named when the finding's block is refused. */
+  findingPath: string;
+  /** The finding as `readFinding` returned it. Its `verify` key, when present, is the block. */
+  findingText: string;
   /** `sites/<site>/handoffs/<key>.md` */
   handoffPath: string;
   /** The production origin every check must name. */
@@ -350,22 +355,47 @@ export interface ReadVerifyBlockInput {
 }
 
 export interface ReadVerifyBlockResult {
-  /** The handoff as it is in the findings repository. */
-  handoff: string;
-  /** False when the handoff's frontmatter has no `verify` key: it predates the block. */
+  /** The handoff as it is in the findings repository, or null when the finding's block made it unread. */
+  handoff: string | null;
+  /** False when neither the finding nor the handoff has a `verify` key: the workflow generates one. */
   hasBlock: boolean;
   checks: VerifyCheck[];
+  /**
+   * Where the checks come from, decided here so the workflow's branch replays
+   * from history (design rule 10). `generated` means none exists yet. Absent
+   * from histories written before the finding's block was read.
+   */
+  source?: VerifyBlockSource;
 }
 
 /**
- * The generated handoff of a finding and the `verify` block in it.
+ * A finding's `verify` block: the finding's own when its frontmatter has the
+ * key, else the one in its generated handoff.
  *
- * A handoff with no `verify` key is a result, not a failure: the workflow
- * generates the block. A block that is there and fails
- * {@link validateVerifyBlock} is a failure, since a block Steward would not
- * have written is one it does not run.
+ * The finding's key wins whatever it holds. A list of checks runs; an empty
+ * list is the finder judging the measure unmeasurable, and the handoff is not
+ * read. A finding's block that fails {@link validateVerifyBlock} is a failure
+ * naming the finding, never a fall back: a typo would hand the definition of
+ * fixed back to the fixer.
+ *
+ * With no key on the finding, the handoff decides. A handoff with no `verify`
+ * key is a result, not a failure: the workflow generates the block. A block
+ * that is there and fails {@link validateVerifyBlock} is a failure, since a
+ * block Steward would not have written is one it does not run.
  */
 export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<ReadVerifyBlockResult> {
+  const own = (parseFrontmatter(input.findingText).data ?? {}) as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(own, 'verify')) {
+    const { checks, problems } = validateVerifyBlock(own.verify, input.origin);
+    if (problems.length > 0) {
+      throw ApplicationFailure.nonRetryable(
+        `The verify block in ${input.findingPath} was refused: ${problems.join('; ')}.`,
+        'VerifyBlockInvalid',
+      );
+    }
+    return { handoff: null, hasBlock: true, checks, source: 'finding' };
+  }
+
   const file = await readRepoFile(input.handoffPath, BRANCH, input.repo);
   if (!file) {
     throw ApplicationFailure.nonRetryable(
@@ -374,7 +404,7 @@ export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<Read
     );
   }
   const verify = readHandoffVerify(file.text);
-  if (!verify.present) return { handoff: file.text, hasBlock: false, checks: [] };
+  if (!verify.present) return { handoff: file.text, hasBlock: false, checks: [], source: 'generated' };
   const { checks, problems } = validateVerifyBlock(verify.raw, input.origin);
   if (problems.length > 0) {
     throw ApplicationFailure.nonRetryable(
@@ -382,7 +412,7 @@ export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<Read
       'VerifyBlockInvalid',
     );
   }
-  return { handoff: file.text, hasBlock: true, checks };
+  return { handoff: file.text, hasBlock: true, checks, source: 'handoff' };
 }
 
 export interface WriteFindingVerificationInput {

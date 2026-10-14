@@ -9,6 +9,7 @@ import {
   setIndexStatus,
   verifyRefusal,
   verifyRunId,
+  verifySourceLabel,
   verifyStamp,
   verifyWorkflowId,
   type Verification,
@@ -44,6 +45,7 @@ const verification = (status: Verification['status'], rows = ROWS): Verification
   status,
   at: AT,
   workflowId: verifyWorkflowId('mattpyle-com', DEFECT_KEY, AT),
+  source: 'finding',
   rows,
 });
 
@@ -99,9 +101,18 @@ test('a pass writes resolved, resolved_run and the section, and every other line
     '',
     `Steward ran this finding's checks against production at ${AT}. Outcome: resolved. Workflow \`verify/mattpyle-com/${DEFECT_KEY}/2026-10-13T041233Z\`.`,
     '',
+    'Checks from: finding.',
+    '',
     '1. Pass, `selector` on https://www.mattpyle.com/. Expected: "footer nav" has aria-label="Footer". Measured: "Footer".',
     '',
   ]);
+});
+
+test('the section names where the checks came from, and a fallback says so', () => {
+  assert.equal(verifySourceLabel('finding'), 'finding');
+  assert.equal(verifySourceLabel('handoff'), 'handoff (fallback)');
+  assert.equal(verifySourceLabel('generated'), 'generated (fallback)');
+  assert.match(setFindingVerification(FIXING, { ...verification('resolved'), source: 'handoff' }), /\n\nChecks from: handoff \(fallback\)\.\n\n1\. /);
 });
 
 test('a fail writes reopened with the expected and the measured value, and leaves resolved_run empty', () => {

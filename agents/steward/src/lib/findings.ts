@@ -369,8 +369,20 @@ export function setFrontmatterFix(text: string, prUrl: string): string {
 // The verifier (findings-loop design, phase 5)
 // ---------------------------------------------------------------------------
 
-/** What a verify run decides. `unverifiable` writes nothing: the handoff's block is empty. */
+/** What a verify run decides. `unverifiable` writes nothing: the block it took is empty. */
 export type VerifyOutcome = 'resolved' | 'reopened' | 'unverifiable';
+
+/**
+ * Where a verify run took its checks from: the finding's own `verify` key,
+ * written by the finder before any fix existed, or, only when the finding has
+ * no such key, the fixer's handoff or a block generated into it.
+ */
+export type VerifyBlockSource = 'finding' | 'handoff' | 'generated';
+
+/** `finding`, `handoff (fallback)` or `generated (fallback)`: the source as the section and the CLI name it. */
+export function verifySourceLabel(source: VerifyBlockSource): string {
+  return source === 'finding' ? 'finding' : `${source} (fallback)`;
+}
 
 /** `2026-10-13T041233Z` from an ISO instant: the stamp in a verify workflow's ID. */
 export function verifyStamp(at: string): string {
@@ -428,6 +440,8 @@ export interface Verification {
   /** ISO 8601, when the checks ran. */
   at: string;
   workflowId: string;
+  /** Where the checks came from. */
+  source: VerifyBlockSource;
   rows: VerificationRow[];
 }
 
@@ -437,6 +451,8 @@ export function buildVerificationSection(verification: Verification): string {
     '## Verification',
     '',
     `Steward ran this finding's checks against production at ${verification.at}. Outcome: ${verification.status}. Workflow \`${verification.workflowId}\`.`,
+    '',
+    `Checks from: ${verifySourceLabel(verification.source)}.`,
     '',
   ];
   for (const row of verification.rows) {
