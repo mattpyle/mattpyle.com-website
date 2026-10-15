@@ -440,6 +440,66 @@ export async function awaitProductionDeploy(input: AwaitProductionDeployInput): 
   return { liveSha: live.sha, deploymentId: live.id };
 }
 
+export interface AwaitPreviewDeployInput {
+  /** `owner/name` of the site repository, the fixer PR's. */
+  repo: string;
+  /** The PR's head commit. */
+  sha: string;
+  /** The GitHub deployment environment Vercel posts previews to. */
+  environment: string;
+}
+
+export interface PreviewDeploy {
+  /** The preview's origin, `https://<deployment>.vercel.app`. */
+  origin: string;
+  deploymentId: number;
+}
+
+/**
+ * The preview wait: one read of the PR head's preview deployment, failing until
+ * Vercel reports it ready.
+ *
+ * Read from GitHub's Deployments API, as {@link awaitProductionDeploy} reads
+ * production: the newest deployment of `sha` in the environment, and its newest
+ * status. `success` carries the preview's URL. `failure` or `error` is a build
+ * that will not become ready, `PreviewFailed`, and no retry mends it. Anything
+ * else, or no deployment yet, is the retryable `PreviewNotReady`.
+ */
+export async function awaitPreviewDeploy(input: AwaitPreviewDeployInput): Promise<PreviewDeploy> {
+  const list = (await gh(
+    `/repos/${input.repo}/deployments?sha=${encodeURIComponent(input.sha)}&environment=${encodeURIComponent(input.environment)}&per_page=1`,
+  )) as { id: number }[];
+  const deployment = list[0];
+  if (!deployment) {
+    throw ApplicationFailure.retryable(`No ${input.environment} deployment of ${input.sha.slice(0, 7)} yet.`, 'PreviewNotReady');
+  }
+  const statuses = (await gh(`/repos/${input.repo}/deployments/${deployment.id}/statuses?per_page=1`)) as {
+    state: string;
+    environment_url?: string;
+  }[];
+  const state = statuses[0]?.state ?? 'none';
+  if (state === 'failure' || state === 'error') {
+    throw ApplicationFailure.nonRetryable(
+      `The ${input.environment} deployment of ${input.sha.slice(0, 7)} ended ${state}.`,
+      'PreviewFailed',
+    );
+  }
+  if (state !== 'success') {
+    throw ApplicationFailure.retryable(`The ${input.environment} deployment of ${input.sha.slice(0, 7)} is ${state}.`, 'PreviewNotReady');
+  }
+  let origin: string;
+  try {
+    origin = new URL(String(statuses[0].environment_url)).origin;
+  } catch {
+    throw ApplicationFailure.nonRetryable(
+      `The ${input.environment} deployment of ${input.sha.slice(0, 7)} succeeded with no URL.`,
+      'PreviewFailed',
+    );
+  }
+  log.info({ activity: 'awaitPreviewDeploy', sha: input.sha, origin }, 'the preview is ready');
+  return { origin, deploymentId: deployment.id };
+}
+
 export interface WriteFindingReturnedInput {
   repo: string;
   site: string;

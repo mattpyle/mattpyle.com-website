@@ -20,7 +20,7 @@ import type {
   WriteFindingReturnedInput,
   WriteFindingVerificationInput,
 } from '../../src/activities/findings.js';
-import type { OpenFixerPrInput, RunFixerResult } from '../../src/activities/fixer.js';
+import { readFixChecks, type OpenFixerPrInput, type RunFixerResult } from '../../src/activities/fixer.js';
 import type { RunFindingChecksInput } from '../../src/activities/verify-finding.js';
 import { compareContains, liveDeployment, type DeploymentRecord, type FindingVerdict } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
@@ -150,6 +150,9 @@ function lifecycle(script: Script) {
         claude: { model: 'claude-x', costUsd: 0.05, durationMs: 1, numTurns: 1 },
       };
     },
+    // The fix child's chooser, pure. The fixture handoff's block is empty, so
+    // the child runs neither site test and the lifecycle's calls are unchanged.
+    readFixChecks,
     runFixer: async () => {
       calls.push('runFixer');
       return run;
