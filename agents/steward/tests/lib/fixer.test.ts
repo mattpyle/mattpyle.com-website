@@ -20,7 +20,13 @@ import {
   repoCommandFor,
   runVerifyChecks,
   validateHandoff,
+  CHECK_OUTPUT_TAIL_CHARS,
+  CHECK_OUTPUT_TAIL_LINES,
+  checkOutputTail,
+  formatDuration,
+  redactSecrets,
   type RepoCommand,
+  type RepoCommandRun,
 } from '../../src/lib/fixer.js';
 import { handoffGeneratorArgs } from '../../src/lib/handoff-generator.js';
 import { parseFindingBody } from '../../src/lib/findings.js';
@@ -245,6 +251,11 @@ test('a check names a repository command only when a backtick span is one, whole
   }
 });
 
+/** What the activity's `exec` reports for one command. */
+function ran(exitCode: number, extra: Partial<RepoCommandRun> = {}): RepoCommandRun {
+  return { exitCode, durationMs: 1200, timedOut: false, outputTail: exitCode === 0 ? 'ok' : 'Error: 1 failed', ...extra };
+}
+
 test('a Verify command outside the repository set is not-run and never spawned', async () => {
   const spawned: RepoCommand[] = [];
   const results = await runVerifyChecks(
@@ -256,14 +267,15 @@ test('a Verify command outside the repository set is not-run and never spawned',
     ],
     async (command) => {
       spawned.push(command);
-      return 0;
+      return ran(0);
     },
   );
+  // A pass keeps the exit code and the duration, and no output.
   assert.deepEqual(results, [
     { n: 1, status: 'not-run', command: null, reason: 'not a repository command' },
-    { n: 2, status: 'pass', command: 'npm test -w @mattpyle/steward' },
+    { n: 2, status: 'pass', command: 'npm test -w @mattpyle/steward', exitCode: 0, durationMs: 1200 },
     { n: 3, status: 'not-run', command: null, reason: 'not a repository command' },
-    { n: 4, status: 'pass', command: 'npx tsc --noEmit -p agents/steward' },
+    { n: 4, status: 'pass', command: 'npx tsc --noEmit -p agents/steward', exitCode: 0, durationMs: 1200 },
   ]);
   // What is spawned is the fixed entry's argv, not the handoff's text.
   assert.deepEqual(
@@ -281,7 +293,7 @@ test('a non-zero exit is fail, a command two checks name runs once, and a fail m
     ['`npm test -w @mattpyle/steward` passes.', 'The new test is in `npm test -w @mattpyle/steward`.', '`npm run check` is clean.'],
     async (command) => {
       runs++;
-      return command.command === 'npm run check' ? 0 : 1;
+      return ran(command.command === 'npm run check' ? 0 : 1);
     },
   );
   assert.deepEqual(checks.map((check) => check.status), ['fail', 'fail', 'pass']);
@@ -294,7 +306,138 @@ test('a non-zero exit is fail, a command two checks name runs once, and a fail m
 
   const body = buildFixerPrBody({ ...BODY_INPUT, results: checks.slice(0, 2) });
   assert.match(body, /^> \*\*2 checks failed\.\*\* Steward ran the Verify commands on this branch after the run\./);
-  assert.match(body, /\n   - Result: fail\n   - Command: `npm test -w @mattpyle\/steward`\n/);
+  assert.match(body, /\n   - Result: fail\n   - Command: `npm test -w @mattpyle\/steward`\n   - Exit code 1, after 1 s\.\n/);
+  // The second check that names the command points at the first, not a second copy of its output.
+  assert.match(body, /   - Output: under check 1, which ran the same command\./);
+  assert.equal(body.split('<details>').length - 1, 1);
+});
+
+test('a failed command keeps its exit code, duration and output tail, and the PR shows them collapsed', async () => {
+  const output = ['  1 passed', '  1 failed', '    [chromium] › retro.spec.ts:12 › /projects/ aria snapshot', 'Error: 1 failed'].join('\n');
+  const checks = await runVerifyChecks(['`npm run a11y` passes.'], async () => ran(1, { durationMs: 252_000, outputTail: output }));
+  assert.deepEqual(checks, [
+    { n: 1, status: 'fail', command: 'npm run a11y', exitCode: 1, durationMs: 252_000, timedOut: false, outputTail: output },
+  ]);
+  const body = buildFixerPrBody({ ...BODY_INPUT, checks: ['`npm run a11y` passes.'], results: checks });
+  assert.ok(
+    body.includes(
+      [
+        '1. `npm run a11y` passes.',
+        '   - Result: fail',
+        '   - Command: `npm run a11y`',
+        '   - Exit code 1, after 4 min 12 s.',
+        '',
+        '   <details><summary>The last 4 lines of its output</summary>',
+        '',
+        '   ```',
+        '     1 passed',
+        '     1 failed',
+        '       [chromium] › retro.spec.ts:12 › /projects/ aria snapshot',
+        '   Error: 1 failed',
+        '   ```',
+        '',
+        '   </details>',
+        '',
+      ].join('\n'),
+    ),
+    body,
+  );
+});
+
+test('a command killed at its time limit fails whatever its exit code, and the PR says so', async () => {
+  const checks = await runVerifyChecks(['`npm run a11y` passes.'], async () =>
+    ran(0, { durationMs: 600_000, timedOut: true, outputTail: 'Running 185 tests using 4 workers' }),
+  );
+  assert.equal(checks[0].status, 'fail');
+  assert.equal(checks[0].timedOut, true);
+  const body = buildFixerPrBody({ ...BODY_INPUT, checks: ['`npm run a11y` passes.'], results: checks });
+  assert.match(body, /   - Timed out after 10 minutes, and was killed\. Exit code 0\.\n/);
+  assert.match(body, /<summary>The last line of its output<\/summary>/);
+});
+
+test('a failed command with no output says so, and a result from before the tail renders as before', () => {
+  const body = buildFixerPrBody({
+    ...BODY_INPUT,
+    results: [{ n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward', exitCode: 2, durationMs: 4_000, timedOut: false, outputTail: '' }],
+  });
+  assert.match(body, /   - Exit code 2, after 4 s\.\n   - No output\.\n/);
+  const old = buildFixerPrBody({ ...BODY_INPUT, results: [{ n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward' }] });
+  assert.match(old, /   - Command: `npm test -w @mattpyle\/steward`\n2\. /);
+});
+
+test('output with a fence in it gets a longer fence', () => {
+  const body = buildFixerPrBody({
+    ...BODY_INPUT,
+    results: [{ n: 1, status: 'fail', command: 'npm test -w @mattpyle/steward', exitCode: 1, durationMs: 1, timedOut: false, outputTail: 'a\n```js\nb' }],
+  });
+  assert.match(body, /\n   ````\n   a\n   ```js\n   b\n   ````\n/);
+});
+
+test('the output tail keeps the last 60 lines, strips ANSI codes, and joins CRLF', () => {
+  const output = Array.from({ length: 100 }, (_, i) => `\u001b[31mline ${i + 1}\u001b[39m`).join('\r\n') + '\r\n\r\n';
+  const tail = checkOutputTail(output, {});
+  const lines = tail.split('\n');
+  assert.equal(CHECK_OUTPUT_TAIL_LINES, 60);
+  assert.equal(lines.length, 60);
+  assert.equal(lines[0], 'line 41');
+  assert.equal(lines[59], 'line 100');
+  assert.doesNotMatch(tail, /\u001b|\r/);
+});
+
+test('the output tail is at most 8,000 characters and starts on a whole line', () => {
+  const output = Array.from({ length: 50 }, (_, i) => `${String(i).padStart(2, '0')} ${'x'.repeat(296)}`).join('\n');
+  const tail = checkOutputTail(output, {});
+  assert.equal(CHECK_OUTPUT_TAIL_CHARS, 8_000);
+  assert.ok(tail.length <= 8_000, String(tail.length));
+  assert.match(tail, /^\d\d x/);
+  assert.match(tail, /^49 x+$/m);
+  // One line longer than the cap keeps its end.
+  assert.equal(checkOutputTail('y'.repeat(20_000), {}).length, 8_000);
+});
+
+/** A stand-in secret, built at run time so the secret scan has no literal to flag. */
+function fakeSecret(label: string): string {
+  return [label, 'f'.repeat(12)].join('-');
+}
+
+test('a secret of the environment in the output is redacted before it leaves the worker', () => {
+  const bypass = fakeSecret('bypass');
+  const apiKey = fakeSecret('api');
+  const npmToken = fakeSecret('npm');
+  const env = {
+    VERCEL_AUTOMATION_BYPASS_SECRET: bypass,
+    OPENAI_API_KEY: apiKey,
+    npm_config__authToken: npmToken,
+    SHORT_TOKEN: 'abc',
+    PATH: '/usr/bin:/bin',
+    HOME: '/home/steward',
+  };
+  const output = [
+    `GET /?x-vercel-protection-bypass=${bypass} 200`,
+    `key=${apiKey} token ${npmToken}`,
+    'abc stays, /usr/bin stays, /home/steward stays',
+  ].join('\n');
+  assert.equal(
+    checkOutputTail(output, env),
+    ['GET /?x-vercel-protection-bypass=[redacted] 200', 'key=[redacted] token [redacted]', 'abc stays, /usr/bin stays, /home/steward stays'].join('\n'),
+  );
+  // A secret that contains another goes whole.
+  assert.equal(redactSecrets('AAAAAAAABBBB', { A_KEY: 'AAAAAAAA', AB_TOKEN: 'AAAAAAAABBBB' }), '[redacted]');
+});
+
+test('a secret is redacted before the character cap, so no half of one survives', () => {
+  // One line, 8,017 characters. Capped first, it would keep the secret's last ten.
+  const value = fakeSecret('cap-order-0123'); // 27 characters
+  const tail = checkOutputTail(`${value}${'z'.repeat(7_990)}`, { STEWARD_SECRET: value });
+  assert.equal(tail, `[redacted]${'z'.repeat(7_990)}`);
+  assert.doesNotMatch(tail, /f{4}/);
+});
+
+test('a duration reads in seconds, then minutes and seconds', () => {
+  assert.equal(formatDuration(450), '0 s');
+  assert.equal(formatDuration(45_000), '45 s');
+  assert.equal(formatDuration(252_000), '4 min 12 s');
+  assert.equal(formatDuration(600_000), '10 min');
 });
 
 // --- The PR body -------------------------------------------------------------

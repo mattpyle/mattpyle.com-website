@@ -11,8 +11,10 @@ import { gh } from '../lib/github.js';
 import { log } from '../lib/logger.js';
 import { runCancellable } from '../lib/proc.js';
 import {
+  CHECK_TIMEOUT_MS,
   FINAL_MESSAGE_MAX,
   buildFixerPrBody,
+  checkOutputTail,
   claudeArgs,
   fixerChildEnv,
   fixerPrompt,
@@ -68,12 +70,6 @@ const CLAUDE_TIMEOUT_MS = 30 * 60_000;
  * the limit sits above that.
  */
 const CLAUDE_STALL_MS = 12 * 60_000;
-
-/**
- * How long one Verify command may run before it is killed and counted as a
- * failure. The slowest of them, `npm run a11y`, is a build and a browser suite.
- */
-const CHECK_TIMEOUT_MS = 10 * 60_000;
 
 const INSTALL_STATE = path.join(STEWARD_DIR, '.cache', 'fixer-worktree-install.json');
 
@@ -616,14 +612,27 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
     const checks = await runVerifyChecks(handoff.checks, async (command) => {
       step(`check: ${command.command}`);
       const proc = repoCommandProcess(command);
+      const started = Date.now();
+      const limit = AbortSignal.timeout(CHECK_TIMEOUT_MS);
       const res = await runCancellable(proc.binary, proc.args, {
         cwd: FIXER_WORKTREE_DIR,
         exactEnv: env,
-        signal: AbortSignal.any([signal, AbortSignal.timeout(CHECK_TIMEOUT_MS)]),
+        signal: AbortSignal.any([signal, limit]),
       });
       if (signal.aborted) throw new CancelledFailure(`cancelled during ${command.command}`);
-      log.info({ activity: 'runFixer', key: input.key, check: command.command, exitCode: res.exitCode }, 'check ran');
-      return res.exitCode;
+      const ran = {
+        exitCode: res.exitCode,
+        durationMs: Date.now() - started,
+        timedOut: limit.aborted,
+        // The worker's whole environment, not only the child's: a superset, so
+        // a secret the child reached some other way is redacted too.
+        outputTail: checkOutputTail(res.output, process.env),
+      };
+      log.info(
+        { activity: 'runFixer', key: input.key, check: command.command, exitCode: ran.exitCode, durationMs: ran.durationMs, timedOut: ran.timedOut },
+        'check ran',
+      );
+      return ran;
     });
     const checksMs = Date.now() - checksStarted;
 

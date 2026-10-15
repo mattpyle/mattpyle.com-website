@@ -63,12 +63,15 @@ export async function run(
  *
  * `env` is added to the worker's own environment. `exactEnv` replaces it, for
  * a child that must not inherit the worker's secrets.
+ *
+ * `output` is stdout and stderr together in the order they arrived, for a
+ * caller that shows a person what the command printed.
  */
 export async function runCancellable(
   binary: string,
   args: string[],
   options: { cwd?: string; env?: NodeJS.ProcessEnv; exactEnv?: NodeJS.ProcessEnv; signal?: AbortSignal } = {},
-): Promise<RunResult> {
+): Promise<RunResult & { output: string }> {
   const child = spawn(binary, args, {
     cwd: options.cwd,
     env: options.exactEnv ?? (options.env ? { ...process.env, ...options.env } : process.env),
@@ -78,8 +81,15 @@ export async function runCancellable(
 
   let stdout = '';
   let stderr = '';
-  child.stdout?.on('data', (c: Buffer) => (stdout += c.toString()));
-  child.stderr?.on('data', (c: Buffer) => (stderr += c.toString()));
+  let output = '';
+  child.stdout?.on('data', (c: Buffer) => {
+    stdout += c.toString();
+    output += c.toString();
+  });
+  child.stderr?.on('data', (c: Buffer) => {
+    stderr += c.toString();
+    output += c.toString();
+  });
 
   const onAbort = () => killTree(child.pid);
   options.signal?.addEventListener('abort', onAbort, { once: true });
@@ -89,7 +99,7 @@ export async function runCancellable(
       child.once('error', reject);
       child.once('close', (code) => resolve(code ?? -1));
     });
-    return { stdout, stderr, exitCode };
+    return { stdout, stderr, output, exitCode };
   } finally {
     options.signal?.removeEventListener('abort', onAbort);
   }
