@@ -229,6 +229,26 @@ test('filing a webmaster note replaces the form with the confirmation and the re
   // note went nowhere.
   await expect(filed.locator('a')).toHaveAttribute('href', /linkedin\.com/);
   await expect(page.locator('[data-wm-announce]')).toContainText('never left this browser');
+
+  // The announcer empties once it has spoken, so the panel reads the confirmation once, and focus
+  // rests on it with the real link next.
+  await expect(page.locator('[data-wm-announce]')).toHaveText('', { timeout: 3000 });
+  await expect(page.locator('[data-wm-filed-copy]')).toBeFocused();
+  await expect(
+    page.locator('[data-module="webmaster-note"]').getByText('drawer 1 of', { exact: false }),
+  ).toHaveCount(1);
+  await page.keyboard.press('Tab');
+  await expect(filed.locator('a')).toBeFocused();
+});
+
+test('an empty webmaster note keeps focus on the textarea and announces nothing', async ({ page }) => {
+  await gotoRetroHome(page);
+
+  await page.locator('[data-wm-submit]').click();
+
+  await expect(page.locator('[data-wm-input]')).toBeFocused();
+  await expect(page.locator('[data-wm-error]')).toBeVisible();
+  await expect(page.locator('[data-wm-announce]')).toHaveText('');
 });
 
 test('the ring cycles its members without moving the controls', async ({ page }) => {

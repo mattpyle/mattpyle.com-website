@@ -57,7 +57,7 @@ import { NOTE_MAX } from '../lib/webmaster-notes.mjs';
       solid maroon: it must not be readable as the error state.
     */}
     <div class="wm-filed" data-wm-filed hidden>
-      <p class="wm-filed-copy" data-wm-filed-copy></p>
+      <p class="wm-filed-copy" data-wm-filed-copy tabindex="-1"></p>
       <p class="wm-linkedin">
         Want to actually reach me? <a href="https://linkedin.com/in/matt-pyle">Matt Pyle on LinkedIn</a>. That one goes to a real person.
       </p>
@@ -252,6 +252,8 @@ import { NOTE_MAX } from '../lib/webmaster-notes.mjs';
       form.hidden = true;
       filed!.hidden = false;
       announce!.textContent = copy;
+      filedCopy!.focus();
+      window.setTimeout(() => { announce!.textContent = ''; }, 2000);
     });
   }
 
