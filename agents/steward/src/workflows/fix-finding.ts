@@ -3,6 +3,7 @@ import type * as activities from '../activities/index.js';
 // Pure, no imports of its own: the same parser and the same refusal rule the
 // PR body and the tests hold.
 import { fixRefusal, parseFindingBody, parsePrUrl } from '../lib/findings.js';
+import type { FixerDiffReview } from '../lib/diff-review.js';
 import type { FixerSiteChecks } from '../lib/fixer.js';
 import type { VerifyCheck, VerifyCheckResult } from '../lib/verify-checks.js';
 
@@ -11,9 +12,9 @@ import type { VerifyCheck, VerifyCheckResult } from '../lib/verify-checks.js';
  * from the finding to an open PR (findings-loop design, phase 5).
  *
  * The activities, in order: read the finding, generate the handoff, test its
- * checks on production, run Claude Code on it, open the PR, write
- * `status: fixing` and the PR link back, then test the checks on the PR's
- * preview and update the PR with the result.
+ * checks on production, run Claude Code on it, review its diff, open the PR,
+ * write `status: fixing` and the PR link back, then test the checks on the
+ * PR's preview and update the PR with the result.
  *
  * **A new execution, not a later stop point on `findingWorkflow`** (design
  * decision 18). That workflow completed at the verdict; this one starts from
@@ -46,8 +47,16 @@ import type { VerifyCheck, VerifyCheckResult } from '../lib/verify-checks.js';
  * An empty block is a measure no check can express. Neither test runs, and the
  * PR body says the fix is unverifiable by checks.
  *
+ * **The diff review**, after the fixer and before the PR: a second model call
+ * reads the diff against the finding and the handoff, and reports hunks
+ * neither calls for and new mistakes in changed lines. Any report, and a
+ * review that could not finish, opens the PR as a draft. It never fails the
+ * workflow, and it never edits the diff.
+ *
  * **Versioned with `patched`.** A history written before the two tests has no
- * marker, so it replays down the five steps it ran.
+ * marker, so it replays down the five steps it ran. One written before the
+ * diff review has no review marker, so it opens the PR straight after the
+ * fixer.
  *
  * **`stopAfter`** is `'pr'`, the only value this code knows. Waiting for the
  * merge and verifying on production start new executions with a later one.
@@ -63,6 +72,9 @@ const QUEUE_HEAVY = 'steward-heavy';
 
 /** The `patched` marker of the two tests. */
 export const PREVIEW_VERIFY_PATCH = 'fixer-preview-verify';
+
+/** The `patched` marker of the diff review. */
+export const DIFF_REVIEW_PATCH = 'fixer-diff-review';
 
 /** The GitHub deployment environment Vercel's integration posts previews to. */
 const PREVIEW_ENVIRONMENT = 'Preview';
@@ -113,6 +125,8 @@ export interface FixFindingResult {
   };
   /** The `verify` block's two tests. Absent from a run that predates them. */
   verify?: FixerSiteChecks & { previewOrigin: string | null };
+  /** The diff review. Absent from a run that predates it. */
+  review?: FixerDiffReview;
 }
 
 export type FixFindingStep =
@@ -120,6 +134,7 @@ export type FixFindingStep =
   | 'generating'
   | 'testing-production'
   | 'fixing'
+  | 'reviewing'
   | 'opening'
   | 'writing'
   | 'waiting-preview'
@@ -191,6 +206,17 @@ const fixing = wf.proxyActivities<Pick<typeof activities, 'runFixer'>>({
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 1 },
   cancellationType: wf.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+});
+
+// One attempt: the activity returns every failure it can name as an
+// unfinished review, and a second model call on the same diff is not worth a
+// retry. What still throws (a dead worker, a timeout) the workflow records as
+// an unfinished review too.
+const reviewing = wf.proxyActivities<Pick<typeof activities, 'reviewFixDiff'>>({
+  taskQueue: QUEUE_HEAVY,
+  startToCloseTimeout: '10 minutes',
+  heartbeatTimeout: '30 seconds',
+  retry: { maximumAttempts: 1 },
 });
 
 const opening = wf.proxyActivities<Pick<typeof activities, 'openFixerPr'>>({
@@ -407,6 +433,24 @@ export async function fixFindingWorkflow(input: FixFindingInput): Promise<FixFin
     baseSha: generated.baseSha,
   });
 
+  let review: FixerDiffReview | null = null;
+  if (wf.patched(DIFF_REVIEW_PATCH)) {
+    state.step = 'reviewing';
+    try {
+      const reviewed = await reviewing.reviewFixDiff({
+        key: input.key,
+        findingText: finding.text,
+        handoff,
+        baseSha: generated.baseSha,
+        headSha: run.commitSha,
+      });
+      review = { problems: reviewed.problems, incomplete: reviewed.incomplete };
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      review = { problems: [], incomplete: `The review activity failed: ${describeError(err)}` };
+    }
+  }
+
   state.step = 'opening';
   const prInput = {
     key: input.key,
@@ -418,6 +462,7 @@ export async function fixFindingWorkflow(input: FixFindingInput): Promise<FixFin
     checks: run.checks,
     exitCode: run.claude.exitCode,
     timedOut: run.claude.timedOut,
+    ...(review ? { review } : {}),
   };
   const pr = await opening.openFixerPr(site ? { ...prInput, site } : prInput);
   state.prUrl = pr.prUrl;
@@ -467,5 +512,6 @@ export async function fixFindingWorkflow(input: FixFindingInput): Promise<FixFin
       checks: run.checks,
     },
     ...(site ? { verify: { ...site, previewOrigin } } : {}),
+    ...(review ? { review } : {}),
   };
 }

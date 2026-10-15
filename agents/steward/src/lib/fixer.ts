@@ -1,3 +1,4 @@
+import { diffReviewLines, diffReviewProblem, type FixerDiffReview } from './diff-review.js';
 import type { ParsedFinding } from './findings.js';
 import {
   readHandoffVerify,
@@ -163,6 +164,9 @@ export interface ClaudeRunState {
   numTurns: number | null;
   costUsd: number | null;
   durationMs: number | null;
+  /** Tokens the run read and wrote, cache reads and writes counted as input. Null until the `result` event. */
+  inputTokens: number | null;
+  outputTokens: number | null;
   /** Tool calls the allowlist refused, as `Tool: input`. */
   permissionDenials: string[];
 }
@@ -177,6 +181,8 @@ export function initialClaudeRunState(): ClaudeRunState {
     numTurns: null,
     costUsd: null,
     durationMs: null,
+    inputTokens: null,
+    outputTokens: null,
     permissionDenials: [],
   };
 }
@@ -187,6 +193,13 @@ function describeToolUse(block: { name?: string; input?: Record<string, unknown>
   const input = block.input ?? {};
   const detail = input.command ?? input.file_path ?? input.pattern ?? input.skill ?? '';
   return clip(`${block.name ?? 'tool'} ${String(detail)}`.trim(), 160);
+}
+
+/** The `result` event's input side: fresh, cache-read and cache-written tokens together. */
+function inputTokensOf(usage: any): number | null {
+  if (!usage || typeof usage.input_tokens !== 'number') return null;
+  const n = (value: unknown) => (typeof value === 'number' ? value : 0);
+  return usage.input_tokens + n(usage.cache_read_input_tokens) + n(usage.cache_creation_input_tokens);
 }
 
 /**
@@ -224,6 +237,8 @@ export function reduceClaudeEvent(state: ClaudeRunState, line: string): ClaudeRu
       numTurns: event.num_turns ?? null,
       costUsd: event.total_cost_usd ?? null,
       durationMs: event.duration_ms ?? null,
+      inputTokens: inputTokensOf(event.usage),
+      outputTokens: typeof event.usage?.output_tokens === 'number' ? event.usage.output_tokens : null,
       sessionId: event.session_id ?? state.sessionId,
       permissionDenials: Array.isArray(event.permission_denials)
         ? event.permission_denials.map((d: any) =>
@@ -543,6 +558,8 @@ export interface FixerPrBodyInput {
   timedOut: boolean;
   /** The `verify` block's tests. Absent from a run that predates them. */
   site?: FixerSiteChecks | null;
+  /** The diff review. Absent from a run that predates it. */
+  review?: FixerDiffReview | null;
 }
 
 /** True when the run did not end the way a finished one does: killed at its limit, or a non-zero exit. */
@@ -582,19 +599,21 @@ export function siteCheckProblems(site: FixerSiteChecks): string[] {
 
 /**
  * True when the PR opens as a draft, or is turned into one: the run was
- * incomplete, a check Steward ran failed, or the `verify` block's tests found
- * a problem.
+ * incomplete, a check Steward ran failed, the `verify` block's tests found a
+ * problem, or the diff review reported one or did not finish.
  */
 export function opensAsDraft(run: {
   exitCode: number;
   timedOut: boolean;
   checks: FixerCheckResult[];
   site?: FixerSiteChecks | null;
+  review?: FixerDiffReview | null;
 }): boolean {
   return (
     isIncompleteRun(run) ||
     run.checks.some((check) => check.status === 'fail') ||
-    (run.site ? siteCheckProblems(run.site).length > 0 : false)
+    (run.site ? siteCheckProblems(run.site).length > 0 : false) ||
+    (run.review ? diffReviewProblem(run.review) !== null : false)
   );
 }
 
@@ -655,6 +674,8 @@ export function buildFixerPrBody(input: FixerPrBodyInput): string {
     );
   }
   for (const problem of input.site ? siteCheckProblems(input.site) : []) lines.push(`> ${problem}`, '');
+  const reviewProblem = input.review ? diffReviewProblem(input.review) : null;
+  if (reviewProblem) lines.push(`> ${reviewProblem}`, '');
   lines.push(`Fixes one finding from Argus, the site's inspector: ${finding.title}`, '');
 
   lines.push('## Evidence', '');
@@ -682,6 +703,7 @@ export function buildFixerPrBody(input: FixerPrBodyInput): string {
   });
   lines.push('');
   if (input.site) lines.push(...siteCheckLines(input.site));
+  if (input.review) lines.push(...diffReviewLines(input.review));
 
   lines.push(
     `Finding: \`${input.key}\``,

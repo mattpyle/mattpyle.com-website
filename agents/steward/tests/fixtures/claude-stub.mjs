@@ -34,6 +34,23 @@ switch (mode) {
     process.stderr.write('API Error: overloaded\n');
     process.exitCode = 1;
     break;
+  // A reviewer: reads the prompt from stdin, keeps a copy beside the reply
+  // file, and answers with the reply file's text.
+  case 'reply': {
+    const prompt = fs.readFileSync(0, 'utf8');
+    fs.writeFileSync(`${file}.stdin`, prompt);
+    init();
+    emit({
+      type: 'result',
+      is_error: false,
+      result: fs.readFileSync(file, 'utf8'),
+      num_turns: 1,
+      total_cost_usd: 0.02,
+      duration_ms: 10,
+      usage: { input_tokens: 3, cache_read_input_tokens: 4000, cache_creation_input_tokens: 500, output_tokens: 120 },
+    });
+    break;
+  }
   default:
     process.exitCode = 2;
 }
