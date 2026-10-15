@@ -51,10 +51,11 @@ const STATUS_LABELS: Record<string, string> = {
  * Where a card goes. There are no per-project detail pages, so the useful
  * destination is the project itself: its live URL, or its repository when the
  * live URL is this very site. A live URL that is a page OF this site, such as
- * /steward/, is the destination and opens in the same tab. /projects is the
- * fallback, never a dead card. Same rule as the homepage section, deliberately.
+ * /steward/, is the destination and opens in the same tab. A project with no
+ * destination returns null and renders as a card that is not a link, because a
+ * link to /projects would reload the page it sits on.
  */
-function cardHref(project: Project): { href: string; external: boolean } {
+function cardHref(project: Project): { href: string; external: boolean } | null {
   const { live, github } = project.data;
   if (live) {
     const url = new URL(live);
@@ -62,7 +63,7 @@ function cardHref(project: Project): { href: string; external: boolean } {
     if (url.pathname !== '/') return { href: url.pathname, external: false };
   }
   if (github) return { href: github, external: true };
-  return { href: '/projects/', external: false };
+  return null;
 }
 ---
 
@@ -77,17 +78,19 @@ function cardHref(project: Project): { href: string; external: boolean } {
   {projects.length > 0 ? (
     <div class="grid">
       {projects.map(project => {
-        const { href, external } = cardHref(project);
+        const link = cardHref(project);
+        const external = link?.external ?? false;
+        const Card = link ? 'a' : 'div';
         return (
           /*
             THE ANCHOR llms.txt ADVERTISES. `/projects/#project-<id>` is the
             address a project has (src/pages/llms.txt.ts). This page ships one
             card grid in both appearances, so the fragment now lands on a
-            displayed card whichever appearance the reader is in.
+            displayed card whichever appearance the reader is in, link or not.
           */
-          <a
+          <Card
             id={`project-${project.id}`}
-            href={href}
+            href={link?.href}
             class="card"
             target={external ? '_blank' : undefined}
             rel={external ? 'noopener noreferrer' : undefined}
@@ -108,7 +111,7 @@ function cardHref(project: Project): { href: string; external: boolean } {
               <span class="card-blurb">{project.data.description}</span>
               {external && <span class="sr-only"> (opens in a new tab)</span>}
             </span>
-          </a>
+          </Card>
         );
       })}
     </div>
@@ -140,7 +143,7 @@ function cardHref(project: Project): { href: string; external: boolean } {
     transition: border-color 240ms ease, transform 240ms ease;
   }
 
-  .card:hover {
+  a.card:hover {
     border-color: var(--projects);
     transform: translateY(-3px);
   }
