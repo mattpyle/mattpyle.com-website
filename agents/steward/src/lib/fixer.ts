@@ -476,6 +476,31 @@ export function validateHandoff(handoff: string, key: string, origin: string): s
 
 export type FixerCheckStatus = 'pass' | 'fail' | 'not-run';
 
+/**
+ * How long one Verify command may run before it is killed and counted as a
+ * failure. The slowest of them, `npm run a11y`, is a build and a browser suite.
+ */
+export const CHECK_TIMEOUT_MS = 10 * 60_000;
+
+/** The most lines of a failed command's output the PR body and the result keep. */
+export const CHECK_OUTPUT_TAIL_LINES = 60;
+
+/**
+ * The most characters of those lines kept. A line of minified output can be
+ * longer than the PR body has room for, and the tail is stored in history.
+ */
+export const CHECK_OUTPUT_TAIL_CHARS = 8_000;
+
+/** One run of a repository command, as the activity's `exec` reports it. */
+export interface RepoCommandRun {
+  exitCode: number;
+  durationMs: number;
+  /** True when it was killed at {@link CHECK_TIMEOUT_MS}. */
+  timedOut: boolean;
+  /** The end of its output, from {@link checkOutputTail}. */
+  outputTail: string;
+}
+
 export interface FixerCheckResult {
   /** 1-based, the number of the Verify check in the handoff. */
   n: number;
@@ -484,6 +509,55 @@ export interface FixerCheckResult {
   command: string | null;
   /** Why a check was not run. */
   reason?: string;
+  /** The command's exit code. Absent from a check not run, and from a run that predates it. */
+  exitCode?: number;
+  durationMs?: number;
+  /** A failed command only: true when it was killed at its time limit. */
+  timedOut?: boolean;
+  /** A failed command only: the end of its output. A pass keeps none, so history stays small. */
+  outputTail?: string;
+}
+
+/** An environment variable whose name says its value is a secret. */
+const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|BYPASS|PRIVATE/i;
+
+/** Shorter values are left alone: `AUTH=1` would redact every "1". */
+const SECRET_MIN_LENGTH = 8;
+
+// The CSI and OSC escapes a terminal-aware tool prints: colours, cursor moves, links.
+// eslint-disable-next-line no-control-regex
+const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b[@-Z\\-_]/g;
+
+/**
+ * Replaces every secret-looking value of `env` in `text` with `[redacted]`.
+ * The longest first, so a secret that contains another goes whole.
+ */
+export function redactSecrets(text: string, env: NodeJS.ProcessEnv): string {
+  const values = Object.entries(env)
+    .filter(([name, value]) => SECRET_ENV_NAME.test(name) && typeof value === 'string' && value.length >= SECRET_MIN_LENGTH)
+    .map(([, value]) => value as string)
+    .sort((a, b) => b.length - a.length);
+  for (const value of values) text = text.split(value).join('[redacted]');
+  return text;
+}
+
+/**
+ * What a PR may show of a command's output: ANSI codes stripped, the last
+ * {@link CHECK_OUTPUT_TAIL_LINES} lines, the secrets in `env` redacted, then at
+ * most {@link CHECK_OUTPUT_TAIL_CHARS} characters from the end. The redaction
+ * runs before the character cap, so the cap never leaves half a secret behind.
+ */
+export function checkOutputTail(output: string, env: NodeJS.ProcessEnv): string {
+  const lines = output.replace(ANSI, '').replace(/\r\n?/g, '\n').split('\n');
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+  let tail = redactSecrets(lines.slice(-CHECK_OUTPUT_TAIL_LINES).join('\n'), env);
+  if (tail.length > CHECK_OUTPUT_TAIL_CHARS) {
+    tail = tail.slice(-CHECK_OUTPUT_TAIL_CHARS);
+    // Start on a whole line, unless the last line alone is over the cap.
+    const newline = tail.indexOf('\n');
+    if (newline !== -1) tail = tail.slice(newline + 1);
+  }
+  return tail;
 }
 
 /** Why a check outside {@link REPO_COMMANDS} has no result on the PR. */
@@ -505,7 +579,7 @@ export function repoCommandFor(check: string): RepoCommand | null {
 
 /**
  * Runs a handoff's Verify checks through `exec` and reads pass or fail off the
- * exit code.
+ * exit code. A command killed at its time limit fails whatever its exit code.
  *
  * Only a check that names one of {@link REPO_COMMANDS} reaches `exec`, and what
  * it is handed is that entry, not the handoff's text: a command a model wrote
@@ -515,9 +589,9 @@ export function repoCommandFor(check: string): RepoCommand | null {
  */
 export async function runVerifyChecks(
   checks: string[],
-  exec: (command: RepoCommand) => Promise<number>,
+  exec: (command: RepoCommand) => Promise<RepoCommandRun>,
 ): Promise<FixerCheckResult[]> {
-  const exits = new Map<string, number>();
+  const runs = new Map<string, RepoCommandRun>();
   const results: FixerCheckResult[] = [];
   for (const [i, check] of checks.entries()) {
     const entry = repoCommandFor(check);
@@ -525,10 +599,59 @@ export async function runVerifyChecks(
       results.push({ n: i + 1, status: 'not-run', command: null, reason: NOT_RUN_REASON });
       continue;
     }
-    if (!exits.has(entry.command)) exits.set(entry.command, await exec(entry));
-    results.push({ n: i + 1, status: exits.get(entry.command) === 0 ? 'pass' : 'fail', command: entry.command });
+    if (!runs.has(entry.command)) runs.set(entry.command, await exec(entry));
+    const ran = runs.get(entry.command)!;
+    const base = { n: i + 1, command: entry.command, exitCode: ran.exitCode, durationMs: ran.durationMs };
+    results.push(
+      ran.exitCode === 0 && !ran.timedOut
+        ? { ...base, status: 'pass' }
+        : { ...base, status: 'fail', timedOut: ran.timedOut, outputTail: ran.outputTail },
+    );
   }
   return results;
+}
+
+/** "45 s", "4 min 12 s", "10 min". */
+export function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds} s`;
+  const rest = seconds % 60;
+  return rest === 0 ? `${Math.floor(seconds / 60)} min` : `${Math.floor(seconds / 60)} min ${rest} s`;
+}
+
+/**
+ * Why a command failed, under its check: the exit code, the duration, the time
+ * limit when it hit it, and its output in a collapsed block. A check whose
+ * command an earlier check already ran points there instead of repeating it.
+ */
+function failureLines(result: FixerCheckResult, earlier: FixerCheckResult | undefined): string[] {
+  if (earlier) return [`   - Output: under check ${earlier.n}, which ran the same command.`];
+  // A result from before the output was kept has nothing more to say.
+  if (result.exitCode === undefined) return [];
+  const lines = [
+    result.timedOut
+      ? `   - Timed out after ${CHECK_TIMEOUT_MS / 60_000} minutes, and was killed. Exit code ${result.exitCode}.`
+      : `   - Exit code ${result.exitCode}, after ${formatDuration(result.durationMs ?? 0)}.`,
+  ];
+  const tail = result.outputTail ?? '';
+  if (tail === '') return [...lines, '   - No output.'];
+  const count = tail.split('\n').length;
+  // A fence longer than any run of backticks in the output, so none closes it.
+  const longest = Math.max(0, ...(tail.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  const indent = (line: string) => (line === '' ? '' : `   ${line}`);
+  return [
+    ...lines,
+    '',
+    `   <details><summary>The last ${count === 1 ? 'line' : `${count} lines`} of its output</summary>`,
+    '',
+    indent(fence),
+    ...tail.split('\n').map(indent),
+    indent(fence),
+    '',
+    '   </details>',
+    '',
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -752,6 +875,10 @@ export function buildFixerPrBody(input: FixerPrBodyInput): string {
     const status = result?.status ?? 'not-run';
     lines.push(`   - Result: ${result?.reason ? `${status} (${result.reason})` : status}`);
     if (result?.command) lines.push(`   - Command: \`${result.command}\``);
+    if (result?.status === 'fail') {
+      const earlier = input.results.find((r) => r.n < result.n && r.command === result.command);
+      lines.push(...failureLines(result, earlier));
+    }
   });
   lines.push('');
   if (input.site) lines.push(...siteCheckLines(input.site));
