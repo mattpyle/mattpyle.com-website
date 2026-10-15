@@ -3,7 +3,7 @@ import path from 'node:path';
 import { STEWARD_DIR } from '../config.js';
 import { tempRunName } from './audit-engine.js';
 import { killTree } from './proc.js';
-import { CheckBroken, CheckUnavailable, type PageProbe } from './verify-checks.js';
+import { CheckBroken, CheckUnavailable, VERCEL_BYPASS_HEADER, type PageProbe } from './verify-checks.js';
 
 /**
  * The verifier's browser: the worker's Chromium, one page at a time, asked one
@@ -13,9 +13,15 @@ import { CheckBroken, CheckUnavailable, type PageProbe } from './verify-checks.j
  * `CHROME_PATH` when it is set. The conversation with it is the DevTools
  * protocol over Node's own `WebSocket`: four commands, so no client library.
  *
- * The page is production and the expression comes from a validated `verify`
- * block. It runs inside the page, in the browser's sandbox, and its result
- * comes back by value. Nothing here touches the worker's filesystem or shell.
+ * The page is production or a preview, and the expression comes from a
+ * validated `verify` block. It runs inside the page, in the browser's sandbox,
+ * and its result comes back by value. Nothing here touches the worker's
+ * filesystem or shell.
+ *
+ * **A preview's bypass secret** is added by the browser's own request
+ * interception (the protocol's `Fetch` domain), to requests for the preview's
+ * origin only. A page that loads anything from another origin sends it no
+ * secret.
  */
 
 const LOAD_TIMEOUT_MS = 30_000;
@@ -25,7 +31,16 @@ interface Pending {
   reject: (err: Error) => void;
 }
 
-export async function openChromeProbe(options: { userAgent: string }): Promise<PageProbe & { close(): Promise<void> }> {
+export interface ProbeBypass {
+  /** The preview origin the secret is sent to. */
+  origin: string;
+  secret: string;
+}
+
+export async function openChromeProbe(options: {
+  userAgent: string;
+  bypass?: ProbeBypass;
+}): Promise<PageProbe & { close(): Promise<void> }> {
   const { launch } = await import('chrome-launcher');
   const userDataDir = path.join(STEWARD_DIR, '.cache', tempRunName('chrome-verify'));
   await fs.mkdir(userDataDir, { recursive: true });
@@ -97,9 +112,25 @@ export async function openChromeProbe(options: { userAgent: string }): Promise<P
 
     const evaluate = async (url: string, expression: string): Promise<unknown> => {
       const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+      let onPaused: ((message: any) => void) | undefined;
       try {
         const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
         await send('Page.enable', {}, sessionId);
+        if (options.bypass) {
+          const { origin, secret } = options.bypass;
+          const allowed = new URL(origin).origin;
+          onPaused = (message: any) => {
+            if (message.sessionId !== sessionId || message.method !== 'Fetch.requestPaused') return;
+            const { requestId, request } = message.params;
+            const headers = Object.entries(request.headers as Record<string, string>)
+              .filter(([name]) => name.toLowerCase() !== VERCEL_BYPASS_HEADER)
+              .map(([name, value]) => ({ name, value }));
+            if (new URL(request.url).origin === allowed) headers.push({ name: VERCEL_BYPASS_HEADER, value: secret });
+            send('Fetch.continueRequest', { requestId, headers }, sessionId).catch(() => {});
+          };
+          listeners.add(onPaused);
+          await send('Fetch.enable', { patterns: [{ urlPattern: `${allowed}/*`, requestStage: 'Request' }] }, sessionId);
+        }
         const loaded = new Promise<void>((resolve, reject) => {
           const timer = setTimeout(() => {
             listeners.delete(onEvent);
@@ -124,6 +155,7 @@ export async function openChromeProbe(options: { userAgent: string }): Promise<P
         }
         return outcome.result?.value ?? null;
       } finally {
+        if (onPaused) listeners.delete(onPaused);
         await send('Target.closeTarget', { targetId }).catch(() => {});
       }
     };

@@ -227,6 +227,24 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       return response(200, { number, html_url: prUrl(number) });
     }
 
+    // GET /pulls/{n}: what the draft flip reads first.
+    if (method === 'GET' && patchPull) {
+      const number = Number(patchPull[1]);
+      const pull = pulls.find((p) => p.number === number);
+      if (!pull) return response(404, { message: 'Not Found' });
+      return response(200, { number, html_url: prUrl(number), draft: pull.draft, node_id: `PR_${number}` });
+    }
+
+    // POST /graphql: `convertPullRequestToDraft`, the one mutation this codebase sends.
+    if (method === 'POST' && url.pathname === '/graphql') {
+      const pull = pulls.find((p) => `PR_${p.number}` === body.variables?.id);
+      if (!pull || !String(body.query).includes('convertPullRequestToDraft')) {
+        return response(200, { errors: [{ message: 'not modelled' }] });
+      }
+      pull.draft = true;
+      return response(200, { data: { convertPullRequestToDraft: { pullRequest: { isDraft: true } } } });
+    }
+
     throw new Error(`fake GitHub has no route for ${method} ${route} — add it deliberately`);
   }) as typeof fetch;
 

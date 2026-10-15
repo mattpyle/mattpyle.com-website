@@ -9,7 +9,13 @@ import { CancelledFailure } from '@temporalio/common';
 import { createTestEnv } from '../helpers/test-env.js';
 import { fixFindingStateQuery, fixFindingWorkflow, type FixFindingInput } from '../../src/workflows/fix-finding.js';
 import type { WriteFindingFixInput } from '../../src/activities/findings.js';
-import type { GenerateHandoffInput, OpenFixerPrInput, RunFixerInput, RunFixerResult } from '../../src/activities/fixer.js';
+import {
+  readFixChecks,
+  type GenerateHandoffInput,
+  type OpenFixerPrInput,
+  type RunFixerInput,
+  type RunFixerResult,
+} from '../../src/activities/fixer.js';
 import { opensAsDraft } from '../../src/lib/fixer.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, OPPORTUNITY_FINDING } from '../helpers/finding-fixtures.js';
@@ -87,6 +93,11 @@ function mockActivities(mocks: Mocks = {}) {
         claude: { model: 'claude-x', costUsd: 0.05, durationMs: 20_000, numTurns: 9 },
       };
     },
+    // Pure: the fixture handoff's block is empty, so neither test runs.
+    readFixChecks: async (input: Parameters<typeof readFixChecks>[0]) => {
+      calls.push('readFixChecks');
+      return readFixChecks(input);
+    },
     runFixer: async (input: RunFixerInput) => {
       calls.push('runFixer');
       seen.run = input;
@@ -146,7 +157,7 @@ async function failure(run: Promise<unknown>): Promise<Error & { type?: string }
   assert.fail('the workflow completed');
 }
 
-test('pass: five activities in order, the PR from the finding, and fixing written back', async () => {
+test('pass: the activities in order, the PR from the finding, and fixing written back', async () => {
   const { activities, calls, seen } = mockActivities();
   const result = await withWorker(activities, async () => {
     const handle = await env.client.workflow.start(fixFindingWorkflow, {
@@ -164,7 +175,7 @@ test('pass: five activities in order, the PR from the finding, and fixing writte
     return r;
   });
 
-  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'runFixer', 'openFixerPr', 'writeFindingFix']);
+  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'readFixChecks', 'runFixer', 'openFixerPr', 'writeFindingFix']);
   // The finding the gate judged is the text the handoff and the PR are made from.
   assert.equal(seen.generate!.findingText, DEFECT_FINDING);
   assert.equal(seen.generate!.handoffPath, `sites/mattpyle-com/handoffs/${DEFECT_KEY}.md`);
@@ -190,6 +201,7 @@ test('pass: five activities in order, the PR from the finding, and fixing writte
   assert.equal(result.run.numTurns, 40);
   assert.equal(result.run.costUsd, 1.2);
   assert.deepEqual(result.run.checks, RUN.checks);
+  assert.deepEqual(result.verify?.block, [], 'an empty block: unverifiable by checks');
   assert.ok(!JSON.stringify(result).includes('Generated with Claude Code'), 'nor the workflow result');
 });
 
@@ -300,7 +312,7 @@ test('a stalled run fails the workflow on the first attempt: no PR, nothing writ
   );
   assert.equal(err.type, 'FixerStalled');
   assert.equal(attempts, 1);
-  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'runFixer']);
+  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'readFixChecks', 'runFixer']);
 });
 
 test('a failed run is not retried: a second attempt would spend a second model turn', async () => {
@@ -366,5 +378,5 @@ test('cancellation mid-turn: the activity is told, the workflow waits for it, an
     assert.equal(cleanedUp, true, 'the workflow closed only after the activity finished its cleanup');
   });
   assert.equal(sawCancel, true);
-  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'runFixer']);
+  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'readFixChecks', 'runFixer']);
 });

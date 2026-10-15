@@ -221,6 +221,56 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
 }
 
 // ---------------------------------------------------------------------------
+// A block on a preview
+// ---------------------------------------------------------------------------
+
+/**
+ * The header Vercel reads its Protection Bypass for Automation secret from. A
+ * request that carries it passes the preview's Vercel Authentication.
+ */
+export const VERCEL_BYPASS_HEADER = 'x-vercel-protection-bypass';
+
+/** The block with each check's origin swapped for `origin`. Path, query and expectation are kept. */
+export function onOrigin(checks: VerifyCheck[], origin: string): VerifyCheck[] {
+  const target = new URL(origin);
+  return checks.map((check) => {
+    const url = new URL(check.url);
+    url.protocol = target.protocol;
+    url.host = target.host;
+    return { ...check, url: url.toString() };
+  });
+}
+
+/** Most redirects {@link bypassFetch} follows before it hands back the last answer. */
+const REDIRECTS_MAX = 10;
+
+/**
+ * `fetch` that sends the bypass secret to `origin` and to no other origin.
+ *
+ * It follows redirects itself, so the header is set or left off per hop: a
+ * redirect from the preview to production, or anywhere else, never carries the
+ * secret there. A caller that asks for `redirect: 'manual'` gets the first
+ * answer, as it would from `fetch`.
+ */
+export function bypassFetch(origin: string, secret: string, base: typeof fetch = fetch): typeof fetch {
+  const allowed = new URL(origin).origin;
+  return (async (input: string | URL | Request, init: RequestInit = {}) => {
+    let url = new URL(input instanceof Request ? input.url : String(input));
+    for (let hop = 0; ; hop++) {
+      const headers = new Headers(init.headers);
+      if (url.origin === allowed) headers.set(VERCEL_BYPASS_HEADER, secret);
+      else headers.delete(VERCEL_BYPASS_HEADER);
+      const res = await base(url, { ...init, headers, redirect: 'manual' });
+      const location = res.headers.get('location');
+      if (init.redirect === 'manual' || res.status < 300 || res.status > 399 || !location || hop >= REDIRECTS_MAX) {
+        return res;
+      }
+      url = new URL(location, url);
+    }
+  }) as typeof fetch;
+}
+
+// ---------------------------------------------------------------------------
 // Running a block
 // ---------------------------------------------------------------------------
 
@@ -322,7 +372,8 @@ function sameJson(a: unknown, b: unknown): boolean {
 }
 
 /**
- * Runs a validated block against production and returns one row per check.
+ * Runs a validated block against the origin its URLs name, production or a
+ * preview, and returns one row per check.
  *
  * A row is a measurement: pass or fail, with both values. A check that could
  * not be measured throws {@link CheckUnavailable}, and one whose own selector

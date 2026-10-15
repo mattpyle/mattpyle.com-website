@@ -1,5 +1,11 @@
 import type { ParsedFinding } from './findings.js';
-import { readHandoffVerify, validateVerifyBlock, verifyBlockGuide } from './verify-checks.js';
+import {
+  readHandoffVerify,
+  validateVerifyBlock,
+  verifyBlockGuide,
+  type VerifyCheck,
+  type VerifyCheckResult,
+} from './verify-checks.js';
 
 /**
  * The fixer's pure half: the handoff it asks for, what `runFixer` passes to
@@ -454,7 +460,7 @@ export interface FixerCheckResult {
 }
 
 /** Why a check outside {@link REPO_COMMANDS} has no result on the PR. */
-export const NOT_RUN_REASON = 'runs after deploy';
+export const NOT_RUN_REASON = 'not a repository command';
 
 /**
  * The repository command a Verify check names: the first backtick span that is
@@ -502,6 +508,30 @@ export async function runVerifyChecks(
 // The PR
 // ---------------------------------------------------------------------------
 
+/**
+ * The `verify` block's two tests: on production before the fixer runs, where
+ * every check must fail, and on the PR's preview after it opens, where every
+ * check must pass.
+ */
+export interface FixerSiteChecks {
+  /** Whose block: the finding's own, or the handoff's. */
+  source: 'finding' | 'handoff';
+  /** True when the handoff's block was written again after it passed on production. */
+  regenerated: boolean;
+  /** Why writing the handoff's block again failed, when it did. The first block stands. */
+  regenerateError: string | null;
+  /** The block as run, on the production origin. Empty when no check can measure the finding. */
+  block: VerifyCheck[];
+  /** Each check on production before the fix, or null when the test did not run. */
+  production: VerifyCheckResult[] | null;
+  /** Why the production test has no rows. */
+  productionNote: string | null;
+  /** Each check on the preview, or null until it has run. */
+  preview: VerifyCheckResult[] | null;
+  /** Why the preview test has no rows. */
+  previewNote: string | null;
+}
+
 export interface FixerPrBodyInput {
   key: string;
   finding: ParsedFinding;
@@ -511,6 +541,8 @@ export interface FixerPrBodyInput {
   filesChanged: string[];
   exitCode: number;
   timedOut: boolean;
+  /** The `verify` block's tests. Absent from a run that predates them. */
+  site?: FixerSiteChecks | null;
 }
 
 /** True when the run did not end the way a finished one does: killed at its limit, or a non-zero exit. */
@@ -518,9 +550,86 @@ export function isIncompleteRun(run: { exitCode: number; timedOut: boolean }): b
   return run.timedOut || run.exitCode !== 0;
 }
 
-/** True when the PR opens as a draft: the run was incomplete, or a check Steward ran failed. */
-export function opensAsDraft(run: { exitCode: number; timedOut: boolean; checks: FixerCheckResult[] }): boolean {
-  return isIncompleteRun(run) || run.checks.some((check) => check.status === 'fail');
+/** "Check 2", "Checks 1 and 3", "Checks 1, 2 and 4". */
+function checksLabel(numbers: number[]): string {
+  if (numbers.length === 1) return `Check ${numbers[0]}`;
+  return `Checks ${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`;
+}
+
+/**
+ * What the `verify` block's tests found wrong, one bold-led sentence each.
+ * Empty when every check failed on production and passed on the preview, when
+ * the preview has not run yet, and when the block is empty.
+ */
+export function siteCheckProblems(site: FixerSiteChecks): string[] {
+  if (site.block.length === 0) return [];
+  const problems: string[] = [];
+  if (site.productionNote) problems.push(`**The production test did not run.** ${site.productionNote}`);
+  const passing = (site.production ?? []).filter((row) => row.pass).map((row) => row.n);
+  if (passing.length > 0) {
+    const one = passing.length === 1;
+    problems.push(
+      `**${checksLabel(passing)} already ${one ? 'passes' : 'pass'} on production.** Before the fix, so ${one ? 'it does' : 'they do'} not show the defect.`,
+    );
+  }
+  if (site.previewNote) problems.push(`**The preview was not measured.** ${site.previewNote}`);
+  const failing = (site.preview ?? []).filter((row) => !row.pass).map((row) => row.n);
+  if (failing.length > 0) {
+    problems.push(`**${checksLabel(failing)} ${failing.length === 1 ? 'fails' : 'fail'} on the preview.** The fix does not hold there.`);
+  }
+  return problems;
+}
+
+/**
+ * True when the PR opens as a draft, or is turned into one: the run was
+ * incomplete, a check Steward ran failed, or the `verify` block's tests found
+ * a problem.
+ */
+export function opensAsDraft(run: {
+  exitCode: number;
+  timedOut: boolean;
+  checks: FixerCheckResult[];
+  site?: FixerSiteChecks | null;
+}): boolean {
+  return (
+    isIncompleteRun(run) ||
+    run.checks.some((check) => check.status === 'fail') ||
+    (run.site ? siteCheckProblems(run.site).length > 0 : false)
+  );
+}
+
+/** The `verify` block's part of the Verify section. */
+function siteCheckLines(site: FixerSiteChecks): string[] {
+  if (site.block.length === 0) {
+    return ['No check on the site can measure this finding: its `verify` block is empty. The fix is unverifiable by checks.', ''];
+  }
+  let whose = site.source === 'finding' ? "the finding's own `verify` block" : "the handoff's `verify` block";
+  if (site.regenerated) whose += ', written a second time because the first one passed on production before the fix';
+  const lines = [
+    `The checks on the site, from ${whose}. Each runs on production before the fix, where it must fail, and on this PR's preview, where it must pass.`,
+  ];
+  if (site.regenerateError) lines.push('', `Writing the block a second time failed, so the first one stands: ${site.regenerateError}`);
+  lines.push('');
+  site.block.forEach((check, i) => {
+    const n = i + 1;
+    const production = site.production?.find((row) => row.n === n);
+    const preview = site.preview?.find((row) => row.n === n);
+    lines.push(`${n}. \`${check.kind}\` ${check.url}`);
+    const expected = production?.expected ?? preview?.expected;
+    if (expected) lines.push(`   - Expects: ${expected}`);
+    lines.push(
+      production
+        ? `   - Production, before the fix: ${production.measured}. ${production.pass ? 'Passes, so it does not show the defect.' : 'Fails, as it should.'}`
+        : '   - Production, before the fix: not measured.',
+    );
+    lines.push(
+      preview
+        ? `   - Preview: ${preview.measured}. ${preview.pass ? 'Pass.' : 'Fail.'}`
+        : `   - Preview: ${site.previewNote ? 'not measured.' : 'not measured yet.'}`,
+    );
+  });
+  lines.push('');
+  return lines;
 }
 
 /**
@@ -545,6 +654,7 @@ export function buildFixerPrBody(input: FixerPrBodyInput): string {
       '',
     );
   }
+  for (const problem of input.site ? siteCheckProblems(input.site) : []) lines.push(`> ${problem}`, '');
   lines.push(`Fixes one finding from Argus, the site's inspector: ${finding.title}`, '');
 
   lines.push('## Evidence', '');
@@ -571,6 +681,7 @@ export function buildFixerPrBody(input: FixerPrBodyInput): string {
     if (result?.command) lines.push(`   - Command: \`${result.command}\``);
   });
   lines.push('');
+  if (input.site) lines.push(...siteCheckLines(input.site));
 
   lines.push(
     `Finding: \`${input.key}\``,

@@ -2009,7 +2009,20 @@ finding
 
       const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
       console.log('');
-      console.log(`  PR: ${fixed.prUrl}${fixed.draft ? '  (draft: the run was incomplete or a check failed)' : ''}`);
+      console.log(`  PR: ${fixed.prUrl}${fixed.draft ? '  (draft: the PR body says why)' : ''}`);
+      if (fixed.verify) {
+        const v = fixed.verify;
+        console.log(`  site checks: ${v.block.length === 0 ? 'none, unverifiable by checks' : `${v.block.length} from the ${v.source}${v.regenerated ? ', written twice' : ''}`}`);
+        for (const [i] of v.block.entries()) {
+          const prod = v.production?.find((row) => row.n === i + 1);
+          const prev = v.preview?.find((row) => row.n === i + 1);
+          console.log(
+            `    ${i + 1}: production ${prod ? `${prod.pass ? 'PASS' : 'fail'} (${prod.measured})` : 'not measured'}, preview ${prev ? `${prev.pass ? 'pass' : 'FAIL'} (${prev.measured})` : 'not measured'}`,
+          );
+        }
+        if (v.productionNote) console.log(`    production: ${v.productionNote}`);
+        if (v.previewNote) console.log(`    preview: ${v.previewNote}`);
+      }
       console.log(`  commit: ${fixed.commitSha}  (${fixed.filesChanged.length} files)`);
       console.log(`  finding: status fixing, commit ${fixed.findingCommitSha ?? 'none (it already said so)'}`);
       console.log(

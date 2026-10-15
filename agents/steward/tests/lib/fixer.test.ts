@@ -255,9 +255,9 @@ test('a Verify command outside the repository set is not-run and never spawned',
     },
   );
   assert.deepEqual(results, [
-    { n: 1, status: 'not-run', command: null, reason: 'runs after deploy' },
+    { n: 1, status: 'not-run', command: null, reason: 'not a repository command' },
     { n: 2, status: 'pass', command: 'npm test -w @mattpyle/steward' },
-    { n: 3, status: 'not-run', command: null, reason: 'runs after deploy' },
+    { n: 3, status: 'not-run', command: null, reason: 'not a repository command' },
     { n: 4, status: 'pass', command: 'npx tsc --noEmit -p agents/steward' },
   ]);
   // What is spawned is the fixed entry's argv, not the handoff's text.
@@ -300,7 +300,7 @@ const BODY_INPUT = {
   checks: parseHandoff(DEFECT_HANDOFF).checks,
   results: [
     { n: 1, status: 'pass' as const, command: 'npm test -w @mattpyle/steward' },
-    { n: 2, status: 'not-run' as const, command: null, reason: 'runs after deploy' },
+    { n: 2, status: 'not-run' as const, command: null, reason: 'not a repository command' },
   ],
   filesChanged: ['agents/steward/src/workflows/scorecard-audit.ts', 'agents/steward/tests/workflows/scorecard-audit.test.ts'],
   exitCode: 0,
@@ -321,7 +321,7 @@ test('the PR body is the finding: its line, evidence, cause, measure, the checks
     body,
     /\n1\. A unit test of `buildCommentary` .*\n   - Result: pass\n   - Command: `npm test -w @mattpyle\/steward`\n/,
   );
-  assert.match(body, /\n2\. `npx tsc --noEmit -p agents\/steward` is clean\.\n   - Result: not-run \(runs after deploy\)\n\n/);
+  assert.match(body, /\n2\. `npx tsc --noEmit -p agents\/steward` is clean\.\n   - Result: not-run \(not a repository command\)\n\n/);
   assert.ok(body.includes(`Finding: \`${DEFECT_KEY}\``));
   assert.match(body, /Steward never merges\.\*$/);
   assert.doesNotMatch(body, /Incomplete run|checks? failed/);

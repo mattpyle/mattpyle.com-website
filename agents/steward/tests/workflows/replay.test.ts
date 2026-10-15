@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { Worker } from '@temporalio/worker';
+import proto from '@temporalio/proto';
 
 /**
  * Replay regression test (temporal-developer skill, testing.md § Replay Testing).
@@ -273,5 +274,28 @@ test('a verdict-only finding history with a file reject replays against current 
     { workflowsPath, bundlerOptions: {} },
     history,
     'finding/mattpyle-com/direction-no-dark-mode--sitewide',
+  );
+});
+
+/**
+ * A fix child as `fixFindingWorkflow` ran it before the `verify` block's two
+ * tests: read, generate, run, open, write, and no `patched` marker. New code
+ * must take the same five steps on replay, which is what the
+ * `fixer-preview-verify` patch is for. A probe that deleted the `patched()`
+ * guard made this replay fail with a nondeterminism error (2026-10-13).
+ *
+ * Recorded from the pre-change code against the time-skipping server, with the
+ * fix suite's mocked activities, so it holds no real finding text. Stored as the
+ * protobuf binary because the SDK's `historyToJSON` throws on this server's
+ * payloads ("toProto3JSON: don't know how to convert value json/plain").
+ */
+const fixFindingHistoryPath = fileURLToPath(new URL('../fixtures/histories/fix-finding-pr.bin', import.meta.url));
+
+test('a fix child recorded before the preview test replays down its five steps', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(fixFindingHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'fix/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });

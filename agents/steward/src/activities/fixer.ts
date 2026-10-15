@@ -4,7 +4,7 @@ import { ApplicationFailure, Context } from '@temporalio/activity';
 import { CancelledFailure } from '@temporalio/common';
 import { FIXER_WORKTREE_DIR, GITHUB_REPO, PROD_ORIGIN, SITE_DIR, STEWARD_DIR } from '../config.js';
 import { runClaude } from '../lib/claude-runner.js';
-import { parseFindingBody } from '../lib/findings.js';
+import { parseFindingBody, parsePrUrl } from '../lib/findings.js';
 import { git, needsInstall, recordInstall, worktreeExists } from '../lib/git.js';
 import { openOrUpdatePr, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
 import { gh } from '../lib/github.js';
@@ -21,16 +21,18 @@ import {
   parseHandoff,
   runVerifyChecks,
   type FixerCheckResult,
+  type FixerSiteChecks,
   type RepoCommand,
 } from '../lib/fixer.js';
-import { draftHandoff, draftVerifyBlock } from '../lib/handoff-generator.js';
+import { draftHandoff, draftVerifyBlock, type VerifyBlockRejection } from '../lib/handoff-generator.js';
 import { readHandoffVerify, validateVerifyBlock, withVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
 import { npmCommand } from './build-audit.js';
 
 /**
- * The fixer's three laptop activities: write the handoff, run Claude Code on
- * it, open the PR. `fixFindingWorkflow` runs them in that order between a read
- * of the finding and the write back to it.
+ * The fixer's laptop activities: write the handoff, choose its checks and
+ * write them again when they do not show the defect, run Claude Code on it,
+ * open the PR. `fixFindingWorkflow` runs them in that order between a read of
+ * the finding and the write back to it.
  *
  * All three need this machine: the first two its Claude Code login and its
  * checkout, the second its git credentials as well. They run on `steward-heavy`, which only the
@@ -233,10 +235,17 @@ export interface GenerateVerifyBlockInput {
   handoffPath: string;
   /** The production origin every check must name. */
   origin: string;
+  /**
+   * The handoff's block and what it measured on production before the fix.
+   * When present the block is written again, whatever the handoff holds.
+   */
+  rejected?: VerifyBlockRejection;
 }
 
 export interface GenerateVerifyBlockResult {
   checks: VerifyCheck[];
+  /** The handoff as written back with the new block, or null when nothing was written. */
+  handoff?: string | null;
   /** The commit that wrote the block into the handoff, or null when it was already there. */
   commitSha: string | null;
   /** The site commit the model read, or null when no model ran. */
@@ -255,6 +264,12 @@ export interface GenerateVerifyBlockResult {
  *
  * **Safe to retry.** The handoff is read first, and one that already carries a
  * valid block is returned as it is, with no model run and no write.
+ *
+ * **Before the fix**, `rejected` carries the handoff's block and what each
+ * check measured on production. The block is written again with that in the
+ * prompt, against the commit the fix will branch from, and replaces the first
+ * one in the handoff. A retry after the write asks again rather than trust a
+ * block the first attempt wrote, since nothing has tested it.
  */
 export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Promise<GenerateVerifyBlockResult> {
   const ctx = Context.current();
@@ -268,7 +283,7 @@ export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Prom
   };
 
   const existing = readHandoffVerify((await read()).text);
-  if (existing.present) {
+  if (existing.present && !input.rejected) {
     const block = validateVerifyBlock(existing.raw, input.origin);
     if (block.problems.length === 0) return { checks: block.checks, commitSha: null, baseSha: null, claude: noRun };
   }
@@ -286,6 +301,7 @@ export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Prom
       handoff: existing.body,
       cwd: FIXER_WORKTREE_DIR,
       origin: input.origin,
+      rejected: input.rejected,
       signal: ctx.cancellationSignal,
       onActivity: (activity) => {
         phase = `claude -p: ${activity}`;
@@ -306,21 +322,75 @@ export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Prom
 
     phase = 'writing the verify block to the findings repository';
     const file = await read();
+    const handoff = withVerifyBlock(file.text, draft.checks);
     const { commitSha } = await writeRepoFile({
       repo: input.repo,
       path: input.handoffPath,
-      text: withVerifyBlock(file.text, draft.checks),
+      text: handoff,
       message: `verify block ${input.key}`,
       branch: FINDINGS_BRANCH,
       sha: file.sha,
     });
 
-    log.info({ activity: 'generateVerifyBlock', key: input.key, commitSha, baseSha, ...draft.claude }, 'verify block generated');
-    return { checks: draft.checks, commitSha, baseSha, claude: draft.claude };
+    log.info(
+      { activity: 'generateVerifyBlock', key: input.key, again: Boolean(input.rejected), commitSha, baseSha, ...draft.claude },
+      'verify block generated',
+    );
+    return { checks: draft.checks, handoff, commitSha, baseSha, claude: draft.claude };
   } finally {
     clearInterval(pump);
     busy = undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// readFixChecks
+// ---------------------------------------------------------------------------
+
+export interface ReadFixChecksInput {
+  key: string;
+  /** `sites/<site>/findings/<key>.md`, named when the finding's block is refused. */
+  findingPath: string;
+  /** The finding as the workflow read it. */
+  findingText: string;
+  /** The handoff `generateHandoff` wrote. */
+  handoff: string;
+  /** The production origin every check must name. The site's own when absent. */
+  origin?: string;
+}
+
+export interface ReadFixChecksResult {
+  /** The production origin the checks were validated against. */
+  origin: string;
+  source: 'finding' | 'handoff';
+  /** The block to test. Empty when its owner judged the measure unmeasurable by checks. */
+  checks: VerifyCheck[];
+}
+
+/**
+ * The checks a fix is judged by: the finding's own `verify` block when its
+ * frontmatter has the key, else the handoff's. The verifier's rule
+ * (`readVerifyBlock`), applied to the handoff just written rather than a read
+ * of it.
+ *
+ * A finding's block that fails {@link validateVerifyBlock} fails the fix as
+ * `VerifyBlockInvalid`, as it would fail the verifier: a typo must not hand the
+ * definition of fixed to the handoff. The handoff's block was validated when
+ * it was generated.
+ */
+export async function readFixChecks(input: ReadFixChecksInput): Promise<ReadFixChecksResult> {
+  const origin = input.origin ?? PROD_ORIGIN;
+  const own = readHandoffVerify(input.findingText);
+  const source = own.present ? 'finding' : 'handoff';
+  const raw = own.present ? own.raw : readHandoffVerify(input.handoff).raw;
+  const { checks, problems } = validateVerifyBlock(raw ?? [], origin);
+  if (problems.length > 0) {
+    throw ApplicationFailure.nonRetryable(
+      `The verify block in ${source === 'finding' ? input.findingPath : `the handoff for ${input.key}`} was refused: ${problems.join('; ')}.`,
+      'VerifyBlockInvalid',
+    );
+  }
+  return { origin, source, checks };
 }
 
 // ---------------------------------------------------------------------------
@@ -575,6 +645,8 @@ export interface OpenFixerPrInput {
   checks: FixerCheckResult[];
   exitCode: number;
   timedOut: boolean;
+  /** The `verify` block's tests so far. Absent from a run that predates them. */
+  site?: FixerSiteChecks | null;
 }
 
 export interface OpenFixerPrResult {
@@ -588,8 +660,12 @@ export interface OpenFixerPrResult {
  * against it, with the body {@link buildFixerPrBody} writes from the finding.
  *
  * An incomplete run (a non-zero exit, or the 30-minute kill) opens a draft, and
- * so does a run with a failed check. The body's first line says which. Steward
- * never merges either kind.
+ * so does a run with a failed check or a `verify` block that failed a test. The
+ * body's first lines say which. Steward never merges either kind.
+ *
+ * **The second call**, once the preview is measured, updates the body and turns
+ * an open PR into a draft when the preview test failed. It never turns a draft
+ * back to ready: that is a person's call.
  */
 export async function openFixerPr(input: OpenFixerPrInput): Promise<OpenFixerPrResult> {
   const handoff = parseHandoff(input.handoff);
@@ -602,9 +678,33 @@ export async function openFixerPr(input: OpenFixerPrInput): Promise<OpenFixerPrR
     filesChanged: input.filesChanged,
     exitCode: input.exitCode,
     timedOut: input.timedOut,
+    site: input.site,
   });
   const title = handoff.title.charAt(0).toUpperCase() + handoff.title.slice(1);
   const prUrl = await openOrUpdatePr({ branch: input.branch, base: input.base, title, body, draft });
+  if (draft) await markDraft(prUrl);
   log.info({ activity: 'openFixerPr', key: input.key, prUrl, draft }, 'fixer PR open');
   return { prUrl, draft };
+}
+
+/**
+ * Turns an open PR into a draft. REST has no field for it, so this is GraphQL's
+ * `convertPullRequestToDraft`, by the PR's node ID. A PR that is already a
+ * draft is left alone, which also makes a retry a no-op.
+ */
+async function markDraft(prUrl: string): Promise<void> {
+  const pr = parsePrUrl(prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
+  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  if (data.draft === true) return;
+  const reply = await gh('/graphql', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: 'mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { pullRequest { isDraft } } }',
+      variables: { id: data.node_id },
+    }),
+  });
+  if (Array.isArray(reply.errors) && reply.errors.length > 0) {
+    throw new Error(`GitHub refused to make ${prUrl} a draft: ${reply.errors.map((e: { message?: string }) => e.message).join('; ')}`);
+  }
 }

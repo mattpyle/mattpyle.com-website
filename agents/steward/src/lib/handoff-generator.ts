@@ -7,7 +7,13 @@ import {
   handoffGeneratorPrompt,
   validateHandoff,
 } from './fixer.js';
-import { parseVerifyReply, validateVerifyBlock, verifyBlockGuide, type VerifyCheck } from './verify-checks.js';
+import {
+  parseVerifyReply,
+  validateVerifyBlock,
+  verifyBlockGuide,
+  type VerifyCheck,
+  type VerifyCheckResult,
+} from './verify-checks.js';
 
 /**
  * One `claude -p` run that turns a finding into a handoff, reading the checkout
@@ -138,6 +144,78 @@ export function verifyBlockPrompt(args: { key: string; finding: string; handoff:
   ].join('\n');
 }
 
+/**
+ * What the handoff's first block measured on production before the fix: every
+ * check's row, or the reason the test could not finish. The regeneration is
+ * told it, so it can see which checks do not show the defect.
+ */
+export interface VerifyBlockRejection {
+  /** The block as it was run. */
+  checks: VerifyCheck[];
+  /** One row per check, or null when a check's own expression did not run. */
+  results: VerifyCheckResult[] | null;
+  /** Why the test could not finish, when it could not. */
+  broken: string | null;
+}
+
+/**
+ * What the block generator is sent when the handoff's block failed its
+ * production test: the finding, the handoff, the first block and what each of
+ * its checks measured on production before the fix.
+ *
+ * Unlike {@link verifyBlockPrompt}, the fix is not written yet. The checkout is
+ * the commit the fix will branch from, so a check must fail against it.
+ */
+export function verifyBlockRetryPrompt(args: {
+  key: string;
+  finding: string;
+  handoff: string;
+  origin: string;
+  rejected: VerifyBlockRejection;
+}): string {
+  const { rejected } = args;
+  const measured = rejected.results
+    ? rejected.results.map((row) => {
+        const check = rejected.checks[row.n - 1];
+        return `${row.n}. \`${row.kind}\` ${row.url}, expect ${JSON.stringify(check?.expect)}: measured ${row.measured}. ${row.pass ? 'It PASSES before the fix, so it does not show the defect.' : 'It fails before the fix, as it should.'}`;
+      })
+    : rejected.checks.map((check, i) => `${i + 1}. \`${check.kind}\` ${check.url}, expect ${JSON.stringify(check.expect)}`);
+  return [
+    'Write the checks that will show one finding is fixed on the live site.',
+    `The fix is not written yet. Production at ${args.origin} still has the defect, and your working directory is a checkout of the site repository at the commit the fix will branch from. Every check must fail on production now and pass once the fix is live.`,
+    '',
+    'A first block was written for this handoff and run against production before the fix. It did not hold:',
+    '',
+    ...measured,
+    ...(rejected.broken ? ['', `The test could not finish: ${rejected.broken}`] : []),
+    '',
+    'Write the whole block again. Keep a check that fails before the fix only if it measures the defect the finding describes. Replace every check that passes: read the page source and the code, and expect the value the fixed page will serve, which the page does not serve now.',
+    '',
+    ...verifyBlockGuide(args.origin),
+    '',
+    'Build the checks from the finding\'s "How to measure" and nothing else, as the handoff\'s Verify section reads it.',
+    '',
+    'Reply with exactly this YAML document:',
+    '',
+    'verify:',
+    '  - url: <a URL on the production origin>',
+    '    kind: <kind>',
+    '    expect: <what the kind expects>',
+    '',
+    `The finding, \`${args.key}\`:`,
+    '',
+    '<finding>',
+    args.finding.trim(),
+    '</finding>',
+    '',
+    'The handoff the fix will be built from:',
+    '',
+    '<handoff>',
+    args.handoff.trim(),
+    '</handoff>',
+  ].join('\n');
+}
+
 export interface VerifyBlockDraft {
   /** The validated checks, or null when the run ended without a block or with one that was refused. */
   checks: VerifyCheck[] | null;
@@ -153,15 +231,17 @@ export interface VerifyBlockDraft {
 
 /**
  * One `claude -p` run, with the handoff generator's tools and limits, that
- * writes the `verify` block for a handoff that has none.
+ * writes the `verify` block for a handoff that has none, or writes it again
+ * when `rejected` says the first one passed on production before the fix.
  */
 export async function draftVerifyBlock(
-  options: HandoffDraftOptions & { handoff: string },
+  options: HandoffDraftOptions & { handoff: string; rejected?: VerifyBlockRejection },
 ): Promise<VerifyBlockDraft> {
+  const prompt = { key: options.key, finding: options.findingText, handoff: options.handoff, origin: options.origin };
   const run = await runClaude({
     command: 'claude',
     argv: handoffGeneratorArgs(
-      verifyBlockPrompt({ key: options.key, finding: options.findingText, handoff: options.handoff, origin: options.origin }),
+      options.rejected ? verifyBlockRetryPrompt({ ...prompt, rejected: options.rejected }) : verifyBlockPrompt(prompt),
       VERIFY_BLOCK_SYSTEM_PROMPT,
     ),
     cwd: options.cwd,

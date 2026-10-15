@@ -45,3 +45,5 @@
 
 process.env.GITHUB_TOKEN = '';
 process.env.ANTHROPIC_API_KEY = '';
+// The preview bypass secret: a test that wants one sets its own.
+process.env.VERCEL_AUTOMATION_BYPASS_SECRET = '';
