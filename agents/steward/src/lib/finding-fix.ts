@@ -11,7 +11,9 @@ import {
   findingsIndexPath,
   fixBranch,
   fixPrUrl,
+  fixRefusal,
   fixWorkflowId,
+  parseFindingBody,
   parsePrUrl,
   type FindingVerdict,
 } from './findings.js';
@@ -55,8 +57,8 @@ export interface FindingFixDeps {
   taskQueue: string;
   /** The site's production origin, or undefined for a site Steward knows none for. */
   origin: string | undefined;
-  /** The finding file's frontmatter, from the findings repository. */
-  readFinding: (path: string) => Promise<Record<string, unknown>>;
+  /** The finding file, its text and its parsed frontmatter, from the findings repository. */
+  readFinding: (path: string) => Promise<{ text: string; data: Record<string, unknown> }>;
   /** Where the fixer's PR stands on GitHub. */
   readPr: (prUrl: string) => Promise<'open' | 'merged' | 'closed'>;
   /** `writeFindingReturned`: `status: approved` back, with the closed PR named. */
@@ -129,12 +131,23 @@ async function queryState(handle: WorkflowHandle, deadline: number, pollMs: numb
 }
 
 /**
+ * The file's `verdict_at` as ISO 8601. An unquoted timestamp parses as a
+ * `Date`; a missing or unreadable one falls back to now.
+ */
+function verdictAt(value: unknown): string {
+  if (typeof value === 'string' && value) return value;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  return new Date().toISOString();
+}
+
+/**
  * The file's case for a finding with no lifecycle run: fixable as it stands,
  * fixable after its closed PR returns it, or refused.
  */
 async function prepareFromFile(deps: FindingFixDeps, site: string, key: string): Promise<{ verdict: FindingVerdict; returnedFrom: string | null }> {
   const path = findingPath(site, key);
-  let data = await deps.readFinding(path);
+  let finding = await deps.readFinding(path);
+  let data = finding.data;
   let returnedFrom: string | null = null;
 
   if (data.status === 'fixing') {
@@ -156,22 +169,19 @@ async function prepareFromFile(deps: FindingFixDeps, site: string, key: string):
     });
     deps.say(`returned ${key} to approved: ${prUrl} closed unmerged (commit ${returned.commitSha ?? 'none, already returned'})`);
     returnedFrom = prUrl;
-    data = await deps.readFinding(path);
+    finding = await deps.readFinding(path);
+    data = finding.data;
   }
 
-  if (data.status !== 'approved') {
-    throw new FixRefused(`${key} cannot be fixed: its status is ${String(data.status ?? 'unset')}, not approved.`);
-  }
-  // The child's own gate refuses anything else; refused here, no run is left
-  // open waiting for a fix that can never start.
-  if (data.kind !== 'defect') {
-    throw new FixRefused(`${key} does not go to the fixer: its kind is ${String(data.kind ?? 'unset')}, not defect.`);
-  }
+  // The child's own gate, run here first: a finding it would refuse never
+  // starts a run that is left open waiting for a fix that cannot start.
+  const refusal = fixRefusal(data, parseFindingBody(finding.text));
+  if (refusal) throw new FixRefused(`${key} does not go to the fixer: ${refusal}.`);
   const verdict: FindingVerdict = {
     status: 'approved',
     reason: typeof data.verdict_reason === 'string' ? data.verdict_reason : '',
     source: 'file',
-    at: typeof data.verdict_at === 'string' ? data.verdict_at : new Date().toISOString(),
+    at: verdictAt(data.verdict_at),
   };
   return { verdict, returnedFrom };
 }
