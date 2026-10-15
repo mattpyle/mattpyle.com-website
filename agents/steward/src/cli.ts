@@ -3,7 +3,6 @@ import path from 'node:path';
 import {
   Client,
   Connection,
-  WorkflowExecutionAlreadyStartedError,
   WorkflowNotFoundError,
   type ScheduleOptions,
   type WorkflowExecutionInfo,
@@ -61,11 +60,8 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
-import {
-  fixFindingStateQuery,
-  fixFindingWorkflow,
-  type FixFindingInput,
-} from './workflows/fix-finding.js';
+import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
+import { gh } from './lib/github.js';
 import {
   SCORECARD_SCHEDULE_ACTIONS,
   SCORECARD_SCHEDULE_DEFAULT_AT,
@@ -81,14 +77,14 @@ import {
   findingPath,
   findingWorkflowId,
   findingsIndexPath,
-  fixBranch,
   fixWorkflowId,
   isFindingSlug,
+  parsePrUrl,
   verifySourceLabel,
   verifyWorkflowId,
   type FindingVerdict,
 } from './lib/findings.js';
-import { readFindingsIndex } from './activities/findings.js';
+import { readFinding, readFindingsIndex, writeFindingReturned } from './activities/findings.js';
 import {
   verifyFindingStateQuery,
   verifyFindingWorkflow,
@@ -103,7 +99,6 @@ import {
 } from './lib/findings-schedule.js';
 import {
   findingStateQuery,
-  fixSignal,
   verdictSignal,
   type FindingState,
   type FindingWorkflowResult,
@@ -1738,24 +1733,6 @@ async function openFindingHandle(c: Client, site: string, key: string) {
   return handle;
 }
 
-/**
- * The finding's open workflow when it runs the whole lifecycle, or undefined
- * when there is none or it stops at the verdict. The stop point is read from
- * the workflow's state, which carries its input's `stopAfter`; a worker older
- * than the lifecycle answers without one, which is `'verdict'`.
- */
-async function resolvedFindingHandle(c: Client, site: string, key: string) {
-  const handle = c.workflow.getHandle(findingWorkflowId(site, key));
-  try {
-    if ((await handle.describe()).status.name !== 'RUNNING') return undefined;
-  } catch (err) {
-    if (err instanceof WorkflowNotFoundError) return undefined;
-    throw err;
-  }
-  const state = await handle.query(findingStateQuery);
-  return state.stopAfter === 'resolved' ? handle : undefined;
-}
-
 async function sendFindingVerdict(site: string, key: string, status: FindingVerdict['status'], reason: string) {
   const c = await client();
   try {
@@ -1937,75 +1914,50 @@ finding
   .command('fix')
   .argument('<key>', 'finding key', parseFindingSlug('key'))
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
-  .description('Fix an approved defect: generate a handoff, run Claude Code on it, open one PR. Needs `steward up`')
+  .description(
+    'Fix an approved defect under its lifecycle workflow: the fix child generates a handoff, runs Claude Code and opens one PR. Needs `steward up`',
+  )
   .action(async (key: string, opts: { site: string }) => {
-    // Resolved HERE and frozen into the workflow input (design rule 10): the
-    // repository, the paths and the branch are decisions, never re-derived.
-    const input: FixFindingInput = {
-      site: opts.site,
-      key,
-      repo: ARGUS_REPO,
-      findingPath: findingPath(opts.site, key),
-      indexPath: findingsIndexPath(opts.site),
-      handoffPath: findingHandoffPath(opts.site, key),
-      branch: fixBranch(key),
-      stopAfter: 'pr',
-    };
-    const workflowId = fixWorkflowId(opts.site, key);
     const c = await client();
+    const started = Date.now();
+    console.log('');
     try {
-      // A finding whose workflow was started with `stopAfter: 'resolved'` runs
-      // its own fix as a child: signal it rather than start a second one.
-      const lifecycle = await resolvedFindingHandle(c, opts.site, key);
-      if (lifecycle) {
-        const state = await lifecycle.query(findingStateQuery);
-        if (state.verdict?.status !== 'approved') {
-          fail(`${lifecycle.workflowId} has no approved verdict yet. Approve it first.`);
-        }
-        if (state.step !== 'waiting-fix' && state.step !== 'waiting-verdict') {
-          fail(`${lifecycle.workflowId} is ${state.step}, not waiting for a fix.`);
-        }
-        await lifecycle.signal(fixSignal, { source: 'cli', at: new Date().toISOString() });
-        console.log(`\n  fix signal sent to ${lifecycle.workflowId}`);
-        console.log(`  It runs ${workflowId} as a child, then waits for the merge, the deploy and the verify.`);
-        console.log(`  \`steward finding status ${key}\` shows the step.`);
-        console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(lifecycle.workflowId)}\n`);
-        return;
-      }
-
-      const started = Date.now();
-      let handle;
+      let requested;
       try {
-        handle = await c.workflow.start(fixFindingWorkflow, { workflowId, taskQueue: QUEUE_HEAVY, args: [input] });
+        requested = await requestFix(
+          {
+            client: c,
+            repo: ARGUS_REPO,
+            taskQueue: QUEUE_FINDINGS,
+            origin: opts.site === FINDINGS_DEFAULT_SITE ? PROD_ORIGIN : undefined,
+            readFinding: async (p) => (await readFinding(ARGUS_REPO, p)).data,
+            readPr: async (prUrl) => {
+              const pr = parsePrUrl(prUrl) as { repo: string; number: number };
+              const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+              return data.merged === true ? 'merged' : data.state === 'closed' ? 'closed' : 'open';
+            },
+            returnFinding: writeFindingReturned,
+            say: (line) => console.log(`  ${line}`),
+          },
+          opts.site,
+          key,
+        );
       } catch (err) {
-        if (!(err instanceof WorkflowExecutionAlreadyStartedError)) throw err;
-        await c.connection.close();
-        fail(`${workflowId} is already running. Watch it in ${WEB_UI}.`);
-      }
-      console.log(`\n  fixing ${key}, branch ${input.branch}`);
-      console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
-
-      // The result is the answer; the query only says which of the five steps
-      // a run that takes minutes has reached.
-      let done = false;
-      const result = handle.result().finally(() => {
-        done = true;
-      });
-      result.catch(() => undefined);
-      let step = '';
-      while (!done) {
-        try {
-          const state = await handle.query(fixFindingStateQuery);
-          if (state.step !== step) {
-            step = state.step;
-            console.log(`  ${paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(5), DIM)}  ${step}`);
-          }
-        } catch {
-          /* no worker yet, or the workflow just closed: the result says which */
+        if (err instanceof FixRefused) {
+          await c.connection.close();
+          fail(err.message);
         }
-        await Promise.race([result.catch(() => undefined), new Promise((r) => setTimeout(r, 5000))]);
+        throw err;
       }
-      const fixed = await result;
+      const lifecycleId = requested.lifecycle.workflowId;
+      console.log(`  It runs ${fixWorkflowId(opts.site, key)} as a child, then waits for the merge, the deploy and the verify.`);
+      console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(lifecycleId)}\n`);
+
+      // The child's result is the answer; its query only says which step a run
+      // that takes minutes has reached. Ctrl-C here stops the watching, not the fix.
+      const fixed = await followFix(c, opts.site, key, requested, (step) => {
+        console.log(`  ${paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(5), DIM)}  ${step}`);
+      });
 
       const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
       console.log('');
@@ -2039,6 +1991,7 @@ finding
         console.log(`  refused tool calls: ${fixed.run.permissionDenials.length}`);
         for (const denial of fixed.run.permissionDenials) console.log(`    ${denial}`);
       }
+      console.log(`  ${lifecycleId} now waits for the PR. \`steward finding status ${key}\` shows the step.`);
       console.log('');
     } finally {
       await c.connection.close();

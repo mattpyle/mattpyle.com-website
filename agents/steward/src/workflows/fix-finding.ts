@@ -21,8 +21,12 @@ import type { VerifyCheck, VerifyCheckResult } from '../lib/verify-checks.js';
  * the file the verdict was written to, so no open execution replays through
  * code it never ran.
  *
+ * **Always a child** of a `findingWorkflow` started with `stopAfter:
+ * 'resolved'`, which `steward finding fix` signals (standalone-fix-closed-pr).
+ * The parent watches the PR, so a close or a merge is never left unhandled.
+ *
  * **What rides where** (design rule 10). The repository, the three paths, the
- * branch and the stop point are in the input, resolved by the CLI. Nothing here
+ * branch and the stop point are in the input, resolved by its parent. Nothing here
  * reads config or the environment. The finding itself is read by an activity,
  * so the text the gate judged, the handoff was written from and the PR body
  * quotes is one string in the history. So are the checks, the production
