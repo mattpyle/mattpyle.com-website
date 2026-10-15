@@ -25,9 +25,9 @@
       - heading "About this post" [level=2]
       - link "Matt Pyle":
         - /url: /about/
-      - time: /\d+ Jul \d+/
+      - time: /\d+ [A-Z][a-z]{2} \d+/
       - text: 8 min read updated
-      - time: /\d+ Jul \d+/
+      - time: /\d+ [A-Z][a-z]{2} \d+/
       - navigation "·":
         - link "·":
           - /url: "#"
