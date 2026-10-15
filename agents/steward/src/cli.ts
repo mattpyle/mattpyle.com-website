@@ -1930,7 +1930,7 @@ finding
             repo: ARGUS_REPO,
             taskQueue: QUEUE_FINDINGS,
             origin: opts.site === FINDINGS_DEFAULT_SITE ? PROD_ORIGIN : undefined,
-            readFinding: async (p) => (await readFinding(ARGUS_REPO, p)).data,
+            readFinding: (p) => readFinding(ARGUS_REPO, p),
             readPr: async (prUrl) => {
               const pr = parsePrUrl(prUrl) as { repo: string; number: number };
               const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);

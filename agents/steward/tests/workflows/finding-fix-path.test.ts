@@ -7,6 +7,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, WorkflowNotFoundError } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { createTestEnv } from '../helpers/test-env.js';
+import { DEFECT_FINDING } from '../helpers/finding-fixtures.js';
 import { STUB_PR } from '../helpers/stub-fix-workflow.js';
 import { FixRefused, followFix, requestFix, type FindingFixDeps } from '../../src/lib/finding-fix.js';
 import { findingPath, findingWorkflowId, fixWorkflowId } from '../../src/lib/findings.js';
@@ -62,7 +63,16 @@ function fixingFile(prUrl: string): Record<string, unknown> {
   return { ...approvedFile(), status: 'fixing', links: { pr: prUrl } };
 }
 
-function harness(key: string, file: Record<string, unknown>, prs: Record<string, 'open' | 'merged' | 'closed'> = {}) {
+/**
+ * `file` is the frontmatter the deps hand back; `text` is the body the gate
+ * parses, by default the fixtures' defect with a cause and a measure.
+ */
+function harness(
+  key: string,
+  file: Record<string, unknown>,
+  prs: Record<string, 'open' | 'merged' | 'closed'> = {},
+  text: string = DEFECT_FINDING,
+) {
   const files: Record<string, Record<string, unknown>> = { [findingPath(SITE, key)]: file };
   const said: string[] = [];
   const returned: { prUrl: string }[] = [];
@@ -76,7 +86,7 @@ function harness(key: string, file: Record<string, unknown>, prs: Record<string,
     readFinding: async (p) => {
       const data = files[p];
       if (!data) throw new Error(`${p} is not in ${REPO}`);
-      return data;
+      return { data, text };
     },
     readPr: async (prUrl) => prs[prUrl] ?? 'open',
     returnFinding: async (input) => {
@@ -214,6 +224,43 @@ test('an approved opportunity is refused before a run starts', async () => {
   await withWorkers(h.activities, async () => {
     await assert.rejects(requestFix(h.deps, SITE, key), /its kind is opportunity, not defect/);
     await assert.rejects(client.workflow.getHandle(findingWorkflowId(SITE, key)).describe(), WorkflowNotFoundError);
+  });
+});
+
+test('an approved defect in the old template, with no cause, is refused before a run starts', async () => {
+  const key = 'one-fix-path-no-cause--page';
+  const oldTemplate = [
+    '---',
+    'status: approved',
+    'kind: defect',
+    '---',
+    '',
+    "# /changelog hasn't logged a new entry in 6 weeks",
+    '',
+    '## Finding',
+    '',
+    'No entry since the launch.',
+    '',
+    '## How to measure',
+    '',
+    'Read the newest entry date.',
+  ].join('\n');
+  const h = harness(key, approvedFile(), {}, oldTemplate);
+  await withWorkers(h.activities, async () => {
+    await assert.rejects(requestFix(h.deps, SITE, key), /does not go to the fixer: its "What happened" names no cause/);
+    await assert.rejects(client.workflow.getHandle(findingWorkflowId(SITE, key)).describe(), WorkflowNotFoundError);
+  });
+});
+
+test("an unquoted verdict_at, parsed as a Date, is the run's verdict time", async () => {
+  const key = 'one-fix-path-date-verdict--page';
+  const h = harness(key, { ...approvedFile(), verdict_at: new Date('2026-09-13T02:45:00Z') });
+  await withWorkers(h.activities, async () => {
+    const requested = await requestFix(h.deps, SITE, key);
+    const state = await requested.lifecycle.query(findingStateQuery);
+    assert.equal(state.verdict?.at, '2026-09-13T02:45:00.000Z');
+    await followFix(client, SITE, key, requested, () => undefined, { pollMs: 50 });
+    await closeRun(key);
   });
 });
 
