@@ -116,7 +116,7 @@ function describe(digest, { unrecognised = false } = {}) {
   lines.push('');
   lines.push(
     `This is ${site.person.name}'s personal site. He is ${site.person.jobTitle} at ${site.person.worksFor}; ` +
-      'the site is a personal blog and project portfolio with no product, no company, and nothing for sale. ' +
+      'the site is a personal blog and a home for his hobby projects, with no product, no company, and nothing for sale. ' +
       'It doubles as a testbed for emerging web and agent standards, which is why there is a JSON-RPC endpoint ' +
       'on a personal homepage at all.'
   );

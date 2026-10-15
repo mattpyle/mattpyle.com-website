@@ -4,7 +4,7 @@ This file describes mattpyle.com for AI agents, crawlers, and assistants (e.g. C
 
 ## What this site is
 
-A personal site for Matt Pyle: a mix of a professional bio, a blog ("Writing"), and a portfolio of small side projects ("Projects"). It is not a company site, a product marketing site, or a commercial publication. There is no newsletter signup, no gated content, and nothing for sale.
+A personal site for Matt Pyle: a mix of a professional bio, a blog ("Writing"), and his hobby projects ("Projects"). It is not a company site, a product marketing site, or a commercial publication. There is no newsletter signup, no gated content, and nothing for sale.
 
 ## Who Matt Pyle is
 
