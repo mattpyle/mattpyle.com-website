@@ -299,3 +299,23 @@ test('a fix child recorded before the preview test replays down its five steps',
     'fix/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });
+
+/**
+ * A fix child as `fixFindingWorkflow` ran it with the `verify` block's two
+ * tests and before the diff review: the `fixer-preview-verify` marker and no
+ * `fixer-diff-review` one. New code must open the PR straight after the fixer
+ * on replay, which is what the `fixer-diff-review` patch is for.
+ *
+ * Recorded from the pre-change code (85b2e3d) the same way as the fixture
+ * above, with the checks suite's mocked activities on its passing path.
+ */
+const fixFindingPreviewHistoryPath = fileURLToPath(new URL('../fixtures/histories/fix-finding-preview.bin', import.meta.url));
+
+test('a fix child recorded before the diff review replays without it', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(fixFindingPreviewHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'fix/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});

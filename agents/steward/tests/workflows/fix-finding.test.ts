@@ -103,6 +103,10 @@ function mockActivities(mocks: Mocks = {}) {
       seen.run = input;
       return mocks.runFixer ? mocks.runFixer(input) : RUN;
     },
+    reviewFixDiff: async () => {
+      calls.push('reviewFixDiff');
+      return { problems: [], incomplete: null, diffChars: 100, reply: 'problems: []', claude: null };
+    },
     openFixerPr: async (input: OpenFixerPrInput) => {
       calls.push('openFixerPr');
       seen.pr = input;
@@ -175,7 +179,7 @@ test('pass: the activities in order, the PR from the finding, and fixing written
     return r;
   });
 
-  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'readFixChecks', 'runFixer', 'openFixerPr', 'writeFindingFix']);
+  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'readFixChecks', 'runFixer', 'reviewFixDiff', 'openFixerPr', 'writeFindingFix']);
   // The finding the gate judged is the text the handoff and the PR are made from.
   assert.equal(seen.generate!.findingText, DEFECT_FINDING);
   assert.equal(seen.generate!.handoffPath, `sites/mattpyle-com/handoffs/${DEFECT_KEY}.md`);

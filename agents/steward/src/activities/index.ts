@@ -61,7 +61,7 @@ export {
 } from './findings.js';
 // The fixer, on `steward-heavy`: it needs the checkout, a local Claude Code
 // login and git credentials, so it runs on the laptop worker only.
-export { generateHandoff, generateVerifyBlock, readFixChecks, runFixer, openFixerPr } from './fixer.js';
+export { generateHandoff, generateVerifyBlock, readFixChecks, runFixer, reviewFixDiff, openFixerPr } from './fixer.js';
 // The verifier's checks, on `steward-heavy` beside the block generator: fetches
 // against production and the worker's Chromium.
 export { runFindingChecks } from './verify-finding.js';

@@ -10,7 +10,9 @@ import { initialClaudeRunState, reduceClaudeEvent, type ClaudeRunState } from '.
  * does not cover: the environment is given whole rather than extended, stdout
  * is read as it arrives so the heartbeat can carry it, and stdin is closed.
  * `claude -p` reads a prompt from stdin when stdin is a pipe, and an open pipe
- * nobody writes to is a run that waits forever.
+ * nobody writes to is a run that waits forever. A caller that passes `stdin`
+ * gets a pipe that is written once and ended at once, for a prompt longer than
+ * Windows allows on a command line (32,767 characters).
  *
  * **Three ways it ends early**, each killing the whole process tree and each
  * named in the outcome so the caller never infers one from an exit code:
@@ -34,6 +36,8 @@ export interface ClaudeRunOptions {
   timeoutMs: number;
   stallMs: number;
   onActivity?: (activity: string) => void;
+  /** Written to the child's stdin, which is then closed. Absent means stdin is closed from the start. */
+  stdin?: string;
 }
 
 export interface ClaudeOutcome {
@@ -51,8 +55,14 @@ export async function runClaude(options: ClaudeRunOptions): Promise<ClaudeOutcom
     env: options.env,
     windowsHide: true,
     shell: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [options.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
   });
+  if (options.stdin !== undefined) {
+    // A child that exits before reading all of it raises EPIPE here; its exit
+    // code is the outcome that matters, so the write error is dropped.
+    child.stdin!.on('error', () => {});
+    child.stdin!.end(options.stdin);
+  }
 
   let state = initialClaudeRunState();
   let stderrTail = '';

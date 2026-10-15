@@ -24,6 +24,7 @@ import {
   type FixerSiteChecks,
   type RepoCommand,
 } from '../lib/fixer.js';
+import { DIFF_REVIEW_MAX_CHARS, diffReviewArgs, diffReviewPrompt, parseDiffReviewReply, type FixerDiffReview } from '../lib/diff-review.js';
 import { draftHandoff, draftVerifyBlock, type VerifyBlockRejection } from '../lib/handoff-generator.js';
 import { readHandoffVerify, validateVerifyBlock, withVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
 import { npmCommand } from './build-audit.js';
@@ -630,6 +631,133 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
 }
 
 // ---------------------------------------------------------------------------
+// reviewFixDiff
+// ---------------------------------------------------------------------------
+
+/** One reply, no tools: five minutes is a hung run. */
+const REVIEW_TIMEOUT_MS = 5 * 60_000;
+
+/** The reply arrives as one event, so the stall limit is the timeout's. */
+const REVIEW_STALL_MS = REVIEW_TIMEOUT_MS;
+
+export interface ReviewFixDiffInput {
+  key: string;
+  /** The finding as the workflow read it. */
+  findingText: string;
+  /** The handoff the fixer ran. */
+  handoff: string;
+  /** The commit the branch was cut from. */
+  baseSha: string;
+  /** The branch head `runFixer` pushed. */
+  headSha: string;
+}
+
+export interface ReviewFixDiffResult extends FixerDiffReview {
+  /** Characters in `git diff <base>...<head>`. */
+  diffChars: number;
+  /** The reviewer's reply as it came, capped at `FINAL_MESSAGE_MAX`, or null when there was none. Nothing publishes it. */
+  reply: string | null;
+  claude: {
+    model: string | null;
+    costUsd: number | null;
+    durationMs: number | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+  } | null;
+}
+
+/**
+ * A second model call that reads the fix's diff against the finding and the
+ * handoff, and reports hunks neither calls for and new mistakes in changed
+ * lines. It gets nothing from the fixer's run, has no tools and edits nothing.
+ *
+ * **It never fails.** A diff over `DIFF_REVIEW_MAX_CHARS`, a run that errors
+ * and a reply that does not parse each return `incomplete` with the reason,
+ * which opens the PR as a draft. Only a cancellation is thrown.
+ *
+ * The diff is read from git objects, `<base>...<head>`, so it is the same
+ * whatever the fixer worktree has checked out since; the worktree is not
+ * claimed.
+ */
+export async function reviewFixDiff(input: ReviewFixDiffInput): Promise<ReviewFixDiffResult> {
+  const ctx = Context.current();
+  let diff: string;
+  try {
+    diff = await git(FIXER_WORKTREE_DIR, ['diff', `${input.baseSha}...${input.headSha}`]);
+  } catch (err) {
+    return unfinishedReview(input.key, `git diff failed: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
+  }
+  const pump = setInterval(() => ctx.heartbeat('claude -p: reviewing the diff'), HEARTBEAT_MS);
+  try {
+    return await reviewDiff({ ...input, diff, cwd: FIXER_WORKTREE_DIR, signal: ctx.cancellationSignal });
+  } finally {
+    clearInterval(pump);
+  }
+}
+
+function unfinishedReview(key: string, reason: string, diffChars = 0): ReviewFixDiffResult {
+  log.warn({ activity: 'reviewFixDiff', key, diffChars, reason }, 'diff review did not finish');
+  return { problems: [], incomplete: reason, diffChars, reply: null, claude: null };
+}
+
+/**
+ * The review of a diff already read: the size cap, the one model call, and the
+ * reply parsed. `reviewer` puts a stub in Claude Code's place for the tests.
+ */
+export async function reviewDiff(options: {
+  key: string;
+  findingText: string;
+  handoff: string;
+  diff: string;
+  cwd: string;
+  signal: AbortSignal;
+  reviewer?: { command: string; argv: string[] };
+}): Promise<ReviewFixDiffResult> {
+  const { diff } = options;
+  const unfinished = (reason: string) => unfinishedReview(options.key, reason, diff.length);
+  if (diff.length > DIFF_REVIEW_MAX_CHARS) {
+    return unfinished(
+      `The diff is ${diff.length.toLocaleString('en-US')} characters, over the review's cap of ${DIFF_REVIEW_MAX_CHARS.toLocaleString('en-US')}.`,
+    );
+  }
+
+  const reviewer = options.reviewer ?? { command: 'claude', argv: diffReviewArgs() };
+  let run: Awaited<ReturnType<typeof runClaude>>;
+  try {
+    run = await runClaude({
+      command: reviewer.command,
+      argv: reviewer.argv,
+      stdin: diffReviewPrompt({ key: options.key, finding: options.findingText, handoff: options.handoff, diff }),
+      cwd: options.cwd,
+      env: fixerChildEnv(process.env),
+      signal: options.signal,
+      timeoutMs: REVIEW_TIMEOUT_MS,
+      stallMs: REVIEW_STALL_MS,
+    });
+  } catch (err) {
+    return unfinished(`The reviewer did not start: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (run.cancelled) throw new CancelledFailure('cancelled while the diff was being reviewed');
+  const claude = {
+    model: run.state.model,
+    costUsd: run.state.costUsd,
+    durationMs: run.state.durationMs,
+    inputTokens: run.state.inputTokens,
+    outputTokens: run.state.outputTokens,
+  };
+  const reply = run.state.finalMessage?.slice(0, FINAL_MESSAGE_MAX) ?? null;
+  log.info({ activity: 'reviewFixDiff', key: options.key, diffChars: diff.length, exitCode: run.exitCode, ...claude }, 'diff reviewed');
+
+  if (run.exitCode !== 0 || run.state.isError || !run.state.finalMessage) {
+    const how = run.timedOut || run.stalled ? 'was stopped at its time limit' : `exited ${run.exitCode}`;
+    return { ...unfinished(`The reviewer ${how} without a reply.`), reply, claude };
+  }
+  const parsed = parseDiffReviewReply(run.state.finalMessage);
+  if ('error' in parsed) return { ...unfinished(`The reviewer's reply did not parse: ${parsed.error}.`), reply, claude };
+  return { problems: parsed.problems, incomplete: null, diffChars: diff.length, reply, claude };
+}
+
+// ---------------------------------------------------------------------------
 // openFixerPr
 // ---------------------------------------------------------------------------
 
@@ -647,6 +775,8 @@ export interface OpenFixerPrInput {
   timedOut: boolean;
   /** The `verify` block's tests so far. Absent from a run that predates them. */
   site?: FixerSiteChecks | null;
+  /** The diff review. Absent from a run that predates it. */
+  review?: FixerDiffReview | null;
 }
 
 export interface OpenFixerPrResult {
@@ -660,8 +790,9 @@ export interface OpenFixerPrResult {
  * against it, with the body {@link buildFixerPrBody} writes from the finding.
  *
  * An incomplete run (a non-zero exit, or the 30-minute kill) opens a draft, and
- * so does a run with a failed check or a `verify` block that failed a test. The
- * body's first lines say which. Steward never merges either kind.
+ * so does a run with a failed check, a `verify` block that failed a test, or a
+ * diff review that reported a problem or did not finish. The body's first lines
+ * say which. Steward never merges either kind.
  *
  * **The second call**, once the preview is measured, updates the body and turns
  * an open PR into a draft when the preview test failed. It never turns a draft
@@ -679,6 +810,7 @@ export async function openFixerPr(input: OpenFixerPrInput): Promise<OpenFixerPrR
     exitCode: input.exitCode,
     timedOut: input.timedOut,
     site: input.site,
+    review: input.review,
   });
   const title = handoff.title.charAt(0).toUpperCase() + handoff.title.slice(1);
   const prUrl = await openOrUpdatePr({ branch: input.branch, base: input.base, title, body, draft });

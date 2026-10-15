@@ -12,6 +12,8 @@ import {
   type GenerateVerifyBlockInput,
   type GenerateVerifyBlockResult,
   type OpenFixerPrInput,
+  type ReviewFixDiffInput,
+  type ReviewFixDiffResult,
   type RunFixerInput,
   type RunFixerResult,
 } from '../../src/activities/fixer.js';
@@ -94,6 +96,7 @@ interface Mocks {
   runChecks?: (input: RunFindingChecksInput) => Promise<RunFindingChecksResult>;
   regenerate?: (input: GenerateVerifyBlockInput) => Promise<GenerateVerifyBlockResult>;
   preview?: (input: AwaitPreviewDeployInput) => Promise<PreviewDeploy>;
+  review?: (input: ReviewFixDiffInput) => Promise<ReviewFixDiffResult>;
 }
 
 function mockActivities(mocks: Mocks = {}) {
@@ -103,6 +106,7 @@ function mockActivities(mocks: Mocks = {}) {
     regenerate: GenerateVerifyBlockInput[];
     preview?: AwaitPreviewDeployInput;
     run?: RunFixerInput;
+    review?: ReviewFixDiffInput;
     prs: OpenFixerPrInput[];
     write?: WriteFindingFixInput;
   } = { checks: [], regenerate: [], prs: [] };
@@ -168,6 +172,12 @@ function mockActivities(mocks: Mocks = {}) {
       seen.run = input;
       return RUN;
     },
+    reviewFixDiff: async (input: ReviewFixDiffInput): Promise<ReviewFixDiffResult> => {
+      calls.push('reviewFixDiff');
+      seen.review = input;
+      if (mocks.review) return mocks.review(input);
+      return { problems: [], incomplete: null, diffChars: 100, reply: 'problems: []', claude: null };
+    },
     openFixerPr: async (input: OpenFixerPrInput) => {
       calls.push('openFixerPr');
       seen.prs.push(structuredClone(input));
@@ -225,6 +235,7 @@ const FULL_ORDER = [
   'readFixChecks',
   'runFindingChecks:production',
   'runFixer',
+  'reviewFixDiff',
   'openFixerPr',
   'writeFindingFix',
   'awaitPreviewDeploy',
@@ -292,6 +303,7 @@ test('a handoff check that passes on production is written again once, told what
     'generateVerifyBlock',
     'runFindingChecks:production',
     'runFixer',
+    'reviewFixDiff',
     'openFixerPr',
     'writeFindingFix',
     'awaitPreviewDeploy',
@@ -368,7 +380,7 @@ test('an empty block is unverifiable by checks: no test runs, no preview wait, a
   const { activities, calls, seen } = mockActivities({ handoff: DEFECT_HANDOFF });
   const result = await execute(activities);
 
-  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'readFixChecks', 'runFixer', 'openFixerPr', 'writeFindingFix']);
+  assert.deepEqual(calls, ['readFinding', 'generateHandoff', 'readFixChecks', 'runFixer', 'reviewFixDiff', 'openFixerPr', 'writeFindingFix']);
   assert.deepEqual(seen.prs[0].site?.block, []);
   assert.equal(result.verify?.source, 'handoff');
   assert.equal(result.draft, false);
@@ -440,5 +452,53 @@ test('a worker without the bypass secret is a draft with the reason, and the run
   const result = await execute(activities);
   assert.match(String(seen.prs[1].site?.previewNote), /VERCEL_AUTOMATION_BYPASS_SECRET is not set/);
   assert.equal(seen.write!.prUrl, PR, 'the finding was marked fixing before the preview');
+  assert.equal(result.draft, true);
+});
+
+// ---------------------------------------------------------------------------
+// The diff review
+// ---------------------------------------------------------------------------
+
+test("the review reads the fixer's diff, base to head, with the finding and the handoff the fixer ran", async () => {
+  const { activities, calls, seen } = mockActivities();
+  const result = await execute(activities);
+
+  assert.ok(calls.indexOf('reviewFixDiff') === calls.indexOf('runFixer') + 1, 'straight after the fixer');
+  assert.deepEqual(seen.review, {
+    key: DEFECT_KEY,
+    findingText: DEFECT_FINDING,
+    handoff: handoffWith([CHECK_A]),
+    baseSha: 'c-base',
+    headSha: 'c-fix-head',
+  });
+  assert.deepEqual(seen.prs[0].review, { problems: [], incomplete: null });
+  assert.deepEqual(result.review, { problems: [], incomplete: null });
+  assert.equal(result.draft, false);
+});
+
+test('a reported problem opens the PR as a draft, and the preview test still runs', async () => {
+  const problem = { file: 'src/lib/a2a-responder.mjs', line: 119, kind: 'error' as const, note: 'Missing space: "no product,no company".' };
+  const { activities, calls, seen } = mockActivities({
+    review: async () => ({ problems: [problem], incomplete: null, diffChars: 900, reply: null, claude: null }),
+  });
+  const result = await execute(activities);
+
+  assert.ok(calls.includes('runFindingChecks:preview'));
+  assert.deepEqual(seen.prs[0].review?.problems, [problem]);
+  assert.deepEqual(seen.prs[1].review?.problems, [problem], 'the update after the preview keeps the review');
+  assert.equal(opensAsDraft(seen.prs[0]), true);
+  assert.equal(result.draft, true);
+});
+
+test('a review activity that throws is an unfinished review and a draft, never a failed workflow', async () => {
+  const { activities, calls, seen } = mockActivities({
+    review: async () => {
+      throw new Error('worker lost the claude binary');
+    },
+  });
+  const result = await execute(activities);
+
+  assert.equal(calls.filter((c) => c === 'reviewFixDiff').length, 1, 'one attempt');
+  assert.match(String(seen.prs[0].review?.incomplete), /^The review activity failed: worker lost the claude binary$/);
   assert.equal(result.draft, true);
 });

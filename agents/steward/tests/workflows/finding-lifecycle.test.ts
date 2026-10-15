@@ -20,7 +20,8 @@ import type {
   WriteFindingReturnedInput,
   WriteFindingVerificationInput,
 } from '../../src/activities/findings.js';
-import { readFixChecks, type OpenFixerPrInput, type RunFixerResult } from '../../src/activities/fixer.js';
+import { readFixChecks, type OpenFixerPrInput, type ReviewFixDiffResult, type RunFixerResult } from '../../src/activities/fixer.js';
+import { opensAsDraft } from '../../src/lib/fixer.js';
 import type { RunFindingChecksInput } from '../../src/activities/verify-finding.js';
 import { compareContains, liveDeployment, type DeploymentRecord, type FindingVerdict } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
@@ -74,9 +75,15 @@ function lifecycle(script: Script) {
   let prCount = 0;
   const mergePolls: Record<string, number> = {};
   let deployPolls = 0;
-  const seen: { returned: WriteFindingReturnedInput[]; deploy: AwaitProductionDeployInput[]; verification?: WriteFindingVerificationInput } = {
+  const seen: {
+    returned: WriteFindingReturnedInput[];
+    deploy: AwaitProductionDeployInput[];
+    verification?: WriteFindingVerificationInput;
+    prs: OpenFixerPrInput[];
+  } = {
     returned: [],
     deploy: [],
+    prs: [],
   };
 
   const findings = {
@@ -157,10 +164,16 @@ function lifecycle(script: Script) {
       calls.push('runFixer');
       return run;
     },
-    openFixerPr: async (_input: OpenFixerPrInput) => {
+    // A clean review: the lifecycle's PR opens ready, as a real run's would.
+    reviewFixDiff: async (): Promise<ReviewFixDiffResult> => {
+      calls.push('reviewFixDiff');
+      return { problems: [], incomplete: null, diffChars: 100, reply: 'problems: []', claude: null };
+    },
+    openFixerPr: async (input: OpenFixerPrInput) => {
       calls.push('openFixerPr');
+      seen.prs.push(input);
       prCount++;
-      return { prUrl: prCount === 1 ? PR_1 : PR_2, draft: false };
+      return { prUrl: prCount === 1 ? PR_1 : PR_2, draft: opensAsDraft(input) };
     },
     writeFindingFix: async () => {
       calls.push('writeFindingFix');
@@ -269,11 +282,15 @@ test('merged, deployed and every check passes: resolved, with one execution carr
   assert.equal(mocks.mergePolls()[PR_1], 4, 'three open polls, then the merge');
   assert.equal(mocks.deployPolls(), 2, 'the old deploy, then the merge commit');
   assert.deepEqual(mocks.seen.deploy[0], { repo: SITE_REPO, mergeSha: 'm1', environment: 'Production' });
+  // The review ran, found nothing, and the PR opened ready.
+  assert.deepEqual(mocks.seen.prs[0].review, { problems: [], incomplete: null });
+  assert.equal(opensAsDraft(mocks.seen.prs[0]), false, 'the PR opens ready');
   assert.deepEqual(mocks.calls, [
     'writeFindingVerdict',
     'readFinding',
     'generateHandoff',
     'runFixer',
+    'reviewFixDiff',
     'openFixerPr',
     'writeFindingFix',
     'awaitFixPrMerge:merged',
