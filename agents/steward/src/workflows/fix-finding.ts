@@ -314,6 +314,7 @@ async function testOnProduction(
     regenerated: false,
     regenerateError: null,
     block: chosen.checks,
+    coverage: chosen.coverage ?? null,
     production: null,
     productionNote: null,
     preview: null,
@@ -334,6 +335,7 @@ async function testOnProduction(
       });
       handoff = again.handoff ?? handoff;
       site.block = again.checks;
+      site.coverage = again.coverage ?? null;
       site.regenerated = true;
       if (site.block.length === 0) return { handoff, site };
       measured = await measure(input.key, site.block);
@@ -443,6 +445,7 @@ export async function fixFindingWorkflow(input: FixFindingInput): Promise<FixFin
         handoff,
         baseSha: generated.baseSha,
         headSha: run.commitSha,
+        coverage: site?.coverage ?? null,
       });
       review = { problems: reviewed.problems, incomplete: reviewed.incomplete };
     } catch (err) {

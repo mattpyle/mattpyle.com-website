@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { reviewDiff } from '../../src/activities/fixer.js';
 import { DIFF_REVIEW_MAX_CHARS } from '../../src/lib/diff-review.js';
+import { opensAsDraft } from '../../src/lib/fixer.js';
 
 /**
  * `reviewDiff` against a stub in Claude Code's place: the reply it gets back,
@@ -24,7 +25,7 @@ const DIFF = [
   "+      'the site is a personal blog and his hobby projects, with no product,no company, and nothing for sale. ' +",
 ].join('\n');
 
-function review(reply: string | null, diff = DIFF) {
+function review(reply: string | null, diff = DIFF, coverage?: { surface: string; checks: number[] }[]) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'diff-review-'));
   const file = path.join(dir, 'reply.txt');
   if (reply !== null) fs.writeFileSync(file, reply);
@@ -35,6 +36,7 @@ function review(reply: string | null, diff = DIFF) {
       findingText: 'THE FINDING',
       handoff: 'THE HANDOFF',
       diff,
+      coverage,
       cwd: dir,
       signal: new AbortController().signal,
       reviewer: { command: process.execPath, argv: [STUB, 'reply', file] },
@@ -62,6 +64,24 @@ test('one unexplained hunk is reported', { timeout: 30_000 }, async () => {
   ).result;
   assert.equal(reviewed.incomplete, null);
   assert.deepEqual(reviewed.problems.map((p) => [p.file, p.line, p.kind]), [['src/lib/a2a-responder.mjs', 119, 'unexplained']]);
+});
+
+test('the map goes to the reviewer, and a changed file serving a surface it leaves out comes back unexplained', { timeout: 30_000 }, async () => {
+  // PR 336's map named /llms.txt and /agents.md; the A2A responder serves neither.
+  const { file, result } = review(
+    'problems:\n  - file: src/lib/a2a-responder.mjs\n    line: 119\n    kind: unexplained\n    note: The A2A answer is a surface the coverage map does not name.',
+    DIFF,
+    [
+      { surface: '/llms.txt', checks: [1] },
+      { surface: '/agents.md', checks: [2] },
+    ],
+  );
+  const reviewed = await result;
+  const prompt = fs.readFileSync(`${file}.stdin`, 'utf8');
+  assert.match(prompt, /<coverage>\n- \/llms\.txt: checks 1\n- \/agents\.md: checks 2\n<\/coverage>/);
+  assert.match(prompt, /does not name is also `unexplained`/);
+  assert.deepEqual(reviewed.problems.map((p) => [p.file, p.kind]), [['src/lib/a2a-responder.mjs', 'unexplained']]);
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: [], review: reviewed }), true);
 });
 
 test('one error is reported', { timeout: 30_000 }, async () => {

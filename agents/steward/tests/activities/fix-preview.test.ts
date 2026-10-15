@@ -194,12 +194,26 @@ test("the finding's own block wins, and the handoff's stands in only when the fi
     origin: ORIGIN,
     source: 'finding',
     checks: [{ url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { contains: 'violation' } }],
+    coverage: null,
   });
   assert.deepEqual(await readFixChecks(findingInput(DEFECT_FINDING)), {
     origin: ORIGIN,
     source: 'handoff',
     checks: [{ url: `${ORIGIN}/scorecard/`, kind: 'status', expect: 200 }],
+    coverage: null,
   });
+});
+
+test("a handoff's coverage map is read beside its block, and one that names a missing check fails the fix", async () => {
+  const map = ['verify_coverage:', `  - surface: ${ORIGIN}/scorecard/`, '    checks: [1]', '  - surface: the A2A answer', '    reason: A2A is a POST.'];
+  const mapped = handoffWith([HANDOFF_BLOCK, ...map].join('\n'));
+  assert.deepEqual((await readFixChecks(findingInput(DEFECT_FINDING, mapped))).coverage, [
+    { surface: `${ORIGIN}/scorecard/`, checks: [1] },
+    { surface: 'the A2A answer', reason: 'A2A is a POST.' },
+  ]);
+  const wrong = handoffWith([HANDOFF_BLOCK, ...map].join('\n').replace('checks: [1]', 'checks: [2]'));
+  const err = await rejectsWith(readFixChecks(findingInput(DEFECT_FINDING, wrong)), 'VerifyBlockInvalid', true);
+  assert.match(err.message, /the handoff for .* was refused: coverage entry 1 .* names check 2, which the block does not have/);
 });
 
 test("an invalid finding block fails the fix, naming the finding, and never falls back to the handoff's", async () => {
@@ -308,6 +322,42 @@ test('an empty block is named unverifiable by checks, and is not a draft', () =>
   const site = { ...SITE, block: [], production: null, preview: null };
   assert.match(bodyWith(site), /its `verify` block is empty\. The fix is unverifiable by checks\./);
   assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: [], site }), false);
+});
+
+test('the Verify section shows the coverage map, and a fully mapped block is not a draft', () => {
+  const site: FixerSiteChecks = { ...SITE, source: 'handoff', coverage: [{ surface: `${ORIGIN}/scorecard/`, checks: [1] }] };
+  const body = bodyWith(site);
+  assert.ok(body.includes(
+    ['The surfaces the finding names, and the checks on the site that measure each:', '', `- \`${ORIGIN}/scorecard/\`: check 1.`].join('\n'),
+  ), body);
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: [], site }), false);
+});
+
+test('a surface with a reason and no check is a banner and a draft, and the reason is under Verify', () => {
+  const site: FixerSiteChecks = {
+    ...SITE,
+    source: 'handoff',
+    coverage: [
+      { surface: '/llms.txt', checks: [1] },
+      { surface: 'the A2A answer', reason: 'A2A is a POST; no check kind sends one.' },
+    ],
+  };
+  const body = bodyWith(site);
+  assert.match(body, /^> \*\*A surface the finding names has no check\.\*\* Its reason is under Verify; a person decides whether the fix holds there\./);
+  assert.ok(body.includes('- `the A2A answer`: no check. A2A is a POST; no check kind sends one.'), body);
+  assert.ok(body.includes('- `/llms.txt`: check 1.'), body);
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: [], site }), true);
+  // An empty block whose every surface has a reason is a draft too.
+  const empty = { ...site, block: [], production: null, preview: null, coverage: [site.coverage![1]] };
+  assert.match(bodyWith(empty), /The fix is unverifiable by checks\.\n\nThe surfaces the finding names/);
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: [], site: empty }), true);
+});
+
+test("a finding's own block has no map: the section says so, and that alone is not a draft", () => {
+  const site: FixerSiteChecks = { ...SITE, source: 'finding', coverage: null };
+  assert.match(bodyWith(site), /Coverage not mapped \(the finding's own block\)\./);
+  assert.equal(opensAsDraft({ exitCode: 0, timedOut: false, checks: [], site }), false);
+  assert.match(bodyWith({ ...site, source: 'handoff' }), /Coverage not mapped \(the handoff predates the map\)\./);
 });
 
 test("a regenerated handoff block says so, and a failed regeneration says why the first stands", () => {

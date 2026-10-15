@@ -10,6 +10,7 @@ import {
   findingWorkflow,
   fixSignal,
   verdictSignal,
+  type FindingState,
   type FindingWorkflowInput,
   type FindingWorkflowResult,
 } from '../../src/workflows/finding.js';
@@ -329,11 +330,12 @@ test('a PR closed unmerged writes approved back, waits, and the next fix runs ag
   const result = await withWorkers(mocks, async () => {
     const handle = await startApproved('closed');
     // Wait for the return to approved, then ask again.
-    for (;;) {
-      const state = await handle.query(findingStateQuery);
-      if (state.step === 'waiting-fix' && mocks.seen.returned.length === 1) break;
-      await env.sleep('10 seconds');
-    }
+    await untilState(
+      handle,
+      (state) => state.step === 'waiting-fix' && mocks.seen.returned.length === 1,
+      'waiting-fix after one returned PR',
+      '10 seconds',
+    );
     const waiting = await handle.query(findingStateQuery);
     assert.equal(waiting.prUrl, PR_1, 'the closed PR is still the last one');
     await handle.signal(fixSignal, { ...FIX, at: '2026-10-13T19:30:00Z' });
@@ -409,6 +411,26 @@ test('two merges close together: production skips the first one\'s deploy, and t
   assert.equal(mocks.deployPolls(), 3);
 });
 
+/**
+ * Polls the run's state until `ready` holds, and fails after `limitMs` of
+ * wall-clock time rather than spinning until CI kills the job.
+ */
+async function untilState(
+  handle: { query: (q: typeof findingStateQuery) => Promise<FindingState> },
+  ready: (state: FindingState) => boolean,
+  what: string,
+  every: Parameters<typeof env.sleep>[0] = '1 second',
+  limitMs = 30_000,
+) {
+  const deadline = Date.now() + limitMs;
+  for (;;) {
+    const state = await handle.query(findingStateQuery);
+    if (ready(state)) return state;
+    if (Date.now() > deadline) assert.fail(`the run never reached ${what}; it is at ${state.step}`);
+    await env.sleep(every);
+  }
+}
+
 test('a fix sent before the verdict is dropped, and a verdict-only run ignores fix entirely', async () => {
   const mocks = lifecycle({ merge: {} });
   await withWorkers(mocks, async () => {
@@ -417,13 +439,13 @@ test('a fix sent before the verdict is dropped, and a verdict-only run ignores f
       taskQueue: FINDINGS,
       args: [input('early-fix')],
     });
+    // The run must be waiting for its verdict before the fix arrives. Two
+    // signals that reach a run before its first task are delivered in handler
+    // order, verdict first, and the fix would then count.
+    await untilState(handle, (state) => state.step === 'waiting-verdict', 'waiting-verdict');
     await handle.signal(fixSignal, FIX);
     await handle.signal(verdictSignal, APPROVE);
-    for (;;) {
-      const state = await handle.query(findingStateQuery);
-      if (state.step === 'waiting-fix') break;
-      await env.sleep('1 second');
-    }
+    await untilState(handle, (state) => state.step === 'waiting-fix', 'waiting-fix');
     assert.ok(!mocks.calls.includes('runFixer'), 'the early fix started nothing');
     await handle.terminate('test over');
 

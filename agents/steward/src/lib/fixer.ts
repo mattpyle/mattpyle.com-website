@@ -2,10 +2,13 @@ import { diffReviewLines, diffReviewProblem, type FixerDiffReview } from './diff
 import type { ParsedFinding } from './findings.js';
 import {
   readHandoffVerify,
-  validateVerifyBlock,
+  unmeasuredSurfaces,
+  validateGeneratedBlock,
   verifyBlockGuide,
+  verifyCoverageGuide,
   type VerifyCheck,
   type VerifyCheckResult,
+  type VerifyCoverageEntry,
 } from './verify-checks.js';
 
 /**
@@ -337,13 +340,17 @@ export function handoffGeneratorPrompt(args: { key: string; finding: string; ori
     '8. Verify: numbered checks, built from the finding\'s "How to measure". Each check is one command in backticks and its expected result. Then add the test command and the type check for the code the cause is in.',
     '9. Out of scope: what the finding says to leave alone, then merging and deploying.',
     '10. Plain short sentences. Use commas and colons, never an em dash.',
-    '11. The handoff opens with YAML frontmatter that holds one key, `verify`: the checks Steward runs against production after the fix is deployed. The session that does the handoff ignores it.',
+    '11. The handoff opens with YAML frontmatter that holds two keys, `verify` and `verify_coverage`: the checks Steward runs against production after the fix is deployed, and the surfaces the finding names with the checks that measure each. The session that does the handoff ignores both.',
     '',
     'The `verify` list:',
     '',
     ...verifyBlockGuide(args.origin),
     '',
     'Build the checks from the finding\'s "How to measure" and nothing else, the same measure as the Verify section.',
+    '',
+    'The `verify_coverage` list:',
+    '',
+    ...verifyCoverageGuide().map((line) => line.replace('write `coverage`', 'write `verify_coverage`')),
     '',
     'Commands that exist in the repository. Write one exactly as it is here, with nothing piped onto it:',
     '',
@@ -356,6 +363,11 @@ export function handoffGeneratorPrompt(args: { key: string; finding: string; ori
     '  - url: <a URL on the production origin>',
     '    kind: <kind>',
     '    expect: <what the kind expects>',
+    'verify_coverage:',
+    '  - surface: <a URL, endpoint, file or page the finding names>',
+    '    checks: [<the number of each check that measures it>]',
+    '  - surface: <a surface no check can measure>',
+    '    reason: <why no check can measure it>',
     '---',
     '',
     '# Handoff: <title>',
@@ -435,7 +447,7 @@ export function validateHandoff(handoff: string, key: string, origin: string): s
   const parsed = parseHandoff(handoff);
 
   if (!verify.present) problems.push('the frontmatter has no "verify" list');
-  else problems.push(...validateVerifyBlock(verify.raw, origin).problems);
+  else problems.push(...validateGeneratedBlock(verify.raw, verify.coverageRaw, origin).problems);
 
   if (!/^# Handoff: \S/.test(lines[0] ?? '')) problems.push('the first line is not "# Handoff: <title>"');
   if (parsed.title.length > HANDOFF_TITLE_MAX) {
@@ -537,6 +549,12 @@ export interface FixerSiteChecks {
   regenerateError: string | null;
   /** The block as run, on the production origin. Empty when no check can measure the finding. */
   block: VerifyCheck[];
+  /**
+   * Each surface the finding names, with the checks that measure it or why
+   * none can. Null for a finding's own block, and for a handoff that predates
+   * the map; absent from a run that predates it.
+   */
+  coverage?: VerifyCoverageEntry[] | null;
   /** Each check on production before the fix, or null when the test did not run. */
   production: VerifyCheckResult[] | null;
   /** Why the production test has no rows. */
@@ -574,13 +592,21 @@ function checksLabel(numbers: number[]): string {
 }
 
 /**
- * What the `verify` block's tests found wrong, one bold-led sentence each.
- * Empty when every check failed on production and passed on the preview, when
- * the preview has not run yet, and when the block is empty.
+ * What the `verify` block's tests found wrong, one bold-led sentence each,
+ * after one for the surfaces its coverage map gives no check. Empty when every
+ * surface has a check, every check failed on production and passed on the
+ * preview or the preview has not run yet.
  */
 export function siteCheckProblems(site: FixerSiteChecks): string[] {
-  if (site.block.length === 0) return [];
   const problems: string[] = [];
+  const unmeasured = unmeasuredSurfaces(site.coverage ?? []);
+  if (unmeasured.length > 0) {
+    const one = unmeasured.length === 1;
+    problems.push(
+      `**${one ? 'A surface' : `${unmeasured.length} surfaces`} the finding names ${one ? 'has' : 'have'} no check.** ${one ? 'Its reason is' : 'Their reasons are'} under Verify; a person decides whether the fix holds there.`,
+    );
+  }
+  if (site.block.length === 0) return problems;
   if (site.productionNote) problems.push(`**The production test did not run.** ${site.productionNote}`);
   const passing = (site.production ?? []).filter((row) => row.pass).map((row) => row.n);
   if (passing.length > 0) {
@@ -617,10 +643,36 @@ export function opensAsDraft(run: {
   );
 }
 
+/** The coverage map's part of the Verify section. */
+function coverageLines(site: FixerSiteChecks): string[] {
+  if (!site.coverage) {
+    return [
+      site.source === 'finding'
+        ? "Coverage not mapped (the finding's own block)."
+        : 'Coverage not mapped (the handoff predates the map).',
+      '',
+    ];
+  }
+  const lines = ['The surfaces the finding names, and the checks on the site that measure each:', ''];
+  for (const entry of site.coverage) {
+    lines.push(
+      'checks' in entry
+        ? `- \`${entry.surface}\`: ${checksLabel(entry.checks).replace(/^C/, 'c')}.`
+        : `- \`${entry.surface}\`: no check. ${entry.reason}`,
+    );
+  }
+  lines.push('');
+  return lines;
+}
+
 /** The `verify` block's part of the Verify section. */
 function siteCheckLines(site: FixerSiteChecks): string[] {
   if (site.block.length === 0) {
-    return ['No check on the site can measure this finding: its `verify` block is empty. The fix is unverifiable by checks.', ''];
+    return [
+      'No check on the site can measure this finding: its `verify` block is empty. The fix is unverifiable by checks.',
+      '',
+      ...coverageLines(site),
+    ];
   }
   let whose = site.source === 'finding' ? "the finding's own `verify` block" : "the handoff's `verify` block";
   if (site.regenerated) whose += ', written a second time because the first one passed on production before the fix';
@@ -647,7 +699,7 @@ function siteCheckLines(site: FixerSiteChecks): string[] {
         : `   - Preview: ${site.previewNote ? 'not measured.' : 'not measured yet.'}`,
     );
   });
-  lines.push('');
+  lines.push('', ...coverageLines(site));
   return lines;
 }
 

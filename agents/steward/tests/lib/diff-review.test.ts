@@ -34,6 +34,19 @@ test('the prompt carries the finding, the handoff and the diff, and nothing else
   assert.match(prompt, /<diff>\nDIFF\n<\/diff>/);
 });
 
+test('with a coverage map, the prompt lists it and makes a changed file serving an unmapped surface unexplained', () => {
+  const coverage = [
+    { surface: '/llms.txt', checks: [1] },
+    { surface: 'the A2A answer', reason: 'A2A is a POST.' },
+  ];
+  const prompt = diffReviewPrompt({ key: 'k', finding: 'FINDING', handoff: 'HANDOFF', diff: 'DIFF', coverage });
+  assert.match(prompt, /A changed file that serves a surface the coverage map below does not name is also `unexplained`/);
+  assert.match(prompt, /<coverage>\n- \/llms\.txt: checks 1\n- the A2A answer: no check, because A2A is a POST\.\n<\/coverage>/);
+  assert.ok(prompt.indexOf('<coverage>') < prompt.indexOf('<diff>'));
+  const bare = diffReviewPrompt({ key: 'k', finding: 'FINDING', handoff: 'HANDOFF', diff: 'DIFF', coverage: null });
+  assert.doesNotMatch(bare, /coverage/i, 'no map, no rule and no section');
+});
+
 test('no problems: an empty list', () => {
   assert.deepEqual(parseDiffReviewReply('problems: []'), { problems: [] });
   assert.deepEqual(parseDiffReviewReply('problems:\n'), { problems: [] });

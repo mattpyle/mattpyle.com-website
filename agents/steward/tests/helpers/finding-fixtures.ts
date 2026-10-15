@@ -156,3 +156,20 @@ export const DEFECT_HANDOFF = [
   'Archived rows. Merging and deploying.',
   '',
 ].join('\n');
+
+/**
+ * The handoff as the generator now writes it: the same, with the coverage map
+ * beside its empty block. The scorecard page is the one surface the finding
+ * names, and a unit test is no check. `DEFECT_HANDOFF` stands for a handoff
+ * written before the map.
+ */
+export const MAPPED_HANDOFF = DEFECT_HANDOFF.replace(
+  'verify: []\n',
+  [
+    'verify: []',
+    'verify_coverage:',
+    '  - surface: https://www.mattpyle.com/scorecard/',
+    '    reason: The measure is a unit test of buildCommentary, which no check on the live site runs.',
+    '',
+  ].join('\n'),
+);

@@ -8,15 +8,22 @@ import {
   parseVerifyReply,
   readHandoffVerify,
   runChecks,
+  validateGeneratedBlock,
   validateVerifyBlock,
+  validateVerifyCoverage,
   verifyBlockGuide,
   withVerifyBlock,
   type CheckRunner,
   type VerifyCheck,
 } from '../../src/lib/verify-checks.js';
 import { HANDOFF_GENERATOR_TOOLS, handoffGeneratorPrompt, validateHandoff } from '../../src/lib/fixer.js';
-import { VERIFY_BLOCK_SYSTEM_PROMPT, handoffGeneratorArgs, verifyBlockPrompt } from '../../src/lib/handoff-generator.js';
-import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, ORIGIN } from '../helpers/finding-fixtures.js';
+import {
+  VERIFY_BLOCK_SYSTEM_PROMPT,
+  handoffGeneratorArgs,
+  verifyBlockPrompt,
+  verifyBlockRetryPrompt,
+} from '../../src/lib/handoff-generator.js';
+import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, MAPPED_HANDOFF, ORIGIN } from '../helpers/finding-fixtures.js';
 
 /**
  * The verifier's checks: the block's rules, then each of the six kinds run
@@ -149,13 +156,64 @@ test('a block is refused for an unknown kind, a URL off the production origin, o
   refused(Array.from({ length: 13 }, () => GOOD[0]), /13 checks, over 12/);
 });
 
+test('a coverage map is admitted when every surface has checks or a reason and every check is named', () => {
+  const map = [
+    { surface: '/llms.txt', checks: [1, 2] },
+    { surface: '/agents.md', checks: [2] },
+    { surface: 'the A2A answer', reason: 'A2A is a POST; no check kind sends one' },
+  ];
+  assert.deepEqual(validateVerifyCoverage(map, 2), { coverage: map, problems: [] });
+  // An empty block maps every surface to a reason.
+  assert.deepEqual(validateVerifyCoverage([map[2]], 0).problems, []);
+});
+
+test('a coverage map is refused for each way it can leave the rules', () => {
+  const refused = (raw: unknown, checkCount: number, pattern: RegExp) => {
+    const { coverage, problems } = validateVerifyCoverage(raw, checkCount);
+    assert.match(problems.join('; '), pattern);
+    assert.deepEqual(coverage, [], 'a refused map holds no entry');
+  };
+  // No coverage at all.
+  refused(undefined, 1, /there is no coverage map/);
+  refused(null, 1, /there is no coverage map/);
+  refused({ surface: '/llms.txt', checks: [1] }, 1, /coverage is not a list/);
+  refused([], 0, /coverage names no surface/);
+  // An entry with both, or neither, of checks and reason.
+  refused([{ surface: '/llms.txt', checks: [1], reason: 'also this' }], 1, /entry 1 \(\/llms\.txt\) has both checks and a reason/);
+  refused([{ surface: '/llms.txt', checks: [1] }, { surface: '/agents.md' }], 1, /entry 2 \(\/agents\.md\) has neither checks nor a reason/);
+  refused([{ checks: [1] }], 1, /entry 1 has no surface/);
+  refused([{ surface: '/llms.txt', checks: [] }], 0, /not a non-empty list/);
+  // A check number the block does not have.
+  refused([{ surface: '/llms.txt', checks: [1, 3] }], 2, /names check 3, which the block does not have/);
+  refused([{ surface: '/llms.txt', checks: [0] }], 1, /names check 0, which the block does not have/);
+  refused([{ surface: '/llms.txt', checks: ['1'] }], 1, /names check 1, which the block does not have/);
+  // A check no entry names.
+  refused([{ surface: '/llms.txt', checks: [1] }, { surface: 'A2A', reason: 'a POST' }], 3, /check 2, 3 is named by no coverage entry/);
+});
+
+test('a generated block is refused when its map is, and the block\'s own problems come first', () => {
+  const block = [{ url: `${ORIGIN}/llms.txt`, kind: 'status', expect: 200 }];
+  assert.deepEqual(validateGeneratedBlock(block, [{ surface: '/llms.txt', checks: [1] }], ORIGIN), {
+    checks: block,
+    coverage: [{ surface: '/llms.txt', checks: [1] }],
+    problems: [],
+  });
+  const missing = validateGeneratedBlock(block, undefined, ORIGIN);
+  assert.deepEqual(missing.checks, []);
+  assert.deepEqual(missing.problems, ['there is no coverage map']);
+  const both = validateGeneratedBlock([{ ...block[0], url: 'https://example.com/' }], [{ surface: '/x', checks: [2] }], ORIGIN);
+  assert.match(both.problems[0], /not the production origin/);
+  assert.match(both.problems[1], /names check 2/);
+});
+
 test('validateHandoff admits a good block and refuses a bad or a missing one', () => {
-  const withBlock = (yaml: string) => DEFECT_HANDOFF.replace('verify: []', yaml);
+  const MAP = ['verify_coverage:', `  - surface: ${ORIGIN}/scorecard/`, '    checks: [1]'].join('\n');
+  const withBlock = (yaml: string) => DEFECT_HANDOFF.replace('verify: []', `${yaml}\n${MAP}`);
   const good = withBlock(
     ['verify:', `  - url: ${ORIGIN}/scorecard/`, '    kind: text', '    expect: {count: 0, of: "100/100 (Fail)"}'].join('\n'),
   );
   assert.deepEqual(validateHandoff(good, DEFECT_KEY, ORIGIN), []);
-  assert.deepEqual(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY, ORIGIN), [], 'an empty list is a block');
+  assert.deepEqual(validateHandoff(MAPPED_HANDOFF, DEFECT_KEY, ORIGIN), [], 'an empty list is a block');
 
   const problems = (markdown: string) => validateHandoff(markdown, DEFECT_KEY, ORIGIN).join('; ');
   assert.match(
@@ -175,14 +233,20 @@ test('a block is written into a handoff that has none, and reads back as the sam
   const bare = DEFECT_HANDOFF.replace('---\nverify: []\n---\n\n', '');
   assert.equal(readHandoffVerify(bare).present, false);
 
-  const written = withVerifyBlock(bare, GOOD);
+  const map = [{ surface: '/steward.md', checks: [1] }, { surface: '/feed.xml', checks: [2] }];
+  const written = withVerifyBlock(bare, GOOD, map);
   const read = readHandoffVerify(written);
   assert.equal(read.present, true);
   assert.deepEqual(validateVerifyBlock(read.raw, ORIGIN), { checks: GOOD, problems: [] });
+  assert.equal(read.coveragePresent, true);
+  assert.deepEqual(read.coverageRaw, map);
   assert.equal(read.body, bare, 'the handoff under the frontmatter is unchanged');
   assert.ok(written.startsWith('---\nverify:\n  - url: '));
+  assert.ok(written.indexOf('verify_coverage:') > written.indexOf('verify:'), 'the map sits after the block');
   assert.deepEqual(validateHandoff(written, DEFECT_KEY, ORIGIN), []);
-  assert.equal(withVerifyBlock(written, GOOD), written, 'writing the same block twice changes nothing');
+  assert.equal(withVerifyBlock(written, GOOD, map), written, 'writing the same block twice changes nothing');
+  // A block written again without a map drops the old one, whose numbers it no longer matches.
+  assert.equal(readHandoffVerify(withVerifyBlock(written, [GOOD[0]])).coveragePresent, false);
 });
 
 test("a model's reply is read as a verify key, fenced or bare, and anything else is not a block", () => {
@@ -192,7 +256,10 @@ test("a model's reply is read as a verify key, fenced or bare, and anything else
     assert.equal(parsed.present, true);
     assert.deepEqual(validateVerifyBlock(parsed.raw, ORIGIN).checks, [GOOD[0]]);
   }
-  assert.deepEqual(parseVerifyReply('verify: []'), { present: true, raw: [] });
+  assert.deepEqual(parseVerifyReply('verify: []'), { present: true, raw: [], coveragePresent: false, coverageRaw: undefined });
+  const mapped = parseVerifyReply(`${yaml}\ncoverage:\n  - surface: /steward.md\n    checks: [1]`);
+  assert.deepEqual(mapped.coverageRaw, [{ surface: '/steward.md', checks: [1] }]);
+  assert.deepEqual(validateGeneratedBlock(mapped.raw, mapped.coverageRaw, ORIGIN).problems, []);
   assert.equal(parseVerifyReply('I could not find a measure.').present, false);
 });
 
@@ -205,7 +272,20 @@ test('both generators are told the same six kinds and the one origin, and the bl
     assert.match(prompt, /cannot be a check, the retro appearance aside: write `verify: \[\]`/);
     assert.match(prompt, /\nverify:\n  - url: <a URL on the production origin>/);
     assert.match(prompt, /Build the checks from the finding's "How to measure" and nothing else/);
+    assert.match(prompt, /one entry for every surface the finding names\. A surface is a URL, an endpoint, a file or a page/);
+    assert.match(prompt, /An entry has `checks` or `reason`, never both/);
   }
+  assert.match(block, /\ncoverage:\n  - surface: <a URL, endpoint, file or page the finding names>\n    checks: \[/);
+  assert.match(whole, /\nverify_coverage:\n  - surface: <a URL, endpoint, file or page the finding names>\n    checks: \[/);
+  assert.match(whole, /write `verify_coverage`: one entry/);
+  const retry = verifyBlockRetryPrompt({
+    key: DEFECT_KEY,
+    finding: DEFECT_FINDING,
+    handoff: DEFECT_HANDOFF,
+    origin: ORIGIN,
+    rejected: { checks: GOOD, results: null, broken: 'x' },
+  });
+  assert.match(retry, /\ncoverage:\n  - surface: /);
   assert.ok(whole.indexOf('---\nverify:') < whole.indexOf('# Handoff: <title>'), 'the block opens the handoff');
   assert.ok(block.includes(`<finding>\n${DEFECT_FINDING.trim()}\n</finding>`));
   assert.ok(block.includes(`<handoff>\n${DEFECT_HANDOFF.trim()}\n</handoff>`));
