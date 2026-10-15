@@ -50,7 +50,17 @@ import {
  * sends both to Bash.
  *
  * Both shells are listed because Claude Code on Windows offers both.
+ *
+ * **`curl`** reaches the two origins fixer runs have used: the built site that
+ * `scripts/serve-built-site.mjs` serves on port 4321, which a handoff's Verify
+ * steps read, and production (`PROD_ORIGIN`'s default). These rules narrow
+ * intent, not capability. Claude Code matches a rule against the whole command,
+ * so a probe on 2026-10-14 ran `curl https://example.com/?q=https://www.mattpyle.com/`
+ * under them, and `node *` reaches any host anyway. `fixerChildEnv` is the
+ * control: the child holds no secret to send.
  */
+const FIXER_CURL_ORIGINS = ['http://localhost:4321', 'http://127.0.0.1:4321', 'https://www.mattpyle.com'];
+
 export const FIXER_ALLOWED_TOOLS = [
   'Skill',
   'TodoWrite',
@@ -61,7 +71,7 @@ export const FIXER_ALLOWED_TOOLS = [
     `${shell}(npx astro *)`,
     `${shell}(npx tsc *)`,
     `${shell}(node *)`,
-    `${shell}(curl *)`,
+    ...FIXER_CURL_ORIGINS.map((origin) => `${shell}(curl *${origin}/*)`),
     `${shell}(git status*)`,
     `${shell}(git diff*)`,
     `${shell}(git log*)`,
@@ -138,18 +148,54 @@ export function claudeArgs(args: { prompt: string; systemPrompt: string }): stri
 }
 
 /**
- * The environment Claude Code runs in: the worker's, minus the worker's secrets.
+ * The only variables a fixer child sees.
  *
- * `ANTHROPIC_API_KEY` is the one that changes behaviour rather than only
- * exposure. With it set, `claude -p` bills that key instead of using the
- * machine's own login, so Steward's editorial-pass key would silently pay for
- * every fixer run. The `CLAUDE*` variables go because a worker started from
- * inside a Claude Code session inherits that session's identity.
+ * Measured on 2026-10-14 on the Windows machine the fixer runs on: `npm ci`,
+ * `npm run build`, `npm test`, `npm run check`, `npm run a11y`, read-only git,
+ * and a `claude -p` run that called Bash and PowerShell all passed under these
+ * nine alone, with the same results as under the worker's full environment.
  */
-const STRIPPED_ENV = /^(ANTHROPIC_|TEMPORAL_|STEWARD_|GITHUB_TOKEN$|GH_TOKEN$|CLAUDECODE$|CLAUDE_CODE_)/;
+const CHILD_ENV_ALLOWLIST = new Set(
+  [
+    // Finding programs: `node`, `git`, `claude`, and the `.cmd` shims npm installs.
+    'PATH',
+    'PATHEXT',
+    // System DLLs and the shell npm runs scripts in.
+    'SystemRoot',
+    'ComSpec',
+    // Home: Claude Code's login, git's config.
+    'USERPROFILE',
+    // npm's user config and global prefix; npm's cache and Playwright's browsers.
+    'APPDATA',
+    'LOCALAPPDATA',
+    // Temporary files: the build, Playwright and Claude Code write here.
+    'TEMP',
+    'TMP',
+  ].map((name) => name.toUpperCase()),
+);
 
+/**
+ * The environment every fixer child runs in: Claude Code for the handoff, the
+ * Verify block, the fix and the diff review, `npm ci`, and each Verify command.
+ *
+ * An allowlist, because a denylist fails open: a secret added to
+ * `agents/steward/.env` would reach the child until someone remembered to
+ * strip it. The child is a model with a shell, working from an untrusted
+ * finding. `runFixer` pushes the branch before the diff review runs, so
+ * anything the model writes reaches the public remote unreviewed. What the
+ * child can read is therefore the control; `redactSecrets` is a second layer.
+ *
+ * `ANTHROPIC_API_KEY` stays out for a second reason. With it set, `claude -p`
+ * bills that key instead of using the machine's own login, so Steward's
+ * editorial-pass key would silently pay for every fixer run. The `CLAUDE*`
+ * variables stay out because a worker started from inside a Claude Code
+ * session would hand the child that session's identity.
+ *
+ * Names match case-insensitively, as Windows matches them: the worker may hold
+ * `Path` where the list says `PATH`.
+ */
 export function fixerChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(env).filter(([key]) => !STRIPPED_ENV.test(key)));
+  return Object.fromEntries(Object.entries(env).filter(([key]) => CHILD_ENV_ALLOWLIST.has(key.toUpperCase())));
 }
 
 // ---------------------------------------------------------------------------
