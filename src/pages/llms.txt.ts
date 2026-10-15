@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('# Matt Pyle');
   lines.push('');
   lines.push(
-    '> Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder. This site is his personal blog and project portfolio — no product, no company, nothing for sale.'
+    '> Director of Growth at Temporal Technologies. Growth marketer and hobbyist builder. This site is his personal blog and his hobby projects — no product, no company, nothing for sale.'
   );
   lines.push('');
   lines.push(

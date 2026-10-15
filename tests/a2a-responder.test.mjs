@@ -311,6 +311,18 @@ test('every intent answers from the digest and cites a real site URL', async () 
   }
 });
 
+test('the front desk answer calls the site hobby projects, not a portfolio', () => {
+  for (const question of ['What is this site?', 'zzzz qqqq']) {
+    const reply = answer(question, digest);
+    assert.equal(reply.intent, 'site', `"${question}" should answer as site`);
+    assert.doesNotMatch(reply.text, /portfolio/i, `"${question}" reply says portfolio`);
+    assert.match(reply.text, /hobby projects/, `"${question}" reply should say hobby projects`);
+  }
+
+  // The router still hears "portfolio" as a question about projects.
+  assert.equal(answer('Show me his portfolio', digest).intent, 'projects');
+});
+
 test('the responder writes no em dashes of its own', async () => {
   // House style, and on this repo an em dash reads as a generator fingerprint. Asserted against a
   // digest whose content strings are scrubbed, because the raw reply also contains authored post

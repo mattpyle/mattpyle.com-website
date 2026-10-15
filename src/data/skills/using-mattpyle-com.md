@@ -5,7 +5,7 @@ description: Work with mattpyle.com as an agent. Covers which discovery surface 
 
 # Using mattpyle.com
 
-mattpyle.com is the personal site of Matt Pyle, Director of Growth at Temporal: a bio, a blog, a portfolio of small projects, and a changelog. It is also a testbed for agent-facing web standards, so it publishes more machine-readable surfaces than a site this size normally would. This skill tells you which one to reach for.
+mattpyle.com is the personal site of Matt Pyle, Director of Growth at Temporal: a bio, a blog, hobby projects, and a changelog. It is also a testbed for agent-facing web standards, so it publishes more machine-readable surfaces than a site this size normally would. This skill tells you which one to reach for.
 
 Everything here is public and unauthenticated. There is no API key, no rate limit worth planning around, and nothing behind a login. The full inventory of pages and resources lives at [agents.md](https://www.mattpyle.com/agents.md); this skill is the workflow, not the catalogue.
 
