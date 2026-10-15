@@ -527,7 +527,8 @@ export async function runFixer(input: RunFixerInput): Promise<RunFixerResult> {
     if (install.needed) {
       step('npm ci');
       const ci = npmCommand(['ci']);
-      const res = await runCancellable(ci.binary, ci.args, { cwd: FIXER_WORKTREE_DIR, signal });
+      // Install scripts are third-party code, so they get the child environment too.
+      const res = await runCancellable(ci.binary, ci.args, { cwd: FIXER_WORKTREE_DIR, exactEnv: fixerChildEnv(process.env), signal });
       if (signal.aborted) throw new CancelledFailure('cancelled during npm ci');
       if (res.exitCode !== 0) {
         throw new Error(`npm ci failed (exit ${res.exitCode}):\n${res.stderr.slice(-4000)}`);

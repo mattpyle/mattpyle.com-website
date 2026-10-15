@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   FIXER_ALLOWED_TOOLS,
   HANDOFF_GENERATOR_TOOLS,
@@ -67,6 +68,16 @@ test('the allowlist covers the parts of the compound commands the spike saw refu
   assert.ok(FIXER_ALLOWED_TOOLS.includes('PowerShell(Select-Object *)'));
 });
 
+test('curl is scoped to the built site and production, with no bare rule', () => {
+  const curl = FIXER_ALLOWED_TOOLS.filter((rule) => /^Bash\(curl /.test(rule));
+  assert.deepEqual(curl, [
+    'Bash(curl *http://localhost:4321/*)',
+    'Bash(curl *http://127.0.0.1:4321/*)',
+    'Bash(curl *https://www.mattpyle.com/*)',
+  ]);
+  assert.ok(!FIXER_ALLOWED_TOOLS.some((rule) => /\(curl \*\)$/.test(rule)));
+});
+
 test('claudeArgs puts the prompt directly after -p, each list in one argument, and adds no directory', () => {
   const argv = claudeArgs({ prompt: 'Do the handoff below.', systemPrompt: 'sys' });
   assert.deepEqual(argv.slice(0, 2), ['-p', 'Do the handoff below.']);
@@ -89,18 +100,19 @@ test('the handoff rides in the prompt and the system prompt names no vault path'
   assert.match(system, /the activity runs the Verify commands itself/);
 });
 
-test('the child environment drops the worker secrets and the parent session', () => {
-  const env = fixerChildEnv({
-    PATH: '/bin',
-    ANTHROPIC_API_KEY: 'k',
-    GITHUB_TOKEN: 'g',
-    TEMPORAL_API_KEY: 't',
-    STEWARD_HEALTHCHECK_BASE: 'h',
-    CLAUDECODE: '1',
-    CLAUDE_CODE_ENTRYPOINT: 'cli',
-    GITHUB_TOKENS_ARE_FINE: 'kept',
-  });
-  assert.deepEqual(env, { PATH: '/bin', GITHUB_TOKENS_ARE_FINE: 'kept' });
+test('no worker variable reaches the child, a secret added later included', () => {
+  // Every name `.env.example` documents, the two Upstash names the live `.env`
+  // holds, and one nobody has added yet.
+  const example = readFileSync(new URL('../../.env.example', import.meta.url), 'utf8');
+  const documented = [...example.matchAll(/^#?\s*([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]);
+  assert.ok(documented.includes('VERCEL_AUTOMATION_BYPASS_SECRET'), 'the parse found the example names');
+  const secrets = [...documented, 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_READONLY_TOKEN', 'NEW_SECRET_TOKEN'];
+  const parent = ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'GIT_ASKPASS', 'NODE_OPTIONS', 'npm_config_userconfig'];
+  const worker = Object.fromEntries([...secrets, ...parent].map((name) => [name, 'x']));
+  const env = fixerChildEnv({ ...worker, Path: 'C:\\Windows', USERPROFILE: 'C:\\Users\\u', TEMP: 'C:\\t' });
+  for (const name of [...secrets, ...parent]) assert.ok(!(name in env), `${name} reached the child`);
+  // Windows names match whatever their case.
+  assert.deepEqual(env, { Path: 'C:\\Windows', USERPROFILE: 'C:\\Users\\u', TEMP: 'C:\\t' });
 });
 
 // --- The event stream --------------------------------------------------------
