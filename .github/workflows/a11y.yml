@@ -24,6 +24,8 @@ permissions:
 jobs:
   axe:
     runs-on: ubuntu-latest
+    outputs:
+      golden: ${{ steps.golden.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -192,6 +194,20 @@ jobs:
           A11Y_REUSE_SERVER: '1'
         run: npm run --silent a11y:run -- --grep-invert "@golden|@axe"
 
+      # The @golden snapshots the guard step drops, run on master only. A content or component
+      # change that moves a golden is usually intended, so it stays off the PR gate for the reason
+      # above; but nothing else runs them in CI, and a drifted golden turns every local
+      # `npm run a11y` red until someone regenerates it. On a push to master the drift surfaces
+      # once, against the merge that caused it, and the golden-drift job below files it as an
+      # issue. continue-on-error keeps master's check green; the outcome travels as a job output.
+      - name: Run aria goldens (master only)
+        id: golden
+        if: always() && github.event_name == 'push'
+        continue-on-error: true
+        env:
+          A11Y_REUSE_SERVER: '1'
+        run: npm run --silent a11y:run -- --grep @golden
+
       # Steward's `audit-url` HTML report is a page this repo ships too, and an
       # agent-readiness report that fails an accessibility scan argues against
       # its own tool. The script renders a fixture carrying every status, every
@@ -224,3 +240,31 @@ jobs:
       - name: Validate llms.txt conformance
         if: always()
         run: npm run --silent validate:llms-txt
+
+  # Files a failed master golden run as one open issue, and comments on it when a later merge
+  # fails again, so a drift is a single thread rather than one issue per merge. A job of its own so
+  # that `issues: write` never reaches the job that builds and runs this repo's code.
+  golden-drift:
+    needs: axe
+    if: always() && github.event_name == 'push' && needs.axe.outputs.golden == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the golden-drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          title="Aria golden drift on master"
+          body="The @golden aria snapshots failed on ${SHA}: ${RUN_URL}
+
+          Read the diff in the run log. An intended page change gets a new golden with \`npm run a11y -- --update-snapshots --grep <template>\`; a regression gets a fix to the page."
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
