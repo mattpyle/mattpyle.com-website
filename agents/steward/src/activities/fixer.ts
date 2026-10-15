@@ -26,7 +26,14 @@ import {
 } from '../lib/fixer.js';
 import { DIFF_REVIEW_MAX_CHARS, diffReviewArgs, diffReviewPrompt, parseDiffReviewReply, type FixerDiffReview } from '../lib/diff-review.js';
 import { draftHandoff, draftVerifyBlock, type VerifyBlockRejection } from '../lib/handoff-generator.js';
-import { readHandoffVerify, validateVerifyBlock, withVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
+import {
+  readHandoffVerify,
+  validateVerifyBlock,
+  validateVerifyCoverage,
+  withVerifyBlock,
+  type VerifyCheck,
+  type VerifyCoverageEntry,
+} from '../lib/verify-checks.js';
 import { npmCommand } from './build-audit.js';
 
 /**
@@ -245,6 +252,12 @@ export interface GenerateVerifyBlockInput {
 
 export interface GenerateVerifyBlockResult {
   checks: VerifyCheck[];
+  /**
+   * The block's coverage map. Null when the handoff already held a block and
+   * no map, which a handoff written before the map does. Absent from a result
+   * that predates it.
+   */
+  coverage?: VerifyCoverageEntry[] | null;
   /** The handoff as written back with the new block, or null when nothing was written. */
   handoff?: string | null;
   /** The commit that wrote the block into the handoff, or null when it was already there. */
@@ -286,7 +299,11 @@ export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Prom
   const existing = readHandoffVerify((await read()).text);
   if (existing.present && !input.rejected) {
     const block = validateVerifyBlock(existing.raw, input.origin);
-    if (block.problems.length === 0) return { checks: block.checks, commitSha: null, baseSha: null, claude: noRun };
+    if (block.problems.length === 0) {
+      const map = existing.coveragePresent ? validateVerifyCoverage(existing.coverageRaw, block.checks.length) : null;
+      const coverage = map && map.problems.length === 0 ? map.coverage : null;
+      return { checks: block.checks, coverage, commitSha: null, baseSha: null, claude: noRun };
+    }
   }
 
   claimWorktree(input.key);
@@ -315,7 +332,7 @@ export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Prom
         message: `The generated verify block for ${input.key} was refused: ${draft.problems.join('; ')}.`,
       });
     }
-    if (!draft.checks) {
+    if (!draft.checks || !draft.coverage) {
       throw new Error(
         `claude -p exited ${draft.exitCode}${draft.timedOut || draft.stalled ? ' (stopped at its time limit)' : ''} without a verify block. stderr: ${draft.stderrTail || '(empty)'}`,
       );
@@ -323,7 +340,7 @@ export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Prom
 
     phase = 'writing the verify block to the findings repository';
     const file = await read();
-    const handoff = withVerifyBlock(file.text, draft.checks);
+    const handoff = withVerifyBlock(file.text, draft.checks, draft.coverage);
     const { commitSha } = await writeRepoFile({
       repo: input.repo,
       path: input.handoffPath,
@@ -337,7 +354,7 @@ export async function generateVerifyBlock(input: GenerateVerifyBlockInput): Prom
       { activity: 'generateVerifyBlock', key: input.key, again: Boolean(input.rejected), commitSha, baseSha, ...draft.claude },
       'verify block generated',
     );
-    return { checks: draft.checks, handoff, commitSha, baseSha, claude: draft.claude };
+    return { checks: draft.checks, coverage: draft.coverage, handoff, commitSha, baseSha, claude: draft.claude };
   } finally {
     clearInterval(pump);
     busy = undefined;
@@ -366,6 +383,12 @@ export interface ReadFixChecksResult {
   source: 'finding' | 'handoff';
   /** The block to test. Empty when its owner judged the measure unmeasurable by checks. */
   checks: VerifyCheck[];
+  /**
+   * The handoff's coverage map. Null for a finding's own block, which has
+   * none, and for a handoff written before the map. Absent from a result that
+   * predates it.
+   */
+  coverage?: VerifyCoverageEntry[] | null;
 }
 
 /**
@@ -383,15 +406,21 @@ export async function readFixChecks(input: ReadFixChecksInput): Promise<ReadFixC
   const origin = input.origin ?? PROD_ORIGIN;
   const own = readHandoffVerify(input.findingText);
   const source = own.present ? 'finding' : 'handoff';
-  const raw = own.present ? own.raw : readHandoffVerify(input.handoff).raw;
-  const { checks, problems } = validateVerifyBlock(raw ?? [], origin);
+  const handoff = own.present ? null : readHandoffVerify(input.handoff);
+  const { checks, problems } = validateVerifyBlock((own.present ? own.raw : handoff?.raw) ?? [], origin);
+  let coverage: VerifyCoverageEntry[] | null = null;
+  if (handoff?.coveragePresent && problems.length === 0) {
+    const map = validateVerifyCoverage(handoff.coverageRaw, checks.length);
+    problems.push(...map.problems);
+    coverage = map.coverage;
+  }
   if (problems.length > 0) {
     throw ApplicationFailure.nonRetryable(
       `The verify block in ${source === 'finding' ? input.findingPath : `the handoff for ${input.key}`} was refused: ${problems.join('; ')}.`,
       'VerifyBlockInvalid',
     );
   }
-  return { origin, source, checks };
+  return { origin, source, checks, coverage };
 }
 
 // ---------------------------------------------------------------------------
@@ -650,6 +679,8 @@ export interface ReviewFixDiffInput {
   baseSha: string;
   /** The branch head `runFixer` pushed. */
   headSha: string;
+  /** The coverage map of the block the fix is tested by, when it has one. */
+  coverage?: VerifyCoverageEntry[] | null;
 }
 
 export interface ReviewFixDiffResult extends FixerDiffReview {
@@ -709,6 +740,7 @@ export async function reviewDiff(options: {
   findingText: string;
   handoff: string;
   diff: string;
+  coverage?: VerifyCoverageEntry[] | null;
   cwd: string;
   signal: AbortSignal;
   reviewer?: { command: string; argv: string[] };
@@ -727,7 +759,13 @@ export async function reviewDiff(options: {
     run = await runClaude({
       command: reviewer.command,
       argv: reviewer.argv,
-      stdin: diffReviewPrompt({ key: options.key, finding: options.findingText, handoff: options.handoff, diff }),
+      stdin: diffReviewPrompt({
+        key: options.key,
+        finding: options.findingText,
+        handoff: options.handoff,
+        diff,
+        coverage: options.coverage,
+      }),
       cwd: options.cwd,
       env: fixerChildEnv(process.env),
       signal: options.signal,

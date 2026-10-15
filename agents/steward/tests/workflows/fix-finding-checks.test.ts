@@ -470,9 +470,52 @@ test("the review reads the fixer's diff, base to head, with the finding and the 
     handoff: handoffWith([CHECK_A]),
     baseSha: 'c-base',
     headSha: 'c-fix-head',
+    coverage: null,
   });
   assert.deepEqual(seen.prs[0].review, { problems: [], incomplete: null });
   assert.deepEqual(result.review, { problems: [], incomplete: null });
+  assert.equal(result.draft, false);
+});
+
+test("the handoff's map reaches the review and the PR, and a surface with only a reason opens a draft", async () => {
+  const map = [
+    `  - surface: ${ORIGIN}/scorecard/`,
+    '    checks: [1]',
+    '  - surface: the A2A answer',
+    '    reason: A2A is a POST; no check kind sends one.',
+  ];
+  const handoff = handoffWith([CHECK_A]).replace('\n---\n\n# Handoff', `\nverify_coverage:\n${map.join('\n')}\n---\n\n# Handoff`);
+  const { activities, calls, seen } = mockActivities({ handoff });
+  const result = await execute(activities);
+
+  const coverage = [
+    { surface: `${ORIGIN}/scorecard/`, checks: [1] },
+    { surface: 'the A2A answer', reason: 'A2A is a POST; no check kind sends one.' },
+  ];
+  assert.deepEqual(calls, FULL_ORDER, 'the map changes no step');
+  assert.deepEqual(seen.review?.coverage, coverage);
+  assert.deepEqual(seen.prs[0].site?.coverage, coverage);
+  assert.deepEqual(result.verify?.coverage, coverage);
+  assert.equal(result.draft, true);
+});
+
+test("a regeneration's map replaces the first block's", async () => {
+  const regenerated = [{ surface: `${ORIGIN}/scorecard/`, checks: [1] }];
+  const { activities, seen } = mockActivities({
+    handoff: handoffWith([CHECK_A, CHECK_C]),
+    outcomes: { production: (check) => same(check, CHECK_C) },
+    regenerate: async () => ({
+      checks: [CHECK_B],
+      coverage: regenerated,
+      handoff: handoffWith([CHECK_B]),
+      commitSha: 'c-block',
+      baseSha: 'c-base',
+      claude: { model: 'claude-x', costUsd: 0.03, durationMs: 9_000, numTurns: 5 },
+    }),
+  });
+  const result = await execute(activities);
+  assert.deepEqual(seen.review?.coverage, regenerated);
+  assert.deepEqual(result.verify?.coverage, regenerated);
   assert.equal(result.draft, false);
 });
 

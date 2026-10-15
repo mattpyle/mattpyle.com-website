@@ -28,6 +28,7 @@ import {
   DEFECT_FINDING,
   DEFECT_HANDOFF,
   DEFECT_KEY,
+  MAPPED_HANDOFF,
   OPPORTUNITY_FINDING,
   OPPORTUNITY_KEY,
   ORIGIN,
@@ -181,9 +182,13 @@ test('the template is the same for every finding but for the key', () => {
 });
 
 test('a handoff in the template passes, with or without a code fence around it', () => {
-  assert.deepEqual(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY, ORIGIN), []);
-  const fenced = cleanHandoff(`\`\`\`markdown\r\n${DEFECT_HANDOFF.trim()}\r\n\`\`\`\r\n`);
-  assert.equal(fenced, DEFECT_HANDOFF);
+  assert.deepEqual(validateHandoff(MAPPED_HANDOFF, DEFECT_KEY, ORIGIN), []);
+  const fenced = cleanHandoff(`\`\`\`markdown\r\n${MAPPED_HANDOFF.trim()}\r\n\`\`\`\r\n`);
+  assert.equal(fenced, MAPPED_HANDOFF);
+});
+
+test('a handoff with no coverage map beside its block is refused', () => {
+  assert.match(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY, ORIGIN).join('; '), /there is no coverage map/);
 });
 
 test('a handoff is refused for each way it can leave the template', () => {
@@ -191,22 +196,22 @@ test('a handoff is refused for each way it can leave the template', () => {
     const problems = validateHandoff(markdown, DEFECT_KEY, ORIGIN).join('; ');
     assert.match(problems, pattern);
   };
-  refused(`Here is the handoff.\n\n${DEFECT_HANDOFF}`, /first line/);
-  refused(DEFECT_HANDOFF.replace('## Out of scope', '## Close'), /sections are/);
-  refused(DEFECT_HANDOFF.replace('## Goal', '## Read first\n\n1. The card.\n\n## Goal'), /sections are/);
-  refused(DEFECT_HANDOFF.replace('`npx tsc', 'See docs/work/card.md. `npx tsc'), /docs\/ or steward\//);
-  refused(DEFECT_HANDOFF.replace(DEFECT_KEY, 'another-key'), /"Finding:" line/);
-  refused(DEFECT_HANDOFF.replace(/^1\. A unit test[\s\S]*?clean\.\n/m, 'Run the tests.\n'), /no numbered check/);
+  refused(`Here is the handoff.\n\n${MAPPED_HANDOFF}`, /first line/);
+  refused(MAPPED_HANDOFF.replace('## Out of scope', '## Close'), /sections are/);
+  refused(MAPPED_HANDOFF.replace('## Goal', '## Read first\n\n1. The card.\n\n## Goal'), /sections are/);
+  refused(MAPPED_HANDOFF.replace('`npx tsc', 'See docs/work/card.md. `npx tsc'), /docs\/ or steward\//);
+  refused(MAPPED_HANDOFF.replace(DEFECT_KEY, 'another-key'), /"Finding:" line/);
+  refused(MAPPED_HANDOFF.replace(/^1\. A unit test[\s\S]*?clean\.\n/m, 'Run the tests.\n'), /no numbered check/);
   // Cases: absent, and present but empty of any case.
-  refused(DEFECT_HANDOFF.replace(/## Cases\n\n[\s\S]*?(?=## Tasks)/, ''), /sections are/);
-  refused(DEFECT_HANDOFF.replace(/(## Cases\n\n)[\s\S]*?(?=## Tasks)/, '$1'), /Cases section lists no case/);
-  refused(DEFECT_HANDOFF.replace(/(## Cases\n\n)[\s\S]*?(?=## Tasks)/, '$1Every gate.\n\n'), /Cases section lists no case/);
+  refused(MAPPED_HANDOFF.replace(/## Cases\n\n[\s\S]*?(?=## Tasks)/, ''), /sections are/);
+  refused(MAPPED_HANDOFF.replace(/(## Cases\n\n)[\s\S]*?(?=## Tasks)/, '$1'), /Cases section lists no case/);
+  refused(MAPPED_HANDOFF.replace(/(## Cases\n\n)[\s\S]*?(?=## Tasks)/, '$1Every gate.\n\n'), /Cases section lists no case/);
   refused(
-    DEFECT_HANDOFF.replace('Name the failing reason in scorecard commentary', 'x'.repeat(HANDOFF_TITLE_MAX + 1)),
+    MAPPED_HANDOFF.replace('Name the failing reason in scorecard commentary', 'x'.repeat(HANDOFF_TITLE_MAX + 1)),
     /title is 73 characters/,
   );
   // A path under agents/steward/ is the repository's, not the vault's.
-  assert.deepEqual(validateHandoff(DEFECT_HANDOFF, DEFECT_KEY, ORIGIN), []);
+  assert.deepEqual(validateHandoff(MAPPED_HANDOFF, DEFECT_KEY, ORIGIN), []);
 });
 
 test('parseHandoff takes the title without its label and the Verify checks one per line', () => {

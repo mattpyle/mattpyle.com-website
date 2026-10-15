@@ -1,4 +1,5 @@
 import { parseFrontmatter } from './frontmatter.js';
+import type { VerifyCoverageEntry } from './verify-checks.js';
 
 /**
  * The fix's diff review, pure half: what the reviewer is sent, how its reply is
@@ -66,14 +67,31 @@ export function diffReviewArgs(): string[] {
   ];
 }
 
-/** What the reviewer is sent: the finding, the handoff, the diff, and the rules. */
-export function diffReviewPrompt(args: { key: string; finding: string; handoff: string; diff: string }): string {
+/**
+ * What the reviewer is sent: the finding, the handoff, the diff, and the rules.
+ * With a coverage map, a changed file that serves a surface the map leaves out
+ * is `unexplained`: a fix that reached a surface nobody listed is one no check
+ * was written for.
+ */
+export function diffReviewPrompt(args: {
+  key: string;
+  finding: string;
+  handoff: string;
+  diff: string;
+  coverage?: VerifyCoverageEntry[] | null;
+}): string {
+  const coverage = args.coverage ?? null;
   return [
     'Review the diff below. It is one automated fix for one finding about a website. The finding says what was wrong, and the handoff says what to change.',
     '',
     'Report two kinds of problem, and nothing else:',
     '',
     '1. `unexplained`: a hunk the finding and the handoff do not call for. A change a task in the handoff names is explained, and so is a test the handoff asks for. Judge each hunk on its own.',
+    ...(coverage
+      ? [
+          '   A changed file that serves a surface the coverage map below does not name is also `unexplained`, whatever the handoff says: no check was written for that surface. A test file is not a surface.',
+        ]
+      : []),
     '2. `error`: a new mistake in a changed line. A typo, a missing or doubled space, a punctuation slip, broken markup, or broken syntax. Read every added line character by character, prose inside strings included. A mistake on a line the diff did not change is not reported.',
     '',
     'Do not report style preferences, better wordings, or anything the fix might also have done.',
@@ -102,6 +120,20 @@ export function diffReviewPrompt(args: { key: string; finding: string; handoff: 
     args.handoff.trim(),
     '</handoff>',
     '',
+    ...(coverage
+      ? [
+          'The coverage map: every surface the finding names, and the checks on the live site that measure it.',
+          '',
+          '<coverage>',
+          ...coverage.map((entry) =>
+            'checks' in entry
+              ? `- ${entry.surface}: checks ${entry.checks.join(', ')}`
+              : `- ${entry.surface}: no check, because ${entry.reason}`,
+          ),
+          '</coverage>',
+          '',
+        ]
+      : []),
     'The diff:',
     '',
     '<diff>',

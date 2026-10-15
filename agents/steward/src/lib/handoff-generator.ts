@@ -9,9 +9,11 @@ import {
 } from './fixer.js';
 import {
   parseVerifyReply,
-  validateVerifyBlock,
+  validateGeneratedBlock,
   verifyBlockGuide,
+  verifyCoverageGuide,
   type VerifyCheck,
+  type VerifyCoverageEntry,
   type VerifyCheckResult,
 } from './verify-checks.js';
 
@@ -110,6 +112,19 @@ export async function draftHandoff(options: HandoffDraftOptions): Promise<Handof
 export const VERIFY_BLOCK_SYSTEM_PROMPT =
   'You turn a finding about a website into checks a program runs against the live site. You read the code first, with the read-only tools you have. Your final message is one YAML document and nothing else: no preamble, no code fence around it, no closing remark.';
 
+/** The shape of the block generator's reply: the block and its coverage map. */
+const VERIFY_REPLY_TEMPLATE = [
+  'verify:',
+  '  - url: <a URL on the production origin>',
+  '    kind: <kind>',
+  '    expect: <what the kind expects>',
+  'coverage:',
+  '  - surface: <a URL, endpoint, file or page the finding names>',
+  '    checks: [<the number of each check that measures it>]',
+  '  - surface: <a surface no check can measure>',
+  '    reason: <why no check can measure it>',
+];
+
 /**
  * What the block generator is sent: a finding whose fix is live, the handoff
  * the fix was built from, and the rules of the block.
@@ -123,12 +138,11 @@ export function verifyBlockPrompt(args: { key: string; finding: string; handoff:
     '',
     'Build the checks from the finding\'s "How to measure" and nothing else, as the handoff\'s Verify section reads it.',
     '',
+    ...verifyCoverageGuide(),
+    '',
     'Reply with exactly this YAML document:',
     '',
-    'verify:',
-    '  - url: <a URL on the production origin>',
-    '    kind: <kind>',
-    '    expect: <what the kind expects>',
+    ...VERIFY_REPLY_TEMPLATE,
     '',
     `The finding, \`${args.key}\`:`,
     '',
@@ -195,12 +209,11 @@ export function verifyBlockRetryPrompt(args: {
     '',
     'Build the checks from the finding\'s "How to measure" and nothing else, as the handoff\'s Verify section reads it.',
     '',
+    ...verifyCoverageGuide(),
+    '',
     'Reply with exactly this YAML document:',
     '',
-    'verify:',
-    '  - url: <a URL on the production origin>',
-    '    kind: <kind>',
-    '    expect: <what the kind expects>',
+    ...VERIFY_REPLY_TEMPLATE,
     '',
     `The finding, \`${args.key}\`:`,
     '',
@@ -219,7 +232,9 @@ export function verifyBlockRetryPrompt(args: {
 export interface VerifyBlockDraft {
   /** The validated checks, or null when the run ended without a block or with one that was refused. */
   checks: VerifyCheck[] | null;
-  /** What {@link validateVerifyBlock} refuses in the reply. */
+  /** The validated coverage map, or null whenever `checks` is. */
+  coverage: VerifyCoverageEntry[] | null;
+  /** What {@link validateGeneratedBlock} refuses in the reply. */
   problems: string[];
   cancelled: boolean;
   exitCode: number;
@@ -252,9 +267,11 @@ export async function draftVerifyBlock(
     onActivity: options.onActivity,
   });
   const reply = run.exitCode === 0 && run.state.finalMessage ? parseVerifyReply(run.state.finalMessage) : null;
-  const validated = reply ? (reply.present ? validateVerifyBlock(reply.raw, options.origin) : null) : null;
+  const validated = reply?.present ? validateGeneratedBlock(reply.raw, reply.coverageRaw, options.origin) : null;
+  const valid = validated !== null && validated.problems.length === 0;
   return {
-    checks: validated && validated.problems.length === 0 ? validated.checks : null,
+    checks: valid ? validated.checks : null,
+    coverage: valid ? validated.coverage : null,
     problems: reply && !reply.present ? ['the reply is not a YAML document with a "verify" key'] : (validated?.problems ?? []),
     cancelled: run.cancelled,
     exitCode: run.exitCode,

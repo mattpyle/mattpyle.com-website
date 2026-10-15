@@ -66,15 +66,41 @@ export function verifyBlockGuide(origin: string): string[] {
   ];
 }
 
+/**
+ * What a generator is told about the coverage map it writes beside a block.
+ * Apart from {@link verifyBlockGuide}, whose text Argus copies: a finding's own
+ * block carries no map.
+ */
+export function verifyCoverageGuide(): string[] {
+  return [
+    "Beside `verify`, write `coverage`: one entry for every surface the finding names. A surface is a URL, an endpoint, a file or a page that the finding's What or its How to measure names. List every one, including those no check can measure.",
+    '',
+    '- `{surface: "/llms.txt", checks: [1, 2]}`: the numbers of the checks that measure it, counting from 1 in the `verify` list.',
+    '- `{surface: "the A2A answer at /a2a", reason: "A2A is a POST; no check kind sends one"}`: why no check can measure it.',
+    '',
+    'An entry has `checks` or `reason`, never both. Every check is named by at least one entry. When `verify` is empty, every entry has a `reason`.',
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // The block in a handoff
 // ---------------------------------------------------------------------------
+
+/** The frontmatter key a handoff stores its coverage map under, beside `verify`. */
+export const COVERAGE_KEY = 'verify_coverage';
+
+/** One surface the finding names: the checks that measure it, or why none can. */
+export type VerifyCoverageEntry = { surface: string; checks: number[] } | { surface: string; reason: string };
 
 export interface HandoffVerify {
   /** True when the frontmatter has a `verify` key, whatever it holds. */
   present: boolean;
   /** The key's value as parsed, unvalidated. */
   raw: unknown;
+  /** True when the frontmatter has a `verify_coverage` key. */
+  coveragePresent: boolean;
+  /** The `verify_coverage` value as parsed, unvalidated. */
+  coverageRaw: unknown;
   /** The handoff without its frontmatter. */
   body: string;
   /** The other frontmatter keys, kept when the block is written back. */
@@ -87,19 +113,39 @@ export function readHandoffVerify(markdown: string): HandoffVerify {
   return {
     present: Object.prototype.hasOwnProperty.call(data, 'verify'),
     raw: data.verify,
+    coveragePresent: Object.prototype.hasOwnProperty.call(data, COVERAGE_KEY),
+    coverageRaw: data[COVERAGE_KEY],
     body: parsed.content.replace(/^\s*\n/, ''),
     data,
   };
 }
 
-/** The handoff with `verify` set in its frontmatter and its body kept. */
-export function withVerifyBlock(markdown: string, checks: VerifyCheck[]): string {
+/**
+ * The handoff with `verify` and `verify_coverage` set in its frontmatter and
+ * its body kept. With no `coverage`, a map already there is dropped, since it
+ * numbers checks the new block may not have.
+ */
+export function withVerifyBlock(markdown: string, checks: VerifyCheck[], coverage?: VerifyCoverageEntry[]): string {
   const { body, data } = readHandoffVerify(markdown);
-  return matter.stringify(`\n${body.replace(/\s+$/, '')}\n`, { ...data, verify: checks });
+  const { verify: _verify, [COVERAGE_KEY]: _coverage, ...rest } = data;
+  return matter.stringify(`\n${body.replace(/\s+$/, '')}\n`, {
+    ...rest,
+    verify: checks,
+    ...(coverage ? { [COVERAGE_KEY]: coverage } : {}),
+  });
 }
 
-/** A model's reply as the value of a `verify` key: an outer fence removed, the YAML parsed. */
-export function parseVerifyReply(raw: string): { present: boolean; raw: unknown } {
+export interface VerifyReply {
+  /** True when the reply has a `verify` key. */
+  present: boolean;
+  raw: unknown;
+  /** True when the reply has a `coverage` key. */
+  coveragePresent: boolean;
+  coverageRaw: unknown;
+}
+
+/** A model's reply as the values of its `verify` and `coverage` keys: an outer fence removed, the YAML parsed. */
+export function parseVerifyReply(raw: string): VerifyReply {
   let text = raw.replace(/\r\n/g, '\n').trim();
   const fenced = /^```(?:ya?ml)?\n([\s\S]*)\n```$/.exec(text);
   if (fenced) text = fenced[1].trim();
@@ -108,9 +154,14 @@ export function parseVerifyReply(raw: string): { present: boolean; raw: unknown 
   try {
     data = (parseFrontmatter(`---\n${text}\n---\n`).data ?? {}) as Record<string, unknown>;
   } catch {
-    return { present: false, raw: undefined };
+    return { present: false, raw: undefined, coveragePresent: false, coverageRaw: undefined };
   }
-  return { present: Object.prototype.hasOwnProperty.call(data, 'verify'), raw: data.verify };
+  return {
+    present: Object.prototype.hasOwnProperty.call(data, 'verify'),
+    raw: data.verify,
+    coveragePresent: Object.prototype.hasOwnProperty.call(data, 'coverage'),
+    coverageRaw: data.coverage,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +269,93 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
     checks.push({ url: String(item.url), kind, expect: item.expect });
   });
   return problems.length > 0 ? { checks: [], problems } : { checks, problems };
+}
+
+/** The most entries one map may carry. */
+export const VERIFY_COVERAGE_MAX = 24;
+
+/**
+ * The entries a coverage map holds and what is wrong with it, one line each,
+ * for a block of `checkCount` checks. `coverage` is empty whenever `problems`
+ * is not.
+ *
+ * A map is refused when it is missing or empty, when an entry has both or
+ * neither of `checks` and `reason`, when it names a check the block does not
+ * have, and when a check is named by no entry.
+ */
+export function validateVerifyCoverage(
+  raw: unknown,
+  checkCount: number,
+): { coverage: VerifyCoverageEntry[]; problems: string[] } {
+  if (raw === undefined || raw === null) return { coverage: [], problems: ['there is no coverage map'] };
+  if (!Array.isArray(raw)) return { coverage: [], problems: ['coverage is not a list'] };
+  if (raw.length === 0) return { coverage: [], problems: ['coverage names no surface'] };
+  const problems: string[] = [];
+  if (raw.length > VERIFY_COVERAGE_MAX) problems.push(`coverage has ${raw.length} entries, over ${VERIFY_COVERAGE_MAX}`);
+
+  const coverage: VerifyCoverageEntry[] = [];
+  const named = new Set<number>();
+  raw.forEach((item, i) => {
+    const at = `coverage entry ${i + 1}`;
+    if (!isRecord(item) || !isText(item.surface)) {
+      problems.push(`${at} has no surface`);
+      return;
+    }
+    const surface = item.surface.trim();
+    const hasChecks = Object.prototype.hasOwnProperty.call(item, 'checks');
+    const hasReason = Object.prototype.hasOwnProperty.call(item, 'reason');
+    if (hasChecks && hasReason) {
+      problems.push(`${at} (${surface}) has both checks and a reason`);
+      return;
+    }
+    if (!hasChecks && !hasReason) {
+      problems.push(`${at} (${surface}) has neither checks nor a reason`);
+      return;
+    }
+    if (!keysAre(item, ['surface', 'checks'], ['surface', 'reason'])) {
+      problems.push(`${at} (${surface}) has a key other than surface, checks and reason`);
+      return;
+    }
+    if (hasReason) {
+      if (isText(item.reason)) coverage.push({ surface, reason: item.reason.trim() });
+      else problems.push(`${at} (${surface}) has a reason that is not a string`);
+      return;
+    }
+    const checks = item.checks;
+    if (!Array.isArray(checks) || checks.length === 0) {
+      problems.push(`${at} (${surface}) has checks that are not a non-empty list`);
+      return;
+    }
+    const absent = checks.filter((n) => !(Number.isInteger(n) && n >= 1 && n <= checkCount));
+    if (absent.length > 0) {
+      problems.push(`${at} (${surface}) names check ${absent.map(String).join(', ')}, which the block does not have`);
+      return;
+    }
+    for (const n of checks) named.add(n);
+    coverage.push({ surface, checks: [...checks] });
+  });
+  const unnamed = Array.from({ length: checkCount }, (_, i) => i + 1).filter((n) => !named.has(n));
+  if (unnamed.length > 0) problems.push(`check ${unnamed.join(', ')} is named by no coverage entry`);
+  return problems.length > 0 ? { coverage: [], problems } : { coverage, problems };
+}
+
+/** A generated block and its map, validated together: the block's problems, then the map's against its length. */
+export function validateGeneratedBlock(
+  verify: unknown,
+  coverage: unknown,
+  origin: string,
+): { checks: VerifyCheck[]; coverage: VerifyCoverageEntry[]; problems: string[] } {
+  const block = validateVerifyBlock(verify, origin);
+  const map = validateVerifyCoverage(coverage, Array.isArray(verify) ? verify.length : 0);
+  const problems = [...block.problems, ...map.problems];
+  return problems.length > 0
+    ? { checks: [], coverage: [], problems }
+    : { checks: block.checks, coverage: map.coverage, problems };
+}
+
+/** The entries no check measures. */
+export function unmeasuredSurfaces(coverage: VerifyCoverageEntry[]): { surface: string; reason: string }[] {
+  return coverage.filter((entry): entry is { surface: string; reason: string } => 'reason' in entry);
 }
 
 // ---------------------------------------------------------------------------
