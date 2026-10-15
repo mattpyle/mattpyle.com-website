@@ -1280,7 +1280,7 @@ html[data-appearance='retro'] [data-module='projects-board'] .card {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='projects-board'] .card:hover {
+html[data-appearance='retro'] [data-module='projects-board'] a.card:hover {
   border-color: var(--retro-maroon);
 }
 
@@ -1317,7 +1317,7 @@ html[data-appearance='retro'] [data-module='projects-board'] .card-name {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='projects-board'] .card:hover .card-name {
+html[data-appearance='retro'] [data-module='projects-board'] a.card:hover .card-name {
   color: var(--retro-link);
 }
 
