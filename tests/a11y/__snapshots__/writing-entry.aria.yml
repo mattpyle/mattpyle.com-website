@@ -23,9 +23,11 @@
     - paragraph: ·
     - complementary "About this post":
       - heading "About this post" [level=2]
-      - time: /\d+ Jul \d+/
+      - link "Matt Pyle":
+        - /url: /about/
+      - time: /\d+ [A-Z][a-z]{2} \d+/
       - text: 8 min read updated
-      - time: /\d+ Aug \d+/
+      - time: /\d+ [A-Z][a-z]{2} \d+/
       - navigation "·":
         - link "·":
           - /url: "#"
@@ -46,6 +48,8 @@
         - /url: https://chatgpt.com/?hint=search&q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Faccessibility-and-ai%2F+so+I+can+ask+questions+about+its+contents
       - link "ask claude (opens in a new tab)":
         - /url: https://claude.ai/new?q=Read+from+https%3A%2F%2Fwww.mattpyle.com%2Fwriting%2Faccessibility-and-ai%2F+so+I+can+ask+questions+about+its+contents
+      - link "rss feed":
+        - /url: /rss.xml
       - status
 - contentinfo:
   - text: Matt Pyle
