@@ -144,6 +144,48 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
   </div>
 </header>
 
+<script>
+  // A native <details> only closes from its own summary, so the "more" panel
+  // would stay parked over the page. Close it on outside tap, scroll, focus
+  // leaving it, and Escape (returning focus to the summary).
+  function wire(more: HTMLDetailsElement) {
+    const close = () => { more.open = false; };
+    // ClientRouter swaps the header on soft nav; document/window listeners outlive the old
+    // element, so they drop themselves once it is detached.
+    const onClick = (e: Event) => {
+      if (!more.isConnected) return document.removeEventListener('click', onClick);
+      if (more.open && !more.contains(e.target as Node)) close();
+    };
+    const onScroll = () => {
+      if (!more.isConnected) return window.removeEventListener('scroll', onScroll);
+      if (more.open) close();
+    };
+    document.addEventListener('click', onClick);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    more.addEventListener('focusout', (e) => {
+      // A null relatedTarget is a tap on a non-focusable spot (the outside-click
+      // handler covers it); closing there would swallow taps on the panel links.
+      const next = e.relatedTarget as Node | null;
+      if (more.open && next && !more.contains(next)) close();
+    });
+    more.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && more.open) {
+        close();
+        more.querySelector('summary')?.focus();
+      }
+    });
+  }
+
+  // Per-element flag (as Guestbook.astro): the header is replaced on every soft nav.
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLDetailsElement>('details.nav-more').forEach((more) => {
+      if (more.dataset.wired) return;
+      more.dataset.wired = 'true';
+      wire(more);
+    });
+  });
+</script>
+
 <style>
   [data-module="site-header"] {
     position: sticky;
