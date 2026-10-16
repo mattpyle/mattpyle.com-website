@@ -155,6 +155,54 @@ test('starts the missing, signals the decided, and does nothing on a second run'
   assert.match(s.pings[0].summary, /site-a started 2, signalled 0, unchanged 1/);
 });
 
+test('a reopened line whose last run completed gets a new run, waiting at the verdict and named reopened in its memo', async () => {
+  const s = store({ 'mattpyle-com': header(['r-one | proposed | Title | ']) });
+  await withWorker(s.activities, async () => {
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, unchanged: 0 });
+    const id = findingWorkflowId('mattpyle-com', 'r-one');
+    const first = await client.workflow.getHandle(id).describe();
+    assert.equal(first.memo?.indexStatus, 'proposed');
+
+    // The first run ends; a later verify writes `reopened` into the index.
+    s.indexes['mattpyle-com'] = header(['r-one | rejected | Title | Not now.']);
+    await reconcileOnce();
+    await client.workflow.getHandle(id, first.runId).result();
+    s.indexes['mattpyle-com'] = header(['r-one | reopened | Title | ']);
+
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, unchanged: 0 });
+    const latest = client.workflow.getHandle(id);
+    const described = await latest.describe();
+    assert.equal(described.status.name, 'RUNNING');
+    assert.notEqual(described.runId, first.runId, 'a new run under the same ID');
+    assert.equal(described.memo?.indexStatus, 'reopened');
+    const state = await latest.query(findingStateQuery);
+    assert.equal(state.step, 'waiting-verdict');
+    assert.equal(state.stopAfter, 'resolved');
+
+    const history = await latest.fetchHistory();
+    const payload = history.events?.[0]?.workflowExecutionStartedEventAttributes?.input?.payloads?.[0]?.data;
+    const started = JSON.parse(Buffer.from(payload as Uint8Array).toString('utf8'));
+    assert.ok(!('indexStatus' in started), 'the index status rides in the memo, not the workflow input');
+
+    // Open now, so the next run leaves it.
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, unchanged: 1 });
+    await latest.terminate('test over');
+  });
+});
+
+test('a proposed line whose last run completed is not started again', async () => {
+  const s = store({ 'site-f': header(['f-one | proposed | Title | ']) });
+  await withWorker(s.activities, async () => {
+    await reconcileOnce();
+    s.indexes['site-f'] = header(['f-one | rejected | Title | No.']);
+    await reconcileOnce();
+    await client.workflow.getHandle(findingWorkflowId('site-f', 'f-one')).result();
+    // A stale line: the index still says proposed after the run completed.
+    s.indexes['site-f'] = header(['f-one | proposed | Title | ']);
+    assert.deepEqual((await reconcileOnce())['site-f'], { started: 0, signalled: 0, unchanged: 1 });
+  });
+});
+
 test('a start that collides with a workflow visibility has not listed yet counts as unchanged', async () => {
   const s = store({ 'site-c': header(['c-one | proposed | Title | ']) });
   // Visibility lags: the list never shows anything open.

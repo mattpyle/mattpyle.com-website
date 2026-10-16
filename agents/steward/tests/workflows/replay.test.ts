@@ -342,3 +342,34 @@ test('a lifecycle run whose first fix was a child replays that attempt as a chil
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the hosted verifier:
+ * approved with `auto_fix`, the issue, the PR, the merge and the deploy, then
+ * `verifyFindingWorkflow` started on `steward-heavy` and resolved. New code
+ * must replay that start on `steward-heavy`, which is what the
+ * `verifier-hosted` patch is for.
+ *
+ * Two probes (2026-10-15). A timer injected before the child start made this
+ * replay fail with `[TMPRL1100] Timer machine does not handle this event`, so
+ * the fixture guards the command sequence up to and through the verify start.
+ * Deleting the `patched()` guard, so the child always starts on
+ * `steward-findings`, replayed green: the SDK matches a child start on its
+ * workflow ID and type, not its task queue. The marker keeps the history
+ * honest about where each verify ran; the replay does not depend on it.
+ *
+ * Recorded from the pre-change code (76b1680) the same way as the fixture
+ * above.
+ */
+const findingVerifyHeavyHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-verify-child-heavy.bin', import.meta.url),
+);
+
+test('a lifecycle run that started its verify child on steward-heavy replays that start', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingVerifyHeavyHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});

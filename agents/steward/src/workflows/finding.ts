@@ -36,8 +36,8 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *   with a PR (decisions 26 and 27): `openFixIssue`, then `awaitFixPr`, then
  *   `writeFindingFix`, all on `steward-findings`. The merge wait and the
  *   deploy wait poll from here too, and `verifyFindingWorkflow` runs as a
- *   child. Its outcome is this run's result. A rejected verdict ends the run
- *   as `'verdict'` does.
+ *   child on the same queue (decision 29). Its outcome is this run's result.
+ *   A rejected verdict ends the run as `'verdict'` does.
  *
  * **What rides where** (design rule 10). The repository, the paths, the branch,
  * the production origin and the stop point are in the input, so an open
@@ -62,7 +62,10 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * {@link ACTION_ADAPTER_PATCH} marker there. Its next attempt, and every
  * attempt of a run parked at `waiting-fix` before this shipped, takes the
  * issue. A run already past its verdict has no {@link AUTO_FIX_PATCH} marker,
- * so it never reads the flag and waits for `fix` as it did.
+ * so it never reads the flag and waits for `fix` as it did. A run that started
+ * its verify child on `steward-heavy` has no {@link VERIFIER_HOSTED_PATCH}
+ * marker there and replays that start unchanged; every later verify runs on
+ * `steward-findings`.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -75,6 +78,9 @@ export const ACTION_ADAPTER_PATCH = 'fixer-action-adapter';
 
 /** The `patched` marker of the `auto_fix` read after an approved verdict (decision 28). */
 export const AUTO_FIX_PATCH = 'fixer-auto-fix';
+
+/** The `patched` marker of the verify child on `steward-findings` in place of `steward-heavy` (decision 29). */
+export const VERIFIER_HOSTED_PATCH = 'verifier-hosted';
 
 /** The GitHub deployment environment Vercel's integration posts production to. */
 const PRODUCTION_ENVIRONMENT = 'Production';
@@ -509,10 +515,11 @@ async function lifecycle(
     state.step = 'verifying';
     const at = nowIso();
     const verifyId = verifyWorkflowId(input.site, input.key, at);
+    const verifyQueue = wf.patched(VERIFIER_HOSTED_PATCH) ? QUEUE_FINDINGS : QUEUE_HEAVY;
     try {
       const verified = await wf.executeChild(verifyFindingWorkflow, {
         workflowId: verifyId,
-        taskQueue: QUEUE_HEAVY,
+        taskQueue: verifyQueue,
         args: [
           {
             site: input.site,
@@ -526,11 +533,16 @@ async function lifecycle(
           },
         ],
       });
-      return end(verified.outcome, `Verified on production at ${deploy.liveSha.slice(0, 7)}: ${verified.outcome}.`, {
-        mergeSha,
-        liveSha: deploy.liveSha,
-        verifyWorkflowId: verifyId,
-      });
+      const live = { mergeSha, liveSha: deploy.liveSha, verifyWorkflowId: verifyId };
+      if (verified.outcome === 'unverifiable') {
+        const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
+        return end(
+          'unverifiable',
+          `Live at ${deploy.liveSha.slice(0, 7)}, but unverifiable: the finding ${why}, so no check ran. The finding is still fixing.`,
+          live,
+        );
+      }
+      return end(verified.outcome, `Verified on production at ${deploy.liveSha.slice(0, 7)}: ${verified.outcome}.`, live);
     } catch (err) {
       if (wf.isCancellation(err)) throw err;
       return end('verify-failed', `The verify failed: ${describeError(err)}. The finding is still fixing.`, {

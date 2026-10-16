@@ -229,6 +229,8 @@ export async function generateHandoff(input: GenerateHandoffInput): Promise<Gene
 // generateVerifyBlock
 // ---------------------------------------------------------------------------
 
+// Started by nothing since findings-loop design decision 29: the verifier reads the finding's own block.
+
 export interface GenerateVerifyBlockInput {
   /** `owner/name` of the findings repository. */
   repo: string;

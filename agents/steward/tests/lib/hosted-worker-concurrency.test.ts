@@ -125,7 +125,24 @@ test('the findings worker runs a small bounded cap and registers only the findin
       'awaitProductionDeploy',
       'listOpenFindingWorkflows',
       'startFindingWorkflow',
+      'readFixPr',
+      'readVerifyBlock',
+      'runFindingChecks',
+      'writeFindingVerification',
       'reportRunHealth',
     ],
   );
+});
+
+test('every activity the verifier schedules is on steward-findings and registered by the hosted worker', async () => {
+  const hosted = await source();
+  const registered = hosted.match(/const findingsActivities = \{([^}]*)\}/)![1];
+  const verifier = await fs.readFile(path.join(path.dirname(HOSTED_WORKER), 'workflows', 'verify-finding.ts'), 'utf8');
+  const proxied = [...verifier.matchAll(/Pick<typeof activities, ([^>]*)>/g)].flatMap((m) =>
+    [...m[1].matchAll(/'(\w+)'/g)].map((name) => name[1]),
+  );
+  assert.deepEqual(proxied.sort(), ['readFinding', 'readFixPr', 'readVerifyBlock', 'runFindingChecks', 'writeFindingVerification']);
+  for (const name of proxied) assert.match(registered, new RegExp(`\\b${name}\\b`), `${name} is not in findingsActivities`);
+  assert.deepEqual([...verifier.matchAll(/taskQueue: (\w+)/g)].map((m) => m[1]), Array(3).fill('QUEUE_FINDINGS'));
+  assert.match(verifier, /const QUEUE_FINDINGS = 'steward-findings';/);
 });
