@@ -69,3 +69,13 @@ test('planReconcile starts the proposed without a workflow and signals the decid
   assert.deepEqual(plan.signal.map((l) => [l.key, l.status, l.reason]), [['decided-open', 'approved', 'Yes.']]);
   assert.equal(plan.unchanged, 3);
 });
+
+test('planReconcile starts a reopened line with no workflow, as it does a proposed one, and leaves one with a workflow', () => {
+  const index = parseFindingsIndex(
+    ['back | reopened | t | ', 'back-open | reopened | t | ', 'fixing-one | fixing | t | Yes.'].join('\n'),
+  );
+  const plan = planReconcile('s', index, [findingWorkflowId('s', 'back-open')]);
+  assert.deepEqual(plan.start.map((l) => [l.key, l.status]), [['back', 'reopened']]);
+  assert.deepEqual(plan.signal, []);
+  assert.equal(plan.unchanged, 2);
+});

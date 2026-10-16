@@ -37,7 +37,7 @@ import {
   type Verification,
   type VerifyBlockSource,
 } from '../lib/findings.js';
-import { readHandoffVerify, validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
+import { validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
 import type { FindingStopAfter, FindingWorkflowInput } from '../workflows/finding.js';
 
 /**
@@ -794,71 +794,45 @@ export interface ReadVerifyBlockInput {
   findingPath: string;
   /** The finding as `readFinding` returned it. Its `verify` key, when present, is the block. */
   findingText: string;
-  /** `sites/<site>/handoffs/<key>.md` */
-  handoffPath: string;
+  /** `sites/<site>/handoffs/<key>.md`. Unread since design decision 29. */
+  handoffPath?: string;
   /** The production origin every check must name. */
   origin: string;
 }
 
 export interface ReadVerifyBlockResult {
-  /** The handoff as it is in the findings repository, or null when the finding's block made it unread. */
+  /** Always null since decision 29: the handoff is not read. */
   handoff: string | null;
-  /** False when neither the finding nor the handoff has a `verify` key: the workflow generates one. */
+  /** False when the finding has no `verify` key. */
   hasBlock: boolean;
   checks: VerifyCheck[];
-  /**
-   * Where the checks come from, decided here so the workflow's branch replays
-   * from history (design rule 10). `generated` means none exists yet. Absent
-   * from histories written before the finding's block was read.
-   */
+  /** `finding`. Absent from histories written before the finding's block was read. */
   source?: VerifyBlockSource;
 }
 
 /**
- * A finding's `verify` block: the finding's own when its frontmatter has the
- * key, else the one in its generated handoff.
+ * A finding's `verify` block, from the finding's own frontmatter and nowhere
+ * else (design decision 29). Argus writes it at filing time.
  *
- * The finding's key wins whatever it holds. A list of checks runs; an empty
- * list is the finder judging the measure unmeasurable, and the handoff is not
- * read. A finding's block that fails {@link validateVerifyBlock} is a failure
- * naming the finding, never a fall back: a typo would hand the definition of
- * fixed back to the fixer.
- *
- * With no key on the finding, the handoff decides. A handoff with no `verify`
- * key is a result, not a failure: the workflow generates the block. A block
- * that is there and fails {@link validateVerifyBlock} is a failure, since a
- * block Steward would not have written is one it does not run.
+ * A list of checks runs. An empty list is the finder judging the measure
+ * unmeasurable, and a finding with no `verify` key has no measure at all:
+ * both return no checks, and the workflow ends `unverifiable`. A block that
+ * fails {@link validateVerifyBlock} is a failure naming the finding: a typo
+ * is not a pass.
  */
 export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<ReadVerifyBlockResult> {
   const own = (parseFrontmatter(input.findingText).data ?? {}) as Record<string, unknown>;
-  if (Object.prototype.hasOwnProperty.call(own, 'verify')) {
-    const { checks, problems } = validateVerifyBlock(own.verify, input.origin);
-    if (problems.length > 0) {
-      throw ApplicationFailure.nonRetryable(
-        `The verify block in ${input.findingPath} was refused: ${problems.join('; ')}.`,
-        'VerifyBlockInvalid',
-      );
-    }
-    return { handoff: null, hasBlock: true, checks, source: 'finding' };
+  if (!Object.prototype.hasOwnProperty.call(own, 'verify')) {
+    return { handoff: null, hasBlock: false, checks: [], source: 'finding' };
   }
-
-  const file = await readRepoFile(input.handoffPath, BRANCH, input.repo);
-  if (!file) {
-    throw ApplicationFailure.nonRetryable(
-      `${input.handoffPath} is not in ${input.repo} at ${BRANCH}. The verifier reads a finding's checks from its generated handoff.`,
-      'HandoffMissing',
-    );
-  }
-  const verify = readHandoffVerify(file.text);
-  if (!verify.present) return { handoff: file.text, hasBlock: false, checks: [], source: 'generated' };
-  const { checks, problems } = validateVerifyBlock(verify.raw, input.origin);
+  const { checks, problems } = validateVerifyBlock(own.verify, input.origin);
   if (problems.length > 0) {
     throw ApplicationFailure.nonRetryable(
-      `The verify block in ${input.handoffPath} was refused: ${problems.join('; ')}.`,
+      `The verify block in ${input.findingPath} was refused: ${problems.join('; ')}.`,
       'VerifyBlockInvalid',
     );
   }
-  return { handoff: file.text, hasBlock: true, checks, source: 'handoff' };
+  return { handoff: null, hasBlock: true, checks, source: 'finding' };
 }
 
 export interface WriteFindingVerificationInput {
@@ -980,6 +954,8 @@ export interface StartFindingWorkflowInput {
   findingPath: string;
   indexPath: string;
   stopAfter: FindingStopAfter;
+  /** The index line's status. Absent from inputs recorded before `reopened` was started; read it as `proposed`. */
+  indexStatus?: 'proposed' | 'reopened';
 }
 
 /**
@@ -1005,16 +981,23 @@ function productionOrigin(site: string): string | undefined {
  * reconciler's own input stays `{repo}`. A site with no known origin starts at
  * `verdict`, with a log line: a lifecycle that cannot verify does not start.
  *
- * `ALLOW_DUPLICATE_FAILED_ONLY`: a finding whose workflow completed at a verdict
- * is never reopened by a stale index line, while one that failed or was
- * terminated can be started again. A retry after a start that landed returns
- * `already-started`, so the activity is safe to retry.
+ * `ALLOW_DUPLICATE_FAILED_ONLY` for a `proposed` line: a finding whose workflow
+ * completed at a verdict is never reopened by a stale index line, while one
+ * that failed or was terminated can be started again. `ALLOW_DUPLICATE` for a
+ * `reopened` line: its last run completed by writing `reopened`, so that run
+ * is history, and the new one returns the finding to the verdict gate. A
+ * retry after a start that landed returns `already-started`, so the activity
+ * is safe to retry.
+ *
+ * The line's status rides in the memo, so `steward finding list` names a
+ * reopened finding without a query per workflow.
  */
 export async function startFindingWorkflow(
   input: StartFindingWorkflowInput,
 ): Promise<'started' | 'already-started'> {
   const client = Context.current().client;
-  let args: FindingWorkflowInput = { ...input };
+  const { indexStatus = 'proposed', ...rest } = input;
+  let args: FindingWorkflowInput = { ...rest };
   if (input.stopAfter === 'resolved') {
     const origin = productionOrigin(input.site);
     if (origin) {
@@ -1029,7 +1012,8 @@ export async function startFindingWorkflow(
       workflowId: findingWorkflowId(input.site, input.key),
       taskQueue: QUEUE_FINDINGS,
       args: [args],
-      workflowIdReusePolicy: 'ALLOW_DUPLICATE_FAILED_ONLY',
+      workflowIdReusePolicy: indexStatus === 'reopened' ? 'ALLOW_DUPLICATE' : 'ALLOW_DUPLICATE_FAILED_ONLY',
+      memo: { indexStatus },
     });
     return 'started';
   } catch (err) {

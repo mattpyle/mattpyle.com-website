@@ -192,7 +192,7 @@ export function setFrontmatterVerdict(text: string, verdict: FindingVerdict): st
 // ---------------------------------------------------------------------------
 
 export interface ReconcilePlan {
-  /** `proposed` lines with no open workflow. */
+  /** `proposed` and `reopened` lines with no open workflow. */
   start: FindingsIndexLine[];
   /** `approved`/`rejected` lines whose workflow is open. */
   signal: FindingsIndexLine[];
@@ -204,13 +204,16 @@ export interface ReconcilePlan {
  * What one site's index asks for, given the IDs of the open finding workflows.
  * Pure so the reconciler's whole decision is a unit test; the workflow only
  * carries it out.
+ *
+ * A `reopened` line is a `proposed` one again (design decision 29): its fix
+ * failed on production, so it goes back to the verdict gate.
  */
 export function planReconcile(site: string, index: FindingsIndexLine[], openIds: string[]): ReconcilePlan {
   const open = new Set(openIds);
   const plan: ReconcilePlan = { start: [], signal: [], unchanged: 0 };
   for (const line of index) {
     const isOpen = open.has(findingWorkflowId(site, line.key));
-    if (line.status === 'proposed' && !isOpen) plan.start.push(line);
+    if ((line.status === 'proposed' || line.status === 'reopened') && !isOpen) plan.start.push(line);
     else if ((line.status === 'approved' || line.status === 'rejected') && isOpen) plan.signal.push(line);
     else plan.unchanged++;
   }

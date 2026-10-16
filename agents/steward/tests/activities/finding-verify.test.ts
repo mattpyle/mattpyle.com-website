@@ -92,52 +92,32 @@ async function failure(run: Promise<unknown>): Promise<ApplicationFailure> {
 // readVerifyBlock
 // ---------------------------------------------------------------------------
 
-test('a handoff with a block is read as its checks, and an empty block is a block', async () => {
-  seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK) });
-  const read = await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN });
-  assert.equal(read.hasBlock, true);
-  assert.deepEqual(read.checks, [{ url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { count: 0, of: '100/100 (Fail)' } }]);
-
-  fake!.restore();
-  seed();
-  assert.deepEqual(await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }), {
-    handoff: DEFECT_HANDOFF,
-    hasBlock: true,
-    checks: [],
-    source: 'handoff',
-  });
-});
-
-test('a handoff that predates the block is a result, not a failure', async () => {
-  const bare = DEFECT_HANDOFF.replace('---\nverify: []\n---\n\n', '');
-  seed({ handoff: bare });
-  assert.deepEqual(await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }), {
-    handoff: bare,
-    hasBlock: false,
-    checks: [],
-    source: 'generated',
-  });
-});
-
-test('a block Steward would not have written is refused, and a missing handoff too', async () => {
-  seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK.replace(ORIGIN, 'https://example.com')) });
-  const invalid = await failure(readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }));
-  assert.equal(invalid.type, 'VerifyBlockInvalid');
-  assert.equal(invalid.nonRetryable, true);
-  assert.match(invalid.message, /not the production origin/);
-
-  const missing = await failure(readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, handoffPath: 'sites/mattpyle-com/handoffs/none.md' }));
-  assert.equal(missing.type, 'HandoffMissing');
-});
-
 /** The finding with a `verify` key of its own, set after its `status`. */
 const withOwnBlock = (block: string) => FIXING.replace('status: fixing', `status: fixing\n${block}`);
 
-test("the finding's own block wins: its checks run, and the handoff is not read", async () => {
+test("a finding with no verify key has no checks, and the handoff is not read even when it has a block", async () => {
+  // The handoff holds a valid block; before decision 29 it would have run.
+  const github = seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK) });
+  assert.deepEqual(await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }), {
+    handoff: null,
+    hasBlock: false,
+    checks: [],
+    source: 'finding',
+  });
+  assert.deepEqual(github.calls, [], 'no GitHub call at all');
+});
+
+test('a missing handoff is no failure: the finding is the only source', async () => {
+  seed();
+  const read = await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: 'sites/mattpyle-com/handoffs/none.md', origin: ORIGIN });
+  assert.equal(read.hasBlock, false);
+  assert.deepEqual(read.checks, []);
+});
+
+test("the finding's own block is read as its checks", async () => {
   const two = [BLOCK, `  - url: ${ORIGIN}/scorecard/`, '    kind: status', '    expect: 200'].join('\n');
-  // The handoff's block would be refused, and the path given is not even there.
-  seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK.replace(ORIGIN, 'https://example.com')) });
-  const read = await readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, findingText: withOwnBlock(two), handoffPath: 'sites/mattpyle-com/handoffs/none.md' });
+  seed();
+  const read = await readVerifyBlock({ repo: REPO, findingPath: FINDING, findingText: withOwnBlock(two), origin: ORIGIN });
   assert.deepEqual(read, {
     handoff: null,
     hasBlock: true,
@@ -149,7 +129,7 @@ test("the finding's own block wins: its checks run, and the handoff is not read"
   });
 });
 
-test("a finding's empty block is the finder's verdict: no checks, and no fallback to the handoff", async () => {
+test("a finding's empty block is the finder's verdict: no checks, and a block, unlike no key", async () => {
   seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK) });
   assert.deepEqual(await readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, findingText: withOwnBlock('verify: []') }), {
     handoff: null,
@@ -159,7 +139,7 @@ test("a finding's empty block is the finder's verdict: no checks, and no fallbac
   });
 });
 
-test("an invalid block on the finding fails naming the finding, and never falls back to the handoff's", async () => {
+test("an invalid block on the finding fails naming the finding, and a bare key is invalid, not absent", async () => {
   seed({ handoff: DEFECT_HANDOFF.replace('verify: []', BLOCK) });
   for (const bad of [BLOCK.replace('kind: text', 'kind: grep'), 'verify:', 'verify: {url: x}']) {
     const invalid = await failure(readVerifyBlock({ ...{ repo: REPO, findingPath: FINDING, findingText: FIXING, handoffPath: HANDOFF, origin: ORIGIN }, findingText: withOwnBlock(bad) }));

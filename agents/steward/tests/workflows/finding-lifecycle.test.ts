@@ -35,9 +35,9 @@ import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, ORIGIN } from '../helpers/f
  * `findingWorkflow` started with `stopAfter: 'resolved'`, end to end on the
  * time-skipping server: the verdict, the `fix` signal or `auto_fix`, the fix
  * issue and the PR wait, the merge and deploy waits, and
- * `verifyFindingWorkflow` as a real child. Every activity is mocked. Two
- * workers, one per queue, as in production: the parent and its activities on
- * `steward-findings`, the verify child on `steward-heavy`.
+ * `verifyFindingWorkflow` as a real child. Every activity is mocked. One
+ * worker on `steward-findings`, as on the hosted container: the parent, the
+ * verify child and every activity of both (design decision 29).
  *
  * The waits are scripted per attempt, so a test reads as the sequence of polls
  * GitHub would answer. The retry intervals are the real ones (1, 5 and 2
@@ -46,7 +46,6 @@ import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, ORIGIN } from '../helpers/f
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const FINDINGS = 'steward-findings';
-const HEAVY = 'steward-heavy';
 const SITE_REPO = 'mattpyle/mattpyle.com-website';
 const PR_1 = `https://github.com/${SITE_REPO}/pull/401`;
 const PR_2 = `https://github.com/${SITE_REPO}/pull/402`;
@@ -79,6 +78,8 @@ interface Script {
   contains?: Record<string, boolean>;
   /** Whether the verify checks pass. */
   passes?: boolean;
+  /** The finding has no `verify` key. */
+  noBlock?: boolean;
 }
 
 function lifecycle(script: Script) {
@@ -162,8 +163,8 @@ function lifecycle(script: Script) {
     },
   };
 
-  // The verify child's activities.
-  const heavy = {
+  // The verify child's activities, on the same queue since decision 29.
+  const verify = {
     readFinding: async (_repo: string, path: string) => {
       calls.push('readFinding');
       return { path, text: finding, sha: 'sha-1', data: parseFrontmatter(finding).data };
@@ -174,6 +175,7 @@ function lifecycle(script: Script) {
     },
     readVerifyBlock: async () => {
       calls.push('readVerifyBlock');
+      if (script.noBlock) return { handoff: null, hasBlock: false, checks: [], source: 'finding' as const };
       return { handoff: null, hasBlock: true, checks: [CHECK], source: 'finding' as const };
     },
     runFindingChecks: async (input: RunFindingChecksInput) => {
@@ -200,8 +202,7 @@ function lifecycle(script: Script) {
   };
 
   return {
-    findings,
-    heavy,
+    findings: { ...findings, ...verify },
     calls,
     seen,
     prPolls: () => prPolls,
@@ -210,6 +211,7 @@ function lifecycle(script: Script) {
   };
 }
 
+/** One worker, as on the hosted container: no `steward-heavy` poller, so a child sent there would never run. */
 async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Promise<T>): Promise<T> {
   const findingsWorker = await Worker.create({
     connection: env.nativeConnection,
@@ -218,14 +220,7 @@ async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Pro
     taskQueue: FINDINGS,
     bundlerOptions: {},
   });
-  const heavyWorker = await Worker.create({
-    connection: env.nativeConnection,
-    workflowsPath,
-    activities: mocks.heavy,
-    taskQueue: HEAVY,
-    bundlerOptions: {},
-  });
-  return await findingsWorker.runUntil(heavyWorker.runUntil(fn()));
+  return await findingsWorker.runUntil(fn());
 }
 
 function input(id: string): FindingWorkflowInput {
@@ -264,11 +259,19 @@ test('merged, deployed and every check passes: resolved, with one execution carr
     merge: { [PR_1]: { openPolls: 3, outcome: merged(PR_1, 'm1') } },
     deploys: [[{ id: 1, sha: 'old', state: 'success' }], [{ id: 2, sha: 'm1', state: 'success' }]],
   });
+  let childQueues: (string | null | undefined)[] = [];
   const result = (await withWorkers(mocks, async () => {
     const handle = await startApproved('resolved');
-    return handle.result();
+    const done = await handle.result();
+    const history = await handle.fetchHistory();
+    childQueues = (history.events ?? [])
+      .map((e) => e.startChildWorkflowExecutionInitiatedEventAttributes)
+      .filter(Boolean)
+      .map((child) => child?.taskQueue?.name);
+    return done;
   })) as FindingWorkflowResult;
 
+  assert.deepEqual(childQueues, [FINDINGS], 'the verify child starts on steward-findings');
   assert.equal(result.outcome, 'resolved');
   assert.equal(result.prUrl, PR_1);
   assert.equal(result.mergeSha, 'm1');
@@ -358,6 +361,21 @@ test('merged and deployed, but a check fails on production: reopened with both v
   const row = mocks.seen.verification?.verification.rows[0];
   assert.equal(row?.expected, 'contains "1 axe violation (Fail)"');
   assert.equal(row?.measured, '0 occurrences');
+});
+
+test('merged and deployed, but the finding has no verify block: unverifiable in the outcome and the note, not verify-failed', async () => {
+  const mocks = lifecycle({
+    merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
+    deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
+    noBlock: true,
+  });
+  const result = await withWorkers(mocks, async () => (await startApproved('unverifiable')).result());
+
+  assert.equal(result.outcome, 'unverifiable');
+  assert.match(result.note ?? '', /unverifiable: the finding has no verify block, so no check ran/);
+  assert.equal(result.liveSha, 'm1');
+  assert.ok(!mocks.calls.includes('runFindingChecks'));
+  assert.ok(!mocks.calls.some((c) => c.startsWith('writeFindingVerification')), 'nothing is written');
 });
 
 test('a PR closed unmerged writes approved back, and the next fix closes the first issue naming the PR and opens a second', async () => {

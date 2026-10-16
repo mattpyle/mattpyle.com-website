@@ -68,7 +68,7 @@ test('the verifier takes fixing findings and names why it refuses any other', ()
   assert.match(verifyRefusal({})!, /unset/);
 });
 
-test('resolved and reopened are statuses the index parser reads and the reconciler leaves alone', () => {
+test('resolved and reopened are statuses the index parser reads; the reconciler leaves resolved alone and starts a reopened one', () => {
   const index = parseFindingsIndex(
     ['fixed-one | resolved | defect | s | Title | Approved.', 'back-one | reopened | defect | s | Title | Approved.'].join('\n'),
   );
@@ -76,10 +76,15 @@ test('resolved and reopened are statuses the index parser reads and the reconcil
     ['fixed-one', 'resolved'],
     ['back-one', 'reopened'],
   ]);
-  // With a workflow open for each or with none, neither is started or signalled.
-  for (const open of [[], ['finding/mattpyle-com/fixed-one', 'finding/mattpyle-com/back-one']]) {
-    assert.deepEqual(planReconcile('mattpyle-com', index, open), { start: [], signal: [], unchanged: 2 });
-  }
+  // With a workflow open for each, neither is started or signalled.
+  assert.deepEqual(
+    planReconcile('mattpyle-com', index, ['finding/mattpyle-com/fixed-one', 'finding/mattpyle-com/back-one']),
+    { start: [], signal: [], unchanged: 2 },
+  );
+  // With none, the reopened one goes back to the gate (design decision 29); resolved stays.
+  const none = planReconcile('mattpyle-com', index, []);
+  assert.deepEqual(none.start.map((line) => line.key), ['back-one']);
+  assert.equal(none.unchanged, 1);
   assert.equal(
     setIndexStatus('back-one | fixing | defect | s | Title | Approved.', 'back-one', 'reopened'),
     'back-one | reopened | defect | s | Title | Approved.',

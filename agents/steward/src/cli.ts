@@ -22,7 +22,6 @@ import {
   FINDINGS_DEFAULT_SITE,
   QUEUE_AUDIT,
   QUEUE_FINDINGS,
-  QUEUE_HEAVY,
   QUEUE_LIGHT,
   PROD_ORIGIN,
   temporalConnectionOptions,
@@ -73,7 +72,6 @@ import {
 } from './lib/scorecard-schedule.js';
 import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 import {
-  findingHandoffPath,
   findingPath,
   findingWorkflowId,
   findingsIndexPath,
@@ -1803,7 +1801,9 @@ finding
           timeStyle: 'short',
           hour12: false,
         }).format(row.startTime);
-        console.log(`  ${row.workflowId}  since ${since}`);
+        // The reconciler's start puts the index line's status in the memo.
+        const reopened = row.memo?.indexStatus === 'reopened' ? '  reopened' : '';
+        console.log(`  ${row.workflowId}  since ${since}${reopened}`);
       }
       console.log('');
     } finally {
@@ -2067,13 +2067,12 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
     repo: ARGUS_REPO,
     findingPath: findingPath(site, key),
     indexPath: findingsIndexPath(site),
-    handoffPath: findingHandoffPath(site, key),
     origin: PROD_ORIGIN,
     at,
   };
   const workflowId = verifyWorkflowId(site, key, at);
   const started = Date.now();
-  const handle = await c.workflow.start(verifyFindingWorkflow, { workflowId, taskQueue: QUEUE_HEAVY, args: [input] });
+  const handle = await c.workflow.start(verifyFindingWorkflow, { workflowId, taskQueue: QUEUE_FINDINGS, args: [input] });
   console.log(`\n  verifying ${key}`);
   console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
 
@@ -2099,11 +2098,6 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
 
   console.log('');
   console.log(`  checks from: ${verifySourceLabel(verified.source)}`);
-  if (verified.generated) {
-    console.log(
-      `  verify block: generated, commit ${verified.handoffCommitSha ?? 'none'}  (total_cost_usd ${verified.generateCostUsd ?? 'unknown'}, at API rates)`,
-    );
-  }
   for (const [i, check] of verified.block.entries()) {
     const row = verified.checks.find((r) => r.n === i + 1);
     console.log(`  check ${i + 1}: ${check.kind} ${check.url}`);
@@ -2115,7 +2109,8 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
     }
   }
   if (verified.outcome === 'unverifiable') {
-    console.log(`  ${BOLD}unverifiable${RESET}: the ${verified.source === 'finding' ? "finding's" : "handoff's"} verify block is empty. Nothing was written.`);
+    const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
+    console.log(`  ${BOLD}unverifiable${RESET}: the finding ${why}. Nothing was written.`);
   } else {
     const colour = verified.outcome === 'resolved' ? GREEN : RED;
     console.log(
@@ -2132,7 +2127,7 @@ finding
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .option('--all-fixing', "every `fixing` finding of the site, one at a time")
   .description(
-    "Verify a fixed finding on production: run its handoff's checks and write resolved or reopened. Needs `steward up`",
+    "Verify a fixed finding on production: run the finding's own checks and write resolved or reopened. Runs on the hosted worker",
   )
   .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean }) => {
     if (Boolean(key) === Boolean(opts.allFixing)) fail('Give one finding key, or --all-fixing.');
