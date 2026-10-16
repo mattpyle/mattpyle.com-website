@@ -319,3 +319,26 @@ test('a fix child recorded before the diff review replays without it', { timeout
     'fix/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the issue path: approved,
+ * one `fix`, a `fixFindingWorkflow` child that opened a PR, the PR closed
+ * unmerged, and the run parked back at `waiting-fix`. New code must replay
+ * that attempt as a child, which is what the `fixer-action-adapter` patch is
+ * for, and must not read `auto_fix` on a run already past its verdict, which
+ * is the `fixer-auto-fix` patch.
+ *
+ * Recorded from the pre-change code (2a9ae4d) against the time-skipping
+ * server, with mocked activities and the stub child, so it holds no real
+ * finding text.
+ */
+const findingChildHistoryPath = fileURLToPath(new URL('../fixtures/histories/finding-child-fix-returned.bin', import.meta.url));
+
+test('a lifecycle run whose first fix was a child replays that attempt as a child', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingChildHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});
