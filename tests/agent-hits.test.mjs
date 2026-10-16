@@ -534,7 +534,12 @@ test('a bad event class fails inside recordHit rather than reaching the caller',
 test('the middleware counts an ordinary page serve, and only when it serves one', () => {
   // The count sits on the next() branch of slashRedirectOrNext, never beside the 308: a redirected
   // request was not served a page, and the canonical follow-up re-enters and is counted normally.
-  assert.match(middlewareSource, /if \(isPage\) countHit\('page', url\.pathname, request\);\s*\n\s*return next\(\);/);
+  // next() may carry a headers argument (the entry-page Link header), so lines may sit between the
+  // count and the return, but the count must reach a next() before any redirect code begins.
+  assert.match(
+    middlewareSource,
+    /if \(isPage\) countHit\('page', url\.pathname, request\);(?:(?!const location)[\s\S])*?return next\(/,
+  );
   // isPage is false for a path with no markdown sibling, which is every `.md` URL — so the proxy
   // fetch below cannot count its own internal request as a second page view.
   assert.match(middlewareSource, /slashRedirectOrNext\(url, request, Boolean\(sibling\)\)/);
