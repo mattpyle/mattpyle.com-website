@@ -77,7 +77,6 @@ import {
   findingPath,
   findingWorkflowId,
   findingsIndexPath,
-  fixWorkflowId,
   isFindingSlug,
   parsePrUrl,
   verifySourceLabel,
@@ -1832,7 +1831,13 @@ finding
       console.log(`  ${id}`);
       console.log(`  status: ${state.status}`);
       if (state.step) console.log(`  step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`);
-      if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
+      if (state.step === 'fixing' && state.issueUrl) {
+        console.log(`  issue: ${state.issueUrl}  (waiting for the PR)`);
+        if (state.prUrl) console.log(`  last PR: ${state.prUrl}`);
+      } else {
+        if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
+        if (state.issueUrl) console.log(`  issue: ${state.issueUrl}`);
+      }
       if (state.lastFixError) console.log(`  last fix failed: ${state.lastFixError}`);
       if (state.verdict) {
         console.log(`  verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
@@ -1915,7 +1920,7 @@ finding
   .argument('<key>', 'finding key', parseFindingSlug('key'))
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .description(
-    'Fix an approved defect under its lifecycle workflow: the fix child generates a handoff, runs Claude Code and opens one PR. Needs `steward up`',
+    'Fix an approved defect under its lifecycle workflow: it opens a GitHub issue, and claude-code-action answers with one PR. For sites without auto_fix, and for a retry',
   )
   .action(async (key: string, opts: { site: string }) => {
     const c = await client();
@@ -1950,48 +1955,21 @@ finding
         throw err;
       }
       const lifecycleId = requested.lifecycle.workflowId;
-      console.log(`  It runs ${fixWorkflowId(opts.site, key)} as a child, then waits for the merge, the deploy and the verify.`);
+      console.log('  It opens an issue for claude-code-action, then waits for its PR, the merge, the deploy and the verify.');
       console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(lifecycleId)}\n`);
 
-      // The child's result is the answer; its query only says which step a run
-      // that takes minutes has reached. Ctrl-C here stops the watching, not the fix.
-      const fixed = await followFix(c, opts.site, key, requested, (step) => {
-        console.log(`  ${paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(5), DIM)}  ${step}`);
-      });
-
-      const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+      // The run's state is the answer. Ctrl-C here stops the watching, not the fix.
+      const elapsed = () => paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(6), DIM);
+      let fixed;
+      try {
+        fixed = await followFix(requested, (issueUrl) => console.log(`  ${elapsed()}  issue ${issueUrl}`));
+      } catch (err) {
+        await c.connection.close();
+        fail(err instanceof Error ? err.message : String(err));
+      }
+      console.log(`  ${elapsed()}  PR ${fixed.prUrl}`);
       console.log('');
-      console.log(`  PR: ${fixed.prUrl}${fixed.draft ? '  (draft: the PR body says why)' : ''}`);
-      if (fixed.verify) {
-        const v = fixed.verify;
-        console.log(`  site checks: ${v.block.length === 0 ? 'none, unverifiable by checks' : `${v.block.length} from the ${v.source}${v.regenerated ? ', written twice' : ''}`}`);
-        for (const [i] of v.block.entries()) {
-          const prod = v.production?.find((row) => row.n === i + 1);
-          const prev = v.preview?.find((row) => row.n === i + 1);
-          console.log(
-            `    ${i + 1}: production ${prod ? `${prod.pass ? 'PASS' : 'fail'} (${prod.measured})` : 'not measured'}, preview ${prev ? `${prev.pass ? 'pass' : 'FAIL'} (${prev.measured})` : 'not measured'}`,
-          );
-        }
-        if (v.productionNote) console.log(`    production: ${v.productionNote}`);
-        if (v.previewNote) console.log(`    preview: ${v.previewNote}`);
-      }
-      console.log(`  commit: ${fixed.commitSha}  (${fixed.filesChanged.length} files)`);
-      console.log(`  finding: status fixing, commit ${fixed.findingCommitSha ?? 'none (it already said so)'}`);
-      console.log(
-        `  wall time: ${seconds(Date.now() - started)}  (Claude Code ${seconds(fixed.run.timingsMs.claude)}, exit ${fixed.run.exitCode})`,
-      );
-      console.log(`  turns: ${fixed.run.numTurns ?? 'unknown'}   model: ${fixed.run.model ?? 'unknown'}`);
-      for (const check of fixed.run.checks) {
-        console.log(`  check ${check.n}: ${check.status}${check.command ? `  ${check.command}` : ''}`);
-      }
-      console.log(
-        `  total_cost_usd: ${fixed.run.costUsd ?? 'unknown'}  (handoff ${fixed.run.handoffCostUsd ?? 'unknown'}), at API rates`,
-      );
-      if (fixed.run.permissionDenials.length > 0) {
-        console.log(`  refused tool calls: ${fixed.run.permissionDenials.length}`);
-        for (const denial of fixed.run.permissionDenials) console.log(`    ${denial}`);
-      }
-      console.log(`  ${lifecycleId} now waits for the PR. \`steward finding status ${key}\` shows the step.`);
+      console.log(`  ${lifecycleId} now waits for the merge. \`steward finding status ${key}\` shows the step.`);
       console.log('');
     } finally {
       await c.connection.close();

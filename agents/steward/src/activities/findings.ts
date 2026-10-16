@@ -1,6 +1,6 @@
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
-import { FINDINGS_DEFAULT_SITE, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
+import { FINDINGS_DEFAULT_SITE, GITHUB_REPO, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
 import { gh } from '../lib/github.js';
@@ -10,9 +10,17 @@ import {
   findingHandoffPath,
   findingWorkflowId,
   fixBranch,
+  fixIssueBody,
+  fixIssueClosingComment,
+  fixIssueMarker,
+  fixIssueTitle,
+  fixPrBranchPrefix,
+  fixRefusal,
   isFindingSlug,
   liveDeployment,
+  parseFindingBody,
   parseFindingsIndex,
+  parseIssueUrl,
   parsePrUrl,
   findingsIndexPath,
   setFindingReturned,
@@ -21,6 +29,7 @@ import {
   setFrontmatterVerdict,
   setIndexStatus,
   setIndexVerdict,
+  siteConfigPath,
   type FindingVerdictSource,
   type FindingVerdictStatus,
   type FindingsIndexLine,
@@ -40,7 +49,9 @@ import type { FindingStopAfter, FindingWorkflowInput } from '../workflows/findin
  * property that lets the hosted worker register them (`worker-hosted.ts`). The
  * repository is a parameter on every call, never read from config here: it rides
  * in the workflow input (design rule 10), so a workflow started against one
- * repository keeps writing to it.
+ * repository keeps writing to it. The one exception is the site repository
+ * `openFixIssue` writes to, resolved like the production origin and returned
+ * in its result, so the history holds it from there on.
  *
  * All reads are at `main`, the findings repository's only branch. Argus pushes
  * there directly and so does the verdict write.
@@ -381,6 +392,177 @@ export async function awaitFixPrMerge(prUrl: string): Promise<FixPrOutcome> {
     return { prUrl, state: 'closed', mergeSha: null, at: (data.closed_at as string | null) ?? null };
   }
   throw ApplicationFailure.retryable(`${prUrl} is still open.`, 'PrStillOpen');
+}
+
+/**
+ * The site repository a site's fix issues go to, or undefined for a site this
+ * worker does not know. One site today, as {@link productionOrigin} says.
+ */
+function siteRepository(site: string): string | undefined {
+  return site === FINDINGS_DEFAULT_SITE ? GITHUB_REPO : undefined;
+}
+
+/**
+ * Whether a site's `config.yaml` says `auto_fix: true` (design decision 28).
+ * Only the literal `true` counts. Parsed through the frontmatter parser,
+ * Steward's one YAML reader, by wrapping the file as a frontmatter block.
+ */
+export function siteAutoFix(configText: string): boolean {
+  const data = parseFrontmatter(`---\n${configText}\n---\n`).data as Record<string, unknown>;
+  return data.auto_fix === true;
+}
+
+export interface ReadSiteAutoFixInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+}
+
+/**
+ * The site's `auto_fix` flag, read once when an approved verdict lands. A site
+ * with no `config.yaml` has no flag. The answer is an activity result, so the
+ * workflow's branch on it replays from history.
+ */
+export async function readSiteAutoFix(input: ReadSiteAutoFixInput): Promise<boolean> {
+  const file = await readRepoFile(siteConfigPath(input.site), BRANCH, input.repo);
+  return file ? siteAutoFix(file.text) : false;
+}
+
+export interface OpenFixIssueInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+  key: string;
+  /** `sites/<site>/findings/<key>.md` */
+  findingPath: string;
+  /**
+   * The previous attempt's issue and why it ended, closed with a comment saying
+   * so before the new one opens. Null on a first attempt.
+   */
+  supersedes?: { url: string; reason: string } | null;
+}
+
+export interface FixIssue {
+  /** `owner/name` of the site repository the issue is in. */
+  repo: string;
+  number: number;
+  url: string;
+  /** True when an open issue for this finding already existed and is returned as it is. */
+  reused: boolean;
+}
+
+/** The open issue in `repo` whose body carries `marker`, or undefined. Pull requests are skipped. */
+async function findOpenIssue(repo: string, marker: string): Promise<{ number: number; html_url: string } | undefined> {
+  for (let page = 1; ; page++) {
+    const items = (await gh(`/repos/${repo}/issues?state=open&per_page=100&page=${page}`)) as {
+      number: number;
+      html_url: string;
+      body?: string | null;
+      pull_request?: unknown;
+    }[];
+    const hit = items.find((item) => !item.pull_request && (item.body ?? '').includes(marker));
+    if (hit) return hit;
+    if (items.length < 100) return undefined;
+  }
+}
+
+/**
+ * Hands an approved finding to `claude-code-action` (design decisions 26 and
+ * 27): one issue in the site repository, the finding file as its body under
+ * the spike's six-line header, titled with the finding's H1.
+ *
+ * **The gate first.** {@link fixRefusal}, the rule the custom fixer ran: an
+ * approved defect with a cause and a measure. A finding that fails it is
+ * `FindingNotFixable` and no issue opens.
+ *
+ * **Idempotent on the finding key.** The body ends with a hidden marker naming
+ * the finding, and an open issue that carries it is returned instead of a
+ * second one. Only open issues count (the card's rule 2), so after
+ * `supersedes` closes the last attempt's issue a new one opens.
+ *
+ * Created with the worker's `GITHUB_TOKEN`, a person's token, so the Action's
+ * write-access and human-actor checks pass (the card's rule 1).
+ */
+export async function openFixIssue(input: OpenFixIssueInput): Promise<FixIssue> {
+  const siteRepo = siteRepository(input.site);
+  if (!siteRepo) {
+    throw ApplicationFailure.nonRetryable(`Steward knows no site repository for ${input.site}.`, 'UnknownSite');
+  }
+  const finding = await readFinding(input.repo, input.findingPath);
+  const refusal = fixRefusal(finding.data, parseFindingBody(finding.text));
+  if (refusal) {
+    throw ApplicationFailure.nonRetryable(`${input.key} does not go to the fixer: ${refusal}.`, 'FindingNotFixable');
+  }
+
+  if (input.supersedes) {
+    const old = parseIssueUrl(input.supersedes.url);
+    if (!old) throw ApplicationFailure.nonRetryable(`${input.supersedes.url} is not an issue URL.`, 'FindingMalformed');
+    const current = await gh(`/repos/${old.repo}/issues/${old.number}`);
+    if (current.state === 'open') {
+      await gh(`/repos/${old.repo}/issues/${old.number}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ body: fixIssueClosingComment(input.supersedes.reason) }),
+      });
+      await gh(`/repos/${old.repo}/issues/${old.number}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }),
+      });
+      log.info({ activity: 'openFixIssue', key: input.key, closed: input.supersedes.url }, 'previous fix issue closed');
+    }
+  }
+
+  const marker = fixIssueMarker(input.site, input.key);
+  const open = await findOpenIssue(siteRepo, marker);
+  if (open) {
+    log.info({ activity: 'openFixIssue', key: input.key, issue: open.html_url }, 'fix issue already open');
+    return { repo: siteRepo, number: open.number, url: open.html_url, reused: true };
+  }
+  const created = await gh(`/repos/${siteRepo}/issues`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: fixIssueTitle(finding.text),
+      body: fixIssueBody(input.site, input.key, finding.text, finding.data.verdict_reason),
+    }),
+  });
+  log.info({ activity: 'openFixIssue', key: input.key, issue: created.html_url }, 'fix issue opened');
+  return { repo: siteRepo, number: created.number as number, url: created.html_url as string, reused: false };
+}
+
+export interface AwaitFixPrInput {
+  /** `owner/name` of the site repository, the issue's. */
+  repo: string;
+  issueNumber: number;
+}
+
+export interface FixPr {
+  prUrl: string;
+  /** The PR's head branch, `claude/issue-<n>-…`. */
+  branch: string;
+}
+
+/**
+ * The PR wait: one read of the site repository's open PRs that fails until one
+ * has a head branch starting `claude/issue-<n>-`, the branch the Action cuts
+ * for issue `n`. The branch prefix is the match, not the PR body's `Fixes #n`
+ * (the card's rule 3).
+ *
+ * The same infrequent-polling pattern as {@link awaitFixPrMerge}: `FixPrNotOpen`
+ * is the retryable "not yet", and the workflow's schedule-to-close bound is the
+ * 60-minute give-up, which reaches the workflow as a timeout. Each attempt is
+ * one short read, so it needs no heartbeat.
+ */
+export async function awaitFixPr(input: AwaitFixPrInput): Promise<FixPr> {
+  const prefix = fixPrBranchPrefix(input.issueNumber);
+  const pulls = (await gh(`/repos/${input.repo}/pulls?state=open&per_page=100`)) as {
+    html_url: string;
+    head?: { ref?: string };
+  }[];
+  const match = pulls.find((pr) => pr.head?.ref?.startsWith(prefix));
+  if (!match) {
+    throw ApplicationFailure.retryable(`No open PR in ${input.repo} from a ${prefix} branch yet.`, 'FixPrNotOpen');
+  }
+  log.info({ activity: 'awaitFixPr', issue: input.issueNumber, pr: match.html_url }, 'the fix PR is open');
+  return { prUrl: match.html_url, branch: match.head?.ref as string };
 }
 
 export interface AwaitProductionDeployInput {

@@ -1,5 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
+import type { FixIssue } from '../activities/findings.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
 // same objects the reconciler and the CLI hold.
 import {
@@ -29,12 +30,14 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * - `'verdict'`: it completes with the verdict, as every execution started
  *   before the lifecycle shipped does. That path issues exactly the commands it
  *   always did, so those histories replay unchanged.
- * - `'resolved'`: after an `approved` verdict it waits for the `fix` signal
- *   (decision 2: not on approve, while the fix needs the laptop). Then the fix
- *   runs as a child, `fixFindingWorkflow` as it is, on the heavy queue; the
- *   merge wait and the deploy wait poll from here, on `steward-findings`; and
- *   `verifyFindingWorkflow` runs as a child. Its outcome is this run's result.
- *   A rejected verdict ends the run as `'verdict'` does.
+ * - `'resolved'`: after an `approved` verdict it waits for the `fix` signal,
+ *   or, when the site's `config.yaml` says `auto_fix: true`, goes straight on
+ *   (decision 28). The fix is a GitHub issue that `claude-code-action` answers
+ *   with a PR (decisions 26 and 27): `openFixIssue`, then `awaitFixPr`, then
+ *   `writeFindingFix`, all on `steward-findings`. The merge wait and the
+ *   deploy wait poll from here too, and `verifyFindingWorkflow` runs as a
+ *   child. Its outcome is this run's result. A rejected verdict ends the run
+ *   as `'verdict'` does.
  *
  * **What rides where** (design rule 10). The repository, the paths, the branch,
  * the production origin and the stop point are in the input, so an open
@@ -49,14 +52,29 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * which; `steward finding verify` closes it by hand.
  *
  * **A PR closed unmerged** writes `status: approved` back with a note, and the
- * run waits for the next `fix`. So does a fix child that fails: the finding is
- * still approved, and a second `fix` is the retry.
+ * run waits for the next `fix`. So does a fix that fails, and an issue with no
+ * PR after 60 minutes: the finding is still approved, and a second `fix` is the
+ * retry. The retry closes the last attempt's issue with a comment saying why,
+ * and opens a new one. `auto_fix` covers the first attempt only.
+ *
+ * **Versioned with `patched`.** A run whose history started a
+ * `fixFindingWorkflow` child replays that attempt as a child: it has no
+ * {@link ACTION_ADAPTER_PATCH} marker there. Its next attempt, and every
+ * attempt of a run parked at `waiting-fix` before this shipped, takes the
+ * issue. A run already past its verdict has no {@link AUTO_FIX_PATCH} marker,
+ * so it never reads the flag and waits for `fix` as it did.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
 // scorecard-audit.ts gives: config.ts touches `node:path` and `process.env`.
 const QUEUE_FINDINGS = 'steward-findings';
 const QUEUE_HEAVY = 'steward-heavy';
+
+/** The `patched` marker of the issue path in place of the fix child (decision 26). */
+export const ACTION_ADAPTER_PATCH = 'fixer-action-adapter';
+
+/** The `patched` marker of the `auto_fix` read after an approved verdict (decision 28). */
+export const AUTO_FIX_PATCH = 'fixer-auto-fix';
 
 /** The GitHub deployment environment Vercel's integration posts production to. */
 const PRODUCTION_ENVIRONMENT = 'Production';
@@ -135,7 +153,11 @@ export interface FindingState {
   stopAfter?: FindingStopAfter;
   step?: FindingStep;
   prUrl?: string | null;
-  /** Why the last fix child failed, while the run waits for the next `fix`. */
+  /** The fix issue of the current or last attempt. Absent from a worker older than the issue path. */
+  issueUrl?: string | null;
+  /** How many fixes have started, so a watcher tells its own attempt from an earlier one. */
+  fixAttempts?: number;
+  /** Why the last fix failed, while the run waits for the next `fix`. */
   lastFixError?: string | null;
 }
 
@@ -158,14 +180,36 @@ const GITHUB_PERMANENT = ['AuthError', 'NotFound', 'UnprocessableRequest'];
  * GitHub answers with 409 and the next attempt resolves from a fresh read. The
  * rest are permanent and named so they fail on the first attempt.
  */
-const writing = wf.proxyActivities<Pick<typeof activities, 'writeFindingVerdict' | 'writeFindingReturned'>>({
+const writing = wf.proxyActivities<
+  Pick<typeof activities, 'writeFindingVerdict' | 'writeFindingReturned' | 'writeFindingFix' | 'openFixIssue' | 'readSiteAutoFix'>
+>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
   retry: {
     maximumAttempts: 5,
     initialInterval: '2 seconds',
     backoffCoefficient: 2,
-    nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMissing', 'FindingMalformed', 'FindingMoved'],
+    nonRetryableErrorTypes: [
+      ...GITHUB_PERMANENT,
+      'FindingMissing',
+      'FindingMalformed',
+      'FindingMoved',
+      'FindingNotFixable',
+      'UnknownSite',
+    ],
+  },
+});
+
+// The PR wait: every minute for up to 60. The Action took minutes in the
+// spike, so an hour with no PR is a run that is not coming.
+const awaitingPr = wf.proxyActivities<Pick<typeof activities, 'awaitFixPr'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  scheduleToCloseTimeout: '60 minutes',
+  retry: {
+    initialInterval: '1 minute',
+    backoffCoefficient: 1,
+    nonRetryableErrorTypes: GITHUB_PERMANENT,
   },
 });
 
@@ -253,6 +297,8 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     stopAfter: input.stopAfter,
     step: 'waiting-verdict',
     prUrl: null,
+    issueUrl: null,
+    fixAttempts: 0,
     lastFixError: null,
   };
 
@@ -342,35 +388,75 @@ async function lifecycle(
     return { ...base, outcome, note, prUrl: state.prUrl ?? null, fixAttempts, ...extra };
   };
 
+  // Read once, at the verdict: the flag the site had when the finding was approved.
+  let autoFix = false;
+  if (wf.patched(AUTO_FIX_PATCH)) {
+    autoFix = await writing.readSiteAutoFix({ repo: input.repo, site: input.site });
+  }
+
+  // The last attempt's issue, and why it ended: the next attempt closes it with that.
+  let lastIssue: { url: string; reason: string } | null = null;
+
   for (;;) {
     state.step = 'waiting-fix';
-    await wf.condition(() => fix.requested);
+    if (!(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
     fix.requested = false;
     fixAttempts++;
+    state.fixAttempts = fixAttempts;
 
     state.step = 'fixing';
     let prUrl: string;
     try {
-      const fixed = await wf.executeChild(fixFindingWorkflow, {
-        workflowId: fixWorkflowId(input.site, input.key),
-        taskQueue: QUEUE_HEAVY,
-        args: [
-          {
-            site: input.site,
-            key: input.key,
-            repo: input.repo,
-            findingPath: input.findingPath,
-            indexPath: input.indexPath,
-            handoffPath: input.handoffPath,
-            branch: input.branch,
-            stopAfter: 'pr',
-          },
-        ],
-      });
-      prUrl = fixed.prUrl;
+      if (wf.patched(ACTION_ADAPTER_PATCH)) {
+        const issue: FixIssue = await writing.openFixIssue({
+          repo: input.repo,
+          site: input.site,
+          key: input.key,
+          findingPath: input.findingPath,
+          supersedes: lastIssue,
+        });
+        state.issueUrl = issue.url;
+        lastIssue = { url: issue.url, reason: '' };
+        try {
+          prUrl = (await awaitingPr.awaitFixPr({ repo: issue.repo, issueNumber: issue.number })).prUrl;
+        } catch (err) {
+          if (isTimeout(err)) throw new Error(`No PR from ${issue.url} within 60 minutes.`);
+          throw err;
+        }
+        // The custom fixer wrote this from inside its child; the Action cannot.
+        await writing.writeFindingFix({
+          repo: input.repo,
+          site: input.site,
+          key: input.key,
+          findingPath: input.findingPath,
+          indexPath: input.indexPath,
+          prUrl,
+        });
+        // From here the only way back to the fix wait is the PR closing unmerged.
+        lastIssue.reason = `${prUrl} closed unmerged`;
+      } else {
+        const fixed = await wf.executeChild(fixFindingWorkflow, {
+          workflowId: fixWorkflowId(input.site, input.key),
+          taskQueue: QUEUE_HEAVY,
+          args: [
+            {
+              site: input.site,
+              key: input.key,
+              repo: input.repo,
+              findingPath: input.findingPath,
+              indexPath: input.indexPath,
+              handoffPath: input.handoffPath,
+              branch: input.branch,
+              stopAfter: 'pr',
+            },
+          ],
+        });
+        prUrl = fixed.prUrl;
+      }
     } catch (err) {
       if (wf.isCancellation(err)) throw err;
       state.lastFixError = describeError(err);
+      if (lastIssue && !lastIssue.reason) lastIssue.reason = state.lastFixError;
       wf.log.warn('the fix failed; waiting for the next fix signal', { key: input.key, error: state.lastFixError });
       continue;
     }

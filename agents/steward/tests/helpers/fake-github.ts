@@ -34,6 +34,15 @@ export interface FakeGitHub {
   branches: Map<string, Map<string, FakeRepoFile>>;
   /** Every PR opened, in order. */
   pulls: Array<{ number: number; head: string; base: string; title: string; body: string; draft: boolean }>;
+  /** Every issue opened, in order, numbered from 101. */
+  issues: Array<{
+    number: number;
+    title: string;
+    body: string;
+    state: 'open' | 'closed';
+    stateReason: string | null;
+    comments: string[];
+  }>;
   /** Every request, as `METHOD /path`, for asserting call shape and count. */
   calls: string[];
   /** The `owner/name` each request in `calls` addressed, index for index. */
@@ -93,6 +102,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   branches.set(DEFAULT_BRANCH, base);
 
   const pulls: FakeGitHub['pulls'] = [];
+  const issues: FakeGitHub['issues'] = [];
   const calls: string[] = [];
   const repos: string[] = [];
 
@@ -195,12 +205,47 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       return response(200, { commit: { sha: `commit-${shaOf(text)}` }, content: { sha: shaOf(text) } });
     }
 
-    // GET /pulls?head=
+    // GET /pulls?head=, or with no head every PR: the fix-PR wait's list.
     if (method === 'GET' && route === '/pulls') {
-      const head = url.searchParams.get('head') ?? '';
+      const head = url.searchParams.get('head');
+      if (head === null) {
+        return response(200, pulls.map((p) => ({ number: p.number, html_url: prUrl(p.number), head: { ref: p.head } })));
+      }
       const branch = head.split(':')[1] ?? '';
       const open = pulls.filter((p) => p.head === branch);
       return response(200, open.map((p) => ({ number: p.number, html_url: prUrl(p.number) })));
+    }
+
+    // GET /issues?state=open: open issues, and every PR as GitHub lists them,
+    // with `pull_request` set. One page.
+    if (method === 'GET' && route === '/issues') {
+      if (Number(url.searchParams.get('page') ?? '1') > 1) return response(200, []);
+      return response(200, [
+        ...pulls.map((p) => ({ number: p.number, html_url: prUrl(p.number), body: p.body, pull_request: {} })),
+        ...issues.filter((i) => i.state === 'open').map((i) => ({ number: i.number, html_url: issueUrl(i.number), body: i.body })),
+      ]);
+    }
+
+    if (method === 'POST' && route === '/issues') {
+      const number = 100 + issues.length + 1;
+      issues.push({ number, title: String(body.title), body: String(body.body), state: 'open', stateReason: null, comments: [] });
+      return response(201, { number, html_url: issueUrl(number) });
+    }
+
+    const issueRoute = /^\/issues\/(\d+)(\/comments)?$/.exec(route);
+    if (issueRoute) {
+      const issue = issues.find((i) => i.number === Number(issueRoute[1]));
+      if (!issue) return response(404, { message: 'Not Found' });
+      if (method === 'GET' && !issueRoute[2]) return response(200, { number: issue.number, state: issue.state });
+      if (method === 'POST' && issueRoute[2]) {
+        issue.comments.push(String(body.body));
+        return response(201, {});
+      }
+      if (method === 'PATCH' && !issueRoute[2]) {
+        issue.state = body.state === 'closed' ? 'closed' : issue.state;
+        issue.stateReason = body.state_reason ?? null;
+        return response(200, { number: issue.number, state: issue.state });
+      }
     }
 
     if (method === 'POST' && route === '/pulls') {
@@ -251,6 +296,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   return {
     branches,
     pulls,
+    issues,
     calls,
     repos,
     file: (branch, path) => branches.get(branch)?.get(path),
@@ -269,4 +315,8 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
 
 function prUrl(number: number): string {
   return `https://github.com/mattpyle/mattpyle.com-website/pull/${number}`;
+}
+
+function issueUrl(number: number): string {
+  return `https://github.com/mattpyle/mattpyle.com-website/issues/${number}`;
 }
