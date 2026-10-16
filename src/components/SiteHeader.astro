@@ -144,6 +144,32 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
   </div>
 </header>
 
+<script>
+  // A native <details> only closes from its own summary, so the "more" panel
+  // would stay parked over the page. Close it on outside tap, scroll, focus
+  // leaving it, and Escape (returning focus to the summary).
+  const more = document.querySelector<HTMLDetailsElement>('.nav-more');
+  if (more) {
+    const close = () => { more.open = false; };
+    document.addEventListener('click', (e) => {
+      if (more.open && !more.contains(e.target as Node)) close();
+    });
+    window.addEventListener('scroll', () => { if (more.open) close(); }, { passive: true });
+    more.addEventListener('focusout', (e) => {
+      // A null relatedTarget is a tap on a non-focusable spot (the outside-click
+      // handler covers it); closing there would swallow taps on the panel links.
+      const next = e.relatedTarget as Node | null;
+      if (more.open && next && !more.contains(next)) close();
+    });
+    more.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && more.open) {
+        close();
+        more.querySelector('summary')?.focus();
+      }
+    });
+  }
+</script>
+
 <style>
   [data-module="site-header"] {
     position: sticky;
