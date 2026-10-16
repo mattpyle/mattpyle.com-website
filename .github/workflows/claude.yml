@@ -18,6 +18,7 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: read
@@ -30,6 +31,20 @@ jobs:
         with:
           fetch-depth: 1
 
+      # The same preparation as the "Site tests & astro check" job in ci.yml, so the
+      # checks Claude runs before it pushes are the checks CI runs after.
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate content collection types
+        run: npx astro sync
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -40,11 +55,8 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
-
+          # Claude may run the repository's own checks and open the PR itself. Nothing else
+          # on the shell: the allowlist is the fence, as it is for the Steward fixer.
+          claude_args: |
+            --allowedTools "Bash(npm test:*),Bash(npm run check:*),Bash(gh pr create:*)"
+            --append-system-prompt "Before you push, run npm test and npm run check and leave both passing. When the fix is pushed, open the pull request yourself with gh pr create against master. The PR body is public and short: what changed, why, and the evidence."
