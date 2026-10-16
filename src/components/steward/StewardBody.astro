@@ -338,9 +338,10 @@ const GUARANTEES = [
           </table>
           <p class="limits-note">
             A refusal is a JSON-RPC error with a <code>Retry-After</code> header naming which limit
-            was hit and how long to wait. Every accepted call spends a dozen requests at somebody
-            else's origin under this site's name; an unbounded endpoint would be an open relay with
-            an honest User-Agent. The deep limits are two orders of magnitude smaller because a deep
+            was hit and how long to wait. The first fast audit of a site in each UTC hour spends a
+            dozen requests at somebody else's origin under this site's name; later calls that hour
+            get the same report and cost the site nothing. An unbounded endpoint would be an open
+            relay with an honest User-Agent. The deep limits are two orders of magnitude smaller because a deep
             audit spends minutes of browser time on a machine somebody pays for. The counters hold a
             keyed hash of the caller's address with a lifetime no longer than the window, never the
             address itself. There is no key and no way to ask for more. <code>get_audit</code> is
