@@ -89,6 +89,28 @@ test('the digest lists the agent surfaces, including both A2A ones', () => {
   }
 });
 
+test("the digest surfaces cover every URL in llms.txt's machine-readable resources", () => {
+  // llms.txt.ts and the digest each keep their own list; this fails when they differ.
+  const source = readFileSync(
+    fileURLToPath(new URL('../src/pages/llms.txt.ts', import.meta.url)),
+    'utf8'
+  );
+  const section = source
+    .split("lines.push('## Machine-readable resources');")[1]
+    .split("lines.push('## Writing');")[0];
+  const skills = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../src/data/agent-skills-index.json', import.meta.url)), 'utf8')
+  ).skills;
+  const expected = new Set(
+    [...section.matchAll(/\$\{base\}(\/[^\s)`]*)/g)].map((m) => `${PRODUCTION_ORIGIN}${m[1].replace(/[,.;:]+$/, '')}`)
+  );
+  for (const skill of skills) expected.add(`${PRODUCTION_ORIGIN}${skill.url}`);
+  assert.ok(expected.size > 10, 'expected to find the llms.txt URLs');
+
+  const text = committed.surfaces.map((s) => `${s.url} ${s.description}`).join('\n');
+  assert.deepEqual([...expected].filter((url) => !text.includes(url)), []);
+});
+
 test('counts describe the truncation rather than hiding it', () => {
   assert.equal(committed.counts.changelogListed, committed.changelog.length);
   assert.ok(committed.counts.changelog >= committed.counts.changelogListed);

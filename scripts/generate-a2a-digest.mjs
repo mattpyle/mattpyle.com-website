@@ -158,8 +158,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       {
         name: 'WebMCP tools',
         url: `${base}/webmcp`,
-        description:
-          'Six tools registered on document.modelContext for in-browser agents, four read and two write. Callable only from a browser that implements WebMCP; the definitions are at /webmcp/tools.json and the data they read is at /webmcp/index.json.',
+        description: `Six tools registered on document.modelContext for in-browser agents, four read and two write. Callable only from a browser that implements WebMCP; the definitions are at ${base}/webmcp/tools.json and the data they read is at ${base}/webmcp/index.json.`,
       },
       {
         name: 'A2A Agent Card',
@@ -170,6 +169,37 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
         name: 'A2A endpoint',
         url: `${base}/a2a`,
         description: 'This endpoint. JSON-RPC 2.0, SendMessage only.',
+      },
+      {
+        name: 'MCP server',
+        url: `${base}/mcp`,
+        description: `Streamable-HTTP MCP endpoint, no auth. audit_site(url) runs the fast agent-readiness audit, the same work as the audit-a-site skill; tools/list enumerates the rest. Discovery document at ${base}/.well-known/mcp-server.`,
+      },
+      {
+        name: 'MCP Server Card',
+        url: `${base}/mcp/server-card`,
+        description: `The MCP endpoint's identity, transport and protocol versions, per SEP-2127. Also served at ${base}/.well-known/mcp/server-card.json.`,
+      },
+      {
+        name: 'Agent Skills index',
+        url: `${base}/.well-known/agent-skills/index.json`,
+        description: `Agent Skills Discovery index listing 2 skills with sha256 digests: ${base}/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md and ${base}/.well-known/agent-skills/using-mattpyle-com/SKILL.md.`,
+      },
+      {
+        name: 'ARD catalogue',
+        url: `${base}/.well-known/ard.json`,
+        description:
+          'Agentic Resource Discovery publisher catalogue pointing at the A2A Agent Card, the MCP Server Card and the two Agent Skills.',
+      },
+      {
+        name: 'scorecard.json',
+        url: `${base}/scorecard.json`,
+        description: 'Every scorecard run as JSON, the same numbers the scorecard page displays.',
+      },
+      {
+        name: 'activity.json',
+        url: `${base}/activity.json`,
+        description: 'Agent-traffic counts as JSON, at UTC-hour resolution.',
       },
       {
         name: 'Sitemap',
