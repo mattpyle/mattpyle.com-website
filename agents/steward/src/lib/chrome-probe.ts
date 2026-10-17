@@ -3,11 +3,14 @@ import path from 'node:path';
 import { STEWARD_DIR } from '../config.js';
 import { tempRunName } from './audit-engine.js';
 import { killTree } from './proc.js';
-import { CheckBroken, CheckUnavailable, VERCEL_BYPASS_HEADER, type PageProbe } from './verify-checks.js';
+import { CheckBroken, CheckUnavailable, VERCEL_BYPASS_HEADER, type PageProbe, type Viewport } from './verify-checks.js';
 
 /**
  * The verifier's browser: the worker's Chromium, one page at a time, asked one
  * expression per page.
+ *
+ * Each page is sized before it navigates, with `Emulation.setDeviceMetricsOverride`
+ * at the check's viewport, so a phone-only defect is measured at phone width.
  *
  * `chrome-launcher` finds the browser the way it does for Lighthouse, through
  * `CHROME_PATH` when it is set. The conversation with it is the DevTools
@@ -110,12 +113,18 @@ export async function openChromeProbe(options: {
       });
     };
 
-    const evaluate = async (url: string, expression: string): Promise<unknown> => {
+    const evaluate = async (url: string, expression: string, viewport: Viewport): Promise<unknown> => {
       const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
       let onPaused: ((message: any) => void) | undefined;
       try {
         const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
         await send('Page.enable', {}, sessionId);
+        // Before the navigation, so the page lays out at this size from its first paint.
+        await send(
+          'Emulation.setDeviceMetricsOverride',
+          { width: viewport.width, height: viewport.height, deviceScaleFactor: 1, mobile: false },
+          sessionId,
+        );
         if (options.bypass) {
           const { origin, secret } = options.bypass;
           const allowed = new URL(origin).origin;

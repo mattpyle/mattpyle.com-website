@@ -192,7 +192,14 @@ test('a second write of the same result makes no commit', async () => {
   assert.equal(gh.calls.filter((call) => call.startsWith('PUT')).length, puts);
 });
 
-test('a finding that is not fixing is not overruled', async () => {
+test('a reopened finding takes the new result, as a fixing one does', async () => {
+  const gh = seed({ finding: FIXING_FINDING.replace('status: fixing', 'status: reopened') });
+  await writeFindingVerification(input('resolved'));
+  assert.equal(parseFrontmatter(gh.file('main', FINDING)!.text).data.status, 'resolved');
+  assert.match(gh.file('main', INDEX)!.text, new RegExp(`${DEFECT_KEY} \\| resolved \\|`));
+});
+
+test('a finding that is not fixing or reopened is not overruled', async () => {
   for (const status of ['approved', 'rejected', 'resolved']) {
     const gh = seed({ finding: FIXING_FINDING.replace('status: fixing', `status: ${status}`) });
     const err = await failure(writeFindingVerification(input('reopened')));

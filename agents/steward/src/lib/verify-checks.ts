@@ -21,6 +21,8 @@ export interface VerifyCheck {
   kind: VerifyKind;
   /** A status code for `status`; one of the kind's forms (see {@link VERIFY_BLOCK_GUIDE}) for the rest. */
   expect: unknown;
+  /** `selector` and `js` only: the size the page is opened at, `<width>x<height>`. Absent means {@link DEFAULT_VIEWPORT}. */
+  viewport?: string;
 }
 
 export interface VerifyCheckResult {
@@ -33,10 +35,35 @@ export interface VerifyCheckResult {
   expected: string;
   /** What production answered. */
   measured: string;
+  /** `selector` and `js` only: the size the page was opened at. */
+  viewport?: string;
 }
 
 /** The most checks one block may carry: a measure is one or two facts, not a suite. */
 export const VERIFY_CHECKS_MAX = 12;
+
+/** The two kinds that open the page in a browser, and so the only two a viewport applies to. */
+export const BROWSER_KINDS: readonly VerifyKind[] = ['selector', 'js'];
+
+/**
+ * The size a `selector` or `js` check runs at when it names none: the desktop
+ * viewport Argus measures at (`run.viewports` in its `config.yaml`). Without
+ * it the probe would open whatever window headless Chrome gives it.
+ */
+export const DEFAULT_VIEWPORT = '1280x800';
+
+export interface Viewport {
+  width: number;
+  height: number;
+}
+
+/** `390x844` as a width and a height, or null for anything else. Each side is 100 to 4096 pixels. */
+export function parseViewport(value: unknown): Viewport | null {
+  const match = typeof value === 'string' ? /^([1-9]\d{2,3})x([1-9]\d{2,3})$/.exec(value) : null;
+  if (!match) return null;
+  const [width, height] = [Number(match[1]), Number(match[2])];
+  return width >= 100 && width <= 4096 && height >= 100 && height <= 4096 ? { width, height } : null;
+}
 
 const STRING_MAX = 2_000;
 
@@ -59,6 +86,7 @@ export function verifyBlockGuide(origin: string): string[] {
     '- `selector`: the page rendered in a browser. `expect: {selector: "footer nav", count: 1}`, or `{selector: "h1", text: "the trimmed text of the first match"}`, or `{selector: "footer nav", attribute: "aria-label", equals: "Footer"}`.',
     '- `js`: an expression evaluated in the rendered page. `expect: {expression: "document.title", equals: "the JSON value it returns"}`.',
     '',
+    `Every \`selector\` and \`js\` check names the viewport its measurement was taken at, as \`viewport: "390x844"\`; a check without one runs at ${DEFAULT_VIEWPORT}.`,
     'Every check passes on production once the fix is live and fails before it.',
     'Prefer `status`, `header`, `text` and `markdown`. Use `selector` or `js` only when the fact exists in the rendered page alone.',
     'The retro appearance is the one page state a check may set. Its stylesheet loads on every page and applies when `<html>` carries `data-appearance="retro"`. A check in retro is a `js` check whose expression sets `document.documentElement.dataset.appearance = \'retro\'` before it measures, and fails on an empty match: `expect: {expression: "(() => { document.documentElement.dataset.appearance = \'retro\'; const cells = [...document.querySelectorAll(\'.facts td\')]; return cells.length > 0 && cells.every((cell) => getComputedStyle(cell).paddingLeft === \'8px\'); })()", equals: true}`.',
@@ -247,8 +275,8 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
   const checks: VerifyCheck[] = [];
   raw.forEach((item, i) => {
     const at = `verify check ${i + 1}`;
-    if (!isRecord(item) || !keysAre(item, ['url', 'kind', 'expect'])) {
-      problems.push(`${at} is not {url, kind, expect}`);
+    if (!isRecord(item) || !keysAre(item, ['url', 'kind', 'expect'], ['url', 'kind', 'expect', 'viewport'])) {
+      problems.push(`${at} is not {url, kind, expect}, with a viewport or without`);
       return;
     }
     if (!VERIFY_KINDS.includes(item.kind as VerifyKind)) {
@@ -266,7 +294,13 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
     else if (url.origin !== production) problems.push(`${at} names ${url.origin}, not the production origin ${production}`);
     const wrong = expectProblem(kind, item.expect);
     if (wrong) problems.push(`${at} (${kind}): ${wrong}`);
-    checks.push({ url: String(item.url), kind, expect: item.expect });
+    const hasViewport = Object.prototype.hasOwnProperty.call(item, 'viewport');
+    if (hasViewport && !BROWSER_KINDS.includes(kind)) {
+      problems.push(`${at} (${kind}): a viewport applies to selector and js checks only`);
+    } else if (hasViewport && !parseViewport(item.viewport)) {
+      problems.push(`${at} (${kind}): viewport ${show(item.viewport)} is not "<width>x<height>", each 100 to 4096`);
+    }
+    checks.push({ url: String(item.url), kind, expect: item.expect, ...(hasViewport ? { viewport: String(item.viewport) } : {}) });
   });
   return problems.length > 0 ? { checks: [], problems } : { checks, problems };
 }
@@ -414,8 +448,8 @@ export function bypassFetch(origin: string, secret: string, base: typeof fetch =
 
 /** One rendered page, asked one question. `chrome-probe.ts` is the real one. */
 export interface PageProbe {
-  /** The JSON value `expression` evaluates to in the page at `url`, once it has loaded. */
-  evaluate(url: string, expression: string): Promise<unknown>;
+  /** The JSON value `expression` evaluates to in the page at `url`, opened at `viewport` and loaded. */
+  evaluate(url: string, expression: string, viewport: Viewport): Promise<unknown>;
 }
 
 export interface CheckRunner {
@@ -450,7 +484,7 @@ function occurrences(body: string, needle: string): number {
   return count;
 }
 
-type Verdict = Pick<VerifyCheckResult, 'pass' | 'expected' | 'measured'>;
+type Verdict = Pick<VerifyCheckResult, 'pass' | 'expected' | 'measured' | 'viewport'>;
 
 function judgeText(body: string, expect: Record<string, unknown>): Verdict {
   if ('contains' in expect) {
@@ -512,6 +546,9 @@ function sameJson(a: unknown, b: unknown): boolean {
 /**
  * Runs a validated block against the origin its URLs name, production or a
  * preview, and returns one row per check.
+ *
+ * A `selector` or `js` check opens its page at its own viewport, or at
+ * {@link DEFAULT_VIEWPORT}, and its row names the size it ran at.
  *
  * A row is a measurement: pass or fail, with both values. A check that could
  * not be measured throws {@link CheckUnavailable}, and one whose own selector
@@ -575,12 +612,16 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
       case 'js': {
         probe ??= await runner.openProbe();
         const expression = check.kind === 'js' ? String(expect.expression) : selectorExpression(expect);
-        const value = await probe.evaluate(check.url, expression);
-        if (check.kind === 'selector') return judgeSelector(value, expect);
+        const viewport = check.viewport ?? DEFAULT_VIEWPORT;
+        const size = parseViewport(viewport);
+        if (!size) throw new CheckBroken(`viewport ${show(viewport)} is not "<width>x<height>"`);
+        const value = await probe.evaluate(check.url, expression, size);
+        if (check.kind === 'selector') return { ...judgeSelector(value, expect), viewport };
         return {
           pass: sameJson(value, expect.equals),
           expected: `${clip(String(expect.expression))} is ${show(expect.equals)}`,
           measured: clip(show(value)),
+          viewport,
         };
       }
     }

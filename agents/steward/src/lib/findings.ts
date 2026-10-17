@@ -498,10 +498,15 @@ export function verifyWorkflowId(site: string, key: string, at: string): string 
 
 /**
  * Why a finding cannot be verified, or null when it can: the verifier takes
- * `fixing` findings, the ones a merged fixer PR left behind.
+ * `fixing` findings, the ones a merged fixer PR left behind, and `reopened`
+ * ones. A `reopened` finding still names the PR whose fix its checks failed
+ * on, and when a check could not measure that fix, a corrected check is
+ * re-run against the same PR. The workflow's merged-PR gate covers both.
  */
 export function verifyRefusal(data: Record<string, unknown>): string | null {
-  if (data.status !== 'fixing') return `its status is ${String(data.status ?? 'unset')}, not fixing`;
+  if (data.status !== 'fixing' && data.status !== 'reopened') {
+    return `its status is ${String(data.status ?? 'unset')}, not fixing or reopened`;
+  }
   if (!parsePrUrl(fixPrUrl(data))) return 'it has no links.pr to a pull request';
   return null;
 }
@@ -527,6 +532,8 @@ export interface VerificationRow {
   pass: boolean;
   expected: string;
   measured: string;
+  /** `selector` and `js` only: the size the page was opened at. */
+  viewport?: string;
 }
 
 export interface Verification {
@@ -551,7 +558,7 @@ export function buildVerificationSection(verification: Verification): string {
   ];
   for (const row of verification.rows) {
     lines.push(
-      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${row.url}. Expected: ${row.expected}. Measured: ${row.measured}.`,
+      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${row.url}${row.viewport ? ` at ${row.viewport}` : ''}. Expected: ${row.expected}. Measured: ${row.measured}.`,
     );
   }
   return lines.join('\n');
