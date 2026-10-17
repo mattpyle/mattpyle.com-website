@@ -57,6 +57,9 @@ test("a block on the preview keeps each check's path, query and expectation", ()
     { url: `${PREVIEW}/scorecard/?view=runs`, kind: 'text', expect: { count: 0, of: '100/100 (Fail)' } },
     { url: `${PREVIEW}/`, kind: 'status', expect: 200 },
   ]);
+  // A list check has every URL swapped.
+  const list: VerifyCheck = { url: [`${ORIGIN}/writing/a/`, `${ORIGIN}/writing/b/?x=1`], kind: 'header', expect: { name: 'link', absent: true } };
+  assert.deepEqual(onOrigin([list], PREVIEW), [{ ...list, url: [`${PREVIEW}/writing/a/`, `${PREVIEW}/writing/b/?x=1`] }]);
 });
 
 test('the bypass secret goes to the preview origin and nowhere a redirect leads', async () => {

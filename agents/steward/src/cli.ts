@@ -2176,7 +2176,12 @@ async function verifyOneFinding(c: Client, site: string, key: string, reason?: s
   for (const [i, check] of verified.block.entries()) {
     const row = verified.checks.find((r) => r.n === i + 1);
     const at = row?.viewport ?? check.viewport;
-    console.log(`  check ${i + 1}: ${check.kind} ${check.url}${at ? ` at ${at}` : ''}`);
+    if (Array.isArray(check.url)) {
+      console.log(`  check ${i + 1}: ${check.kind} on ${check.url.length} URLs`);
+      for (const url of check.url) console.log(`    ${url}`);
+    } else {
+      console.log(`  check ${i + 1}: ${check.kind} ${check.url}${at ? ` at ${at}` : ''}`);
+    }
     console.log(`    expect: ${JSON.stringify(check.expect)}`);
     if (row) {
       console.log(`    expected: ${row.expected}`);
