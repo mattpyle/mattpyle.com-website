@@ -228,12 +228,12 @@ test('filing a webmaster note replaces the form with the confirmation and the re
   // The one real channel, and it appears only here — the moment the joke has just admitted the
   // note went nowhere.
   await expect(filed.locator('a')).toHaveAttribute('href', /linkedin\.com/);
-  await expect(page.locator('[data-wm-announce]')).toContainText('never left this browser');
 
-  // The announcer empties once it has spoken, so the panel reads the confirmation once, and focus
-  // rests on it with the real link next.
-  await expect(page.locator('[data-wm-announce]')).toHaveText('', { timeout: 3000 });
+  // Focus on the confirmation is the announcement, so the announcer stays empty and the panel
+  // reads it once, with the real link next. Read once rather than polled: a retrying assertion
+  // would wait out an announcer that speaks and then clears.
   await expect(page.locator('[data-wm-filed-copy]')).toBeFocused();
+  expect(await page.locator('[data-wm-announce]').textContent()).toBe('');
   await expect(
     page.locator('[data-module="webmaster-note"]').getByText('drawer 1 of', { exact: false }),
   ).toHaveCount(1);

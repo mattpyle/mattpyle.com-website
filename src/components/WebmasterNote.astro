@@ -251,9 +251,9 @@ import { NOTE_MAX } from '../lib/webmaster-notes.mjs';
       filedCopy!.textContent = copy;
       form.hidden = true;
       filed!.hidden = false;
-      announce!.textContent = copy;
+      // Focus is the announcement: a screen reader reads the confirmation as it lands on it, so
+      // writing it to the announcer as well would speak it twice.
       filedCopy!.focus();
-      window.setTimeout(() => { announce!.textContent = ''; }, 2000);
     });
   }
 
