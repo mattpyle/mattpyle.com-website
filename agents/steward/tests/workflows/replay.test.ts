@@ -373,3 +373,52 @@ test('a lifecycle run that started its verify child on steward-heavy replays tha
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });
+
+/**
+ * Two histories from before design decision 30, when a finding with no
+ * `verify` block ended its verify `unverifiable` and nothing was written.
+ *
+ * - `verify-finding-blockless.bin`: the verify alone, read, PR, block, done.
+ *   New code reads production and writes on a blockless finding, so this
+ *   replays only because the `verify-blockless-confirm` patch sends a history
+ *   without its marker down the old ending.
+ * - `finding-verify-unverifiable.bin`: a lifecycle run through the merge, the
+ *   deploy and that child, ending `unverifiable`. The parent's commands did not
+ *   change; it pins that the old ending is still a result the run accepts.
+ *
+ * Probe (2026-10-16): deleting the `patched()` guard in `verifyFindingWorkflow`
+ * made the verify fixture fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity machine does not handle this
+ * event: HistoryEvent(id: 23, WorkflowExecutionCompleted)
+ * ```
+ *
+ * and left the lifecycle fixture green. The guard was restored and both re-run
+ * green.
+ *
+ * Recorded from the pre-change code (448be2b) against the time-skipping
+ * server with mocked activities, as the fixtures above.
+ */
+const verifyBlocklessHistoryPath = fileURLToPath(new URL('../fixtures/histories/verify-finding-blockless.bin', import.meta.url));
+const findingUnverifiableHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-verify-unverifiable.bin', import.meta.url),
+);
+
+test('a blockless verify recorded before decision 30 replays to its unverifiable ending', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(verifyBlocklessHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'verify/mattpyle-com/content-perfect-score-labelled-fail--scorecard/2026-10-13T041233Z',
+  );
+});
+
+test('a lifecycle run whose child ended unverifiable still replays to that ending', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingUnverifiableHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});

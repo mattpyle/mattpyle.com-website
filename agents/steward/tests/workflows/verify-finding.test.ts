@@ -11,7 +11,13 @@ import {
   verifyFindingWorkflow,
   type VerifyFindingInput,
 } from '../../src/workflows/verify-finding.js';
-import { readVerifyBlock, type ReadVerifyBlockInput, type WriteFindingVerificationInput } from '../../src/activities/findings.js';
+import {
+  readVerifyBlock,
+  type ProductionRead,
+  type ReadProductionDeployInput,
+  type ReadVerifyBlockInput,
+  type WriteFindingVerificationInput,
+} from '../../src/activities/findings.js';
 import type { RunFindingChecksInput } from '../../src/activities/verify-finding.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { verifyWorkflowId } from '../../src/lib/findings.js';
@@ -20,8 +26,8 @@ import { DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-f
 
 /**
  * `verifyFindingWorkflow` with its activities mocked, on `steward-findings`
- * as on the hosted worker: the pass, the fail, the empty block and the
- * finding with no block. `readVerifyBlock` is the real activity over the
+ * as on the hosted worker: the pass, the fail, and the empty block and the
+ * finding with no block, which the deploy confirms (design decision 30). `readVerifyBlock` is the real activity over the
  * finding's text, so the finding is the only source a test can give the
  * checks. The check run is the real `runChecks` over a fetch that serves one
  * page, so a pass and a fail are measured rather than declared.
@@ -56,6 +62,8 @@ interface Mocks {
   /** False for a fixer PR that is still open. */
   merged?: boolean;
   runFindingChecks?: (input: RunFindingChecksInput) => Promise<never>;
+  /** What the blockless verify's production read answers. Defaults to a live commit that contains the merge. */
+  production?: Partial<ProductionRead>;
 }
 
 function mockActivities(mocks: Mocks = {}) {
@@ -63,6 +71,7 @@ function mockActivities(mocks: Mocks = {}) {
   const seen: {
     pr?: string;
     read?: ReadVerifyBlockInput;
+    production?: ReadProductionDeployInput;
     run?: RunFindingChecksInput;
     write?: WriteFindingVerificationInput;
   } = {};
@@ -81,6 +90,20 @@ function mockActivities(mocks: Mocks = {}) {
       calls.push('readVerifyBlock');
       seen.read = input;
       return readVerifyBlock(input);
+    },
+    readProductionDeploy: async (input: ReadProductionDeployInput): Promise<ProductionRead> => {
+      calls.push('readProductionDeploy');
+      seen.production = input;
+      return {
+        prUrl: input.prUrl,
+        mergeSha: 'm312',
+        liveSha: 'live1',
+        deploymentId: 7,
+        contains: true,
+        why: '',
+        readAt: '2026-10-13T04:12:38.000Z',
+        ...mocks.production,
+      };
     },
     runFindingChecks: async (input: RunFindingChecksInput) => {
       calls.push('runFindingChecks');
@@ -206,32 +229,59 @@ test('fail: a check that does not hold reopens the finding with both values', as
   assert.deepEqual(seen.write!.verification.rows, result.checks);
 });
 
-test('unverifiable: an empty block runs nothing and writes nothing', async () => {
-  const { activities, calls } = mockActivities({ finding: withBlock([]) });
-  const result = await withWorker(activities, async () => (await start(input())).result());
-
-  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock']);
-  assert.equal(result.outcome, 'unverifiable');
-  assert.equal(result.hasBlock, true);
-  assert.deepEqual(result.checks, []);
-  assert.equal(result.findingCommitSha, null);
-  assert.equal(result.ranAt, null);
-});
-
-test('unverifiable: a finding with no verify key runs nothing, writes nothing and reads no handoff', async () => {
+test('confirmed: a finding with no verify key is resolved by its deploy, with no rows and the three commits named', async () => {
   const { activities, calls, seen } = mockActivities({ finding: FIXING_FINDING });
   // An input recorded before decision 29 still names the handoff; nothing reads it.
   const result = await withWorker(activities, async () =>
     (await start(input({ handoffPath: `sites/mattpyle-com/handoffs/${DEFECT_KEY}.md` }))).result(),
   );
 
-  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock']);
-  assert.equal(result.outcome, 'unverifiable');
-  assert.equal(result.source, 'finding');
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'readProductionDeploy', 'writeFindingVerification']);
+  assert.equal(result.outcome, 'confirmed');
   assert.equal(result.hasBlock, false);
-  assert.deepEqual(result.block, []);
-  assert.equal(result.findingCommitSha, null);
+  assert.deepEqual(result.checks, []);
+  assert.equal(result.findingCommitSha, 'c-index');
+  assert.equal(result.ranAt, '2026-10-13T04:12:38.000Z');
+  assert.deepEqual(result.deploy, { prUrl: FIX_PR, mergeSha: 'm312', liveSha: 'live1', deploymentId: 7 });
+  assert.deepEqual(seen.production, { prUrl: FIX_PR, environment: 'Production' });
   assert.ok(!('handoffPath' in seen.read!), 'the block read is given no handoff path');
+  assert.deepEqual(seen.write!.verification, {
+    status: 'resolved',
+    at: '2026-10-13T04:12:38.000Z',
+    workflowId: `verify/mattpyle-com/${DEFECT_KEY}/2026-10-13T041233Z`,
+    source: 'finding',
+    rows: [],
+    deploy: { prUrl: FIX_PR, mergeSha: 'm312', liveSha: 'live1' },
+  });
+});
+
+test('confirmed: an empty block is the same answer, and --reason rides into the section', async () => {
+  const { activities, calls, seen } = mockActivities({ finding: withBlock([]) });
+  const result = await withWorker(activities, async () => (await start(input({ reason: 'Matt read the page.' }))).result());
+
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'readProductionDeploy', 'writeFindingVerification']);
+  assert.equal(result.outcome, 'confirmed');
+  assert.equal(result.hasBlock, true);
+  assert.equal(seen.write!.verification.reason, 'Matt read the page.');
+});
+
+test('not contained: production without the fix fails the run as a check that could not measure, and writes nothing', async () => {
+  const { activities, calls } = mockActivities({
+    finding: FIXING_FINDING,
+    production: { contains: false, liveSha: 'old', why: 'Production serves old, which does not contain m312 (behind).' },
+  });
+  const cause = await withWorker(activities, async () => failure((await start(input())).result()));
+  assert.equal(cause.type, 'FixNotLive');
+  assert.match(cause.message, /could not be confirmed by the deploy: Production serves old, which does not contain m312 \(behind\)\. The finding is unchanged\./);
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'readProductionDeploy']);
+});
+
+test('a measured run carries --reason too', async () => {
+  const { activities, seen } = mockActivities();
+  const result = await withWorker(activities, async () => (await start(input({ reason: 'Checked by hand as well.' }))).result());
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(seen.write!.verification.reason, 'Checked by hand as well.');
+  assert.equal(seen.write!.verification.deploy, undefined);
 });
 
 test("a finding's block that fails validation fails the run on the first attempt, naming the finding", async () => {

@@ -20,6 +20,12 @@ import { parseIssueUrl, parsePrUrl, type FindingVerdict } from './findings.js';
  *
  * A step the run never reached is null here and a dash on screen, so a parked,
  * rejected or custom-fixer run is a row with gaps, not an error.
+ *
+ * **A hand verify closes a run's row.** An approved run that ended with the
+ * finding still `fixing`, stopped at its verdict, or that `steward finding
+ * verify` cancelled, is finished by a `verifyFindingWorkflow` the CLI started:
+ * {@link applyHandVerifies} takes that verify's outcome and measurement time
+ * into the row, and its PR and deployment when the run never saw one.
  */
 
 type HistoryEvent = NonNullable<History['events']>[number];
@@ -44,6 +50,8 @@ export interface RunFacts {
   ranAt: string | null;
   /** The result's outcome, `open` for a running run, or how it closed otherwise. */
   outcome: string;
+  /** ISO 8601: when the run closed, or null while it is open. */
+  closedAt: string | null;
 }
 
 /** GitHub's answers for one run. Null where the run never reached the step, or GitHub has no answer. */
@@ -128,6 +136,7 @@ export function readRunHistory(history: History): RunFacts {
     deploymentId: null,
     ranAt: null,
     outcome: 'open',
+    closedAt: null,
   };
 
   // A completion names its activity only through the scheduled event's ID.
@@ -190,6 +199,14 @@ export function readRunHistory(history: History): RunFacts {
       continue;
     }
 
+    const closing =
+      event.workflowExecutionCompletedEventAttributes ??
+      event.workflowExecutionFailedEventAttributes ??
+      event.workflowExecutionTerminatedEventAttributes ??
+      event.workflowExecutionCanceledEventAttributes ??
+      event.workflowExecutionTimedOutEventAttributes ??
+      event.workflowExecutionContinuedAsNewEventAttributes;
+    if (closing) facts.closedAt = eventTime(event);
     if (event.workflowExecutionCompletedEventAttributes) {
       const result = first(event.workflowExecutionCompletedEventAttributes.result) as { outcome?: string } | undefined;
       facts.outcome = result?.outcome ?? 'verdict';
@@ -215,12 +232,100 @@ export function minutesBetween(from: string | null, to: string | null): number |
   return Math.round((Date.parse(to) - Date.parse(from)) / 6_000) / 10;
 }
 
+/** A hand `verifyFindingWorkflow`, one `steward finding verify` started, as the report folds it into a run's row. */
+export interface HandVerify {
+  site: string;
+  key: string;
+  outcome: string;
+  /** ISO 8601: when it measured production or read the deploy. */
+  ranAt: string | null;
+  /** `confirmed` only: the fix PR and the production deployment it read. */
+  prUrl: string | null;
+  deploymentId: number | null;
+}
+
+/**
+ * One hand verify's facts, or null for a verify that did not complete and for
+ * a lifecycle's child, whose outcome is already its parent's.
+ */
+export function readVerifyHistory(history: History): HandVerify | null {
+  const events = history.events ?? [];
+  const started = events[0]?.workflowExecutionStartedEventAttributes;
+  if (started?.parentWorkflowExecution?.workflowId) return null;
+  const input = first(started?.input) as { site?: string; key?: string } | undefined;
+  const done = events.find((e) => e.workflowExecutionCompletedEventAttributes)?.workflowExecutionCompletedEventAttributes;
+  if (!done) return null;
+  const result = first(done.result) as
+    | { outcome?: string; ranAt?: string | null; deploy?: { prUrl?: string; deploymentId?: number | null } }
+    | undefined;
+  if (!result?.outcome) return null;
+  return {
+    site: input?.site ?? '',
+    key: input?.key ?? '',
+    outcome: result.outcome,
+    ranAt: result.ranAt ?? null,
+    prUrl: result.deploy?.prUrl ?? null,
+    deploymentId: result.deploy?.deploymentId ?? null,
+  };
+}
+
+/** Lifecycle endings that leave the finding for a hand verify: still `fixing`, or cancelled by one. */
+const LEFT_FOR_A_HAND_VERIFY = new Set(['unverifiable', 'merge-timeout', 'deploy-timeout', 'verify-failed', 'canceled']);
+const VERIFY_ENDINGS = new Set(['resolved', 'reopened', 'confirmed']);
+
+/** Whether a run's finding can be finished by a hand verify: approved, and its run ended short of a verify of its own. */
+function leftForAHandVerify(facts: RunFacts): boolean {
+  if (facts.verdict?.status !== 'approved' || !facts.closedAt) return false;
+  // A verdict-only run: its fix, if any, ran outside it.
+  return facts.outcome === 'verdict' || LEFT_FOR_A_HAND_VERIFY.has(facts.outcome);
+}
+
+/**
+ * Every run's facts, with the hand verify that finished it folded in. A hand
+ * verify belongs to the newest approved run of its finding whose verdict came
+ * before it. A run the CLI cancelled takes the newest one before its close,
+ * since the cancel follows the verify; a run that ended earlier takes the
+ * first one after it closed. A run that ended on its own verify, or is still
+ * open, is left as it is. The run takes the verify's outcome and time, and its
+ * PR and deployment when the run never had a PR.
+ */
+export function applyHandVerifies(runs: RunFacts[], verifies: HandVerify[]): RunFacts[] {
+  const picked = new Map<RunFacts, HandVerify>();
+  for (const v of verifies) {
+    const ranAt = v.ranAt;
+    if (!ranAt || !VERIFY_ENDINGS.has(v.outcome)) continue;
+    const owner = runs
+      .filter((r) => r.site === v.site && r.key === v.key && r.verdict?.status === 'approved' && r.verdictAt && r.verdictAt <= ranAt)
+      .sort((a, b) => (a.verdictAt as string).localeCompare(b.verdictAt as string))
+      .at(-1);
+    if (!owner || !leftForAHandVerify(owner)) continue;
+    const cancelled = owner.outcome === 'canceled';
+    const closedAt = owner.closedAt as string;
+    if (cancelled ? ranAt > closedAt : ranAt < closedAt) continue;
+    const held = picked.get(owner)?.ranAt as string | undefined;
+    if (!held || (cancelled ? ranAt > held : ranAt < held)) picked.set(owner, v);
+  }
+  return runs.map((facts) => {
+    const hand = picked.get(facts);
+    if (!hand) return facts;
+    const own = facts.prUrl !== null;
+    return {
+      ...facts,
+      outcome: hand.outcome,
+      ranAt: hand.ranAt,
+      prUrl: own ? facts.prUrl : hand.prUrl,
+      deploymentId: own ? facts.deploymentId : hand.deploymentId,
+    };
+  });
+}
+
 /**
  * One report row: the run's history and GitHub's answers in, minutes out. Null
  * for a run that never received a verdict, which the report leaves out.
+ * `facts` defaults to the history's own; pass {@link applyHandVerifies}'s to
+ * count a hand verify.
  */
-export function buildReportRow(history: History, github: RunGitHub): ReportRow | null {
-  const facts = readRunHistory(history);
+export function buildReportRow(history: History, github: RunGitHub, facts = readRunHistory(history)): ReportRow | null {
   if (!facts.verdict || !facts.verdictAt) return null;
   const approve = facts.verdictAt;
   return {

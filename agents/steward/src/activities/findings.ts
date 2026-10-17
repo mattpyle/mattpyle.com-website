@@ -592,6 +592,21 @@ export interface ProductionDeploy {
  * retryable "not yet", polled on the same pattern as {@link awaitFixPrMerge}.
  */
 export async function awaitProductionDeploy(input: AwaitProductionDeployInput): Promise<ProductionDeploy> {
+  const read = await readLive(input);
+  if (!read.live) throw ApplicationFailure.retryable(read.why, 'DeployNotLive');
+  if (!read.contains) throw ApplicationFailure.retryable(read.why, 'DeployNotLive');
+  log.info({ activity: 'awaitProductionDeploy', mergeSha: input.mergeSha, liveSha: read.live.sha }, 'the merge commit is live');
+  return { liveSha: read.live.sha, deploymentId: read.live.id };
+}
+
+/**
+ * The deploy wait's read and compare, once: the live deployment, and whether
+ * its commit contains the merge commit. `why` says what is missing when either
+ * is.
+ */
+async function readLive(
+  input: AwaitProductionDeployInput,
+): Promise<{ live: DeploymentRecord | undefined; contains: boolean; why: string }> {
   const list = (await gh(
     `/repos/${input.repo}/deployments?environment=${encodeURIComponent(input.environment)}&per_page=10`,
   )) as { id: number; sha: string }[];
@@ -607,19 +622,70 @@ export async function awaitProductionDeploy(input: AwaitProductionDeployInput): 
   }
   const live = liveDeployment(records);
   if (!live) {
-    throw ApplicationFailure.retryable(`No ${input.environment} deployment of ${input.repo} has succeeded yet.`, 'DeployNotLive');
+    return { live, contains: false, why: `No ${input.environment} deployment of ${input.repo} has succeeded yet.` };
   }
-  if (live.sha !== input.mergeSha) {
-    const compare = await gh(`/repos/${input.repo}/compare/${input.mergeSha}...${live.sha}`);
-    if (!compareContains(String(compare.status))) {
-      throw ApplicationFailure.retryable(
-        `${input.environment} serves ${live.sha.slice(0, 7)}, which does not contain ${input.mergeSha.slice(0, 7)} (${String(compare.status)}).`,
-        'DeployNotLive',
-      );
-    }
+  if (live.sha === input.mergeSha) return { live, contains: true, why: '' };
+  const compare = await gh(`/repos/${input.repo}/compare/${input.mergeSha}...${live.sha}`);
+  const status = String(compare.status);
+  if (compareContains(status)) return { live, contains: true, why: '' };
+  return {
+    live,
+    contains: false,
+    why: `${input.environment} serves ${live.sha.slice(0, 7)}, which does not contain ${input.mergeSha.slice(0, 7)} (${status}).`,
+  };
+}
+
+export interface ReadProductionDeployInput {
+  /** The fix PR, from the finding's `links.pr`. */
+  prUrl: string;
+  /** The GitHub deployment environment Vercel posts production to. */
+  environment: string;
+}
+
+export interface ProductionRead {
+  prUrl: string;
+  /** The PR's merge commit, or null when GitHub has none. */
+  mergeSha: string | null;
+  /** The commit production serves, or null when no deployment has succeeded. */
+  liveSha: string | null;
+  deploymentId: number | null;
+  /** True when the live commit contains the merge commit. */
+  contains: boolean;
+  /** What is missing when `contains` is false. */
+  why: string;
+  /** ISO 8601, when production was read. */
+  readAt: string;
+}
+
+/**
+ * A blockless verify's one look at production (design decision 30): the fix
+ * PR's merge commit, then {@link awaitProductionDeploy}'s read and compare,
+ * one attempt. Not contained is an answer, not a retry: the verify has no
+ * "not yet" to wait out, since the lifecycle's deploy wait or the operator
+ * already decided the fix is live.
+ */
+export async function readProductionDeploy(input: ReadProductionDeployInput): Promise<ProductionRead> {
+  const pr = parsePrUrl(input.prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${input.prUrl} is not a pull request URL.`, 'FindingMalformed');
+  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  const mergeSha = (data.merge_commit_sha as string | null) ?? null;
+  const readAt = new Date().toISOString();
+  const none = { prUrl: input.prUrl, mergeSha, liveSha: null, deploymentId: null, contains: false, readAt };
+  if (data.merged !== true || !mergeSha) {
+    return { ...none, why: `${input.prUrl} has no merge commit on GitHub.` };
   }
-  log.info({ activity: 'awaitProductionDeploy', mergeSha: input.mergeSha, liveSha: live.sha }, 'the merge commit is live');
-  return { liveSha: live.sha, deploymentId: live.id };
+  const read = await readLive({ repo: pr.repo, mergeSha, environment: input.environment });
+  log.info(
+    { activity: 'readProductionDeploy', prUrl: input.prUrl, mergeSha, liveSha: read.live?.sha, contains: read.contains },
+    'production read for a blockless verify',
+  );
+  return {
+    ...none,
+    liveSha: read.live?.sha ?? null,
+    deploymentId: read.live?.id ?? null,
+    contains: read.contains,
+    why: read.why,
+  };
 }
 
 export interface AwaitPreviewDeployInput {
@@ -816,9 +882,9 @@ export interface ReadVerifyBlockResult {
  *
  * A list of checks runs. An empty list is the finder judging the measure
  * unmeasurable, and a finding with no `verify` key has no measure at all:
- * both return no checks, and the workflow ends `unverifiable`. A block that
- * fails {@link validateVerifyBlock} is a failure naming the finding: a typo
- * is not a pass.
+ * both return no checks, and the workflow confirms the fix by its deploy
+ * instead (design decision 30). A block that fails {@link validateVerifyBlock}
+ * is a failure naming the finding: a typo is not a pass.
  */
 export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<ReadVerifyBlockResult> {
   const own = (parseFrontmatter(input.findingText).data ?? {}) as Record<string, unknown>;

@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import proto from '@temporalio/proto';
 import {
+  applyHandVerifies,
   buildReportRow,
   costFromJobLog,
   countHumanComments,
@@ -11,11 +12,14 @@ import {
   pickIssueRun,
   readRunGitHub,
   readRunHistory,
+  readVerifyHistory,
   renderFindingReport,
   reportFooter,
   successAt,
   type GitHubReader,
+  type HandVerify,
   type ReportRow,
+  type RunFacts,
   type RunGitHub,
 } from '../../src/lib/finding-report.js';
 
@@ -29,7 +33,8 @@ import {
  * answers are GitHub's for those objects, read the same day. Its history
  * completed the merge wait at 05:40:01, seven seconds after GitHub's
  * `merged_at`, which is why the minutes come from GitHub.
- * `finding-child-fix-returned.bin` is the replay suite's custom-fixer run.
+ * `finding-child-fix-returned.bin` is the replay suite's custom-fixer run,
+ * and `verify-finding-blockless.bin` its verify from before decision 30.
  */
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/histories/${name}`, import.meta.url));
@@ -234,4 +239,104 @@ test('the table prints local time, dashes for gaps, and the same rows as markdow
   assert.equal(md[1], '| --- | --- | --: | --: | --: | --: | --: | --: | --- | --: | --: |');
   assert.equal(md[2], '| k | 2026-10-15 22:32 | 0.1 | 1.5 | 5.5 | 0.5 | 1.8 | 9.4 | resolved | 0 | 0.13 |');
   assert.equal(md[3], '| rejected-one | 2026-10-15 22:32 | - | - | - | - | - | - | rejected | - | - |');
+});
+
+// ---------------------------------------------------------------------------
+// Hand verifies (design decision 30)
+// ---------------------------------------------------------------------------
+
+const facts = (over: Partial<RunFacts>): RunFacts => ({
+  workflowId: 'finding/mattpyle-com/k',
+  site: 'mattpyle-com',
+  key: 'k',
+  verdict: { status: 'approved', reason: 'Real.', source: 'cli', at: '2026-10-11T06:26:32Z' },
+  verdictAt: '2026-10-11T06:26:32.301Z',
+  issueUrl: null,
+  prUrl: null,
+  deploymentId: null,
+  ranAt: null,
+  outcome: 'verdict',
+  closedAt: '2026-10-11T06:26:40.000Z',
+  ...over,
+});
+
+const hand = (over: Partial<HandVerify>): HandVerify => ({
+  site: 'mattpyle-com',
+  key: 'k',
+  outcome: 'confirmed',
+  ranAt: '2026-10-17T05:00:00.000Z',
+  prUrl: `https://github.com/${REPO}/pull/312`,
+  deploymentId: 7200,
+  ...over,
+});
+
+test('a run records when it closed, and an open run has no close', async () => {
+  assert.match(readRunHistory(await load(RESOLVED)).closedAt ?? '', /^2026-10-16T05:42:\d\d\.\d{3}Z$/);
+  assert.equal(readRunHistory(await load('finding-child-fix-returned.bin')).closedAt, null);
+});
+
+test('a hand verify is read from its history, and a lifecycle child or an unfinished verify is not one', async () => {
+  const blockless = readVerifyHistory(await load('verify-finding-blockless.bin'));
+  assert.deepEqual(blockless, {
+    site: 'mattpyle-com',
+    key: 'content-perfect-score-labelled-fail--scorecard',
+    outcome: 'unverifiable',
+    ranAt: null,
+    prUrl: null,
+    deploymentId: null,
+  });
+  const child = { events: [{ workflowExecutionStartedEventAttributes: { parentWorkflowExecution: { workflowId: 'finding/mattpyle-com/k' } } }] };
+  assert.equal(readVerifyHistory(child as never), null);
+  assert.equal(readVerifyHistory({ events: [{ workflowExecutionStartedEventAttributes: {} }] } as never), null);
+});
+
+test('a verdict-only run and a cancelled parked run take the confirmed verify that finished them, with its PR and deployment', () => {
+  const verdictOnly = facts({});
+  const parked = facts({
+    key: 'parked',
+    workflowId: 'finding/mattpyle-com/parked',
+    outcome: 'canceled',
+    verdictAt: '2026-10-14T05:00:00.000Z',
+    closedAt: '2026-10-17T05:00:30.000Z',
+  });
+  const [one, two] = applyHandVerifies([verdictOnly, parked], [hand({}), hand({ key: 'parked', ranAt: '2026-10-17T05:00:10.000Z' })]);
+  assert.equal(one.outcome, 'confirmed');
+  assert.equal(one.ranAt, '2026-10-17T05:00:00.000Z');
+  assert.equal(one.prUrl, `https://github.com/${REPO}/pull/312`);
+  assert.equal(one.deploymentId, 7200);
+  assert.equal(two.outcome, 'confirmed');
+  assert.equal(two.ranAt, '2026-10-17T05:00:10.000Z');
+});
+
+test('a hand verify leaves alone a run that ended on its own verify, a rejected one, and a run cancelled before it', () => {
+  const resolved = facts({ outcome: 'resolved', ranAt: '2026-10-12T00:00:00.000Z' });
+  const rejected = facts({ verdict: { status: 'rejected', reason: 'No.', source: 'cli', at: 'x' }, outcome: 'rejected' });
+  const cancelledEarly = facts({ outcome: 'canceled', closedAt: '2026-10-12T00:00:00.000Z' });
+  for (const run of [resolved, rejected, cancelledEarly]) {
+    assert.deepEqual(applyHandVerifies([run], [hand({})]), [run]);
+  }
+  // A run still at fixing is finished by a reopened hand verify too, and an unverifiable one is no ending.
+  const stranded = facts({ outcome: 'unverifiable', prUrl: `https://github.com/${REPO}/pull/401`, deploymentId: 5 });
+  assert.equal(applyHandVerifies([stranded], [hand({ outcome: 'unverifiable' })])[0].outcome, 'unverifiable');
+  const reopened = applyHandVerifies([stranded], [hand({ outcome: 'reopened', prUrl: null, deploymentId: null })])[0];
+  assert.equal(reopened.outcome, 'reopened');
+  assert.equal(reopened.prUrl, `https://github.com/${REPO}/pull/401`, 'the run keeps its own PR');
+  assert.equal(reopened.deploymentId, 5);
+});
+
+test('a hand verify belongs to one run: the newest approved run of its finding before it', () => {
+  const older = facts({});
+  const newer = facts({ verdictAt: '2026-10-15T00:00:00.000Z', outcome: 'unverifiable', closedAt: '2026-10-15T01:00:00.000Z' });
+  const [a, b] = applyHandVerifies([older, newer], [hand({})]);
+  assert.equal(a.outcome, 'verdict');
+  assert.equal(b.outcome, 'confirmed');
+  // Of two later verifies, a run that ended earlier takes the first.
+  const [first] = applyHandVerifies([older], [hand({ ranAt: '2026-10-18T00:00:00.000Z', outcome: 'reopened' }), hand({})]);
+  assert.equal(first.ranAt, '2026-10-17T05:00:00.000Z');
+});
+
+test('confirmed prints as its own outcome and counts as verified in the footer', () => {
+  const text = renderFindingReport([row({ outcome: 'confirmed', total: 9000.5 })], { markdown: false, timeZone: 'America/Vancouver' });
+  assert.match(text, / confirmed /);
+  assert.match(text, /1 row\. Median total 9000\.5 min \(1 verified\)/);
 });

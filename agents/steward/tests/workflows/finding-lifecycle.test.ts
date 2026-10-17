@@ -22,6 +22,8 @@ import type {
   FixPrOutcome,
   OpenFixIssueInput,
   ProductionDeploy,
+  ProductionRead,
+  ReadProductionDeployInput,
   WriteFindingReturnedInput,
   WriteFindingVerificationInput,
 } from '../../src/activities/findings.js';
@@ -29,7 +31,7 @@ import type { RunFindingChecksInput } from '../../src/activities/verify-finding.
 import { compareContains, liveDeployment, type DeploymentRecord, type FindingVerdict } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import type { VerifyCheck } from '../../src/lib/verify-checks.js';
-import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, ORIGIN } from '../helpers/finding-fixtures.js';
+import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
 
 /**
  * `findingWorkflow` started with `stopAfter: 'resolved'`, end to end on the
@@ -80,6 +82,8 @@ interface Script {
   passes?: boolean;
   /** The finding has no `verify` key. */
   noBlock?: boolean;
+  /** What the blockless verify's production read says: contained unless false. */
+  liveContains?: boolean;
 }
 
 function lifecycle(script: Script) {
@@ -172,6 +176,19 @@ function lifecycle(script: Script) {
     readFixPr: async (prUrl: string) => {
       calls.push('readFixPr');
       return { prUrl, merged: true, mergedAt: '2026-10-13T20:00:00Z' };
+    },
+    readProductionDeploy: async (input: ReadProductionDeployInput): Promise<ProductionRead> => {
+      calls.push('readProductionDeploy');
+      const contains = script.liveContains ?? true;
+      return {
+        prUrl: input.prUrl,
+        mergeSha: 'm1',
+        liveSha: contains ? 'm1' : 'old',
+        deploymentId: 2,
+        contains,
+        why: contains ? '' : 'Production serves old, which does not contain m1 (behind).',
+        readAt: '2026-10-13T21:00:00.000Z',
+      };
     },
     readVerifyBlock: async () => {
       calls.push('readVerifyBlock');
@@ -363,18 +380,40 @@ test('merged and deployed, but a check fails on production: reopened with both v
   assert.equal(row?.measured, '0 occurrences');
 });
 
-test('merged and deployed, but the finding has no verify block: unverifiable in the outcome and the note, not verify-failed', async () => {
+test('merged and deployed, and the finding has no verify block: confirmed by the deploy, written resolved', async () => {
   const mocks = lifecycle({
     merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
     deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
     noBlock: true,
   });
-  const result = await withWorkers(mocks, async () => (await startApproved('unverifiable')).result());
+  const result = await withWorkers(mocks, async () => (await startApproved('confirmed')).result());
 
-  assert.equal(result.outcome, 'unverifiable');
-  assert.match(result.note ?? '', /unverifiable: the finding has no verify block, so no check ran/);
+  assert.equal(result.outcome, 'confirmed');
+  assert.match(result.note ?? '', /^Confirmed by its deploy: production serves m1, which contains m1\. No check could measure the fix\.$/);
   assert.equal(result.liveSha, 'm1');
   assert.ok(!mocks.calls.includes('runFindingChecks'));
+  assert.deepEqual(mocks.calls.slice(-5), [
+    'readFinding',
+    'readFixPr',
+    'readVerifyBlock',
+    'readProductionDeploy',
+    'writeFindingVerification:resolved',
+  ]);
+  assert.equal(mocks.seen.verification?.verification.deploy?.prUrl, FIX_PR, 'the PR the finding names');
+  assert.deepEqual(mocks.seen.verification?.verification.rows, []);
+});
+
+test('no verify block, and production does not contain the fix: verify-failed, the finding still fixing', async () => {
+  const mocks = lifecycle({
+    merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
+    deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
+    noBlock: true,
+    liveContains: false,
+  });
+  const result = await withWorkers(mocks, async () => (await startApproved('not-contained')).result());
+
+  assert.equal(result.outcome, 'verify-failed');
+  assert.match(result.note ?? '', /could not be confirmed by the deploy: Production serves old.+The finding is still fixing\./);
   assert.ok(!mocks.calls.some((c) => c.startsWith('writeFindingVerification')), 'nothing is written');
 });
 

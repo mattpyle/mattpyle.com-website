@@ -57,6 +57,7 @@ export {
   awaitFixPr,
   awaitFixPrMerge,
   awaitProductionDeploy,
+  readProductionDeploy,
   awaitPreviewDeploy,
   writeFindingReturned,
   listOpenFindingWorkflows,

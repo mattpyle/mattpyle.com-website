@@ -36,7 +36,9 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *   with a PR (decisions 26 and 27): `openFixIssue`, then `awaitFixPr`, then
  *   `writeFindingFix`, all on `steward-findings`. The merge wait and the
  *   deploy wait poll from here too, and `verifyFindingWorkflow` runs as a
- *   child on the same queue (decision 29). Its outcome is this run's result.
+ *   child on the same queue (decision 29). Its outcome is this run's result:
+ *   a finding with no checks ends `confirmed` when its child reads the fix on
+ *   production (decision 30).
  *   A rejected verdict ends the run as `'verdict'` does.
  *
  * **What rides where** (design rule 10). The repository, the paths, the branch,
@@ -65,7 +67,9 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * so it never reads the flag and waits for `fix` as it did. A run that started
  * its verify child on `steward-heavy` has no {@link VERIFIER_HOSTED_PATCH}
  * marker there and replays that start unchanged; every later verify runs on
- * `steward-findings`.
+ * `steward-findings`. The `confirmed` ending needs no marker here: the child
+ * carries `verify-blockless-confirm`, and a child recorded before that marker
+ * returns `unverifiable`, which this run still ends on.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -106,9 +110,11 @@ export interface FindingWorkflowInput {
 }
 
 /**
- * How a run ended. `verdict` and `rejected` end at the gate. The three verify
- * outcomes end the lifecycle. The two timeouts and `verify-failed` end it with
- * the finding still `fixing`.
+ * How a run ended. `verdict` and `rejected` end at the gate. The verify
+ * outcomes end the lifecycle: `resolved`, `reopened`, and `confirmed` for a
+ * finding with no checks resolved by its deploy (decision 30). `unverifiable`
+ * is a run recorded before that. The two timeouts and `verify-failed` end it
+ * with the finding still `fixing`.
  */
 export type FindingOutcome = 'verdict' | 'rejected' | VerifyOutcome | 'merge-timeout' | 'deploy-timeout' | 'verify-failed';
 
@@ -534,6 +540,14 @@ async function lifecycle(
         ],
       });
       const live = { mergeSha, liveSha: deploy.liveSha, verifyWorkflowId: verifyId };
+      if (verified.outcome === 'confirmed') {
+        return end(
+          'confirmed',
+          `Confirmed by its deploy: production serves ${(verified.deploy?.liveSha ?? deploy.liveSha).slice(0, 7)}, which contains ${mergeSha.slice(0, 7)}. No check could measure the fix.`,
+          live,
+        );
+      }
+      // A child recorded before decision 30 ended here; nothing produces it now.
       if (verified.outcome === 'unverifiable') {
         const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
         return end(
