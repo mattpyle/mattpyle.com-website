@@ -6,7 +6,6 @@ import {
   NAMESPACE,
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
-  QUEUE_FINDINGS,
   QUEUE_HEAVY,
   QUEUE_LIGHT,
   TEMPORAL_ADDRESS,
@@ -43,10 +42,14 @@ process.on('unhandledRejection', (reason) => {
 });
 
 /**
- * One process, every queue (spec §3).
+ * One process, every queue but one (spec §3).
  *
- * The laptop worker polls everything, which is what keeps `steward up` a single
- * command. The split is about who *else* may poll: `steward-audit` carries work
+ * The laptop worker polls every queue except `steward-findings`, which keeps
+ * `steward up` a single command. The findings queue is hosted only (design
+ * decisions 18 and 29): two workers polling it meant that after every merge an
+ * old-code laptop worker could take a hosted run's workflow task and fail it as
+ * non-deterministic. The `steward finding` commands reach Temporal through the
+ * client and need no worker here. The split is about who *else* may poll: `steward-audit` carries work
  * with no local dependency, so a hosted worker can serve that queue alone
  * (always-on-audit-worker card) while `reviewPost` and the scorecard's publish
  * leg stay here, where the working copy is.
@@ -68,12 +71,11 @@ async function main() {
     Worker.create({ ...common, taskQueue: QUEUE_HEAVY }),
     Worker.create({ ...common, taskQueue: QUEUE_AUDIT }),
     Worker.create({ ...common, taskQueue: QUEUE_AUDIT_FAST }),
-    Worker.create({ ...common, taskQueue: QUEUE_FINDINGS }),
   ]);
 
   log.info(
     {
-      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS],
+      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT, QUEUE_AUDIT_FAST],
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',

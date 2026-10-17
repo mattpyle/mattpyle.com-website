@@ -68,6 +68,17 @@ test('each worker sets the option once, from its own constant, in queue order', 
   );
 });
 
+test('the laptop worker serves four queues and leaves steward-findings to the hosted one', async () => {
+  const local = await fs.readFile(path.join(path.dirname(HOSTED_WORKER), 'worker.ts'), 'utf8');
+  const queues = [...local.matchAll(/taskQueue:\s*([A-Z_]+)/g)].map((match) => match[1]);
+  assert.deepEqual(
+    queues,
+    ['QUEUE_LIGHT', 'QUEUE_HEAVY', 'QUEUE_AUDIT', 'QUEUE_AUDIT_FAST'],
+    'a second poller on steward-findings lets an old-code laptop worker fail a hosted run after a merge',
+  );
+  assert.doesNotMatch(local, /QUEUE_FINDINGS/, 'the ready line lists the queues the laptop worker serves');
+});
+
 test('the second worker serves the fast queue and registers nothing but the fast audit', async () => {
   const text = await source();
 
