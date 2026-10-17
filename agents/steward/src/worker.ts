@@ -49,7 +49,9 @@ process.on('unhandledRejection', (reason) => {
  * decisions 18 and 29): two workers polling it meant that after every merge an
  * old-code laptop worker could take a hosted run's workflow task and fail it as
  * non-deterministic. The `steward finding` commands reach Temporal through the
- * client and need no worker here. The split is about who *else* may poll: `steward-audit` carries work
+ * client and need no worker here.
+ *
+ * The split is about who *else* may poll: `steward-audit` carries work
  * with no local dependency, so a hosted worker can serve that queue alone
  * (always-on-audit-worker card) while `reviewPost` and the scorecard's publish
  * leg stay here, where the working copy is.
