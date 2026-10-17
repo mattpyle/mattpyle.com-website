@@ -858,9 +858,10 @@ export interface WriteFindingVerificationResult {
  *
  * The same guard and the same idempotence as {@link writeFindingVerdict}.
  *
- * **It moves a finding from `fixing` only.** A file that already holds this
- * run's status is the retry case and passes. Any other status means somebody
- * moved the finding while the checks ran, and the write refuses.
+ * **It moves a finding from `fixing` or `reopened` only**, the two statuses
+ * the workflow's gate admits. A file that already holds this run's result is
+ * the retry case and passes. Any other status means somebody moved the finding
+ * while the checks ran, and the write refuses.
  */
 export async function writeFindingVerification(
   input: WriteFindingVerificationInput,
@@ -877,9 +878,9 @@ export async function writeFindingVerification(
   }
   const before = parseFrontmatter(finding.text).data as Record<string, unknown>;
   const retry = before.status === status && finding.text.includes(input.verification.workflowId);
-  if (before.status !== 'fixing' && !retry) {
+  if (before.status !== 'fixing' && before.status !== 'reopened' && !retry) {
     throw ApplicationFailure.nonRetryable(
-      `${input.findingPath} is ${String(before.status)}, not fixing, so it is not marked ${status}.`,
+      `${input.findingPath} is ${String(before.status)}, not fixing or reopened, so it is not marked ${status}.`,
       'FindingMoved',
     );
   }

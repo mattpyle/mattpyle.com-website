@@ -255,14 +255,28 @@ test('a read result recorded before source existed is read as the handoff', asyn
   assert.equal(result.outcome, 'resolved');
 });
 
-test('refuse: a finding that is not fixing fails before its block is read', async () => {
-  for (const status of ['approved', 'resolved', 'reopened']) {
+test('refuse: a finding that is not fixing or reopened fails before its block is read', async () => {
+  for (const status of ['approved', 'resolved', 'proposed']) {
     const { activities, calls } = mockActivities({ finding: withBlock([RIGHT]).replace('status: fixing', `status: ${status}`) });
     const cause = await withWorker(activities, async () => failure((await start(input())).result()));
     assert.equal(cause.type, 'FindingNotVerifiable');
-    assert.match(cause.message, new RegExp(`its status is ${status}, not fixing`));
+    assert.match(cause.message, new RegExp(`its status is ${status}, not fixing or reopened`));
     assert.deepEqual(calls, ['readFinding']);
   }
+});
+
+test('a reopened finding whose PR is merged is verified again, and an unmerged one is not', async () => {
+  const reopened = withBlock([RIGHT]).replace('status: fixing', 'status: reopened');
+  const { activities, calls, seen } = mockActivities({ finding: reopened });
+  const result = await withWorker(activities, async () => (await start(input())).result());
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'runFindingChecks', 'writeFindingVerification']);
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(seen.write!.verification.status, 'resolved');
+
+  const open = mockActivities({ finding: reopened, merged: false });
+  const cause = await withWorker(open.activities, async () => failure((await start(input())).result()));
+  assert.equal(cause.type, 'FixNotMerged');
+  assert.deepEqual(open.calls, ['readFinding', 'readFixPr']);
 });
 
 test('refuse: a fix that is not merged is not measured, so an open PR never reopens its finding', async () => {

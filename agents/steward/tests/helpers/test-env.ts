@@ -1,6 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 
 /**
@@ -14,14 +14,20 @@ import { TestWorkflowEnvironment } from '@temporalio/testing';
  * observed flaky first run (`Failed to start ephemeral server`, passing on the
  * retry) came from.
  *
- * Pinning it under `.cache/` gives it a stable, gitignored home that survives
- * across days locally and can be restored by `actions/cache` in CI, so the
- * download happens once per runner image rather than once per run.
+ * The home is per user, not per checkout: a path inside the checkout gave
+ * every git worktree its own 57 MB download, and on Windows a firewall prompt
+ * per worktree, because firewall rules are keyed to the executable's path.
+ * CI restores it with `actions/cache` (`ci.yml`), so the download happens once
+ * per runner image rather than once per run. `STEWARD_TEST_SERVER_DIR`
+ * overrides it.
  */
-export const TEST_SERVER_DIR = path.join(
-  fileURLToPath(new URL('../../.cache/', import.meta.url)),
-  'temporal-test-server',
-);
+export const TEST_SERVER_DIR =
+  process.env.STEWARD_TEST_SERVER_DIR ??
+  path.join(
+    process.env.LOCALAPPDATA ?? process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), '.cache'),
+    'steward',
+    'temporal-test-server',
+  );
 
 /**
  * The time-skipping environment every workflow suite shares.

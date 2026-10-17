@@ -11,7 +11,7 @@ import {
 
 /**
  * `verifyFindingWorkflow`: one execution per verify run,
- * `verify/<site>/<key>/<stamp>`, from a `fixing` finding to `resolved` or
+ * `verify/<site>/<key>/<stamp>`, from a `fixing` or `reopened` finding to `resolved` or
  * `reopened` (findings-loop design, phase 5).
  *
  * Up to five activities, in order: read the finding, read its PR, read the
@@ -25,8 +25,10 @@ import {
  * `## Verification` section say `Checks from: finding`.
  *
  * **The gate** is {@link verifyRefusal} and a merged PR. A finding that is not
- * `fixing`, or whose fix is not merged, ends the workflow before a check runs:
- * measuring production for a fix that is not there would reopen the finding.
+ * `fixing` or `reopened`, or whose fix is not merged, ends the workflow before
+ * a check runs: measuring production for a fix that is not there would reopen
+ * the finding. A `reopened` finding is admitted so that a check corrected after
+ * it failed (a missing viewport, say) can be re-run against the same live fix.
  * Whether the deploy has finished is the operator's to know.
  *
  * **A new execution, not a later stop point** (design decision 18), and a new
@@ -73,14 +75,16 @@ export interface VerifyFindingCheck {
   pass: boolean;
   expected: string;
   measured: string;
+  /** `selector` and `js` only: the size the page was opened at. Absent from results recorded before viewports. */
+  viewport?: string;
 }
 
 export interface VerifyFindingResult {
   site: string;
   key: string;
   outcome: VerifyOutcome;
-  /** The block as it was run: `{url, kind, expect}` per check. */
-  block: { url: string; kind: string; expect: unknown }[];
+  /** The block as it was run: `{url, kind, expect}` per check, and a `viewport` where the check names one. */
+  block: { url: string; kind: string; expect: unknown; viewport?: string }[];
   checks: VerifyFindingCheck[];
   /** Where the checks came from: `finding` since decision 29. An older result may name the handoff. */
   source: VerifyBlockSource;

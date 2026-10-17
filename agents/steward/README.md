@@ -165,7 +165,7 @@ steward finding status <key>     # the verdict, and the lifecycle step for a 're
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"
 steward finding fix <key>        # signal the finding's lifecycle, or start the fixer alone for an older finding
-steward finding verify <key>     # fixing finding to resolved or reopened, measured on production
+steward finding verify <key>     # fixing or reopened finding to resolved or reopened, measured on production
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile

@@ -60,6 +60,7 @@ import {
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
 import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
+import { LIFECYCLE_CANCEL_WAIT_MS, cancelLifecycleRun } from './lib/finding-verify.js';
 import { gh, ghText } from './lib/github.js';
 import {
   buildReportRow,
@@ -2142,7 +2143,8 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
   console.log(`  checks from: ${verifySourceLabel(verified.source)}`);
   for (const [i, check] of verified.block.entries()) {
     const row = verified.checks.find((r) => r.n === i + 1);
-    console.log(`  check ${i + 1}: ${check.kind} ${check.url}`);
+    const at = row?.viewport ?? check.viewport;
+    console.log(`  check ${i + 1}: ${check.kind} ${check.url}${at ? ` at ${at}` : ''}`);
     console.log(`    expect: ${JSON.stringify(check.expect)}`);
     if (row) {
       console.log(`    expected: ${row.expected}`);
@@ -2159,6 +2161,15 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
       `  ${BOLD}${paint(verified.outcome, colour)}${RESET}  finding commit ${verified.findingCommitSha ?? 'none (it already said so)'}`,
     );
   }
+  if (verified.outcome === 'resolved') {
+    const lifecycle = c.workflow.getHandle(findingWorkflowId(site, key));
+    const closed = await cancelLifecycleRun(lifecycle);
+    if (closed === 'cancelled') {
+      console.log(`  cancelled ${lifecycle.workflowId}: the fix is live, so the run has nothing left to do`);
+    } else if (closed === 'requested') {
+      console.log(`  cancel requested for ${lifecycle.workflowId}; it had not closed after ${LIFECYCLE_CANCEL_WAIT_MS / 1000}s`);
+    }
+  }
   console.log('');
   return verified;
 }
@@ -2169,7 +2180,7 @@ finding
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .option('--all-fixing', "every `fixing` finding of the site, one at a time")
   .description(
-    "Verify a fixed finding on production: run the finding's own checks and write resolved or reopened. Runs on the hosted worker",
+    "Verify a fixed finding on production, fixing or reopened with its PR merged: run the finding's own checks and write resolved or reopened. Runs on the hosted worker",
   )
   .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean }) => {
     if (Boolean(key) === Boolean(opts.allFixing)) fail('Give one finding key, or --all-fixing.');
