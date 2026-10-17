@@ -71,16 +71,19 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | Queue | Carries | Why it is where it is |
 |---|---|---|
 | `steward-light` | `reviewPost`'s passes | Reads the working copy and applies patches to local files |
-| `steward-heavy` | `buildAndAuditDraft`, and `fixFindingWorkflow` with its activities | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
+| `steward-heavy` | `buildAndAuditDraft`, and the frozen custom fixer: `fixFindingWorkflow` with its activities, which only a lifecycle run that started that child before the issue path replays, and a `verifyFindingWorkflow` child started before the verifier moved to `steward-findings` | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
-| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow` and `verifyFindingWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
+| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow` and `verifyFindingWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **laptop worker** (`steward up`, `src/worker.ts`)
-registers all of them. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
+registers four of them, every queue but `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
 the three queues that depend on nothing local, each with a hand-written activity map: a worker that
 claimed `snapshotDraft` would fail it, because the container has no drafts, and a failed task is
-worse than an unclaimed one.
+worse than an unclaimed one. `steward-findings` has the hosted worker alone: with a second poller on
+matt-pc, an old-code laptop worker could take a hosted run's workflow task after a merge and fail it
+as non-deterministic. The `steward finding` commands reach Temporal through the client and need no
+local worker.
 
 ### The publish leg
 
