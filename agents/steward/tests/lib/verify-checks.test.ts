@@ -200,6 +200,64 @@ test('a malformed viewport is refused', () => {
   assert.deepEqual(parseViewport(DEFAULT_VIEWPORT), { width: 1280, height: 800 });
 });
 
+const PAGES = ['/writing/a/', '/writing/b/', '/writing/c/'].map((path) => `${ORIGIN}${path}`);
+
+test('a status, header, text or markdown check may name a list of URLs, and keeps it', () => {
+  const lists: VerifyCheck[] = [
+    { url: PAGES, kind: 'header', expect: { name: 'link', contains: 'text/markdown' } },
+    { url: PAGES, kind: 'status', expect: 200 },
+    { url: PAGES, kind: 'text', expect: { contains: 'Matt' } },
+    { url: [PAGES[0]], kind: 'markdown', expect: { contains: '# ' } },
+    { url: Array.from({ length: 20 }, (_, i) => `${ORIGIN}/writing/${i}/`), kind: 'status', expect: 200 },
+  ];
+  assert.deepEqual(validateVerifyBlock(lists, ORIGIN), { checks: lists, problems: [] });
+  // As Argus writes it: a YAML list under `url`.
+  const yaml = ['verify:', '  - url:', ...PAGES.map((url) => `      - "${url}"`), '    kind: "header"', '    expect: {name: "link", contains: "text/markdown"}'].join('\n');
+  assert.deepEqual(validateVerifyBlock(parseVerifyReply(yaml).raw, ORIGIN).checks, [lists[0]]);
+});
+
+test('a single-string url round-trips as a string, through the validator and the handoff', () => {
+  const [one] = validateVerifyBlock([GOOD[0]], ORIGIN).checks;
+  assert.equal(one.url, `${ORIGIN}/steward.md`);
+  const read = readHandoffVerify(withVerifyBlock('# Handoff\n', [GOOD[0], { ...GOOD[0], url: PAGES }]));
+  assert.deepEqual(validateVerifyBlock(read.raw, ORIGIN).checks, [GOOD[0], { ...GOOD[0], url: PAGES }]);
+  assert.equal(typeof (read.raw as VerifyCheck[])[0].url, 'string');
+});
+
+test('a list of URLs is refused when empty, over 20, off the production origin, or on a browser kind', () => {
+  const refused = (url: unknown, kind: VerifyCheck['kind'], expect: unknown, ...problems: string[]) => {
+    const result = validateVerifyBlock([{ url, kind, expect }], ORIGIN);
+    assert.deepEqual(result.problems, problems);
+    assert.deepEqual(result.checks, []);
+  };
+  const header = { name: 'link', contains: 'text/markdown' };
+  refused([], 'header', header, 'verify check 1 has an empty list of URLs');
+  refused(Array.from({ length: 21 }, (_, i) => `${ORIGIN}/writing/${i}/`), 'header', header, 'verify check 1 lists 21 URLs, over 20');
+  refused(
+    [PAGES[0], 'https://example.com/writing/b/', PAGES[2]],
+    'header',
+    header,
+    'verify check 1 URL 2 names https://example.com, not the production origin https://www.mattpyle.com',
+  );
+  refused([PAGES[0], '/writing/b/', 7], 'header', header, 'verify check 1 URL 2 is not a full URL', 'verify check 1 URL 3 is not a full URL');
+  refused(PAGES, 'selector', { selector: 'h1', count: 1 }, 'verify check 1 (selector): a list of URLs applies to status, header, text and markdown checks only');
+  refused(PAGES, 'js', { expression: 'document.title', equals: 'x' }, 'verify check 1 (js): a list of URLs applies to status, header, text and markdown checks only');
+});
+
+test('a list check counts as one check toward the cap of twelve', () => {
+  const twelve = Array.from({ length: 12 }, () => ({ url: PAGES, kind: 'status', expect: 200 }));
+  assert.deepEqual(validateVerifyBlock(twelve, ORIGIN).problems, []);
+  assert.match(validateVerifyBlock([...twelve, twelve[0]], ORIGIN).problems.join('; '), /13 checks, over 12/);
+});
+
+test('the guide names the list form, its cap and the kinds it applies to', () => {
+  assert.ok(
+    verifyBlockGuide(ORIGIN).includes(
+      'One fact measured across many pages is one check: its `url` is a list of up to 20 full URLs, and it passes when every URL passes. A list applies to `status`, `header`, `text` and `markdown`.',
+    ),
+  );
+});
+
 test('a coverage map is admitted when every surface has checks or a reason and every check is named', () => {
   const map = [
     { surface: '/llms.txt', checks: [1, 2] },
@@ -489,6 +547,36 @@ test('a browser check opens its page at its viewport, or at 1280x800, and its ro
   ]);
   assert.deepEqual(rows.map((r) => r.viewport), ['390x844', DEFAULT_VIEWPORT, undefined]);
   assert.ok(!('viewport' in rows[2]), 'a fetch row carries no viewport');
+});
+
+test('a list check passes when every URL passes, and its row says how many', async () => {
+  const urls = [`${origin}/audit/`, `${origin}/audit/`];
+  const [row] = await run([{ url: urls, kind: 'header', expect: { name: 'link', contains: 'text/markdown' } }]);
+  assert.deepEqual(row, {
+    n: 1,
+    url: urls,
+    kind: 'header',
+    pass: true,
+    expected: 'link contains "text/markdown"',
+    measured: '2 of 2 pass',
+  });
+});
+
+test('a list check fails when any URL fails, and its row names each failed URL with its measured value', async () => {
+  const urls = [`${origin}/audit/`, `${origin}/about/`, `${origin}/nowhere/`];
+  const rows = await run([
+    { url: urls, kind: 'header', expect: { name: 'link', contains: 'text/markdown' } },
+    { url: urls, kind: 'status', expect: 200 },
+    check('/audit/', 'status', 200),
+  ]);
+  assert.equal(rows[0].pass, false);
+  assert.equal(rows[0].measured, `1 of 3 pass; failed: ${origin}/about/ (absent), ${origin}/nowhere/ (absent)`);
+  assert.equal(rows[1].measured, `2 of 3 pass; failed: ${origin}/nowhere/ (status 404)`);
+  assert.deepEqual(rows[1].url, urls, 'the row carries the list as written');
+  assert.equal(rows[2].url, `${origin}/audit/`, 'a single-URL row keeps its string');
+  assert.equal(rows[2].measured, 'status 200');
+  // One URL that cannot be measured stops the block, as a single check does.
+  await assert.rejects(run([{ url: [`${origin}/audit/`, `${origin}/down/`], kind: 'text', expect: { contains: 'x' } }]), CheckUnavailable);
 });
 
 test('a check that cannot be measured throws, and is never a failed row', async () => {

@@ -161,6 +161,16 @@ test('a browser check names the viewport it ran at, and a fetch check names none
   assert.match(section, /\n2\. Fail, `text` on https:\/\/www\.mattpyle\.com\/about\/\. Expected: /);
 });
 
+test('a list check names its count and every URL, and the failed URLs in its measured value', () => {
+  const urls = ['https://www.mattpyle.com/writing/a/', 'https://www.mattpyle.com/writing/b/'];
+  const row = { n: 1, url: urls, kind: 'header', pass: false, expected: 'link contains "text/markdown"', measured: `1 of 2 pass; failed: ${urls[1]} (absent)` };
+  assert.ok(
+    buildVerificationSection(verification('reopened', [row])).includes(
+      `1. Fail, \`header\` on 2 URLs (${urls.join(', ')}). Expected: link contains "text/markdown". Measured: 1 of 2 pass; failed: ${urls[1]} (absent).`,
+    ),
+  );
+});
+
 test('a finding with no resolved_run field gets one, inside the frontmatter', () => {
   const out = setFindingVerification('---\nkey: k\nstatus: fixing\n---\n\n# Title\n', verification('resolved', [ROWS[0]]));
   assert.ok(out.startsWith('---\nkey: k\nstatus: resolved\nresolved_run: 2026-10-13T0412Z\n---\n\n# Title\n\n## Verification\n'));

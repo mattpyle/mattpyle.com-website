@@ -9,6 +9,7 @@ import {
 } from './fixer.js';
 import {
   parseVerifyReply,
+  urlLabel,
   validateGeneratedBlock,
   verifyBlockGuide,
   verifyCoverageGuide,
@@ -191,9 +192,9 @@ export function verifyBlockRetryPrompt(args: {
   const measured = rejected.results
     ? rejected.results.map((row) => {
         const check = rejected.checks[row.n - 1];
-        return `${row.n}. \`${row.kind}\` ${row.url}, expect ${JSON.stringify(check?.expect)}: measured ${row.measured}. ${row.pass ? 'It PASSES before the fix, so it does not show the defect.' : 'It fails before the fix, as it should.'}`;
+        return `${row.n}. \`${row.kind}\` ${urlLabel(row.url)}, expect ${JSON.stringify(check?.expect)}: measured ${row.measured}. ${row.pass ? 'It PASSES before the fix, so it does not show the defect.' : 'It fails before the fix, as it should.'}`;
       })
-    : rejected.checks.map((check, i) => `${i + 1}. \`${check.kind}\` ${check.url}, expect ${JSON.stringify(check.expect)}`);
+    : rejected.checks.map((check, i) => `${i + 1}. \`${check.kind}\` ${urlLabel(check.url)}, expect ${JSON.stringify(check.expect)}`);
   return [
     'Write the checks that will show one finding is fixed on the live site.',
     `The fix is not written yet. Production at ${args.origin} still has the defect, and your working directory is a checkout of the site repository at the commit the fix will branch from. Every check must fail on production now and pass once the fix is live.`,

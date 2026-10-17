@@ -17,7 +17,8 @@ export const VERIFY_KINDS = ['status', 'header', 'text', 'markdown', 'selector',
 export type VerifyKind = (typeof VERIFY_KINDS)[number];
 
 export interface VerifyCheck {
-  url: string;
+  /** One URL, or a list of 1 to {@link VERIFY_URLS_MAX} for one fact measured across many pages. */
+  url: string | string[];
   kind: VerifyKind;
   /** A status code for `status`; one of the kind's forms (see {@link VERIFY_BLOCK_GUIDE}) for the rest. */
   expect: unknown;
@@ -28,8 +29,10 @@ export interface VerifyCheck {
 export interface VerifyCheckResult {
   /** 1-based, the check's place in the block. */
   n: number;
-  url: string;
+  /** The check's `url` as written: one URL, or the list. */
+  url: string | string[];
   kind: VerifyKind;
+  /** For a list, true only when every URL passes. */
   pass: boolean;
   /** What the check asked for, in words. */
   expected: string;
@@ -42,8 +45,24 @@ export interface VerifyCheckResult {
 /** The most checks one block may carry: a measure is one or two facts, not a suite. */
 export const VERIFY_CHECKS_MAX = 12;
 
+/**
+ * The most URLs one check may list. A kind of page on this site is at most
+ * this many, and the cap keeps one check from becoming a crawl.
+ */
+export const VERIFY_URLS_MAX = 20;
+
 /** The two kinds that open the page in a browser, and so the only two a viewport applies to. */
 export const BROWSER_KINDS: readonly VerifyKind[] = ['selector', 'js'];
+
+/** A check's `url` as a list: the one URL, or every URL it names. */
+export function checkUrls(url: string | string[]): string[] {
+  return Array.isArray(url) ? url : [url];
+}
+
+/** A check's `url` for a line of prose: the URL, or the count and every URL in the list. */
+export function urlLabel(url: string | string[]): string {
+  return Array.isArray(url) ? `${url.length} URLs (${url.join(', ')})` : url;
+}
 
 /**
  * The size a `selector` or `js` check runs at when it names none: the desktop
@@ -86,6 +105,7 @@ export function verifyBlockGuide(origin: string): string[] {
     '- `selector`: the page rendered in a browser. `expect: {selector: "footer nav", count: 1}`, or `{selector: "h1", text: "the trimmed text of the first match"}`, or `{selector: "footer nav", attribute: "aria-label", equals: "Footer"}`.',
     '- `js`: an expression evaluated in the rendered page. `expect: {expression: "document.title", equals: "the JSON value it returns"}`.',
     '',
+    `One fact measured across many pages is one check: its \`url\` is a list of up to ${VERIFY_URLS_MAX} full URLs, and it passes when every URL passes. A list applies to \`status\`, \`header\`, \`text\` and \`markdown\`.`,
     `Every \`selector\` and \`js\` check names the viewport its measurement was taken at, as \`viewport: "390x844"\`; a check without one runs at ${DEFAULT_VIEWPORT}.`,
     'Every check passes on production once the fix is live and fails before it.',
     'Prefer `status`, `header`, `text` and `markdown`. Use `selector` or `js` only when the fact exists in the rendered page alone.',
@@ -264,7 +284,9 @@ function expectProblem(kind: VerifyKind, expect: unknown): string | null {
  * is not.
  *
  * `origin` is the production origin. A URL on any other origin is refused, so
- * a block can make Steward fetch the site it verifies and nothing else.
+ * a block can make Steward fetch the site it verifies and nothing else. A list
+ * of URLs is refused when it is empty, longer than {@link VERIFY_URLS_MAX},
+ * names any other origin, or sits on a browser kind.
  */
 export function validateVerifyBlock(raw: unknown, origin: string): { checks: VerifyCheck[]; problems: string[] } {
   const problems: string[] = [];
@@ -284,14 +306,26 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
       return;
     }
     const kind = item.kind as VerifyKind;
-    let url: URL | undefined;
-    try {
-      url = new URL(String(item.url));
-    } catch {
-      /* reported below */
+    const list = Array.isArray(item.url);
+    if (list && BROWSER_KINDS.includes(kind)) {
+      problems.push(`${at} (${kind}): a list of URLs applies to status, header, text and markdown checks only`);
+    } else if (list && (item.url as unknown[]).length === 0) {
+      problems.push(`${at} has an empty list of URLs`);
+    } else if (list && (item.url as unknown[]).length > VERIFY_URLS_MAX) {
+      problems.push(`${at} lists ${(item.url as unknown[]).length} URLs, over ${VERIFY_URLS_MAX}`);
+    } else {
+      for (const [j, value] of (list ? (item.url as unknown[]) : [item.url]).entries()) {
+        const which = list ? `${at} URL ${j + 1}` : at;
+        let url: URL | undefined;
+        try {
+          url = new URL(String(value));
+        } catch {
+          /* reported below */
+        }
+        if (typeof value !== 'string' || !url) problems.push(list ? `${which} is not a full URL` : `${at} has no full URL`);
+        else if (url.origin !== production) problems.push(`${which} names ${url.origin}, not the production origin ${production}`);
+      }
     }
-    if (typeof item.url !== 'string' || !url) problems.push(`${at} has no full URL`);
-    else if (url.origin !== production) problems.push(`${at} names ${url.origin}, not the production origin ${production}`);
     const wrong = expectProblem(kind, item.expect);
     if (wrong) problems.push(`${at} (${kind}): ${wrong}`);
     const hasViewport = Object.prototype.hasOwnProperty.call(item, 'viewport');
@@ -300,7 +334,7 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
     } else if (hasViewport && !parseViewport(item.viewport)) {
       problems.push(`${at} (${kind}): viewport ${show(item.viewport)} is not "<width>x<height>", each 100 to 4096`);
     }
-    checks.push({ url: String(item.url), kind, expect: item.expect, ...(hasViewport ? { viewport: String(item.viewport) } : {}) });
+    checks.push({ url: list ? (item.url as unknown[]).map(String) : String(item.url), kind, expect: item.expect, ...(hasViewport ? { viewport: String(item.viewport) } : {}) });
   });
   return problems.length > 0 ? { checks: [], problems } : { checks, problems };
 }
@@ -402,15 +436,16 @@ export function unmeasuredSurfaces(coverage: VerifyCoverageEntry[]): { surface: 
  */
 export const VERCEL_BYPASS_HEADER = 'x-vercel-protection-bypass';
 
-/** The block with each check's origin swapped for `origin`. Path, query and expectation are kept. */
+/** The block with the origin of each check's URLs swapped for `origin`. Path, query and expectation are kept. */
 export function onOrigin(checks: VerifyCheck[], origin: string): VerifyCheck[] {
   const target = new URL(origin);
-  return checks.map((check) => {
-    const url = new URL(check.url);
+  const swap = (value: string) => {
+    const url = new URL(value);
     url.protocol = target.protocol;
     url.host = target.host;
-    return { ...check, url: url.toString() };
-  });
+    return url.toString();
+  };
+  return checks.map((check) => ({ ...check, url: Array.isArray(check.url) ? check.url.map(swap) : swap(check.url) }));
 }
 
 /** Most redirects {@link bypassFetch} follows before it hands back the last answer. */
@@ -550,6 +585,10 @@ function sameJson(a: unknown, b: unknown): boolean {
  * A `selector` or `js` check opens its page at its own viewport, or at
  * {@link DEFAULT_VIEWPORT}, and its row names the size it ran at.
  *
+ * A check with a list of URLs measures each one and passes only when every one
+ * passes. Its row says how many passed and names each URL that failed with
+ * the value it measured there: "14 of 16 pass; failed: <url> (absent), …".
+ *
  * A row is a measurement: pass or fail, with both values. A check that could
  * not be measured throws {@link CheckUnavailable}, and one whose own selector
  * or expression does not run throws {@link CheckBroken}; neither is a row.
@@ -558,32 +597,32 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
   const timeoutMs = runner.timeoutMs ?? 30_000;
   let probe: (PageProbe & { close(): Promise<void> }) | undefined;
 
-  const get = async (check: VerifyCheck, init: RequestInit = {}): Promise<Response> => {
+  const get = async (check: VerifyCheck, url: string, init: RequestInit = {}): Promise<Response> => {
     let res: Response;
     try {
-      res = await runner.fetch(check.url, {
+      res = await runner.fetch(url, {
         ...init,
         headers: { 'User-Agent': runner.userAgent, ...(init.headers ?? {}) },
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
-      throw new CheckUnavailable(`${check.url} did not answer: ${err instanceof Error ? err.message : String(err)}`);
+      throw new CheckUnavailable(`${url} did not answer: ${err instanceof Error ? err.message : String(err)}`);
     }
     if (res.status >= 500 && !(check.kind === 'status' && check.expect === res.status)) {
-      throw new CheckUnavailable(`${check.url} answered ${res.status}`);
+      throw new CheckUnavailable(`${url} answered ${res.status}`);
     }
     return res;
   };
 
-  const judge = async (check: VerifyCheck): Promise<Verdict> => {
+  const judge = async (check: VerifyCheck, url: string): Promise<Verdict> => {
     const expect = check.expect as Record<string, unknown>;
     switch (check.kind) {
       case 'status': {
-        const res = await get(check, { redirect: 'manual' });
+        const res = await get(check, url, { redirect: 'manual' });
         return { pass: res.status === check.expect, expected: `status ${String(check.expect)}`, measured: `status ${res.status}` };
       }
       case 'header': {
-        const res = await get(check);
+        const res = await get(check, url);
         const value = res.headers.get(String(expect.name));
         const measured = value === null ? 'absent' : clip(show(value));
         if ('absent' in expect) return { pass: value === null, expected: `no ${String(expect.name)} header`, measured };
@@ -599,7 +638,7 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
       case 'text':
       case 'markdown': {
         const markdown = check.kind === 'markdown';
-        const res = await get(check, markdown ? { headers: { Accept: 'text/markdown' } } : {});
+        const res = await get(check, url, markdown ? { headers: { Accept: 'text/markdown' } } : {});
         const type = (res.headers.get('content-type') ?? '').toLowerCase();
         const verdict = judgeText((await res.text()).slice(0, BODY_MAX), expect);
         if (res.status !== 200) return { ...verdict, pass: false, measured: `status ${res.status}` };
@@ -615,7 +654,7 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
         const viewport = check.viewport ?? DEFAULT_VIEWPORT;
         const size = parseViewport(viewport);
         if (!size) throw new CheckBroken(`viewport ${show(viewport)} is not "<width>x<height>"`);
-        const value = await probe.evaluate(check.url, expression, size);
+        const value = await probe.evaluate(url, expression, size);
         if (check.kind === 'selector') return { ...judgeSelector(value, expect), viewport };
         return {
           pass: sameJson(value, expect.equals),
@@ -630,7 +669,21 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
   try {
     const results: VerifyCheckResult[] = [];
     for (const [i, check] of checks.entries()) {
-      results.push({ n: i + 1, url: check.url, kind: check.kind, ...(await judge(check)) });
+      const row = { n: i + 1, url: check.url, kind: check.kind };
+      if (!Array.isArray(check.url)) {
+        results.push({ ...row, ...(await judge(check, check.url)) });
+        continue;
+      }
+      const verdicts: (Verdict & { url: string })[] = [];
+      for (const url of check.url) verdicts.push({ url, ...(await judge(check, url)) });
+      const failed = verdicts.filter((verdict) => !verdict.pass);
+      const passed = `${verdicts.length - failed.length} of ${verdicts.length} pass`;
+      results.push({
+        ...row,
+        pass: failed.length === 0,
+        expected: verdicts[0].expected,
+        measured: failed.length === 0 ? passed : `${passed}; failed: ${failed.map((f) => `${f.url} (${f.measured})`).join(', ')}`,
+      });
     }
     return results;
   } finally {

@@ -533,7 +533,8 @@ export function parsePrUrl(url: string): { repo: string; number: number } | null
 /** One measured check, as the Verification section prints it. */
 export interface VerificationRow {
   n: number;
-  url: string;
+  /** One URL, or the check's list of URLs. */
+  url: string | string[];
   kind: string;
   pass: boolean;
   expected: string;
@@ -563,6 +564,11 @@ export interface Verification {
   reason?: string;
 }
 
+/** A row's URL, or the count and every URL of a list: `urlLabel` in `verify-checks.ts`, kept here since this file takes no imports. */
+function rowUrlLabel(url: string | string[]): string {
+  return Array.isArray(url) ? `${url.length} URLs (${url.join(', ')})` : url;
+}
+
 /**
  * The `## Verification` section: the outcome, then each check with both
  * values. A deploy-resolved finding has no rows: the section says no check
@@ -589,7 +595,7 @@ export function buildVerificationSection(verification: Verification): string {
   }
   for (const row of verification.rows) {
     lines.push(
-      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${row.url}${row.viewport ? ` at ${row.viewport}` : ''}. Expected: ${row.expected}. Measured: ${row.measured}.`,
+      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${rowUrlLabel(row.url)}${row.viewport ? ` at ${row.viewport}` : ''}. Expected: ${row.expected}. Measured: ${row.measured}.`,
     );
   }
   if (verification.reason) {

@@ -87,7 +87,8 @@ export interface VerifyFindingInput {
 
 export interface VerifyFindingCheck {
   n: number;
-  url: string;
+  /** One URL, or the check's list of URLs. */
+  url: string | string[];
   kind: string;
   pass: boolean;
   expected: string;
@@ -101,7 +102,7 @@ export interface VerifyFindingResult {
   key: string;
   outcome: VerifyOutcome;
   /** The block as it was run: `{url, kind, expect}` per check, and a `viewport` where the check names one. */
-  block: { url: string; kind: string; expect: unknown; viewport?: string }[];
+  block: { url: string | string[]; kind: string; expect: unknown; viewport?: string }[];
   checks: VerifyFindingCheck[];
   /** Where the checks came from: `finding` since decision 29. An older result may name the handoff. */
   source: VerifyBlockSource;

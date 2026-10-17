@@ -3,6 +3,7 @@ import type { ParsedFinding } from './findings.js';
 import {
   readHandoffVerify,
   unmeasuredSurfaces,
+  urlLabel,
   validateGeneratedBlock,
   verifyBlockGuide,
   verifyCoverageGuide,
@@ -854,7 +855,7 @@ function siteCheckLines(site: FixerSiteChecks): string[] {
     const n = i + 1;
     const production = site.production?.find((row) => row.n === n);
     const preview = site.preview?.find((row) => row.n === n);
-    lines.push(`${n}. \`${check.kind}\` ${check.url}`);
+    lines.push(`${n}. \`${check.kind}\` ${urlLabel(check.url)}`);
     const expected = production?.expected ?? preview?.expected;
     if (expected) lines.push(`   - Expects: ${expected}`);
     lines.push(
