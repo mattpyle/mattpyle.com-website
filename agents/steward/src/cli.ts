@@ -60,7 +60,14 @@ import {
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
 import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
-import { gh } from './lib/github.js';
+import { gh, ghText } from './lib/github.js';
+import {
+  buildReportRow,
+  readRunGitHub,
+  readRunHistory,
+  renderFindingReport,
+  type ReportRow,
+} from './lib/finding-report.js';
 import {
   SCORECARD_SCHEDULE_ACTIONS,
   SCORECARD_SCHEDULE_DEFAULT_AT,
@@ -1845,6 +1852,41 @@ finding
       }
       if (state.commitSha) console.log(`  commit: ${state.commitSha}`);
       console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('report')
+  .option('--site <site>', 'only this site', parseFindingSlug('site'))
+  .option('--markdown', 'print a markdown table for the vault')
+  .description(
+    'One row per finding run that received a verdict: minutes between approve, issue, PR, merge, deploy and resolved, human PR comments, and the Action\'s cost',
+  )
+  .action(async (opts: { site?: string; markdown?: boolean }) => {
+    const c = await client();
+    try {
+      const reader = { json: gh, text: ghText };
+      const rows: ReportRow[] = [];
+      const notes: string[] = [];
+      for await (const info of c.workflow.list({ query: "WorkflowType='findingWorkflow'" })) {
+        if (opts.site && !info.workflowId.startsWith(`finding/${opts.site}/`)) continue;
+        const history = await c.workflow.getHandle(info.workflowId, info.runId).fetchHistory();
+        const facts = readRunHistory(history);
+        if (!facts.verdict) continue;
+        const answers = await readRunGitHub(facts, reader);
+        if (answers.costNote) notes.push(`cost: ${answers.costNote}`);
+        const row = buildReportRow(history, answers);
+        if (row) rows.push(row);
+      }
+      rows.sort((a, b) => a.approveAt.localeCompare(b.approveAt));
+      console.log('');
+      if (rows.length === 0) console.log('  No finding run has received a verdict.');
+      else console.log(renderFindingReport(rows, { markdown: opts.markdown === true, timeZone: STEWARD_TIMEZONE }));
+      console.log('');
+      // Notes go to stderr, so a redirected or pasted table stays a table.
+      for (const note of notes) console.error(paint(note, DIM));
     } finally {
       await c.connection.close();
     }
