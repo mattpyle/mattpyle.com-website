@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { WorkflowNotFoundError } from '@temporalio/client';
-import { VerifyRefused, cancelLifecycleRun, recordHandFix, type HandFixDeps, type LifecycleRunHandle } from '../../src/lib/finding-verify.js';
+import {
+  VerifyRefused,
+  buildVerifyInput,
+  cancelLifecycleRun,
+  parseScratchRoot,
+  recordHandFix,
+  verifyFindingPaths,
+  type HandFixDeps,
+  type LifecycleRunHandle,
+} from '../../src/lib/finding-verify.js';
 
 /** After a hand verify resolves a finding, its open lifecycle run is cancelled; a closed or missing one is left alone. */
 
@@ -100,4 +109,36 @@ test('--pr refuses any status but approved, a PR that is not merged, and a URL t
   const { deps, calls } = handFix('approved', 'merged');
   await assert.rejects(recordHandFix(deps, 'mattpyle-com', KEY, 'https://github.com/mattpyle/mattpyle.com-website/issues/359'), /not a GitHub pull request URL/);
   assert.deepEqual(calls, [], 'nothing is read for a URL that is not a PR');
+});
+
+test('a verify run reads and writes the real store by default, and the scratch copy under --root', () => {
+  assert.deepEqual(verifyFindingPaths('mattpyle-com', KEY), {
+    findingPath: `sites/mattpyle-com/findings/${KEY}.md`,
+    indexPath: 'sites/mattpyle-com/findings/INDEX.md',
+  });
+  assert.deepEqual(verifyFindingPaths('mattpyle-com', KEY, parseScratchRoot('scratch/verify-cli/')), {
+    findingPath: `scratch/verify-cli/sites/mattpyle-com/findings/${KEY}.md`,
+    indexPath: 'scratch/verify-cli/sites/mattpyle-com/findings/INDEX.md',
+  });
+});
+
+test('a root is scratch and then slugs, so it can never name the real store', () => {
+  assert.equal(parseScratchRoot('scratch/a/b-2'), 'scratch/a/b-2');
+  for (const root of ['', 'scratch', 'scratch/', 'sites/mattpyle-com', 'scratch/../sites', 'scratch/A', '/scratch/a', 'scratch//a']) {
+    assert.throws(() => parseScratchRoot(root), VerifyRefused, root);
+  }
+});
+
+test('under --root, the workflow input carries the scratch paths and nothing else changes', () => {
+  const base = { site: 'mattpyle-com', key: KEY, repo: 'mattpyle/argus', origin: 'https://www.mattpyle.com', at: '2026-10-17T06:26:59.000Z' };
+  const real = buildVerifyInput(base);
+  assert.deepEqual(real, { ...base, findingPath: `sites/mattpyle-com/findings/${KEY}.md`, indexPath: 'sites/mattpyle-com/findings/INDEX.md' });
+  const scratch = buildVerifyInput({ ...base, reason: 'scratch run', root: parseScratchRoot('scratch/verify-cli') });
+  assert.deepEqual(scratch, {
+    ...base,
+    findingPath: `scratch/verify-cli/sites/mattpyle-com/findings/${KEY}.md`,
+    indexPath: 'scratch/verify-cli/sites/mattpyle-com/findings/INDEX.md',
+    reason: 'scratch run',
+  });
+  assert.ok(!Object.values(scratch).some((v) => typeof v === 'string' && v.startsWith('sites/')), 'no path in the input names the real store');
 });
