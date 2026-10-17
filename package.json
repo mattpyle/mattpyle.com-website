@@ -38,7 +38,7 @@
     "@astrojs/sitemap": "^3.7.3",
     "@astrojs/vercel": "^11.0.3",
     "@mattpyle/steward": "*",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.31.0",
     "@temporalio/client": "1.20.3",
     "@vercel/functions": "^3.7.5",
     "@vercel/speed-insights": "^2.0.0",
