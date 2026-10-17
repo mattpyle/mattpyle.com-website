@@ -1,13 +1,13 @@
 {
-  "iso": "2026-10-16",
-  "timestamp": "2026-10-16T03:33:57-07:00",
+  "iso": "2026-10-17",
+  "timestamp": "2026-10-17T03:33:47-07:00",
   "scope": "26 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "All 26 pages passed all four public metrics.",
+  "commentary": "Performance moved from Partial to Pass; all 26 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -38,7 +38,7 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-10-16",
+  "id": "2026-10-17",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -327,8 +327,9 @@
       "axeViolations": 0
     }
   ],
-  "decision": "no-op",
-  "reason": "unchanged, published 6d ago (<= 7d threshold)",
+  "decision": "open-pr",
+  "reason": "Performance Partial→Pass",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/378",
   "dryRun": false,
-  "archiveId": "2026-10-16"
+  "archiveId": "2026-10-17"
 }
