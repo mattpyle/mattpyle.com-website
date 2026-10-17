@@ -59,7 +59,7 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
-import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
+import { FixRefused, approvedNextStep, followFix, requestFix } from './lib/finding-fix.js';
 import { LIFECYCLE_CANCEL_WAIT_MS, VerifyRefused, cancelLifecycleRun, recordHandFix } from './lib/finding-verify.js';
 import { gh, ghText } from './lib/github.js';
 import {
@@ -93,7 +93,13 @@ import {
   verifyWorkflowId,
   type FindingVerdict,
 } from './lib/findings.js';
-import { readFinding, readFindingsIndex, writeFindingFix, writeFindingReturned } from './activities/findings.js';
+import {
+  readFinding,
+  readFindingsIndex,
+  readSiteAutoFix,
+  writeFindingFix,
+  writeFindingReturned,
+} from './activities/findings.js';
 import {
   verifyFindingStateQuery,
   verifyFindingWorkflow,
@@ -1790,7 +1796,14 @@ async function sendFindingVerdict(site: string, key: string, status: FindingVerd
     }
     console.log(`  commit: ${recorded.commitSha ?? 'none (the file already carried this verdict)'}`);
     if (stillOpen && recordedVerdict.status === 'approved') {
-      console.log(`  The workflow waits for \`steward finding fix ${key}\`.`);
+      // The verdict is recorded by now, so a failed read changes this line, not the exit.
+      let autoFix: boolean | undefined;
+      try {
+        autoFix = await readSiteAutoFix({ repo: ARGUS_REPO, site });
+      } catch (err) {
+        console.log(`  auto_fix unread (${describeCliError(err)}): \`steward finding status ${key}\` shows the next step.`);
+      }
+      if (autoFix !== undefined) console.log(`  ${approvedNextStep(key, autoFix)}`);
     }
     console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(handle.workflowId)}\n`);
   } finally {

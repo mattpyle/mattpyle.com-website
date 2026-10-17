@@ -77,6 +77,18 @@ export interface FindingFixDeps {
   pollMs?: number;
 }
 
+/**
+ * What `steward finding approve` prints after an approved verdict on a run that
+ * stays open. `autoFix` is the site's flag, read once at the approve as the
+ * workflow reads it at the verdict: with it the run opens the fix issue on its
+ * own, and without it the run waits at `waiting-fix` for the fix signal.
+ */
+export function approvedNextStep(key: string, autoFix: boolean): string {
+  return autoFix
+    ? 'The run opens the fix issue now: the site has auto_fix.'
+    : `The workflow waits for \`steward finding fix ${key}\`.`;
+}
+
 /** A refusal the operator can act on; the CLI prints the message alone. */
 export class FixRefused extends Error {
   constructor(message: string) {
