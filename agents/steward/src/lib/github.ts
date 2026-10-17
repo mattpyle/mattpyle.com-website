@@ -70,3 +70,22 @@ export async function gh(pathname: string, init?: RequestInit): Promise<any> {
   // deliberately a plain Error so the default retry policy applies.
   throw new Error(`GitHub ${res.status} for ${pathname}: ${body.message ?? text}`);
 }
+
+/**
+ * A plain-text GitHub read, for the one kind of body that is not JSON: an
+ * Actions job log. GitHub answers with a redirect to a short-lived storage URL,
+ * which `fetch` follows. Null when there is nothing to read: 404, or 410 for a
+ * log past its retention. Any other failure throws, as {@link gh} does.
+ */
+export async function ghText(pathname: string): Promise<string | null> {
+  const res = await fetch(`https://api.github.com${pathname}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${githubToken()}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (res.ok) return await res.text();
+  if (res.status === 404 || res.status === 410) return null;
+  throw new Error(`GitHub ${res.status} for ${pathname}: ${await res.text()}`);
+}
