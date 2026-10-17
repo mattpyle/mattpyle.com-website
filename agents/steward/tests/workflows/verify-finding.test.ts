@@ -11,29 +11,40 @@ import {
   verifyFindingWorkflow,
   type VerifyFindingInput,
 } from '../../src/workflows/verify-finding.js';
-import type { ReadVerifyBlockInput, WriteFindingVerificationInput } from '../../src/activities/findings.js';
-import type { GenerateVerifyBlockInput } from '../../src/activities/fixer.js';
+import {
+  readVerifyBlock,
+  type ProductionRead,
+  type ReadProductionDeployInput,
+  type ReadVerifyBlockInput,
+  type WriteFindingVerificationInput,
+} from '../../src/activities/findings.js';
 import type { RunFindingChecksInput } from '../../src/activities/verify-finding.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { verifyWorkflowId } from '../../src/lib/findings.js';
 import { runChecks, type VerifyCheck } from '../../src/lib/verify-checks.js';
-import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
+import { DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
 
 /**
- * `verifyFindingWorkflow` with its activities mocked: the pass, the fail, the
- * empty block, and the handoff that has no block yet. The check run is the real
- * `runChecks` over a fetch that serves one page, so a pass and a fail are
- * measured rather than declared.
+ * `verifyFindingWorkflow` with its activities mocked, on `steward-findings`
+ * as on the hosted worker: the pass, the fail, and the empty block and the
+ * finding with no block, which the deploy confirms (design decision 30). `readVerifyBlock` is the real activity over the
+ * finding's text, so the finding is the only source a test can give the
+ * checks. The check run is the real `runChecks` over a fetch that serves one
+ * page, so a pass and a fail are measured rather than declared.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
-const QUEUE = 'steward-heavy';
+const QUEUE = 'steward-findings';
 const AT = '2026-10-13T04:12:33.527Z';
-const FIXING = FIXING_FINDING;
 const PAGE = '<p>Accessibility: 100/100, 1 axe violation (Fail)</p>';
 
 const RIGHT: VerifyCheck = { url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { contains: '1 axe violation (Fail)' } };
 const WRONG: VerifyCheck = { url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { contains: '3 axe violations (Fail)' } };
+
+/** The fixing finding with a `verify` key in its frontmatter, as Argus writes it. JSON is YAML. */
+function withBlock(checks: VerifyCheck[]): string {
+  return FIXING_FINDING.replace('references: []', `references: []\nverify: ${JSON.stringify(checks)}`);
+}
 
 let env: TestWorkflowEnvironment;
 
@@ -46,18 +57,13 @@ after(async () => {
 });
 
 interface Mocks {
+  /** The finding file. Defaults to the fixing finding with `[RIGHT]` as its block. */
   finding?: string;
   /** False for a fixer PR that is still open. */
   merged?: boolean;
-  /** The block in the handoff, or `null` for a handoff that predates it. */
-  block?: VerifyCheck[] | null;
-  /** The finding's own block, which wins over the handoff's. Undefined for a finding with no `verify` key. */
-  own?: VerifyCheck[];
-  /** Leave `source` off the read result, as a history recorded before it existed does. */
-  legacyRead?: boolean;
-  /** What the generator writes when the handoff has none. */
-  generated?: VerifyCheck[];
   runFindingChecks?: (input: RunFindingChecksInput) => Promise<never>;
+  /** What the blockless verify's production read answers. Defaults to a live commit that contains the merge. */
+  production?: Partial<ProductionRead>;
 }
 
 function mockActivities(mocks: Mocks = {}) {
@@ -65,15 +71,14 @@ function mockActivities(mocks: Mocks = {}) {
   const seen: {
     pr?: string;
     read?: ReadVerifyBlockInput;
-    generate?: GenerateVerifyBlockInput;
+    production?: ReadProductionDeployInput;
     run?: RunFindingChecksInput;
     write?: WriteFindingVerificationInput;
   } = {};
-  const block = mocks.block === undefined ? [RIGHT] : mocks.block;
   const activities = {
     readFinding: async (_repo: string, path: string) => {
       calls.push('readFinding');
-      const text = mocks.finding ?? FIXING;
+      const text = mocks.finding ?? withBlock([RIGHT]);
       return { path, text, sha: 'sha-1', data: parseFrontmatter(text).data };
     },
     readFixPr: async (prUrl: string) => {
@@ -84,19 +89,20 @@ function mockActivities(mocks: Mocks = {}) {
     readVerifyBlock: async (input: ReadVerifyBlockInput) => {
       calls.push('readVerifyBlock');
       seen.read = input;
-      if (mocks.own) return { handoff: null, hasBlock: true, checks: mocks.own, source: 'finding' as const };
-      const read = { handoff: DEFECT_HANDOFF, hasBlock: block !== null, checks: block ?? [] };
-      if (mocks.legacyRead) return read;
-      return { ...read, source: block === null ? ('generated' as const) : ('handoff' as const) };
+      return readVerifyBlock(input);
     },
-    generateVerifyBlock: async (input: GenerateVerifyBlockInput) => {
-      calls.push('generateVerifyBlock');
-      seen.generate = input;
+    readProductionDeploy: async (input: ReadProductionDeployInput): Promise<ProductionRead> => {
+      calls.push('readProductionDeploy');
+      seen.production = input;
       return {
-        checks: mocks.generated ?? [RIGHT],
-        commitSha: 'c-block',
-        baseSha: 'c-base',
-        claude: { model: 'claude-x', costUsd: 0.31, durationMs: 40_000, numTurns: 7 },
+        prUrl: input.prUrl,
+        mergeSha: 'm312',
+        liveSha: 'live1',
+        deploymentId: 7,
+        contains: true,
+        why: '',
+        readAt: '2026-10-13T04:12:38.000Z',
+        ...mocks.production,
       };
     },
     runFindingChecks: async (input: RunFindingChecksInput) => {
@@ -139,7 +145,6 @@ function input(overrides: Partial<VerifyFindingInput> = {}): VerifyFindingInput 
     repo: 'mattpyle/argus',
     findingPath: `sites/mattpyle-com/findings/${DEFECT_KEY}.md`,
     indexPath: 'sites/mattpyle-com/findings/INDEX.md',
-    handoffPath: `sites/mattpyle-com/handoffs/${DEFECT_KEY}.md`,
     origin: ORIGIN,
     at: AT,
     ...overrides,
@@ -166,7 +171,7 @@ async function failure(run: Promise<unknown>): Promise<Error & { type?: string }
   assert.fail('the workflow did not fail');
 }
 
-test('pass: read, read the block, run, write. The finding is resolved with the measured value', async () => {
+test("pass: the finding's block runs on the findings queue, and the finding is resolved with the measured value", async () => {
   const { activities, calls, seen } = mockActivities();
   const result = await withWorker(activities, async () => {
     const handle = await start(input());
@@ -177,7 +182,8 @@ test('pass: read, read the block, run, write. The finding is resolved with the m
 
   assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'runFindingChecks', 'writeFindingVerification']);
   assert.equal(result.outcome, 'resolved');
-  assert.equal(result.generated, false);
+  assert.equal(result.source, 'finding');
+  assert.equal(result.hasBlock, true);
   assert.deepEqual(result.block, [RIGHT]);
   assert.deepEqual(result.checks, [
     {
@@ -196,23 +202,21 @@ test('pass: read, read the block, run, write. The finding is resolved with the m
   assert.deepEqual(seen.read, {
     repo: 'mattpyle/argus',
     findingPath: input().findingPath,
-    findingText: FIXING,
-    handoffPath: input().handoffPath,
+    findingText: withBlock([RIGHT]),
     origin: ORIGIN,
   });
-  assert.equal(result.source, 'handoff');
   assert.deepEqual(seen.run, { key: DEFECT_KEY, checks: [RIGHT] });
   assert.deepEqual(seen.write!.verification, {
     status: 'resolved',
     at: '2026-10-13T04:12:40.000Z',
     workflowId: `verify/mattpyle-com/${DEFECT_KEY}/2026-10-13T041233Z`,
-    source: 'handoff',
+    source: 'finding',
     rows: result.checks,
   });
 });
 
 test('fail: a check that does not hold reopens the finding with both values', async () => {
-  const { activities, calls, seen } = mockActivities({ block: [RIGHT, WRONG] });
+  const { activities, calls, seen } = mockActivities({ finding: withBlock([RIGHT, WRONG]) });
   const result = await withWorker(activities, async () => (await start(input())).result());
 
   assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'runFindingChecks', 'writeFindingVerification']);
@@ -221,100 +225,108 @@ test('fail: a check that does not hold reopens the finding with both values', as
   assert.equal(result.checks[1].expected, 'contains "3 axe violations (Fail)"');
   assert.equal(result.checks[1].measured, '0 occurrences');
   assert.equal(seen.write!.verification.status, 'reopened');
+  assert.equal(seen.write!.verification.source, 'finding');
   assert.deepEqual(seen.write!.verification.rows, result.checks);
 });
 
-test('unverifiable: an empty block runs nothing and writes nothing', async () => {
-  const { activities, calls } = mockActivities({ block: [] });
-  const result = await withWorker(activities, async () => (await start(input())).result());
+test('confirmed: a finding with no verify key is resolved by its deploy, with no rows and the three commits named', async () => {
+  const { activities, calls, seen } = mockActivities({ finding: FIXING_FINDING });
+  // An input recorded before decision 29 still names the handoff; nothing reads it.
+  const result = await withWorker(activities, async () =>
+    (await start(input({ handoffPath: `sites/mattpyle-com/handoffs/${DEFECT_KEY}.md` }))).result(),
+  );
 
-  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock']);
-  assert.equal(result.outcome, 'unverifiable');
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'readProductionDeploy', 'writeFindingVerification']);
+  assert.equal(result.outcome, 'confirmed');
+  assert.equal(result.hasBlock, false);
   assert.deepEqual(result.checks, []);
-  assert.equal(result.findingCommitSha, null);
-  assert.equal(result.ranAt, null);
-});
-
-test('generate-then-run: a handoff with no block gets one from the generator, and the generated block is what runs', async () => {
-  const { activities, calls, seen } = mockActivities({ block: null, generated: [RIGHT] });
-  const result = await withWorker(activities, async () => (await start(input())).result());
-
-  assert.deepEqual(calls, [
-    'readFinding',
-    'readFixPr',
-    'readVerifyBlock',
-    'generateVerifyBlock',
-    'runFindingChecks',
-    'writeFindingVerification',
-  ]);
-  assert.deepEqual(seen.generate, {
-    repo: 'mattpyle/argus',
-    key: DEFECT_KEY,
-    findingText: FIXING,
-    handoffPath: input().handoffPath,
-    origin: ORIGIN,
+  assert.equal(result.findingCommitSha, 'c-index');
+  assert.equal(result.ranAt, '2026-10-13T04:12:38.000Z');
+  assert.deepEqual(result.deploy, { prUrl: FIX_PR, mergeSha: 'm312', liveSha: 'live1', deploymentId: 7 });
+  assert.deepEqual(seen.production, { prUrl: FIX_PR, environment: 'Production' });
+  assert.ok(!('handoffPath' in seen.read!), 'the block read is given no handoff path');
+  assert.deepEqual(seen.write!.verification, {
+    status: 'resolved',
+    at: '2026-10-13T04:12:38.000Z',
+    workflowId: `verify/mattpyle-com/${DEFECT_KEY}/2026-10-13T041233Z`,
+    source: 'finding',
+    rows: [],
+    deploy: { prUrl: FIX_PR, mergeSha: 'm312', liveSha: 'live1' },
   });
-  assert.deepEqual(seen.run!.checks, [RIGHT]);
-  assert.equal(result.outcome, 'resolved');
-  assert.equal(result.generated, true);
-  assert.equal(result.source, 'generated');
-  assert.equal(seen.write!.verification.source, 'generated');
-  assert.equal(result.handoffCommitSha, 'c-block');
-  assert.equal(result.generateCostUsd, 0.31);
 });
 
-test("finding's block: its checks run, nothing is generated, and the write names the finding", async () => {
-  const { activities, calls, seen } = mockActivities({ own: [RIGHT, RIGHT], block: [WRONG] });
-  const result = await withWorker(activities, async () => (await start(input())).result());
+test('confirmed: an empty block is the same answer, and --reason rides into the section', async () => {
+  const { activities, calls, seen } = mockActivities({ finding: withBlock([]) });
+  const result = await withWorker(activities, async () => (await start(input({ reason: 'Matt read the page.' }))).result());
 
-  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'runFindingChecks', 'writeFindingVerification']);
-  assert.deepEqual(seen.run!.checks, [RIGHT, RIGHT]);
-  assert.equal(result.outcome, 'resolved');
-  assert.equal(result.source, 'finding');
-  assert.equal(result.generated, false);
-  assert.equal(seen.write!.verification.source, 'finding');
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'readProductionDeploy', 'writeFindingVerification']);
+  assert.equal(result.outcome, 'confirmed');
+  assert.equal(result.hasBlock, true);
+  assert.equal(seen.write!.verification.reason, 'Matt read the page.');
 });
 
-test("finding's empty block: unverifiable, and nothing is generated even though the handoff has no block", async () => {
-  const { activities, calls } = mockActivities({ own: [], block: null });
-  const result = await withWorker(activities, async () => (await start(input())).result());
+test('not contained: production without the fix fails the run as a check that could not measure, and writes nothing', async () => {
+  const { activities, calls } = mockActivities({
+    finding: FIXING_FINDING,
+    production: { contains: false, liveSha: 'old', why: 'Production serves old, which does not contain m312 (behind).' },
+  });
+  const cause = await withWorker(activities, async () => failure((await start(input())).result()));
+  assert.equal(cause.type, 'FixNotLive');
+  assert.match(cause.message, /could not be confirmed by the deploy: Production serves old, which does not contain m312 \(behind\)\. The finding is unchanged\./);
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'readProductionDeploy']);
+});
 
+test('a measured run carries --reason too', async () => {
+  const { activities, seen } = mockActivities();
+  const result = await withWorker(activities, async () => (await start(input({ reason: 'Checked by hand as well.' }))).result());
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(seen.write!.verification.reason, 'Checked by hand as well.');
+  assert.equal(seen.write!.verification.deploy, undefined);
+});
+
+test("a finding's block that fails validation fails the run on the first attempt, naming the finding", async () => {
+  const offsite: VerifyCheck = { ...RIGHT, url: 'https://example.com/scorecard/' };
+  const { activities, calls } = mockActivities({ finding: withBlock([offsite]) });
+  const cause = await withWorker(activities, async () => failure((await start(input())).result()));
+  const inner = ((cause as { cause?: Error & { type?: string } }).cause ?? cause) as Error & { type?: string };
+  assert.equal(inner.type, 'VerifyBlockInvalid');
+  assert.match(inner.message, new RegExp(`findings/${DEFECT_KEY}\\.md was refused`));
   assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock']);
-  assert.equal(result.outcome, 'unverifiable');
-  assert.equal(result.source, 'finding');
-  assert.equal(result.generated, false);
 });
 
-test('a read result recorded before source existed still branches on hasBlock', async () => {
-  const kept = mockActivities({ block: [RIGHT], legacyRead: true });
-  const fromHandoff = await withWorker(kept.activities, async () => (await start(input())).result());
-  assert.equal(fromHandoff.source, 'handoff');
-  assert.ok(!kept.calls.includes('generateVerifyBlock'));
-
-  const bare = mockActivities({ block: null, legacyRead: true });
-  const generated = await withWorker(bare.activities, async () => (await start(input())).result());
-  assert.equal(generated.source, 'generated');
-  assert.ok(bare.calls.includes('generateVerifyBlock'));
+test('a read result recorded before source existed is read as the handoff', async () => {
+  const { activities } = mockActivities();
+  const legacy = {
+    ...activities,
+    readVerifyBlock: async () => ({ handoff: 'h', hasBlock: true, checks: [RIGHT] }),
+  };
+  const result = await withWorker(legacy, async () => (await start(input())).result());
+  assert.equal(result.source, 'handoff');
+  assert.equal(result.outcome, 'resolved');
 });
 
-test('generate-then-unverifiable: a generated empty block ends the run with nothing written to the finding', async () => {
-  const { activities, calls } = mockActivities({ block: null, generated: [] });
-  const result = await withWorker(activities, async () => (await start(input())).result());
-
-  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'generateVerifyBlock']);
-  assert.equal(result.outcome, 'unverifiable');
-  assert.equal(result.generated, true);
-  assert.equal(result.handoffCommitSha, 'c-block');
-});
-
-test('refuse: a finding that is not fixing fails before its handoff is read', async () => {
-  for (const status of ['approved', 'resolved', 'reopened']) {
-    const { activities, calls } = mockActivities({ finding: FIXING_FINDING.replace('status: fixing', `status: ${status}`) });
+test('refuse: a finding that is not fixing or reopened fails before its block is read', async () => {
+  for (const status of ['approved', 'resolved', 'proposed']) {
+    const { activities, calls } = mockActivities({ finding: withBlock([RIGHT]).replace('status: fixing', `status: ${status}`) });
     const cause = await withWorker(activities, async () => failure((await start(input())).result()));
     assert.equal(cause.type, 'FindingNotVerifiable');
-    assert.match(cause.message, new RegExp(`its status is ${status}, not fixing`));
+    assert.match(cause.message, new RegExp(`its status is ${status}, not fixing or reopened`));
     assert.deepEqual(calls, ['readFinding']);
   }
+});
+
+test('a reopened finding whose PR is merged is verified again, and an unmerged one is not', async () => {
+  const reopened = withBlock([RIGHT]).replace('status: fixing', 'status: reopened');
+  const { activities, calls, seen } = mockActivities({ finding: reopened });
+  const result = await withWorker(activities, async () => (await start(input())).result());
+  assert.deepEqual(calls, ['readFinding', 'readFixPr', 'readVerifyBlock', 'runFindingChecks', 'writeFindingVerification']);
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(seen.write!.verification.status, 'resolved');
+
+  const open = mockActivities({ finding: reopened, merged: false });
+  const cause = await withWorker(open.activities, async () => failure((await start(input())).result()));
+  assert.equal(cause.type, 'FixNotMerged');
+  assert.deepEqual(open.calls, ['readFinding', 'readFixPr']);
 });
 
 test('refuse: a fix that is not merged is not measured, so an open PR never reopens its finding', async () => {
@@ -324,7 +336,7 @@ test('refuse: a fix that is not merged is not measured, so an open PR never reop
   assert.match(cause.message, /pull\/312 is not merged/);
   assert.deepEqual(calls, ['readFinding', 'readFixPr']);
 
-  const noLink = mockActivities({ finding: FIXING.replace(/links:[^]*?pull\/312/, 'links: {}') });
+  const noLink = mockActivities({ finding: withBlock([RIGHT]).replace(/links:[^]*?pull\/312/, 'links: {}') });
   const refused = await withWorker(noLink.activities, async () => failure((await start(input())).result()));
   assert.equal(refused.type, 'FindingNotVerifiable');
   assert.match(refused.message, /no links\.pr/);

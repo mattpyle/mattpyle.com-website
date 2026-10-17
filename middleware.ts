@@ -44,6 +44,11 @@ const RETIRED_WRITING_SLUGS: Record<string, string> = {
 // trailing slash) and its `.md` sibling.
 const RETIRABLE = /^\/writing\/([^/.]+?)(\.md)?\/?$/;
 
+// An entry page (post or changelog entry) is a slug under a collection root. vercel.json hand-lists a
+// `Link` header per section path, which cannot cover pages generated from a slug, so entry pages get
+// theirs here. Purely numeric slugs are pagination pages, not entries.
+const ENTRY_PAGE = /^\/(?:writing|changelog)\/(?!\d+\/?$)[^/.]+\/?$/;
+
 // Fire-and-forget durable counting, in its own failure domain and its own try/catch.
 //
 // Two separate wrappers rather than one around both the log and the count, on purpose: the console
@@ -90,6 +95,10 @@ function slashRedirectOrNext(url: URL, request: Request, isPage: boolean): Respo
   const slashed = trailingSlashRedirectFor(url.pathname);
   if (!slashed) {
     if (isPage) countHit('page', url.pathname, request);
+    const entrySibling = ENTRY_PAGE.test(url.pathname) ? markdownSiblingFor(url.pathname) : null;
+    if (entrySibling) {
+      return next({ headers: { Link: `<${entrySibling}>; rel="alternate"; type="text/markdown"` } });
+    }
     return next();
   }
   const location = `${slashed}${url.search}`;

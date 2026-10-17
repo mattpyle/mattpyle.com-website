@@ -149,6 +149,13 @@ test('the tracker records a browser activity, its end, and the in-flight count',
   });
 });
 
+test("the verifier's check run arms the policy: it launches the worker's Chromium for selector and js", async () => {
+  const tracker = new ActivityTracker(() => NOW);
+  const inbound = trackActivityExecution(tracker)({ info: { activityType: 'runFindingChecks' } } as never).inbound;
+  await inbound!.execute!({ args: [], headers: {} } as never, (async () => 'rows') as never);
+  assert.equal(tracker.state().lastBrowserActivityAt, NOW);
+});
+
 test('a failed activity still ends, so a crash cannot strand the worker in flight', async () => {
   const tracker = new ActivityTracker(() => NOW);
   const inbound = trackActivityExecution(tracker)({

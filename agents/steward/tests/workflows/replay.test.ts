@@ -319,3 +319,106 @@ test('a fix child recorded before the diff review replays without it', { timeout
     'fix/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the issue path: approved,
+ * one `fix`, a `fixFindingWorkflow` child that opened a PR, the PR closed
+ * unmerged, and the run parked back at `waiting-fix`. New code must replay
+ * that attempt as a child, which is what the `fixer-action-adapter` patch is
+ * for, and must not read `auto_fix` on a run already past its verdict, which
+ * is the `fixer-auto-fix` patch.
+ *
+ * Recorded from the pre-change code (2a9ae4d) against the time-skipping
+ * server, with mocked activities and the stub child, so it holds no real
+ * finding text.
+ */
+const findingChildHistoryPath = fileURLToPath(new URL('../fixtures/histories/finding-child-fix-returned.bin', import.meta.url));
+
+test('a lifecycle run whose first fix was a child replays that attempt as a child', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingChildHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the hosted verifier:
+ * approved with `auto_fix`, the issue, the PR, the merge and the deploy, then
+ * `verifyFindingWorkflow` started on `steward-heavy` and resolved. New code
+ * must replay that start on `steward-heavy`, which is what the
+ * `verifier-hosted` patch is for.
+ *
+ * Two probes (2026-10-15). A timer injected before the child start made this
+ * replay fail with `[TMPRL1100] Timer machine does not handle this event`, so
+ * the fixture guards the command sequence up to and through the verify start.
+ * Deleting the `patched()` guard, so the child always starts on
+ * `steward-findings`, replayed green: the SDK matches a child start on its
+ * workflow ID and type, not its task queue. The marker keeps the history
+ * honest about where each verify ran; the replay does not depend on it.
+ *
+ * Recorded from the pre-change code (76b1680) the same way as the fixture
+ * above.
+ */
+const findingVerifyHeavyHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-verify-child-heavy.bin', import.meta.url),
+);
+
+test('a lifecycle run that started its verify child on steward-heavy replays that start', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingVerifyHeavyHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});
+
+/**
+ * Two histories from before design decision 30, when a finding with no
+ * `verify` block ended its verify `unverifiable` and nothing was written.
+ *
+ * - `verify-finding-blockless.bin`: the verify alone, read, PR, block, done.
+ *   New code reads production and writes on a blockless finding, so this
+ *   replays only because the `verify-blockless-confirm` patch sends a history
+ *   without its marker down the old ending.
+ * - `finding-verify-unverifiable.bin`: a lifecycle run through the merge, the
+ *   deploy and that child, ending `unverifiable`. The parent's commands did not
+ *   change; it pins that the old ending is still a result the run accepts.
+ *
+ * Probe (2026-10-16): deleting the `patched()` guard in `verifyFindingWorkflow`
+ * made the verify fixture fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity machine does not handle this
+ * event: HistoryEvent(id: 23, WorkflowExecutionCompleted)
+ * ```
+ *
+ * and left the lifecycle fixture green. The guard was restored and both re-run
+ * green.
+ *
+ * Recorded from the pre-change code (448be2b) against the time-skipping
+ * server with mocked activities, as the fixtures above.
+ */
+const verifyBlocklessHistoryPath = fileURLToPath(new URL('../fixtures/histories/verify-finding-blockless.bin', import.meta.url));
+const findingUnverifiableHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-verify-unverifiable.bin', import.meta.url),
+);
+
+test('a blockless verify recorded before decision 30 replays to its unverifiable ending', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(verifyBlocklessHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'verify/mattpyle-com/content-perfect-score-labelled-fail--scorecard/2026-10-13T041233Z',
+  );
+});
+
+test('a lifecycle run whose child ended unverifiable still replays to that ending', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingUnverifiableHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});

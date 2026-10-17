@@ -56,19 +56,21 @@ test('a verify run has its own workflow ID, stamped to the second, and a run ID 
   assert.equal(verifyStamp('2026-10-13T04:12:33Z'), '2026-10-13T041233Z', 'an instant with no milliseconds too');
 });
 
-test('the verifier takes fixing findings and names why it refuses any other', () => {
+test('the verifier takes fixing and reopened findings and names why it refuses any other', () => {
   assert.equal(verifyRefusal({ status: 'fixing', links: { pr: FIX_PR } }), null);
+  assert.equal(verifyRefusal({ status: 'reopened', links: { pr: FIX_PR } }), null);
+  assert.equal(verifyRefusal({ status: 'reopened' }), 'it has no links.pr to a pull request');
   assert.equal(verifyRefusal({ status: 'fixing' }), 'it has no links.pr to a pull request');
   assert.equal(verifyRefusal({ status: 'fixing', links: { pr: 'https://example.com/pull/1' } }), 'it has no links.pr to a pull request');
   assert.deepEqual(parsePrUrl(FIX_PR), { repo: 'mattpyle/mattpyle.com-website', number: 312 });
   assert.equal(parsePrUrl(`${FIX_PR}/files`), null);
-  for (const status of ['approved', 'resolved', 'reopened', 'proposed', 'rejected']) {
-    assert.equal(verifyRefusal({ status, links: { pr: FIX_PR } }), `its status is ${status}, not fixing`);
+  for (const status of ['approved', 'resolved', 'proposed', 'rejected']) {
+    assert.equal(verifyRefusal({ status, links: { pr: FIX_PR } }), `its status is ${status}, not fixing or reopened`);
   }
   assert.match(verifyRefusal({})!, /unset/);
 });
 
-test('resolved and reopened are statuses the index parser reads and the reconciler leaves alone', () => {
+test('resolved and reopened are statuses the index parser reads; the reconciler leaves resolved alone and starts a reopened one', () => {
   const index = parseFindingsIndex(
     ['fixed-one | resolved | defect | s | Title | Approved.', 'back-one | reopened | defect | s | Title | Approved.'].join('\n'),
   );
@@ -76,10 +78,15 @@ test('resolved and reopened are statuses the index parser reads and the reconcil
     ['fixed-one', 'resolved'],
     ['back-one', 'reopened'],
   ]);
-  // With a workflow open for each or with none, neither is started or signalled.
-  for (const open of [[], ['finding/mattpyle-com/fixed-one', 'finding/mattpyle-com/back-one']]) {
-    assert.deepEqual(planReconcile('mattpyle-com', index, open), { start: [], signal: [], unchanged: 2 });
-  }
+  // With a workflow open for each, neither is started or signalled.
+  assert.deepEqual(
+    planReconcile('mattpyle-com', index, ['finding/mattpyle-com/fixed-one', 'finding/mattpyle-com/back-one']),
+    { start: [], signal: [], unchanged: 2 },
+  );
+  // With none, the reopened one goes back to the gate (design decision 29); resolved stays.
+  const none = planReconcile('mattpyle-com', index, []);
+  assert.deepEqual(none.start.map((line) => line.key), ['back-one']);
+  assert.equal(none.unchanged, 1);
   assert.equal(
     setIndexStatus('back-one | fixing | defect | s | Title | Approved.', 'back-one', 'reopened'),
     'back-one | reopened | defect | s | Title | Approved.',
@@ -147,8 +154,53 @@ test('the section keeps a later section Argus appended, and the edit keeps CRLF'
   assert.throws(() => setFindingVerification('---\nkey: k\n---\nbody\n', verification('resolved')), /no status field/);
 });
 
+test('a browser check names the viewport it ran at, and a fetch check names none', () => {
+  const rows: Verification['rows'] = [{ ...ROWS[0], kind: 'js', viewport: '390x844' }, ROWS[1]];
+  const section = buildVerificationSection(verification('resolved', rows));
+  assert.match(section, /\n1\. Pass, `js` on https:\/\/www\.mattpyle\.com\/ at 390x844\. Expected: /);
+  assert.match(section, /\n2\. Fail, `text` on https:\/\/www\.mattpyle\.com\/about\/\. Expected: /);
+});
+
 test('a finding with no resolved_run field gets one, inside the frontmatter', () => {
   const out = setFindingVerification('---\nkey: k\nstatus: fixing\n---\n\n# Title\n', verification('resolved', [ROWS[0]]));
   assert.ok(out.startsWith('---\nkey: k\nstatus: resolved\nresolved_run: 2026-10-13T0412Z\n---\n\n# Title\n\n## Verification\n'));
   assert.match(buildVerificationSection(verification('resolved', [ROWS[0]])), /^## Verification\n\nSteward ran/);
+});
+
+const DEPLOY = { prUrl: FIX_PR, mergeSha: 'a'.repeat(40), liveSha: 'b'.repeat(40) };
+
+test('a deploy-resolved finding is resolved_by deploy, and its section has no rows and names the PR, the merge and the live commit', () => {
+  const out = setFindingVerification(FIXING, { ...verification('resolved', []), deploy: DEPLOY });
+  const { data } = parseFrontmatter(out);
+  assert.equal(data.status, 'resolved');
+  assert.equal(data.resolved_run, '2026-10-13T0412Z');
+  assert.equal(data.resolved_by, 'deploy');
+  assert.match(out, /\nresolved_run: 2026-10-13T0412Z\nresolved_by: deploy\n/);
+  const before = FIXING.split('\n');
+  assert.deepEqual(out.split('\n').slice(before.length + 1), [
+    '## Verification',
+    '',
+    `Steward confirmed this finding's fix by its deploy at ${AT}. Outcome: confirmed. Workflow \`verify/mattpyle-com/${DEFECT_KEY}/2026-10-13T041233Z\`.`,
+    '',
+    `No check could measure the fix: the finding has no verify block. ${FIX_PR} merged as \`${DEPLOY.mergeSha}\`, and production serves \`${DEPLOY.liveSha}\`, which contains it.`,
+    '',
+  ]);
+});
+
+test('a measured result drops an earlier resolved_by, and a measured resolved never writes one', () => {
+  const deployed = setFindingVerification(FIXING, { ...verification('resolved', []), deploy: DEPLOY });
+  const reopened = setFindingVerification(deployed.replace('status: resolved', 'status: fixing'), verification('reopened'));
+  assert.equal(parseFrontmatter(reopened).data.resolved_by, undefined);
+  assert.equal(reopened.match(/^resolved_by:/gm), null);
+  assert.equal(setFindingVerification(FIXING, verification('resolved', [ROWS[0]])).match(/^resolved_by:/gm), null);
+  // The same deploy result twice is one line, not two.
+  const again = setFindingVerification(deployed, { ...verification('resolved', []), deploy: DEPLOY });
+  assert.equal(again, deployed);
+});
+
+test('--reason adds one line attributed to the CLI, after the rows or the deploy sentence', () => {
+  const measured = buildVerificationSection({ ...verification('resolved', [ROWS[0]]), reason: 'Read the footer by hand.' });
+  assert.match(measured, /Measured: "Footer"\.\n\nFrom the CLI: Read the footer by hand\.$/);
+  const deployed = buildVerificationSection({ ...verification('resolved', []), deploy: DEPLOY, reason: 'Fixed by PR 356 outside the run.' });
+  assert.match(deployed, /which contains it\.\n\nFrom the CLI: Fixed by PR 356 outside the run\.$/);
 });

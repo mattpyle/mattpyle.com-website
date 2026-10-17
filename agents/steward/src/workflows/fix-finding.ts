@@ -1,3 +1,4 @@
+// Frozen with activities/fixer.ts and lib/fixer.ts, and started by nothing: claude-code-action is the fixer (findings-loop design, decision 26).
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 // Pure, no imports of its own: the same parser and the same refusal rule the

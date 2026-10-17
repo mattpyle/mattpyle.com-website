@@ -15,38 +15,44 @@ import {
   type FindingWorkflowResult,
 } from '../../src/workflows/finding.js';
 import type {
+  AwaitFixPrInput,
   AwaitProductionDeployInput,
+  FixIssue,
+  FixPr,
   FixPrOutcome,
+  OpenFixIssueInput,
   ProductionDeploy,
+  ProductionRead,
+  ReadProductionDeployInput,
   WriteFindingReturnedInput,
   WriteFindingVerificationInput,
 } from '../../src/activities/findings.js';
-import { readFixChecks, type OpenFixerPrInput, type ReviewFixDiffResult, type RunFixerResult } from '../../src/activities/fixer.js';
-import { opensAsDraft } from '../../src/lib/fixer.js';
 import type { RunFindingChecksInput } from '../../src/activities/verify-finding.js';
 import { compareContains, liveDeployment, type DeploymentRecord, type FindingVerdict } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import type { VerifyCheck } from '../../src/lib/verify-checks.js';
-import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, FIXING_FINDING, ORIGIN } from '../helpers/finding-fixtures.js';
+import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
 
 /**
  * `findingWorkflow` started with `stopAfter: 'resolved'`, end to end on the
- * time-skipping server: the verdict, the `fix` signal, `fixFindingWorkflow` and
- * `verifyFindingWorkflow` as real children, and the two polling waits. Every
- * activity is mocked. Two workers, one per queue, as in production: the parent
- * and its waits on `steward-findings`, the children on `steward-heavy`.
+ * time-skipping server: the verdict, the `fix` signal or `auto_fix`, the fix
+ * issue and the PR wait, the merge and deploy waits, and
+ * `verifyFindingWorkflow` as a real child. Every activity is mocked. One
+ * worker on `steward-findings`, as on the hosted container: the parent, the
+ * verify child and every activity of both (design decision 29).
  *
  * The waits are scripted per attempt, so a test reads as the sequence of polls
- * GitHub would answer. The retry intervals are the real ones (5 minutes, 2
+ * GitHub would answer. The retry intervals are the real ones (1, 5 and 2
  * minutes); the time-skipping server jumps them.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const FINDINGS = 'steward-findings';
-const HEAVY = 'steward-heavy';
 const SITE_REPO = 'mattpyle/mattpyle.com-website';
 const PR_1 = `https://github.com/${SITE_REPO}/pull/401`;
 const PR_2 = `https://github.com/${SITE_REPO}/pull/402`;
+const ISSUE_1 = `https://github.com/${SITE_REPO}/issues/101`;
+const ISSUE_2 = `https://github.com/${SITE_REPO}/issues/102`;
 const CHECK: VerifyCheck = { url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { contains: '1 axe violation (Fail)' } };
 
 let env: TestWorkflowEnvironment;
@@ -60,6 +66,12 @@ after(async () => {
 });
 
 interface Script {
+  /** The site config's `auto_fix`. */
+  autoFix?: boolean;
+  /** Per attempt: how many PR polls answer "not yet" before its PR opens. Default 2. */
+  prPolls?: number[];
+  /** Per attempt: a non-retryable failure type the PR wait throws instead, or null. */
+  prFail?: (string | null)[];
   /** Per PR: how many polls answer "still open", then the outcome. */
   merge: Record<string, { openPolls: number; outcome: FixPrOutcome }>;
   /** What production's deployments list holds at each deploy poll, newest first. The last entry repeats. */
@@ -68,29 +80,62 @@ interface Script {
   contains?: Record<string, boolean>;
   /** Whether the verify checks pass. */
   passes?: boolean;
+  /** The finding has no `verify` key. */
+  noBlock?: boolean;
+  /** What the blockless verify's production read says: contained unless false. */
+  liveContains?: boolean;
 }
 
 function lifecycle(script: Script) {
   const calls: string[] = [];
   let finding = DEFECT_FINDING;
-  let prCount = 0;
+  const issues: FixIssue[] = [];
+  const prPolls: Record<number, number> = {};
   const mergePolls: Record<string, number> = {};
   let deployPolls = 0;
   const seen: {
+    issues: OpenFixIssueInput[];
     returned: WriteFindingReturnedInput[];
     deploy: AwaitProductionDeployInput[];
     verification?: WriteFindingVerificationInput;
-    prs: OpenFixerPrInput[];
   } = {
+    issues: [],
     returned: [],
     deploy: [],
-    prs: [],
   };
 
   const findings = {
     writeFindingVerdict: async () => {
       calls.push('writeFindingVerdict');
       return { findingCommitSha: 'c-v1', indexCommitSha: 'c-v2', commitSha: 'c-v2' };
+    },
+    readSiteAutoFix: async () => {
+      calls.push('readSiteAutoFix');
+      return script.autoFix ?? false;
+    },
+    openFixIssue: async (input: OpenFixIssueInput): Promise<FixIssue> => {
+      calls.push('openFixIssue');
+      seen.issues.push(input);
+      const number = 101 + issues.length;
+      const issue = { repo: SITE_REPO, number, url: `https://github.com/${SITE_REPO}/issues/${number}`, reused: false };
+      issues.push(issue);
+      return issue;
+    },
+    awaitFixPr: async (input: AwaitFixPrInput): Promise<FixPr> => {
+      const attempt = input.issueNumber - 101;
+      const n = (prPolls[input.issueNumber] = (prPolls[input.issueNumber] ?? 0) + 1);
+      const fail = script.prFail?.[attempt];
+      if (fail) throw ApplicationFailure.nonRetryable('GitHub rejected the credential (403).', fail);
+      if (n <= (script.prPolls?.[attempt] ?? 2)) {
+        throw ApplicationFailure.retryable(`No open PR from claude/issue-${input.issueNumber}- yet.`, 'FixPrNotOpen');
+      }
+      calls.push('awaitFixPr');
+      return { prUrl: attempt === 0 ? PR_1 : PR_2, branch: `claude/issue-${input.issueNumber}-20261016-0338` };
+    },
+    writeFindingFix: async () => {
+      calls.push('writeFindingFix');
+      finding = FIXING_FINDING;
+      return { findingCommitSha: 'c-f1', indexCommitSha: 'c-f2', commitSha: 'c-f2' };
     },
     awaitFixPrMerge: async (prUrl: string): Promise<FixPrOutcome> => {
       const n = (mergePolls[prUrl] = (mergePolls[prUrl] ?? 0) + 1);
@@ -122,71 +167,32 @@ function lifecycle(script: Script) {
     },
   };
 
-  const run: RunFixerResult = {
-    branch: `fix/finding-${DEFECT_KEY}`,
-    base: 'master',
-    commitSha: 'c-fix',
-    filesChanged: ['src/pages/scorecard.astro'],
-    checks: [{ n: 1, status: 'pass', command: 'npm test' }],
-    claude: {
-      exitCode: 0,
-      timedOut: false,
-      finalMessage: 'Done.',
-      model: 'claude-x',
-      sessionId: 's1',
-      numTurns: 10,
-      costUsd: 1,
-      permissionDenials: [],
-    },
-    npmCi: false,
-    timingsMs: { worktree: 1, install: 1, claude: 1, checks: 1, push: 1, total: 5 },
-  };
-
-  const heavy = {
+  // The verify child's activities, on the same queue since decision 29.
+  const verify = {
     readFinding: async (_repo: string, path: string) => {
       calls.push('readFinding');
       return { path, text: finding, sha: 'sha-1', data: parseFrontmatter(finding).data };
-    },
-    generateHandoff: async () => {
-      calls.push('generateHandoff');
-      return {
-        handoff: DEFECT_HANDOFF,
-        title: 'Fix',
-        commitSha: 'c-handoff',
-        base: 'master',
-        baseSha: 'c-base',
-        claude: { model: 'claude-x', costUsd: 0.05, durationMs: 1, numTurns: 1 },
-      };
-    },
-    // The fix child's chooser, pure. The fixture handoff's block is empty, so
-    // the child runs neither site test and the lifecycle's calls are unchanged.
-    readFixChecks,
-    runFixer: async () => {
-      calls.push('runFixer');
-      return run;
-    },
-    // A clean review: the lifecycle's PR opens ready, as a real run's would.
-    reviewFixDiff: async (): Promise<ReviewFixDiffResult> => {
-      calls.push('reviewFixDiff');
-      return { problems: [], incomplete: null, diffChars: 100, reply: 'problems: []', claude: null };
-    },
-    openFixerPr: async (input: OpenFixerPrInput) => {
-      calls.push('openFixerPr');
-      seen.prs.push(input);
-      prCount++;
-      return { prUrl: prCount === 1 ? PR_1 : PR_2, draft: opensAsDraft(input) };
-    },
-    writeFindingFix: async () => {
-      calls.push('writeFindingFix');
-      finding = FIXING_FINDING;
-      return { findingCommitSha: 'c-f1', indexCommitSha: 'c-f2', commitSha: 'c-f2' };
     },
     readFixPr: async (prUrl: string) => {
       calls.push('readFixPr');
       return { prUrl, merged: true, mergedAt: '2026-10-13T20:00:00Z' };
     },
+    readProductionDeploy: async (input: ReadProductionDeployInput): Promise<ProductionRead> => {
+      calls.push('readProductionDeploy');
+      const contains = script.liveContains ?? true;
+      return {
+        prUrl: input.prUrl,
+        mergeSha: 'm1',
+        liveSha: contains ? 'm1' : 'old',
+        deploymentId: 2,
+        contains,
+        why: contains ? '' : 'Production serves old, which does not contain m1 (behind).',
+        readAt: '2026-10-13T21:00:00.000Z',
+      };
+    },
     readVerifyBlock: async () => {
       calls.push('readVerifyBlock');
+      if (script.noBlock) return { handoff: null, hasBlock: false, checks: [], source: 'finding' as const };
       return { handoff: null, hasBlock: true, checks: [CHECK], source: 'finding' as const };
     },
     runFindingChecks: async (input: RunFindingChecksInput) => {
@@ -212,9 +218,17 @@ function lifecycle(script: Script) {
     },
   };
 
-  return { findings, heavy, calls, seen, mergePolls: () => mergePolls, deployPolls: () => deployPolls };
+  return {
+    findings: { ...findings, ...verify },
+    calls,
+    seen,
+    prPolls: () => prPolls,
+    mergePolls: () => mergePolls,
+    deployPolls: () => deployPolls,
+  };
 }
 
+/** One worker, as on the hosted container: no `steward-heavy` poller, so a child sent there would never run. */
 async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Promise<T>): Promise<T> {
   const findingsWorker = await Worker.create({
     connection: env.nativeConnection,
@@ -223,14 +237,7 @@ async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Pro
     taskQueue: FINDINGS,
     bundlerOptions: {},
   });
-  const heavyWorker = await Worker.create({
-    connection: env.nativeConnection,
-    workflowsPath,
-    activities: mocks.heavy,
-    taskQueue: HEAVY,
-    bundlerOptions: {},
-  });
-  return await findingsWorker.runUntil(heavyWorker.runUntil(fn()));
+  return await findingsWorker.runUntil(fn());
 }
 
 function input(id: string): FindingWorkflowInput {
@@ -269,30 +276,41 @@ test('merged, deployed and every check passes: resolved, with one execution carr
     merge: { [PR_1]: { openPolls: 3, outcome: merged(PR_1, 'm1') } },
     deploys: [[{ id: 1, sha: 'old', state: 'success' }], [{ id: 2, sha: 'm1', state: 'success' }]],
   });
+  let childQueues: (string | null | undefined)[] = [];
   const result = (await withWorkers(mocks, async () => {
     const handle = await startApproved('resolved');
-    return handle.result();
+    const done = await handle.result();
+    const history = await handle.fetchHistory();
+    childQueues = (history.events ?? [])
+      .map((e) => e.startChildWorkflowExecutionInitiatedEventAttributes)
+      .filter(Boolean)
+      .map((child) => child?.taskQueue?.name);
+    return done;
   })) as FindingWorkflowResult;
 
+  assert.deepEqual(childQueues, [FINDINGS], 'the verify child starts on steward-findings');
   assert.equal(result.outcome, 'resolved');
   assert.equal(result.prUrl, PR_1);
   assert.equal(result.mergeSha, 'm1');
   assert.equal(result.liveSha, 'm1');
   assert.equal(result.fixAttempts, 1);
   assert.match(result.verifyWorkflowId ?? '', new RegExp(`^verify/mattpyle-com/${DEFECT_KEY}/`));
+  assert.equal(mocks.prPolls()[101], 3, 'two "not yet" polls, then the PR');
   assert.equal(mocks.mergePolls()[PR_1], 4, 'three open polls, then the merge');
   assert.equal(mocks.deployPolls(), 2, 'the old deploy, then the merge commit');
   assert.deepEqual(mocks.seen.deploy[0], { repo: SITE_REPO, mergeSha: 'm1', environment: 'Production' });
-  // The review ran, found nothing, and the PR opened ready.
-  assert.deepEqual(mocks.seen.prs[0].review, { problems: [], incomplete: null });
-  assert.equal(opensAsDraft(mocks.seen.prs[0]), false, 'the PR opens ready');
+  assert.deepEqual(mocks.seen.issues[0], {
+    repo: 'mattpyle/argus',
+    site: 'mattpyle-com',
+    key: DEFECT_KEY,
+    findingPath: `sites/mattpyle-com/findings/${DEFECT_KEY}.md`,
+    supersedes: null,
+  });
   assert.deepEqual(mocks.calls, [
     'writeFindingVerdict',
-    'readFinding',
-    'generateHandoff',
-    'runFixer',
-    'reviewFixDiff',
-    'openFixerPr',
+    'readSiteAutoFix',
+    'openFixIssue',
+    'awaitFixPr',
     'writeFindingFix',
     'awaitFixPrMerge:merged',
     'awaitProductionDeploy:m1',
@@ -302,6 +320,49 @@ test('merged, deployed and every check passes: resolved, with one execution carr
     'runFindingChecks',
     'writeFindingVerification:resolved',
   ]);
+});
+
+test('auto_fix: the approved verdict goes to the issue with no fix signal, and the run waits on the PR', async () => {
+  const mocks = lifecycle({
+    autoFix: true,
+    prPolls: [3],
+    merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
+    deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
+  });
+  const result = await withWorkers(mocks, async () => {
+    const handle = await env.client.workflow.start(findingWorkflow, {
+      workflowId: 'finding/mattpyle-com/lifecycle-auto-fix',
+      taskQueue: FINDINGS,
+      args: [input('auto-fix')],
+    });
+    await handle.signal(verdictSignal, APPROVE);
+    const waiting = await untilState(handle, (s) => s.step === 'fixing' && Boolean(s.issueUrl), 'fixing with an issue');
+    assert.equal(waiting.issueUrl, ISSUE_1, 'the issue is in the state while the run waits for the PR');
+    assert.equal(waiting.prUrl, null);
+    return handle.result();
+  });
+
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(result.prUrl, PR_1);
+  assert.equal(result.fixAttempts, 1);
+  assert.deepEqual(mocks.calls.slice(0, 5), ['writeFindingVerdict', 'readSiteAutoFix', 'openFixIssue', 'awaitFixPr', 'writeFindingFix']);
+});
+
+test('without auto_fix the approved run waits at waiting-fix and opens no issue', async () => {
+  const mocks = lifecycle({ autoFix: false, merge: {} });
+  await withWorkers(mocks, async () => {
+    const handle = await env.client.workflow.start(findingWorkflow, {
+      workflowId: 'finding/mattpyle-com/lifecycle-no-auto-fix',
+      taskQueue: FINDINGS,
+      args: [input('no-auto-fix')],
+    });
+    await handle.signal(verdictSignal, APPROVE);
+    await untilState(handle, (s) => s.step === 'waiting-fix', 'waiting-fix');
+    await env.sleep('10 minutes');
+    assert.equal((await handle.query(findingStateQuery)).step, 'waiting-fix');
+    assert.deepEqual(mocks.calls, ['writeFindingVerdict', 'readSiteAutoFix']);
+    await handle.terminate('test over');
+  });
 });
 
 test('merged and deployed, but a check fails on production: reopened with both values', async () => {
@@ -319,7 +380,44 @@ test('merged and deployed, but a check fails on production: reopened with both v
   assert.equal(row?.measured, '0 occurrences');
 });
 
-test('a PR closed unmerged writes approved back, waits, and the next fix runs again through to resolved', async () => {
+test('merged and deployed, and the finding has no verify block: confirmed by the deploy, written resolved', async () => {
+  const mocks = lifecycle({
+    merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
+    deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
+    noBlock: true,
+  });
+  const result = await withWorkers(mocks, async () => (await startApproved('confirmed')).result());
+
+  assert.equal(result.outcome, 'confirmed');
+  assert.match(result.note ?? '', /^Confirmed by its deploy: production serves m1, which contains m1\. No check could measure the fix\.$/);
+  assert.equal(result.liveSha, 'm1');
+  assert.ok(!mocks.calls.includes('runFindingChecks'));
+  assert.deepEqual(mocks.calls.slice(-5), [
+    'readFinding',
+    'readFixPr',
+    'readVerifyBlock',
+    'readProductionDeploy',
+    'writeFindingVerification:resolved',
+  ]);
+  assert.equal(mocks.seen.verification?.verification.deploy?.prUrl, FIX_PR, 'the PR the finding names');
+  assert.deepEqual(mocks.seen.verification?.verification.rows, []);
+});
+
+test('no verify block, and production does not contain the fix: verify-failed, the finding still fixing', async () => {
+  const mocks = lifecycle({
+    merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
+    deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
+    noBlock: true,
+    liveContains: false,
+  });
+  const result = await withWorkers(mocks, async () => (await startApproved('not-contained')).result());
+
+  assert.equal(result.outcome, 'verify-failed');
+  assert.match(result.note ?? '', /could not be confirmed by the deploy: Production serves old.+The finding is still fixing\./);
+  assert.ok(!mocks.calls.some((c) => c.startsWith('writeFindingVerification')), 'nothing is written');
+});
+
+test('a PR closed unmerged writes approved back, and the next fix closes the first issue naming the PR and opens a second', async () => {
   const mocks = lifecycle({
     merge: {
       [PR_1]: { openPolls: 1, outcome: { prUrl: PR_1, state: 'closed', mergeSha: null, at: '2026-10-13T19:00:00Z' } },
@@ -338,6 +436,7 @@ test('a PR closed unmerged writes approved back, waits, and the next fix runs ag
     );
     const waiting = await handle.query(findingStateQuery);
     assert.equal(waiting.prUrl, PR_1, 'the closed PR is still the last one');
+    assert.equal(waiting.issueUrl, ISSUE_1);
     await handle.signal(fixSignal, { ...FIX, at: '2026-10-13T19:30:00Z' });
     return handle.result();
   });
@@ -346,20 +445,88 @@ test('a PR closed unmerged writes approved back, waits, and the next fix runs ag
   assert.equal(result.prUrl, PR_2);
   assert.equal(result.fixAttempts, 2);
   assert.equal(mocks.seen.returned[0].prUrl, PR_1);
-  assert.equal(mocks.calls.filter((c) => c === 'runFixer').length, 2);
   assert.deepEqual(
-    mocks.calls.filter((c) => c.startsWith('await') || c.startsWith('write')),
+    mocks.seen.issues.map((i) => i.supersedes),
+    [null, { url: ISSUE_1, reason: `${PR_1} closed unmerged` }],
+  );
+  assert.deepEqual(
+    mocks.calls.filter((c) => c.startsWith('await') || c.startsWith('write') || c === 'openFixIssue'),
     [
       'writeFindingVerdict',
+      'openFixIssue',
+      'awaitFixPr',
       'writeFindingFix',
       'awaitFixPrMerge:closed',
       'writeFindingReturned',
+      'openFixIssue',
+      'awaitFixPr',
       'writeFindingFix',
       'awaitFixPrMerge:merged',
       'awaitProductionDeploy:m2',
       'writeFindingVerification:resolved',
     ],
   );
+});
+
+test('no PR within 60 minutes: the reason lands in lastFixError and the run goes back to waiting-fix', async () => {
+  const mocks = lifecycle({ prPolls: [Number.POSITIVE_INFINITY], merge: {} });
+  await withWorkers(mocks, async () => {
+    const handle = await startApproved('pr-timeout');
+    // A pending result() lets the server skip the hour of polls. Once the run
+    // idles at waiting-fix it skips on to the test server's own execution
+    // timeout, so the state is read on the way and the run is left there.
+    const done = handle.result().catch(() => undefined);
+    let waiting: FindingState;
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      waiting = await handle.query(findingStateQuery);
+      if (waiting.step === 'waiting-fix' && waiting.lastFixError) break;
+      if (Date.now() > deadline) assert.fail(`the PR wait never gave up; the run is at ${waiting.step}`);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.equal(waiting.lastFixError, `No PR from ${ISSUE_1} within 60 minutes.`);
+    assert.equal(waiting.issueUrl, ISSUE_1);
+    assert.equal(waiting.prUrl, null);
+    // Every minute for an hour.
+    const polls = mocks.prPolls()[101];
+    assert.ok(polls >= 55 && polls <= 61, `polled ${polls} times`);
+    assert.ok(!mocks.calls.includes('writeFindingFix'), 'the finding is marked fixing only when a PR exists');
+    // Settle the pending result, or time skipping stays unlocked for the next test.
+    await handle.terminate('test over').catch(() => undefined);
+    await done;
+  });
+});
+
+test('a failed attempt is retried by fix: the next issue supersedes the first with the failure, then runs to resolved', async () => {
+  const mocks = lifecycle({
+    prFail: ['AuthError'],
+    prPolls: [0, 0],
+    merge: { [PR_2]: { openPolls: 0, outcome: merged(PR_2, 'm2') } },
+    deploys: [[{ id: 3, sha: 'm2', state: 'success' }]],
+  });
+  // Asserted through the state query, not result(): result() never returns
+  // on this run in the test harness, though the run reaches `done`.
+  const state = await withWorkers(mocks, async () => {
+    const handle = await startApproved('pr-failed');
+    const waiting = await untilState(handle, (s) => s.step === 'waiting-fix' && Boolean(s.lastFixError), 'waiting-fix after the failure');
+    assert.equal(waiting.lastFixError, 'GitHub rejected the credential (403).');
+    await handle.signal(fixSignal, { ...FIX, at: '2026-10-13T20:00:00Z' });
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      const s = await handle.query(findingStateQuery);
+      if (s.step === 'done') return s;
+      if (Date.now() > deadline) assert.fail(`the retry never finished; the run is at ${s.step}`);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  });
+
+  assert.equal(state.prUrl, PR_2);
+  assert.equal(state.fixAttempts, 2);
+  assert.equal(state.issueUrl, ISSUE_2);
+  assert.equal(state.lastFixError, null);
+  assert.deepEqual(mocks.seen.issues[1].supersedes, { url: ISSUE_1, reason: 'GitHub rejected the credential (403).' });
+  assert.equal(mocks.calls.filter((c) => c === 'writeFindingFix').length, 1);
+  assert.equal(mocks.calls.at(-1), 'writeFindingVerification:resolved');
 });
 
 test('a deploy that never serves the merge commit times out after 24 hours: still fixing, no verify', async () => {
@@ -446,7 +613,7 @@ test('a fix sent before the verdict is dropped, and a verdict-only run ignores f
     await handle.signal(fixSignal, FIX);
     await handle.signal(verdictSignal, APPROVE);
     await untilState(handle, (state) => state.step === 'waiting-fix', 'waiting-fix');
-    assert.ok(!mocks.calls.includes('runFixer'), 'the early fix started nothing');
+    assert.ok(!mocks.calls.includes('openFixIssue'), 'the early fix started nothing');
     await handle.terminate('test over');
 
     const verdictOnly = await env.client.workflow.start(findingWorkflow, {

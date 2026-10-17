@@ -1,6 +1,6 @@
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
-import { FINDINGS_DEFAULT_SITE, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
+import { FINDINGS_DEFAULT_SITE, GITHUB_REPO, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
 import { gh } from '../lib/github.js';
@@ -10,9 +10,17 @@ import {
   findingHandoffPath,
   findingWorkflowId,
   fixBranch,
+  fixIssueBody,
+  fixIssueClosingComment,
+  fixIssueMarker,
+  fixIssueTitle,
+  fixPrBranchPrefix,
+  fixRefusal,
   isFindingSlug,
   liveDeployment,
+  parseFindingBody,
   parseFindingsIndex,
+  parseIssueUrl,
   parsePrUrl,
   findingsIndexPath,
   setFindingReturned,
@@ -21,6 +29,7 @@ import {
   setFrontmatterVerdict,
   setIndexStatus,
   setIndexVerdict,
+  siteConfigPath,
   type FindingVerdictSource,
   type FindingVerdictStatus,
   type FindingsIndexLine,
@@ -28,7 +37,7 @@ import {
   type Verification,
   type VerifyBlockSource,
 } from '../lib/findings.js';
-import { readHandoffVerify, validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
+import { validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
 import type { FindingStopAfter, FindingWorkflowInput } from '../workflows/finding.js';
 
 /**
@@ -40,7 +49,9 @@ import type { FindingStopAfter, FindingWorkflowInput } from '../workflows/findin
  * property that lets the hosted worker register them (`worker-hosted.ts`). The
  * repository is a parameter on every call, never read from config here: it rides
  * in the workflow input (design rule 10), so a workflow started against one
- * repository keeps writing to it.
+ * repository keeps writing to it. The one exception is the site repository
+ * `openFixIssue` writes to, resolved like the production origin and returned
+ * in its result, so the history holds it from there on.
  *
  * All reads are at `main`, the findings repository's only branch. Argus pushes
  * there directly and so does the verdict write.
@@ -383,6 +394,177 @@ export async function awaitFixPrMerge(prUrl: string): Promise<FixPrOutcome> {
   throw ApplicationFailure.retryable(`${prUrl} is still open.`, 'PrStillOpen');
 }
 
+/**
+ * The site repository a site's fix issues go to, or undefined for a site this
+ * worker does not know. One site today, as {@link productionOrigin} says.
+ */
+function siteRepository(site: string): string | undefined {
+  return site === FINDINGS_DEFAULT_SITE ? GITHUB_REPO : undefined;
+}
+
+/**
+ * Whether a site's `config.yaml` says `auto_fix: true` (design decision 28).
+ * Only the literal `true` counts. Parsed through the frontmatter parser,
+ * Steward's one YAML reader, by wrapping the file as a frontmatter block.
+ */
+export function siteAutoFix(configText: string): boolean {
+  const data = parseFrontmatter(`---\n${configText}\n---\n`).data as Record<string, unknown>;
+  return data.auto_fix === true;
+}
+
+export interface ReadSiteAutoFixInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+}
+
+/**
+ * The site's `auto_fix` flag, read once when an approved verdict lands. A site
+ * with no `config.yaml` has no flag. The answer is an activity result, so the
+ * workflow's branch on it replays from history.
+ */
+export async function readSiteAutoFix(input: ReadSiteAutoFixInput): Promise<boolean> {
+  const file = await readRepoFile(siteConfigPath(input.site), BRANCH, input.repo);
+  return file ? siteAutoFix(file.text) : false;
+}
+
+export interface OpenFixIssueInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+  key: string;
+  /** `sites/<site>/findings/<key>.md` */
+  findingPath: string;
+  /**
+   * The previous attempt's issue and why it ended, closed with a comment saying
+   * so before the new one opens. Null on a first attempt.
+   */
+  supersedes?: { url: string; reason: string } | null;
+}
+
+export interface FixIssue {
+  /** `owner/name` of the site repository the issue is in. */
+  repo: string;
+  number: number;
+  url: string;
+  /** True when an open issue for this finding already existed and is returned as it is. */
+  reused: boolean;
+}
+
+/** The open issue in `repo` whose body carries `marker`, or undefined. Pull requests are skipped. */
+async function findOpenIssue(repo: string, marker: string): Promise<{ number: number; html_url: string } | undefined> {
+  for (let page = 1; ; page++) {
+    const items = (await gh(`/repos/${repo}/issues?state=open&per_page=100&page=${page}`)) as {
+      number: number;
+      html_url: string;
+      body?: string | null;
+      pull_request?: unknown;
+    }[];
+    const hit = items.find((item) => !item.pull_request && (item.body ?? '').includes(marker));
+    if (hit) return hit;
+    if (items.length < 100) return undefined;
+  }
+}
+
+/**
+ * Hands an approved finding to `claude-code-action` (design decisions 26 and
+ * 27): one issue in the site repository, the finding file as its body under
+ * the spike's six-line header, titled with the finding's H1.
+ *
+ * **The gate first.** {@link fixRefusal}, the rule the custom fixer ran: an
+ * approved defect with a cause and a measure. A finding that fails it is
+ * `FindingNotFixable` and no issue opens.
+ *
+ * **Idempotent on the finding key.** The body ends with a hidden marker naming
+ * the finding, and an open issue that carries it is returned instead of a
+ * second one. Only open issues count (the card's rule 2), so after
+ * `supersedes` closes the last attempt's issue a new one opens.
+ *
+ * Created with the worker's `GITHUB_TOKEN`, a person's token, so the Action's
+ * write-access and human-actor checks pass (the card's rule 1).
+ */
+export async function openFixIssue(input: OpenFixIssueInput): Promise<FixIssue> {
+  const siteRepo = siteRepository(input.site);
+  if (!siteRepo) {
+    throw ApplicationFailure.nonRetryable(`Steward knows no site repository for ${input.site}.`, 'UnknownSite');
+  }
+  const finding = await readFinding(input.repo, input.findingPath);
+  const refusal = fixRefusal(finding.data, parseFindingBody(finding.text));
+  if (refusal) {
+    throw ApplicationFailure.nonRetryable(`${input.key} does not go to the fixer: ${refusal}.`, 'FindingNotFixable');
+  }
+
+  if (input.supersedes) {
+    const old = parseIssueUrl(input.supersedes.url);
+    if (!old) throw ApplicationFailure.nonRetryable(`${input.supersedes.url} is not an issue URL.`, 'FindingMalformed');
+    const current = await gh(`/repos/${old.repo}/issues/${old.number}`);
+    if (current.state === 'open') {
+      await gh(`/repos/${old.repo}/issues/${old.number}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ body: fixIssueClosingComment(input.supersedes.reason) }),
+      });
+      await gh(`/repos/${old.repo}/issues/${old.number}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }),
+      });
+      log.info({ activity: 'openFixIssue', key: input.key, closed: input.supersedes.url }, 'previous fix issue closed');
+    }
+  }
+
+  const marker = fixIssueMarker(input.site, input.key);
+  const open = await findOpenIssue(siteRepo, marker);
+  if (open) {
+    log.info({ activity: 'openFixIssue', key: input.key, issue: open.html_url }, 'fix issue already open');
+    return { repo: siteRepo, number: open.number, url: open.html_url, reused: true };
+  }
+  const created = await gh(`/repos/${siteRepo}/issues`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: fixIssueTitle(finding.text),
+      body: fixIssueBody(input.site, input.key, finding.text, finding.data.verdict_reason),
+    }),
+  });
+  log.info({ activity: 'openFixIssue', key: input.key, issue: created.html_url }, 'fix issue opened');
+  return { repo: siteRepo, number: created.number as number, url: created.html_url as string, reused: false };
+}
+
+export interface AwaitFixPrInput {
+  /** `owner/name` of the site repository, the issue's. */
+  repo: string;
+  issueNumber: number;
+}
+
+export interface FixPr {
+  prUrl: string;
+  /** The PR's head branch, `claude/issue-<n>-…`. */
+  branch: string;
+}
+
+/**
+ * The PR wait: one read of the site repository's open PRs that fails until one
+ * has a head branch starting `claude/issue-<n>-`, the branch the Action cuts
+ * for issue `n`. The branch prefix is the match, not the PR body's `Fixes #n`
+ * (the card's rule 3).
+ *
+ * The same infrequent-polling pattern as {@link awaitFixPrMerge}: `FixPrNotOpen`
+ * is the retryable "not yet", and the workflow's schedule-to-close bound is the
+ * 60-minute give-up, which reaches the workflow as a timeout. Each attempt is
+ * one short read, so it needs no heartbeat.
+ */
+export async function awaitFixPr(input: AwaitFixPrInput): Promise<FixPr> {
+  const prefix = fixPrBranchPrefix(input.issueNumber);
+  const pulls = (await gh(`/repos/${input.repo}/pulls?state=open&per_page=100`)) as {
+    html_url: string;
+    head?: { ref?: string };
+  }[];
+  const match = pulls.find((pr) => pr.head?.ref?.startsWith(prefix));
+  if (!match) {
+    throw ApplicationFailure.retryable(`No open PR in ${input.repo} from a ${prefix} branch yet.`, 'FixPrNotOpen');
+  }
+  log.info({ activity: 'awaitFixPr', issue: input.issueNumber, pr: match.html_url }, 'the fix PR is open');
+  return { prUrl: match.html_url, branch: match.head?.ref as string };
+}
+
 export interface AwaitProductionDeployInput {
   /** `owner/name` of the site repository, the fixer PR's. */
   repo: string;
@@ -410,6 +592,21 @@ export interface ProductionDeploy {
  * retryable "not yet", polled on the same pattern as {@link awaitFixPrMerge}.
  */
 export async function awaitProductionDeploy(input: AwaitProductionDeployInput): Promise<ProductionDeploy> {
+  const read = await readLive(input);
+  if (!read.live) throw ApplicationFailure.retryable(read.why, 'DeployNotLive');
+  if (!read.contains) throw ApplicationFailure.retryable(read.why, 'DeployNotLive');
+  log.info({ activity: 'awaitProductionDeploy', mergeSha: input.mergeSha, liveSha: read.live.sha }, 'the merge commit is live');
+  return { liveSha: read.live.sha, deploymentId: read.live.id };
+}
+
+/**
+ * The deploy wait's read and compare, once: the live deployment, and whether
+ * its commit contains the merge commit. `why` says what is missing when either
+ * is.
+ */
+async function readLive(
+  input: AwaitProductionDeployInput,
+): Promise<{ live: DeploymentRecord | undefined; contains: boolean; why: string }> {
   const list = (await gh(
     `/repos/${input.repo}/deployments?environment=${encodeURIComponent(input.environment)}&per_page=10`,
   )) as { id: number; sha: string }[];
@@ -425,19 +622,70 @@ export async function awaitProductionDeploy(input: AwaitProductionDeployInput): 
   }
   const live = liveDeployment(records);
   if (!live) {
-    throw ApplicationFailure.retryable(`No ${input.environment} deployment of ${input.repo} has succeeded yet.`, 'DeployNotLive');
+    return { live, contains: false, why: `No ${input.environment} deployment of ${input.repo} has succeeded yet.` };
   }
-  if (live.sha !== input.mergeSha) {
-    const compare = await gh(`/repos/${input.repo}/compare/${input.mergeSha}...${live.sha}`);
-    if (!compareContains(String(compare.status))) {
-      throw ApplicationFailure.retryable(
-        `${input.environment} serves ${live.sha.slice(0, 7)}, which does not contain ${input.mergeSha.slice(0, 7)} (${String(compare.status)}).`,
-        'DeployNotLive',
-      );
-    }
+  if (live.sha === input.mergeSha) return { live, contains: true, why: '' };
+  const compare = await gh(`/repos/${input.repo}/compare/${input.mergeSha}...${live.sha}`);
+  const status = String(compare.status);
+  if (compareContains(status)) return { live, contains: true, why: '' };
+  return {
+    live,
+    contains: false,
+    why: `${input.environment} serves ${live.sha.slice(0, 7)}, which does not contain ${input.mergeSha.slice(0, 7)} (${status}).`,
+  };
+}
+
+export interface ReadProductionDeployInput {
+  /** The fix PR, from the finding's `links.pr`. */
+  prUrl: string;
+  /** The GitHub deployment environment Vercel posts production to. */
+  environment: string;
+}
+
+export interface ProductionRead {
+  prUrl: string;
+  /** The PR's merge commit, or null when GitHub has none. */
+  mergeSha: string | null;
+  /** The commit production serves, or null when no deployment has succeeded. */
+  liveSha: string | null;
+  deploymentId: number | null;
+  /** True when the live commit contains the merge commit. */
+  contains: boolean;
+  /** What is missing when `contains` is false. */
+  why: string;
+  /** ISO 8601, when production was read. */
+  readAt: string;
+}
+
+/**
+ * A blockless verify's one look at production (design decision 30): the fix
+ * PR's merge commit, then {@link awaitProductionDeploy}'s read and compare,
+ * one attempt. Not contained is an answer, not a retry: the verify has no
+ * "not yet" to wait out, since the lifecycle's deploy wait or the operator
+ * already decided the fix is live.
+ */
+export async function readProductionDeploy(input: ReadProductionDeployInput): Promise<ProductionRead> {
+  const pr = parsePrUrl(input.prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${input.prUrl} is not a pull request URL.`, 'FindingMalformed');
+  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  const mergeSha = (data.merge_commit_sha as string | null) ?? null;
+  const readAt = new Date().toISOString();
+  const none = { prUrl: input.prUrl, mergeSha, liveSha: null, deploymentId: null, contains: false, readAt };
+  if (data.merged !== true || !mergeSha) {
+    return { ...none, why: `${input.prUrl} has no merge commit on GitHub.` };
   }
-  log.info({ activity: 'awaitProductionDeploy', mergeSha: input.mergeSha, liveSha: live.sha }, 'the merge commit is live');
-  return { liveSha: live.sha, deploymentId: live.id };
+  const read = await readLive({ repo: pr.repo, mergeSha, environment: input.environment });
+  log.info(
+    { activity: 'readProductionDeploy', prUrl: input.prUrl, mergeSha, liveSha: read.live?.sha, contains: read.contains },
+    'production read for a blockless verify',
+  );
+  return {
+    ...none,
+    liveSha: read.live?.sha ?? null,
+    deploymentId: read.live?.id ?? null,
+    contains: read.contains,
+    why: read.why,
+  };
 }
 
 export interface AwaitPreviewDeployInput {
@@ -612,71 +860,45 @@ export interface ReadVerifyBlockInput {
   findingPath: string;
   /** The finding as `readFinding` returned it. Its `verify` key, when present, is the block. */
   findingText: string;
-  /** `sites/<site>/handoffs/<key>.md` */
-  handoffPath: string;
+  /** `sites/<site>/handoffs/<key>.md`. Unread since design decision 29. */
+  handoffPath?: string;
   /** The production origin every check must name. */
   origin: string;
 }
 
 export interface ReadVerifyBlockResult {
-  /** The handoff as it is in the findings repository, or null when the finding's block made it unread. */
+  /** Always null since decision 29: the handoff is not read. */
   handoff: string | null;
-  /** False when neither the finding nor the handoff has a `verify` key: the workflow generates one. */
+  /** False when the finding has no `verify` key. */
   hasBlock: boolean;
   checks: VerifyCheck[];
-  /**
-   * Where the checks come from, decided here so the workflow's branch replays
-   * from history (design rule 10). `generated` means none exists yet. Absent
-   * from histories written before the finding's block was read.
-   */
+  /** `finding`. Absent from histories written before the finding's block was read. */
   source?: VerifyBlockSource;
 }
 
 /**
- * A finding's `verify` block: the finding's own when its frontmatter has the
- * key, else the one in its generated handoff.
+ * A finding's `verify` block, from the finding's own frontmatter and nowhere
+ * else (design decision 29). Argus writes it at filing time.
  *
- * The finding's key wins whatever it holds. A list of checks runs; an empty
- * list is the finder judging the measure unmeasurable, and the handoff is not
- * read. A finding's block that fails {@link validateVerifyBlock} is a failure
- * naming the finding, never a fall back: a typo would hand the definition of
- * fixed back to the fixer.
- *
- * With no key on the finding, the handoff decides. A handoff with no `verify`
- * key is a result, not a failure: the workflow generates the block. A block
- * that is there and fails {@link validateVerifyBlock} is a failure, since a
- * block Steward would not have written is one it does not run.
+ * A list of checks runs. An empty list is the finder judging the measure
+ * unmeasurable, and a finding with no `verify` key has no measure at all:
+ * both return no checks, and the workflow confirms the fix by its deploy
+ * instead (design decision 30). A block that fails {@link validateVerifyBlock}
+ * is a failure naming the finding: a typo is not a pass.
  */
 export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<ReadVerifyBlockResult> {
   const own = (parseFrontmatter(input.findingText).data ?? {}) as Record<string, unknown>;
-  if (Object.prototype.hasOwnProperty.call(own, 'verify')) {
-    const { checks, problems } = validateVerifyBlock(own.verify, input.origin);
-    if (problems.length > 0) {
-      throw ApplicationFailure.nonRetryable(
-        `The verify block in ${input.findingPath} was refused: ${problems.join('; ')}.`,
-        'VerifyBlockInvalid',
-      );
-    }
-    return { handoff: null, hasBlock: true, checks, source: 'finding' };
+  if (!Object.prototype.hasOwnProperty.call(own, 'verify')) {
+    return { handoff: null, hasBlock: false, checks: [], source: 'finding' };
   }
-
-  const file = await readRepoFile(input.handoffPath, BRANCH, input.repo);
-  if (!file) {
-    throw ApplicationFailure.nonRetryable(
-      `${input.handoffPath} is not in ${input.repo} at ${BRANCH}. The verifier reads a finding's checks from its generated handoff.`,
-      'HandoffMissing',
-    );
-  }
-  const verify = readHandoffVerify(file.text);
-  if (!verify.present) return { handoff: file.text, hasBlock: false, checks: [], source: 'generated' };
-  const { checks, problems } = validateVerifyBlock(verify.raw, input.origin);
+  const { checks, problems } = validateVerifyBlock(own.verify, input.origin);
   if (problems.length > 0) {
     throw ApplicationFailure.nonRetryable(
-      `The verify block in ${input.handoffPath} was refused: ${problems.join('; ')}.`,
+      `The verify block in ${input.findingPath} was refused: ${problems.join('; ')}.`,
       'VerifyBlockInvalid',
     );
   }
-  return { handoff: file.text, hasBlock: true, checks, source: 'handoff' };
+  return { handoff: null, hasBlock: true, checks, source: 'finding' };
 }
 
 export interface WriteFindingVerificationInput {
@@ -702,9 +924,10 @@ export interface WriteFindingVerificationResult {
  *
  * The same guard and the same idempotence as {@link writeFindingVerdict}.
  *
- * **It moves a finding from `fixing` only.** A file that already holds this
- * run's status is the retry case and passes. Any other status means somebody
- * moved the finding while the checks ran, and the write refuses.
+ * **It moves a finding from `fixing` or `reopened` only**, the two statuses
+ * the workflow's gate admits. A file that already holds this run's result is
+ * the retry case and passes. Any other status means somebody moved the finding
+ * while the checks ran, and the write refuses.
  */
 export async function writeFindingVerification(
   input: WriteFindingVerificationInput,
@@ -721,9 +944,9 @@ export async function writeFindingVerification(
   }
   const before = parseFrontmatter(finding.text).data as Record<string, unknown>;
   const retry = before.status === status && finding.text.includes(input.verification.workflowId);
-  if (before.status !== 'fixing' && !retry) {
+  if (before.status !== 'fixing' && before.status !== 'reopened' && !retry) {
     throw ApplicationFailure.nonRetryable(
-      `${input.findingPath} is ${String(before.status)}, not fixing, so it is not marked ${status}.`,
+      `${input.findingPath} is ${String(before.status)}, not fixing or reopened, so it is not marked ${status}.`,
       'FindingMoved',
     );
   }
@@ -798,6 +1021,8 @@ export interface StartFindingWorkflowInput {
   findingPath: string;
   indexPath: string;
   stopAfter: FindingStopAfter;
+  /** The index line's status. Absent from inputs recorded before `reopened` was started; read it as `proposed`. */
+  indexStatus?: 'proposed' | 'reopened';
 }
 
 /**
@@ -823,16 +1048,23 @@ function productionOrigin(site: string): string | undefined {
  * reconciler's own input stays `{repo}`. A site with no known origin starts at
  * `verdict`, with a log line: a lifecycle that cannot verify does not start.
  *
- * `ALLOW_DUPLICATE_FAILED_ONLY`: a finding whose workflow completed at a verdict
- * is never reopened by a stale index line, while one that failed or was
- * terminated can be started again. A retry after a start that landed returns
- * `already-started`, so the activity is safe to retry.
+ * `ALLOW_DUPLICATE_FAILED_ONLY` for a `proposed` line: a finding whose workflow
+ * completed at a verdict is never reopened by a stale index line, while one
+ * that failed or was terminated can be started again. `ALLOW_DUPLICATE` for a
+ * `reopened` line: its last run completed by writing `reopened`, so that run
+ * is history, and the new one returns the finding to the verdict gate. A
+ * retry after a start that landed returns `already-started`, so the activity
+ * is safe to retry.
+ *
+ * The line's status rides in the memo, so `steward finding list` names a
+ * reopened finding without a query per workflow.
  */
 export async function startFindingWorkflow(
   input: StartFindingWorkflowInput,
 ): Promise<'started' | 'already-started'> {
   const client = Context.current().client;
-  let args: FindingWorkflowInput = { ...input };
+  const { indexStatus = 'proposed', ...rest } = input;
+  let args: FindingWorkflowInput = { ...rest };
   if (input.stopAfter === 'resolved') {
     const origin = productionOrigin(input.site);
     if (origin) {
@@ -847,7 +1079,8 @@ export async function startFindingWorkflow(
       workflowId: findingWorkflowId(input.site, input.key),
       taskQueue: QUEUE_FINDINGS,
       args: [args],
-      workflowIdReusePolicy: 'ALLOW_DUPLICATE_FAILED_ONLY',
+      workflowIdReusePolicy: indexStatus === 'reopened' ? 'ALLOW_DUPLICATE' : 'ALLOW_DUPLICATE_FAILED_ONLY',
+      memo: { indexStatus },
     });
     return 'started';
   } catch (err) {

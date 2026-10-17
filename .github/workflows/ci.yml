@@ -72,7 +72,7 @@ jobs:
       - name: Restore Temporal test server binary
         uses: actions/cache@v4
         with:
-          path: agents/steward/.cache/temporal-test-server
+          path: ~/.cache/steward/temporal-test-server
           key: temporal-test-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Typecheck (tsc --noEmit)

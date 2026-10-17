@@ -44,8 +44,9 @@ that's the property being dogfooded here, on a low-stakes, real target.
   `verifyFindingWorkflow` as a child and completes with `resolved`, `reopened` or `unverifiable`. A PR
   closed unmerged writes `status: approved` back with a note, and the run waits for the next `fix`.
   Either wait timing out ends the run with the finding still `fixing`. An hourly Schedule runs the
-  reconciler, which starts a `'resolved'` workflow for each new `proposed` finding and signals the
-  ones whose file already carries a verdict.
+  reconciler, which starts a `'resolved'` workflow for each `proposed` or `reopened` finding with
+  none open, and signals the ones whose file already carries a verdict. A `reopened` finding is back
+  at the verdict gate.
 - **`fixFindingWorkflow`**: the fixer, one execution per approved finding (`fix/<site>/<key>`),
   started as a child of a `'resolved'` `findingWorkflow`, or alone by `steward finding fix <key>` for
   a finding whose workflow stops at the verdict. Five activities: read the finding, generate a handoff from
@@ -57,12 +58,11 @@ that's the property being dogfooded here, on a low-stakes, real target.
   the finding's measure as checks against production.
 - **`verifyFindingWorkflow`**: the verifier, one execution per run (`verify/<site>/<key>/<stamp>`),
   started as the lifecycle's last child once production serves the merge, or by `steward finding
-  verify <key>` by hand. It reads the finding,
-  confirms the fixer's PR is merged, reads the finding's own `verify` list (falling back to the
-  handoff's only when the finding has no `verify` key, and generating that with the read-only
-  generator when an older handoff has none), measures each check against production with
-  Steward's own fetch and Chromium, and writes `resolved` or `reopened` with the measured values. An
-  empty list writes nothing. No command from a list is ever spawned.
+  verify <key>` by hand, on `steward-findings`. It reads the finding, confirms the fixer's PR is
+  merged, reads the finding's own `verify` list and nothing else, measures each check against
+  production with Steward's own fetch and the hosted worker's Chromium, and writes `resolved` or
+  `reopened` with the measured values. A finding with no `verify` key, or an empty list, ends
+  `unverifiable` and writes nothing. No command from a list is ever spawned.
 
 ### Task queues and workers
 
@@ -71,16 +71,19 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | Queue | Carries | Why it is where it is |
 |---|---|---|
 | `steward-light` | `reviewPost`'s passes | Reads the working copy and applies patches to local files |
-| `steward-heavy` | `buildAndAuditDraft`, and `fixFindingWorkflow` and `verifyFindingWorkflow` with their activities | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
+| `steward-heavy` | `buildAndAuditDraft`, and the frozen custom fixer: `fixFindingWorkflow` with its activities, which only a lifecycle run that started that child before the issue path replays, and a `verifyFindingWorkflow` child started before the verifier moved to `steward-findings` | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
-| `steward-findings` | `findingWorkflow` and `reconcileFindingsWorkflow`, with their activities, including the lifecycle's merge and deploy waits | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, and Temporal through the worker's client |
+| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow` and `verifyFindingWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **laptop worker** (`steward up`, `src/worker.ts`)
-registers all of them. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
+registers four of them, every queue but `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
 the three queues that depend on nothing local, each with a hand-written activity map: a worker that
 claimed `snapshotDraft` would fail it, because the container has no drafts, and a failed task is
-worse than an unclaimed one.
+worse than an unclaimed one. `steward-findings` has the hosted worker alone: with a second poller on
+matt-pc, an old-code laptop worker could take a hosted run's workflow task after a merge and fail it
+as non-deterministic. The `steward finding` commands reach Temporal through the client and need no
+local worker.
 
 ### The publish leg
 
@@ -162,7 +165,8 @@ steward finding status <key>     # the verdict, and the lifecycle step for a 're
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"
 steward finding fix <key>        # signal the finding's lifecycle, or start the fixer alone for an older finding
-steward finding verify <key>     # fixing finding to resolved or reopened, measured on production
+steward finding verify <key>     # fixing or reopened finding to resolved or reopened, measured on production
+steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
 ```

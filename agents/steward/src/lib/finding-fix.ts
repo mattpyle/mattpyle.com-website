@@ -11,7 +11,8 @@ import {
   findingsIndexPath,
   fixBranch,
   fixPrUrl,
-  fixWorkflowId,
+  fixRefusal,
+  parseFindingBody,
   parsePrUrl,
   type FindingVerdict,
 } from './findings.js';
@@ -22,16 +23,17 @@ import {
   type FindingState,
   type FindingWorkflowInput,
 } from '../workflows/finding.js';
-import { fixFindingStateQuery, type FixFindingResult } from '../workflows/fix-finding.js';
 
 /**
- * `steward finding fix`, the one fix path: every fix runs as the child of a
+ * `steward finding fix`, the one fix path: every fix runs inside a
  * `findingWorkflow` started with `stopAfter: 'resolved'` (standalone-fix-closed-pr,
- * decision 1). That parent writes `approved` back when the PR closes unmerged,
- * and waits for the merge, the deploy and the verify when it merges, so no fix
- * is left at `fixing` with nothing watching its PR.
+ * decision 1). That run opens the fix issue, waits for the Action's PR, writes
+ * `approved` back when the PR closes unmerged, and waits for the merge, the
+ * deploy and the verify when it merges, so no fix is left at `fixing` with
+ * nothing watching its PR. A site with `auto_fix: true` needs none of this
+ * after its verdict; this is the path for the rest, and for a retry.
  *
- * {@link requestFix} finds or makes that parent and sends it `fix`:
+ * {@link requestFix} finds or makes that run and sends it `fix`:
  *
  * 1. An open `'resolved'` run is used as it is.
  * 2. Otherwise the finding file decides. `approved` is fixable. `fixing` whose
@@ -43,8 +45,7 @@ import { fixFindingStateQuery, type FixFindingResult } from '../workflows/fix-fi
  * 5. `fix` is sent only once the run reports `waiting-fix`, so it never races
  *    the verdict (finding-early-fix-signal).
  *
- * Nothing here starts `fixFindingWorkflow`. {@link followFix} only watches the
- * child the parent started.
+ * {@link followFix} only watches the run's state.
  */
 
 export interface FindingFixDeps {
@@ -55,8 +56,8 @@ export interface FindingFixDeps {
   taskQueue: string;
   /** The site's production origin, or undefined for a site Steward knows none for. */
   origin: string | undefined;
-  /** The finding file's frontmatter, from the findings repository. */
-  readFinding: (path: string) => Promise<Record<string, unknown>>;
+  /** The finding file, its text and its parsed frontmatter, from the findings repository. */
+  readFinding: (path: string) => Promise<{ text: string; data: Record<string, unknown> }>;
   /** Where the fixer's PR stands on GitHub. */
   readPr: (prUrl: string) => Promise<'open' | 'merged' | 'closed'>;
   /** `writeFindingReturned`: `status: approved` back, with the closed PR named. */
@@ -92,8 +93,10 @@ export interface FixRequested {
   returnedFrom: string | null;
   /** True when an open run that stopped at the verdict was cancelled for it. */
   replacedVerdictRun: boolean;
-  /** The fix child's run before the signal, so {@link followFix} knows the new one. */
-  priorFixRunId: string | null;
+  /** The run's `fixAttempts` before the signal, so {@link followFix} knows the new attempt. */
+  priorAttempts: number;
+  /** The run's issue before the signal, so a reused one is not reported as new. */
+  priorIssueUrl: string | null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -103,15 +106,6 @@ async function describeOpen(handle: WorkflowHandle): Promise<boolean> {
     return (await handle.describe()).status.name === 'RUNNING';
   } catch (err) {
     if (err instanceof WorkflowNotFoundError) return false;
-    throw err;
-  }
-}
-
-async function runId(handle: WorkflowHandle): Promise<string | null> {
-  try {
-    return (await handle.describe()).runId;
-  } catch (err) {
-    if (err instanceof WorkflowNotFoundError) return null;
     throw err;
   }
 }
@@ -129,12 +123,23 @@ async function queryState(handle: WorkflowHandle, deadline: number, pollMs: numb
 }
 
 /**
+ * The file's `verdict_at` as ISO 8601. An unquoted timestamp parses as a
+ * `Date`; a missing or unreadable one falls back to now.
+ */
+function verdictAt(value: unknown): string {
+  if (typeof value === 'string' && value) return value;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  return new Date().toISOString();
+}
+
+/**
  * The file's case for a finding with no lifecycle run: fixable as it stands,
  * fixable after its closed PR returns it, or refused.
  */
 async function prepareFromFile(deps: FindingFixDeps, site: string, key: string): Promise<{ verdict: FindingVerdict; returnedFrom: string | null }> {
   const path = findingPath(site, key);
-  let data = await deps.readFinding(path);
+  let finding = await deps.readFinding(path);
+  let data = finding.data;
   let returnedFrom: string | null = null;
 
   if (data.status === 'fixing') {
@@ -156,22 +161,19 @@ async function prepareFromFile(deps: FindingFixDeps, site: string, key: string):
     });
     deps.say(`returned ${key} to approved: ${prUrl} closed unmerged (commit ${returned.commitSha ?? 'none, already returned'})`);
     returnedFrom = prUrl;
-    data = await deps.readFinding(path);
+    finding = await deps.readFinding(path);
+    data = finding.data;
   }
 
-  if (data.status !== 'approved') {
-    throw new FixRefused(`${key} cannot be fixed: its status is ${String(data.status ?? 'unset')}, not approved.`);
-  }
-  // The child's own gate refuses anything else; refused here, no run is left
-  // open waiting for a fix that can never start.
-  if (data.kind !== 'defect') {
-    throw new FixRefused(`${key} does not go to the fixer: its kind is ${String(data.kind ?? 'unset')}, not defect.`);
-  }
+  // `openFixIssue`'s own gate, run here first: a finding it would refuse never
+  // starts a run that is left open waiting for a fix that cannot start.
+  const refusal = fixRefusal(data, parseFindingBody(finding.text));
+  if (refusal) throw new FixRefused(`${key} does not go to the fixer: ${refusal}.`);
   const verdict: FindingVerdict = {
     status: 'approved',
     reason: typeof data.verdict_reason === 'string' ? data.verdict_reason : '',
     source: 'file',
-    at: typeof data.verdict_at === 'string' ? data.verdict_at : new Date().toISOString(),
+    at: verdictAt(data.verdict_at),
   };
   return { verdict, returnedFrom };
 }
@@ -180,7 +182,6 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
   const waitMs = deps.waitMs ?? 60_000;
   const pollMs = deps.pollMs ?? 1000;
   const id = findingWorkflowId(site, key);
-  const fixHandle = deps.client.workflow.getHandle(fixWorkflowId(site, key));
 
   let lifecycle: WorkflowHandle | undefined = deps.client.workflow.getHandle(id);
   let verdictRun: WorkflowHandle | undefined;
@@ -199,9 +200,6 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
   if (!lifecycle) {
     if (!deps.origin) {
       throw new FixRefused(`Steward knows no production origin for ${site}, so a fix could not be verified.`);
-    }
-    if (await describeOpen(fixHandle)) {
-      throw new FixRefused(`${fixHandle.workflowId} is already running.`);
     }
     const prepared = await prepareFromFile(deps, site, key);
     returnedFrom = prepared.returnedFrom;
@@ -261,71 +259,73 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
     if (state.step === 'done' || state.verdict?.status === 'rejected') {
       throw new FixRefused(`${id} has a rejected verdict, so there is nothing to fix.`);
     }
+    if ((state.fixAttempts ?? 0) > 0) {
+      // `auto_fix`: the verdict started the first attempt with no signal.
+      throw new FixRefused(`${id} is ${state.step}: the site's auto_fix started the fix. \`steward finding status\` shows it.`);
+    }
     if (Date.now() > deadline) {
-      throw new FixRefused(`${id} is still ${state.step} after ${waitMs / 1000}s. Is a worker running (\`steward up\`)?`);
+      throw new FixRefused(`${id} is still ${state.step} after ${waitMs / 1000}s. Is the hosted worker running?`);
     }
     await sleep(pollMs);
     state = await queryState(lifecycle, deadline, pollMs);
   }
 
-  const priorFixRunId = await runId(fixHandle);
   await lifecycle.signal(fixSignal, { source: 'cli', at: new Date().toISOString() });
   deps.say(`fix signal sent to ${id}`);
-  return { lifecycle, started, returnedFrom, replacedVerdictRun: Boolean(verdictRun), priorFixRunId };
+  return {
+    lifecycle,
+    started,
+    returnedFrom,
+    replacedVerdictRun: Boolean(verdictRun),
+    priorAttempts: state.fixAttempts ?? 0,
+    priorIssueUrl: state.issueUrl ?? null,
+  };
+}
+
+export interface FixFollowed {
+  issueUrl: string | null;
+  prUrl: string;
 }
 
 /**
- * Watches the fix child the signal started, reporting each step, and returns
- * its result. The child is told from an earlier run of the same ID by its run
- * ID, so no clock is compared.
+ * Watches the attempt the signal started, from the lifecycle run's own state:
+ * reports the issue once it is open, and returns when the PR is. The attempt is
+ * told from an earlier one by the run's `fixAttempts`, so no clock is compared.
+ * An attempt that fails back to `waiting-fix` throws its `lastFixError`.
+ *
+ * The default wait outlasts the run's own 60-minute PR wait, so the run's
+ * verdict on a missing PR is the one the operator sees.
  */
 export async function followFix(
-  client: Client,
-  site: string,
-  key: string,
   requested: FixRequested,
-  onStep: (step: string) => void,
+  onIssue: (issueUrl: string) => void,
   opts: { waitMs?: number; pollMs?: number } = {},
-): Promise<FixFindingResult> {
-  const waitMs = opts.waitMs ?? 120_000;
-  const pollMs = opts.pollMs ?? 2000;
-  const id = fixWorkflowId(site, key);
+): Promise<FixFollowed> {
+  const waitMs = opts.waitMs ?? 65 * 60_000;
+  const pollMs = opts.pollMs ?? 5000;
+  const id = requested.lifecycle.workflowId;
   const deadline = Date.now() + waitMs;
+  let reported: string | null = null;
 
-  let childRunId: string | null = null;
   for (;;) {
-    const current = await runId(client.workflow.getHandle(id));
-    if (current && current !== requested.priorFixRunId) {
-      childRunId = current;
-      break;
+    const state = await queryState(requested.lifecycle, deadline, pollMs);
+    if ((state.fixAttempts ?? 0) > requested.priorAttempts) {
+      if (state.issueUrl && state.issueUrl !== reported && state.issueUrl !== requested.priorIssueUrl) {
+        reported = state.issueUrl;
+        onIssue(state.issueUrl);
+      }
+      // Back at the fix wait with no error: the PR opened, and has closed since.
+      if (state.step === 'waiting-fix' && state.lastFixError) {
+        throw new Error(`The fix failed: ${state.lastFixError}`);
+      }
+      if (state.step !== 'fixing') {
+        if (!state.prUrl) throw new Error(`${id} is ${state.step} with no PR.`);
+        return { issueUrl: state.issueUrl ?? null, prUrl: state.prUrl };
+      }
     }
-    const parent = await requested.lifecycle.query(findingStateQuery).catch(() => undefined);
-    if (parent?.step === 'done') throw new Error(`${requested.lifecycle.workflowId} ended before it started ${id}.`);
     if (Date.now() > deadline) {
-      throw new Error(`${requested.lifecycle.workflowId} has not started ${id} after ${waitMs / 1000}s. Is a worker running?`);
+      throw new Error(`${id} has no PR after ${Math.round(waitMs / 60_000)} minutes. \`steward finding status\` shows the step.`);
     }
     await sleep(pollMs);
   }
-  onStep('started');
-
-  const child = client.workflow.getHandle(id, childRunId);
-  let done = false;
-  const result = child.result().finally(() => {
-    done = true;
-  });
-  result.catch(() => undefined);
-  let step = '';
-  while (!done) {
-    try {
-      const state = await child.query(fixFindingStateQuery);
-      if (state.step !== step) {
-        step = state.step;
-        onStep(step);
-      }
-    } catch {
-      /* the child just closed: the result says how */
-    }
-    await Promise.race([result.catch(() => undefined), sleep(pollMs)]);
-  }
-  return (await result) as FixFindingResult;
 }

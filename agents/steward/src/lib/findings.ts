@@ -192,7 +192,7 @@ export function setFrontmatterVerdict(text: string, verdict: FindingVerdict): st
 // ---------------------------------------------------------------------------
 
 export interface ReconcilePlan {
-  /** `proposed` lines with no open workflow. */
+  /** `proposed` and `reopened` lines with no open workflow. */
   start: FindingsIndexLine[];
   /** `approved`/`rejected` lines whose workflow is open. */
   signal: FindingsIndexLine[];
@@ -204,13 +204,16 @@ export interface ReconcilePlan {
  * What one site's index asks for, given the IDs of the open finding workflows.
  * Pure so the reconciler's whole decision is a unit test; the workflow only
  * carries it out.
+ *
+ * A `reopened` line is a `proposed` one again (design decision 29): its fix
+ * failed on production, so it goes back to the verdict gate.
  */
 export function planReconcile(site: string, index: FindingsIndexLine[], openIds: string[]): ReconcilePlan {
   const open = new Set(openIds);
   const plan: ReconcilePlan = { start: [], signal: [], unchanged: 0 };
   for (const line of index) {
     const isOpen = open.has(findingWorkflowId(site, line.key));
-    if (line.status === 'proposed' && !isOpen) plan.start.push(line);
+    if ((line.status === 'proposed' || line.status === 'reopened') && !isOpen) plan.start.push(line);
     else if ((line.status === 'approved' || line.status === 'rejected') && isOpen) plan.signal.push(line);
     else plan.unchanged++;
   }
@@ -366,11 +369,108 @@ export function setFrontmatterFix(text: string, prUrl: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// The fix issue (findings-loop design, decisions 26 to 28)
+// ---------------------------------------------------------------------------
+
+/** GitHub refuses an issue title over 256 characters. */
+const ISSUE_TITLE_MAX = 256;
+
+/**
+ * The six lines above the finding in a fix issue, as the spike's issue 358 was
+ * written. `@claude` is what starts `claude-code-action` (`claude.yml`'s `if`).
+ */
+export const FIX_ISSUE_HEADER = [
+  '@claude Fix the approved finding below.',
+  '',
+  'Rules: one finding, one fix, one PR. Change only what the cause needs; no adjacent tidying. Run `npm test` and `npm run check` before you push and leave both passing. Open the PR yourself. Keep the PR body short: what changed, why, and the evidence. The PR is done when the "How to measure" check passes on the Vercel preview.',
+  '',
+  '---',
+  '',
+  '',
+].join('\n');
+
+/**
+ * The hidden line that ties an issue to its finding, so a retried
+ * `openFixIssue` finds the issue it already opened.
+ */
+export function fixIssueMarker(site: string, key: string): string {
+  return `<!-- steward-finding: ${site}/${key} -->`;
+}
+
+/** The finding's H1, cut to GitHub's title limit. */
+export function fixIssueTitle(text: string): string {
+  const title = parseFindingBody(text).title;
+  return title.length <= ISSUE_TITLE_MAX ? title : `${title.slice(0, ISSUE_TITLE_MAX - 1)}…`;
+}
+
+/**
+ * `Verdict: approved. <reason>`, the line the spike put under the H1. A reason
+ * that already opens with "Approved" is kept as the verdict's own words.
+ */
+export function fixIssueVerdictLine(reason: unknown): string {
+  const text = typeof reason === 'string' ? reason.trim() : '';
+  if (!text) return 'Verdict: approved.';
+  if (/^approved\b/i.test(text)) return `Verdict: a${text.slice(1)}`;
+  return `Verdict: approved. ${text}`;
+}
+
+/**
+ * The fix issue's body: the header, the finding with its frontmatter dropped and
+ * the verdict line under its H1, and the marker last. `verdictReason` is the
+ * file's `verdict_reason`, parsed by the caller.
+ */
+export function fixIssueBody(site: string, key: string, text: string, verdictReason: unknown): string {
+  const lines = text.split(/\r?\n/);
+  let start = 0;
+  if (lines[0] === '---') {
+    const close = lines.indexOf('---', 1);
+    if (close > 0) start = close + 1;
+  }
+  const body = lines.slice(start);
+  while (body.length > 0 && body[0].trim() === '') body.shift();
+  while (body.length > 0 && body[body.length - 1].trim() === '') body.pop();
+  const h1 = body.findIndex((line) => /^#\s+\S/.test(line));
+  if (h1 >= 0) body.splice(h1 + 1, 0, '', fixIssueVerdictLine(verdictReason));
+  return `${FIX_ISSUE_HEADER}${body.join('\n')}\n\n${fixIssueMarker(site, key)}\n`;
+}
+
+/**
+ * The comment on an issue a second fix attempt closes: why the last attempt
+ * ended, which names the PR when one closed unmerged (the card's rule 2).
+ */
+export function fixIssueClosingComment(reason: string): string {
+  const why = reason.trim().replace(/\.$/, '') || 'the attempt ended without a merged fix';
+  return `Closed by Steward: ${why}. The next fix attempt opens a new issue.`;
+}
+
+/** The head branch prefix `claude-code-action` gives the PR it opens from issue `n`. */
+export function fixPrBranchPrefix(issueNumber: number): string {
+  return `claude/issue-${issueNumber}-`;
+}
+
+/** `owner/name` and the number from a GitHub issue URL, or null for anything else. */
+export function parseIssueUrl(url: string): { repo: string; number: number } | null {
+  const match = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)$/.exec(url);
+  return match ? { repo: match[1], number: Number(match[2]) } : null;
+}
+
+/** `sites/<site>/config.yaml` in the findings repository. */
+export function siteConfigPath(site: string): string {
+  return `sites/${site}/config.yaml`;
+}
+
+// ---------------------------------------------------------------------------
 // The verifier (findings-loop design, phase 5)
 // ---------------------------------------------------------------------------
 
-/** What a verify run decides. `unverifiable` writes nothing: the block it took is empty. */
-export type VerifyOutcome = 'resolved' | 'reopened' | 'unverifiable';
+/**
+ * What a verify run decides. `resolved` and `reopened` are measured by the
+ * finding's checks. `confirmed` is a finding with no checks resolved by its
+ * deploy: production serves a commit that contains the fix PR's merge (design
+ * decision 30). `unverifiable` is what a blockless verify ended as before
+ * that, kept so recorded histories decode; nothing produces it now.
+ */
+export type VerifyOutcome = 'resolved' | 'reopened' | 'confirmed' | 'unverifiable';
 
 /**
  * Where a verify run took its checks from: the finding's own `verify` key,
@@ -404,10 +504,15 @@ export function verifyWorkflowId(site: string, key: string, at: string): string 
 
 /**
  * Why a finding cannot be verified, or null when it can: the verifier takes
- * `fixing` findings, the ones a merged fixer PR left behind.
+ * `fixing` findings, the ones a merged fixer PR left behind, and `reopened`
+ * ones. A `reopened` finding still names the PR whose fix its checks failed
+ * on, and when a check could not measure that fix, a corrected check is
+ * re-run against the same PR. The workflow's merged-PR gate covers both.
  */
 export function verifyRefusal(data: Record<string, unknown>): string | null {
-  if (data.status !== 'fixing') return `its status is ${String(data.status ?? 'unset')}, not fixing`;
+  if (data.status !== 'fixing' && data.status !== 'reopened') {
+    return `its status is ${String(data.status ?? 'unset')}, not fixing or reopened`;
+  }
   if (!parsePrUrl(fixPrUrl(data))) return 'it has no links.pr to a pull request';
   return null;
 }
@@ -433,41 +538,74 @@ export interface VerificationRow {
   pass: boolean;
   expected: string;
   measured: string;
+  /** `selector` and `js` only: the size the page was opened at. */
+  viewport?: string;
+}
+
+/** What a deploy-resolved finding's Verification section names: the fix and the commit production serves. */
+export interface VerificationDeploy {
+  prUrl: string;
+  mergeSha: string;
+  liveSha: string;
 }
 
 export interface Verification {
   status: 'resolved' | 'reopened';
-  /** ISO 8601, when the checks ran. */
+  /** ISO 8601, when the checks ran, or when production was read for a deploy-resolved finding. */
   at: string;
   workflowId: string;
   /** Where the checks came from. */
   source: VerifyBlockSource;
   rows: VerificationRow[];
+  /** Set when no check ran and the deploy is the evidence: the finding is written `resolved_by: deploy`. */
+  deploy?: VerificationDeploy;
+  /** `steward finding verify --reason`: one line, attributed to the CLI. */
+  reason?: string;
 }
 
-/** The `## Verification` section: the outcome, then each check with both values. */
+/**
+ * The `## Verification` section: the outcome, then each check with both
+ * values. A deploy-resolved finding has no rows: the section says no check
+ * could measure the fix, and names the PR, its merge commit and the live
+ * commit instead.
+ */
 export function buildVerificationSection(verification: Verification): string {
-  const lines = [
-    '## Verification',
-    '',
-    `Steward ran this finding's checks against production at ${verification.at}. Outcome: ${verification.status}. Workflow \`${verification.workflowId}\`.`,
-    '',
-    `Checks from: ${verifySourceLabel(verification.source)}.`,
-    '',
-  ];
-  for (const row of verification.rows) {
+  const { deploy } = verification;
+  const lines = ['## Verification', ''];
+  if (deploy) {
     lines.push(
-      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${row.url}. Expected: ${row.expected}. Measured: ${row.measured}.`,
+      `Steward confirmed this finding's fix by its deploy at ${verification.at}. Outcome: confirmed. Workflow \`${verification.workflowId}\`.`,
+      '',
+      `No check could measure the fix: the finding has no verify block. ${deploy.prUrl} merged as \`${deploy.mergeSha}\`, and production serves \`${deploy.liveSha}\`, which contains it.`,
+      '',
+    );
+  } else {
+    lines.push(
+      `Steward ran this finding's checks against production at ${verification.at}. Outcome: ${verification.status}. Workflow \`${verification.workflowId}\`.`,
+      '',
+      `Checks from: ${verifySourceLabel(verification.source)}.`,
+      '',
     );
   }
+  for (const row of verification.rows) {
+    lines.push(
+      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${row.url}${row.viewport ? ` at ${row.viewport}` : ''}. Expected: ${row.expected}. Measured: ${row.measured}.`,
+    );
+  }
+  if (verification.reason) {
+    if (verification.rows.length > 0) lines.push('');
+    lines.push(`From the CLI: ${verification.reason}`);
+  }
+  while (lines[lines.length - 1] === '') lines.pop();
   return lines.join('\n');
 }
 
 /**
  * The finding file with the verifier's result in it and every other byte kept:
- * `status`, `resolved_run` when it resolved, and one `## Verification` section
- * at the end of the body. A section from an earlier run is replaced, so the
- * file holds the latest measurement.
+ * `status`, `resolved_run` when it resolved, `resolved_by: deploy` when the
+ * deploy resolved it, and one `## Verification` section at the end of the
+ * body. A section from an earlier run is replaced, so the file holds the
+ * latest measurement, and a measured result drops an earlier `resolved_by`.
  */
 export function setFindingVerification(text: string, verification: Verification): string {
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
@@ -481,12 +619,16 @@ export function setFindingVerification(text: string, verification: Verification)
   if (statusAt < 0) throw new Error('the finding has no status field');
   lines[statusAt] = `status: ${verification.status}`;
 
-  let head = lines.slice(0, close);
+  let head = lines.slice(0, close).filter((line, i) => i === 0 || !/^resolved_by:/.test(line));
   if (verification.status === 'resolved') {
     const run = `resolved_run: ${verifyRunId(verification.at)}`;
-    const runAt = head.findIndex((line, i) => i > 0 && /^resolved_run:/.test(line));
+    let runAt = head.findIndex((line, i) => i > 0 && /^resolved_run:/.test(line));
     if (runAt >= 0) head[runAt] = run;
-    else head = [...head, run];
+    else {
+      head = [...head, run];
+      runAt = head.length - 1;
+    }
+    if (verification.deploy) head.splice(runAt + 1, 0, 'resolved_by: deploy');
   }
 
   const body = lines.slice(close);

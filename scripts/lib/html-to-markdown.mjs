@@ -130,16 +130,40 @@ const BLOCK_TAGS = new Set([
 // across several lines and no parser reads it back as a link, so the destination is lost.
 // The fix is to push the anchor down onto the heading, which is the shape the writing index
 // already uses and the one that round-trips. Links with only inline content are untouched.
+// The writing rows and project cards have no heading: their titles are spans. Promote the
+// title span to an h3 carrying the link, and keep the rest of the card in a div so each card
+// stays its own block rather than running into the next one.
+const CARD_TITLE_SELECTOR = '.row-title, .card-name';
+
+function hoistTitleLink(anchor, href, document) {
+  if (anchor.querySelector('h1, h2, h3, h4, h5, h6')) return false;
+  const title = asArray(anchor.querySelectorAll(CARD_TITLE_SELECTOR))[0];
+  if (!title) return false;
+
+  const heading = document.createElement('h3');
+  const inner = document.createElement('a');
+  inner.setAttribute('href', href);
+  while (title.firstChild) inner.appendChild(title.firstChild);
+  heading.appendChild(inner);
+  title.parentNode.replaceChild(heading, title);
+
+  const card = document.createElement('div');
+  while (anchor.firstChild) card.appendChild(anchor.firstChild);
+  anchor.parentNode.replaceChild(card, anchor);
+  return true;
+}
+
 function hoistBlockLinks(root) {
   for (const anchor of asArray(root.getElementsByTagName('a'))) {
     const href = anchor.getAttribute('href');
     if (!href) continue;
+    const document = anchor.ownerDocument;
+    if (hoistTitleLink(anchor, href, document)) continue;
     if (!asArray(anchor.getElementsByTagName('*')).some((el) => BLOCK_TAGS.has(el.tagName))) continue;
 
     const heading = asArray(anchor.querySelectorAll('h1, h2, h3, h4, h5, h6'))[0];
     if (!heading) continue;
 
-    const document = anchor.ownerDocument;
     const inner = document.createElement('a');
     inner.setAttribute('href', href);
     while (heading.firstChild) inner.appendChild(heading.firstChild);

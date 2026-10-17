@@ -22,7 +22,6 @@ import {
   FINDINGS_DEFAULT_SITE,
   QUEUE_AUDIT,
   QUEUE_FINDINGS,
-  QUEUE_HEAVY,
   QUEUE_LIGHT,
   PROD_ORIGIN,
   temporalConnectionOptions,
@@ -61,7 +60,19 @@ import {
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
 import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
-import { gh } from './lib/github.js';
+import { LIFECYCLE_CANCEL_WAIT_MS, VerifyRefused, cancelLifecycleRun, recordHandFix } from './lib/finding-verify.js';
+import { gh, ghText } from './lib/github.js';
+import {
+  applyHandVerifies,
+  buildReportRow,
+  readRunGitHub,
+  readRunHistory,
+  readVerifyHistory,
+  renderFindingReport,
+  type HandVerify,
+  type ReportRow,
+  type RunFacts,
+} from './lib/finding-report.js';
 import {
   SCORECARD_SCHEDULE_ACTIONS,
   SCORECARD_SCHEDULE_DEFAULT_AT,
@@ -73,18 +84,16 @@ import {
 } from './lib/scorecard-schedule.js';
 import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 import {
-  findingHandoffPath,
   findingPath,
   findingWorkflowId,
   findingsIndexPath,
-  fixWorkflowId,
   isFindingSlug,
   parsePrUrl,
   verifySourceLabel,
   verifyWorkflowId,
   type FindingVerdict,
 } from './lib/findings.js';
-import { readFinding, readFindingsIndex, writeFindingReturned } from './activities/findings.js';
+import { readFinding, readFindingsIndex, writeFindingFix, writeFindingReturned } from './activities/findings.js';
 import {
   verifyFindingStateQuery,
   verifyFindingWorkflow,
@@ -1700,6 +1709,19 @@ program
 // steward finding: the findings gate (findings-loop design, decisions 16 to 19)
 // ---------------------------------------------------------------------------
 
+/** Where a PR stands on GitHub, for `fix` and `verify --pr`. */
+async function readPrState(prUrl: string): Promise<'open' | 'merged' | 'closed'> {
+  const pr = parsePrUrl(prUrl) as { repo: string; number: number };
+  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  return data.merged === true ? 'merged' : data.state === 'closed' ? 'closed' : 'open';
+}
+
+/** A `--pr` value: a GitHub pull request URL, refused before anything connects. */
+function parsePrOption(value: string): string {
+  if (!parsePrUrl(value)) fail(`--pr ${value} is not a GitHub pull request URL.`);
+  return value;
+}
+
 function parseFindingSlug(label: string) {
   return (value: string): string => {
     if (!isFindingSlug(value)) {
@@ -1804,7 +1826,9 @@ finding
           timeStyle: 'short',
           hour12: false,
         }).format(row.startTime);
-        console.log(`  ${row.workflowId}  since ${since}`);
+        // The reconciler's start puts the index line's status in the memo.
+        const reopened = row.memo?.indexStatus === 'reopened' ? '  reopened' : '';
+        console.log(`  ${row.workflowId}  since ${since}${reopened}`);
       }
       console.log('');
     } finally {
@@ -1832,7 +1856,13 @@ finding
       console.log(`  ${id}`);
       console.log(`  status: ${state.status}`);
       if (state.step) console.log(`  step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`);
-      if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
+      if (state.step === 'fixing' && state.issueUrl) {
+        console.log(`  issue: ${state.issueUrl}  (waiting for the PR)`);
+        if (state.prUrl) console.log(`  last PR: ${state.prUrl}`);
+      } else {
+        if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
+        if (state.issueUrl) console.log(`  issue: ${state.issueUrl}`);
+      }
       if (state.lastFixError) console.log(`  last fix failed: ${state.lastFixError}`);
       if (state.verdict) {
         console.log(`  verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
@@ -1840,6 +1870,59 @@ finding
       }
       if (state.commitSha) console.log(`  commit: ${state.commitSha}`);
       console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('report')
+  .option('--site <site>', 'only this site', parseFindingSlug('site'))
+  .option('--markdown', 'print a markdown table for the vault')
+  .description(
+    'One row per finding run that received a verdict: minutes between approve, issue, PR, merge, deploy and resolved, human PR comments, and the Action\'s cost',
+  )
+  .action(async (opts: { site?: string; markdown?: boolean }) => {
+    const c = await client();
+    try {
+      const reader = { json: gh, text: ghText };
+      const rows: ReportRow[] = [];
+      const notes: string[] = [];
+      // Hand verifies: a run left short of its own verify takes its row's
+      // outcome from the one that finished it.
+      const verifies: HandVerify[] = [];
+      for await (const info of c.workflow.list({
+        query: "WorkflowType='verifyFindingWorkflow' AND ExecutionStatus='Completed'",
+      })) {
+        if (opts.site && !info.workflowId.startsWith(`verify/${opts.site}/`)) continue;
+        const verify = readVerifyHistory(await c.workflow.getHandle(info.workflowId, info.runId).fetchHistory());
+        if (verify) verifies.push(verify);
+      }
+      const runs: { history: Parameters<typeof readRunHistory>[0]; facts: RunFacts }[] = [];
+      for await (const info of c.workflow.list({ query: "WorkflowType='findingWorkflow'" })) {
+        if (opts.site && !info.workflowId.startsWith(`finding/${opts.site}/`)) continue;
+        const history = await c.workflow.getHandle(info.workflowId, info.runId).fetchHistory();
+        const facts = readRunHistory(history);
+        if (facts.verdict) runs.push({ history, facts });
+      }
+      const finished = applyHandVerifies(
+        runs.map((r) => r.facts),
+        verifies,
+      );
+      for (const [i, { history }] of runs.entries()) {
+        const facts = finished[i];
+        const answers = await readRunGitHub(facts, reader);
+        if (answers.costNote) notes.push(`cost: ${answers.costNote}`);
+        const row = buildReportRow(history, answers, facts);
+        if (row) rows.push(row);
+      }
+      rows.sort((a, b) => a.approveAt.localeCompare(b.approveAt));
+      console.log('');
+      if (rows.length === 0) console.log('  No finding run has received a verdict.');
+      else console.log(renderFindingReport(rows, { markdown: opts.markdown === true, timeZone: STEWARD_TIMEZONE }));
+      console.log('');
+      // Notes go to stderr, so a redirected or pasted table stays a table.
+      for (const note of notes) console.error(paint(note, DIM));
     } finally {
       await c.connection.close();
     }
@@ -1915,7 +1998,7 @@ finding
   .argument('<key>', 'finding key', parseFindingSlug('key'))
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .description(
-    'Fix an approved defect under its lifecycle workflow: the fix child generates a handoff, runs Claude Code and opens one PR. Needs `steward up`',
+    'Fix an approved defect under its lifecycle workflow: it opens a GitHub issue, and claude-code-action answers with one PR. For sites without auto_fix, and for a retry',
   )
   .action(async (key: string, opts: { site: string }) => {
     const c = await client();
@@ -1930,12 +2013,8 @@ finding
             repo: ARGUS_REPO,
             taskQueue: QUEUE_FINDINGS,
             origin: opts.site === FINDINGS_DEFAULT_SITE ? PROD_ORIGIN : undefined,
-            readFinding: async (p) => (await readFinding(ARGUS_REPO, p)).data,
-            readPr: async (prUrl) => {
-              const pr = parsePrUrl(prUrl) as { repo: string; number: number };
-              const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
-              return data.merged === true ? 'merged' : data.state === 'closed' ? 'closed' : 'open';
-            },
+            readFinding: (p) => readFinding(ARGUS_REPO, p),
+            readPr: readPrState,
             returnFinding: writeFindingReturned,
             say: (line) => console.log(`  ${line}`),
           },
@@ -1950,48 +2029,21 @@ finding
         throw err;
       }
       const lifecycleId = requested.lifecycle.workflowId;
-      console.log(`  It runs ${fixWorkflowId(opts.site, key)} as a child, then waits for the merge, the deploy and the verify.`);
+      console.log('  It opens an issue for claude-code-action, then waits for its PR, the merge, the deploy and the verify.');
       console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(lifecycleId)}\n`);
 
-      // The child's result is the answer; its query only says which step a run
-      // that takes minutes has reached. Ctrl-C here stops the watching, not the fix.
-      const fixed = await followFix(c, opts.site, key, requested, (step) => {
-        console.log(`  ${paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(5), DIM)}  ${step}`);
-      });
-
-      const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+      // The run's state is the answer. Ctrl-C here stops the watching, not the fix.
+      const elapsed = () => paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(6), DIM);
+      let fixed;
+      try {
+        fixed = await followFix(requested, (issueUrl) => console.log(`  ${elapsed()}  issue ${issueUrl}`));
+      } catch (err) {
+        await c.connection.close();
+        fail(err instanceof Error ? err.message : String(err));
+      }
+      console.log(`  ${elapsed()}  PR ${fixed.prUrl}`);
       console.log('');
-      console.log(`  PR: ${fixed.prUrl}${fixed.draft ? '  (draft: the PR body says why)' : ''}`);
-      if (fixed.verify) {
-        const v = fixed.verify;
-        console.log(`  site checks: ${v.block.length === 0 ? 'none, unverifiable by checks' : `${v.block.length} from the ${v.source}${v.regenerated ? ', written twice' : ''}`}`);
-        for (const [i] of v.block.entries()) {
-          const prod = v.production?.find((row) => row.n === i + 1);
-          const prev = v.preview?.find((row) => row.n === i + 1);
-          console.log(
-            `    ${i + 1}: production ${prod ? `${prod.pass ? 'PASS' : 'fail'} (${prod.measured})` : 'not measured'}, preview ${prev ? `${prev.pass ? 'pass' : 'FAIL'} (${prev.measured})` : 'not measured'}`,
-          );
-        }
-        if (v.productionNote) console.log(`    production: ${v.productionNote}`);
-        if (v.previewNote) console.log(`    preview: ${v.previewNote}`);
-      }
-      console.log(`  commit: ${fixed.commitSha}  (${fixed.filesChanged.length} files)`);
-      console.log(`  finding: status fixing, commit ${fixed.findingCommitSha ?? 'none (it already said so)'}`);
-      console.log(
-        `  wall time: ${seconds(Date.now() - started)}  (Claude Code ${seconds(fixed.run.timingsMs.claude)}, exit ${fixed.run.exitCode})`,
-      );
-      console.log(`  turns: ${fixed.run.numTurns ?? 'unknown'}   model: ${fixed.run.model ?? 'unknown'}`);
-      for (const check of fixed.run.checks) {
-        console.log(`  check ${check.n}: ${check.status}${check.command ? `  ${check.command}` : ''}`);
-      }
-      console.log(
-        `  total_cost_usd: ${fixed.run.costUsd ?? 'unknown'}  (handoff ${fixed.run.handoffCostUsd ?? 'unknown'}), at API rates`,
-      );
-      if (fixed.run.permissionDenials.length > 0) {
-        console.log(`  refused tool calls: ${fixed.run.permissionDenials.length}`);
-        for (const denial of fixed.run.permissionDenials) console.log(`    ${denial}`);
-      }
-      console.log(`  ${lifecycleId} now waits for the PR. \`steward finding status ${key}\` shows the step.`);
+      console.log(`  ${lifecycleId} now waits for the merge. \`steward finding status ${key}\` shows the step.`);
       console.log('');
     } finally {
       await c.connection.close();
@@ -2081,7 +2133,7 @@ function describeCliError(err: unknown): string {
  * the workflow (design rule 10): the repository, the paths, the origin and the
  * instant the ID is stamped with.
  */
-async function verifyOneFinding(c: Client, site: string, key: string): Promise<VerifyFindingResult> {
+async function verifyOneFinding(c: Client, site: string, key: string, reason?: string): Promise<VerifyFindingResult> {
   const at = new Date().toISOString();
   const input: VerifyFindingInput = {
     site,
@@ -2089,13 +2141,13 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
     repo: ARGUS_REPO,
     findingPath: findingPath(site, key),
     indexPath: findingsIndexPath(site),
-    handoffPath: findingHandoffPath(site, key),
     origin: PROD_ORIGIN,
     at,
+    ...(reason ? { reason } : {}),
   };
   const workflowId = verifyWorkflowId(site, key, at);
   const started = Date.now();
-  const handle = await c.workflow.start(verifyFindingWorkflow, { workflowId, taskQueue: QUEUE_HEAVY, args: [input] });
+  const handle = await c.workflow.start(verifyFindingWorkflow, { workflowId, taskQueue: QUEUE_FINDINGS, args: [input] });
   console.log(`\n  verifying ${key}`);
   console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
 
@@ -2121,14 +2173,10 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
 
   console.log('');
   console.log(`  checks from: ${verifySourceLabel(verified.source)}`);
-  if (verified.generated) {
-    console.log(
-      `  verify block: generated, commit ${verified.handoffCommitSha ?? 'none'}  (total_cost_usd ${verified.generateCostUsd ?? 'unknown'}, at API rates)`,
-    );
-  }
   for (const [i, check] of verified.block.entries()) {
     const row = verified.checks.find((r) => r.n === i + 1);
-    console.log(`  check ${i + 1}: ${check.kind} ${check.url}`);
+    const at = row?.viewport ?? check.viewport;
+    console.log(`  check ${i + 1}: ${check.kind} ${check.url}${at ? ` at ${at}` : ''}`);
     console.log(`    expect: ${JSON.stringify(check.expect)}`);
     if (row) {
       console.log(`    expected: ${row.expected}`);
@@ -2136,13 +2184,30 @@ async function verifyOneFinding(c: Client, site: string, key: string): Promise<V
       console.log(`    ${row.pass ? paint('pass', GREEN) : paint('fail', RED)}`);
     }
   }
+  if (verified.deploy) {
+    const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
+    console.log(`  no check: the finding ${why}, so the deploy is the evidence`);
+    console.log(`    PR: ${verified.deploy.prUrl}`);
+    console.log(`    merge commit: ${verified.deploy.mergeSha}`);
+    console.log(`    production serves: ${verified.deploy.liveSha}, which contains it`);
+  }
   if (verified.outcome === 'unverifiable') {
-    console.log(`  ${BOLD}unverifiable${RESET}: the ${verified.source === 'finding' ? "finding's" : "handoff's"} verify block is empty. Nothing was written.`);
+    const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
+    console.log(`  ${BOLD}unverifiable${RESET}: the finding ${why}. Nothing was written.`);
   } else {
-    const colour = verified.outcome === 'resolved' ? GREEN : RED;
+    const colour = verified.outcome === 'reopened' ? RED : GREEN;
     console.log(
       `  ${BOLD}${paint(verified.outcome, colour)}${RESET}  finding commit ${verified.findingCommitSha ?? 'none (it already said so)'}`,
     );
+  }
+  if (verified.outcome === 'resolved' || verified.outcome === 'confirmed') {
+    const lifecycle = c.workflow.getHandle(findingWorkflowId(site, key));
+    const closed = await cancelLifecycleRun(lifecycle);
+    if (closed === 'cancelled') {
+      console.log(`  cancelled ${lifecycle.workflowId}: the fix is live, so the run has nothing left to do`);
+    } else if (closed === 'requested') {
+      console.log(`  cancel requested for ${lifecycle.workflowId}; it had not closed after ${LIFECYCLE_CANCEL_WAIT_MS / 1000}s`);
+    }
   }
   console.log('');
   return verified;
@@ -2153,14 +2218,32 @@ finding
   .argument('[key]', 'finding key', parseFindingSlug('key'))
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .option('--all-fixing', "every `fixing` finding of the site, one at a time")
+  .option('--pr <url>', 'an approved finding fixed outside its run: record this merged PR as its fix, then verify', parsePrOption)
+  .option('--reason <text>', 'one line for the Verification section, attributed to the CLI')
   .description(
-    "Verify a fixed finding on production: run its handoff's checks and write resolved or reopened. Needs `steward up`",
+    "Verify a fixed finding on production, fixing or reopened with its PR merged: run the finding's own checks and write resolved or reopened, or, with no checks, confirm the fix by its deploy. Runs on the hosted worker",
   )
-  .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean }) => {
+  .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean; pr?: string; reason?: string }) => {
     if (Boolean(key) === Boolean(opts.allFixing)) fail('Give one finding key, or --all-fixing.');
+    if (opts.pr && opts.allFixing) fail('--pr names the fix of one finding; give its key, not --all-fixing.');
+    if (opts.reason !== undefined && !opts.reason.trim()) fail('--reason must say something, or be left out.');
     // The origin is this site's. Another site's would ride in its own config.
     if (opts.site !== FINDINGS_DEFAULT_SITE) {
       fail(`verify knows the production origin of ${FINDINGS_DEFAULT_SITE} only, not ${opts.site}.`);
+    }
+    if (key && opts.pr) {
+      try {
+        const written = await recordHandFix(
+          { repo: ARGUS_REPO, readFinding: (p) => readFinding(ARGUS_REPO, p), readPr: readPrState, writeFix: writeFindingFix },
+          opts.site,
+          key,
+          opts.pr,
+        );
+        console.log(`\n  ${key} is fixing with ${opts.pr}  (commit ${written.commitSha ?? 'none (it already said so)'})`);
+      } catch (err) {
+        if (err instanceof VerifyRefused) fail(err.message);
+        throw err;
+      }
     }
     const keys = key
       ? [key]
@@ -2174,7 +2257,7 @@ finding
     try {
       for (const one of keys) {
         try {
-          outcomes.push({ key: one, outcome: (await verifyOneFinding(c, opts.site, one)).outcome });
+          outcomes.push({ key: one, outcome: (await verifyOneFinding(c, opts.site, one, opts.reason?.trim())).outcome });
         } catch (err) {
           if (!opts.allFixing) throw err;
           // One finding's failure must not stop the rest of the list.

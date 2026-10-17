@@ -95,6 +95,24 @@ test('a card-shaped link keeps its destination by moving onto the heading', () =
   assert.match(markdown, /02 AUG 2026/);
 });
 
+test('span-only cards link their title alone, one card per block', () => {
+  const row = (href, date, title, excerpt) =>
+    `<a href="${href}" class="row"><time>${date}</time><span class="row-body"><span class="row-title">${title}</span><span class="row-excerpt">${excerpt}</span></span><span class="row-length">10 min</span></a>`;
+  const card = (href, title) =>
+    `<a href="${href}"><span class="card-meta"><span>live</span><time>07 Sep 2026</time></span><span class="card-name">${title}</span><span class="card-blurb">Blurb.</span></a>`;
+  const markdown = pageToMarkdown(
+    page(
+      `<h1>Index</h1>${row('/writing/a/', '03 Sep 2026', 'First post', 'One.')}${row('/writing/b/', '02 Sep 2026', 'Second post', 'Two.')}${card('/projects/', 'Argus')}`
+    )
+  );
+  assert.match(markdown, /\[First post\]\(\/writing\/a\/\)/);
+  assert.match(markdown, /\[Second post\]\(\/writing\/b\/\)/);
+  assert.match(markdown, /\[Argus\]\(\/projects\/\)/);
+  for (const line of markdown.split('\n')) {
+    assert.ok((line.match(/\]\(\//g) ?? []).length <= 1, `one link per line: ${line}`);
+  }
+});
+
 test('a link with only inline content is left exactly as it was', () => {
   const markdown = pageToMarkdown(
     page('<h1>Home</h1><p><a href="/writing/"><span>All</span> <span>writing</span></a></p>')

@@ -31,8 +31,8 @@ import type {
  *   which is correct but wasteful; the in-flight count gates everything.
  * - **Never on a worker that has done no browser work.** A container that has
  *   only answered fast audits is already at baseline, so recycling it buys
- *   nothing and costs a restart. Only `auditRenderedPage` and `auditLiveUrl`
- *   launch Chrome, so only they arm the policy.
+ *   nothing and costs a restart. Only `auditRenderedPage`, `auditLiveUrl` and
+ *   `runFindingChecks` launch Chrome, so only they arm the policy.
  * - **Never straight after the last browser activity.** A workflow between two
  *   activities has no activity in flight, and exiting there would drop the
  *   queue for the seconds it takes to come back. The idle window is what waits
@@ -53,7 +53,9 @@ import type {
 
 /**
  * The activities that launch Chrome. Recycling is for the memory these leave
- * behind, so a worker that has run neither of them never recycles.
+ * behind, so a worker that has run none of them never recycles.
+ * `runFindingChecks` opens a page only for a `selector` or `js` check, and is
+ * counted whole: the set names activity types, not what one run did.
  *
  * Kept as a set here rather than as a check inside the activities because the
  * activities are shared with the laptop worker and must not learn about hosting.
@@ -61,6 +63,7 @@ import type {
 export const BROWSER_ACTIVITY_TYPES: ReadonlySet<string> = new Set([
   'auditRenderedPage',
   'auditLiveUrl',
+  'runFindingChecks',
 ]);
 
 /**
