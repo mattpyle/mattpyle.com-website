@@ -50,6 +50,10 @@ jobs:
   steward:
     name: Steward tests & tsc
     runs-on: ubuntu-latest
+    # The suite takes 3 to 4 minutes. A hung test fails in one under the test
+    # script's --test-timeout; this bounds a hang outside a test, such as the
+    # install or the Temporal binary download, well short of the 6-hour default.
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5

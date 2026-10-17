@@ -1,5 +1,6 @@
 import { WorkflowNotFoundError } from '@temporalio/client';
-import { findingPath, findingsIndexPath, parsePrUrl } from './findings.js';
+import { findingPath, findingsIndexPath, isFindingSlug, parsePrUrl } from './findings.js';
+import type { VerifyFindingInput } from '../workflows/verify-finding.js';
 
 /**
  * What `steward finding verify` does after a hand verify ends `resolved` or
@@ -72,6 +73,54 @@ export class VerifyRefused extends Error {
     super(message);
     this.name = 'VerifyRefused';
   }
+}
+
+/**
+ * `steward finding verify --root <prefix>`: a scratch copy of the findings
+ * store inside the findings repository, as `scratch/<name>`, so a test run
+ * through the real CLI reads and writes `scratch/<name>/sites/<site>/...` and
+ * never `sites/<site>/`, where Argus reads and writes. The first segment is
+ * `scratch` and each one after it is a slug; a trailing slash is dropped.
+ */
+export function parseScratchRoot(value: string): string {
+  const root = value.replace(/\/+$/, '');
+  const segments = root.split('/');
+  if (segments.length < 2 || segments[0] !== 'scratch' || !segments.slice(1).every(isFindingSlug)) {
+    throw new VerifyRefused(
+      `--root ${value} is not scratch/<name>: the first segment is scratch, and each one after it lower case letters, digits and hyphens.`,
+    );
+  }
+  return root;
+}
+
+/**
+ * The finding and index paths a verify run reads and writes, frozen into its
+ * input (design rule 10). With a root, both sit under it.
+ */
+export function verifyFindingPaths(site: string, key: string, root?: string): { findingPath: string; indexPath: string } {
+  const prefix = root ? `${root}/` : '';
+  return { findingPath: `${prefix}${findingPath(site, key)}`, indexPath: `${prefix}${findingsIndexPath(site)}` };
+}
+
+/** The input `steward finding verify` starts `verifyFindingWorkflow` with, every value resolved here. */
+export function buildVerifyInput(opts: {
+  site: string;
+  key: string;
+  repo: string;
+  origin: string;
+  at: string;
+  reason?: string;
+  root?: string;
+}): VerifyFindingInput {
+  return {
+    site: opts.site,
+    key: opts.key,
+    repo: opts.repo,
+    ...verifyFindingPaths(opts.site, opts.key, opts.root),
+    origin: opts.origin,
+    at: opts.at,
+    ...(opts.reason ? { reason: opts.reason } : {}),
+  };
 }
 
 export interface HandFixDeps {

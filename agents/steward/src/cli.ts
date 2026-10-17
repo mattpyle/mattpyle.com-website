@@ -59,8 +59,15 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
-import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
-import { LIFECYCLE_CANCEL_WAIT_MS, VerifyRefused, cancelLifecycleRun, recordHandFix } from './lib/finding-verify.js';
+import { FixRefused, approvedNextStep, followFix, requestFix } from './lib/finding-fix.js';
+import {
+  LIFECYCLE_CANCEL_WAIT_MS,
+  VerifyRefused,
+  buildVerifyInput,
+  cancelLifecycleRun,
+  parseScratchRoot,
+  recordHandFix,
+} from './lib/finding-verify.js';
 import { gh, ghText } from './lib/github.js';
 import {
   applyHandVerifies,
@@ -84,20 +91,23 @@ import {
 } from './lib/scorecard-schedule.js';
 import { validateCommentary, type ScorecardRunRecord } from './lib/scorecard-aggregate.js';
 import {
-  findingPath,
   findingWorkflowId,
-  findingsIndexPath,
   isFindingSlug,
   parsePrUrl,
   verifySourceLabel,
   verifyWorkflowId,
   type FindingVerdict,
 } from './lib/findings.js';
-import { readFinding, readFindingsIndex, writeFindingFix, writeFindingReturned } from './activities/findings.js';
+import {
+  readFinding,
+  readFindingsIndex,
+  readSiteAutoFix,
+  writeFindingFix,
+  writeFindingReturned,
+} from './activities/findings.js';
 import {
   verifyFindingStateQuery,
   verifyFindingWorkflow,
-  type VerifyFindingInput,
   type VerifyFindingResult,
 } from './workflows/verify-finding.js';
 import {
@@ -1722,6 +1732,15 @@ function parsePrOption(value: string): string {
   return value;
 }
 
+function parseRootOption(value: string): string {
+  try {
+    return parseScratchRoot(value);
+  } catch (err) {
+    if (err instanceof VerifyRefused) fail(err.message);
+    throw err;
+  }
+}
+
 function parseFindingSlug(label: string) {
   return (value: string): string => {
     if (!isFindingSlug(value)) {
@@ -1790,7 +1809,14 @@ async function sendFindingVerdict(site: string, key: string, status: FindingVerd
     }
     console.log(`  commit: ${recorded.commitSha ?? 'none (the file already carried this verdict)'}`);
     if (stillOpen && recordedVerdict.status === 'approved') {
-      console.log(`  The workflow waits for \`steward finding fix ${key}\`.`);
+      // The verdict is recorded by now, so a failed read changes this line, not the exit.
+      let autoFix: boolean | undefined;
+      try {
+        autoFix = await readSiteAutoFix({ repo: ARGUS_REPO, site });
+      } catch (err) {
+        console.log(`  auto_fix unread (${describeCliError(err)}): \`steward finding status ${key}\` shows the next step.`);
+      }
+      if (autoFix !== undefined) console.log(`  ${approvedNextStep(key, autoFix)}`);
     }
     console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(handle.workflowId)}\n`);
   } finally {
@@ -2131,24 +2157,24 @@ function describeCliError(err: unknown): string {
 /**
  * One verify run, start to result. The input is resolved HERE and frozen into
  * the workflow (design rule 10): the repository, the paths, the origin and the
- * instant the ID is stamped with.
+ * instant the ID is stamped with. A `--root` puts the paths under a scratch
+ * copy, and the finding's lifecycle run is then left alone: it belongs to the
+ * real finding, not the copy.
  */
-async function verifyOneFinding(c: Client, site: string, key: string, reason?: string): Promise<VerifyFindingResult> {
+async function verifyOneFinding(
+  c: Client,
+  site: string,
+  key: string,
+  reason?: string,
+  root?: string,
+): Promise<VerifyFindingResult> {
   const at = new Date().toISOString();
-  const input: VerifyFindingInput = {
-    site,
-    key,
-    repo: ARGUS_REPO,
-    findingPath: findingPath(site, key),
-    indexPath: findingsIndexPath(site),
-    origin: PROD_ORIGIN,
-    at,
-    ...(reason ? { reason } : {}),
-  };
+  const input = buildVerifyInput({ site, key, repo: ARGUS_REPO, origin: PROD_ORIGIN, at, reason, root });
   const workflowId = verifyWorkflowId(site, key, at);
   const started = Date.now();
   const handle = await c.workflow.start(verifyFindingWorkflow, { workflowId, taskQueue: QUEUE_FINDINGS, args: [input] });
   console.log(`\n  verifying ${key}`);
+  if (root) console.log(`  root: ${root}, so the run reads and writes ${input.findingPath} and ${input.indexPath}`);
   console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
 
   let done = false;
@@ -2205,7 +2231,9 @@ async function verifyOneFinding(c: Client, site: string, key: string, reason?: s
       `  ${BOLD}${paint(verified.outcome, colour)}${RESET}  finding commit ${verified.findingCommitSha ?? 'none (it already said so)'}`,
     );
   }
-  if (verified.outcome === 'resolved' || verified.outcome === 'confirmed') {
+  if (root) {
+    console.log(`  a scratch copy under ${root}: no lifecycle run is touched`);
+  } else if (verified.outcome === 'resolved' || verified.outcome === 'confirmed') {
     const lifecycle = c.workflow.getHandle(findingWorkflowId(site, key));
     const closed = await cancelLifecycleRun(lifecycle);
     if (closed === 'cancelled') {
@@ -2225,12 +2253,16 @@ finding
   .option('--all-fixing', "every `fixing` finding of the site, one at a time")
   .option('--pr <url>', 'an approved finding fixed outside its run: record this merged PR as its fix, then verify', parsePrOption)
   .option('--reason <text>', 'one line for the Verification section, attributed to the CLI')
+  .option('--root <prefix>', 'a scratch copy, scratch/<name>: read and write <prefix>/sites/<site>/findings, not the real store', parseRootOption)
   .description(
     "Verify a fixed finding on production, fixing or reopened with its PR merged: run the finding's own checks and write resolved or reopened, or, with no checks, confirm the fix by its deploy. Runs on the hosted worker",
   )
-  .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean; pr?: string; reason?: string }) => {
+  .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean; pr?: string; reason?: string; root?: string }) => {
     if (Boolean(key) === Boolean(opts.allFixing)) fail('Give one finding key, or --all-fixing.');
     if (opts.pr && opts.allFixing) fail('--pr names the fix of one finding; give its key, not --all-fixing.');
+    if (opts.root && (opts.allFixing || opts.pr)) {
+      fail('--root verifies one scratch copy as it stands; give its key, without --all-fixing or --pr.');
+    }
     if (opts.reason !== undefined && !opts.reason.trim()) fail('--reason must say something, or be left out.');
     // The origin is this site's. Another site's would ride in its own config.
     if (opts.site !== FINDINGS_DEFAULT_SITE) {
@@ -2262,7 +2294,7 @@ finding
     try {
       for (const one of keys) {
         try {
-          outcomes.push({ key: one, outcome: (await verifyOneFinding(c, opts.site, one, opts.reason?.trim())).outcome });
+          outcomes.push({ key: one, outcome: (await verifyOneFinding(c, opts.site, one, opts.reason?.trim(), opts.root)).outcome });
         } catch (err) {
           if (!opts.allFixing) throw err;
           // One finding's failure must not stop the rest of the list.

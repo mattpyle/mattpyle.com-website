@@ -89,6 +89,23 @@ test('verify --pr takes one key and a pull request URL, and --reason must say so
   assert.match(blank.out, /--reason must say something/);
 });
 
+test('verify --root takes scratch/<name> and one key, all before anything connects', async () => {
+  for (const root of ['sites', 'scratch', 'scratch/../sites', 'tmp/verify-1', '/scratch/verify-1']) {
+    const bad = await runCli(['finding', 'verify', 'some-key', '--root', root]);
+    assert.equal(bad.code, 1, root);
+    assert.match(bad.out, /is not scratch\/<name>/, root);
+  }
+  const all = await runCli(['finding', 'verify', '--all-fixing', '--root', 'scratch/verify-1']);
+  assert.equal(all.code, 1);
+  assert.match(all.out, /--root verifies one scratch copy/);
+  const pr = await runCli([
+    'finding', 'verify', 'some-key', '--root', 'scratch/verify-1',
+    '--pr', 'https://github.com/mattpyle/mattpyle.com-website/pull/356',
+  ]);
+  assert.equal(pr.code, 1);
+  assert.match(pr.out, /--root verifies one scratch copy/);
+});
+
 test('the spike verb is gone: the fixer starts from a finding, not a handoff path', async () => {
   const { code, out } = await runCli(['fixer', 'spike', 'docs/handoffs/x.md']);
   assert.equal(code, 1);
