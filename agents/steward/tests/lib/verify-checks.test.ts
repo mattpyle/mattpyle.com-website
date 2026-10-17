@@ -5,7 +5,9 @@ import type { AddressInfo } from 'node:net';
 import {
   CheckBroken,
   CheckUnavailable,
+  DEFAULT_VIEWPORT,
   parseVerifyReply,
+  parseViewport,
   readHandoffVerify,
   runChecks,
   validateGeneratedBlock,
@@ -15,6 +17,7 @@ import {
   withVerifyBlock,
   type CheckRunner,
   type VerifyCheck,
+  type Viewport,
 } from '../../src/lib/verify-checks.js';
 import { HANDOFF_GENERATOR_TOOLS, handoffGeneratorPrompt, validateHandoff } from '../../src/lib/fixer.js';
 import {
@@ -76,14 +79,16 @@ after(async () => {
 /** A probe that answers each expression from a table, and records what it was asked. */
 function fakeProbe(answers: (url: string, expression: string) => unknown) {
   const asked: { url: string; expression: string }[] = [];
+  const sizes: Viewport[] = [];
   let opened = 0;
   let closed = 0;
   const runner: Pick<CheckRunner, 'openProbe'> = {
     openProbe: async () => {
       opened++;
       return {
-        evaluate: async (url, expression) => {
+        evaluate: async (url, expression, viewport) => {
           asked.push({ url, expression });
+          sizes.push(viewport);
           return answers(url, expression);
         },
         close: async () => {
@@ -92,7 +97,7 @@ function fakeProbe(answers: (url: string, expression: string) => unknown) {
       };
     },
   };
-  return { runner, asked, counts: () => ({ opened, closed }) };
+  return { runner, asked, sizes, counts: () => ({ opened, closed }) };
 }
 
 const noBrowser: Pick<CheckRunner, 'openProbe'> = {
@@ -154,6 +159,45 @@ test('a block is refused for an unknown kind, a URL off the production origin, o
   // One bad check refuses the whole block, the good check beside it included.
   refused([...GOOD, { url: 'https://example.com/', kind: 'status', expect: 200 }], /verify check 3/);
   refused(Array.from({ length: 13 }, () => GOOD[0]), /13 checks, over 12/);
+});
+
+test('a selector or js check may name a viewport, and keeps it', () => {
+  const phone: VerifyCheck[] = [
+    { url: `${ORIGIN}/`, kind: 'js', expect: { expression: 'innerWidth', equals: 390 }, viewport: '390x844' },
+    { url: `${ORIGIN}/`, kind: 'selector', expect: { selector: '.nav-more', count: 1 }, viewport: '1280x800' },
+  ];
+  assert.deepEqual(validateVerifyBlock(phone, ORIGIN), { checks: phone, problems: [] });
+  // As Argus writes it: an unquoted value in YAML is a string too.
+  const { raw } = parseVerifyReply(`verify:\n  - url: "${ORIGIN}/"\n    kind: "js"\n    expect: {expression: "innerWidth", equals: 390}\n    viewport: 390x844\n`);
+  assert.equal(validateVerifyBlock(raw, ORIGIN).checks[0].viewport, '390x844');
+  assert.ok(!('viewport' in validateVerifyBlock(GOOD, ORIGIN).checks[1]), 'a check with none gets none');
+});
+
+test('a viewport on a status, header, text or markdown check is refused', () => {
+  const fetchKinds: [VerifyCheck['kind'], unknown][] = [
+    ['status', 200],
+    ['header', { name: 'link', contains: 'text/markdown' }],
+    ['text', { contains: 'Matt' }],
+    ['markdown', { contains: 'Matt' }],
+  ];
+  for (const [kind, expect] of fetchKinds) {
+    const result = validateVerifyBlock([{ url: `${ORIGIN}/`, kind, expect, viewport: '390x844' }], ORIGIN);
+    assert.deepEqual(result.problems, [`verify check 1 (${kind}): a viewport applies to selector and js checks only`]);
+    assert.deepEqual(result.checks, []);
+  }
+});
+
+test('a malformed viewport is refused', () => {
+  for (const viewport of ['390', '390X844', '390 x 844', ' 390x844', '390x844px', 'phone', '50x844', '390x5000', '0390x844', 390, null, '']) {
+    const result = validateVerifyBlock(
+      [{ url: `${ORIGIN}/`, kind: 'js', expect: { expression: 'innerWidth', equals: 390 }, viewport }],
+      ORIGIN,
+    );
+    assert.match(result.problems.join('; '), /verify check 1 \(js\): viewport .* is not "<width>x<height>", each 100 to 4096/, String(viewport));
+    assert.deepEqual(result.checks, []);
+  }
+  assert.deepEqual(parseViewport('390x844'), { width: 390, height: 844 });
+  assert.deepEqual(parseViewport(DEFAULT_VIEWPORT), { width: 1280, height: 800 });
 });
 
 test('a coverage map is admitted when every surface has checks or a reason and every check is named', () => {
@@ -305,6 +349,16 @@ test('the guide is the schema alone: it names no finding section, and its source
   assert.doesNotMatch(guide, /Build the checks from/);
 });
 
+test('the guide asks every browser check for its viewport and names the default', () => {
+  const guide = verifyBlockGuide(ORIGIN);
+  assert.ok(
+    guide.includes(
+      'Every `selector` and `js` check names the viewport its measurement was taken at, as `viewport: "390x844"`; a check without one runs at 1280x800.',
+    ),
+  );
+  assert.equal(DEFAULT_VIEWPORT, '1280x800');
+});
+
 test('the guide teaches the retro check: a js expression that sets the attribute, then measures a non-empty match', () => {
   const guide = verifyBlockGuide(ORIGIN).join('\n');
   assert.match(guide, /The retro appearance is the one page state a check may set\./);
@@ -417,6 +471,24 @@ test('js: the expression as written, compared as a JSON value', async () => {
   assert.deepEqual(rows.map((r) => r.pass), [true, false, true]);
   assert.equal(rows[1].measured, '["rss","github"]');
   assert.deepEqual(probe.asked.map((a) => a.url), [`${origin}/`, `${origin}/`, `${origin}/`]);
+});
+
+test('a browser check opens its page at its viewport, or at 1280x800, and its row names the size', async () => {
+  const probe = fakeProbe((_url, expression) => (expression === 'innerWidth' ? 390 : 1));
+  const rows = await run(
+    [
+      { ...check('/', 'js', { expression: 'innerWidth', equals: 390 }), viewport: '390x844' },
+      check('/', 'selector', { selector: 'h1', count: 1 }),
+      check('/audit/', 'status', 200),
+    ],
+    probe.runner,
+  );
+  assert.deepEqual(probe.sizes, [
+    { width: 390, height: 844 },
+    { width: 1280, height: 800 },
+  ]);
+  assert.deepEqual(rows.map((r) => r.viewport), ['390x844', DEFAULT_VIEWPORT, undefined]);
+  assert.ok(!('viewport' in rows[2]), 'a fetch row carries no viewport');
 });
 
 test('a check that cannot be measured throws, and is never a failed row', async () => {

@@ -56,14 +56,16 @@ test('a verify run has its own workflow ID, stamped to the second, and a run ID 
   assert.equal(verifyStamp('2026-10-13T04:12:33Z'), '2026-10-13T041233Z', 'an instant with no milliseconds too');
 });
 
-test('the verifier takes fixing findings and names why it refuses any other', () => {
+test('the verifier takes fixing and reopened findings and names why it refuses any other', () => {
   assert.equal(verifyRefusal({ status: 'fixing', links: { pr: FIX_PR } }), null);
+  assert.equal(verifyRefusal({ status: 'reopened', links: { pr: FIX_PR } }), null);
+  assert.equal(verifyRefusal({ status: 'reopened' }), 'it has no links.pr to a pull request');
   assert.equal(verifyRefusal({ status: 'fixing' }), 'it has no links.pr to a pull request');
   assert.equal(verifyRefusal({ status: 'fixing', links: { pr: 'https://example.com/pull/1' } }), 'it has no links.pr to a pull request');
   assert.deepEqual(parsePrUrl(FIX_PR), { repo: 'mattpyle/mattpyle.com-website', number: 312 });
   assert.equal(parsePrUrl(`${FIX_PR}/files`), null);
-  for (const status of ['approved', 'resolved', 'reopened', 'proposed', 'rejected']) {
-    assert.equal(verifyRefusal({ status, links: { pr: FIX_PR } }), `its status is ${status}, not fixing`);
+  for (const status of ['approved', 'resolved', 'proposed', 'rejected']) {
+    assert.equal(verifyRefusal({ status, links: { pr: FIX_PR } }), `its status is ${status}, not fixing or reopened`);
   }
   assert.match(verifyRefusal({})!, /unset/);
 });
@@ -150,6 +152,13 @@ test('the section keeps a later section Argus appended, and the edit keeps CRLF'
   assert.ok(!/[^\r]\n/.test(crlf));
   assert.throws(() => setFindingVerification('# no frontmatter\n', verification('resolved')), /no frontmatter block/);
   assert.throws(() => setFindingVerification('---\nkey: k\n---\nbody\n', verification('resolved')), /no status field/);
+});
+
+test('a browser check names the viewport it ran at, and a fetch check names none', () => {
+  const rows: Verification['rows'] = [{ ...ROWS[0], kind: 'js', viewport: '390x844' }, ROWS[1]];
+  const section = buildVerificationSection(verification('resolved', rows));
+  assert.match(section, /\n1\. Pass, `js` on https:\/\/www\.mattpyle\.com\/ at 390x844\. Expected: /);
+  assert.match(section, /\n2\. Fail, `text` on https:\/\/www\.mattpyle\.com\/about\/\. Expected: /);
 });
 
 test('a finding with no resolved_run field gets one, inside the frontmatter', () => {
