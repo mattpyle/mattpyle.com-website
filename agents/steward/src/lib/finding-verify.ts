@@ -1,8 +1,10 @@
 import { WorkflowNotFoundError } from '@temporalio/client';
+import { findingPath, findingsIndexPath, parsePrUrl } from './findings.js';
 
 /**
- * What `steward finding verify` does after a hand verify ends `resolved`: the
- * finding's open lifecycle run, `finding/<site>/<key>`, is cancelled.
+ * What `steward finding verify` does after a hand verify ends `resolved` or
+ * `confirmed`: the finding's open lifecycle run, `finding/<site>/<key>`, is
+ * cancelled.
  *
  * A `reopened` finding gets a fresh lifecycle run from the reconciler, parked
  * at its verdict. When a corrected check then resolves the finding by hand,
@@ -10,6 +12,11 @@ import { WorkflowNotFoundError } from '@temporalio/client';
  * open a fix issue for a fix that is already live. A `fixing` finding's run,
  * still waiting on the merge or the deploy, would run its own verify against a
  * finding that is no longer `fixing`. Either way the run is cancelled.
+ *
+ * An `approved` finding whose fix landed outside its run, through a
+ * hand-filed issue, has a run parked at `waiting-fix`; `--pr` records that fix
+ * ({@link recordHandFix}) and the verify that follows closes the run the same
+ * way.
  *
  * After `reopened` the run is left where it is: the finding still needs a
  * verdict or a fix.
@@ -57,4 +64,55 @@ export async function cancelLifecycleRun(
   ]);
   clearTimeout(timer);
   return closed ? 'cancelled' : 'requested';
+}
+
+/** A refusal the operator can act on; the CLI prints the message alone. */
+export class VerifyRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VerifyRefused';
+  }
+}
+
+export interface HandFixDeps {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  /** The finding file's parsed frontmatter, from the findings repository. */
+  readFinding: (path: string) => Promise<{ data: Record<string, unknown> }>;
+  /** Where the PR stands on GitHub. */
+  readPr: (prUrl: string) => Promise<'open' | 'merged' | 'closed'>;
+  /** `writeFindingFix`: `status: fixing` and `links.pr`, as the lifecycle writes them. */
+  writeFix: (input: {
+    repo: string;
+    site: string;
+    key: string;
+    findingPath: string;
+    indexPath: string;
+    prUrl: string;
+  }) => Promise<{ commitSha: string | null }>;
+}
+
+/**
+ * `steward finding verify <key> --pr <url>`, before the verify: an `approved`
+ * finding fixed by a merged PR its run never saw is written `fixing` with that
+ * PR, so the verifier's gate admits it. Any other status is refused, and so is
+ * a PR that is not merged: the verify would measure a fix that is not live.
+ */
+export async function recordHandFix(
+  deps: HandFixDeps,
+  site: string,
+  key: string,
+  prUrl: string,
+): Promise<{ commitSha: string | null }> {
+  if (!parsePrUrl(prUrl)) throw new VerifyRefused(`--pr ${prUrl} is not a GitHub pull request URL.`);
+  const path = findingPath(site, key);
+  const { data } = await deps.readFinding(path);
+  if (data.status !== 'approved') {
+    throw new VerifyRefused(
+      `${key} is ${String(data.status ?? 'unset')}, not approved. --pr records a fix for an approved finding; verify a fixing or reopened one without it.`,
+    );
+  }
+  const state = await deps.readPr(prUrl);
+  if (state !== 'merged') throw new VerifyRefused(`${prUrl} is ${state}, not merged, so its fix is not on production.`);
+  return deps.writeFix({ repo: deps.repo, site, key, findingPath: path, indexPath: findingsIndexPath(site), prUrl });
 }

@@ -77,6 +77,18 @@ test('verify takes one key or --all-fixing, never both or neither, and refuses b
   assert.match(site.out, /production origin of mattpyle-com only, not temporal-io/);
 });
 
+test('verify --pr takes one key and a pull request URL, and --reason must say something, all before anything connects', async () => {
+  const notPr = await runCli(['finding', 'verify', 'some-key', '--pr', 'https://github.com/mattpyle/mattpyle.com-website/issues/356']);
+  assert.equal(notPr.code, 1);
+  assert.match(notPr.out, /is not a GitHub pull request URL/);
+  const all = await runCli(['finding', 'verify', '--all-fixing', '--pr', 'https://github.com/mattpyle/mattpyle.com-website/pull/356']);
+  assert.equal(all.code, 1);
+  assert.match(all.out, /--pr names the fix of one finding/);
+  const blank = await runCli(['finding', 'verify', 'some-key', '--reason', '  ']);
+  assert.equal(blank.code, 1);
+  assert.match(blank.out, /--reason must say something/);
+});
+
 test('the spike verb is gone: the fixer starts from a finding, not a handoff path', async () => {
   const { code, out } = await runCli(['fixer', 'spike', 'docs/handoffs/x.md']);
   assert.equal(code, 1);

@@ -463,8 +463,14 @@ export function siteConfigPath(site: string): string {
 // The verifier (findings-loop design, phase 5)
 // ---------------------------------------------------------------------------
 
-/** What a verify run decides. `unverifiable` writes nothing: the block it took is empty. */
-export type VerifyOutcome = 'resolved' | 'reopened' | 'unverifiable';
+/**
+ * What a verify run decides. `resolved` and `reopened` are measured by the
+ * finding's checks. `confirmed` is a finding with no checks resolved by its
+ * deploy: production serves a commit that contains the fix PR's merge (design
+ * decision 30). `unverifiable` is what a blockless verify ended as before
+ * that, kept so recorded histories decode; nothing produces it now.
+ */
+export type VerifyOutcome = 'resolved' | 'reopened' | 'confirmed' | 'unverifiable';
 
 /**
  * Where a verify run took its checks from: the finding's own `verify` key,
@@ -536,39 +542,70 @@ export interface VerificationRow {
   viewport?: string;
 }
 
+/** What a deploy-resolved finding's Verification section names: the fix and the commit production serves. */
+export interface VerificationDeploy {
+  prUrl: string;
+  mergeSha: string;
+  liveSha: string;
+}
+
 export interface Verification {
   status: 'resolved' | 'reopened';
-  /** ISO 8601, when the checks ran. */
+  /** ISO 8601, when the checks ran, or when production was read for a deploy-resolved finding. */
   at: string;
   workflowId: string;
   /** Where the checks came from. */
   source: VerifyBlockSource;
   rows: VerificationRow[];
+  /** Set when no check ran and the deploy is the evidence: the finding is written `resolved_by: deploy`. */
+  deploy?: VerificationDeploy;
+  /** `steward finding verify --reason`: one line, attributed to the CLI. */
+  reason?: string;
 }
 
-/** The `## Verification` section: the outcome, then each check with both values. */
+/**
+ * The `## Verification` section: the outcome, then each check with both
+ * values. A deploy-resolved finding has no rows: the section says no check
+ * could measure the fix, and names the PR, its merge commit and the live
+ * commit instead.
+ */
 export function buildVerificationSection(verification: Verification): string {
-  const lines = [
-    '## Verification',
-    '',
-    `Steward ran this finding's checks against production at ${verification.at}. Outcome: ${verification.status}. Workflow \`${verification.workflowId}\`.`,
-    '',
-    `Checks from: ${verifySourceLabel(verification.source)}.`,
-    '',
-  ];
+  const { deploy } = verification;
+  const lines = ['## Verification', ''];
+  if (deploy) {
+    lines.push(
+      `Steward confirmed this finding's fix by its deploy at ${verification.at}. Outcome: confirmed. Workflow \`${verification.workflowId}\`.`,
+      '',
+      `No check could measure the fix: the finding has no verify block. ${deploy.prUrl} merged as \`${deploy.mergeSha}\`, and production serves \`${deploy.liveSha}\`, which contains it.`,
+      '',
+    );
+  } else {
+    lines.push(
+      `Steward ran this finding's checks against production at ${verification.at}. Outcome: ${verification.status}. Workflow \`${verification.workflowId}\`.`,
+      '',
+      `Checks from: ${verifySourceLabel(verification.source)}.`,
+      '',
+    );
+  }
   for (const row of verification.rows) {
     lines.push(
       `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${row.url}${row.viewport ? ` at ${row.viewport}` : ''}. Expected: ${row.expected}. Measured: ${row.measured}.`,
     );
   }
+  if (verification.reason) {
+    if (verification.rows.length > 0) lines.push('');
+    lines.push(`From the CLI: ${verification.reason}`);
+  }
+  while (lines[lines.length - 1] === '') lines.pop();
   return lines.join('\n');
 }
 
 /**
  * The finding file with the verifier's result in it and every other byte kept:
- * `status`, `resolved_run` when it resolved, and one `## Verification` section
- * at the end of the body. A section from an earlier run is replaced, so the
- * file holds the latest measurement.
+ * `status`, `resolved_run` when it resolved, `resolved_by: deploy` when the
+ * deploy resolved it, and one `## Verification` section at the end of the
+ * body. A section from an earlier run is replaced, so the file holds the
+ * latest measurement, and a measured result drops an earlier `resolved_by`.
  */
 export function setFindingVerification(text: string, verification: Verification): string {
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
@@ -582,12 +619,16 @@ export function setFindingVerification(text: string, verification: Verification)
   if (statusAt < 0) throw new Error('the finding has no status field');
   lines[statusAt] = `status: ${verification.status}`;
 
-  let head = lines.slice(0, close);
+  let head = lines.slice(0, close).filter((line, i) => i === 0 || !/^resolved_by:/.test(line));
   if (verification.status === 'resolved') {
     const run = `resolved_run: ${verifyRunId(verification.at)}`;
-    const runAt = head.findIndex((line, i) => i > 0 && /^resolved_run:/.test(line));
+    let runAt = head.findIndex((line, i) => i > 0 && /^resolved_run:/.test(line));
     if (runAt >= 0) head[runAt] = run;
-    else head = [...head, run];
+    else {
+      head = [...head, run];
+      runAt = head.length - 1;
+    }
+    if (verification.deploy) head.splice(runAt + 1, 0, 'resolved_by: deploy');
   }
 
   const body = lines.slice(close);

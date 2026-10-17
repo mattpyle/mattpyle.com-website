@@ -166,3 +166,41 @@ test('a finding with no resolved_run field gets one, inside the frontmatter', ()
   assert.ok(out.startsWith('---\nkey: k\nstatus: resolved\nresolved_run: 2026-10-13T0412Z\n---\n\n# Title\n\n## Verification\n'));
   assert.match(buildVerificationSection(verification('resolved', [ROWS[0]])), /^## Verification\n\nSteward ran/);
 });
+
+const DEPLOY = { prUrl: FIX_PR, mergeSha: 'a'.repeat(40), liveSha: 'b'.repeat(40) };
+
+test('a deploy-resolved finding is resolved_by deploy, and its section has no rows and names the PR, the merge and the live commit', () => {
+  const out = setFindingVerification(FIXING, { ...verification('resolved', []), deploy: DEPLOY });
+  const { data } = parseFrontmatter(out);
+  assert.equal(data.status, 'resolved');
+  assert.equal(data.resolved_run, '2026-10-13T0412Z');
+  assert.equal(data.resolved_by, 'deploy');
+  assert.match(out, /\nresolved_run: 2026-10-13T0412Z\nresolved_by: deploy\n/);
+  const before = FIXING.split('\n');
+  assert.deepEqual(out.split('\n').slice(before.length + 1), [
+    '## Verification',
+    '',
+    `Steward confirmed this finding's fix by its deploy at ${AT}. Outcome: confirmed. Workflow \`verify/mattpyle-com/${DEFECT_KEY}/2026-10-13T041233Z\`.`,
+    '',
+    `No check could measure the fix: the finding has no verify block. ${FIX_PR} merged as \`${DEPLOY.mergeSha}\`, and production serves \`${DEPLOY.liveSha}\`, which contains it.`,
+    '',
+  ]);
+});
+
+test('a measured result drops an earlier resolved_by, and a measured resolved never writes one', () => {
+  const deployed = setFindingVerification(FIXING, { ...verification('resolved', []), deploy: DEPLOY });
+  const reopened = setFindingVerification(deployed.replace('status: resolved', 'status: fixing'), verification('reopened'));
+  assert.equal(parseFrontmatter(reopened).data.resolved_by, undefined);
+  assert.equal(reopened.match(/^resolved_by:/gm), null);
+  assert.equal(setFindingVerification(FIXING, verification('resolved', [ROWS[0]])).match(/^resolved_by:/gm), null);
+  // The same deploy result twice is one line, not two.
+  const again = setFindingVerification(deployed, { ...verification('resolved', []), deploy: DEPLOY });
+  assert.equal(again, deployed);
+});
+
+test('--reason adds one line attributed to the CLI, after the rows or the deploy sentence', () => {
+  const measured = buildVerificationSection({ ...verification('resolved', [ROWS[0]]), reason: 'Read the footer by hand.' });
+  assert.match(measured, /Measured: "Footer"\.\n\nFrom the CLI: Read the footer by hand\.$/);
+  const deployed = buildVerificationSection({ ...verification('resolved', []), deploy: DEPLOY, reason: 'Fixed by PR 356 outside the run.' });
+  assert.match(deployed, /which contains it\.\n\nFrom the CLI: Fixed by PR 356 outside the run\.$/);
+});

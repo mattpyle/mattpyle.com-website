@@ -2,7 +2,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
-import { awaitFixPrMerge, awaitProductionDeploy, writeFindingReturned } from '../../src/activities/findings.js';
+import { awaitFixPrMerge, awaitProductionDeploy, readProductionDeploy, writeFindingReturned } from '../../src/activities/findings.js';
 import { compareContains, liveDeployment, setFindingReturned } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { DEFECT_KEY, FIXING_FINDING, FIX_PR } from '../helpers/finding-fixtures.js';
@@ -150,6 +150,54 @@ test('a live commit that predates the merge, or none at all, is a retryable Depl
 
   scriptGitHub({ [DEPLOYS]: [] });
   await rejectsWith(awaitProductionDeploy(input), 'DeployNotLive', false);
+});
+
+// ---------------------------------------------------------------------------
+// A blockless verify's one production read (design decision 30)
+// ---------------------------------------------------------------------------
+
+const PR_312 = `/repos/${SITE_REPO}/pulls/312`;
+const mergedPr = { state: 'closed', merged: true, merge_commit_sha: 'm1', merged_at: AT };
+
+test('a live commit that contains the fix PR merge is contained, with the merge, the live commit and the deployment', async () => {
+  const calls = scriptGitHub({
+    [PR_312]: mergedPr,
+    [DEPLOYS]: [{ id: 9, sha: 'm2' }],
+    [status(9)]: [{ state: 'success' }],
+    [`/repos/${SITE_REPO}/compare/m1...m2`]: { status: 'ahead' },
+  });
+  const read = await readProductionDeploy({ prUrl: FIX_PR, environment: 'Production' });
+  assert.equal(read.contains, true);
+  assert.equal(read.mergeSha, 'm1');
+  assert.equal(read.liveSha, 'm2');
+  assert.equal(read.deploymentId, 9);
+  assert.equal(read.why, '');
+  assert.ok(!Number.isNaN(Date.parse(read.readAt)));
+  assert.equal(calls.filter((c) => c === DEPLOYS).length, 1, 'one read, no polling');
+});
+
+test('a live commit that does not contain the merge, or no live deployment, is an answer rather than a retry', async () => {
+  scriptGitHub({
+    [PR_312]: mergedPr,
+    [DEPLOYS]: [{ id: 6, sha: 'old' }],
+    [status(6)]: [{ state: 'success' }],
+    [`/repos/${SITE_REPO}/compare/m1...old`]: { status: 'behind' },
+  });
+  const behind = await readProductionDeploy({ prUrl: FIX_PR, environment: 'Production' });
+  assert.equal(behind.contains, false);
+  assert.equal(behind.liveSha, 'old');
+  assert.match(behind.why, /serves old, which does not contain m1 \(behind\)/);
+
+  scriptGitHub({ [PR_312]: mergedPr, [DEPLOYS]: [] });
+  const none = await readProductionDeploy({ prUrl: FIX_PR, environment: 'Production' });
+  assert.equal(none.contains, false);
+  assert.equal(none.liveSha, null);
+  assert.match(none.why, /No Production deployment .+ has succeeded yet/);
+
+  scriptGitHub({ [PR_312]: { state: 'open', merged: false, merge_commit_sha: 'test-merge' } });
+  const open = await readProductionDeploy({ prUrl: FIX_PR, environment: 'Production' });
+  assert.equal(open.contains, false);
+  assert.match(open.why, /pull\/312 has no merge commit/);
 });
 
 // ---------------------------------------------------------------------------

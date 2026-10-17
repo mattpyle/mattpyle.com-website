@@ -15,9 +15,10 @@ import {
  * `reopened` (findings-loop design, phase 5).
  *
  * Up to five activities, in order: read the finding, read its PR, read the
- * `verify` block, run the checks against production, write the result back.
- * All five run on `steward-findings`, the hosted worker's queue (design
- * decision 29), so a verify needs no machine of Matt's to be on.
+ * `verify` block, run the checks against production (or, with no checks, read
+ * what production serves), write the result back. All of them run on
+ * `steward-findings`, the hosted worker's queue (design decision 29), so a
+ * verify needs no machine of Matt's to be on.
  *
  * **Whose block.** The finding's own `verify` key, and nothing else: the
  * finder's measure, written by Argus before any fix existed. The handoff is
@@ -43,13 +44,27 @@ import {
  *
  * **Three endings.** Every check passes: `resolved`. Any check fails:
  * `reopened`. The finding has no `verify` key, or an empty list, a measure no
- * check can express: `unverifiable`, and nothing is written.
+ * check can express: the deploy is the evidence (decision 30). Production is
+ * read once, as the lifecycle's deploy wait reads it, and when the live commit
+ * contains the fix PR's merge the finding is written `resolved` with
+ * `resolved_by: deploy` and the outcome is `confirmed`. When it does not, the
+ * run fails as a check that could not measure, and nothing is written.
+ *
+ * **Versioned with `patched`.** A blockless run recorded before decision 30
+ * has no {@link BLOCKLESS_CONFIRM_PATCH} marker and replays to its old
+ * `unverifiable` ending, which writes nothing.
  */
 
 // Duplicated rather than imported from config.ts, as in the sibling workflows.
 // Every activity runs on the findings queue: GitHub API calls, fetch against
 // production, and the hosted image's Chromium for `selector` and `js`.
 const QUEUE_FINDINGS = 'steward-findings';
+
+/** The `patched` marker of the blockless verify's production read in place of `unverifiable` (decision 30). */
+export const BLOCKLESS_CONFIRM_PATCH = 'verify-blockless-confirm';
+
+/** The GitHub deployment environment Vercel's integration posts production to, as in `finding.ts`. */
+const PRODUCTION_ENVIRONMENT = 'Production';
 
 export interface VerifyFindingInput {
   site: string;
@@ -66,6 +81,8 @@ export interface VerifyFindingInput {
   origin: string;
   /** ISO 8601, when the CLI started the run. The workflow ID's stamp is built from it. */
   at: string;
+  /** `steward finding verify --reason`: one line for the Verification section. Absent from the lifecycle's child. */
+  reason?: string;
 }
 
 export interface VerifyFindingCheck {
@@ -92,8 +109,10 @@ export interface VerifyFindingResult {
   hasBlock: boolean;
   /** The last commit of the write back, or null when nothing was written. */
   findingCommitSha: string | null;
-  /** When the checks ran, or null when there were none. */
+  /** When the checks ran or production was read, or null when neither happened. */
   ranAt: string | null;
+  /** `confirmed` only: the fix PR, its merge commit, and what production served. Absent from older results. */
+  deploy?: { prUrl: string; mergeSha: string; liveSha: string; deploymentId: number | null };
 }
 
 export type VerifyFindingStep = 'reading' | 'checking' | 'writing' | 'done';
@@ -108,7 +127,9 @@ export const verifyFindingStateQuery = wf.defineQuery<VerifyFindingState>('state
 
 const GITHUB_PERMANENT = ['AuthError', 'NotFound', 'UnprocessableRequest'];
 
-const reading = wf.proxyActivities<Pick<typeof activities, 'readFinding' | 'readFixPr' | 'readVerifyBlock'>>({
+const reading = wf.proxyActivities<
+  Pick<typeof activities, 'readFinding' | 'readFixPr' | 'readVerifyBlock' | 'readProductionDeploy'>
+>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
   retry: {
@@ -177,8 +198,11 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
     ranAt: null,
   };
   if (block.length === 0) {
-    state.step = 'done';
-    return result;
+    if (!wf.patched(BLOCKLESS_CONFIRM_PATCH)) {
+      state.step = 'done';
+      return result;
+    }
+    return await confirmByDeploy(input, state, result, pr.prUrl);
   }
 
   state.step = 'checking';
@@ -198,9 +222,58 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
       workflowId: verifyWorkflowId(input.site, input.key, input.at),
       source,
       rows: run.results,
+      ...(input.reason ? { reason: input.reason } : {}),
     },
   });
 
   state.step = 'done';
   return { ...result, outcome, checks: run.results, findingCommitSha: written.commitSha, ranAt: run.ranAt };
+}
+
+/**
+ * A finding with no checks, resolved by its deploy: one read of production,
+ * and the write when the live commit contains the fix PR's merge.
+ */
+async function confirmByDeploy(
+  input: VerifyFindingInput,
+  state: VerifyFindingState,
+  result: VerifyFindingResult,
+  prUrl: string,
+): Promise<VerifyFindingResult> {
+  state.step = 'checking';
+  const live = await reading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT });
+  if (!live.contains || !live.mergeSha || !live.liveSha) {
+    throw wf.ApplicationFailure.nonRetryable(
+      `${input.key} has no check, and its fix could not be confirmed by the deploy: ${live.why} The finding is unchanged.`,
+      'FixNotLive',
+    );
+  }
+  const deploy = { prUrl, mergeSha: live.mergeSha, liveSha: live.liveSha };
+
+  state.step = 'writing';
+  const written = await writing.writeFindingVerification({
+    repo: input.repo,
+    site: input.site,
+    key: input.key,
+    findingPath: input.findingPath,
+    indexPath: input.indexPath,
+    verification: {
+      status: 'resolved',
+      at: live.readAt,
+      workflowId: verifyWorkflowId(input.site, input.key, input.at),
+      source: result.source,
+      rows: [],
+      deploy,
+      ...(input.reason ? { reason: input.reason } : {}),
+    },
+  });
+
+  state.step = 'done';
+  return {
+    ...result,
+    outcome: 'confirmed',
+    findingCommitSha: written.commitSha,
+    ranAt: live.readAt,
+    deploy: { ...deploy, deploymentId: live.deploymentId },
+  };
 }

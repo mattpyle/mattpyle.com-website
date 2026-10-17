@@ -11,6 +11,7 @@ import {
   awaitFixPr,
   awaitFixPrMerge,
   awaitProductionDeploy,
+  readProductionDeploy,
   listOpenFindingWorkflows,
   listSites,
   openFixIssue,
@@ -152,12 +153,13 @@ const activities = {
 const fastActivities = { auditSiteFast };
 
 /**
- * The findings queue's registry (findings-loop design, decisions 18, 26 and
- * 29): the seventeen findings activities, plus `reportRunHealth` because the
+ * The findings queue's registry (findings-loop design, decisions 18, 26, 29
+ * and 30): the eighteen findings activities, plus `reportRunHealth` because the
  * reconciler pings its check from this queue. GitHub API calls against the
- * findings repository, the fix issue, the fix PR and the lifecycle's three
- * waits against the site repository, a visibility list and a workflow start
- * through the worker's own client, and the verifier's checks: fetch against
+ * findings repository, the fix issue, the fix PR, the lifecycle's three waits
+ * and the blockless verify's one production read against the site repository,
+ * a visibility list and a workflow start through the worker's own client, and
+ * the verifier's checks: fetch against
  * production and this image's Chromium for `selector` and `js`, as the deep
  * audit uses it. None opens a local file in the repository, so the "nothing
  * local" rule above holds for this map too.
@@ -174,6 +176,7 @@ const findingsActivities = {
   writeFindingFix,
   awaitFixPrMerge,
   awaitProductionDeploy,
+  readProductionDeploy,
   listOpenFindingWorkflows,
   startFindingWorkflow,
   readFixPr,
