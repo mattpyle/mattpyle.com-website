@@ -152,8 +152,30 @@ const contents = headings.filter(heading => heading.depth === 2);
    * run does not bind a second click listener to the same button.
    */
   const CONFIRM_MS = 1800;
+  const PIN_TOP = 96;
+  const PIN_GUTTER = 16;
+
+  const rails = new Set<HTMLElement>();
+
+  // Pin (`.is-pinned`) only when the whole rail fits under the 96px offset with a
+  // gutter below it. The rail is unpinned until this runs, so its height here is
+  // the same as it will have pinned.
+  function updateRailPin() {
+    rails.forEach(rail => {
+      if (!rail.isConnected) {
+        rails.delete(rail);
+        return;
+      }
+      rail.classList.toggle('is-pinned', rail.offsetHeight + PIN_TOP + PIN_GUTTER <= window.innerHeight);
+    });
+  }
+
+  window.addEventListener('resize', updateRailPin);
 
   function initializePostRail() {
+    document.querySelectorAll<HTMLElement>('.post-rail').forEach(rail => rails.add(rail));
+    updateRailPin();
+
     document.querySelectorAll<HTMLButtonElement>('[data-rail-copy]').forEach(button => {
       if (button.dataset.railCopyReady === 'true') return;
 
@@ -210,34 +232,22 @@ const contents = headings.filter(heading => heading.depth === 2);
 
 <style>
   .post-rail {
-    position: sticky;
-    top: 96px;
     display: flex;
     flex-direction: column;
     gap: 26px;
-    /* A pinned block taller than the window is a block whose bottom you cannot
-       reach: at a 560px window height the rail's last two actions sat below the
-       fold and stayed there, because sticky does not release until the article
-       ends. Measured on the served build. Capping it makes the overflow scroll
-       inside the rail instead.
+  }
 
-       No `tabindex` on the container, deliberately. axe's scrollable-region
-       rule asks for one only when a scroll container has no focusable children;
-       this one is nothing but links and a button, and focusing any of them
-       scrolls it into view — so the keyboard reaches everything without a tab
-       stop on a wrapper. `dvh` first for the mobile toolbar, `vh` behind it.
-
-       Subtracting 112px rather than 120px trades 8px of the bottom gutter for
-       8px of rail, because content that lands within a pixel of the cap paints
-       a scrollbar for that one pixel: the longest post measured `scrollHeight`
-       681 against `clientHeight` 680 at 1280x800 on 2026-09-08. The boundary
-       does not go away, it moves. A longer table of contents, or a shorter
-       window, crosses it again and the rail scrolls, which is what the cap is
-       for. */
-    max-height: calc(100vh - 112px);
-    max-height: calc(100dvh - 112px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
+  /* Pinned only while the whole rail fits in the window, which the script above
+     decides (`is-pinned`). A pinned block taller than the window is a block whose
+     bottom you cannot reach, because sticky does not release until the article
+     ends; capping it with a scrollbar hid the last actions instead. So a rail
+     that does not fit, and any rail before the script runs, flows with the
+     article. 96px is the offset from the top. */
+  @media (min-width: 901px) {
+    .post-rail.is-pinned {
+      position: sticky;
+      top: 96px;
+    }
   }
 
   .rail-block {
@@ -323,10 +333,6 @@ const contents = headings.filter(heading => heading.depth === 2);
     .post-rail {
       position: static;
       gap: 20px;
-      /* Nothing to cap in a single column: the rail is a block of metadata above
-         the article and scrolls with it. */
-      max-height: none;
-      overflow: visible;
     }
 
     .rail-contents {
