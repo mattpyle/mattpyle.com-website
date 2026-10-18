@@ -65,6 +65,10 @@ export const KNOWN_SIGNERS = Object.freeze([
   { identifier: `https://agent.bot.goog${DIRECTORY_PATH}`, family: 'google-agent' },
   // ChatGPT agent: every request, "Signature-Agent: "https://chatgpt.com"".
   { identifier: `https://chatgpt.com${DIRECTORY_PATH}`, family: 'chatgpt-agent' },
+  // This site's own auditor. Its signatures name the card (type=cimd); the directory is the
+  // fallback a verifier reaches by origin. Both are served by this site (src/lib/steward-identity.mjs).
+  { identifier: 'https://www.mattpyle.com/.well-known/signature-agent-card', family: 'steward-audit' },
+  { identifier: `https://www.mattpyle.com${DIRECTORY_PATH}`, family: 'steward-audit' },
 ]);
 
 const SIGNER_FAMILY = new Map(KNOWN_SIGNERS.map(({ identifier, family }) => [identifier, family]));

@@ -54,8 +54,17 @@ test('the named well-known surfaces are the ones the site actually publishes', (
     '/.well-known/mcp/server-card.json',
     SKILLS_INDEX_PATH,
     ...readSkills().map((skill) => skillUrlFor(skill.name)),
+    '/.well-known/http-message-signatures-directory',
+    '/.well-known/signature-agent-card',
   ];
   assert.deepEqual([...WELL_KNOWN_SURFACE_PATHS].sort(), expected.sort());
+
+  // Steward's two Web Bot Auth documents are routes rather than files in public/, built from
+  // committed data by src/lib/steward-identity.mjs; each has to have its route.
+  for (const path of ['/.well-known/http-message-signatures-directory', '/.well-known/signature-agent-card']) {
+    const route = fileURLToPath(new URL(`../src/pages${path}.ts`, import.meta.url));
+    assert.doesNotThrow(() => readFileSync(route), `${path} is listed as a surface but src/pages${path}.ts does not exist`);
+  }
 
   // The hand-written documents are asserted to exist as files, which is what "actually publishes"
   // means for them: none is generated, so nothing else in the build would notice a listed path that

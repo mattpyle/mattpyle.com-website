@@ -2,6 +2,7 @@ import dns from 'node:dns/promises';
 import { Agent, fetch as undiciFetch } from 'undici';
 import { classifyAddress } from './net.js';
 import { pinnedLookup, type PinnedAddress } from './pinning.js';
+import { signerFromEnv, type RequestSigner } from './request-signing.js';
 
 /**
  * The fetch layer every tier of `audit-url` rides on.
@@ -29,7 +30,12 @@ import { pinnedLookup, type PinnedAddress } from './pinning.js';
  * 3. **Caps, all of them.** Redirect count, response bytes, per-request time,
  *    and a whole-audit time budget shared by every request.
  * 4. **It says who it is.** One honest User-Agent, pointing at a page that
- *    explains the traffic.
+ *    explains the traffic. And, when `STEWARD_WEB_BOT_AUTH_KEY` is set, a Web
+ *    Bot Auth signature on every request, redirect hops included, so a site can
+ *    prove the claim rather than take it (`request-signing.ts`). Without the key
+ *    the request is exactly what it was before. Chrome's own requests in the
+ *    deep tier stay unsigned: they leave through the vetting proxy as TLS
+ *    tunnels, and a proxy cannot add a header inside one.
  *
  * The fetch used here is `undici`'s own rather than the global one, because a
  * dispatcher only applies to the client that created it: handing an `Agent`
@@ -288,12 +294,19 @@ async function readCapped(res: UndiciResponse, maxBytes: number): Promise<{ text
  */
 export class SafeFetcher {
   readonly policy: FetchPolicy;
+  /** Signs every request when set; null sends them unsigned. */
+  readonly signer: RequestSigner | null;
   private readonly deadline: number;
   private requestCount = 0;
 
-  constructor(policy: Partial<FetchPolicy> = {}, now: number = Date.now()) {
+  /**
+   * `signer` defaults to the key in `STEWARD_WEB_BOT_AUTH_KEY`, or none. A test passes its own
+   * throwaway signer, or `null` to pin the unsigned path.
+   */
+  constructor(policy: Partial<FetchPolicy> = {}, now: number = Date.now(), signer: RequestSigner | null = signerFromEnv()) {
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.deadline = now + this.policy.totalBudgetMs;
+    this.signer = signer;
   }
 
   /** Milliseconds left in the audit's total budget; never negative. */
@@ -351,8 +364,12 @@ export class SafeFetcher {
       const dispatcher = pinned ? new Agent({ connect: { lookup: pinnedLookup(pinned) } }) : undefined;
       try {
         this.requestCount++;
+        const method = init.method ?? 'GET';
+        // Signed per hop: each signature covers this hop's method, authority and path, so a
+        // redirect target gets a signature of its own and never one minted for another host.
+        const signature = this.signer ? this.signer.headersFor(current, method) : {};
         const res = await undiciFetch(current.href, {
-          method: init.method ?? 'GET',
+          method,
           redirect: 'manual',
           signal: controller.signal,
           ...(dispatcher ? { dispatcher } : {}),
@@ -368,6 +385,10 @@ export class SafeFetcher {
             // authority to this call would change that, and would need the
             // same-origin filter this comment stands in for.
             ...init.headers,
+            // The signature is not forwarded: it is minted above for this hop's
+            // authority and covers nothing else. Last, so no caller header can
+            // replace it.
+            ...signature,
           },
         });
 

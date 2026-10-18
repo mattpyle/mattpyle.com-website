@@ -50,6 +50,7 @@ import { BOLD, DIM, GREEN, RED, RESET, paint, renderReport } from './lib/render-
 import { deriveInboxHint } from './lib/inbox.js';
 import { cleanupPublishedTwin } from './lib/cleanup.js';
 import { promoteReviews } from './lib/promote-reviews.js';
+import { runKeysGenerate } from './lib/signing-keys-cli.js';
 import {
   reviewPost,
   approve as approveSignal,
@@ -2075,6 +2076,18 @@ finding
     } finally {
       await c.connection.close();
     }
+  });
+
+const keys = program
+  .command('keys')
+  .description("Steward's Web Bot Auth signing key (src/lib/agent-audit/request-signing.ts)");
+
+keys
+  .command('generate')
+  .option('--json', 'print the pair as one JSON object rather than the instructions')
+  .description('Print a new Ed25519 key pair as JWK. Writes nothing: store both halves yourself')
+  .action((opts: { json?: boolean }) => {
+    runKeysGenerate(opts);
   });
 
 program

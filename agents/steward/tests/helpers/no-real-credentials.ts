@@ -47,3 +47,6 @@ process.env.GITHUB_TOKEN = '';
 process.env.ANTHROPIC_API_KEY = '';
 // The preview bypass secret: a test that wants one sets its own.
 process.env.VERCEL_AUTOMATION_BYPASS_SECRET = '';
+// The Web Bot Auth signing key: every test that signs builds a throwaway key at run time, so the
+// real one in `.env` must never sign a test request against a mock server.
+process.env.STEWARD_WEB_BOT_AUTH_KEY = '';

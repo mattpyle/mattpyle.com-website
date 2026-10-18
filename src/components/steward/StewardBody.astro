@@ -49,6 +49,9 @@ interface Props {
     checks: Array<{ id: string; title: string; severity: string; plain: string }>;
   }>;
   limitRows: Array<{ tier: string; scope: string; cap: string; window: string }>;
+  /** The Signature Agent Card and the key directory, the two documents a verifier reads. */
+  signatureCardUrl: string;
+  signatureDirectoryUrl: string;
 }
 
 const {
@@ -63,6 +66,8 @@ const {
   checkCount,
   byCategory,
   limitRows,
+  signatureCardUrl,
+  signatureDirectoryUrl,
 } = Astro.props;
 
 /** The deep tier's three promises, as label/value rows. */
@@ -116,6 +121,16 @@ const GUARANTEES = [
             <tr>
               <th scope="row">robots.txt token</th>
               <td><code>{agentToken}</code></td>
+            </tr>
+            <tr>
+              <th scope="row">Signature</th>
+              <td>
+                Web Bot Auth (RFC 9421): each request Steward makes itself is signed, and its
+                <code>Signature-Agent</code> header names <a href={signatureCardUrl}>the Signature Agent Card</a>,
+                which points at <a href={signatureDirectoryUrl}>the key directory</a>. The pages a deep
+                audit opens in Chrome are not signed: the browser's requests leave through an
+                encrypted tunnel that Steward cannot add a header to.
+              </td>
             </tr>
             <tr>
               <th scope="row">Cost of one audit</th>

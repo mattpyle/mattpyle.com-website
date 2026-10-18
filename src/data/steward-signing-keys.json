@@ -1,0 +1,4 @@
+{
+  "$comment": "The public half of Steward's Web Bot Auth signing key, as a JWK Set. Served at /.well-known/http-message-signatures-directory. Add the publicJwk that `steward keys generate` prints; keep the old key here beside the new one until every signature it made has expired, then remove it. Public values only: the private half lives in STEWARD_WEB_BOT_AUTH_KEY.",
+  "keys": []
+}

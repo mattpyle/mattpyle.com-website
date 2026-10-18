@@ -85,6 +85,8 @@ const PATH_CONTENT_TYPES = {
   '/.well-known/mcp-server': 'application/json; charset=utf-8',
   '/mcp/server-card': 'application/mcp-server-card+json; charset=utf-8',
   '/.well-known/mcp/server-card.json': 'application/mcp-server-card+json; charset=utf-8',
+  '/.well-known/http-message-signatures-directory': 'application/http-message-signatures-directory+json',
+  '/.well-known/signature-agent-card': 'application/json; charset=utf-8',
 };
 
 /**

@@ -170,6 +170,7 @@ steward finding verify <key>     # fixing or reopened finding to resolved or reo
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
+steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
 ```
 
 `steward <verb> --help` prints the real options for each.
@@ -232,6 +233,28 @@ also stay free of commas and semicolons: `@axe-core/cli` splits its `--chrome-op
 
 The URL points at `/steward`, the public page explaining what the audit checks, what one costs a
 site, and how to refuse it.
+
+### The signature
+
+When `STEWARD_WEB_BOT_AUTH_KEY` is set, every request the fetcher makes carries a Web Bot Auth
+signature (RFC 9421, draft-ietf-webbotauth-httpsig-protocol-00), redirect hops included. The value is
+one line of Ed25519 private JWK JSON. Unset, or unparseable, the request goes unsigned exactly as it
+did before, and an unparseable value logs one warning.
+
+| Environment | Where the key lives |
+|---|---|
+| Laptop worker and CLI | `agents/steward/.env` |
+| Hosted worker | the Railway service's `STEWARD_WEB_BOT_AUTH_KEY` variable |
+| The site's `/mcp` and `/audit` fast tier | unset, so those audits go unsigned |
+
+`steward keys generate` prints a new pair and writes nothing. The public half goes into
+`src/data/steward-signing-keys.json`, which the site serves at
+`/.well-known/http-message-signatures-directory`. Each signature names
+`/.well-known/signature-agent-card` in `Signature-Agent` with `type=cimd`; that one document is the
+Signature Agent Card and the OAuth Client ID Metadata Document, and its `jwks_uri` is the directory.
+
+Chrome's requests in the deep tier stay unsigned. They leave through the vetting proxy as `CONNECT`
+tunnels, and a proxy cannot add a header inside TLS it does not terminate.
 
 ## Design principles
 
