@@ -12,7 +12,7 @@ draft: false
 
 The homepage's Latest Activity panel now reads directly from the same changelog collection as this page. Its four entries cannot drift into a separate, manually edited version of the site's history anymore.
 
-Each row links to the full changelog entry and shows an explicit `DD MON YYYY` date, significance dot, and type. The visible date stays compact without becoming ambiguous across years or between month-first and day-first readers; its `<time>` element retains the ISO ship date for machines.
+The visible date stays compact without becoming ambiguous across years or between month-first and day-first readers; its `<time>` element retains the ISO ship date for machines.
 
 ## Same-day changes have a real order
 
