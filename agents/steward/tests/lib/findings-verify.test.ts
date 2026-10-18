@@ -78,10 +78,10 @@ test('resolved and reopened are statuses the index parser reads; the reconciler 
     ['fixed-one', 'resolved'],
     ['back-one', 'reopened'],
   ]);
-  // With a workflow open for each, neither is started or signalled.
+  // With a workflow open for each, neither is started, signalled or sent a fix.
   assert.deepEqual(
-    planReconcile('mattpyle-com', index, ['finding/mattpyle-com/fixed-one', 'finding/mattpyle-com/back-one']),
-    { start: [], signal: [], unchanged: 2 },
+    planReconcile('mattpyle-com', index, ['finding/mattpyle-com/fixed-one', 'finding/mattpyle-com/back-one'], true),
+    { start: [], signal: [], fix: [], unchanged: 2 },
   );
   // With none, the reopened one goes back to the gate (design decision 29); resolved stays.
   const none = planReconcile('mattpyle-com', index, []);

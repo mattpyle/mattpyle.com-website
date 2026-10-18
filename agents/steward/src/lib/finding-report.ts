@@ -324,10 +324,23 @@ export function applyHandVerifies(runs: RunFacts[], verifies: HandVerify[]): Run
  * for a run that never received a verdict, which the report leaves out.
  * `facts` defaults to the history's own; pass {@link applyHandVerifies}'s to
  * count a hand verify.
+ *
+ * An open approved run with no issue and no PR waits for a fix: its outcome
+ * reads `waiting-fix` and the whole days from the approve to `now`, as
+ * `waiting-fix 4d`, so a parked run stands out from one in flight.
  */
-export function buildReportRow(history: History, github: RunGitHub, facts = readRunHistory(history)): ReportRow | null {
+export function buildReportRow(
+  history: History,
+  github: RunGitHub,
+  facts = readRunHistory(history),
+  now: Date = new Date(),
+): ReportRow | null {
   if (!facts.verdict || !facts.verdictAt) return null;
   const approve = facts.verdictAt;
+  const waitingFix = facts.outcome === 'open' && facts.verdict.status === 'approved' && !facts.issueUrl && !facts.prUrl;
+  const outcome = waitingFix
+    ? `waiting-fix ${Math.max(0, Math.floor((now.getTime() - Date.parse(approve)) / 86_400_000))}d`
+    : facts.outcome;
   return {
     key: facts.key,
     workflowId: facts.workflowId,
@@ -340,7 +353,7 @@ export function buildReportRow(history: History, github: RunGitHub, facts = read
       resolved: minutesBetween(github.deployedAt, facts.ranAt),
     },
     total: minutesBetween(approve, facts.ranAt),
-    outcome: facts.outcome,
+    outcome,
     humanComments: github.humanComments,
     costUsd: github.costUsd,
   };

@@ -1935,11 +1935,12 @@ finding
         runs.map((r) => r.facts),
         verifies,
       );
+      const now = new Date();
       for (const [i, { history }] of runs.entries()) {
         const facts = finished[i];
         const answers = await readRunGitHub(facts, reader);
         if (answers.costNote) notes.push(`cost: ${answers.costNote}`);
-        const row = buildReportRow(history, answers, facts);
+        const row = buildReportRow(history, answers, facts, now);
         if (row) rows.push(row);
       }
       rows.sort((a, b) => a.approveAt.localeCompare(b.approveAt));

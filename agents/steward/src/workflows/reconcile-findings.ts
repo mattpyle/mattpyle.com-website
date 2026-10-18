@@ -4,10 +4,11 @@ import {
   findingPath,
   findingWorkflowId,
   findingsIndexPath,
+  hasParkedDefect,
   planReconcile,
   type FindingVerdict,
 } from '../lib/findings.js';
-import { verdictSignal } from './finding.js';
+import { fixSignal, verdictSignal } from './finding.js';
 
 /**
  * `reconcileFindingsWorkflow`: the findings store's one poller (findings-loop
@@ -21,8 +22,15 @@ import { verdictSignal } from './finding.js';
  *   with `stopAfter: 'resolved'`, so it runs gate, fix and verify in one
  *   execution (design decisions 18 and 29). It waits at `waiting-verdict`.
  *   Workflows started earlier keep their `'verdict'`;
- * - an `approved` or `rejected` line whose workflow is still open gets the
- *   `verdict` signal with source `file`, carrying the reason from the line;
+ * - an `approved` or `rejected` line whose workflow is still open at
+ *   `waiting-verdict` gets the `verdict` signal with source `file`, carrying
+ *   the reason from the line;
+ * - an `approved` defect whose workflow waits at `waiting-fix` with no
+ *   attempt, on a site whose `config.yaml` says `auto_fix: true`, gets the
+ *   `fix` signal (design decision 31). A run reads the flag once, at its
+ *   verdict, so one that passed it before the flag was set would wait for a
+ *   `fix` nobody sends. The flag is read once per site, and only for a site
+ *   with such a run;
  * - everything else is unchanged.
  *
  * A second run straight after the first finds nothing to do, which is the
@@ -36,8 +44,13 @@ import { verdictSignal } from './finding.js';
  * out a quarter of an hour after it was started. `startFindingWorkflow` starts a
  * top-level execution through the worker's client, with no parent and no
  * timeout, and reports `already-started` on a collision so a retry is harmless.
- * The signal still goes through an external workflow handle: a signal carries no
+ * The signals still go through an external workflow handle: a signal carries no
  * timeout, so the command form costs nothing there.
+ *
+ * **Replay.** `listOpenFindingWorkflows` once returned bare IDs. A history
+ * recorded then replays its list as strings, which `planReconcile` reads as
+ * runs of unknown step: no `fix` line and no `auto_fix` read, so the commands
+ * match the history without a `patched` marker.
  *
  * **Visibility lags.** The open-workflow list comes from the visibility store,
  * which is eventually consistent, so a workflow started a moment ago may not be
@@ -59,13 +72,15 @@ export interface ReconcileFindingsInput {
 export interface SiteReconcileCounts {
   started: number;
   signalled: number;
+  /** Parked approved defects sent the `fix` signal. */
+  fixed: number;
   unchanged: number;
 }
 
 export type ReconcileFindingsResult = Record<string, SiteReconcileCounts>;
 
 const reading = wf.proxyActivities<
-  Pick<typeof activities, 'listSites' | 'readFindingsIndex' | 'listOpenFindingWorkflows' | 'startFindingWorkflow'>
+  Pick<typeof activities, 'listSites' | 'readFindingsIndex' | 'listOpenFindingWorkflows' | 'startFindingWorkflow' | 'readSiteAutoFix'>
 >({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -97,13 +112,16 @@ function isGone(err: unknown): boolean {
 
 async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindingsResult> {
   const sites = await reading.listSites(input.repo);
-  const openIds = await reading.listOpenFindingWorkflows();
+  const open = await reading.listOpenFindingWorkflows();
   const result: ReconcileFindingsResult = {};
 
   for (const site of sites) {
     const index = await reading.readFindingsIndex(input.repo, site);
-    const plan = planReconcile(site, index, openIds);
-    const counts: SiteReconcileCounts = { started: 0, signalled: 0, unchanged: plan.unchanged };
+    const autoFix = hasParkedDefect(site, index, open)
+      ? await reading.readSiteAutoFix({ repo: input.repo, site })
+      : false;
+    const plan = planReconcile(site, index, open, autoFix);
+    const counts: SiteReconcileCounts = { started: 0, signalled: 0, fixed: 0, unchanged: plan.unchanged };
 
     for (const line of plan.start) {
       const outcome = await reading.startFindingWorkflow({
@@ -135,6 +153,18 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
       }
     }
 
+    for (const line of plan.fix) {
+      try {
+        await wf
+          .getExternalWorkflowHandle(findingWorkflowId(site, line.key))
+          .signal(fixSignal, { source: 'reconcile', at: new Date(Date.now()).toISOString() });
+        counts.fixed++;
+      } catch (err) {
+        if (!isGone(err)) throw err;
+        counts.unchanged++;
+      }
+    }
+
     result[site] = counts;
   }
   return result;
@@ -144,7 +174,7 @@ function summarise(result: ReconcileFindingsResult): string {
   const sites = Object.entries(result);
   if (sites.length === 0) return 'Findings reconcile: no site folders.';
   const parts = sites.map(
-    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, unchanged ${c.unchanged}`,
+    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, fixed ${c.fixed}, unchanged ${c.unchanged}`,
   );
   return `Findings reconcile: ${parts.join('; ')}.`;
 }

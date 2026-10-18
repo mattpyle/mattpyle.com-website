@@ -1,5 +1,5 @@
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
+import { WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from '@temporalio/client';
 import { FINDINGS_DEFAULT_SITE, GITHUB_REPO, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
@@ -33,12 +33,13 @@ import {
   type FindingVerdictSource,
   type FindingVerdictStatus,
   type FindingsIndexLine,
+  type OpenFindingWorkflow,
   type DeploymentRecord,
   type Verification,
   type VerifyBlockSource,
 } from '../lib/findings.js';
 import { validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
-import type { FindingStopAfter, FindingWorkflowInput } from '../workflows/finding.js';
+import type { FindingState, FindingStopAfter, FindingWorkflowInput } from '../workflows/finding.js';
 
 /**
  * The findings store's activities (findings-loop design, "The store and the
@@ -1090,20 +1091,39 @@ export async function startFindingWorkflow(
 }
 
 /**
- * The IDs of every running `findingWorkflow`, from the visibility store.
+ * Every running `findingWorkflow` from the visibility store, with the `step`
+ * and `fixAttempts` its `state` query reports.
  *
  * Through the worker's own client (`Context.current().client`), so the activity
  * holds no second connection or credential. Visibility is eventually consistent,
  * so a workflow started seconds ago may be missing from this list; the
  * reconciler tolerates that by treating "already started" as unchanged.
+ *
+ * A run that closed between the list and its query is dropped: its query
+ * reads `step: done`, or the run is gone. Any other query
+ * failure (a run whose workflow task is failing, say) keeps the run with a
+ * null step, which the reconciler treats as it treated every run before it
+ * knew steps: one stuck run must not stop the whole pass.
  */
-export async function listOpenFindingWorkflows(): Promise<string[]> {
+export async function listOpenFindingWorkflows(): Promise<OpenFindingWorkflow[]> {
   const client = Context.current().client;
-  const ids: string[] = [];
+  const runs: OpenFindingWorkflow[] = [];
   for await (const info of client.workflow.list({
     query: "WorkflowType='findingWorkflow' AND ExecutionStatus='Running'",
   })) {
-    ids.push(info.workflowId);
+    try {
+      // By name: importing `findingStateQuery` would load the workflow module here.
+      const state = await client.workflow.getHandle(info.workflowId, info.runId).query<FindingState>('state');
+      if (state.step === 'done') continue;
+      runs.push({ workflowId: info.workflowId, step: state.step ?? null, fixAttempts: state.fixAttempts ?? null });
+    } catch (err) {
+      if (err instanceof WorkflowNotFoundError) continue;
+      log.warn(
+        { activity: 'listOpenFindingWorkflows', workflowId: info.workflowId, error: err instanceof Error ? err.message : String(err) },
+        'state query failed; listing the run with no step',
+      );
+      runs.push({ workflowId: info.workflowId, step: null, fixAttempts: null });
+    }
   }
-  return ids.sort();
+  return runs.sort((a, b) => a.workflowId.localeCompare(b.workflowId));
 }
