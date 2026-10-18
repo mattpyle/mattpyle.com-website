@@ -4,11 +4,17 @@ import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { Client, WorkflowNotFoundError } from '@temporalio/client';
+import { ApplicationFailure } from '@temporalio/common';
 import { createTestEnv } from '../helpers/test-env.js';
 import { reconcileFindingsWorkflow } from '../../src/workflows/reconcile-findings.js';
-import { findingStateQuery, type FindingWorkflowResult } from '../../src/workflows/finding.js';
+import { findingStateQuery, type FindingState, type FindingWorkflowResult } from '../../src/workflows/finding.js';
 import { startFindingWorkflow } from '../../src/activities/findings.js';
-import { findingWorkflowId, parseFindingsIndex, type FindingsIndexLine } from '../../src/lib/findings.js';
+import {
+  findingWorkflowId,
+  parseFindingsIndex,
+  type FindingsIndexLine,
+  type OpenFindingWorkflow,
+} from '../../src/lib/findings.js';
 
 /**
  * `reconcileFindingsWorkflow` against the real test server, with the GitHub
@@ -47,26 +53,36 @@ function store(initial: Record<string, string>) {
   const indexes: Record<string, string> = { ...initial };
   const pings: Array<{ signal: string; ok: boolean; summary: string }> = [];
   const writes: unknown[] = [];
+  const flags = { autoFix: false };
+  const fixIssues: string[] = [];
 
   const activities = {
     listSites: async () => Object.keys(indexes).sort(),
     readFindingsIndex: async (_repo: string, site: string): Promise<FindingsIndexLine[]> =>
       parseFindingsIndex(indexes[site] ?? ''),
     startFindingWorkflow,
-    listOpenFindingWorkflows: async () => {
-      const open: string[] = [];
+    listOpenFindingWorkflows: async (): Promise<OpenFindingWorkflow[]> => {
+      const open: OpenFindingWorkflow[] = [];
       for (const [site, text] of Object.entries(indexes)) {
         for (const line of parseFindingsIndex(text)) {
           const id = findingWorkflowId(site, line.key);
           try {
-            const d = await client.workflow.getHandle(id).describe();
-            if (d.status.name === 'RUNNING') open.push(id);
+            const handle = client.workflow.getHandle(id);
+            if ((await handle.describe()).status.name !== 'RUNNING') continue;
+            const state = await handle.query(findingStateQuery);
+            open.push({ workflowId: id, step: state.step ?? null, fixAttempts: state.fixAttempts ?? null });
           } catch (err) {
             if (!(err instanceof WorkflowNotFoundError)) throw err;
           }
         }
       }
       return open;
+    },
+    // Read by a finding run at its verdict and by the reconciler for a parked defect.
+    readSiteAutoFix: async () => flags.autoFix,
+    openFixIssue: async (input: { key: string }) => {
+      fixIssues.push(input.key);
+      throw ApplicationFailure.nonRetryable('the test opens no issue', 'FindingNotFixable');
     },
     readFinding: async () => {
       throw new Error('the reconciler never reads a finding file');
@@ -80,7 +96,7 @@ function store(initial: Record<string, string>) {
       return { signal: input.signal, ok: input.shape.ok, sent: true };
     },
   };
-  return { indexes, activities, pings, writes };
+  return { indexes, activities, pings, writes, flags, fixIssues };
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
@@ -118,16 +134,16 @@ test('starts the missing, signals the decided, and does nothing on a second run'
   await withWorker(s.activities, async () => {
     const first = await reconcileOnce();
     assert.deepEqual(first, {
-      'site-a': { started: 2, signalled: 0, unchanged: 1 },
-      'site-b': { started: 1, signalled: 0, unchanged: 0 },
-      'site-empty': { started: 0, signalled: 0, unchanged: 0 },
+      'site-a': { started: 2, signalled: 0, fixed: 0, unchanged: 1 },
+      'site-b': { started: 1, signalled: 0, fixed: 0, unchanged: 0 },
+      'site-empty': { started: 0, signalled: 0, fixed: 0, unchanged: 0 },
     });
     const a1 = client.workflow.getHandle(findingWorkflowId('site-a', 'a-one'));
     assert.equal((await a1.query(findingStateQuery)).status, 'waiting');
 
     const second = await reconcileOnce();
-    assert.deepEqual(second['site-a'], { started: 0, signalled: 0, unchanged: 3 });
-    assert.deepEqual(second['site-b'], { started: 0, signalled: 0, unchanged: 1 });
+    assert.deepEqual(second['site-a'], { started: 0, signalled: 0, fixed: 0, unchanged: 3 });
+    assert.deepEqual(second['site-b'], { started: 0, signalled: 0, fixed: 0, unchanged: 1 });
 
     // Argus records a Discord verdict in the index; the next run carries it.
     s.indexes['site-a'] = header([
@@ -136,7 +152,7 @@ test('starts the missing, signals the decided, and does nothing on a second run'
       'a-old | resolved | Title | Done.',
     ]);
     const third = await reconcileOnce();
-    assert.deepEqual(third['site-a'], { started: 0, signalled: 1, unchanged: 2 });
+    assert.deepEqual(third['site-a'], { started: 0, signalled: 1, fixed: 0, unchanged: 2 });
 
     const result = (await a1.result()) as FindingWorkflowResult;
     assert.equal(result.verdict.status, 'rejected');
@@ -146,19 +162,19 @@ test('starts the missing, signals the decided, and does nothing on a second run'
 
     // The closed workflow is not reopened, and the decided line is not re-signalled.
     const fourth = await reconcileOnce();
-    assert.deepEqual(fourth['site-a'], { started: 0, signalled: 0, unchanged: 3 });
+    assert.deepEqual(fourth['site-a'], { started: 0, signalled: 0, fixed: 0, unchanged: 3 });
   });
 
   assert.equal(s.writes.length, 0, 'a file verdict never writes');
   assert.equal(s.pings.length, 4, 'every run pings');
   assert.ok(s.pings.every((p) => p.signal === 'findings-reconcile' && p.ok));
-  assert.match(s.pings[0].summary, /site-a started 2, signalled 0, unchanged 1/);
+  assert.match(s.pings[0].summary, /site-a started 2, signalled 0, fixed 0, unchanged 1/);
 });
 
 test('a reopened line whose last run completed gets a new run, waiting at the verdict and named reopened in its memo', async () => {
   const s = store({ 'mattpyle-com': header(['r-one | proposed | Title | ']) });
   await withWorker(s.activities, async () => {
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, fixed: 0, unchanged: 0 });
     const id = findingWorkflowId('mattpyle-com', 'r-one');
     const first = await client.workflow.getHandle(id).describe();
     assert.equal(first.memo?.indexStatus, 'proposed');
@@ -169,7 +185,7 @@ test('a reopened line whose last run completed gets a new run, waiting at the ve
     await client.workflow.getHandle(id, first.runId).result();
     s.indexes['mattpyle-com'] = header(['r-one | reopened | Title | ']);
 
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, fixed: 0, unchanged: 0 });
     const latest = client.workflow.getHandle(id);
     const described = await latest.describe();
     assert.equal(described.status.name, 'RUNNING');
@@ -185,9 +201,61 @@ test('a reopened line whose last run completed gets a new run, waiting at the ve
     assert.ok(!('indexStatus' in started), 'the index status rides in the memo, not the workflow input');
 
     // Open now, so the next run leaves it.
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, unchanged: 1 });
     await latest.terminate('test over');
   });
+});
+
+/** Polls a finding run's state query until `done` holds, or fails after ten seconds. */
+async function stateWhen(id: string, done: (state: FindingState) => boolean): Promise<FindingState> {
+  const handle = client.workflow.getHandle(id);
+  for (let i = 0; i < 100; i++) {
+    const state = await handle.query(findingStateQuery);
+    if (done(state)) return state;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`${id} never reached the expected state`);
+}
+
+test('an approved defect parked at waiting-fix on an auto_fix site gets one fix; an opportunity gets none', async () => {
+  const kinded = (lines: string[]) =>
+    ['# Findings index', '', 'Format: `key | status | kind | title | verdict reason`.', '', ...lines].join('\n');
+  const s = store({
+    'mattpyle-com': kinded(['p-defect | proposed | defect | Title | ', 'p-opportunity | proposed | opportunity | Title | ']),
+  });
+  const defect = findingWorkflowId('mattpyle-com', 'p-defect');
+  const opportunity = findingWorkflowId('mattpyle-com', 'p-opportunity');
+
+  await withWorker(s.activities, async () => {
+    await reconcileOnce();
+    // Both approved while the site had no flag: each run reads false at its verdict and parks.
+    s.indexes['mattpyle-com'] = kinded([
+      'p-defect | approved | defect | Title | Yes.',
+      'p-opportunity | approved | opportunity | Title | Yes.',
+    ]);
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 2, fixed: 0, unchanged: 0 });
+    for (const id of [defect, opportunity]) {
+      const parked = await stateWhen(id, (st) => st.step === 'waiting-fix');
+      assert.equal(parked.fixAttempts, 0);
+    }
+
+    // The flag is set later. The next pass sends `fix` to the defect only.
+    s.flags.autoFix = true;
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, unchanged: 1 });
+    const tried = await stateWhen(defect, (st) => st.fixAttempts === 1 && st.step === 'waiting-fix');
+    assert.match(tried.lastFixError ?? '', /opens no issue/);
+    assert.deepEqual(s.fixIssues, ['p-defect']);
+
+    // One attempt made, so the next pass sends nothing: a retry is a person's.
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, unchanged: 2 });
+    const left = await client.workflow.getHandle(opportunity).query(findingStateQuery);
+    assert.equal(left.step, 'waiting-fix');
+    assert.equal(left.fixAttempts, 0);
+    assert.deepEqual(s.fixIssues, ['p-defect']);
+
+    for (const id of [defect, opportunity]) await client.workflow.getHandle(id).terminate('test over');
+  });
+  assert.match(s.pings[2].summary, /mattpyle-com started 0, signalled 0, fixed 1, unchanged 1/);
 });
 
 test('a proposed line whose last run completed is not started again', async () => {
@@ -199,7 +267,7 @@ test('a proposed line whose last run completed is not started again', async () =
     await client.workflow.getHandle(findingWorkflowId('site-f', 'f-one')).result();
     // A stale line: the index still says proposed after the run completed.
     s.indexes['site-f'] = header(['f-one | proposed | Title | ']);
-    assert.deepEqual((await reconcileOnce())['site-f'], { started: 0, signalled: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['site-f'], { started: 0, signalled: 0, fixed: 0, unchanged: 1 });
   });
 });
 
@@ -208,8 +276,8 @@ test('a start that collides with a workflow visibility has not listed yet counts
   // Visibility lags: the list never shows anything open.
   s.activities.listOpenFindingWorkflows = async () => [];
   await withWorker(s.activities, async () => {
-    assert.deepEqual((await reconcileOnce())['site-c'], { started: 1, signalled: 0, unchanged: 0 });
-    assert.deepEqual((await reconcileOnce())['site-c'], { started: 0, signalled: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['site-c'], { started: 1, signalled: 0, fixed: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['site-c'], { started: 0, signalled: 0, fixed: 0, unchanged: 1 });
   });
 });
 

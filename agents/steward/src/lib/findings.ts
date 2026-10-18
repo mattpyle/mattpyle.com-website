@@ -72,6 +72,8 @@ export interface FindingsIndexLine {
   status: string;
   /** The verdict reason column, trimmed; empty when there is none. */
   reason: string;
+  /** The `kind` column (`defect`, `opportunity`, `direction`); empty when the format line names none. */
+  kind: string;
   /** Every column as found, for a rewrite that keeps the ones it does not own. */
   columns: string[];
   /** 0-based line number in the file. */
@@ -85,13 +87,20 @@ export interface FindingsIndexLine {
  * are always the first two, by position. Falls back to the fourth column.
  */
 function reasonColumn(text: string): number {
+  const at = formatColumns(text).findIndex((name) => name.includes('reason'));
+  return at >= 2 ? at : 3;
+}
+
+/** The `kind` column named on the format line, or -1 when it names none. */
+function kindColumn(text: string): number {
+  const at = formatColumns(text).indexOf('kind');
+  return at >= 2 ? at : -1;
+}
+
+/** The format line's column names, lower case; empty when the file has none. */
+function formatColumns(text: string): string[] {
   const format = /`([^`]*\|[^`]*)`/.exec(text);
-  if (format) {
-    const names = format[1].split('|').map((name) => name.trim().toLowerCase());
-    const at = names.findIndex((name) => name.includes('reason'));
-    if (at >= 2) return at;
-  }
-  return 3;
+  return format ? format[1].split('|').map((name) => name.trim().toLowerCase()) : [];
 }
 
 /**
@@ -100,6 +109,7 @@ function reasonColumn(text: string): number {
  */
 export function parseFindingsIndex(text: string): FindingsIndexLine[] {
   const reasonAt = reasonColumn(text);
+  const kindAt = kindColumn(text);
   const lines = text.split(/\r?\n/);
   const entries: FindingsIndexLine[] = [];
   lines.forEach((line, lineNumber) => {
@@ -110,6 +120,7 @@ export function parseFindingsIndex(text: string): FindingsIndexLine[] {
       key: columns[0],
       status: columns[1],
       reason: columns.length > reasonAt ? columns.slice(reasonAt).join(' | ').trim() : '',
+      kind: kindAt >= 0 && kindAt < reasonAt ? (columns[kindAt] ?? '') : '',
       columns,
       lineNumber,
     });
@@ -191,30 +202,79 @@ export function setFrontmatterVerdict(text: string, verdict: FindingVerdict): st
 // The reconciler's decision
 // ---------------------------------------------------------------------------
 
+/**
+ * One running `findingWorkflow` as the reconciler sees it: its ID, and where
+ * its `state` query says it is. `step` and `fixAttempts` are null when the
+ * query gave no answer, and for a bare ID, which is what the list returned
+ * before it carried them.
+ */
+export interface OpenFindingWorkflow {
+  workflowId: string;
+  step: string | null;
+  fixAttempts: number | null;
+}
+
 export interface ReconcilePlan {
   /** `proposed` and `reopened` lines with no open workflow. */
   start: FindingsIndexLine[];
-  /** `approved`/`rejected` lines whose workflow is open. */
+  /** `approved`/`rejected` lines whose workflow is open and still waits for its verdict. */
   signal: FindingsIndexLine[];
+  /** Approved defects parked at `waiting-fix` with no attempt, on an `auto_fix` site. */
+  fix: FindingsIndexLine[];
   /** Everything else. */
   unchanged: number;
 }
 
+function openById(open: (OpenFindingWorkflow | string)[]): Map<string, OpenFindingWorkflow> {
+  return new Map(
+    open.map((o) => (typeof o === 'string' ? { workflowId: o, step: null, fixAttempts: null } : o)).map((o) => [o.workflowId, o]),
+  );
+}
+
+function parkedDefect(line: FindingsIndexLine, run: OpenFindingWorkflow | undefined): boolean {
+  return line.status === 'approved' && line.kind === 'defect' && run?.step === 'waiting-fix' && run.fixAttempts === 0;
+}
+
 /**
- * What one site's index asks for, given the IDs of the open finding workflows.
- * Pure so the reconciler's whole decision is a unit test; the workflow only
- * carries it out.
+ * Whether the site has an approved defect whose run waits at `waiting-fix`
+ * with no attempt: the one case where the reconciler needs the site's
+ * `auto_fix` flag, so a site without one costs no config read.
+ */
+export function hasParkedDefect(site: string, index: FindingsIndexLine[], open: (OpenFindingWorkflow | string)[]): boolean {
+  const runs = openById(open);
+  return index.some((line) => parkedDefect(line, runs.get(findingWorkflowId(site, line.key))));
+}
+
+/**
+ * What one site's index asks for, given the open finding workflows and the
+ * site's `auto_fix` flag. Pure so the reconciler's whole decision is a unit
+ * test; the workflow only carries it out.
  *
  * A `reopened` line is a `proposed` one again (design decision 29): its fix
  * failed on production, so it goes back to the verdict gate.
+ *
+ * A verdict goes only to a run still at `waiting-verdict`, or one whose step
+ * is unknown; a run past its verdict would drop it.
+ *
+ * `fix` is the parked case (design decision 31): a run reads `auto_fix` once,
+ * at its verdict, so one that passed it before the flag was set waits for a
+ * `fix` nobody sends. Zero attempts only, so a failed attempt stays a
+ * person's retry. Opportunities and directions are never sent.
  */
-export function planReconcile(site: string, index: FindingsIndexLine[], openIds: string[]): ReconcilePlan {
-  const open = new Set(openIds);
-  const plan: ReconcilePlan = { start: [], signal: [], unchanged: 0 };
+export function planReconcile(
+  site: string,
+  index: FindingsIndexLine[],
+  open: (OpenFindingWorkflow | string)[],
+  autoFix = false,
+): ReconcilePlan {
+  const runs = openById(open);
+  const plan: ReconcilePlan = { start: [], signal: [], fix: [], unchanged: 0 };
   for (const line of index) {
-    const isOpen = open.has(findingWorkflowId(site, line.key));
-    if ((line.status === 'proposed' || line.status === 'reopened') && !isOpen) plan.start.push(line);
-    else if ((line.status === 'approved' || line.status === 'rejected') && isOpen) plan.signal.push(line);
+    const run = runs.get(findingWorkflowId(site, line.key));
+    const awaitingVerdict = run !== undefined && (run.step === null || run.step === 'waiting-verdict');
+    if ((line.status === 'proposed' || line.status === 'reopened') && !run) plan.start.push(line);
+    else if ((line.status === 'approved' || line.status === 'rejected') && awaitingVerdict) plan.signal.push(line);
+    else if (autoFix && parkedDefect(line, run)) plan.fix.push(line);
     else plan.unchanged++;
   }
   return plan;

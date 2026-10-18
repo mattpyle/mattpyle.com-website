@@ -173,9 +173,9 @@ export interface FindingState {
   lastFixError?: string | null;
 }
 
-/** The `fix` signal's payload: who asked, and when. */
+/** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
 export interface FixRequest {
-  source: 'cli';
+  source: 'cli' | 'reconcile';
   /** ISO 8601, the sender's clock. */
   at: string;
 }

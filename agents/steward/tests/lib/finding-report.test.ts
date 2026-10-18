@@ -138,6 +138,44 @@ test('a custom-fixer attempt whose PR closed unmerged is a row with gaps, not an
   assert.equal(row.outcome, 'open');
 });
 
+test('an open approved run with no issue reads waiting-fix and the days since approve', () => {
+  const none: RunGitHub = {
+    issueCreatedAt: null,
+    prCreatedAt: null,
+    mergedAt: null,
+    deployedAt: null,
+    humanComments: null,
+    costUsd: null,
+  };
+  const parked: RunFacts = {
+    workflowId: 'finding/mattpyle-com/parked',
+    site: 'mattpyle-com',
+    key: 'parked',
+    verdict: { status: 'approved', reason: 'Yes.', source: 'file', at: '2026-10-13T18:00:00.000Z' },
+    verdictAt: '2026-10-13T18:00:05.000Z',
+    issueUrl: null,
+    prUrl: null,
+    deploymentId: null,
+    ranAt: null,
+    outcome: 'open',
+    closedAt: null,
+  };
+  const now = new Date('2026-10-17T20:00:00.000Z');
+  const row = buildReportRow({ events: [] }, none, parked, now) as ReportRow;
+  assert.equal(row.outcome, 'waiting-fix 4d');
+  assert.match(renderFindingReport([row], { markdown: false, timeZone: 'America/Vancouver' }), /waiting-fix 4d/);
+
+  // Approved the same day, still zero whole days.
+  assert.equal(buildReportRow({ events: [] }, none, { ...parked, verdictAt: '2026-10-17T19:00:00.000Z' }, now)?.outcome, 'waiting-fix 0d');
+  // An attempt in flight, a rejected run and a closed run keep their own outcome.
+  const issued = { ...parked, issueUrl: 'https://github.com/mattpyle/mattpyle.com-website/issues/1' };
+  assert.equal(buildReportRow({ events: [] }, none, issued, now)?.outcome, 'open');
+  const rejected = { ...parked, verdict: { ...parked.verdict!, status: 'rejected' as const } };
+  assert.equal(buildReportRow({ events: [] }, none, rejected, now)?.outcome, 'open');
+  const closed = { ...parked, outcome: 'terminated', closedAt: '2026-10-15T00:00:00.000Z' };
+  assert.equal(buildReportRow({ events: [] }, none, closed, now)?.outcome, 'terminated');
+});
+
 test('a run with no verdict has no row', () => {
   const history = { events: [] };
   assert.equal(readRunHistory(history).verdict, null);

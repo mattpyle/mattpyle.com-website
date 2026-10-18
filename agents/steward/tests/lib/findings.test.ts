@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   findingWorkflowId,
+  hasParkedDefect,
   isFindingSlug,
   parseFindingWorkflowId,
   parseFindingsIndex,
@@ -68,6 +69,53 @@ test('planReconcile starts the proposed without a workflow and signals the decid
   assert.deepEqual(plan.start.map((l) => l.key), ['new-one']);
   assert.deepEqual(plan.signal.map((l) => [l.key, l.status, l.reason]), [['decided-open', 'approved', 'Yes.']]);
   assert.equal(plan.unchanged, 3);
+});
+
+test('planReconcile sends fix to an approved defect parked at waiting-fix with no attempt, on an auto_fix site only', () => {
+  const index = parseFindingsIndex(
+    [
+      'One line per finding: `key | status | kind | scenario | title | verdict reason`.',
+      'parked | approved | defect | s | t | Yes.',
+      'opportunity | approved | opportunity | s | t | Yes.',
+      'tried-once | approved | defect | s | t | Yes.',
+      'in-flight | approved | defect | s | t | Yes.',
+      'at-gate | approved | defect | s | t | Yes.',
+      'unknown | approved | defect | s | t | Yes.',
+    ].join('\n'),
+  );
+  assert.deepEqual(index.map((l) => l.kind), ['defect', 'opportunity', 'defect', 'defect', 'defect', 'defect']);
+  assert.equal(index[0].reason, 'Yes.');
+  const run = (key: string, step: string | null, fixAttempts: number | null) => ({
+    workflowId: findingWorkflowId('s', key),
+    step,
+    fixAttempts,
+  });
+  const open = [
+    run('parked', 'waiting-fix', 0),
+    run('opportunity', 'waiting-fix', 0),
+    run('tried-once', 'waiting-fix', 1),
+    run('in-flight', 'waiting-merge', 1),
+    run('at-gate', 'waiting-verdict', 0),
+    run('unknown', null, null),
+  ];
+  assert.ok(hasParkedDefect('s', index, open));
+
+  const plan = planReconcile('s', index, open, true);
+  assert.deepEqual(plan.fix.map((l) => l.key), ['parked']);
+  // A run at the gate, or of unknown step, still gets its verdict, as before.
+  assert.deepEqual(plan.signal.map((l) => l.key), ['at-gate', 'unknown']);
+  assert.deepEqual(plan.start, []);
+  assert.equal(plan.unchanged, 3);
+
+  const noFlag = planReconcile('s', index, open, false);
+  assert.deepEqual(noFlag.fix, []);
+  assert.equal(noFlag.unchanged, 4);
+
+  // Bare IDs, as a history recorded before steps replays them: no fix, no flag read.
+  const bare = open.map((o) => o.workflowId);
+  assert.ok(!hasParkedDefect('s', index, bare));
+  assert.deepEqual(planReconcile('s', index, bare, true).fix, []);
+  assert.equal(planReconcile('s', index, bare, true).signal.length, 6);
 });
 
 test('planReconcile starts a reopened line with no workflow, as it does a proposed one, and leaves one with a workflow', () => {
