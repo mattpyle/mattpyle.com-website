@@ -22,6 +22,9 @@ const PORT = 4321;
 
 export default defineConfig({
   testDir: './tests/a11y',
+  // Fails before any spec when the adopted server is not this checkout's build, or was started
+  // without the fixture environment. See the docblock in global-setup.ts.
+  globalSetup: './tests/a11y/global-setup.ts',
   // The aria goldens live next to the suite, one file per template, so a diff
   // shows up in review as a readable YAML change.
   snapshotPathTemplate: '{testDir}/__snapshots__/{arg}{ext}',
