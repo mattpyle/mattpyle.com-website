@@ -45,10 +45,10 @@ export const SCORECARD_VERIFIED = Object.freeze({
  */
 export const STATIC_ROUTE_LASTMOD = Object.freeze({
   '/': '2026-10-02',
-  '/about/': '2026-09-05',
+  '/about/': '2026-10-02',
   '/activity/': '2026-08-22',
   '/audit/': '2026-09-06',
-  '/projects/': '2026-10-02',
+  '/projects/': '2026-10-17',
   '/changelog/': '2026-07-17',
   '/scorecard/': '2026-07-18',
   '/steward/': '2026-08-12',

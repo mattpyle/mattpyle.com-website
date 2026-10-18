@@ -23,7 +23,7 @@ test('latestDate returns the newest valid calendar date', { skip: !policy }, () 
 });
 
 test('static routes resolve against the site-wide significant-change date', { skip: !policy }, () => {
-  assert.equal(policy.resolveStaticLastmod('/about/'), '2026-09-05');
+  assert.equal(policy.resolveStaticLastmod('/about/'), '2026-10-02');
   assert.equal(policy.resolveStaticLastmod('/missing/'), undefined);
 });
 
