@@ -7,6 +7,7 @@ import {
   clientKind,
   hourlySeries,
   lastHourRows,
+  verificationLabel,
 } from '../src/lib/activity-summary.mjs';
 import { epochHour } from '../src/lib/agent-traffic.mjs';
 
@@ -141,4 +142,32 @@ test('an empty store is counted: false rather than a thrown render', () => {
   assert.equal(activity.lastCountedHour, null);
   assert.equal(activity.lastHour.total, 0);
   assert.deepEqual(activity.lastHour.rows, []);
+});
+
+test('the client rows carry a verification state and the page prints it in words', () => {
+  const rows = [
+    { ...row(1, 'googlebot', '/robots.txt', 4), verification: 'ip-verified' },
+    { ...row(2, 'googlebot', '/robots.txt', 1), verification: 'claimed' },
+    { ...row(3, 'browser', '/llms.txt', 2), verification: '' },
+  ];
+  const activity = buildActivity(rows, NOW);
+  assert.deepEqual(
+    activity.clients.rows.map((entry) => [entry.family, verificationLabel(entry.verification)]),
+    [
+      ['googlebot', 'IP-verified'],
+      ['browser', ''],
+      ['googlebot', 'claimed'],
+    ]
+  );
+  assert.deepEqual(
+    activity.verification.map(({ state, total }) => [state, total]),
+    [
+      ['signed', 0],
+      ['ip-verified', 4],
+      ['claimed', 1],
+    ]
+  );
+  // A state the schema does not store prints nothing rather than itself.
+  assert.equal(verificationLabel('trust-me'), '');
+  assert.equal(verificationLabel(undefined), '');
 });

@@ -97,10 +97,28 @@ export const GET: APIRoute = async () => {
       })),
       omitted: activity.surfaces.omitted,
     },
+    /**
+     * What the site could prove about who sent each counted request, per Web Bot Auth: `signed`
+     * (a signature verified against the operator's published key), `ip-verified` (an address in
+     * the operator's published ranges) or `claimed` (the user agent alone). A request in none of
+     * the three is not in this list.
+     */
+    verification: activity.verification.map(row => ({
+      state: row.state,
+      last24Hours: row.day,
+      last7Days: row.week,
+      last30Days: row.month,
+      recorded: row.total,
+    })),
+    /**
+     * One row per client and verification state. `verification` is null for an ordinary visitor
+     * and for a hit counted before checks began on 2026-10-17.
+     */
     clients: {
       rows: activity.clients.rows.map(row => ({
         client: row.family,
         kind: row.kind,
+        verification: row.verification || null,
         last7Days: row.week,
         last30Days: row.month,
         recorded: row.total,

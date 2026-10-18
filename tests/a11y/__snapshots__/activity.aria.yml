@@ -78,17 +78,20 @@
     - text: bot/agent
     - table:
       - rowgroup:
-        - row "bot or agent Client 7 days 30 days":
+        - row "bot or agent Client Verified 7 days 30 days":
           - columnheader "bot or agent"
           - columnheader "Client"
+          - columnheader "Verified"
           - columnheader "7 days"
           - columnheader "30 days"
       - rowgroup:
         - row "· · ·":
           - cell
           - cell "·"
+          - cell
           - cell "·"
           - cell "·"
+    - paragraph: "Signed: a Web Bot Auth signature checked against the operator's published key. IP-verified: an address in the operator's published ranges. Claimed: the user agent alone. Blank on a bot: counted before checks began on 17 Oct 2026."
   - region "Markdown negotiation":
     - heading "Markdown negotiation" [level=2]
     - table:
@@ -104,7 +107,7 @@
           - cell "·"
   - region "How this is counted":
     - heading "How this is counted" [level=2]
-    - paragraph: "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    - paragraph: "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
     - text: The same numbers, as data
     - link "activity.json":
       - /url: /activity.json

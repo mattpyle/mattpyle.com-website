@@ -27,14 +27,18 @@
  */
 
 import {
-  DAYS_KEY,
-  MONTHS_KEY,
+  KEY_VERSION,
+  KEY_VERSIONS,
+  LEGACY_KEY_VERSION,
   ROLLUP_LOCK_KEY,
+  VERIFICATION_STATES,
   dayKeyFor,
+  daysKeyFor,
   isCounterMonth,
   monthFieldFor,
   monthKeyFor,
   monthOf,
+  monthsKeyFor,
   parseHitField,
   parseMonthField,
   readStoreConfig,
@@ -85,20 +89,26 @@ export function bucketHour(day, hour) {
  * guessed at: the only way either exists is a schema change that forgot to bump the key version,
  * and a dropped row is a smaller lie than an invented one.
  *
- * @param {Array<{ day: string, fields: Record<string, string | number> }>} dayHashes
- * @returns {Array<{ hour: number, event: string, family: string, path: string, count: number }>}
+ * Each hash says which key version it was read from, and defaults to the current one. A `v1` row
+ * comes back with the empty verification state, so the two versions flatten into one row shape
+ * and nothing downstream has to know there were two.
+ *
+ * @param {Array<{ day: string, fields: Record<string, string | number>, version?: string }>} dayHashes
+ * @returns {Array<{ hour: number, event: string, family: string, path: string, verification: string,
+ *                   count: number }>}
  */
 export function flattenDayHashes(dayHashes) {
   const rows = [];
-  for (const { day, fields } of dayHashes) {
+  for (const { day, fields, version = KEY_VERSION } of dayHashes) {
     for (const [field, rawCount] of Object.entries(fields ?? {})) {
-      const parsed = parseHitField(field);
+      const parsed = parseHitField(field, version);
       if (!parsed) continue;
       const hour = bucketHour(day, parsed.hour);
       if (hour === null) continue;
       const count = Number(rawCount);
       if (!Number.isFinite(count) || count <= 0) continue;
-      rows.push({ hour, event: parsed.event, family: parsed.family, path: parsed.path, count });
+      const { event, family, path, verification } = parsed;
+      rows.push({ hour, event, family, path, verification, count });
     }
   }
   return rows;
@@ -114,18 +124,20 @@ export function flattenDayHashes(dayHashes) {
  *
  * Same drop-rather-than-guess rule as flattenDayHashes().
  *
- * @param {Array<{ month: string, fields: Record<string, string | number> }>} monthHashes
- * @returns {Array<{ hour: null, event: string, family: string, path: string, count: number }>}
+ * @param {Array<{ month: string, fields: Record<string, string | number>, version?: string }>} monthHashes
+ * @returns {Array<{ hour: null, event: string, family: string, path: string, verification: string,
+ *                   count: number }>}
  */
 export function flattenMonthHashes(monthHashes) {
   const rows = [];
-  for (const { fields } of monthHashes ?? []) {
+  for (const { fields, version = KEY_VERSION } of monthHashes ?? []) {
     for (const [field, rawCount] of Object.entries(fields ?? {})) {
-      const parsed = parseMonthField(field);
+      const parsed = parseMonthField(field, version);
       if (!parsed) continue;
       const count = Number(rawCount);
       if (!Number.isFinite(count) || count <= 0) continue;
-      rows.push({ hour: null, event: parsed.event, family: parsed.family, path: parsed.path, count });
+      const { event, family, path, verification } = parsed;
+      rows.push({ hour: null, event, family, path, verification, count });
     }
   }
   return rows;
@@ -188,27 +200,29 @@ function windowTotals(rows, nowHour) {
 }
 
 /**
- * @typedef {{ path?: string, family?: string, total: number, day: number, week: number,
- *             month: number, lastHour: number | null }} TallyRow
+ * @typedef {{ path?: string, family?: string, verification?: string, total: number, day: number,
+ *             week: number, month: number, lastHour: number | null }} TallyRow
  */
 
 /**
- * Group rows by a key and total each group over every window, newest-first by all-time count.
+ * Group rows by the properties `identityOf` picks out and total each group over every window,
+ * largest first by all-time count. The identity's properties land on the group row, so a table
+ * keyed on two columns (client and verification state) is the same call as one keyed on a path.
  *
- * @param {Array<{ hour: number, count: number }>} rows
- * @param {(row: any) => string} keyOf
+ * @param {Array<{ hour: number | null, count: number }>} rows
+ * @param {(row: any) => Record<string, string>} identityOf
  * @param {number} nowHour
- * @param {'path' | 'family'} keyName the property the key lands on
  * @returns {{ rows: TallyRow[], omitted: number }}
  */
-function tally(rows, keyOf, nowHour, keyName) {
+function tally(rows, identityOf, nowHour) {
   /** @type {Map<string, any>} */
   const groups = new Map();
   for (const row of rows) {
-    const key = keyOf(row);
+    const identity = identityOf(row);
+    const key = Object.values(identity).join('|');
     let group = groups.get(key);
     if (!group) {
-      group = { [keyName]: key, total: 0, day: 0, week: 0, month: 0, lastHour: row.hour };
+      group = { ...identity, key, total: 0, day: 0, week: 0, month: 0, lastHour: row.hour };
       groups.set(key, group);
     }
     group.total += row.count;
@@ -222,10 +236,27 @@ function tally(rows, keyOf, nowHour, keyName) {
     }
   }
 
-  const sorted = [...groups.values()].sort(
-    (a, b) => b.total - a.total || String(a[keyName]).localeCompare(String(b[keyName]))
-  );
+  const sorted = [...groups.values()]
+    .sort((a, b) => b.total - a.total || a.key.localeCompare(b.key))
+    .map(({ key, ...group }) => group);
   return { rows: sorted.slice(0, MAX_TABLE_ROWS), omitted: Math.max(0, sorted.length - MAX_TABLE_ROWS) };
+}
+
+/**
+ * Each verification state's totals over every window, in VERIFICATION_STATES order. The share of
+ * agent traffic the site can prove is `signed` plus `ip-verified` over all three.
+ *
+ * @param {Array<{ hour: number | null, verification?: string, count: number }>} rows
+ * @param {number} nowHour
+ */
+function verificationTotals(rows, nowHour) {
+  return VERIFICATION_STATES.map((state) => ({
+    state,
+    ...windowTotals(
+      rows.filter((row) => row.verification === state),
+      nowHour
+    ),
+  }));
 }
 
 /**
@@ -255,11 +286,18 @@ export function summarizeTraffic(rows, now = new Date()) {
     surfaceTotals: windowTotals(surfaceRows, nowHour),
     markdownTotals: windowTotals(markdownRows, nowHour),
     botPageTotals: windowTotals(pageRows, nowHour),
-    surfaces: tally(surfaceRows, (row) => row.path, nowHour, 'path'),
-    clients: tally(rows, (row) => row.family, nowHour, 'family'),
-    pages: tally(markdownRows, (row) => row.path, nowHour, 'path'),
+    surfaces: tally(surfaceRows, ({ path }) => ({ path }), nowHour),
+    /**
+     * One row per client AND verification state, since 2026-10-17: googlebot from its own ranges
+     * and googlebot by user agent alone are different findings and get a row each. A row from the
+     * `v1` keys, counted before verification existed, has the empty state.
+     */
+    clients: tally(rows, ({ family, verification = '' }) => ({ family, verification }), nowHour),
+    /** Every row in each verification state, totalled. */
+    verification: verificationTotals(rows, nowHour),
+    pages: tally(markdownRows, ({ path }) => ({ path }), nowHour),
     /** Which pages bots read, which is the question the `page` class was added to answer. */
-    botPages: tally(pageRows, (row) => row.path, nowHour, 'path'),
+    botPages: tally(pageRows, ({ path }) => ({ path }), nowHour),
     /**
      * The newest bucket anything landed in, for "last counted". Null when nothing has, and null
      * when everything there is has been rolled up into months, which is the same statement: no
@@ -328,18 +366,22 @@ export function rollupEligibleDays(days, now) {
  * numerically invisible: a field the reader would have ignored is not smuggled into a total by
  * being folded.
  *
+ * A day folds into a month of its own key version, so a `v1` field is never rewritten into the
+ * `v2` shape with a state it never had.
+ *
  * @param {Record<string, string | number>} fields
+ * @param {string} [version]
  * @returns {Record<string, number>}
  */
-export function foldDayFields(fields) {
+export function foldDayFields(fields, version = KEY_VERSION) {
   /** @type {Record<string, number>} */
   const folded = {};
   for (const [field, rawCount] of Object.entries(fields ?? {})) {
-    const parsed = parseHitField(field);
+    const parsed = parseHitField(field, version);
     if (!parsed) continue;
     const count = Number(rawCount);
     if (!Number.isFinite(count) || count <= 0) continue;
-    const monthField = monthFieldFor(parsed);
+    const monthField = monthFieldFor(parsed, version);
     folded[monthField] = (folded[monthField] ?? 0) + count;
   }
   return folded;
@@ -363,22 +405,25 @@ export function foldDayFields(fields) {
  * risk adding a day's counts to its month twice, which is the one failure that would show up on
  * the page as a number that grew on its own.
  *
- * @param {Array<{ day: string, fields: Record<string, string> }>} dayHashes
+ * Every key is built for the hash's own version, so a `v1` day leaves the `v1` day set and lands in
+ * a `v1` month.
+ *
+ * @param {Array<{ day: string, fields: Record<string, string>, version?: string }>} dayHashes
  * @returns {string[][]}
  */
 export function rollupCommands(dayHashes) {
   const commands = [];
-  for (const { day, fields } of dayHashes) {
+  for (const { day, fields, version = KEY_VERSION } of dayHashes) {
     const month = monthOf(day);
-    const folded = foldDayFields(fields);
-    commands.push(['SREM', DAYS_KEY, day]);
+    const folded = foldDayFields(fields, version);
+    commands.push(['SREM', daysKeyFor(version), day]);
     if (Object.keys(folded).length > 0) {
-      commands.push(['SADD', MONTHS_KEY, month]);
+      commands.push(['SADD', monthsKeyFor(version), month]);
       for (const [field, count] of Object.entries(folded)) {
-        commands.push(['HINCRBY', monthKeyFor(month), field, String(count)]);
+        commands.push(['HINCRBY', monthKeyFor(month, version), field, String(count)]);
       }
     }
-    commands.push(['DEL', dayKeyFor(day)]);
+    commands.push(['DEL', dayKeyFor(day, version)]);
   }
   return commands;
 }
@@ -476,8 +521,9 @@ async function pipeline(store, commands, fetchImpl) {
  * set in production, and it produces its buckets relative to `now` so every window is populated.
  *
  * @param {{ env?: Record<string, string | undefined>, fetchImpl?: typeof fetch, now?: Date }} options
- * @returns {Promise<{ ok: true, dayHashes: Array<{ day: string, fields: Record<string, string> }>,
- *                     monthHashes: Array<{ month: string, fields: Record<string, string> }> }
+ * @returns {Promise<{ ok: true,
+ *                     dayHashes: Array<{ day: string, version: string, fields: Record<string, string> }>,
+ *                     monthHashes: Array<{ month: string, version: string, fields: Record<string, string> }> }
  *                  | { ok: false, reason: string }>}
  */
 export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, now = new Date() } = {}) {
@@ -489,43 +535,68 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
     const store = readStoreConfig(env);
     if (!store) return { ok: false, reason: 'no-store' };
 
-    const [days, months] = await pipeline(
+    // Both key versions, `v1` first: the day and month sets of each, in one round trip. Four
+    // commands rather than two, and still two round trips in all.
+    const sets = await pipeline(
       store,
-      [
-        ['SMEMBERS', DAYS_KEY],
-        ['SMEMBERS', MONTHS_KEY],
-      ],
+      KEY_VERSIONS.flatMap((version) => [
+        ['SMEMBERS', daysKeyFor(version)],
+        ['SMEMBERS', monthsKeyFor(version)],
+      ]),
       fetchImpl
     );
 
-    const orderedDays = Array.isArray(days) ? [...days].map(String).sort() : [];
-    // Months are filtered where days are not: a month name is used to build a key AND is the thing
-    // the rollup writes, so a garbage member would mint a key rather than just read an absent one.
-    const orderedMonths = Array.isArray(months) ? [...months].map(String).filter(isCounterMonth).sort() : [];
+    /** @type {Array<{ day: string, version: string }>} */
+    const orderedDays = [];
+    /** @type {Array<{ month: string, version: string }>} */
+    const orderedMonths = [];
+    KEY_VERSIONS.forEach((version, index) => {
+      const days = sets[index * 2];
+      const months = sets[index * 2 + 1];
+      if (Array.isArray(days)) {
+        for (const day of [...days].map(String).sort()) orderedDays.push({ day, version });
+      }
+      // Months are filtered where days are not: a month name is used to build a key AND is the
+      // thing the rollup writes, so a garbage member would mint a key rather than just read an
+      // absent one.
+      if (Array.isArray(months)) {
+        for (const month of [...months].map(String).filter(isCounterMonth).sort()) orderedMonths.push({ month, version });
+      }
+    });
     if (orderedDays.length === 0 && orderedMonths.length === 0) {
       return { ok: true, dayHashes: [], monthHashes: [] };
     }
 
-    const eligible = rollupEligibleDays(orderedDays, now);
+    const eligible = new Set(
+      rollupEligibleDays(
+        orderedDays.map(({ day }) => day),
+        now
+      )
+    );
+    const anyEligible = orderedDays.some(({ day }) => eligible.has(day));
     const commands = [
-      ...orderedDays.map((day) => ['HGETALL', dayKeyFor(day)]),
-      ...orderedMonths.map((month) => ['HGETALL', monthKeyFor(month)]),
+      ...orderedDays.map(({ day, version }) => ['HGETALL', dayKeyFor(day, version)]),
+      ...orderedMonths.map(({ month, version }) => ['HGETALL', monthKeyFor(month, version)]),
     ];
-    if (eligible.length > 0) commands.push(rollupLockCommand(now.toISOString()));
+    if (anyEligible) commands.push(rollupLockCommand(now.toISOString()));
 
     const results = await pipeline(store, commands, fetchImpl);
 
-    const dayHashes = orderedDays.map((day, index) => ({ day, fields: toFieldMap(results[index]) }));
-    const monthHashes = orderedMonths.map((month, index) => ({
+    const dayHashes = orderedDays.map(({ day, version }, index) => ({
+      day,
+      version,
+      fields: toFieldMap(results[index]),
+    }));
+    const monthHashes = orderedMonths.map(({ month, version }, index) => ({
       month,
+      version,
       fields: toFieldMap(results[orderedDays.length + index]),
     }));
 
     // Null means another render holds the lock, which is a reason to do nothing at all: the read
     // above is already complete and correct, and the fold will happen on some later render.
-    if (eligible.length > 0 && results[commands.length - 1] !== null) {
-      const eligibleSet = new Set(eligible);
-      await rollUp(store, dayHashes.filter(({ day }) => eligibleSet.has(day)), fetchImpl);
+    if (anyEligible && results[commands.length - 1] !== null) {
+      await rollUp(store, dayHashes.filter(({ day }) => eligible.has(day)), fetchImpl);
     }
 
     return { ok: true, dayHashes, monthHashes };
@@ -564,23 +635,24 @@ async function rollUp(store, dayHashes, fetchImpl) {
 function fixtureDayHashes(now) {
   const nowHour = epochHour(now);
   /** @type {Array<[number, string, number]>} hours-ago, field, count */
+  // `v2` fields: the last part is the verification state, and every state appears at least once.
   const seed = [
-    [0, 'surface|curl|/llms.txt', 4],
-    [1, 'surface|claudebot|/agents.md', 3],
-    [2, 'surface|gptbot|/llms.txt', 2],
-    [5, 'surface|none|/.well-known/agent-card.json', 2],
-    [9, 'markdown|curl|/about', 1],
-    [30, 'surface|perplexitybot|/robots.txt', 6],
-    [40, 'surface|other|/.well-known/*', 3],
-    [70, 'markdown|claude-user|/writing/accessibility-and-ai', 2],
-    [150, 'surface|curl|/.well-known/agent-skills/index.json', 5],
-    [400, 'surface|googlebot|/sitemap-index.xml', 8],
-    [700, 'surface|browser|/llms-full.txt', 1],
-    // The `page` class. Every family and path here already appears above, so the client table
-    // gains no row and only the bot-pages table is new.
-    [3, 'page|gptbot|/writing/accessibility-and-ai', 5],
-    [12, 'page|perplexitybot|/about', 2],
-    [80, 'page|claudebot|/writing/accessibility-and-ai', 4],
+    [0, 'surface|curl|/llms.txt|claimed', 4],
+    [1, 'surface|claudebot|/agents.md|claimed', 3],
+    [2, 'surface|gptbot|/llms.txt|ip-verified', 2],
+    [5, 'surface|none|/.well-known/agent-card.json|', 2],
+    [9, 'markdown|curl|/about|signed', 1],
+    [30, 'surface|perplexitybot|/robots.txt|claimed', 6],
+    [40, 'surface|other|/.well-known/*|', 3],
+    [70, 'markdown|claude-user|/writing/accessibility-and-ai|claimed', 2],
+    [150, 'surface|curl|/.well-known/agent-skills/index.json|claimed', 5],
+    [400, 'surface|googlebot|/sitemap-index.xml|ip-verified', 8],
+    [700, 'surface|browser|/llms-full.txt|', 1],
+    // The `page` class. Every path here already appears above.
+    [3, 'page|gptbot|/writing/accessibility-and-ai|ip-verified', 5],
+    [6, 'page|google-agent|/writing/accessibility-and-ai|signed', 1],
+    [12, 'page|perplexitybot|/about|claimed', 2],
+    [80, 'page|claudebot|/writing/accessibility-and-ai|claimed', 4],
   ];
 
   /** @type {Map<string, Record<string, string>>} */
@@ -593,17 +665,17 @@ function fixtureDayHashes(now) {
     fields[`${hour}|${suffix}`] = String(count);
     byDay.set(day, fields);
   }
-  return [...byDay.entries()].sort().map(([day, fields]) => ({ day, fields }));
+  return [...byDay.entries()].sort().map(([day, fields]) => ({ day, version: KEY_VERSION, fields }));
 }
 
 /**
  * A canned rolled-up month, so the fixture exercises the merged day-plus-month path rather than
  * only the day half of it.
  *
- * Every surface, family and path here already appears in fixtureDayHashes(), on purpose: the
- * month contributes to the all-time column of rows that exist anyway, so no table gains or loses a
- * row and the committed aria goldens are untouched. It is dated well before the rollup cutoff so
- * it reads as what it is.
+ * Every surface and path here already appears in fixtureDayHashes(), on purpose: the month
+ * contributes to the all-time column of rows that exist anyway. It is dated well before the rollup
+ * cutoff so it reads as what it is, and it is a `v1` month, so the fixture also exercises the read
+ * of the legacy shape: its rows carry no verification state and render as such.
  *
  * @param {Date} now
  */
@@ -614,6 +686,7 @@ function fixtureMonthHashes(now) {
   return [
     {
       month,
+      version: LEGACY_KEY_VERSION,
       fields: {
         'surface|curl|/llms.txt': '12',
         'surface|googlebot|/sitemap-index.xml': '9',

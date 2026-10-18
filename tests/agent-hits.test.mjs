@@ -9,7 +9,12 @@ import {
   EVENTS,
   FALLBACK_FAMILY,
   KEY_VERSION,
+  KEY_VERSIONS,
+  LEGACY_KEY_VERSION,
   PAGE_CLIENT_FAMILIES,
+  VERIFICATION_STATES,
+  dayKeyFor,
+  isKnownFamily,
   MONTHS_KEY,
   ROLLUP_LOCK_KEY,
   UNNAMED_PAGE,
@@ -202,7 +207,25 @@ test('an absent user agent is its own family, not unknown', () => {
 test('the family list is data and every family is unique', () => {
   const families = knownFamilies();
   assert.equal(new Set(families).size, families.length);
-  assert.ok(CLIENT_FAMILIES.every(({ family, match }) => typeof family === 'string' && match instanceof RegExp));
+  assert.ok(
+    CLIENT_FAMILIES.every(({ family, match }) => typeof family === 'string' && (match instanceof RegExp || match === null))
+  );
+});
+
+test('a family with no user agent pattern is reachable only by signature', () => {
+  // chatgpt-agent sends a plain Chrome user agent, so no string can classify into it; only a
+  // signature verified by OpenAI's directory names it (src/lib/web-bot-auth.mjs).
+  const signatureOnly = CLIENT_FAMILIES.filter(({ match }) => match === null).map(({ family }) => family);
+  assert.deepEqual(signatureOnly, ['chatgpt-agent']);
+  assert.equal(classifyClient('chatgpt-agent'), FALLBACK_FAMILY);
+  assert.equal(isKnownFamily('chatgpt-agent'), true);
+  assert.equal(isKnownFamily('made-up-family'), false);
+});
+
+test("Google-Agent's Chrome user agent is Google-Agent, not a browser", () => {
+  const ua =
+    'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36 (compatible; Google-Agent; +https://developers.google.com/crawling/docs/crawlers-fetchers/google-agent)';
+  assert.equal(classifyClient(ua), 'google-agent');
 });
 
 test('every crawler robots.txt names has a family, or is accounted for', () => {
@@ -245,17 +268,61 @@ test('the key schema is exactly three commands in one pipeline', () => {
   // detail, so it fails here first.
   const keys = hitKeys({ event: 'surface', path: '/agents.md', ua: 'curl/8', now: new Date('2026-08-04T20:00:00Z') });
   assert.deepEqual(keys.commands, [
-    ['HINCRBY', 'hits:v1:day:2026-08-04', '20|surface|curl|/agents.md', '1'],
-    ['SADD', 'hits:v1:days', '2026-08-04'],
-    ['INCR', 'hits:v1:total'],
+    ['HINCRBY', 'hits:v2:day:2026-08-04', '20|surface|curl|/agents.md|', '1'],
+    ['SADD', 'hits:v2:days', '2026-08-04'],
+    ['INCR', 'hits:v2:total'],
   ]);
+});
+
+test('v2 is written and v1 is only ever read', () => {
+  assert.equal(KEY_VERSION, 'v2');
+  assert.deepEqual(KEY_VERSIONS, [LEGACY_KEY_VERSION, KEY_VERSION]);
+  const keys = hitKeys({ event: 'surface', path: '/llms.txt', ua: 'curl/8', now: new Date('2026-08-04T20:00:00Z') });
+  for (const [, key] of keys.commands) assert.ok(!key.startsWith('hits:v1:'), key);
+  // The legacy keys keep their names, so the read side still finds every hit counted before v2.
+  assert.equal(dayKeyFor('2026-08-04', LEGACY_KEY_VERSION), 'hits:v1:day:2026-08-04');
+  assert.equal(monthKeyFor('2026-08', LEGACY_KEY_VERSION), 'hits:v1:month:2026-08');
+});
+
+test('the verification state is the fifth part, bounded to three values and empty', () => {
+  assert.deepEqual(VERIFICATION_STATES, ['signed', 'ip-verified', 'claimed']);
+  const at = new Date('2026-08-04T20:00:00Z');
+  for (const state of VERIFICATION_STATES) {
+    const keys = hitKeys({ event: 'surface', path: '/llms.txt', ua: 'curl/8', verification: state, now: at });
+    assert.equal(keys.field, `20|surface|curl|/llms.txt|${state}`);
+    assert.equal(parseHitField(keys.field).verification, state);
+  }
+  // Anything else a caller hands in is the empty state, never a new key part.
+  const forged = hitKeys({ event: 'surface', path: '/llms.txt', ua: 'curl/8', verification: 'trust-me', now: at });
+  assert.equal(forged.field, '20|surface|curl|/llms.txt|');
+  assert.equal(parseHitField('20|surface|curl|/llms.txt|trust-me'), null);
+  // So is a family the schema does not list: it falls back to what the user agent says.
+  const family = hitKeys({ event: 'surface', path: '/llms.txt', ua: 'curl/8', family: 'evil', now: at });
+  assert.equal(family.family, 'curl');
+});
+
+test('a v1 field reads as the empty state and a v2 field does not read as v1', () => {
+  assert.deepEqual(parseHitField('20|surface|curl|/llms.txt', LEGACY_KEY_VERSION), {
+    hour: '20',
+    event: 'surface',
+    family: 'curl',
+    path: '/llms.txt',
+    verification: '',
+  });
+  assert.equal(parseHitField('20|surface|curl|/llms.txt|signed', LEGACY_KEY_VERSION), null);
+  assert.equal(parseHitField('20|surface|curl|/llms.txt'), null);
+  assert.deepEqual(parseMonthField('surface|curl|/llms.txt', LEGACY_KEY_VERSION).verification, '');
+  assert.equal(monthFieldFor({ event: 'surface', family: 'curl', path: '/llms.txt' }, LEGACY_KEY_VERSION), 'surface|curl|/llms.txt');
 });
 
 test('the rollup keys carry the version prefix and no hit ever writes one', () => {
   const keys = hitKeys({ event: 'surface', path: '/llms.txt', ua: 'curl/8', now: new Date('2026-08-04T20:00:00Z') });
-  for (const key of [MONTHS_KEY, monthKeyFor('2026-08'), ROLLUP_LOCK_KEY]) {
+  for (const key of [MONTHS_KEY, monthKeyFor('2026-08')]) {
     assert.ok(key.startsWith(`hits:${KEY_VERSION}:`), key);
   }
+  // The lock keeps its v1 name: an old render and a new one during a deploy share it, so neither
+  // can fold a v1 day the other is folding.
+  assert.equal(ROLLUP_LOCK_KEY, 'hits:v1:rollup');
   // The write path is the day keys and nothing else; the read path owns the rollup.
   const written = keys.commands.map(([, key]) => key);
   for (const key of [MONTHS_KEY, monthKeyFor('2026-08'), ROLLUP_LOCK_KEY]) {
@@ -268,11 +335,11 @@ test('a month field is a day field with the hour dropped, and the two cannot be 
   const parsed = parseHitField(keys.field);
   const monthField = monthFieldFor(parsed);
 
-  assert.equal(monthField, 'surface|curl|/llms.txt');
-  assert.equal(monthField.split('|').length, 3);
-  assert.deepEqual(parseMonthField(monthField), { event: 'surface', family: 'curl', path: '/llms.txt' });
+  assert.equal(monthField, 'surface|curl|/llms.txt|');
+  assert.equal(monthField.split('|').length, 4);
+  assert.deepEqual(parseMonthField(monthField), { event: 'surface', family: 'curl', path: '/llms.txt', verification: '' });
 
-  // Four parts is a day field and three is a month field, in both directions, so a field can never
+  // Five parts is a day field and four is a month field, in both directions, so a field can never
   // be read by the wrong parser without a version bump.
   assert.equal(parseMonthField(keys.field), null);
   assert.equal(parseHitField(monthField), null);
@@ -286,10 +353,10 @@ test('a month is the first seven characters of a day, and only a real month pass
   }
 });
 
-test('the field is hour, event, family, path and cannot be ambiguous', () => {
+test('the field is hour, event, family, path, state and cannot be ambiguous', () => {
   const keys = hitKeys({ event: 'markdown', path: '/about/', ua: null, now: new Date('2026-08-04T20:00:00Z') });
-  assert.equal(keys.field, `20|markdown|${ABSENT_FAMILY}|/about`);
-  assert.equal(keys.field.split('|').length, 4);
+  assert.equal(keys.field, `20|markdown|${ABSENT_FAMILY}|/about|`);
+  assert.equal(keys.field.split('|').length, 5);
   assert.equal(keys.hour, '20');
   assert.equal(keys.day, '2026-08-04');
 });
@@ -342,11 +409,11 @@ test('a page hit keys exactly like the other two classes', () => {
     now: new Date('2026-08-04T20:00:00Z'),
   });
   assert.deepEqual(keys.commands, [
-    ['HINCRBY', 'hits:v1:day:2026-08-04', '20|page|perplexitybot|/writing/accessibility-and-ai', '1'],
-    ['SADD', 'hits:v1:days', '2026-08-04'],
-    ['INCR', 'hits:v1:total'],
+    ['HINCRBY', 'hits:v2:day:2026-08-04', '20|page|perplexitybot|/writing/accessibility-and-ai|', '1'],
+    ['SADD', 'hits:v2:days', '2026-08-04'],
+    ['INCR', 'hits:v2:total'],
   ]);
-  assert.equal(keys.field.split('|').length, 4);
+  assert.equal(keys.field.split('|').length, 5);
 });
 
 test('a published page keeps its own key and anything else buckets', () => {
@@ -386,7 +453,7 @@ test('a garbage request cannot widen the key space in any component', () => {
     ua: 'definitely-not-a-real-client ' + 'z'.repeat(9000),
     now: new Date('2026-08-04T20:00:00Z'),
   });
-  assert.equal(keys.field, `20|markdown|${FALLBACK_FAMILY}|${UNNAMED_PAGE}`);
+  assert.equal(keys.field, `20|markdown|${FALLBACK_FAMILY}|${UNNAMED_PAGE}|`);
   assert.ok(keys.field.length < 64);
 });
 
@@ -435,10 +502,56 @@ test('a hit is one POST to the pipeline endpoint carrying all three commands', a
   assert.equal(call.init.method, 'POST');
   assert.equal(call.init.headers.Authorization, 'Bearer token');
   assert.deepEqual(JSON.parse(call.init.body), [
-    ['HINCRBY', 'hits:v1:day:2026-08-04', '20|surface|curl|/llms.txt', '1'],
-    ['SADD', 'hits:v1:days', '2026-08-04'],
-    ['INCR', 'hits:v1:total'],
+    ['HINCRBY', 'hits:v2:day:2026-08-04', '20|surface|curl|/llms.txt|', '1'],
+    ['SADD', 'hits:v2:days', '2026-08-04'],
+    ['INCR', 'hits:v2:total'],
   ]);
+});
+
+test('an identity is awaited, and its state lands in the field', async () => {
+  const fetchImpl = spyFetch();
+  await recordHit({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8.7.1',
+    identity: Promise.resolve({ family: 'curl', verification: 'signed' }),
+    now: new Date('2026-08-04T20:00:00Z'),
+    env: STORE_ENV,
+    fetchImpl,
+  });
+  assert.equal(JSON.parse(fetchImpl.calls[0].init.body)[0][2], '20|surface|curl|/llms.txt|signed');
+});
+
+test('a rejected identity is a hit counted on its user agent alone', async () => {
+  const fetchImpl = spyFetch();
+  const result = await recordHit({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8.7.1',
+    identity: Promise.reject(new Error('directory down')),
+    now: new Date('2026-08-04T20:00:00Z'),
+    env: STORE_ENV,
+    fetchImpl,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.field, '20|surface|curl|/llms.txt|');
+});
+
+test('a signature-named family passes the page gate a browser user agent would not', async () => {
+  // ChatGPT agent sends Chrome's user agent. Proved by signature, it is a bot reading a page.
+  const chrome =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  const fetchImpl = spyFetch();
+  const result = await recordHit({
+    event: 'page',
+    path: '/about/',
+    ua: chrome,
+    identity: { family: 'chatgpt-agent', verification: 'signed' },
+    now: new Date('2026-08-04T20:00:00Z'),
+    env: STORE_ENV,
+    fetchImpl,
+  });
+  assert.equal(result.field, '20|page|chatgpt-agent|/about|signed');
 });
 
 test('the request body carries no user agent, no header and no per-request detail', async () => {
@@ -482,8 +595,8 @@ test('a named bot reading a page is counted', async () => {
   assert.equal(result.ok, true);
   assert.deepEqual(JSON.parse(fetchImpl.calls[0].init.body)[0], [
     'HINCRBY',
-    'hits:v1:day:2026-08-04',
-    '20|page|chatgpt-user|/writing/accessibility-and-ai',
+    'hits:v2:day:2026-08-04',
+    '20|page|chatgpt-user|/writing/accessibility-and-ai|',
     '1',
   ]);
 });
@@ -562,5 +675,13 @@ test('the middleware counts both event classes and still logs each one', () => {
 
 test('counting is fired through waitUntil and wrapped', () => {
   assert.match(middlewareSource, /waitUntil\(recordHit\(/);
-  assert.match(middlewareSource, /try \{\s*waitUntil\(recordHit\([\s\S]*?\} catch \{/);
+  assert.match(middlewareSource, /try \{\s*(?:const identity = [^;]+;\s*)?waitUntil\(recordHit\([\s\S]*?\} catch \{/);
+});
+
+test('verification starts inside the wrapper and is handed to the count unawaited', () => {
+  // identifyRequest() can fetch a key directory, so it must never be awaited on the response path:
+  // its promise goes to recordHit(), which awaits it inside waitUntil.
+  assert.match(middlewareSource, /const identity = identifyRequest\(request, \{ address: ipAddress\(request\) \?\? null \}\);/);
+  assert.match(middlewareSource, /recordHit\(\{ event, path, ua: request\.headers\.get\('user-agent'\), identity \}\)/);
+  assert.doesNotMatch(middlewareSource, /await identifyRequest/);
 });

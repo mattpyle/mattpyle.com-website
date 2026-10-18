@@ -45,6 +45,7 @@
     "astro": "^7.3.2",
     "satteri": "^0.9.1",
     "undici": "^7.30.0",
+    "web-bot-auth": "0.2.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
