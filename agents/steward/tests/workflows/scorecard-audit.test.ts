@@ -220,6 +220,97 @@ test('a tool failure on one page blocks a green decision and is archived, not dr
   assert.equal(archivedRecord.perPage.length, 2);
 });
 
+/**
+ * A run that audits no pages (the 2026-09-27 chromedriver outage). Every page
+ * erroring measures the worker, not the site, so the run archives its record
+ * and fails its ping but opens no run-log PR. A partial failure and a healthy
+ * run keep the behaviour they had.
+ */
+
+interface ArchivedRun {
+  decision: string;
+  reason: string;
+  prUrl?: string;
+  perPage: unknown[];
+}
+
+const THREE_URLS = [
+  'https://www.mattpyle.com/',
+  'https://www.mattpyle.com/about/',
+  'https://www.mattpyle.com/writing/',
+];
+
+test('every page failed: no-op, no run-log PR, the record is still archived', async () => {
+  const { activities, calls, archived, signals } = mockActivities({
+    resolveAuditUrls: async () => THREE_URLS,
+    auditLiveUrl: async (url: string) => ({ url, ok: false, error: 'session not created' }),
+    // No published run, the case that would otherwise open a PR unconditionally.
+    readPublishedScorecard: async () => undefined,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-zero-1',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'schedule' })],
+    }),
+  );
+
+  assert.equal(result.decision, 'no-op');
+  assert.match(result.reason, /the auditor read 0 of 3 pages/);
+  assert.equal(result.prUrl, undefined);
+  assert.ok(!calls.includes('publishScorecardRun'));
+
+  assert.equal(archived.length, 1);
+  const record = archived[0] as ArchivedRun;
+  assert.equal(record.decision, 'no-op');
+  assert.equal(record.reason, result.reason);
+  assert.equal(record.perPage.length, 3);
+
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', false]]);
+  assert.match(signals[0].summary, /No run-log PR opened/);
+});
+
+test('one page failed: the run-log PR still opens', async () => {
+  const { activities, calls, archived } = mockActivities({
+    resolveAuditUrls: async () => THREE_URLS,
+    auditLiveUrl: async (url: string) =>
+      url.endsWith('/about/') ? { url, ok: false, error: 'Lighthouse timed out' } : { ...GREEN_PAGE, url },
+    readPublishedScorecard: async () => undefined,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-zero-2',
+      taskQueue: QUEUE,
+      args: [baseInput()],
+    }),
+  );
+
+  assert.equal(result.decision, 'open-pr');
+  assert.equal(result.prUrl, 'https://github.com/o/r/pull/9');
+  assert.ok(calls.includes('publishScorecardRun'));
+  assert.equal((archived[0] as ArchivedRun).decision, 'open-pr');
+});
+
+test('a healthy run is unchanged: decidePublish decides and the PR opens', async () => {
+  const { activities, calls, archived, signals } = mockActivities({
+    resolveAuditUrls: async () => THREE_URLS,
+    readPublishedScorecard: async () => undefined,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-zero-3',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'schedule' })],
+    }),
+  );
+
+  assert.equal(result.decision, 'open-pr');
+  assert.equal(result.reason, 'no published run exists yet');
+  assert.ok(calls.includes('publishScorecardRun'));
+  assert.equal((archived[0] as ArchivedRun).prUrl, 'https://github.com/o/r/pull/9');
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', true]]);
+});
+
 test('commentary folds in the change delta decidePublish found, worded as a timeless fact', async () => {
   const published: PublishableRun = {
     iso: '2000-01-01',

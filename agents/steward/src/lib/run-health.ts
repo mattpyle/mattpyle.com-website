@@ -107,9 +107,17 @@ export interface ScorecardShapeInput {
  *
  * Not "most pages failed" and not a ratio. A single page the audit could not
  * measure already blocks a green scorecard by design (`buildCommentary`), so the
- * run's own publish logic and this rule agree on what a defect is. An audit set
- * of zero pages is caught earlier by `checkAuditSet` and fails the run outright,
- * which the failure path alerts on separately.
+ * run's own publish logic and this rule agree on what a defect is.
+ *
+ * "No pages" is guarded twice, on two different counts:
+ *
+ * 1. Before the fan-out, `checkAuditSet` counts the URLs resolved from the
+ *    sitemap. Zero fails the run outright, and the failure path alerts on it.
+ * 2. After the fan-out, the workflow counts the pages actually audited. Zero
+ *    means every page errored: the run measured the worker, not the site, so it
+ *    opens no run-log PR and this rule says so in the summary.
+ *
+ * A partial failure keeps its wording, because that run may still open a PR.
  */
 export function scorecardRunShape(input: ScorecardShapeInput): RunShape {
   const failed = input.pages.filter((p) => !p.ok);
@@ -123,6 +131,16 @@ export function scorecardRunShape(input: ScorecardShapeInput): RunShape {
   }
   const named = failed.slice(0, 5).map((p) => `${p.url}${p.error ? ` (${p.error})` : ''}`);
   const rest = failed.length > named.length ? `, and ${failed.length - named.length} more` : '';
+  if (failed.length === input.pages.length) {
+    return {
+      ok: false,
+      summary:
+        `Scorecard ${input.iso} completed but 0 of ${input.pages.length} page(s) could be ` +
+        `audited: ${named.join('; ')}${rest}. The auditor read no page, so the run measured ` +
+        'the worker, not the site. No run-log PR opened; the per-run record is archived with ' +
+        'each page\'s error. Check the hosted worker\'s logs.',
+    };
+  }
   return {
     ok: false,
     summary:

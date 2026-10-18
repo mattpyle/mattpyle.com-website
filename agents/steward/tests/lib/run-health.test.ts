@@ -59,6 +59,45 @@ test('one failed page out of many is a bad shape — the rule is a count, not a 
   assert.match(shape.summary, /axe produced no result file/);
 });
 
+// The 2026-09-27 chromedriver outage: every page errored, the run scored the
+// site 0 and opened a run-log PR six nights running. These three pin the split
+// the workflow now makes at step 3, from the alert's side.
+
+test('a run where every page failed is a bad shape that says no run-log PR opened', () => {
+  const pages = Array.from({ length: 26 }, (_, i) => ({
+    url: `https://www.mattpyle.com/p${i}/`,
+    ok: false,
+    error: 'session not created: chromedriver only supports Chrome version 140',
+  }));
+  const shape = scorecardRunShape({ pages, decision: 'no-op', iso: '2026-09-27' });
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /0 of 26 page\(s\) could be audited/);
+  assert.match(shape.summary, /No run-log PR opened/);
+  assert.match(shape.summary, /chromedriver only supports/);
+});
+
+test('one failed page keeps the partial-failure summary, which allows for a PR', () => {
+  const pages = [
+    { url: 'https://www.mattpyle.com/', ok: true },
+    { url: 'https://www.mattpyle.com/broken/', ok: false, error: 'Lighthouse timed out' },
+  ];
+  const shape = scorecardRunShape({ pages, decision: 'open-pr', iso: '2026-09-27' });
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /1 of 2 page\(s\) could not be audited/);
+  assert.match(shape.summary, /run-log PR \(if one opened\)/);
+  assert.doesNotMatch(shape.summary, /No run-log PR opened/);
+});
+
+test('a healthy run keeps its summary', () => {
+  const pages = [
+    { url: 'https://www.mattpyle.com/', ok: true },
+    { url: 'https://www.mattpyle.com/about/', ok: true },
+  ];
+  const shape = scorecardRunShape({ pages, decision: 'open-pr', iso: '2026-09-27' });
+  assert.equal(shape.ok, true);
+  assert.equal(shape.summary, 'Scorecard 2026-09-27: 2 page(s) audited, none failed, decision open-pr.');
+});
+
 test('the failure summary names a handful of pages and counts the rest', () => {
   const pages = Array.from({ length: 12 }, (_, i) => ({ url: `https://x.test/${i}`, ok: false }));
   const shape = scorecardRunShape({ pages, decision: 'open-pr', iso: '2026-08-15' });
