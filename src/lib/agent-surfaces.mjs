@@ -106,6 +106,11 @@ export const WELL_KNOWN_SURFACE_PATHS = [
   '/.well-known/agent-skills/index.json',
   '/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md',
   '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',
+  // Steward's Web Bot Auth documents (src/lib/steward-identity.mjs). A fetch of either is a
+  // verifier checking a steward-audit signature, which makes their log lines the measure of how
+  // many sites verify at all.
+  '/.well-known/http-message-signatures-directory',
+  '/.well-known/signature-agent-card',
 ];
 
 /** Trailing slash tolerated so /llms.txt/ logs as the same surface; '/' itself is not a surface. */

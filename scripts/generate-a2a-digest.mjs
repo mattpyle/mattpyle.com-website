@@ -192,6 +192,17 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
           'Agentic Resource Discovery publisher catalogue pointing at the A2A Agent Card, the MCP Server Card and the two Agent Skills.',
       },
       {
+        name: "Steward's Signature Agent Card",
+        url: `${base}/.well-known/signature-agent-card`,
+        description:
+          'The Web Bot Auth identity of the steward-audit auditor and its OAuth Client ID Metadata Document. Signed Steward requests name it in Signature-Agent with type=cimd.',
+      },
+      {
+        name: "Steward's key directory",
+        url: `${base}/.well-known/http-message-signatures-directory`,
+        description: 'The Ed25519 public keys that verify Steward request signatures, as a JWK Set.',
+      },
+      {
         name: 'scorecard.json',
         url: `${base}/scorecard.json`,
         description: 'Every scorecard run as JSON, the same numbers the scorecard page displays.',

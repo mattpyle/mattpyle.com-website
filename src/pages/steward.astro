@@ -22,6 +22,7 @@ import StewardBody from '../components/steward/StewardBody.astro';
 import { STEWARD_FAST_CHECKS, STEWARD_CHECK_CATEGORIES } from '../data/steward-audit-checks.mjs';
 import { readLimits, readDeepLimits } from '../lib/mcp-rate-limit.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
+import { DIRECTORY_PATH, SIGNATURE_AGENT_CARD_PATH } from '../lib/steward-identity.mjs';
 
 // The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
 // rather than written out, so this link and the sibling the middleware would actually serve
@@ -176,6 +177,8 @@ const extraJsonLd = [
     checkCount={STEWARD_FAST_CHECKS.length}
     byCategory={byCategory}
     limitRows={limitRows}
+    signatureCardUrl={new URL(SIGNATURE_AGENT_CARD_PATH, Astro.site).toString()}
+    signatureDirectoryUrl={new URL(DIRECTORY_PATH, Astro.site).toString()}
   />
 </Layout>
 
