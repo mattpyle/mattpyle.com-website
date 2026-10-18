@@ -207,10 +207,10 @@ jobs:
           # section of .gitignore as its implementation. A new private path goes in all
           # three in the same change or this tripwire has a hole in it.
           #
-          # Anchoring follows the ignore rules: `CLAUDE.md`, `.claude/` and
-          # friends are unanchored in .gitignore and so match at any depth
-          # (agents/steward/CLAUDE.md is one of them); `/docs/`, `/steward/`
-          # and `/public/og/` are root-anchored and matched as such.
+          # Anchoring follows the ignore rules: `.claude/` and friends are
+          # unanchored in .gitignore and so match at any depth; `/CLAUDE.md`,
+          # `/docs/`, `/steward/` and `/public/og/` are root-anchored and
+          # matched as such. agents/steward/CLAUDE.md is tracked on purpose.
           #
           # `agents/steward/.reviews-drafts/` holds reviews of posts that have
           # not published yet: the review quotes the unpublished draft and its
@@ -224,7 +224,7 @@ jobs:
           # the marking summary written by the marker's `--summary` flag, and
           # quotes that same material back a point at a time.
           # ---------------------------------------------------------------
-          private='(^|/)CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/|^agents/benchmark/runs/|^agents/benchmark/calibration\.md$'
+          private='^CLAUDE\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/|^agents/benchmark/runs/|^agents/benchmark/calibration\.md$'
 
           tracked_private=$(git ls-files | grep -E "$private")
 
