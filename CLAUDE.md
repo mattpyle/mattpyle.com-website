@@ -30,6 +30,8 @@ mattpyle.com is a personal site and a testbed for emerging web standards (WebMCP
 |---|---|
 | `npm run dev` | Dev server. Iterate layout here; fonts, images and CSS inlining differ from prod, layout does not. |
 | `SHOW_DRAFTS=true npm run build`, then `npm run serve` | Production build and a server that renders `/scorecard` on demand. A static server 404s it. |
+| `npm test` | The site test suite. CI runs it on every PR, and the fix Action runs it before it pushes. |
+| `npm run check` | The Astro and TypeScript check. CI runs it on every PR, and the fix Action runs it before it pushes. |
 | `npm run new-post -- "Title"` | Scaffold a draft with correct frontmatter. |
 | `npm run a11y` | Playwright suite for the manual WCAG checks. Advisory. Regenerate one golden with `--update-snapshots --grep <template>`, never `--update-snapshots=all`. |
 | `npm run sweep:retro` | Reports modern colour tokens or fonts leaking into the retro appearance. Advisory. |
