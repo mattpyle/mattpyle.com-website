@@ -20,11 +20,14 @@ import {
 } from '../src/lib/agent-traffic.mjs';
 import {
   DAYS_KEY,
+  LEGACY_KEY_VERSION,
   MONTHS_KEY,
   ROLLUP_LOCK_KEY,
   dayKeyFor,
+  daysKeyFor,
   hitKeys,
   monthKeyFor,
+  monthsKeyFor,
 } from '../src/lib/agent-hits.mjs';
 
 // The read side of the hit counter. The window math is the part worth guarding: it is arithmetic
@@ -35,11 +38,11 @@ const NOW = new Date('2026-08-06T14:37:00.000Z');
 const NOW_HOUR = epochHour(NOW);
 
 /** A day hash built the way the middleware would have built it. */
-function bucket(hoursAgo, event, family, path, count) {
+function bucket(hoursAgo, event, family, path, count, verification = '') {
   const at = hourStart(NOW_HOUR - hoursAgo);
   return {
     day: at.toISOString().slice(0, 10),
-    field: `${at.toISOString().slice(11, 13)}|${event}|${family}|${path}`,
+    field: `${at.toISOString().slice(11, 13)}|${event}|${family}|${path}|${verification}`,
     count: String(count),
   };
 }
@@ -82,12 +85,12 @@ test('a field that does not match the schema is dropped, not guessed at', () => 
     {
       day: '2026-08-06',
       fields: {
-        '06|surface|curl|/llms.txt': '2',
+        '06|surface|curl|/llms.txt|': '2',
         '06|surface|curl': '9', // too few parts
-        '06|invented|curl|/llms.txt': '9', // unknown event class
-        'xx|surface|curl|/llms.txt': '9', // not an hour
-        '07|surface|curl|/agents.md': 'not-a-number',
-        '08|surface|curl|/agents.md': '0',
+        '06|invented|curl|/llms.txt|': '9', // unknown event class
+        'xx|surface|curl|/llms.txt|': '9', // not an hour
+        '07|surface|curl|/agents.md|': 'not-a-number',
+        '08|surface|curl|/agents.md|': '0',
       },
     },
   ]);
@@ -100,7 +103,7 @@ test('a field that does not match the schema is dropped, not guessed at', () => 
 
 test('a day that is not a date contributes nothing', () => {
   assert.equal(bucketHour('not-a-day', '06'), null);
-  assert.equal(flattenDayHashes([{ day: 'not-a-day', fields: { '06|surface|curl|/llms.txt': '1' } }]).length, 0);
+  assert.equal(flattenDayHashes([{ day: 'not-a-day', fields: { '06|surface|curl|/llms.txt|': '1' } }]).length, 0);
 });
 
 // ── Rolling windows ──────────────────────────────────────────────────────────────────────────
@@ -141,7 +144,7 @@ test('a window has no timezone: the same buckets give the same numbers whatever 
             .slice(0, 10),
           field: `${hourStart(epochHour(midnightish) - 12)
             .toISOString()
-            .slice(11, 13)}|surface|curl|/llms.txt`,
+            .slice(11, 13)}|surface|curl|/llms.txt|`,
           count: '1',
         },
       ])
@@ -189,6 +192,33 @@ test('surfaces, clients and pages split by event class the way the tables do', (
   assert.equal(summary.totals.total, 12);
   assert.equal(summary.surfaceTotals.total, 10);
   assert.equal(summary.markdownTotals.total, 2);
+});
+
+test('the client table has a row per client and verification state', () => {
+  const summary = summarize([
+    bucket(1, 'surface', 'googlebot', '/robots.txt', 4, 'ip-verified'),
+    bucket(2, 'surface', 'googlebot', '/robots.txt', 3, 'claimed'),
+    bucket(3, 'page', 'google-agent', '/about', 2, 'signed'),
+    bucket(4, 'surface', 'browser', '/llms.txt', 1),
+  ]);
+  assert.deepEqual(
+    summary.clients.rows.map((row) => [row.family, row.verification, row.total]),
+    [
+      ['googlebot', 'ip-verified', 4],
+      ['googlebot', 'claimed', 3],
+      ['google-agent', 'signed', 2],
+      ['browser', '', 1],
+    ]
+  );
+  // The three states totalled, signed first; the browser's request is in none of them.
+  assert.deepEqual(
+    summary.verification.map(({ state, total, day }) => [state, total, day]),
+    [
+      ['signed', 2, 2],
+      ['ip-verified', 4, 4],
+      ['claimed', 3, 3],
+    ]
+  );
 });
 
 test('rows sort by all-time count, ties broken by name so the order is stable', () => {
@@ -289,27 +319,27 @@ test('a day name that is not a date is left alone rather than rewritten', () => 
 test('folding sums the hours away and drops exactly what the reader drops', () => {
   assert.deepEqual(
     foldDayFields({
-      '06|surface|curl|/llms.txt': '2',
-      '09|surface|curl|/llms.txt': '3', // same three components, a different hour
-      '11|surface|gptbot|/llms.txt': '1',
+      '06|surface|curl|/llms.txt|': '2',
+      '09|surface|curl|/llms.txt|': '3', // same three components, a different hour
+      '11|surface|gptbot|/llms.txt|': '1',
       '06|surface|curl': '9', // too few parts
-      '06|invented|curl|/llms.txt': '9', // unknown event class
-      'xx|surface|curl|/llms.txt': '9', // not an hour
-      '07|surface|curl|/agents.md': 'not-a-number',
-      '08|surface|curl|/agents.md': '0',
+      '06|invented|curl|/llms.txt|': '9', // unknown event class
+      'xx|surface|curl|/llms.txt|': '9', // not an hour
+      '07|surface|curl|/agents.md|': 'not-a-number',
+      '08|surface|curl|/agents.md|': '0',
     }),
-    { 'surface|curl|/llms.txt': 5, 'surface|gptbot|/llms.txt': 1 }
+    { 'surface|curl|/llms.txt|': 5, 'surface|gptbot|/llms.txt|': 1 }
   );
 });
 
 test('the fold order removes a day from the set before it adds it to a month', () => {
   // The crash-safety argument in the module: interrupted anywhere, this loses counts rather than
   // adding a day to its month twice. Asserted as an order because that is what it is.
-  const commands = rollupCommands([{ day: '2026-05-04', fields: { '06|surface|curl|/llms.txt': '2' } }]);
+  const commands = rollupCommands([{ day: '2026-05-04', fields: { '06|surface|curl|/llms.txt|': '2' } }]);
   assert.deepEqual(commands, [
     ['SREM', DAYS_KEY, '2026-05-04'],
     ['SADD', MONTHS_KEY, '2026-05'],
-    ['HINCRBY', monthKeyFor('2026-05'), 'surface|curl|/llms.txt', '2'],
+    ['HINCRBY', monthKeyFor('2026-05'), 'surface|curl|/llms.txt|', '2'],
     ['DEL', dayKeyFor('2026-05-04')],
   ]);
 });
@@ -322,8 +352,8 @@ test('a day with nothing foldable in it is removed without minting a month', () 
 });
 
 test('month rows carry no hour, so they reach the all-time total and no rolling window', () => {
-  const rows = flattenMonthHashes([{ month: '2026-05', fields: { 'surface|curl|/llms.txt': '7' } }]);
-  assert.deepEqual(rows, [{ hour: null, event: 'surface', family: 'curl', path: '/llms.txt', count: 7 }]);
+  const rows = flattenMonthHashes([{ month: '2026-05', fields: { 'surface|curl|/llms.txt|': '7' } }]);
+  assert.deepEqual(rows, [{ hour: null, event: 'surface', family: 'curl', path: '/llms.txt', verification: '', count: 7 }]);
 
   const summary = summarizeTraffic(rows, NOW);
   assert.equal(summary.totals.total, 7);
@@ -338,11 +368,11 @@ test('a month field that is not what the schema promises is dropped, not guessed
       {
         month: '2026-05',
         fields: {
-          'surface|curl|/llms.txt': '2',
-          '06|surface|curl|/llms.txt': '9', // a day field, four parts
+          'surface|curl|/llms.txt|': '2',
+          '06|surface|curl|/llms.txt|': '9', // a day field, five parts
           'surface|curl': '9', // too few parts
-          'invented|curl|/llms.txt': '9', // unknown event class
-          'surface|curl|/agents.md': '0',
+          'invented|curl|/llms.txt|': '9', // unknown event class
+          'surface|curl|/agents.md|': '0',
         },
       },
     ]).map((row) => row.path),
@@ -411,8 +441,8 @@ test('rolling up twice is not a double count, because a folded day leaves the se
 // ── Transport ────────────────────────────────────────────────────────────────────────────────
 
 test('HGETALL is accepted as a flat array or as an object', () => {
-  assert.deepEqual(toFieldMap(['06|surface|curl|/llms.txt', '3']), { '06|surface|curl|/llms.txt': '3' });
-  assert.deepEqual(toFieldMap({ '06|surface|curl|/llms.txt': 3 }), { '06|surface|curl|/llms.txt': '3' });
+  assert.deepEqual(toFieldMap(['06|surface|curl|/llms.txt|', '3']), { '06|surface|curl|/llms.txt|': '3' });
+  assert.deepEqual(toFieldMap({ '06|surface|curl|/llms.txt|': 3 }), { '06|surface|curl|/llms.txt|': '3' });
   assert.deepEqual(toFieldMap(null), {});
 });
 
@@ -440,10 +470,17 @@ test('the reader asks for both sets, then one HGETALL per day and per month, by 
       return new Response(
         JSON.stringify(
           first
-            ? [{ result: ['2026-08-06', '2026-08-05'] }, { result: ['2026-05'] }]
+            ? [
+                // v1: one day, one month. v2: two days, no months yet.
+                { result: ['2026-08-01'] },
+                { result: ['2026-05'] },
+                { result: ['2026-08-06', '2026-08-05'] },
+                { result: [] },
+              ]
             : [
-                { result: ['06|surface|curl|/llms.txt', '2'] },
-                { result: ['14|surface|gptbot|/agents.md', '1'] },
+                { result: ['06|surface|curl|/llms.txt', '7'] },
+                { result: ['06|surface|curl|/llms.txt|signed', '2'] },
+                { result: ['14|surface|gptbot|/agents.md|ip-verified', '1'] },
                 { result: ['surface|curl|/llms.txt', '40'] },
               ]
         ),
@@ -453,21 +490,42 @@ test('the reader asks for both sets, then one HGETALL per day and per month, by 
   });
 
   assert.equal(sent[0].url, 'https://store.example/pipeline');
+  // Both versions' sets, v1 first, in one round trip.
   assert.deepEqual(sent[0].commands, [
+    ['SMEMBERS', daysKeyFor(LEGACY_KEY_VERSION)],
+    ['SMEMBERS', monthsKeyFor(LEGACY_KEY_VERSION)],
     ['SMEMBERS', DAYS_KEY],
     ['SMEMBERS', MONTHS_KEY],
   ]);
-  // Sorted, so the hashes line up with the days and months they came from.
+  // Sorted within each version, so the hashes line up with the days and months they came from.
   assert.deepEqual(sent[1].commands, [
+    ['HGETALL', 'hits:v1:day:2026-08-01'],
     ['HGETALL', dayKeyFor('2026-08-05')],
     ['HGETALL', dayKeyFor('2026-08-06')],
-    ['HGETALL', monthKeyFor('2026-05')],
+    ['HGETALL', 'hits:v1:month:2026-05'],
   ]);
   // No day is eligible here, so no lock is taken and no third round trip happens.
   assert.equal(sent.length, 2);
   assert.equal(result.ok, true);
-  assert.deepEqual(result.dayHashes[0], { day: '2026-08-05', fields: { '06|surface|curl|/llms.txt': '2' } });
-  assert.deepEqual(result.monthHashes[0], { month: '2026-05', fields: { 'surface|curl|/llms.txt': '40' } });
+  assert.deepEqual(result.dayHashes[0], { day: '2026-08-01', version: 'v1', fields: { '06|surface|curl|/llms.txt': '7' } });
+  assert.deepEqual(result.dayHashes[1], {
+    day: '2026-08-05',
+    version: 'v2',
+    fields: { '06|surface|curl|/llms.txt|signed': '2' },
+  });
+  assert.deepEqual(result.monthHashes[0], { month: '2026-05', version: 'v1', fields: { 'surface|curl|/llms.txt': '40' } });
+
+  // And the two versions flatten into one row shape: the v1 rows with the empty state.
+  const rows = flattenTraffic(result);
+  assert.deepEqual(
+    rows.map(({ family, verification, count }) => [family, verification, count]),
+    [
+      ['curl', '', 7],
+      ['curl', 'signed', 2],
+      ['gptbot', 'ip-verified', 1],
+      ['curl', '', 40],
+    ]
+  );
 });
 
 test('a month name the schema would not have written is never turned into a key', async () => {
@@ -481,7 +539,9 @@ test('a month name the schema would not have written is never turned into a key'
       sent.push(JSON.parse(init.body));
       return new Response(
         JSON.stringify(
-          sent.length === 1 ? [{ result: [] }, { result: ['2026-13', 'nonsense', '2026-07'] }] : [{ result: [] }]
+          sent.length === 1
+            ? [{ result: [] }, { result: [] }, { result: [] }, { result: ['2026-13', 'nonsense', '2026-07'] }]
+            : [{ result: [] }]
         ),
         { status: 200 }
       );
@@ -495,13 +555,14 @@ test('a month name the schema would not have written is never turned into a key'
 test('two empty sets are a successful read of nothing', async () => {
   const result = await readAgentTraffic({
     env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
-    fetchImpl: async () => new Response(JSON.stringify([{ result: [] }, { result: [] }]), { status: 200 }),
+    fetchImpl: async () =>
+      new Response(JSON.stringify([{ result: [] }, { result: [] }, { result: [] }, { result: [] }]), { status: 200 }),
   });
   assert.deepEqual(result, { ok: true, dayHashes: [], monthHashes: [] });
 });
 
 test('a store that errors is a reason, never a throw', async () => {
-  // Every branch answers the two SMEMBERS commands with the same shape, so what is being tested is
+  // Every branch answers the four SMEMBERS commands with the same shape, so what is being tested is
   // the failure and not an arity mismatch.
   const status = await readAgentTraffic({
     env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
@@ -525,21 +586,27 @@ test('a store that errors is a reason, never a throw', async () => {
 });
 
 /**
- * The store as the reader sees it: two SMEMBERS, then the hash pipeline (whose last command is the
- * lock attempt when a rollup is pending), then the rollup pipeline. `lock` decides what the SET NX
- * answers.
+ * The store as the reader sees it: four SMEMBERS (v1 days and months, then v2), then the hash
+ * pipeline (whose last command is the lock attempt when a rollup is pending), then the rollup
+ * pipeline. `lock` decides what the SET NX answers. `days` and `dayFields` are v2;
+ * `legacyDays` and `legacyDayFields` are v1.
  */
-function storeFetch({ days, months = [], dayFields = {}, lock = 'OK', sent }) {
+function storeFetch({ days, months = [], dayFields = {}, legacyDays = [], legacyDayFields = {}, lock = 'OK', sent }) {
   return async (_url, init) => {
     const commands = JSON.parse(init.body);
     sent.push(commands);
-    if (commands.length === 2 && commands[0][0] === 'SMEMBERS') {
-      return new Response(JSON.stringify([{ result: days }, { result: months }]), { status: 200 });
+    if (commands.length === 4 && commands[0][0] === 'SMEMBERS') {
+      return new Response(
+        JSON.stringify([{ result: legacyDays }, { result: [] }, { result: days }, { result: months }]),
+        { status: 200 }
+      );
     }
     const results = commands.map((command) => {
       if (command[0] === 'SET') return { result: lock };
       if (command[0] === 'HGETALL') {
-        const day = command[1].replace(/^hits:v1:day:/, '');
+        const legacy = command[1].match(/^hits:v1:day:(.+)$/);
+        if (legacy) return { result: legacyDayFields[legacy[1]] ?? [] };
+        const day = command[1].replace(/^hits:v2:day:/, '');
         return { result: dayFields[day] ?? [] };
       }
       return { result: 1 };
@@ -560,7 +627,7 @@ test('a render with an eligible day takes the lock in the read pipeline and then
     now: NOW,
     fetchImpl: storeFetch({
       days: [today, old],
-      dayFields: { [old]: ['06|surface|curl|/llms.txt', '5'] },
+      dayFields: { [old]: ['06|surface|curl|/llms.txt|', '5'] },
       sent,
     }),
   });
@@ -574,12 +641,38 @@ test('a render with an eligible day takes the lock in the read pipeline and then
   assert.deepEqual(sent[2], [
     ['SREM', DAYS_KEY, old],
     ['SADD', MONTHS_KEY, old.slice(0, 7)],
-    ['HINCRBY', monthKeyFor(old.slice(0, 7)), 'surface|curl|/llms.txt', '5'],
+    ['HINCRBY', monthKeyFor(old.slice(0, 7)), 'surface|curl|/llms.txt|', '5'],
     ['DEL', dayKeyFor(old)],
   ]);
 
   // The render that folds still reports the day it folded, so its own numbers are unchanged.
   assert.equal(result.ok, true);
+  assert.equal(summarizeTraffic(flattenTraffic(result), NOW).totals.total, 5);
+});
+
+test('a v1 day folds into a v1 month, in the v1 shape', async () => {
+  const old = hourStart(NOW_HOUR - 1200)
+    .toISOString()
+    .slice(0, 10);
+  const sent = [];
+  const result = await readAgentTraffic({
+    env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
+    now: NOW,
+    fetchImpl: storeFetch({
+      days: [],
+      legacyDays: [old],
+      legacyDayFields: { [old]: ['06|surface|curl|/llms.txt', '5'] },
+      sent,
+    }),
+  });
+
+  assert.equal(sent[1].at(-1)[1], ROLLUP_LOCK_KEY, 'one lock for both versions');
+  assert.deepEqual(sent[2], [
+    ['SREM', daysKeyFor(LEGACY_KEY_VERSION), old],
+    ['SADD', monthsKeyFor(LEGACY_KEY_VERSION), old.slice(0, 7)],
+    ['HINCRBY', monthKeyFor(old.slice(0, 7), LEGACY_KEY_VERSION), 'surface|curl|/llms.txt', '5'],
+    ['DEL', dayKeyFor(old, LEGACY_KEY_VERSION)],
+  ]);
   assert.equal(summarizeTraffic(flattenTraffic(result), NOW).totals.total, 5);
 });
 
@@ -592,7 +685,7 @@ test('losing the lock skips the fold and leaves the read exactly as it is', asyn
   const result = await readAgentTraffic({
     env: { KV_REST_API_URL: 'https://store.example', KV_REST_API_TOKEN: 't' },
     now: NOW,
-    fetchImpl: storeFetch({ days: [old], dayFields: { [old]: ['06|surface|curl|/llms.txt', '5'] }, lock: null, sent }),
+    fetchImpl: storeFetch({ days: [old], dayFields: { [old]: ['06|surface|curl|/llms.txt|', '5'] }, lock: null, sent }),
   });
 
   assert.equal(sent.length, 2, 'no fold pipeline is sent');
@@ -622,7 +715,7 @@ test('a fold that fails is still a successful read', async () => {
     fetchImpl: async (url, init) => {
       call += 1;
       if (call === 3) return new Response('nope', { status: 500 });
-      return storeFetch({ days: [old], dayFields: { [old]: ['06|surface|curl|/llms.txt', '5'] }, sent: [] })(url, init);
+      return storeFetch({ days: [old], dayFields: { [old]: ['06|surface|curl|/llms.txt|', '5'] }, sent: [] })(url, init);
     },
   });
 

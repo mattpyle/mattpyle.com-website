@@ -79,6 +79,23 @@ export const FAMILY_NOTES = Object.freeze({
   'other-bot': 'says it is a bot, unnamed here',
 });
 
+/**
+ * The verification states as the page prints them. The empty state prints nothing: it is an
+ * ordinary visitor, or a hit counted before verification began on 17 Oct 2026, and a word in that
+ * cell would claim a check that was never made.
+ */
+export const VERIFICATION_LABELS = Object.freeze({
+  signed: 'signed',
+  'ip-verified': 'IP-verified',
+  claimed: 'claimed',
+  '': '',
+});
+
+/** @param {string | undefined} state */
+export function verificationLabel(state) {
+  return VERIFICATION_LABELS[/** @type {keyof typeof VERIFICATION_LABELS} */ (state ?? '')] ?? '';
+}
+
 /** Two-digit UTC hour, the form the chart's ticks are written in. @param {number} hour */
 function hourLabel(hour) {
   return String(hour).padStart(2, '0');
@@ -187,10 +204,13 @@ export function buildActivity(rows, now = new Date()) {
     hours,
     lastHour,
     surfaces: summary.surfaces,
+    /** One row per client and verification state; see summarizeTraffic(). */
     clients: {
       rows: summary.clients.rows.map((row) => ({ ...row, kind: clientKind(row.family ?? '') })),
       omitted: summary.clients.omitted,
     },
+    /** Each verification state's totals, `signed` first. */
+    verification: summary.verification,
     pages: summary.pages,
     /**
      * Which of this site's pages named bots have read, from the `page` event class.

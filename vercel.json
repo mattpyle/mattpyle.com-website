@@ -18,6 +18,15 @@
       ]
     },
     {
+      "source": "/llms.txt",
+      "headers": [
+        {
+          "key": "Accept-Signature",
+          "value": "sig1=(\"@authority\" \"signature-agent\";key=\"sig1\");created;expires;keyid;tag=\"web-bot-auth\""
+        }
+      ]
+    },
+    {
       "source": "/.well-known/agent-card.json",
       "headers": [
         { "key": "Content-Type", "value": "application/a2a+json; charset=utf-8" },

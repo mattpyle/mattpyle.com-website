@@ -1,5 +1,6 @@
-import { next, waitUntil } from '@vercel/functions';
+import { ipAddress, next, waitUntil } from '@vercel/functions';
 import { recordHit } from './src/lib/agent-hits.mjs';
+import { identifyRequest } from './src/lib/web-bot-auth.mjs';
 import { formatLogLine, formatSurfaceLine, isAgentSurface } from './src/lib/agent-surfaces.mjs';
 import { markdownSiblingFor, prefersMarkdown } from './src/lib/markdown-negotiation.mjs';
 import { canonicalOnDemandPath } from './src/lib/on-demand-routes.mjs';
@@ -56,9 +57,16 @@ const ENTRY_PAGE = /^\/(?:writing|changelog)\/(?!\d+\/?$)[^/.]+\/?$/;
 // take the log line with it. `waitUntil` keeps the round trip off the response path entirely, and
 // recordHit() already swallows everything it can; this catch covers the one gap that leaves, a
 // throw raised before waitUntil is handed a promise.
+//
+// Web Bot Auth verification rides inside the same `waitUntil`. identifyRequest() starts here and
+// recordHit() awaits it, so a key-directory fetch delays the count and never the response, and a
+// verification that fails is a hit counted on its user agent alone (src/lib/web-bot-auth.mjs).
+// The address goes in and does not come out: it is tested against the published bot ranges and
+// dropped, and only a state from a fixed list reaches the store.
 function countHit(event: 'surface' | 'markdown' | 'page', path: string, request: Request): void {
   try {
-    waitUntil(recordHit({ event, path, ua: request.headers.get('user-agent') }));
+    const identity = identifyRequest(request, { address: ipAddress(request) ?? null });
+    waitUntil(recordHit({ event, path, ua: request.headers.get('user-agent'), identity }));
   } catch {
     // Deliberately empty: observation is never worth a failed response.
   }

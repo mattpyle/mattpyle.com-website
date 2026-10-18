@@ -29,8 +29,44 @@ import { PAGE_PATHS } from '../data/page-paths.mjs';
  * Version prefix on every key. A later reshape of the schema writes `v2` beside `v1` and the
  * render layer decides what to do with both; without this, a reshape is a guess about which of two
  * incompatible shapes a given key predates.
+ *
+ * `v2`, from 2026-10-17, is that reshape: every field gains a fifth part, the request's
+ * verification state (VERIFICATION_STATES below). New hits write `v2` keys only. The `v1` keys are
+ * never written again and never deleted; the read side reads both and gives every `v1` row the
+ * empty state, which is true of it: nothing was checked when it was counted.
  */
-export const KEY_VERSION = 'v1';
+export const KEY_VERSION = 'v2';
+
+/** The version every hit before 2026-10-17 was written under. Read, rolled up, never written. */
+export const LEGACY_KEY_VERSION = 'v1';
+
+/** Every version a reader has to read, oldest first. */
+export const KEY_VERSIONS = Object.freeze([LEGACY_KEY_VERSION, KEY_VERSION]);
+
+/**
+ * What the site could prove about who sent a request, strongest first. src/lib/web-bot-auth.mjs
+ * decides; this module only stores the answer.
+ *
+ * | State | Meaning |
+ * |---|---|
+ * | `signed` | a Web Bot Auth signature verified against the key its operator publishes |
+ * | `ip-verified` | no valid signature, but the address is in a range the operator publishes |
+ * | `claimed` | a named client by user agent, and nothing else |
+ *
+ * The empty string is the fourth value: an ordinary visitor, or a client nobody can name. Four
+ * values in all, so the new key part keeps property 2.
+ */
+export const VERIFICATION_STATES = Object.freeze(['signed', 'ip-verified', 'claimed']);
+
+/** The state for a request that is none of the three. */
+export const NO_VERIFICATION = '';
+
+const STATES = new Set([...VERIFICATION_STATES, NO_VERIFICATION]);
+
+/** Is this a state the schema stores? Guards the write path against a caller's typo. */
+export function isVerificationState(state) {
+  return STATES.has(state);
+}
 
 /**
  * The three event classes, each a different finding.
@@ -107,6 +143,10 @@ export const CLIENT_FAMILIES = [
   { family: 'anthropic-ai', match: /anthropic-ai/i },
   { family: 'perplexitybot', match: /perplexitybot/i },
   { family: 'perplexity-user', match: /perplexity-user/i },
+  // Google's user-triggered agent fetcher. Its user agent is a full Chrome string with the token in
+  // a trailing comment, so without this line it classifies as a browser. Some of its requests are
+  // signed with Web Bot Auth under https://agent.bot.goog (src/lib/web-bot-auth.mjs).
+  { family: 'google-agent', match: /google-agent/i },
   { family: 'google-extended', match: /google-extended/i },
   { family: 'googleother', match: /googleother/i },
   { family: 'googlebot', match: /googlebot/i },
@@ -118,6 +158,11 @@ export const CLIENT_FAMILIES = [
   { family: 'applebot', match: /applebot/i },
   { family: 'cohere-ai', match: /cohere-ai/i },
   { family: 'amazonbot', match: /amazonbot/i },
+
+  // ChatGPT agent sends an ordinary Chrome user agent and signs every request under
+  // https://chatgpt.com. It has no `match`: no user agent can claim this family, only a signature
+  // that verifies against OpenAI's directory (KNOWN_SIGNERS in src/lib/web-bot-auth.mjs).
+  { family: 'chatgpt-agent', match: null },
 
   // This site's own auditor, which reads 25 pages here every night and audits other people's
   // sites under the same token. Named like any other crawler, and above `other-bot` so the
@@ -156,13 +201,23 @@ export const ABSENT_FAMILY = 'none';
  */
 export function classifyClient(ua) {
   if (!ua || !ua.trim()) return ABSENT_FAMILY;
-  const found = CLIENT_FAMILIES.find(({ match }) => match.test(ua));
+  const found = CLIENT_FAMILIES.find(({ match }) => match?.test(ua));
   return found ? found.family : FALLBACK_FAMILY;
 }
 
 /** Every family that can ever appear in a key. The render layer can build its rows from this. */
 export function knownFamilies() {
   return [...CLIENT_FAMILIES.map(({ family }) => family), FALLBACK_FAMILY, ABSENT_FAMILY];
+}
+
+const KNOWN_FAMILIES = new Set(knownFamilies());
+
+/**
+ * Is this a family the schema stores? A family handed in by a caller, rather than classified here,
+ * passes through this first, so a signature-derived family cannot widen the key space either.
+ */
+export function isKnownFamily(family) {
+  return KNOWN_FAMILIES.has(family);
 }
 
 /** The one named family that is a person rather than a machine. */
@@ -262,37 +317,58 @@ export function counterPath(event, pathname) {
   return page;
 }
 
-/** The set holding every UTC day that has a hash, so a reader never has to SCAN. */
-export const DAYS_KEY = `hits:${KEY_VERSION}:days`;
-
-/** The all-time counter. */
-export const TOTAL_KEY = `hits:${KEY_VERSION}:total`;
-
-/** The hash holding one UTC day. @param {string} day YYYY-MM-DD, UTC @returns {string} */
-export function dayKeyFor(day) {
-  return `hits:${KEY_VERSION}:day:${day}`;
+/** The set holding every UTC day that has a hash, so a reader never has to SCAN. @param {string} [version] */
+export function daysKeyFor(version = KEY_VERSION) {
+  return `hits:${version}:days`;
 }
+
+/** The all-time counter. @param {string} [version] */
+export function totalKeyFor(version = KEY_VERSION) {
+  return `hits:${version}:total`;
+}
+
+/** The hash holding one UTC day. @param {string} day YYYY-MM-DD, UTC @param {string} [version] @returns {string} */
+export function dayKeyFor(day, version = KEY_VERSION) {
+  return `hits:${version}:day:${day}`;
+}
+
+/** The current version's day set and counter, the two keys a hit writes beside its day hash. */
+export const DAYS_KEY = daysKeyFor();
+export const TOTAL_KEY = totalKeyFor();
 
 /**
  * The rollup keys. Nothing in the write path below ever touches these: they are written by the
  * read path (src/lib/agent-traffic.mjs) when it notices a day old enough that no rendered number
  * can still reach its hours. They live here because the schema lives here, both directions.
  *
- * Month keys sit BESIDE the v1 day keys rather than reshaping them. A day hash still means exactly
- * what it meant; a month hash is the same counts with the hour dropped, because past the longest
- * rolling window the hour is provably unused (see agent-traffic.mjs for that argument).
+ * Month keys sit BESIDE the day keys of the same version rather than reshaping them. A day hash
+ * still means exactly what it meant; a month hash is the same counts with the hour dropped, because
+ * past the longest rolling window the hour is provably unused (see agent-traffic.mjs for that
+ * argument). A `v1` day folds into a `v1` month and a `v2` day into a `v2` month, so neither
+ * version's fields are ever rewritten into the other's shape.
  */
 
-/** The set holding every UTC month that has a rollup hash, so a reader never has to SCAN. */
-export const MONTHS_KEY = `hits:${KEY_VERSION}:months`;
-
-/** The hash holding one rolled-up UTC month. @param {string} month YYYY-MM, UTC @returns {string} */
-export function monthKeyFor(month) {
-  return `hits:${KEY_VERSION}:month:${month}`;
+/** The set holding every UTC month that has a rollup hash, so a reader never has to SCAN. @param {string} [version] */
+export function monthsKeyFor(version = KEY_VERSION) {
+  return `hits:${version}:months`;
 }
 
-/** The lock a render takes before it moves any day into a month. */
-export const ROLLUP_LOCK_KEY = `hits:${KEY_VERSION}:rollup`;
+/** The current version's month set. */
+export const MONTHS_KEY = monthsKeyFor();
+
+/** The hash holding one rolled-up UTC month. @param {string} month YYYY-MM, UTC @param {string} [version] @returns {string} */
+export function monthKeyFor(month, version = KEY_VERSION) {
+  return `hits:${version}:month:${month}`;
+}
+
+/**
+ * The lock a render takes before it moves any day into a month.
+ *
+ * Still the `v1` name, on purpose, and shared by both versions: during a deploy an old render and a
+ * new one can run side by side, both reading `v1` days. One lock between them is what stops the
+ * two from folding the same day twice.
+ */
+export const ROLLUP_LOCK_KEY = `hits:${LEGACY_KEY_VERSION}:rollup`;
 
 /** The UTC month a stored day belongs to. @param {string} day YYYY-MM-DD @returns {string} */
 export function monthOf(day) {
@@ -304,39 +380,48 @@ export function isCounterMonth(month) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
 }
 
-/** The field delimiter inside a day hash. Cannot appear in an hour, event, family or path. */
+/** The field delimiter inside a day hash. Cannot appear in an hour, event, family, path or state. */
 const FIELD_DELIMITER = '|';
+
+/** How many parts a field has, per version and hash kind. */
+const DAY_FIELD_PARTS = Object.freeze({ v1: 4, v2: 5 });
+const MONTH_FIELD_PARTS = Object.freeze({ v1: 3, v2: 4 });
 
 /**
  * A day-hash field, back into its parts. The inverse of the `field` built in hitKeys(), and the
  * reason src/lib/agent-traffic.mjs never rebuilds the schema: both directions live here, so a
  * reshape of the key is one file rather than a hunt.
  *
- * A field that does not split into exactly four parts is returned as null rather than guessed at.
- * The only way one can exist is a schema change that forgot to bump KEY_VERSION, and a reader
- * dropping the row it cannot parse beats a reader inventing a path from it.
+ * A field that does not split into exactly the parts its version promises is returned as null
+ * rather than guessed at. The only way one can exist is a schema change that forgot to bump
+ * KEY_VERSION, and a reader dropping the row it cannot parse beats a reader inventing a path from
+ * it. A `v1` field parses with the empty verification state, which is what it is.
  *
  * @param {string} field
- * @returns {{ hour: string, event: string, family: string, path: string } | null}
+ * @param {string} [version]
+ * @returns {{ hour: string, event: string, family: string, path: string, verification: string } | null}
  */
-export function parseHitField(field) {
+export function parseHitField(field, version = KEY_VERSION) {
   const parts = field.split(FIELD_DELIMITER);
-  if (parts.length !== 4) return null;
-  const [hour, event, family, path] = parts;
+  if (parts.length !== DAY_FIELD_PARTS[version]) return null;
+  const [hour, event, family, path, verification = NO_VERIFICATION] = parts;
   if (!/^\d{2}$/.test(hour) || !EVENTS.includes(event) || !family || !path) return null;
-  return { hour, event, family, path };
+  if (!isVerificationState(verification)) return null;
+  return { hour, event, family, path, verification };
 }
 
 /**
- * A day-hash row, as the month-hash field it rolls up into: the same three components with the
- * hour dropped. Three parts rather than four is what makes the two field shapes impossible to
- * confuse, in either direction, without a version bump.
+ * A day-hash row, as the month-hash field it rolls up into: the same components with the hour
+ * dropped. One part fewer than the day field of the same version, which is what makes the two
+ * shapes impossible to confuse within a version.
  *
- * @param {{ event: string, family: string, path: string }} row
+ * @param {{ event: string, family: string, path: string, verification?: string }} row
+ * @param {string} [version]
  * @returns {string}
  */
-export function monthFieldFor({ event, family, path }) {
-  return [event, family, path].join(FIELD_DELIMITER);
+export function monthFieldFor({ event, family, path, verification = NO_VERIFICATION }, version = KEY_VERSION) {
+  const parts = version === LEGACY_KEY_VERSION ? [event, family, path] : [event, family, path, verification];
+  return parts.join(FIELD_DELIMITER);
 }
 
 /**
@@ -344,14 +429,16 @@ export function monthFieldFor({ event, family, path }) {
  * exactly what the schema promises is returned as null and dropped by the caller, never guessed at.
  *
  * @param {string} field
- * @returns {{ event: string, family: string, path: string } | null}
+ * @param {string} [version]
+ * @returns {{ event: string, family: string, path: string, verification: string } | null}
  */
-export function parseMonthField(field) {
+export function parseMonthField(field, version = KEY_VERSION) {
   const parts = field.split(FIELD_DELIMITER);
-  if (parts.length !== 3) return null;
-  const [event, family, path] = parts;
+  if (parts.length !== MONTH_FIELD_PARTS[version]) return null;
+  const [event, family, path, verification = NO_VERIFICATION] = parts;
   if (!EVENTS.includes(event) || !family || !path) return null;
-  return { event, family, path };
+  if (!isVerificationState(verification)) return null;
+  return { event, family, path, verification };
 }
 
 /**
@@ -362,43 +449,53 @@ export function parseMonthField(field) {
  *
  * | Key | Type | Answers |
  * |---|---|---|
- * | `hits:v1:day:<utc-day>` | hash, field `<utc-hour>\|<event>\|<family>\|<path>` | everything about one UTC day, at hour resolution, in one HGETALL |
- * | `hits:v1:days` | set of UTC days | which days exist, so a trend view never has to SCAN |
- * | `hits:v1:total` | counter | the one number the retro homepage widget wants |
+ * | `hits:v2:day:<utc-day>` | hash, field `<utc-hour>\|<event>\|<family>\|<path>\|<verification>` | everything about one UTC day, at hour resolution, in one HGETALL |
+ * | `hits:v2:days` | set of UTC days | which days exist, so a trend view never has to SCAN |
+ * | `hits:v2:total` | counter | the one number the retro homepage widget wants |
  *
  * And three more that no hit ever writes, added 2026-08-06 so a render's cost stops growing with
  * the site's age. The read path writes them; see src/lib/agent-traffic.mjs.
  *
  * | Key | Type | Answers |
  * |---|---|---|
- * | `hits:v1:month:<utc-month>` | hash, field `<event>\|<family>\|<path>` | one whole UTC month, hour dropped, in one HGETALL |
- * | `hits:v1:months` | set of UTC months | which months exist, the month set's twin |
- * | `hits:v1:rollup` | string with a TTL | the lock one render holds while it folds days into a month |
+ * | `hits:v2:month:<utc-month>` | hash, field `<event>\|<family>\|<path>\|<verification>` | one whole UTC month, hour dropped, in one HGETALL |
+ * | `hits:v2:months` | set of UTC months | which months exist, the month set's twin |
+ * | `hits:v1:rollup` | string with a TTL | the lock one render holds while it folds days into a month, for both versions |
+ *
+ * The `v1` keys have the same shape with the verification part absent: four parts in a day field,
+ * three in a month field. They hold every hit from 2026-07-21 to 2026-10-17.
  *
  * The hour leads the field so a prefix match answers "this hour" without parsing, and so the
  * fields of a day sort into chronological order.
  *
- * A day's hash holds at most (24 hours x 3 events x ~30 families x ~60 paths) fields and
- * realistically a few dozen, so one round trip answers totals, per-client, per-path and per-hour
- * for any window, in any timezone. Nothing expires and nothing is thrown away: a day past every
- * rolling window is folded into its month rather than deleted, so the all-time numbers are
+ * A day's hash holds at most (24 hours x 3 events x ~30 families x ~60 paths x 4 states) fields
+ * and realistically a few dozen, so one round trip answers totals, per-client, per-path and
+ * per-hour for any window, in any timezone. Nothing expires and nothing is thrown away: a day past
+ * every rolling window is folded into its month rather than deleted, so the all-time numbers are
  * unchanged and only the hour, which nothing renders at that age, is gone.
  *
- * The field delimiter is `|`, which cannot appear in an hour, an event, a family or a bucketed
- * path.
+ * The field delimiter is `|`, which cannot appear in an hour, an event, a family, a bucketed path
+ * or a state.
  *
- * @param {{ event: string, path: string, ua?: string | null, now?: Date }} hit
+ * `family` and `verification` are optional and come from src/lib/web-bot-auth.mjs, which can name
+ * a family from a verified signature where the user agent names none. Either one that is not in
+ * the schema's own lists is replaced by what the user agent alone would give, so a caller cannot
+ * mint a key part either.
+ *
+ * @param {{ event: string, path: string, ua?: string | null, family?: string,
+ *           verification?: string, now?: Date }} hit
  * @returns {{ day: string, hour: string, event: string, family: string, path: string,
- *             field: string, dayKey: string, daysKey: string, totalKey: string,
- *             commands: string[][] }}
+ *             verification: string, field: string, dayKey: string, daysKey: string,
+ *             totalKey: string, commands: string[][] }}
  */
-export function hitKeys({ event, path, ua, now = new Date() }) {
+export function hitKeys({ event, path, ua, family, verification, now = new Date() }) {
   if (!EVENTS.includes(event)) throw new Error(`unknown event class: ${event}`);
   const day = counterDay(now);
   const hour = counterHour(now);
-  const family = classifyClient(ua);
+  const countedFamily = family && isKnownFamily(family) ? family : classifyClient(ua);
+  const state = verification && isVerificationState(verification) ? verification : NO_VERIFICATION;
   const countedPath = counterPath(event, path);
-  const field = [hour, event, family, countedPath].join(FIELD_DELIMITER);
+  const field = [hour, event, countedFamily, countedPath, state].join(FIELD_DELIMITER);
 
   const dayKey = dayKeyFor(day);
   const daysKey = DAYS_KEY;
@@ -408,8 +505,9 @@ export function hitKeys({ event, path, ua, now = new Date() }) {
     day,
     hour,
     event,
-    family,
+    family: countedFamily,
     path: countedPath,
+    verification: state,
     field,
     dayKey,
     daysKey,
@@ -448,24 +546,36 @@ const STORE_TIMEOUT_MS = 1500;
  * try/catch here is belt to that braces, because a throw inside a `waitUntil` argument happens
  * before `waitUntil` ever sees a promise.
  *
+ * `identity` is the verification result for this request, or a promise of it: the middleware
+ * hands in identifyRequest() from src/lib/web-bot-auth.mjs unawaited, so a directory fetch runs
+ * inside the same `waitUntil` as the count and never in front of the response. A rejected or
+ * malformed identity falls back to the user agent alone.
+ *
  * @param {{ event: string, path: string, ua?: string | null, now?: Date,
+ *           identity?: { family?: string, verification?: string }
+ *             | Promise<{ family?: string, verification?: string }>,
  *           env?: Record<string, string | undefined>, fetchImpl?: typeof fetch }} hit
  * @returns {Promise<{ ok: boolean, reason?: string, field?: string, day?: string }>}
  */
-export async function recordHit({ event, path, ua, now, env = process.env, fetchImpl = fetch }) {
+export async function recordHit({ event, path, ua, now, identity, env = process.env, fetchImpl = fetch }) {
   let keys;
   try {
+    const { family, verification } = await settleIdentity(identity);
+    const countedFamily = family && isKnownFamily(family) ? family : classifyClient(ua);
+
     // Before the store is even looked up, so the bots-only rule holds in every environment and a
     // test can assert that a browser's page view attempted no network call at all. A page view by
-    // a person is not undercounted here, it is not counted: see the EVENTS table above.
-    if (event === 'page' && !isPageClient(classifyClient(ua))) {
+    // a person is not undercounted here, it is not counted: see the EVENTS table above. The family
+    // is the verified one when there is one, so an agent with a browser's user agent that proves
+    // who it is by signature is counted as the agent it proved to be.
+    if (event === 'page' && !isPageClient(countedFamily)) {
       return { ok: false, reason: 'not-a-bot' };
     }
 
     const store = readStoreConfig(env);
     if (!store) return { ok: false, reason: 'no-store' };
 
-    keys = hitKeys({ event, path, ua, now });
+    keys = hitKeys({ event, path, ua, family: countedFamily, verification, now });
 
     const response = await fetchImpl(`${store.url}/pipeline`, {
       method: 'POST',
@@ -483,5 +593,15 @@ export async function recordHit({ event, path, ua, now, env = process.env, fetch
     // Deliberately swallowed, per the posture this inherits from the middleware's surface branch:
     // observation is never worth a failed response. Undercounting is the acceptable failure.
     return { ok: false, reason: error instanceof Error ? error.name : 'error', field: keys?.field };
+  }
+}
+
+/** An identity, awaited, with a rejection turned into "nothing was proved". */
+async function settleIdentity(identity) {
+  try {
+    const settled = await identity;
+    return settled && typeof settled === 'object' ? settled : {};
+  } catch {
+    return {};
   }
 }

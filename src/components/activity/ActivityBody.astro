@@ -46,7 +46,7 @@
  * src/styles/retro.css. The prefix is load-bearing — Astro appends a `[data-astro-cid-…]` to the
  * selectors below and that attribute counts as a class, so a retro rule without it loses silently.
  */
-import { FAMILY_NOTES } from '../../lib/activity-summary.mjs';
+import { FAMILY_NOTES, verificationLabel } from '../../lib/activity-summary.mjs';
 import { MAX_TABLE_ROWS } from '../../lib/agent-traffic.mjs';
 // The store counts the page path a client asked for; the table shows the URL that answered, so a
 // row reads as the markdown document it was. Same function the middleware derives the sibling
@@ -251,11 +251,18 @@ function familyNote(family: string): string | undefined {
                 column name explains nothing, the label is what explains the swatch. */}
             <span class="legend"><span class="legend-swatch" aria-hidden="true"></span> bot/agent</span>
           </div>
+          {/*
+            One row per client AND verification state, since 2026-10-17 (src/lib/web-bot-auth.mjs):
+            googlebot from its published ranges and googlebot by user agent alone are different
+            findings. The state cell is blank for an ordinary visitor and for a hit counted before
+            checks began, and the legend under the table says so.
+          */}
           <table class="grid-table client-table">
             <thead>
               <tr>
                 <th scope="col" class="c-marker"><span class="sr-only">bot or agent</span></th>
                 <th scope="col" class="c-client">Client</th>
+                <th scope="col" class="c-state">Verified</th>
                 <th scope="col" class="c-num">7 days</th>
                 <th scope="col" class="c-num">30 days</th>
               </tr>
@@ -267,6 +274,7 @@ function familyNote(family: string): string | undefined {
                     <span class:list={['marker', row.kind === 'agent' && 'marker--agent']} aria-hidden="true"></span>
                   </td>
                   <td class="c-client">{row.family}{familyNote(row.family ?? '') && <span class="family-note"> ({familyNote(row.family ?? '')})</span>}</td>
+                  <td class="c-state">{verificationLabel(row.verification)}</td>
                   <td class="c-num c-lead">{counts.format(row.week)}</td>
                   <td class="c-num">{counts.format(row.month)}</td>
                 </tr>
@@ -276,6 +284,7 @@ function familyNote(family: string): string | undefined {
           {activity.clients.omitted > 0 && (
             <p class="omitted">{activity.clients.omitted} further client(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
           )}
+          <p class="state-legend">Signed: a Web Bot Auth signature checked against the operator's published key. IP-verified: an address in the operator's published ranges. Claimed: the user agent alone. Blank on a bot: counted before checks began on 17 Oct 2026.</p>
         </section>
 
         <section class="table-half" aria-labelledby="activity-markdown-title">
@@ -325,7 +334,7 @@ function familyNote(family: string): string | undefined {
     <div>
       <h2 id="activity-how-title">How this is counted</h2>
       <p class="how-prose">
-        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
+        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
       </p>
     </div>
     <div class="as-data">
@@ -582,6 +591,23 @@ function familyNote(family: string): string | undefined {
   .client-table th:nth-child(2),
   .client-table td:nth-child(2) { padding-left: 16px; }
 
+  /* The verification state steps back like a path does: the client is the row's subject, and the
+     state is what the site could prove about it. */
+  .grid-table .c-state {
+    width: 118px;
+    padding-left: 16px;
+  }
+
+  .grid-table td.c-state { color: var(--ink-2); }
+
+  .state-legend {
+    margin: 14px 0 0;
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink-6);
+    text-wrap: pretty;
+  }
+
   .hour-table .c-client { width: 220px; }
 
   .hour-table .c-num { width: 110px; }
@@ -807,6 +833,10 @@ function familyNote(family: string): string | undefined {
     .bot-page-table td.c-num { padding-left: 12px; }
 
     .hour-table .c-num { width: 68px; }
+
+    .grid-table .c-state { width: 100px; padding-left: 12px; }
+
+    .state-legend { font-size: 16px; }
 
     .hour-table thead tr,
     .hour-table tbody tr { grid-template-columns: 9px minmax(0, 1fr) 68px; }

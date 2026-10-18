@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { buildActivity, utcStamp } from '../lib/activity-summary.mjs';
+import { buildActivity, utcStamp, verificationLabel } from '../lib/activity-summary.mjs';
 import { flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 import { SITE_ORIGIN } from '../data/site-origin.mjs';
@@ -122,10 +122,11 @@ export const GET: APIRoute = async () => {
         : 'No named bot has fetched an ordinary page yet.',
       '## By client',
       table(
-        ['Client', 'Kind', '7 days', '30 days', 'Recorded'],
+        ['Client', 'Kind', 'Verified', '7 days', '30 days', 'Recorded'],
         activity.clients.rows.map(row => [
           row.family ?? '',
           row.kind,
+          verificationLabel(row.verification),
           row.week,
           row.month,
           row.total,
@@ -155,7 +156,7 @@ export const GET: APIRoute = async () => {
 
   sections.push(
     '## How this is counted',
-    "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
   );
 
   return new Response(`${sections.join('\n\n')}\n`, {

@@ -2013,6 +2013,20 @@ html[data-appearance='retro'] [data-module='activity-body'] .family-note {
   color: var(--retro-ink-muted);
 }
 
+/* The verification state reads as a label, set like the paths, and its legend
+   like the other notes beneath a table. */
+html[data-appearance='retro'] [data-module='activity-body'] .grid-table td.c-state {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='activity-body'] .state-legend {
+  font-family: var(--retro-font-mono);
+  font-size: 14px;
+  color: var(--retro-ink-muted);
+}
+
 html[data-appearance='retro'] [data-module='activity-body'] .band-empty {
   font-family: var(--retro-font-body);
   color: var(--retro-ink);
