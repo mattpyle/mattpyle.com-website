@@ -2,7 +2,7 @@
 
 The rulebook for an agent changing Steward's code. It routes to the authoritative sources and states the rules they leave implicit. Where this file and a source disagree, the source wins; fix this file in the same change.
 
-The repository rules in the root `CLAUDE.md` apply here too: the worker restart rule, the workspace import rule, the rule on caps in the environment, and the rule on test literals. This file does not repeat them.
+The repository rules in the root `CLAUDE.md` apply here too: the Steward workspace import rule, the worktree rule, and the Temporal rule. This file does not repeat them.
 
 ## What Steward is
 
