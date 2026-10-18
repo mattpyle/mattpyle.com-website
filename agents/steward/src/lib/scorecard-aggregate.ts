@@ -294,6 +294,12 @@ export interface AuditSetGuardResult {
  * An **empty** set is failed unconditionally, past both overrides: a run that
  * audits nothing has no legitimate form, and `--urls` can never produce one
  * (the CLI drops empty entries, and an empty list falls back to the sitemap).
+ *
+ * This guard counts URLs, before the fan-out. It cannot see a run that resolves
+ * every URL and then audits none of them, as every night of the 2026-09-27
+ * chromedriver outage did. That case is guarded after the fan-out, at the
+ * workflow's step 3: zero `ok` pages is a `no-op` with no run-log PR, and
+ * `scorecardRunShape` fails the run's health ping.
  */
 export function checkAuditSet(input: AuditSetGuardInput): AuditSetGuardResult {
   const { resolvedCount, previousCount, overridden, allowShrink } = input;

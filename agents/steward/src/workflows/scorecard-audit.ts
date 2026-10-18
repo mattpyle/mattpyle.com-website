@@ -396,9 +396,33 @@ async function runScorecardAudit(
   // `candidate`, because the gate compares them (spec §6, trigger 3): they
   // describe what was measured, and a change in coverage is news even when
   // every number held.
+  //
+  // A run that audited no page at all is decided here, not in `decidePublish`.
+  // `normalize()` scores an errored page 0, which is right for one page; for all
+  // of them it reads as a site that scored 0, and `decidePublish` would open a
+  // run-log PR for a measurement nobody took. Zero `ok` pages is a worker
+  // failure: `no-op`, archived at step 5 with each page's error, and a failed
+  // health ping. `checkAuditSet` guards the URL count before the fan-out; this
+  // guards the audited count after it. One `ok` page is enough to fall through,
+  // because a partial failure still publishes (it already blocks green).
+  //
+  // Replay: no command is added or reordered, so no `patched()` marker. The
+  // all-failed path drops its step-4 publish call; every other path issues the
+  // commands it always did. This workflow never parks, so the only history the
+  // change could strand is an all-failed `pr`-mode run that a deploy catches
+  // past step 4. The dry-run replay fixture skips step 4 and replays unchanged.
   const scope = `${urls.length} live page${urls.length === 1 ? '' : 's'}`;
   const tools = ['Lighthouse 13.4', 'axe-core 4.12'];
-  const decision = decidePublish({ iso, metrics, scope, tools }, published, input.maxAgeDays);
+  const auditedCount = perPage.filter((p) => p.ok).length;
+  const decision: PublishDecision =
+    auditedCount === 0
+      ? {
+          decision: 'no-op',
+          reason:
+            `the auditor read 0 of ${perPage.length} pages, so the run measured the worker, ` +
+            'not the site; no run-log PR',
+        }
+      : decidePublish({ iso, metrics, scope, tools }, published, input.maxAgeDays);
 
   const candidate: Omit<ScorecardRunRecord, 'id'> = {
     iso,
