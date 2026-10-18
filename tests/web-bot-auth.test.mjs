@@ -23,13 +23,14 @@ import {
   verifyRequestSignature,
 } from '../src/lib/web-bot-auth.mjs';
 import { isKnownFamily } from '../src/lib/agent-hits.mjs';
-import { SOURCES, normaliseRangeList } from '../scripts/refresh-bot-ranges.mjs';
+import { SOURCES, normaliseRangeList, renderRangesModule } from '../scripts/refresh-bot-ranges.mjs';
+import { BOT_RANGES } from '../src/data/bot-ranges.mjs';
 
 // Web Bot Auth on the way in. No test here touches the network: every key set is served by a
 // fetch stand-in, and every key is either the RFC 9421 test key (public half only, for the draft's
 // own vectors) or a throwaway pair generated when the test runs.
 
-const botRanges = JSON.parse(readFileSync(new URL('../src/data/bot-ranges.json', import.meta.url), 'utf8'));
+const botRanges = BOT_RANGES;
 const vercelConfig = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 const CHROME =
@@ -474,7 +475,7 @@ test('an address is in a family range or it is not, in both IP versions', () => 
 
 test('the committed ranges carry their fetch date and only name families the counter stores', () => {
   assert.match(botRanges.fetched, /^\d{4}-\d{2}-\d{2}$/);
-  assert.ok(botRanges.sources.length >= SOURCES.length - 0);
+  assert.ok(botRanges.sources.length === SOURCES.length);
   for (const { family, url, prefixes } of botRanges.sources) {
     assert.ok(isKnownFamily(family), family);
     assert.ok(SOURCES.some((source) => source.family === family && source.url === url), url);
@@ -506,4 +507,26 @@ test('/llms.txt carries the Accept-Signature this module defines', () => {
   assert.match(ACCEPT_SIGNATURE, /"@authority"/);
   assert.match(ACCEPT_SIGNATURE, /"signature-agent";key="sig1"/);
   assert.match(ACCEPT_SIGNATURE, /tag="web-bot-auth"/);
+});
+
+test('the committed ranges module is exactly what the refresh script writes', () => {
+  const committed = readFileSync(new URL('../src/data/bot-ranges.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  assert.equal(committed, renderRangesModule(BOT_RANGES));
+});
+
+test('nothing the middleware imports uses an import attribute', () => {
+  // Vercel's middleware bundler rejects `import ... with { type: 'json' }`, and the failure only
+  // shows on a deploy. The middleware's own modules are checked here instead.
+  const files = [
+    '../middleware.ts',
+    '../src/lib/web-bot-auth.mjs',
+    '../src/lib/agent-hits.mjs',
+    '../src/lib/agent-traffic.mjs',
+    '../src/lib/activity-summary.mjs',
+    '../src/data/bot-ranges.mjs',
+  ];
+  for (const file of files) {
+    const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /^import[^;]+\bwith\s*\{/m, file);
+  }
 });

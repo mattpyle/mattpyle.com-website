@@ -37,7 +37,7 @@ import { parseSignatureAgentHeader, verify } from 'web-bot-auth';
 import { verifierFromJWK } from 'web-bot-auth/crypto';
 import { NO_VERIFICATION, classifyClient, isPageClient } from './agent-hits.mjs';
 import { clientKind } from './activity-summary.mjs';
-import botRanges from '../data/bot-ranges.json' with { type: 'json' };
+import { BOT_RANGES } from '../data/bot-ranges.mjs';
 
 /** The well-known path a `directory` member resolves to (draft section 8.1). */
 export const DIRECTORY_PATH = '/.well-known/http-message-signatures-directory';
@@ -84,7 +84,7 @@ let rangesByFamily = null;
 function ranges() {
   if (rangesByFamily) return rangesByFamily;
   rangesByFamily = new Map();
-  for (const { family, prefixes } of botRanges.sources ?? []) {
+  for (const { family, prefixes } of BOT_RANGES.sources ?? []) {
     const list = rangesByFamily.get(family) ?? [];
     for (const prefix of prefixes ?? []) {
       const parsed = parseCidr(prefix);
