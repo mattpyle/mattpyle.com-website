@@ -23,7 +23,7 @@ test('latestDate returns the newest valid calendar date', { skip: !policy }, () 
 });
 
 test('static routes resolve against the site-wide significant-change date', { skip: !policy }, () => {
-  assert.equal(policy.resolveStaticLastmod('/about/'), '2026-07-15');
+  assert.equal(policy.resolveStaticLastmod('/about/'), '2026-10-02');
   assert.equal(policy.resolveStaticLastmod('/missing/'), undefined);
 });
 
@@ -107,7 +107,7 @@ test('sitemap resolver covers static, index, published, draft, and unknown route
     ['draft', { draft: true, lastmod: '2026-07-20' }],
   ]);
 
-  assert.equal(policy.resolveSitemapLastmod('/', writing), '2026-07-15');
+  assert.equal(policy.resolveSitemapLastmod('/', writing), '2026-10-02');
   assert.equal(policy.resolveSitemapLastmod('/writing/', writing), '2026-07-16');
   assert.equal(policy.resolveSitemapLastmod('/writing/older/', writing), '2026-07-15');
   assert.equal(policy.resolveSitemapLastmod('/writing/draft/', writing), undefined);
