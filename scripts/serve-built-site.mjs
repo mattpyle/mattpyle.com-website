@@ -21,12 +21,18 @@
  * Usage:
  *   node scripts/serve-built-site.mjs [--port 4321] [--root dist/client] [--host 127.0.0.1]
  *
+ * /build-stamp.txt is the build stamp as it was when THIS process started, not the file as it is
+ * now. After a rebuild the file on disk is new while this process still holds the old render
+ * function, so serving the file would let a stale orphan pass for current. The a11y suite compares
+ * what a server answers with the file on disk (tests/a11y/global-setup.ts). 404 when the build had
+ * no stamp at startup.
+ *
  * AGENT_TRAFFIC_FIXTURE=1 makes the traffic section render canned numbers instead of its
  * unavailable state, so the audits see the tables. See src/lib/agent-traffic.mjs.
  */
 
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -47,6 +53,15 @@ if (!existsSync(root)) {
   console.error(`serve-built-site: no build at ${root} — run \`npm run build\` first.`);
   process.exit(1);
 }
+
+/** The stamp `npm run build` wrote, read once. Null when there was none at startup. */
+const bootStamp = (() => {
+  try {
+    return readFileSync(join(root, 'build-stamp.txt'), 'utf8');
+  } catch {
+    return null;
+  }
+})();
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -166,6 +181,15 @@ function toWebRequest(nodeRequest, origin) {
 const server = createServer(async (request, response) => {
   const origin = `http://localhost:${port}`;
   const { pathname } = new URL(request.url ?? '/', origin);
+
+  if (pathname === '/build-stamp.txt') {
+    response.writeHead(bootStamp === null ? 404 : 200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    response.end(bootStamp ?? 'no build stamp at startup');
+    return;
+  }
 
   const file = staticFileFor(pathname);
   if (file) {
