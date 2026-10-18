@@ -122,12 +122,13 @@ One of the tools on this site is `get_recent_writing`. The snippet below shows h
     additionalProperties: false,
   },
   execute: async (args = {}) => {
-    const limit = Math.min(Math.max(args.limit ?? 5, 1), 20);
-    const tag = args.tag?.toLowerCase();
+    const limit = Math.min(Math.max(Number.isInteger(args.limit) ? args.limit : 5, 1), 20);
+    const normalize = (value) => String(value ?? '').toLowerCase();
+    const tag = args.tag ? normalize(args.tag) : null;
     // posts is the site's article index
     return {
       posts: posts
-        .filter((post) => !tag || post.tags.includes(tag))
+        .filter((post) => !tag || post.tags.some((t) => normalize(t) === tag))
         .slice(0, limit),
     };
   },
