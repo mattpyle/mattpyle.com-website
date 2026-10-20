@@ -125,8 +125,8 @@ const GUARANTEES = [
             <tr>
               <th scope="row">Signature</th>
               <td>
-                Web Bot Auth (RFC 9421): each request Steward makes itself is signed, and its
-                <code>Signature-Agent</code> header names <a href={signatureCardUrl}>the Signature Agent Card</a>,
+                Web Bot Auth (RFC 9421): each request Steward makes itself is signed, and
+                its <code>Signature-Agent</code> header names <a href={signatureCardUrl}>the Signature Agent Card</a>,
                 which points at <a href={signatureDirectoryUrl}>the key directory</a>. The pages a deep
                 audit opens in Chrome are not signed: the browser's requests leave through an
                 encrypted tunnel that Steward cannot add a header to.
