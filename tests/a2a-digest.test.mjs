@@ -34,8 +34,9 @@ test('the digest carries at least one current published post, with a usable URL'
 
   const [newest] = committed.writing;
   assert.ok(newest.title);
-  assert.equal(newest.url, `${PRODUCTION_ORIGIN}/writing/${newest.url.split('/').pop()}`);
-  assert.equal(newest.markdownUrl, `${newest.url}.md`);
+  const slug = newest.url.split('/').slice(-2, -1)[0];
+  assert.equal(newest.url, `${PRODUCTION_ORIGIN}/writing/${slug}/`);
+  assert.equal(newest.markdownUrl, `${PRODUCTION_ORIGIN}/writing/${slug}.md`);
   assert.ok(newest.description);
   assert.ok(!Number.isNaN(Date.parse(newest.date)));
 

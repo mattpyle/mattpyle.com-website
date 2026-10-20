@@ -74,7 +74,7 @@
     },
     {
       "name": "WebMCP tools",
-      "url": "https://www.mattpyle.com/webmcp",
+      "url": "https://www.mattpyle.com/webmcp/",
       "description": "Six tools registered on document.modelContext for in-browser agents, four read and two write. Callable only from a browser that implements WebMCP; the definitions are at https://www.mattpyle.com/webmcp/tools.json and the data they read is at https://www.mattpyle.com/webmcp/index.json."
     },
     {
@@ -136,7 +136,7 @@
   "writing": [
     {
       "title": "How to implement WebMCP on a website",
-      "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website",
+      "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "markdownUrl": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website.md",
       "date": "2026-09-03T00:00:00.000Z",
       "updated": "2026-09-03T00:00:00.000Z",
@@ -148,7 +148,7 @@
     },
     {
       "title": "Hello, World! Or, this post is a lie.",
-      "url": "https://www.mattpyle.com/writing/hello-world",
+      "url": "https://www.mattpyle.com/writing/hello-world/",
       "markdownUrl": "https://www.mattpyle.com/writing/hello-world.md",
       "date": "2026-07-18T00:00:00.000Z",
       "updated": "2026-07-18T00:00:00.000Z",
@@ -161,7 +161,7 @@
     },
     {
       "title": "Accessibility, AI, and testing with screen readers",
-      "url": "https://www.mattpyle.com/writing/accessibility-and-ai",
+      "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
       "markdownUrl": "https://www.mattpyle.com/writing/accessibility-and-ai.md",
       "date": "2026-07-13T00:00:00.000Z",
       "updated": "2026-07-31T00:00:00.000Z",
@@ -176,7 +176,7 @@
   "projects": [
     {
       "title": "Argus",
-      "url": "https://www.mattpyle.com/projects",
+      "url": "https://www.mattpyle.com/projects/",
       "date": "2026-09-07T00:00:00.000Z",
       "status": "live",
       "tags": [
@@ -188,7 +188,7 @@
     },
     {
       "title": "Steward",
-      "url": "https://www.mattpyle.com/projects",
+      "url": "https://www.mattpyle.com/projects/",
       "date": "2026-07-18T00:00:00.000Z",
       "status": "live",
       "tags": [
@@ -203,7 +203,7 @@
     },
     {
       "title": "mattpyle.com",
-      "url": "https://www.mattpyle.com/projects",
+      "url": "https://www.mattpyle.com/projects/",
       "date": "2026-07-13T00:00:00.000Z",
       "status": "live",
       "tags": [
@@ -222,7 +222,7 @@
     {
       "slug": "agent-signed-guestbook",
       "title": "A guest book an agent can sign",
-      "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook",
+      "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "date": "2026-08-02T00:00:00.000Z",
       "publishedAt": "2026-08-04T04:00:00.000Z",
       "type": "feature",
@@ -236,7 +236,7 @@
     {
       "slug": "webmcp-resource-page",
       "title": "Added a /webmcp page to showcase WebMCP functionality",
-      "url": "https://www.mattpyle.com/changelog/webmcp-resource-page",
+      "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
       "date": "2026-07-24T00:00:00.000Z",
       "publishedAt": "2026-08-03T07:15:00.000Z",
       "type": "feature",
@@ -251,7 +251,7 @@
     {
       "slug": "agent-driven-retro-mode",
       "title": "Retro mode: a 1997 skin an agent can switch on",
-      "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode",
+      "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
       "date": "2026-07-24T00:00:00.000Z",
       "publishedAt": "2026-08-03T05:45:00.000Z",
       "type": "feature",
@@ -266,7 +266,7 @@
     {
       "slug": "scorecard-run-history",
       "title": "The Scorecard gets a memory",
-      "url": "https://www.mattpyle.com/changelog/scorecard-run-history",
+      "url": "https://www.mattpyle.com/changelog/scorecard-run-history/",
       "date": "2026-07-18T00:00:00.000Z",
       "publishedAt": "2026-07-18T07:22:47.000Z",
       "type": "feature",
@@ -282,7 +282,7 @@
     {
       "slug": "homepage-activity-from-changelog",
       "title": "Homepage activity now comes from the changelog",
-      "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog",
+      "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog/",
       "date": "2026-07-17T00:00:00.000Z",
       "publishedAt": "2026-07-18T06:31:45.000Z",
       "type": "feature",
@@ -297,7 +297,7 @@
     {
       "slug": "public-changelog",
       "title": "Public changelog launches",
-      "url": "https://www.mattpyle.com/changelog/public-changelog",
+      "url": "https://www.mattpyle.com/changelog/public-changelog/",
       "date": "2026-07-17T00:00:00.000Z",
       "type": "launch",
       "significance": "minor",
@@ -310,7 +310,7 @@
     {
       "slug": "webmcp-tools",
       "title": "WebMCP read-only tool surface",
-      "url": "https://www.mattpyle.com/changelog/webmcp-tools",
+      "url": "https://www.mattpyle.com/changelog/webmcp-tools/",
       "date": "2026-07-17T00:00:00.000Z",
       "type": "experiment",
       "significance": "minor",
@@ -323,7 +323,7 @@
     {
       "slug": "markdown-post-variants",
       "title": "Raw-markdown post variants + content negotiation",
-      "url": "https://www.mattpyle.com/changelog/markdown-post-variants",
+      "url": "https://www.mattpyle.com/changelog/markdown-post-variants/",
       "date": "2026-07-16T00:00:00.000Z",
       "type": "infra",
       "significance": "minor",
@@ -336,7 +336,7 @@
     {
       "slug": "public-scorecard",
       "title": "The public Scorecard",
-      "url": "https://www.mattpyle.com/changelog/public-scorecard",
+      "url": "https://www.mattpyle.com/changelog/public-scorecard/",
       "date": "2026-07-15T00:00:00.000Z",
       "type": "feature",
       "significance": "minor",
@@ -351,7 +351,7 @@
     {
       "slug": "site-live",
       "title": "mattpyle.com goes live",
-      "url": "https://www.mattpyle.com/changelog/site-live",
+      "url": "https://www.mattpyle.com/changelog/site-live/",
       "date": "2026-07-14T00:00:00.000Z",
       "type": "launch",
       "significance": "major",

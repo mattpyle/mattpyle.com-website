@@ -68,7 +68,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
     .filter(({ data }) => data.draft !== true)
     .map(({ slug, data }) => ({
       title: requireString(data.title, `writing/${slug} title`),
-      url: `${base}/writing/${slug}`,
+      url: `${base}/writing/${slug}/`,
       markdownUrl: `${base}/writing/${slug}.md`,
       date: isoDate(data.date, `writing/${slug} date`),
       ...(data.updated ? { updated: isoDate(data.updated, `writing/${slug} updated`) } : {}),
@@ -81,7 +81,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
     .map(({ slug, data }) => ({
       title: requireString(data.title, `projects/${slug} title`),
       // Projects have no per-entry route; src/pages/projects/ is an index page only.
-      url: `${base}/projects`,
+      url: `${base}/projects/`,
       date: isoDate(data.date, `projects/${slug} date`),
       status: requireString(data.status, `projects/${slug} status`),
       tags: data.tags ?? [],
@@ -113,7 +113,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
     .map(({ id, data }) => ({
       slug: id,
       title: data.title,
-      url: `${base}/changelog/${id}`,
+      url: `${base}/changelog/${id}/`,
       date: data.date.toISOString(),
       ...(data.publishedAt ? { publishedAt: data.publishedAt.toISOString() } : {}),
       type: data.type,
@@ -157,7 +157,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       },
       {
         name: 'WebMCP tools',
-        url: `${base}/webmcp`,
+        url: `${base}/webmcp/`,
         description: `Six tools registered on document.modelContext for in-browser agents, four read and two write. Callable only from a browser that implements WebMCP; the definitions are at ${base}/webmcp/tools.json and the data they read is at ${base}/webmcp/index.json.`,
       },
       {
