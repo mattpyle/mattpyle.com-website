@@ -206,15 +206,16 @@ function windowTotals(rows, nowHour) {
 
 /**
  * Group rows by the properties `identityOf` picks out and total each group over every window,
- * largest first by all-time count. The identity's properties land on the group row, so a table
+ * largest first by `order` (all-time count unless a table says otherwise). The identity's properties land on the group row, so a table
  * keyed on two columns (client and verification state) is the same call as one keyed on a path.
  *
  * @param {Array<{ hour: number | null, count: number }>} rows
  * @param {(row: any) => Record<string, string>} identityOf
  * @param {number} nowHour
+ * @param {(a: any, b: any) => number} [order] Sorts before the row cut, so it decides what is cut.
  * @returns {{ rows: TallyRow[], omitted: number }}
  */
-function tally(rows, identityOf, nowHour) {
+function tally(rows, identityOf, nowHour, order = () => 0) {
   /** @type {Map<string, any>} */
   const groups = new Map();
   for (const row of rows) {
@@ -237,7 +238,7 @@ function tally(rows, identityOf, nowHour) {
   }
 
   const sorted = [...groups.values()]
-    .sort((a, b) => b.total - a.total || a.key.localeCompare(b.key))
+    .sort((a, b) => order(a, b) || b.total - a.total || a.key.localeCompare(b.key))
     .map(({ key, ...group }) => group);
   return { rows: sorted.slice(0, MAX_TABLE_ROWS), omitted: Math.max(0, sorted.length - MAX_TABLE_ROWS) };
 }
@@ -292,7 +293,14 @@ export function summarizeTraffic(rows, now = new Date()) {
      * and googlebot by user agent alone are different findings and get a row each. A row from the
      * `v1` keys, counted before verification existed, has the empty state.
      */
-    clients: tally(rows, ({ family, verification = '' }) => ({ family, verification }), nowHour),
+    clients: tally(
+      rows,
+      ({ family, verification = '' }) => ({ family, verification }),
+      nowHour,
+      // The client table leads with the 7-day column and shows no all-time one, so it sorts by
+      // what it shows; all-time is only the tie-break.
+      (a, b) => b.week - a.week || b.month - a.month
+    ),
     /** Every row in each verification state, totalled. */
     verification: verificationTotals(rows, nowHour),
     pages: tally(markdownRows, ({ path }) => ({ path }), nowHour),
