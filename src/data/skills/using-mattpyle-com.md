@@ -63,7 +63,7 @@ curl -sS https://www.mattpyle.com/a2a \
 
 Four things trip up clients, all of them A2A 1.0 versus 0.x:
 
-- **The method is `SendMessage`**, not `message/send`. The 0.x spelling is accepted as an alias, but replies only ever use the current form.
+- **The method is `SendMessage`**, not `message/send`. The 0.x spelling is accepted as an alias, and is answered in the 0.x dialect it was asked in (`kind` discriminators, lowercase roles and task states).
 - **Text parts carry no `kind` discriminator.** Send `{"text": "..."}`. The 0.x `{"kind":"text","text":"..."}` shape is also read.
 - **Errors arrive on HTTP 200** with a JSON-RPC error object. Do not treat a 200 as success without checking for `error`.
 - **This skill's reply is a `Message`, not a `Task`.** There is nothing to poll. One request, one answer, no state.
