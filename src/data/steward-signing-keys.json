@@ -4,8 +4,8 @@
     {
       "kty": "OKP",
       "crv": "Ed25519",
-      "x": "TlBWwCczxH1g6cy4CBMYtZJoYcUY2TpEw_flT5QJcss",
-      "kid": "XMIAAGciOtTpwXMaHE7Ns01ugdsaYIKlLZugyWuEtjI",
+      "x": "v3cUFrZvBbXX-knBnAjE4aJcABlpFmK7qd12cRKRasc",
+      "kid": "VbczYvLvjpGmVaOOfkCKJXy57e25HOWKlmjAz2dayoI",
       "use": "sig"
     }
   ]
