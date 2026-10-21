@@ -229,27 +229,27 @@ export interface TrackedCredential {
 export const TRACKED_CREDENTIALS: TrackedCredential[] = [
   {
     name: 'Temporal Cloud API key',
-    expires: '2028-08-13',
+    expires: '2028-10-20',
     failure:
       'every client and both workers fail to connect with a bare "Request unauthorized" that ' +
       'names no cause; the nightly scorecard stops producing runs.',
   },
   {
-    // Created 2026-09-06 with a 90-day lifetime, so it lapses on 2026-12-05 and
-    // the warning arrives around 2026-11-05. Account-level Metrics Read-Only,
+    // Reissued 2026-10-21, lapsing on 2026-11-06, which is inside the 30-day
+    // window from the day it was issued. Account-level Metrics Read-Only,
     // which is a narrower role than the workers' key holds.
     name: 'Temporal Cloud metrics API key',
-    expires: '2026-12-05',
+    expires: '2026-11-06',
     failure:
       'the nightly action-usage check fails with a 401 body naming the endpoint, and nothing ' +
       'else breaks: the scorecard still runs, still measures the site, and still publishes.',
   },
   {
-    // Same creation date and lifetime. A session credential rather than a
+    // Created 2026-09-06 with a 90-day lifetime. A session credential rather than a
     // production one, which is why its failure line says so plainly — the
     // temptation on the day it lapses is to assume production is down.
     name: 'Temporal Cloud read API key',
-    expires: '2026-12-05',
+    expires: '2026-12-06',
     // No storage location here, per `TrackedCredential`: this row would be the
     // natural place to name the file it sits in, and that is exactly the
     // sentence the boundary rule (and the test guarding it) exists to refuse.
@@ -260,7 +260,7 @@ export const TRACKED_CREDENTIALS: TrackedCredential[] = [
   },
   {
     name: 'GitHub fine-grained PAT',
-    expires: '2026-11-11',
+    expires: '2026-11-20',
     failure:
       'the scorecard measures the site for twelve minutes and then dies on its publish and ' +
       'archive legs with an AuthError, so the run happens and persists nothing.',
