@@ -1441,6 +1441,10 @@ program
       'health-gated, one foreground terminal',
   )
   .action(async () => {
+    const { readOnlyKeyRefusal } = await import('./lib/read-only-key-guard.js');
+    const refusal = readOnlyKeyRefusal();
+    if (refusal) fail(refusal);
+
     const { startStack, printReadyBanner, teardownStack } = await import('./lib/stack.js');
     const stack = await startStack();
     printReadyBanner(stack);
