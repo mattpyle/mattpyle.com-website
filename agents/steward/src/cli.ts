@@ -1434,6 +1434,44 @@ program
     await c.connection.close();
   });
 
+/**
+ * Starts the stack and stays up until Ctrl+C or a child dies. The body of `up`,
+ * a function so `update` can name the same behaviour without copying it.
+ */
+async function serveStack(): Promise<void> {
+  const { startStack, printReadyBanner, teardownStack } = await import('./lib/stack.js');
+  const stack = await startStack();
+  printReadyBanner(stack);
+
+  let tearingDown = false;
+  const onSignal = () => {
+    if (tearingDown) return;
+    tearingDown = true;
+    teardownStack(stack);
+    process.exit(0);
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  // Either child dying on its own takes the other down with it — a lone
+  // worker with no server, or a server with no worker polling it, is not a
+  // stack worth staying up for.
+  stack.server?.once('exit', (code) => {
+    if (tearingDown) return;
+    tearingDown = true;
+    console.error(`\n  server exited unexpectedly (code ${code})`);
+    teardownStack(stack);
+    process.exitCode = 1;
+  });
+  stack.worker.once('exit', (code) => {
+    if (tearingDown) return;
+    tearingDown = true;
+    console.error(`\n  worker exited unexpectedly (code ${code})`);
+    teardownStack(stack);
+    process.exitCode = 1;
+  });
+}
+
 program
   .command('up')
   .description(
@@ -1441,37 +1479,84 @@ program
       'health-gated, one foreground terminal',
   )
   .action(async () => {
-    const { startStack, printReadyBanner, teardownStack } = await import('./lib/stack.js');
-    const stack = await startStack();
-    printReadyBanner(stack);
+    const { readOnlyKeyRefusal } = await import('./lib/read-only-key-guard.js');
+    const refusal = readOnlyKeyRefusal();
+    if (refusal) fail(refusal);
+    await serveStack();
+  });
 
-    let tearingDown = false;
-    const onSignal = () => {
-      if (tearingDown) return;
-      tearingDown = true;
-      teardownStack(stack);
-      process.exit(0);
-    };
-    process.on('SIGINT', onSignal);
-    process.on('SIGTERM', onSignal);
+program
+  .command('update')
+  .description(
+    'Pull master in the main checkout and restart the worker, refusing while a steward-heavy activity ' +
+      'is running (--force overrides)',
+  )
+  .option('--force', 'restart even while a running workflow holds a steward-heavy activity')
+  .action(async (opts: { force?: boolean }) => {
+    const { readOnlyKeyRefusal } = await import('./lib/read-only-key-guard.js');
+    const refusal = readOnlyKeyRefusal();
+    if (refusal) fail(refusal);
 
-    // Either child dying on its own takes the other down with it — a lone
-    // worker with no server, or a server with no worker polling it, is not a
-    // stack worth staying up for.
-    stack.server?.once('exit', (code) => {
-      if (tearingDown) return;
-      tearingDown = true;
-      console.error(`\n  server exited unexpectedly (code ${code})`);
-      teardownStack(stack);
-      process.exitCode = 1;
+    // Every module the update uses loads **before** the pull. A lazy import after
+    // it would mix the old code already running with the new files on disk.
+    const { prepareUpdate, UpdateRefused } = await import('./lib/steward-update.js');
+    const { waitUntilNoOrphans, killOrphans } = await import('./lib/stack.js');
+    const { run, runCancellable, killTree, tsxCommand } = await import('./lib/proc.js');
+    const { npmCommand } = await import('./activities/build-audit.js');
+    const { REPO_ROOT, STEWARD_DIR } = await import('./config.js');
+    const { spawn } = await import('node:child_process');
+
+    const runGit = (args: string[]) => run('git', args, { cwd: REPO_ROOT });
+
+    let result: Awaited<ReturnType<typeof prepareUpdate>>;
+    try {
+      result = await prepareUpdate(
+        { force: Boolean(opts.force) },
+        {
+          git: runGit,
+          connect: async () => {
+            const connection = await Connection.connect(temporalConnectionOptions());
+            return { client: new Client({ connection, namespace: NAMESPACE }), close: () => connection.close() };
+          },
+          killOrphans: async () => {
+            const killed = await killOrphans();
+            if (killed > 0) await waitUntilNoOrphans();
+            return killed;
+          },
+          npmCi: async () => {
+            const { binary, args } = npmCommand(['ci']);
+            const res = await runCancellable(binary, args, { cwd: REPO_ROOT });
+            if (res.exitCode !== 0) {
+              throw new UpdateRefused(
+                `npm ci failed (exit ${res.exitCode}). The worker is stopped; fix the install and run ` +
+                  `\`steward up\`.\n${res.output.trim().split(/\r?\n/).slice(-15).join('\n')}`,
+              );
+            }
+          },
+          log: (line) => console.log(`  ${line}`),
+        },
+      );
+    } catch (err) {
+      if (err instanceof UpdateRefused) fail(err.message);
+      throw err;
+    }
+
+    const head = await runGit(['log', '-1', '--format=%h %s']);
+    console.log(`\n  steward now runs ${head.stdout.trim()}\n`);
+
+    // A fresh process starts the stack, so it runs the code that was just pulled.
+    // This one stays as its parent and leaves Ctrl+C to the child, which shares
+    // the console and tears the stack down itself.
+    const { binary, args } = tsxCommand('src/cli.ts');
+    const child = spawn(binary, [...args, 'up'], {
+      cwd: STEWARD_DIR,
+      stdio: 'inherit',
+      windowsHide: true,
+      shell: false,
     });
-    stack.worker.once('exit', (code) => {
-      if (tearingDown) return;
-      tearingDown = true;
-      console.error(`\n  worker exited unexpectedly (code ${code})`);
-      teardownStack(stack);
-      process.exitCode = 1;
-    });
+    process.on('SIGINT', () => {});
+    process.on('SIGTERM', () => killTree(child.pid));
+    child.once('exit', (code) => process.exit(code ?? 1));
   });
 
 program

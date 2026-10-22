@@ -111,6 +111,22 @@ export async function killOrphans(): Promise<number> {
   return pids.size;
 }
 
+/**
+ * Waits for the stray processes a teardown just signalled to leave: `taskkill`
+ * is fire-and-forget, and `refuseIfOrphaned` would read a dying worker as a
+ * live one. `steward update` kills and starts in one command, with no human
+ * pause between them.
+ */
+export async function waitUntilNoOrphans(timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const scan = await scanForOrphans();
+    if (scan.workers.length + scan.servers.length + scan.ports.length === 0) return;
+    if (Date.now() > deadline) return; // `up` reports whatever is left, with the taskkill commands.
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
 function prefixLines(prefix: string, chunk: Buffer, sink: (line: string) => void): void {
   for (const line of chunk.toString().split(/\r?\n/)) {
     if (line.trim()) sink(`  [${prefix}] ${line}`);

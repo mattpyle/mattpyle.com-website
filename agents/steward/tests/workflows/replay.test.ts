@@ -222,6 +222,18 @@ test(
  * evidence: the probe broke exactly the history it should have.
  *
  * The probe was reverted and all four fixtures re-run green.
+ *
+ * **It also guards `scorecard-run-shape-recovery`.** The fixture is a healthy
+ * manual run that ended at the archive leg, so it is the history the healthy
+ * `run-shape` ping would strand. Probe: with the `wf.patched(RUN_SHAPE_RECOVERY_PATCH)`
+ * guard removed, so the ping is issued unconditionally, this replay failed with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity machine does not handle this event:
+ * HistoryEvent(id: 167, WorkflowExecutionCompleted)
+ * ```
+ *
+ * The guard was restored and the replay re-run green.
  */
 test(
   'the scorecard dry-run history replays against current workflow code',

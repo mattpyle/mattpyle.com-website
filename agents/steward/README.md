@@ -171,9 +171,28 @@ steward finding report           # one row per run with a verdict: minutes per s
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
 steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
+steward update                   # after a merge: pull master in the main checkout, restart the worker
 ```
 
 `steward <verb> --help` prints the real options for each.
+
+### Updating the laptop worker
+
+After a Steward merge the laptop worker holds old code until it restarts, and a restart kills the
+activity it is running. `steward update` does the whole sequence from the main checkout:
+
+1. Stops if the checkout is not on `master` or has tracked local changes. A line-ending-only diff of
+   `scripts/steward.mjs`, which `npm ci` leaves behind, counts as clean.
+2. Refuses, naming the workflow, while any running workflow has a pending activity on `steward-heavy`
+   (`runFixer` has one attempt, so a restart fails the fix). `--force` restarts anyway. The check
+   runs before the pull, so a refusal changes nothing.
+3. Runs `git pull --ff-only`, stops the running worker, and runs `npm ci` only when
+   `package-lock.json` changed.
+4. Prints the commit it now runs and starts the stack as `steward up` does.
+
+`steward up` and `steward update` both refuse to start when `TEMPORAL_API_KEY` in the shell equals
+`TEMPORAL_READ_ONLY_API_KEY`: the worker would connect with the read-only key and die on its first
+poll.
 
 > [!TIP]
 > Run any command with `npx tsx src/cli.ts <args>` instead of the `steward` shim if something fails
