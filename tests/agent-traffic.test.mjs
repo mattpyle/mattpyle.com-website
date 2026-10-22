@@ -194,6 +194,22 @@ test('surfaces, clients and pages split by event class the way the tables do', (
   assert.equal(summary.markdownTotals.total, 2);
 });
 
+test('the client table is cut by its 7-day column, not by all-time count', () => {
+  const summary = summarize([
+    // Big all-time, nothing this week.
+    bucket(WINDOW_HOURS.week + 5, 'surface', 'oldbot', '/a', 500),
+    // Small but recent, and verified.
+    bucket(1, 'surface', 'newbot', '/a', 2, 'ip-verified'),
+    bucket(2, 'surface', 'midbot', '/a', 9),
+  ]);
+  assert.deepEqual(
+    summary.clients.rows.map((row) => row.family),
+    ['midbot', 'newbot', 'oldbot']
+  );
+  const weeks = summary.clients.rows.map((row) => row.week);
+  assert.deepEqual(weeks, [...weeks].sort((a, b) => b - a));
+});
+
 test('the client table has a row per client and verification state', () => {
   const summary = summarize([
     bucket(1, 'surface', 'googlebot', '/robots.txt', 4, 'ip-verified'),
