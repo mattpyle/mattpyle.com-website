@@ -248,6 +248,10 @@ jobs:
     needs: axe
     if: always() && github.event_name == 'push' && needs.axe.outputs.golden == 'failure'
     runs-on: ubuntu-latest
+    # One run at a time: two master pushes seconds apart both searched for an open issue, found none, and each filed one.
+    concurrency:
+      group: golden-drift
+      cancel-in-progress: false
     permissions:
       issues: write
     steps:
