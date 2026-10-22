@@ -2,6 +2,7 @@ import rss from '@astrojs/rss';
 import type { APIContext } from 'astro';
 import { getCollection } from 'astro:content';
 import { compareChangelogEntries } from '../../lib/changelog-order';
+import { lastBuildDateElement } from '../../lib/feed-build-date.mjs';
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -45,6 +46,10 @@ export async function GET(context: APIContext) {
       link: `/changelog/${entry.id}/`,
     })),
     xmlns: { atom: 'http://www.w3.org/2005/Atom' },
-    customData: `<language>en-us</language><atom:link href="${new URL('/changelog/rss.xml', context.site)}" rel="self" type="application/rss+xml"/>`,
+    // lastBuildDate follows content (the newest `publishedAt`, `date` or `updated` of any entry),
+    // not the build.
+    customData: `<language>en-us</language>${lastBuildDateElement(
+      entries.flatMap((entry) => [entry.data.publishedAt, entry.data.date, entry.data.updated])
+    )}<atom:link href="${new URL('/changelog/rss.xml', context.site)}" rel="self" type="application/rss+xml"/>`,
   });
 }

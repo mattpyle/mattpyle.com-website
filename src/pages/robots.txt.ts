@@ -79,7 +79,16 @@ export const GET: APIRoute = ({ site }) => {
   // nightly scorecard, the first Fail on a public metric. Removing it costs the catalogue nothing
   // a consumer is required to read: ARD discovery still rides the well-known path itself and the
   // rel="ard" link Layout.astro emits on every page, the two mechanisms the spec makes mandatory.
-  const body = `${crawlerRules}\nSitemap: ${new URL('/sitemap-index.xml', site)}\n`;
+  //
+  // The sitemap index goes first: Steward's audit (checkSitemap) fetches declared sitemaps in
+  // order and stops at three, and scripts/validate-sitemap.mjs asserts the index line. The two
+  // RSS feeds follow as sitemaps. Google reads RSS as a sitemap format, and a feed lists the
+  // newest URLs first, which is the fresh-URL signal the XML sitemap's hand-dated lastmod does
+  // not send.
+  const sitemaps = ['/sitemap-index.xml', '/rss.xml', '/changelog/rss.xml']
+    .map((path) => `Sitemap: ${new URL(path, site)}\n`)
+    .join('');
+  const body = `${crawlerRules}\n${sitemaps}`;
 
   return new Response(body, {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },

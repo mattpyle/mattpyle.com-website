@@ -146,10 +146,38 @@ if (!robots.includes(`Sitemap: ${siteOrigin}/sitemap-index.xml`)) {
   failures.push('robots.txt: missing canonical sitemap-index.xml reference');
 }
 
+// The two RSS feeds are declared as sitemaps after the index (Google reads RSS as a sitemap
+// format). The index stays first: Steward's audit fetches declared sitemaps in order and stops
+// at three. The match is line-based, so '/rss.xml' cannot be satisfied by '/changelog/rss.xml'.
+const declaredSitemaps = robots
+  .split(/\r?\n/)
+  .filter((line) => line.startsWith('Sitemap: '))
+  .map((line) => line.slice('Sitemap: '.length).trim());
+const expectedSitemaps = ['/sitemap-index.xml', '/rss.xml', '/changelog/rss.xml'].map(
+  (path) => siteOrigin + path
+);
+for (const sitemap of expectedSitemaps) {
+  if (!declaredSitemaps.includes(sitemap)) failures.push(`robots.txt: missing Sitemap: ${sitemap}`);
+}
+if (expectedSitemaps.every((sitemap) => declaredSitemaps.includes(sitemap))
+  && expectedSitemaps.some((sitemap, position) => declaredSitemaps.indexOf(sitemap) !== position)) {
+  failures.push(`robots.txt: expected Sitemap order ${expectedSitemaps.join(', ')}; received ${declaredSitemaps.join(', ')}`);
+}
+
+// Each feed carries a lastBuildDate that parses as a date. The value is the newest item date,
+// set in src/pages/rss.xml.ts and src/pages/changelog/rss.xml.ts via src/lib/feed-build-date.mjs.
+for (const [filename, feed] of [['rss.xml', 'writing'], ['changelog/rss.xml', 'changelog']]) {
+  const channel = parseXml(filename).rss?.channel;
+  const lastBuildDate = channel?.lastBuildDate;
+  if (typeof lastBuildDate !== 'string' || Number.isNaN(Date.parse(lastBuildDate))) {
+    failures.push(`${filename}: the ${feed} feed lacks a <lastBuildDate> that parses as a date (received ${JSON.stringify(lastBuildDate)})`);
+  }
+}
+
 if (failures.length > 0) {
   console.error('validate-sitemap: validation failed:\n');
   for (const failure of failures) console.error(`  - ${failure}`);
   process.exit(1);
 }
 
-console.log(`validate-sitemap: ${urls.length} canonical URLs have accurate lastmod values; XML, canonicals, index, and robots reference are valid.`);
+console.log(`validate-sitemap: ${urls.length} canonical URLs have accurate lastmod values; XML, canonicals, index, robots references, and feed build dates are valid.`);
