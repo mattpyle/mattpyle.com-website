@@ -28,14 +28,17 @@
  * | `nightly-scorecard` | a good nightly scorecard run happened | the scheduled run, success and failure both |
  * | `credential-expiry` | no tracked credential is near its expiry | the scheduled run |
  * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
- * | `run-shape` | fail-only: a completed run whose record is wrong | a manual scorecard run, and any deep audit |
+ * | `run-shape` | a completed run's record is right (success) or wrong (fail); no period | a manual scorecard run, and any deep audit, healthy or bad |
  * | `findings-reconcile` | the hourly findings reconciler ran | `reconcileFindingsWorkflow`, success and failure both |
  *
  * The first three, and `findings-reconcile`, carry the dead-man's half: a worker that never runs sends
  * nothing, the check's own period lapses, and the service emails about the
  * silence. That is the failure a liveness ping cannot detect from inside a dead
- * container. `run-shape` is fail-only and therefore has no period — a deep audit
- * is ad hoc, so "no deep audit today" is not news.
+ * container. `run-shape` has no period — a deep audit is ad hoc, so "no deep
+ * audit today" is not news. It is fail-and-recover rather than fail-only: a
+ * healthy run sends a success ping, so the next good run clears a fail ping
+ * instead of leaving the check down until an operator resumes it. A manual run
+ * never pings `nightly-scorecard`, so this cannot hold the dead-man's switch down.
  */
 
 import type { ActionUsageSample } from './action-usage.js';

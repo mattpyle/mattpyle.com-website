@@ -327,8 +327,10 @@ export async function assembleDeepAudit(input: AssembleDeepAuditInput): Promise<
   logAudit('assembleDeepAudit', audit, 'deep');
 
   // The deep tier's result-shape alert (audit-stack-alerting-and-monitoring
-  // card). Fail-only: a healthy audit sends nothing, because a deep audit is ad
-  // hoc and "none ran today" is not news the way a missing nightly run is.
+  // card). Both outcomes ping: a bad shape fails the check, and a healthy audit
+  // sends success, which clears a fail ping left by an earlier bad run. The check
+  // keeps no period, so "no deep audit today" is still not news; only the next
+  // healthy audit changes what the dashboard shows.
   //
   // **Here rather than in the workflow**, which is where the scorecard's
   // equivalent lives, for one reason: `auditSiteWorkflow` has a committed replay
@@ -341,7 +343,7 @@ export async function assembleDeepAudit(input: AssembleDeepAuditInput): Promise<
     sampled: input.sample.length,
     rendered: pages.length,
   });
-  if (!shape.ok) await sendHealthPing('run-shape', shape);
+  await sendHealthPing('run-shape', shape);
 
   return audit;
 }

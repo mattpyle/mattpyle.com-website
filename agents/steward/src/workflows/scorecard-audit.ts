@@ -43,6 +43,12 @@ import { scorecardRunShape, type RunShape } from '../lib/run-health.js';
 // rule was relaxed.
 const QUEUE_AUDIT = 'steward-audit';
 
+/**
+ * The `patched` marker of the `run-shape` success ping that a healthy manual run
+ * now sends. Histories recorded before it ended at the archive leg and lack it.
+ */
+export const RUN_SHAPE_RECOVERY_PATCH = 'scorecard-run-shape-recovery';
+
 export interface ScorecardAuditInput {
   /** Manual `--urls` override. Omitted -> resolved from the live sitemap (spec §4.2 step 0). */
   urls?: string[];
@@ -231,16 +237,20 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
  *
  * Wrapped around the run rather than appended to it, because the failure this
  * exists to catch is not only a bad result: it is *no* result. Three paths, and
- * the only one that stays quiet is the healthy manual run:
+ * every one of them signals:
  *
  * 1. A **scheduled** run signals `nightly-scorecard`, success or failure. That
  *    check is a dead-man's switch: a worker that never runs sends nothing, its
  *    period lapses, and the alerting service emails about the silence. This is
  *    the only path that resets it, which is why a manual run must not.
- * 2. A **manual** run signals nothing when it is healthy and fails `run-shape`
+ * 2. A **manual** run signals `run-shape`, success when it is healthy and failure
  *    when it is not. A `--dry-run` smoke test at two in the afternoon is not
- *    evidence that the nightly job is alive, and letting it say so would be a
- *    dead-man's switch that a human can hold down by accident.
+ *    evidence that the nightly job is alive, so it never touches
+ *    `nightly-scorecard`: that would be a dead-man's switch a human can hold
+ *    down by accident. `run-shape` keeps no period, so its success ping holds
+ *    nothing down. It clears a fail ping left by an earlier bad run (a check
+ *    stays down until a success ping arrives), where it used to wait for an
+ *    operator.
  * 3. Either kind, on a **bad shape**, fails its check explicitly rather than
  *    waiting for the window to lapse. `scorecardRunShape` is the rule, and the
  *    run reports itself exactly as it always did — the alert reads the record,
@@ -260,6 +270,18 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
  * Both are scheduled-only. Each has a one-day period at the alerting service, so
  * a manual run that pinged them would reset a window it is not evidence for —
  * the same argument the `nightly-scorecard` check rests on.
+ *
+ * ## Replay: the healthy manual `run-shape` ping
+ *
+ * A healthy manual run used to issue no command after the archive leg and now
+ * issues one `reportRunHealth`. That is a new command on a path a replay can
+ * take, so it sits behind {@link RUN_SHAPE_RECOVERY_PATCH}. No *open* run needs
+ * the marker: a scorecard run finishes within minutes and never parks, so none
+ * replays across a deploy. A *completed* history does: the committed
+ * `scorecard-dry-run.json` fixture is a healthy manual run that ended at the
+ * archive leg, and replaying it against the unguarded call fails with TMPRL1100
+ * (`Activity machine does not handle this event: WorkflowExecutionCompleted`).
+ * With the marker the old history reads `patched` as false and ends where it did.
  */
 export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promise<ScorecardAuditResult> {
   const scheduled = input.triggeredBy === 'schedule';
@@ -303,7 +325,9 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
     throw err;
   }
 
-  if (scheduled || !ran.shape.ok) {
+  // Short-circuit order matters: `patched` is evaluated only for a healthy manual
+  // run, the one path whose commands changed, so no other run records the marker.
+  if (scheduled || !ran.shape.ok || wf.patched(RUN_SHAPE_RECOVERY_PATCH)) {
     const outcome = await light.alerting.reportRunHealth({
       signal: scheduled ? 'nightly-scorecard' : 'run-shape',
       shape: ran.shape,

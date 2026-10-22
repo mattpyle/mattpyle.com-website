@@ -50,3 +50,6 @@ process.env.VERCEL_AUTOMATION_BYPASS_SECRET = '';
 // The Web Bot Auth signing key: every test that signs builds a throwaway key at run time, so the
 // real one in `.env` must never sign a test request against a mock server.
 process.env.STEWARD_WEB_BOT_AUTH_KEY = '';
+// The alerting base URL: every run-health signal posts to it, healthy or not, so a suite
+// run beside a real `.env` must not reach the live checks. A test that wants one sets its own.
+process.env.STEWARD_HEALTHCHECK_BASE = '';

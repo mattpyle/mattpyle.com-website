@@ -763,7 +763,7 @@ test('a healthy scheduled run signals the nightly check and checks credentials f
   assert.deepEqual(calls.slice(0, 2), ['checkActionUsage', 'checkCredentialExpiry']);
 });
 
-test('a healthy manual run signals nothing — it must not hold the dead-man\'s switch down', async () => {
+test('a healthy manual run pings run-shape success and never the nightly check', async () => {
   const { activities, calls, signals } = mockActivities();
   await withWorker(activities, () =>
     env.client.workflow.execute(scorecardAuditWorkflow, {
@@ -773,7 +773,11 @@ test('a healthy manual run signals nothing — it must not hold the dead-man\'s 
     }),
   );
 
-  assert.deepEqual(signals, []);
+  // One success ping on run-shape, which has no period, so the next healthy run
+  // clears a fail ping left by an earlier bad one. Nothing for the nightly check:
+  // a human must not be able to hold that dead-man's switch down.
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['run-shape', true]]);
+  assert.ok(!signals.some((s) => s.signal === 'nightly-scorecard'));
   assert.ok(!calls.includes('checkCredentialExpiry'));
   // The usage check has a one-day period of its own, so a manual run pinging it
   // would hold that dead-man's switch down exactly as it would the nightly's.
