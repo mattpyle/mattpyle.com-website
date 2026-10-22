@@ -86,6 +86,11 @@ COPY agents/steward/package.json ./agents/steward/
 #
 # The lockfile pin stays. It is the fallback version and Dependabot's handle;
 # this image no longer depends on it.
+#
+# The root `.npmrc` sets DETECT_CHROMEDRIVER_VERSION for laptop and CI installs.
+# It is not in this image's build context (only the manifests are copied), so
+# the variable on the command above is still what pairs the driver here, and
+# INCLUDE_CHROMIUM is still set only here.
 RUN DETECT_CHROMEDRIVER_VERSION=true INCLUDE_CHROMIUM=true \
     npm ci --workspace @mattpyle/steward --include-workspace-root=false
 
