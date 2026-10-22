@@ -110,7 +110,7 @@ curl -sS https://www.mattpyle.com/a2a \
 
 Notes for anyone calling it:
 
-- **The method is `SendMessage`, not `message/send`.** A2A 1.0 (spec §9.1) renamed the JSON-RPC methods to PascalCase matching gRPC. The 0.x `message/send` spelling is accepted here as an alias, per the migration guidance in the spec's Appendix A.2, but responses only ever use the current form.
+- **The method is `SendMessage`, not `message/send`.** A2A 1.0 (spec §9.1) renamed the JSON-RPC methods to PascalCase matching gRPC. The 0.x `message/send` spelling is accepted here as an alias, per the migration guidance in the spec's Appendix A.2, and is answered in the 0.x dialect it was asked in (`kind` discriminators, lowercase roles and task states).
 - **Text parts are the 1.0 shape**, `{"text": "..."}`, with no `kind` discriminator. The 0.x `{"kind":"text","text":"..."}` form is also read, since the member is in the same place either way.
 - **Errors ride an HTTP 200** with a JSON-RPC error object, as JSON-RPC intends. `error.data` is an array of objects each carrying an `@type`, per spec §9.5. An unknown method returns `-32601` naming the one method that works; a message with no text part returns `-32602` naming the field.
 - **`GetTask` takes `{"id": "..."}`**, and the 0.x `tasks/get` spelling is accepted as an alias on the same terms as `message/send`. An id this endpoint did not issue returns `-32001`, A2A's `TaskNotFoundError`.
