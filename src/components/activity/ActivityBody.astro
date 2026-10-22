@@ -149,6 +149,7 @@ function familyNote(family: string): string | undefined {
                 <tr>
                   <td class="c-marker">
                     <span class:list={['marker', row.kind === 'agent' && 'marker--agent']} aria-hidden="true"></span>
+                    {row.kind === 'agent' && <span class="sr-only">bot or agent</span>}
                   </td>
                   {/*
                     Plain ink, never a colour: the marker carries the classification, and colouring
@@ -272,6 +273,7 @@ function familyNote(family: string): string | undefined {
                 <tr>
                   <td class="c-marker">
                     <span class:list={['marker', row.kind === 'agent' && 'marker--agent']} aria-hidden="true"></span>
+                    {row.kind === 'agent' && <span class="sr-only">bot or agent</span>}
                   </td>
                   <td class="c-client">{row.family}{familyNote(row.family ?? '') && <span class="family-note"> ({familyNote(row.family ?? '')})</span>}</td>
                   <td class="c-state">{verificationLabel(row.verification)}</td>
