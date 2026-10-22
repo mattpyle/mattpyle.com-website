@@ -12,9 +12,9 @@ const STEWARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..',
 const CLI = path.join(STEWARD, 'src', 'cli.ts');
 
 /**
- * `steward up` refuses to start with the read-only key in
- * `TEMPORAL_API_KEY`. The comparison is a pure function; the CLI case proves the
- * verb calls it before it does anything else.
+ * `steward up` and `steward update` refuse to start with the read-only key in
+ * `TEMPORAL_API_KEY`. The comparison is a pure function; the CLI cases prove the
+ * two verbs actually call it before they do anything else.
  *
  * The stand-in key is built at run time: the gitleaks job scans full history.
  */
@@ -59,7 +59,7 @@ async function runCli(args: string[]): Promise<{ code: number; out: string }> {
   }
 }
 
-for (const verb of ['up']) {
+for (const verb of ['up', 'update']) {
   test(`steward ${verb} exits before connecting when TEMPORAL_API_KEY is the read-only key`, async () => {
     const { code, out } = await runCli([verb]);
     assert.equal(code, 1);
