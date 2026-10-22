@@ -137,6 +137,9 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Keep focused elements clear of the sticky header (48px mobile, 72px desktop)
+     when the browser scrolls them into view, e.g. on Shift+Tab (WCAG C43). */
+  scroll-padding-top: 80px;
   /* Reserve the scrollbar's width on every page, scrolling or not. Without it,
      /writing is the one page short enough to fit the viewport, so it is the one
      page with no scrollbar, and the centred shell sits ~7px further right there
