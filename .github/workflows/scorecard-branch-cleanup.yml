@@ -1,0 +1,53 @@
+name: Scorecard branch cleanup
+
+# A closed scorecard PR takes its branch with it.
+#
+# Steward opens one PR per run from `steward/scorecard-<date>` (publishScorecardRun
+# in agents/steward/src/activities/scorecard.ts) and never closes it. A merge
+# deletes the branch through the repository's delete_branch_on_merge setting. A PR
+# closed without a merge, as every superseded day's PR is, keeps its branch for
+# good, so this deletes the head ref when such a PR closes.
+#
+# Deliberately narrow:
+#   - closed without a merge (merged PRs are the setting's job),
+#   - head in this repository (a fork's branch is not ours to delete),
+#   - a branch named steward/scorecard-<yyyy-mm-dd>, so the long-lived
+#     steward/scorecard-archive branch survives a PR closed against it.
+# A branch already gone is not an error. The ref reaches the step through the
+# environment, never through shell interpolation.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  delete-branch:
+    if: >-
+      github.event.pull_request.merged == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'steward/scorecard-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete the closed scorecard PR's head branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -u
+          if [[ ! "${HEAD_REF}" =~ ^steward/scorecard-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Not a dated scorecard branch, leaving ${HEAD_REF}."
+            exit 0
+          fi
+          if out=$(gh api -X DELETE "repos/${REPO}/git/refs/heads/${HEAD_REF}" 2>&1); then
+            echo "Deleted ${HEAD_REF}."
+          elif grep -qiE 'reference does not exist|not found' <<<"${out}"; then
+            echo "${HEAD_REF} is already gone."
+          else
+            echo "${out}" >&2
+            exit 1
+          fi
