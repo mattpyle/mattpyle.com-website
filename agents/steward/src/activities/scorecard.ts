@@ -369,6 +369,9 @@ function assertTimelessCommentary(record: Omit<ScorecardRunRecord, 'id'>): void 
 
 export async function publishScorecardRun(input: PublishScorecardRunInput): Promise<PublishScorecardRunResult> {
   assertTimelessCommentary(input.record);
+  // One dated branch and one PR per run. Steward never closes the PR: a merge deletes the
+  // branch (delete_branch_on_merge), and .github/workflows/scorecard-branch-cleanup.yml
+  // deletes it when the PR closes unmerged.
   const branch = `steward/scorecard-${input.record.iso}`;
 
   const base = await defaultBranch();
