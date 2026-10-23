@@ -19,7 +19,11 @@
  *
  * 1. NOTHING PERSONAL LEAVES THIS MODULE. The caller hands in the address; it is tested against
  *    the committed ranges and dropped. The `Signature-Agent` URL is reduced to a family from a
- *    fixed list. What comes back is `{ family, verification }`, both from bounded lists.
+ *    fixed list. What comes back is `{ family, verification, signerHost }`: the first two from
+ *    bounded lists, the third the hostname of the key directory that verified a signature from a
+ *    signer KNOWN_SIGNERS does not list, or null. That hostname is an operator's domain, published
+ *    by the operator so that verifiers can fetch its keys, and the counter caps how many a day it
+ *    stores (MAX_SIGNER_HOSTS_PER_DAY in src/lib/agent-hits.mjs).
  * 2. FAIL OPEN. identifyRequest() never rejects. A malformed header, a directory that will not
  *    answer, a key that does not verify: each is "not signed", never an error, and the caller runs
  *    this inside `waitUntil`, so nothing here reaches a response.
@@ -189,6 +193,29 @@ export function classifyVerification({ ua, signer = null, address = null }) {
   if (inPublishedRange(uaFamily, address)) return { family: uaFamily, verification: 'ip-verified' };
   if (isPageClient(uaFamily)) return { family: uaFamily, verification: 'claimed' };
   return { family: uaFamily, verification: NO_VERIFICATION };
+}
+
+/**
+ * The host the Signers table on /activity names a verified signature by, or null.
+ *
+ * A signer in KNOWN_SIGNERS is already named through its family and records no host. Any other
+ * verified signature records the hostname of the identifier that verified it: lowercased, no port,
+ * no path, no query, which is the operator's domain and nothing more. Independent of what
+ * classifyVerification() decided about the hit's family and state: a stranger's key that verified
+ * under a Googlebot user agent proved that the stranger signed, and that is exactly what the table
+ * records. Pure, like the decision above.
+ *
+ * @param {{ identifier: string } | null | undefined} signer
+ * @returns {string | null}
+ */
+export function signerHostFor(signer) {
+  if (!signer || SIGNER_FAMILY.has(signer.identifier)) return null;
+  try {
+    const host = new URL(signer.identifier).hostname.toLowerCase();
+    return host || null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Key discovery: bounded fetches ───────────────────────────────────────────────────────────
@@ -523,14 +550,14 @@ export async function verifyRequestSignature(request, options = {}) {
  * @param {Request} request
  * @param {{ address?: string | null, cache?: ReturnType<typeof createKeyCache>,
  *           fetchImpl?: typeof fetch, now?: Date }} [options]
- * @returns {Promise<{ family: string, verification: string }>}
+ * @returns {Promise<{ family: string, verification: string, signerHost: string | null }>}
  */
 export async function identifyRequest(request, { address = null, ...options } = {}) {
   const ua = request.headers.get('user-agent');
   try {
     const signer = await verifyRequestSignature(request, options);
-    return classifyVerification({ ua, signer, address });
+    return { ...classifyVerification({ ua, signer, address }), signerHost: signerHostFor(signer) };
   } catch {
-    return classifyVerification({ ua, address: null });
+    return { ...classifyVerification({ ua, address: null }), signerHost: null };
   }
 }

@@ -41,7 +41,9 @@ import {
   monthsKeyFor,
   parseHitField,
   parseMonthField,
+  parseSignerField,
   readStoreConfig,
+  signersKeyFor,
 } from './agent-hits.mjs';
 
 const MS_PER_HOUR = 3_600_000;
@@ -154,6 +156,32 @@ export function flattenMonthHashes(monthHashes) {
  */
 export function flattenTraffic({ dayHashes = [], monthHashes = [] } = {}) {
   return [...flattenDayHashes(dayHashes), ...flattenMonthHashes(monthHashes)];
+}
+
+/**
+ * Signers hashes in, one flat row per bucket out: `{ hour, host, count }`.
+ *
+ * A row list of its own rather than more rows in flattenTraffic()'s: a signer-host count is a
+ * second count of a hit that is already in the day hash, so folding the two lists together would
+ * count that hit twice in every total. Same drop-rather-than-guess rule as the other two.
+ *
+ * @param {Array<{ day: string, fields: Record<string, string | number> }>} signerHashes
+ * @returns {Array<{ hour: number, host: string, count: number }>}
+ */
+export function flattenSignerHashes(signerHashes) {
+  const rows = [];
+  for (const { day, fields } of signerHashes ?? []) {
+    for (const [field, rawCount] of Object.entries(fields ?? {})) {
+      const parsed = parseSignerField(field);
+      if (!parsed) continue;
+      const hour = bucketHour(day, parsed.hour);
+      if (hour === null) continue;
+      const count = Number(rawCount);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      rows.push({ hour, host: parsed.host, count });
+    }
+  }
+  return rows;
 }
 
 /**
@@ -315,6 +343,29 @@ export function summarizeTraffic(rows, now = new Date()) {
   };
 }
 
+/**
+ * The Signers table: one row per key-directory host, totalled over every window, from the rows
+ * flattenSignerHashes() produced.
+ *
+ * Sorted by the 7-day column like the client table, because that is the column the table leads
+ * with, and cut at MAX_TABLE_ROWS like every other table. The per-day cap in agent-hits.mjs bounds
+ * a day to sixteen named hosts and the bucket; over thirty days the row count can still pass the
+ * table's cap, and `omitted` says so when it does.
+ *
+ * @param {Array<{ hour: number | null, host: string, count: number }>} rows
+ * @param {Date} now
+ * @returns {{ rows: Array<{ host: string, total: number, day: number, week: number, month: number }>, omitted: number }}
+ */
+export function summarizeSigners(rows, now = new Date()) {
+  const nowHour = epochHour(now);
+  return tally(
+    rows,
+    ({ host }) => ({ host }),
+    nowHour,
+    (a, b) => b.week - a.week || b.month - a.month
+  );
+}
+
 // ── The monthly rollup ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -406,7 +457,7 @@ export function foldDayFields(fields, version = KEY_VERSION) {
  * 2. `SADD` the month to the month set, before anything lands in the month hash, so a hash can
  *    never exist unreachably.
  * 3. `HINCRBY` the folded counts.
- * 4. `DEL` the day hash.
+ * 4. `DEL` the day hash, and for a `v2` day its signers hash with it.
  *
  * Interrupted between 1 and 3, one old day's counts are gone from the all-time total. Interrupted
  * between 3 and 4, an orphan day hash is left behind that nothing reads. The reverse order would
@@ -415,6 +466,11 @@ export function foldDayFields(fields, version = KEY_VERSION) {
  *
  * Every key is built for the hash's own version, so a `v1` day leaves the `v1` day set and lands in
  * a `v1` month.
+ *
+ * The signers hash is deleted rather than folded, and that is the one count the rollup gives up:
+ * the Signers table has no all-time column, so past the longest window a host count is provably
+ * unread (signersKeyFor() in agent-hits.mjs). Its DEL follows the day hash's in the same pipeline,
+ * so the two leave together.
  *
  * @param {Array<{ day: string, fields: Record<string, string>, version?: string }>} dayHashes
  * @returns {string[][]}
@@ -432,6 +488,7 @@ export function rollupCommands(dayHashes) {
       }
     }
     commands.push(['DEL', dayKeyFor(day, version)]);
+    if (version === KEY_VERSION) commands.push(['DEL', signersKeyFor(day, version)]);
   }
   return commands;
 }
@@ -511,7 +568,9 @@ async function pipeline(store, commands, fetchImpl) {
  *
  * Two round trips, because the two sets have to come back before the hashes can be asked for. The
  * second is pipelined into one request whatever the count. The bill for a render is therefore
- * `2 + D + M`, where D is capped by the rollup at around 33 recent days and M grows twelve a year.
+ * `2 + 2D + M`, where D is capped by the rollup at around 33 recent days and M grows twelve a year;
+ * the second D is one HGETALL of each `v2` day's signers hash, which is empty for most days and
+ * costs the same either way.
  *
  * The rollup rides along rather than costing a third round trip: eligibility is decided from the
  * day NAMES, which the first round trip already returned, so the lock attempt is appended to the
@@ -531,13 +590,19 @@ async function pipeline(store, commands, fetchImpl) {
  * @param {{ env?: Record<string, string | undefined>, fetchImpl?: typeof fetch, now?: Date }} options
  * @returns {Promise<{ ok: true,
  *                     dayHashes: Array<{ day: string, version: string, fields: Record<string, string> }>,
- *                     monthHashes: Array<{ month: string, version: string, fields: Record<string, string> }> }
+ *                     monthHashes: Array<{ month: string, version: string, fields: Record<string, string> }>,
+ *                     signerHashes: Array<{ day: string, fields: Record<string, string> }> }
  *                  | { ok: false, reason: string }>}
  */
 export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, now = new Date() } = {}) {
   try {
     if (env.AGENT_TRAFFIC_FIXTURE === '1') {
-      return { ok: true, dayHashes: fixtureDayHashes(now), monthHashes: fixtureMonthHashes(now) };
+      return {
+        ok: true,
+        dayHashes: fixtureDayHashes(now),
+        monthHashes: fixtureMonthHashes(now),
+        signerHashes: fixtureSignerHashes(now),
+      };
     }
 
     const store = readStoreConfig(env);
@@ -572,7 +637,7 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       }
     });
     if (orderedDays.length === 0 && orderedMonths.length === 0) {
-      return { ok: true, dayHashes: [], monthHashes: [] };
+      return { ok: true, dayHashes: [], monthHashes: [], signerHashes: [] };
     }
 
     const eligible = new Set(
@@ -582,9 +647,12 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       )
     );
     const anyEligible = orderedDays.some(({ day }) => eligible.has(day));
+    // Only a `v2` day can have a signers hash; the `v1` days predate the key.
+    const signerDays = orderedDays.filter(({ version }) => version === KEY_VERSION).map(({ day }) => day);
     const commands = [
       ...orderedDays.map(({ day, version }) => ['HGETALL', dayKeyFor(day, version)]),
       ...orderedMonths.map(({ month, version }) => ['HGETALL', monthKeyFor(month, version)]),
+      ...signerDays.map((day) => ['HGETALL', signersKeyFor(day)]),
     ];
     if (anyEligible) commands.push(rollupLockCommand(now.toISOString()));
 
@@ -600,6 +668,10 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       version,
       fields: toFieldMap(results[orderedDays.length + index]),
     }));
+    const signerHashes = signerDays.map((day, index) => ({
+      day,
+      fields: toFieldMap(results[orderedDays.length + orderedMonths.length + index]),
+    }));
 
     // Null means another render holds the lock, which is a reason to do nothing at all: the read
     // above is already complete and correct, and the fold will happen on some later render.
@@ -607,7 +679,7 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       await rollUp(store, dayHashes.filter(({ day }) => eligible.has(day)), fetchImpl);
     }
 
-    return { ok: true, dayHashes, monthHashes };
+    return { ok: true, dayHashes, monthHashes, signerHashes };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.name || error.message : 'error' };
   }
@@ -674,6 +746,37 @@ function fixtureDayHashes(now) {
     byDay.set(day, fields);
   }
   return [...byDay.entries()].sort().map(([day, fields]) => ({ day, version: KEY_VERSION, fields }));
+}
+
+/**
+ * A canned signers hash set, so the Signers table is in the aria golden and under axe like every
+ * other table. Two named hosts and the bucket, positioned so the 7-day and 30-day columns differ.
+ * The hosts are reserved example names, not operators.
+ *
+ * @param {Date} now
+ */
+function fixtureSignerHashes(now) {
+  const nowHour = epochHour(now);
+  /** @type {Array<[number, string, number]>} hours-ago, host, count */
+  const seed = [
+    [2, 'signer.example', 3],
+    [9, 'signer.example', 1],
+    [30, 'agent.example.net', 2],
+    [400, 'signer.example', 5],
+    [500, 'other-host', 1],
+  ];
+
+  /** @type {Map<string, Record<string, string>>} */
+  const byDay = new Map();
+  for (const [hoursAgo, host, count] of seed) {
+    const at = hourStart(nowHour - hoursAgo);
+    const day = at.toISOString().slice(0, 10);
+    const hour = at.toISOString().slice(11, 13);
+    const fields = byDay.get(day) ?? {};
+    fields[`${hour}|${host}`] = String(count);
+    byDay.set(day, fields);
+  }
+  return [...byDay.entries()].sort().map(([day, fields]) => ({ day, fields }));
 }
 
 /**

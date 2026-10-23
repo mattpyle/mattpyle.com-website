@@ -15,8 +15,14 @@
  * 1. Nothing personal is stored. Aggregate counts only, keyed by day, event class, client family
  *    and path. The raw user agent is classified and thrown away inside this module; no IP, no
  *    header, no per-request record ever reaches the store. The promise is structural, not a policy.
+ *    One more thing is stored since 2026-10-22, and it is the only free-text value in the store:
+ *    the hostname of the key directory that verified a Web Bot Auth signature, for a signer
+ *    src/lib/web-bot-auth.mjs does not already name. That hostname is an operator's domain, which
+ *    the operator publishes so that any site can fetch its keys; it names a company or a service,
+ *    never a person, and it is stored alone, with no path, no user agent and no address beside it.
  * 2. Bounded cardinality. Every component of every key comes from a fixed list or is bucketed into
- *    one. Nothing a stranger can send mints a new key.
+ *    one. Nothing a stranger can send mints a new key. The signer hostname is bucketed by a cap:
+ *    MAX_SIGNER_HOSTS_PER_DAY distinct hosts a day, the rest counted as OTHER_SIGNER_HOST.
  * 3. Fail open. A missing env var, a slow store, a 500 from Upstash: all of them are undercounting,
  *    never a failed response. The caller fires this through `waitUntil` and this module never
  *    rejects.
@@ -380,8 +386,109 @@ export function isCounterMonth(month) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
 }
 
-/** The field delimiter inside a day hash. Cannot appear in an hour, event, family, path or state. */
+/** The field delimiter inside a hash. Cannot appear in an hour, event, family, path, state or host. */
 const FIELD_DELIMITER = '|';
+
+// ── Signers ──────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The hash holding one UTC day's verified signatures from signers the site does not name, by the
+ * hostname of the key directory that verified them: field `<utc-hour>|<host>`, value a count.
+ *
+ * A key of its own rather than a sixth part of the day field, because the host is an additional
+ * count and not a new dimension of the hit: the hit's own row (family, path, state) is unchanged,
+ * and a reader of the day hash never meets a host. The hour leads the field for the same reason it
+ * leads a day field: the Signers table's two columns are rolling windows over hour buckets, like
+ * every other number the page shows.
+ *
+ * Only ever written beside a `v2` day hash, so the day set already says which days have one. The
+ * rollup deletes it with the day hash rather than folding it: the table has no all-time column, so
+ * past the longest window a host count is provably unread, and a host seen for a month is a
+ * candidate for KNOWN_SIGNERS, which is the one place an operator is named for good.
+ *
+ * @param {string} day YYYY-MM-DD, UTC @param {string} [version]
+ */
+export function signersKeyFor(day, version = KEY_VERSION) {
+  return `hits:${version}:signers:${day}`;
+}
+
+/**
+ * The most distinct signer hosts one UTC day records by name. The 17th and every later one counts
+ * as OTHER_SIGNER_HOST.
+ *
+ * Sixteen is several times the number of real signers a site this size meets in a day, and well
+ * under MAX_TABLE_ROWS, so the cap only bites on someone cycling directories. It is enforced from a
+ * read of the day's hash just before the write, so a burst of brand-new hosts landing in the same
+ * instant can overrun it by a few; the fetch budget in src/lib/web-bot-auth.mjs
+ * (MAX_DIRECTORY_FETCHES_PER_HOUR per instance) bounds that burst upstream, because every new host
+ * costs the verifier a fetch before it can verify anything.
+ */
+export const MAX_SIGNER_HOSTS_PER_DAY = 16;
+
+/** The bucket for a signer host past the day's cap. No hostname can be this: it has no dot. */
+export const OTHER_SIGNER_HOST = 'other-host';
+
+/** The longest hostname the DNS allows, so a host past it buckets rather than minting a long field. */
+const MAX_SIGNER_HOST_LENGTH = 253;
+
+/** What a stored host may look like: a lowercased DNS name. Rules out the delimiter by shape. */
+const SIGNER_HOST_SHAPE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+
+/**
+ * Is this a host the schema stores by name? The bucket passes too, since it is a field the reader
+ * has to parse back.
+ *
+ * @param {unknown} host
+ */
+export function isSignerHost(host) {
+  if (typeof host !== 'string') return false;
+  if (host === OTHER_SIGNER_HOST) return true;
+  return host.length <= MAX_SIGNER_HOST_LENGTH && SIGNER_HOST_SHAPE.test(host);
+}
+
+/**
+ * The host a hit's signer is counted under, given the hosts the day has already named.
+ *
+ * A host already in the day's hash keeps its name whatever the count, so a signer that is seen all
+ * day is one row and not sixteen. A new host takes a name while the day has room and the bucket
+ * once it does not. A host the schema would not store, or none, is nothing to count.
+ *
+ * @param {string | null | undefined} host
+ * @param {Iterable<string>} seenHosts the hosts already named in the day's signers hash
+ * @returns {string | null}
+ */
+export function signerHostField(host, seenHosts) {
+  if (!host || !isSignerHost(host) || host === OTHER_SIGNER_HOST) return null;
+  const seen = new Set(seenHosts);
+  seen.delete(OTHER_SIGNER_HOST);
+  if (seen.has(host) || seen.size < MAX_SIGNER_HOSTS_PER_DAY) return host;
+  return OTHER_SIGNER_HOST;
+}
+
+/**
+ * A signers-hash field, back into its parts. Same contract as parseHitField(): a field that is not
+ * exactly what the schema promises is null, and the caller drops it rather than guessing.
+ *
+ * @param {string} field
+ * @returns {{ hour: string, host: string } | null}
+ */
+export function parseSignerField(field) {
+  const parts = field.split(FIELD_DELIMITER);
+  if (parts.length !== 2) return null;
+  const [hour, host] = parts;
+  if (!/^\d{2}$/.test(hour) || !isSignerHost(host)) return null;
+  return { hour, host };
+}
+
+/** The hosts a signers hash names, from its fields, with the bucket left out. @param {string[]} fields */
+export function signerHostsFrom(fields) {
+  const hosts = new Set();
+  for (const field of fields ?? []) {
+    const parsed = parseSignerField(String(field));
+    if (parsed && parsed.host !== OTHER_SIGNER_HOST) hosts.add(parsed.host);
+  }
+  return hosts;
+}
 
 /** How many parts a field has, per version and hash kind. */
 const DAY_FIELD_PARTS = Object.freeze({ v1: 4, v2: 5 });
@@ -462,6 +569,13 @@ export function parseMonthField(field, version = KEY_VERSION) {
  * | `hits:v2:months` | set of UTC months | which months exist, the month set's twin |
  * | `hits:v1:rollup` | string with a TTL | the lock one render holds while it folds days into a month, for both versions |
  *
+ * And one more, since 2026-10-22, written by a hit only when its signature verified under a signer
+ * the site does not name (signersKeyFor() above says why it is a key of its own):
+ *
+ * | Key | Type | Answers |
+ * |---|---|---|
+ * | `hits:v2:signers:<utc-day>` | hash, field `<utc-hour>\|<host>` | which key directories verified the day's unnamed signers, and how often |
+ *
  * The `v1` keys have the same shape with the verification part absent: four parts in a day field,
  * three in a month field. They hold every hit from 2026-07-21 to 2026-10-17.
  *
@@ -477,18 +591,22 @@ export function parseMonthField(field, version = KEY_VERSION) {
  * The field delimiter is `|`, which cannot appear in an hour, an event, a family, a bucketed path
  * or a state.
  *
- * `family` and `verification` are optional and come from src/lib/web-bot-auth.mjs, which can name
- * a family from a verified signature where the user agent names none. Either one that is not in
- * the schema's own lists is replaced by what the user agent alone would give, so a caller cannot
- * mint a key part either.
+ * `family`, `verification` and `signerHost` are optional and come from src/lib/web-bot-auth.mjs,
+ * which can name a family from a verified signature where the user agent names none. A family or
+ * state that is not in the schema's own lists is replaced by what the user agent alone would give,
+ * so a caller cannot mint a key part either. A signer host is counted under signerHostField(),
+ * given the hosts the day has already named (`seenSignerHosts`, read by recordHit()); with a host
+ * the commands gain a fourth, the HINCRBY on the day's signers hash.
  *
  * @param {{ event: string, path: string, ua?: string | null, family?: string,
- *           verification?: string, now?: Date }} hit
+ *           verification?: string, signerHost?: string | null, seenSignerHosts?: Iterable<string>,
+ *           now?: Date }} hit
  * @returns {{ day: string, hour: string, event: string, family: string, path: string,
- *             verification: string, field: string, dayKey: string, daysKey: string,
- *             totalKey: string, commands: string[][] }}
+ *             verification: string, field: string, signerHost: string | null,
+ *             signerField: string | null, dayKey: string, daysKey: string, totalKey: string,
+ *             signersKey: string, commands: string[][] }}
  */
-export function hitKeys({ event, path, ua, family, verification, now = new Date() }) {
+export function hitKeys({ event, path, ua, family, verification, signerHost = null, seenSignerHosts = [], now = new Date() }) {
   if (!EVENTS.includes(event)) throw new Error(`unknown event class: ${event}`);
   const day = counterDay(now);
   const hour = counterHour(now);
@@ -496,10 +614,20 @@ export function hitKeys({ event, path, ua, family, verification, now = new Date(
   const state = verification && isVerificationState(verification) ? verification : NO_VERIFICATION;
   const countedPath = counterPath(event, path);
   const field = [hour, event, countedFamily, countedPath, state].join(FIELD_DELIMITER);
+  const countedHost = signerHostField(signerHost, seenSignerHosts);
+  const signerField = countedHost ? [hour, countedHost].join(FIELD_DELIMITER) : null;
 
   const dayKey = dayKeyFor(day);
   const daysKey = DAYS_KEY;
   const totalKey = TOTAL_KEY;
+  const signersKey = signersKeyFor(day);
+
+  const commands = [
+    ['HINCRBY', dayKey, field, '1'],
+    ['SADD', daysKey, day],
+    ['INCR', totalKey],
+  ];
+  if (signerField) commands.push(['HINCRBY', signersKey, signerField, '1']);
 
   return {
     day,
@@ -509,14 +637,13 @@ export function hitKeys({ event, path, ua, family, verification, now = new Date(
     path: countedPath,
     verification: state,
     field,
+    signerHost: countedHost,
+    signerField,
     dayKey,
     daysKey,
     totalKey,
-    commands: [
-      ['HINCRBY', dayKey, field, '1'],
-      ['SADD', daysKey, day],
-      ['INCR', totalKey],
-    ],
+    signersKey,
+    commands,
   };
 }
 
@@ -551,16 +678,21 @@ const STORE_TIMEOUT_MS = 1500;
  * inside the same `waitUntil` as the count and never in front of the response. A rejected or
  * malformed identity falls back to the user agent alone.
  *
+ * An identity with a `signerHost` costs one more round trip before the write: the hosts the day
+ * has already named, so the cap in signerHostField() can be applied. That read fails open on its
+ * own: if it does not answer, the hit is still counted and only the host is not.
+ *
  * @param {{ event: string, path: string, ua?: string | null, now?: Date,
- *           identity?: { family?: string, verification?: string }
- *             | Promise<{ family?: string, verification?: string }>,
+ *           identity?: { family?: string, verification?: string, signerHost?: string | null }
+ *             | Promise<{ family?: string, verification?: string, signerHost?: string | null }>,
  *           env?: Record<string, string | undefined>, fetchImpl?: typeof fetch }} hit
- * @returns {Promise<{ ok: boolean, reason?: string, field?: string, day?: string }>}
+ * @returns {Promise<{ ok: boolean, reason?: string, field?: string, day?: string,
+ *                     signerField?: string | null }>}
  */
 export async function recordHit({ event, path, ua, now, identity, env = process.env, fetchImpl = fetch }) {
   let keys;
   try {
-    const { family, verification } = await settleIdentity(identity);
+    const { family, verification, signerHost = null } = await settleIdentity(identity);
     const countedFamily = family && isKnownFamily(family) ? family : classifyClient(ua);
 
     // Before the store is even looked up, so the bots-only rule holds in every environment and a
@@ -575,24 +707,66 @@ export async function recordHit({ event, path, ua, now, identity, env = process.
     const store = readStoreConfig(env);
     if (!store) return { ok: false, reason: 'no-store' };
 
-    keys = hitKeys({ event, path, ua, family: countedFamily, verification, now });
-
-    const response = await fetchImpl(`${store.url}/pipeline`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${store.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(keys.commands),
-      signal: AbortSignal.timeout(STORE_TIMEOUT_MS),
+    const at = now ?? new Date();
+    const seenSignerHosts = isSignerHost(signerHost) ? await readSignerHosts(store, counterDay(at), fetchImpl) : null;
+    keys = hitKeys({
+      event,
+      path,
+      ua,
+      family: countedFamily,
+      verification,
+      // A read that did not answer records no host: the hit itself is still counted below.
+      signerHost: seenSignerHosts ? signerHost : null,
+      seenSignerHosts: seenSignerHosts ?? [],
+      now: at,
     });
 
-    if (!response.ok) return { ok: false, reason: `status-${response.status}`, field: keys.field, day: keys.day };
-    return { ok: true, field: keys.field, day: keys.day };
+    const response = await pipeline(store, keys.commands, fetchImpl);
+
+    if (!response.ok) {
+      return { ok: false, reason: `status-${response.status}`, field: keys.field, day: keys.day, signerField: keys.signerField };
+    }
+    return { ok: true, field: keys.field, day: keys.day, signerField: keys.signerField };
   } catch (error) {
     // Deliberately swallowed, per the posture this inherits from the middleware's surface branch:
     // observation is never worth a failed response. Undercounting is the acceptable failure.
     return { ok: false, reason: error instanceof Error ? error.name : 'error', field: keys?.field };
+  }
+}
+
+/** One POST to the store's pipeline endpoint, within this module's budget. */
+function pipeline(store, commands, fetchImpl) {
+  return fetchImpl(`${store.url}/pipeline`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${store.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(commands),
+    signal: AbortSignal.timeout(STORE_TIMEOUT_MS),
+  });
+}
+
+/**
+ * The hosts a day's signers hash already names, or null when the store did not say.
+ *
+ * Its own try/catch, so the one extra read a signed hit costs can never be why the hit itself went
+ * uncounted. Null and an empty set are different answers: an empty hash means the host is the
+ * day's first and takes a name; null means the cap cannot be applied, so no host is written.
+ *
+ * @param {{ url: string, token: string }} store @param {string} day @param {typeof fetch} fetchImpl
+ * @returns {Promise<Set<string> | null>}
+ */
+async function readSignerHosts(store, day, fetchImpl) {
+  try {
+    const response = await pipeline(store, [['HKEYS', signersKeyFor(day)]], fetchImpl);
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const fields = Array.isArray(payload) ? payload[0]?.result : null;
+    if (!Array.isArray(fields)) return null;
+    return signerHostsFrom(fields);
+  } catch {
+    return null;
   }
 }
 

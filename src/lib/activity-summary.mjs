@@ -20,7 +20,8 @@
  * buckets with no store and no deploy. Same split as agent-traffic.mjs itself.
  */
 
-import { epochHour, hourStart, summarizeTraffic } from './agent-traffic.mjs';
+import { epochHour, hourStart, summarizeSigners, summarizeTraffic } from './agent-traffic.mjs';
+import { OTHER_SIGNER_HOST } from './agent-hits.mjs';
 
 /** How many hour buckets the chart shows. One day, ending with the hour in progress. */
 export const CHART_HOURS = 24;
@@ -95,6 +96,21 @@ export const VERIFICATION_LABELS = Object.freeze({
 export function verificationLabel(state) {
   return VERIFICATION_LABELS[/** @type {keyof typeof VERIFICATION_LABELS} */ (state ?? '')] ?? '';
 }
+
+/**
+ * The one Signers row that is not a hostname, glossed the way FAMILY_NOTES glosses a family: the
+ * bucket for hosts past the day's cap (MAX_SIGNER_HOSTS_PER_DAY in src/lib/agent-hits.mjs).
+ */
+export const SIGNER_HOST_NOTES = Object.freeze({
+  [OTHER_SIGNER_HOST]: 'past the day\'s cap of named hosts',
+});
+
+/**
+ * What one row of the Signers table proves, printed under it on every surface so the three
+ * renders say the same thing.
+ */
+export const SIGNERS_LEGEND =
+  'Each row is a Web Bot Auth signature that verified against the key directory at this host, from a signer this site does not yet name. The host is the operator\'s domain, recorded alone; a signer this site names appears under its own name in By client.';
 
 /** Two-digit UTC hour, the form the chart's ticks are written in. @param {number} hour */
 function hourLabel(hour) {
@@ -189,10 +205,16 @@ export function utcStamp(at) {
  * that from a store that did not answer, which is `readAgentTraffic()`'s business rather than
  * this module's.
  *
+ * `signers` is the second row list a read returns (flattenSignerHashes() in agent-traffic.mjs): a
+ * count per hour of the verified signatures from signers the site does not name, by key-directory
+ * host. Kept apart from `rows` because each one is a second count of a hit already in `rows`, and
+ * the headline totals must not count it twice.
+ *
  * @param {Array<{ hour: number | null, event: string, family: string, path: string, count: number }>} rows
  * @param {Date} now
+ * @param {{ signers?: Array<{ hour: number | null, host: string, count: number }> }} [extra]
  */
-export function buildActivity(rows, now = new Date()) {
+export function buildActivity(rows, now = new Date(), { signers = [] } = {}) {
   const summary = summarizeTraffic(rows, now);
   const hours = hourlySeries(rows, now);
   const lastHour = lastHourRows(rows, now);
@@ -211,6 +233,12 @@ export function buildActivity(rows, now = new Date()) {
     },
     /** Each verification state's totals, `signed` first. */
     verification: summary.verification,
+    /**
+     * The Signers table: one row per key-directory host that verified a signature from a signer
+     * the site does not name, over the 7-day and 30-day windows. Empty when every verified
+     * signature came from a signer in KNOWN_SIGNERS, which is the state the table exists to reach.
+     */
+    signers: summarizeSigners(signers, now),
     pages: summary.pages,
     /**
      * Which of this site's pages named bots have read, from the `page` event class.

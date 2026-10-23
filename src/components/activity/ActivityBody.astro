@@ -30,7 +30,7 @@
  * 2. The bundle has no empty or unavailable state, because the mockup always has numbers. This
  *    page reads a live store per request, so it has three states, and the two without numbers say
  *    which one they are.
- * 3. Below 500px the 30-day column is dropped from the three tables that have one. The bundle
+ * 3. Below 500px the 30-day column is dropped from the tables that have one. The bundle
  *    keeps every column at every width; a 320px viewport cannot hold four, and the 30-day figure
  *    is the one a reader needs least because every table here is sorted on another column. The
  *    rule and its reasoning are at the 500px breakpoint at the foot of this file.
@@ -46,7 +46,7 @@
  * src/styles/retro.css. The prefix is load-bearing — Astro appends a `[data-astro-cid-…]` to the
  * selectors below and that attribute counts as a class, so a retro rule without it loses silently.
  */
-import { FAMILY_NOTES, verificationLabel } from '../../lib/activity-summary.mjs';
+import { FAMILY_NOTES, SIGNERS_LEGEND, SIGNER_HOST_NOTES, verificationLabel } from '../../lib/activity-summary.mjs';
 import { MAX_TABLE_ROWS } from '../../lib/agent-traffic.mjs';
 // The store counts the page path a client asked for; the table shows the URL that answered, so a
 // row reads as the markdown document it was. Same function the middleware derives the sibling
@@ -69,6 +69,11 @@ const hasData = Boolean(activity && activity.counted);
 /** A client family with its gloss, for the two places a family name is printed. */
 function familyNote(family: string): string | undefined {
   return FAMILY_NOTES[family as keyof typeof FAMILY_NOTES];
+}
+
+/** The one Signers row that is a bucket rather than a host gets the same kind of gloss. */
+function signerHostNote(host: string): string | undefined {
+  return SIGNER_HOST_NOTES[host as keyof typeof SIGNER_HOST_NOTES];
 }
 ---
 
@@ -324,6 +329,52 @@ function familyNote(family: string): string | undefined {
           )}
         </section>
       </div>
+
+      {/*
+        Signers, since 2026-10-22: the key-directory hosts behind verified signatures from signers
+        the site does not name (src/lib/web-bot-auth.mjs, signerHostFor). A signer in KNOWN_SIGNERS
+        is named through its family and appears in By client, never here; this table is the queue
+        of operators the site has verified but not yet named, and the legend under it says what a
+        row proves. The same shape as the Markdown table beside it (a name and two window columns),
+        and a full-width band because it has no pair.
+
+        No marker column: every row here is a signer by construction, and a marker that was always
+        filled in would restate the heading once per row, the same reasoning Pages read by bots gives.
+      */}
+      <section class="rd-section band-signers" aria-labelledby="activity-signers-title">
+        <div class="band-head">
+          <h2 id="activity-signers-title">Signers</h2>
+        </div>
+        {activity.signers.rows.length > 0 ? (
+          <table class="grid-table signer-table">
+            <thead>
+              <tr>
+                <th scope="col" class="c-client">Host</th>
+                <th scope="col" class="c-num c-wide">7 days</th>
+                <th scope="col" class="c-num c-wide">30 days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activity.signers.rows.map(row => (
+                <tr>
+                  <td class="c-client">{row.host}{signerHostNote(row.host) && <span class="family-note"> ({signerHostNote(row.host)})</span>}</td>
+                  <td class="c-num c-lead">{counts.format(row.week)}</td>
+                  <td class="c-num">{counts.format(row.month)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p class="band-empty">
+            No signature from a signer this site does not name has verified yet. A signer this site
+            names appears under its own name in By client.
+          </p>
+        )}
+        {activity.signers.omitted > 0 && (
+          <p class="omitted">{activity.signers.omitted} further host(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+        )}
+        <p class="state-legend">{SIGNERS_LEGEND}</p>
+      </section>
     </Fragment>
   ) : (
     <section class="rd-section band-counts" aria-labelledby="activity-unavailable-title">
@@ -336,7 +387,7 @@ function familyNote(family: string): string | undefined {
     <div>
       <h2 id="activity-how-title">How this is counted</h2>
       <p class="how-prose">
-        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
+        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
       </p>
     </div>
     <div class="as-data">
@@ -577,13 +628,16 @@ function familyNote(family: string): string | undefined {
   .grid-table td.c-lead { color: var(--ink); }
 
   .surface-table .c-wide,
-  .bot-page-table .c-wide { width: 130px; }
+  .bot-page-table .c-wide,
+  .signer-table .c-wide { width: 130px; }
 
   .surface-table td.c-num,
-  .bot-page-table td.c-num { padding-left: 24px; }
+  .bot-page-table td.c-num,
+  .signer-table td.c-num { padding-left: 24px; }
 
   .surface-table td,
-  .bot-page-table td { padding: 15px 0; }
+  .bot-page-table td,
+  .signer-table td { padding: 15px 0; }
 
   .c-marker {
     width: 9px;
@@ -628,7 +682,8 @@ function familyNote(family: string): string | undefined {
   .family-note { color: var(--ink-6); }
 
   .band-surfaces,
-  .band-bot-pages { padding-top: 76px; }
+  .band-bot-pages,
+  .band-signers { padding-top: 76px; }
 
   .band-tables {
     display: grid;
@@ -790,6 +845,7 @@ function familyNote(family: string): string | undefined {
     .band-surfaces,
     .band-bot-pages,
     .band-tables,
+    .band-signers,
     .band-how { padding-top: 56px; }
 
     .band-head h2,
@@ -825,14 +881,17 @@ function familyNote(family: string): string | undefined {
     .grid-table td { font-size: 17px; padding: 12px 0; }
 
     .surface-table td,
-    .bot-page-table td { padding: 12px 0; }
+    .bot-page-table td,
+    .signer-table td { padding: 12px 0; }
 
     .grid-table .c-num,
     .surface-table .c-wide,
-    .bot-page-table .c-wide { width: 68px; padding-left: 12px; }
+    .bot-page-table .c-wide,
+    .signer-table .c-wide { width: 68px; padding-left: 12px; }
 
     .surface-table td.c-num,
-    .bot-page-table td.c-num { padding-left: 12px; }
+    .bot-page-table td.c-num,
+    .signer-table td.c-num { padding-left: 12px; }
 
     .hour-table .c-num { width: 68px; }
 
@@ -857,7 +916,9 @@ function familyNote(family: string): string | undefined {
     .client-table th:last-child,
     .client-table td:last-child,
     .markdown-table th:last-child,
-    .markdown-table td:last-child { display: none; }
+    .markdown-table td:last-child,
+    .signer-table th:last-child,
+    .signer-table td:last-child { display: none; }
   }
 
   /* ── The bar-height ladder ──────────────────────────────────────────────── */

@@ -19,6 +19,7 @@ import {
   rangeFamilies,
   resolveMember,
   signatureLabels,
+  signerHostFor,
   verifiersFromKeySet,
   verifyRequestSignature,
 } from '../src/lib/web-bot-auth.mjs';
@@ -151,7 +152,7 @@ test('a request signed with a throwaway key verifies against the directory its U
   const fetchImpl = documents({ [`https://signer.example${DIRECTORY_PATH}`]: { keys: [publicJwk] } });
 
   const identity = await identifyRequest(request, { cache: createKeyCache(), fetchImpl });
-  assert.deepEqual(identity, { family: 'curl', verification: 'signed' });
+  assert.deepEqual(identity, { family: 'curl', verification: 'signed', signerHost: 'signer.example' });
 
   // One fetch, of the well-known URI, asking for the directory media type, refusing redirects.
   assert.equal(fetchImpl.calls.length, 1);
@@ -175,6 +176,8 @@ test('the same request with its signature altered is counted on its user agent a
   assert.deepEqual(await identifyRequest(altered, { cache: createKeyCache(), fetchImpl }), {
     family: 'curl',
     verification: 'claimed',
+    // A signature that did not verify names no host, whatever URL it carried.
+    signerHost: null,
   });
 });
 
@@ -206,6 +209,8 @@ test('a Google-Agent-shaped request signed under agent.bot.goog is google-agent,
   assert.deepEqual(await identifyRequest(request, { cache: createKeyCache(), fetchImpl }), {
     family: 'google-agent',
     verification: 'signed',
+    // A known signer is named through its family; no host is recorded for it.
+    signerHost: null,
   });
 });
 
@@ -224,6 +229,8 @@ test('a spoofed Google-Agent signed by its own key is not signed google-agent', 
   assert.deepEqual(await identifyRequest(request, { cache, fetchImpl, address: '203.0.113.9' }), {
     family: 'google-agent',
     verification: 'claimed',
+    // The signature proved attacker.example signed, and that is what the Signers table records.
+    signerHost: 'attacker.example',
   });
 });
 
@@ -235,6 +242,7 @@ test('Google-Agent with no signature from a Google address is ip-verified', asyn
   assert.deepEqual(await identifyRequest(request, { address, fetchImpl, cache: createKeyCache() }), {
     family: 'google-agent',
     verification: 'ip-verified',
+    signerHost: null,
   });
   assert.equal(fetchImpl.calls.length, 0, 'no signature, no fetch');
 });
@@ -245,6 +253,7 @@ test('a plain browser gets no state and costs no fetch', async () => {
   assert.deepEqual(await identifyRequest(request, { address: '198.51.100.7', fetchImpl, cache: createKeyCache() }), {
     family: 'browser',
     verification: '',
+    signerHost: null,
   });
   assert.equal(fetchImpl.calls.length, 0);
 });
@@ -261,6 +270,7 @@ test('ChatGPT agent, signed under chatgpt.com with a Chrome user agent, is chatg
   assert.deepEqual(await identifyRequest(request, { cache: createKeyCache(), fetchImpl }), {
     family: 'chatgpt-agent',
     verification: 'signed',
+    signerHost: null,
   });
 });
 
@@ -290,6 +300,17 @@ test('the decision table, row by row', () => {
   for (const [observed, expected] of cases) {
     assert.deepEqual(classifyVerification(observed), expected, JSON.stringify(observed));
   }
+});
+
+test('the signer host is a stranger’s directory hostname, and nothing for a known signer', () => {
+  // Pure, like the decision table: what the Signers table on /activity records a verified
+  // signature under, independent of the family and state the table above decided.
+  for (const { identifier } of KNOWN_SIGNERS) assert.equal(signerHostFor({ identifier }), null, identifier);
+  assert.equal(signerHostFor({ identifier: `https://signer.example${DIRECTORY_PATH}` }), 'signer.example');
+  // A card or JWKS identifier keeps its path in the identifier and loses it here; case is folded.
+  assert.equal(signerHostFor({ identifier: 'https://Agent.Example.NET/.well-known/signature-agent-card' }), 'agent.example.net');
+  assert.equal(signerHostFor(null), null);
+  assert.equal(signerHostFor({ identifier: 'not a url' }), null);
 });
 
 test('every known signer names a family the counter stores', () => {
@@ -446,6 +467,7 @@ test('identifyRequest never rejects, whatever the headers hold', async () => {
   assert.deepEqual(await identifyRequest(garbage, { fetchImpl: documents({}), cache: createKeyCache() }), {
     family: 'curl',
     verification: 'claimed',
+    signerHost: null,
   });
 });
 

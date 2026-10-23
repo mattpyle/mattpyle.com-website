@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   BAR_CEILING_PERCENT,
   CHART_HOURS,
+  SIGNERS_LEGEND,
+  SIGNER_HOST_NOTES,
   buildActivity,
   clientKind,
   hourlySeries,
@@ -10,6 +12,7 @@ import {
   verificationLabel,
 } from '../src/lib/activity-summary.mjs';
 import { epochHour } from '../src/lib/agent-traffic.mjs';
+import { OTHER_SIGNER_HOST } from '../src/lib/agent-hits.mjs';
 
 // The derivations behind /activity, against fabricated buckets rather than a store. The layer
 // below (rolling windows, the rollup, the transport) is tests/agent-traffic.test.mjs's; this file
@@ -170,4 +173,30 @@ test('the client rows carry a verification state and the page prints it in words
   // A state the schema does not store prints nothing rather than itself.
   assert.equal(verificationLabel('trust-me'), '');
   assert.equal(verificationLabel(undefined), '');
+});
+
+test('the Signers table is built from its own row list and is empty without one', () => {
+  const traffic = [{ ...row(1, 'curl', '/llms.txt', 3), verification: 'signed' }];
+  const signers = [
+    { hour: NOW_HOUR - 1, host: 'signer.example', count: 3 },
+    { hour: NOW_HOUR - 200, host: 'signer.example', count: 2 },
+    { hour: NOW_HOUR - 2, host: OTHER_SIGNER_HOST, count: 1 },
+  ];
+  const activity = buildActivity(traffic, NOW, { signers });
+  assert.deepEqual(
+    activity.signers.rows.map(({ host, week, month }) => [host, week, month]),
+    [
+      ['signer.example', 3, 5],
+      [OTHER_SIGNER_HOST, 1, 1],
+    ]
+  );
+  // A host count is a second count of a hit already in the traffic rows: the headline is unmoved.
+  assert.equal(activity.totals.total, 3);
+  assert.equal(activity.signers.omitted, 0);
+
+  assert.deepEqual(buildActivity(traffic, NOW).signers, { rows: [], omitted: 0 });
+
+  // The bucket is glossed and the legend says what a row proves; both are what the three renders print.
+  assert.ok(SIGNER_HOST_NOTES[OTHER_SIGNER_HOST]);
+  assert.match(SIGNERS_LEGEND, /key directory/);
 });

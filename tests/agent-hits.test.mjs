@@ -11,6 +11,8 @@ import {
   KEY_VERSION,
   KEY_VERSIONS,
   LEGACY_KEY_VERSION,
+  MAX_SIGNER_HOSTS_PER_DAY,
+  OTHER_SIGNER_HOST,
   PAGE_CLIENT_FAMILIES,
   VERIFICATION_STATES,
   dayKeyFor,
@@ -26,14 +28,19 @@ import {
   hitKeys,
   isCounterMonth,
   isPageClient,
+  isSignerHost,
   knownFamilies,
   monthFieldFor,
   monthKeyFor,
   monthOf,
   parseHitField,
   parseMonthField,
+  parseSignerField,
   readStoreConfig,
   recordHit,
+  signerHostField,
+  signerHostsFrom,
+  signersKeyFor,
 } from '../src/lib/agent-hits.mjs';
 import { AGENT_SURFACE_PATHS, WELL_KNOWN_SURFACE_PATHS } from '../src/lib/agent-surfaces.mjs';
 import { PAGE_PATHS } from '../src/data/page-paths.mjs';
@@ -640,6 +647,169 @@ test('a bad event class fails inside recordHit rather than reaching the caller',
   const result = await recordHit({ event: 'nope', path: '/llms.txt', ua: 'curl/8', env: STORE_ENV, fetchImpl });
   assert.equal(result.ok, false);
   assert.equal(fetchImpl.calls.length, 0);
+});
+
+// --- signers ----------------------------------------------------------------------------------
+
+const AT = new Date('2026-10-22T20:00:00Z');
+
+/**
+ * A store whose signers hash for the day already names these hosts. Answers HKEYS with their
+ * fields and every other pipeline with a bare OK, recording each one.
+ */
+function storeNaming(hosts, { hkeys = 'answer' } = {}) {
+  const calls = [];
+  const impl = async (url, init) => {
+    const commands = JSON.parse(init.body);
+    calls.push(commands);
+    if (commands[0][0] === 'HKEYS') {
+      if (hkeys === 'fail') throw new Error('ECONNRESET');
+      if (hkeys === '500') return { ok: false, status: 500 };
+      return new Response(JSON.stringify([{ result: hosts.map((host) => `07|${host}`) }]), { status: 200 });
+    }
+    return { ok: true, status: 200 };
+  };
+  impl.calls = calls;
+  return impl;
+}
+
+test('the signers hash is a v2 key of its own, with the hour leading a two-part field', () => {
+  assert.equal(signersKeyFor('2026-10-22'), 'hits:v2:signers:2026-10-22');
+  assert.deepEqual(parseSignerField('20|signer.example'), { hour: '20', host: 'signer.example' });
+  assert.deepEqual(parseSignerField(`20|${OTHER_SIGNER_HOST}`), { hour: '20', host: OTHER_SIGNER_HOST });
+  // Not two parts, not an hour, not a hostname: dropped, never guessed at.
+  for (const bad of ['20|signer.example|extra', 'xx|signer.example', '20|', '20|Signer.Example', '20|a|b', '20|-bad.example', '20|no-dot']) {
+    assert.equal(parseSignerField(bad), null, bad);
+  }
+});
+
+test('a signer host is a lowercased DNS name or the bucket, and nothing else', () => {
+  for (const ok of ['signer.example', 'agent.bot.goog', 'a-b.c-d.example', OTHER_SIGNER_HOST]) assert.ok(isSignerHost(ok), ok);
+  for (const bad of ['Signer.example', 'signer', 'signer.example|x', 'signer.example:443', '', null, 7, `${'a'.repeat(250)}.example`]) {
+    assert.equal(isSignerHost(bad), false, String(bad));
+  }
+  assert.ok(!OTHER_SIGNER_HOST.includes('.'), 'no hostname can collide with the bucket');
+});
+
+test('a day names at most sixteen hosts and the seventeenth is the bucket', () => {
+  const named = Array.from({ length: MAX_SIGNER_HOSTS_PER_DAY }, (_, i) => `signer-${i}.example`);
+  // Room left: a new host takes its name.
+  assert.equal(signerHostField('new.example', named.slice(0, 3)), 'new.example');
+  // Already named today: keeps its name however full the day is.
+  assert.equal(signerHostField('signer-4.example', named), 'signer-4.example');
+  // Full: a new host is the bucket, and the bucket itself never counts towards the cap.
+  assert.equal(signerHostField('new.example', named), OTHER_SIGNER_HOST);
+  assert.equal(signerHostField('new.example', [...named.slice(0, 15), OTHER_SIGNER_HOST]), 'new.example');
+  // Nothing, or a host the schema would not store, is nothing to count.
+  assert.equal(signerHostField(null, named), null);
+  assert.equal(signerHostField('Not A Host', []), null);
+  assert.equal(signerHostField(OTHER_SIGNER_HOST, []), null);
+  // The reader of a hash's fields gives back the named hosts and leaves the bucket out.
+  assert.deepEqual([...signerHostsFrom(['07|a.example', '08|a.example', `09|${OTHER_SIGNER_HOST}`, 'junk'])], ['a.example']);
+});
+
+test('a hit with a signer host gains a fourth command and the hit field is unchanged', () => {
+  const without = hitKeys({ event: 'surface', path: '/llms.txt', ua: 'curl/8', verification: 'signed', now: AT });
+  const withHost = hitKeys({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8',
+    verification: 'signed',
+    signerHost: 'signer.example',
+    now: AT,
+  });
+  assert.equal(without.commands.length, 3);
+  assert.equal(without.signerField, null);
+  assert.equal(withHost.field, without.field, 'the day field never carries the host');
+  assert.deepEqual(withHost.commands.slice(0, 3), without.commands);
+  assert.deepEqual(withHost.commands[3], ['HINCRBY', 'hits:v2:signers:2026-10-22', '20|signer.example', '1']);
+  assert.equal(withHost.signerField, '20|signer.example');
+});
+
+test('an unlisted signer costs one read and writes its host; a listed one costs nothing extra', async () => {
+  // Listed: identifyRequest hands in no host, so the hit is the one POST it always was.
+  const listed = storeNaming([]);
+  const known = await recordHit({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8',
+    identity: { family: 'chatgpt-agent', verification: 'signed', signerHost: null },
+    now: AT,
+    env: STORE_ENV,
+    fetchImpl: listed,
+  });
+  assert.equal(known.ok, true);
+  assert.equal(known.signerField, null);
+  assert.equal(listed.calls.length, 1);
+  assert.equal(listed.calls[0].length, 3);
+
+  // Unlisted: HKEYS on the day's signers hash, then the hit with its fourth command.
+  const unlisted = storeNaming(['earlier.example']);
+  const stranger = await recordHit({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8',
+    identity: Promise.resolve({ family: 'curl', verification: 'signed', signerHost: 'signer.example' }),
+    now: AT,
+    env: STORE_ENV,
+    fetchImpl: unlisted,
+  });
+  assert.equal(stranger.ok, true);
+  assert.equal(stranger.field, '20|surface|curl|/llms.txt|signed');
+  assert.equal(stranger.signerField, '20|signer.example');
+  assert.deepEqual(unlisted.calls[0], [['HKEYS', 'hits:v2:signers:2026-10-22']]);
+  assert.deepEqual(unlisted.calls[1][3], ['HINCRBY', 'hits:v2:signers:2026-10-22', '20|signer.example', '1']);
+  assert.equal(unlisted.calls.length, 2);
+});
+
+test('the seventeenth host of a day is counted as the bucket', async () => {
+  const full = storeNaming(Array.from({ length: MAX_SIGNER_HOSTS_PER_DAY }, (_, i) => `signer-${i}.example`));
+  const result = await recordHit({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8',
+    identity: { family: 'curl', verification: 'signed', signerHost: 'seventeenth.example' },
+    now: AT,
+    env: STORE_ENV,
+    fetchImpl: full,
+  });
+  assert.equal(result.signerField, `20|${OTHER_SIGNER_HOST}`);
+  assert.deepEqual(full.calls[1][3], ['HINCRBY', 'hits:v2:signers:2026-10-22', `20|${OTHER_SIGNER_HOST}`, '1']);
+});
+
+test('a signers read that fails loses the host and never the hit', async () => {
+  for (const hkeys of ['fail', '500']) {
+    const store = storeNaming([], { hkeys });
+    const result = await recordHit({
+      event: 'surface',
+      path: '/llms.txt',
+      ua: 'curl/8',
+      identity: { family: 'curl', verification: 'signed', signerHost: 'signer.example' },
+      now: AT,
+      env: STORE_ENV,
+      fetchImpl: store,
+    });
+    assert.equal(result.ok, true, hkeys);
+    assert.equal(result.signerField, null, hkeys);
+    assert.equal(store.calls.length, 2, hkeys);
+    assert.equal(store.calls[1].length, 3, 'the hit is written without a signers command');
+  }
+});
+
+test('a host the schema would not store is dropped before any read is attempted', async () => {
+  const store = storeNaming([]);
+  const result = await recordHit({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8',
+    identity: { family: 'curl', verification: 'signed', signerHost: 'not a host|at all' },
+    now: AT,
+    env: STORE_ENV,
+    fetchImpl: store,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.signerField, null);
+  assert.equal(store.calls.length, 1, 'no HKEYS for a host that could never be written');
 });
 
 // --- the wiring -------------------------------------------------------------------------------

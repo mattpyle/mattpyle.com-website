@@ -8,12 +8,14 @@ import {
   epochHour,
   flattenDayHashes,
   flattenMonthHashes,
+  flattenSignerHashes,
   flattenTraffic,
   foldDayFields,
   hourStart,
   readAgentTraffic,
   rollupCommands,
   rollupEligibleDays,
+  summarizeSigners,
   summarizeTraffic,
   toFieldMap,
   windowStart,
@@ -22,12 +24,14 @@ import {
   DAYS_KEY,
   LEGACY_KEY_VERSION,
   MONTHS_KEY,
+  OTHER_SIGNER_HOST,
   ROLLUP_LOCK_KEY,
   dayKeyFor,
   daysKeyFor,
   hitKeys,
   monthKeyFor,
   monthsKeyFor,
+  signersKeyFor,
 } from '../src/lib/agent-hits.mjs';
 
 // The read side of the hit counter. The window math is the part worth guarding: it is arithmetic
@@ -357,6 +361,8 @@ test('the fold order removes a day from the set before it adds it to a month', (
     ['SADD', MONTHS_KEY, '2026-05'],
     ['HINCRBY', monthKeyFor('2026-05'), 'surface|curl|/llms.txt|', '2'],
     ['DEL', dayKeyFor('2026-05-04')],
+    // The signers hash leaves with the day: the table it feeds has no all-time column.
+    ['DEL', signersKeyFor('2026-05-04')],
   ]);
 });
 
@@ -364,7 +370,77 @@ test('a day with nothing foldable in it is removed without minting a month', () 
   assert.deepEqual(rollupCommands([{ day: '2026-05-04', fields: { 'xx|bad|field': '3' } }]), [
     ['SREM', DAYS_KEY, '2026-05-04'],
     ['DEL', dayKeyFor('2026-05-04')],
+    ['DEL', signersKeyFor('2026-05-04')],
   ]);
+});
+
+// ── Signers ──────────────────────────────────────────────────────────────────────────────────
+
+/** A signers hash built the way recordHit() would have built it. */
+function signerBucket(hoursAgo, host, count) {
+  const at = hourStart(NOW_HOUR - hoursAgo);
+  return { day: at.toISOString().slice(0, 10), field: `${at.toISOString().slice(11, 13)}|${host}`, count: String(count) };
+}
+
+test('a signers field the writer produced is one the reader parses, and anything else is dropped', () => {
+  const written = hitKeys({
+    event: 'surface',
+    path: '/llms.txt',
+    ua: 'curl/8',
+    verification: 'signed',
+    signerHost: 'signer.example',
+    now: NOW,
+  });
+  const rows = flattenSignerHashes([
+    {
+      day: written.day,
+      fields: {
+        [written.signerField]: '3',
+        '14|Signer.Example': '1',
+        '14|signer.example|x': '1',
+        'xx|signer.example': '1',
+        [`14|${OTHER_SIGNER_HOST}`]: '0',
+      },
+    },
+    { day: 'not-a-day', fields: { '14|signer.example': '9' } },
+  ]);
+  assert.deepEqual(rows, [{ hour: NOW_HOUR, host: 'signer.example', count: 3 }]);
+});
+
+test('the Signers table totals each host over the windows and leads with the 7-day column', () => {
+  const rows = flattenSignerHashes(dayHashesFrom([
+    signerBucket(0, 'late.example', 1),
+    signerBucket(3, 'steady.example', 2),
+    signerBucket(100, 'steady.example', 2),
+    signerBucket(400, 'steady.example', 2),
+    signerBucket(50, 'quiet.example', 10),
+    signerBucket(300, OTHER_SIGNER_HOST, 4),
+  ]));
+  const signers = summarizeSigners(rows, NOW);
+  assert.deepEqual(
+    signers.rows.map(({ host, day, week, month, total }) => [host, day, week, month, total]),
+    [
+      // 7-day column first, then 30-day, then all-time; `quiet` outweighs `steady` on that order.
+      ['quiet.example', 0, 10, 10, 10],
+      ['steady.example', 2, 4, 6, 6],
+      ['late.example', 1, 1, 1, 1],
+      [OTHER_SIGNER_HOST, 0, 0, 4, 4],
+    ]
+  );
+  assert.equal(signers.omitted, 0);
+  // The table is cut like every other one.
+  const many = flattenSignerHashes(
+    dayHashesFrom(Array.from({ length: MAX_TABLE_ROWS + 3 }, (_, i) => signerBucket(i, `host-${i}.example`, 1)))
+  );
+  assert.equal(summarizeSigners(many, NOW).rows.length, MAX_TABLE_ROWS);
+  assert.equal(summarizeSigners(many, NOW).omitted, 3);
+});
+
+test('signer rows never reach the traffic totals', () => {
+  // The two row lists are separate on purpose: a host count is a second count of a hit that is
+  // already in the day hash.
+  const summary = summarizeTraffic(flattenTraffic({ dayHashes: [], monthHashes: [], signerHashes: [{ day: '2026-08-06', fields: { '14|signer.example': '5' } }] }), NOW);
+  assert.equal(summary.totals.total, 0);
 });
 
 test('month rows carry no hour, so they reach the all-time total and no rolling window', () => {
@@ -498,6 +574,8 @@ test('the reader asks for both sets, then one HGETALL per day and per month, by 
                 { result: ['06|surface|curl|/llms.txt|signed', '2'] },
                 { result: ['14|surface|gptbot|/agents.md|ip-verified', '1'] },
                 { result: ['surface|curl|/llms.txt', '40'] },
+                { result: ['06|signer.example', '2'] },
+                { result: [] },
               ]
         ),
         { status: 200 }
@@ -514,11 +592,14 @@ test('the reader asks for both sets, then one HGETALL per day and per month, by 
     ['SMEMBERS', MONTHS_KEY],
   ]);
   // Sorted within each version, so the hashes line up with the days and months they came from.
+  // Then one signers hash per v2 day, in the same order; a v1 day predates the key and gets none.
   assert.deepEqual(sent[1].commands, [
     ['HGETALL', 'hits:v1:day:2026-08-01'],
     ['HGETALL', dayKeyFor('2026-08-05')],
     ['HGETALL', dayKeyFor('2026-08-06')],
     ['HGETALL', 'hits:v1:month:2026-05'],
+    ['HGETALL', signersKeyFor('2026-08-05')],
+    ['HGETALL', signersKeyFor('2026-08-06')],
   ]);
   // No day is eligible here, so no lock is taken and no third round trip happens.
   assert.equal(sent.length, 2);
@@ -530,6 +611,13 @@ test('the reader asks for both sets, then one HGETALL per day and per month, by 
     fields: { '06|surface|curl|/llms.txt|signed': '2' },
   });
   assert.deepEqual(result.monthHashes[0], { month: '2026-05', version: 'v1', fields: { 'surface|curl|/llms.txt': '40' } });
+  assert.deepEqual(result.signerHashes, [
+    { day: '2026-08-05', fields: { '06|signer.example': '2' } },
+    { day: '2026-08-06', fields: {} },
+  ]);
+  assert.deepEqual(flattenSignerHashes(result.signerHashes), [
+    { hour: bucketHour('2026-08-05', '06'), host: 'signer.example', count: 2 },
+  ]);
 
   // And the two versions flatten into one row shape: the v1 rows with the empty state.
   const rows = flattenTraffic(result);
@@ -574,7 +662,7 @@ test('two empty sets are a successful read of nothing', async () => {
     fetchImpl: async () =>
       new Response(JSON.stringify([{ result: [] }, { result: [] }, { result: [] }, { result: [] }]), { status: 200 }),
   });
-  assert.deepEqual(result, { ok: true, dayHashes: [], monthHashes: [] });
+  assert.deepEqual(result, { ok: true, dayHashes: [], monthHashes: [], signerHashes: [] });
 });
 
 test('a store that errors is a reason, never a throw', async () => {
@@ -622,6 +710,7 @@ function storeFetch({ days, months = [], dayFields = {}, legacyDays = [], legacy
       if (command[0] === 'HGETALL') {
         const legacy = command[1].match(/^hits:v1:day:(.+)$/);
         if (legacy) return { result: legacyDayFields[legacy[1]] ?? [] };
+        if (command[1].startsWith('hits:v2:signers:')) return { result: [] };
         const day = command[1].replace(/^hits:v2:day:/, '');
         return { result: dayFields[day] ?? [] };
       }
@@ -659,6 +748,7 @@ test('a render with an eligible day takes the lock in the read pipeline and then
     ['SADD', MONTHS_KEY, old.slice(0, 7)],
     ['HINCRBY', monthKeyFor(old.slice(0, 7)), 'surface|curl|/llms.txt|', '5'],
     ['DEL', dayKeyFor(old)],
+    ['DEL', signersKeyFor(old)],
   ]);
 
   // The render that folds still reports the day it folded, so its own numbers are unchanged.
@@ -762,6 +852,18 @@ test('the fixture is opt-in, never reaches a store, and fills every window', asy
   assert.ok(summary.totals.week > summary.totals.day, '7-day window is larger');
   assert.ok(summary.totals.month > summary.totals.week, '30-day window is larger');
   assert.ok(summary.pages.rows.length > 0, 'the markdown table has rows');
+
+  // The Signers table is in the fixture too, so the golden and axe see it with rows: two named
+  // hosts and the bucket, with the 7-day and 30-day columns differing.
+  const signers = summarizeSigners(flattenSignerHashes(result.signerHashes), NOW);
+  assert.deepEqual(
+    signers.rows.map(({ host, week, month }) => [host, week, month]),
+    [
+      ['signer.example', 4, 9],
+      ['agent.example.net', 2, 2],
+      [OTHER_SIGNER_HOST, 0, 1],
+    ]
+  );
 
   // The fixture covers the merged path too, and its month only ever adds to rows that already
   // exist, so the tables it produces are the same shape with or without it.
