@@ -1,34 +1,34 @@
 {
-  "iso": "2026-10-21",
-  "timestamp": "2026-10-21T03:33:57-07:00",
-  "scope": "26 live pages",
+  "iso": "2026-10-23",
+  "timestamp": "2026-10-23T03:34:20-07:00",
+  "scope": "27 live pages",
   "tools": [
     "Lighthouse 13.4",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "All 26 pages passed all four public metrics.",
+  "commentary": "Coverage rose from 26 to 27 pages; all 27 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
       "value": "100",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse accessibility score across 26 tested pages. No automated WCAG violations."
+      "description": "The lowest Lighthouse accessibility score across 27 tested pages. No automated WCAG violations."
     },
     {
       "name": "Performance",
       "value": "99",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse performance score across 26 tested pages."
+      "description": "The lowest Lighthouse performance score across 27 tested pages."
     },
     {
       "name": "SEO",
       "value": "100",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse SEO score across 26 tested pages."
+      "description": "The lowest Lighthouse SEO score across 27 tested pages."
     },
     {
       "name": "Agentic Browsing",
@@ -38,7 +38,18 @@
       "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
     }
   ],
-  "id": "2026-10-21",
+  "readingBudget": {
+    "pages": 27,
+    "text": {
+      "lowest": 50,
+      "url": "https://www.mattpyle.com/writing/"
+    },
+    "markdown": {
+      "lowest": 52,
+      "url": "https://www.mattpyle.com/changelog/public-scorecard/"
+    }
+  },
+  "id": "2026-10-23",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -49,7 +60,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 84,
+          "measured": 5686
+        },
+        "markdown": {
+          "share": 90,
+          "measured": 3062
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/about/",
@@ -60,7 +81,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 76,
+          "measured": 3818
+        },
+        "markdown": {
+          "share": 90,
+          "measured": 3170
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/activity/",
@@ -71,7 +102,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 87,
+          "measured": 6902
+        },
+        "markdown": {
+          "share": 95,
+          "measured": 7848
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/audit/",
@@ -82,7 +123,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 76,
+          "measured": 3821
+        },
+        "markdown": {
+          "share": 89,
+          "measured": 3892
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/",
@@ -93,7 +144,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 82,
+          "measured": 5028
+        },
+        "markdown": {
+          "share": 93,
+          "measured": 4498
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
@@ -104,7 +165,38 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 75,
+          "measured": 3727
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2794
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/agent-reading-budget/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 71,
+          "measured": 3145
+        },
+        "markdown": {
+          "share": 75,
+          "measured": 2535
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
@@ -115,7 +207,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 76,
+          "measured": 3834
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2801
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
@@ -126,7 +228,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 60,
+          "measured": 2312
+        },
+        "markdown": {
+          "share": 63,
+          "measured": 1382
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog/",
@@ -137,7 +249,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 59,
+          "measured": 2223
+        },
+        "markdown": {
+          "share": 63,
+          "measured": 1520
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
@@ -148,7 +270,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2395
+        },
+        "markdown": {
+          "share": 60,
+          "measured": 1258
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/markdown-post-variants/",
@@ -159,7 +291,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 70,
+          "measured": 3028
+        },
+        "markdown": {
+          "share": 75,
+          "measured": 2317
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/public-changelog/",
@@ -170,7 +312,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2504
+        },
+        "markdown": {
+          "share": 72,
+          "measured": 1705
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/public-scorecard/",
@@ -181,7 +333,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 54,
+          "measured": 1980
+        },
+        "markdown": {
+          "share": 52,
+          "measured": 1223
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/scorecard-run-history/",
@@ -192,7 +354,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 70,
+          "measured": 3067
+        },
+        "markdown": {
+          "share": 75,
+          "measured": 2291
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/self-hosted-fonts/",
@@ -203,7 +375,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 60,
+          "measured": 2313
+        },
+        "markdown": {
+          "share": 66,
+          "measured": 1629
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/site-live/",
@@ -214,7 +396,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2358
+        },
+        "markdown": {
+          "share": 66,
+          "measured": 1557
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
@@ -225,7 +417,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 76,
+          "measured": 3766
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2716
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-tools/",
@@ -236,7 +438,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 66,
+          "measured": 2668
+        },
+        "markdown": {
+          "share": 72,
+          "measured": 1879
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/projects/",
@@ -247,7 +459,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 52,
+          "measured": 1915
+        },
+        "markdown": {
+          "share": 75,
+          "measured": 1304
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/scorecard/",
@@ -258,7 +480,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 76,
+          "measured": 3843
+        },
+        "markdown": {
+          "share": 90,
+          "measured": 3346
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/steward/",
@@ -269,7 +501,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 96,
+          "measured": 8000
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/webmcp/",
@@ -280,7 +522,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 96,
+          "measured": 8000
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/writing/",
@@ -291,7 +543,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 50,
+          "measured": 1830
+        },
+        "markdown": {
+          "share": 76,
+          "measured": 1249
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
@@ -302,7 +564,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 94,
+          "measured": 8000
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/writing/hello-world/",
@@ -313,7 +585,17 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 95,
+          "measured": 7500
+        }
+      }
     },
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
@@ -324,11 +606,22 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 0
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 94,
+          "measured": 8000
+        }
+      }
     }
   ],
-  "decision": "no-op",
-  "reason": "unchanged, published 4d ago (<= 7d threshold)",
+  "decision": "open-pr",
+  "reason": "Coverage 26→27 pages",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/437",
   "dryRun": false,
-  "archiveId": "2026-10-21"
+  "archiveId": "2026-10-23"
 }
