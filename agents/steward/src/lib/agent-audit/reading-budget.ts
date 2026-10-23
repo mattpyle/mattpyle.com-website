@@ -159,11 +159,43 @@ function inlineText(fragment: string): string {
     .trim();
 }
 
-/** Drops the elements an agent never reads, contents included, plus comments. */
+/**
+ * Replaces `pattern` with nothing until the text stops changing.
+ *
+ * One pass is not a removal: `<!-<!---->-` loses its inner comment and the
+ * pieces left behind spell `<!--`. This is a character count and not output
+ * sanitisation, so a survivor would cost four characters rather than a script
+ * run, but CodeQL's js/incomplete-multi-character-sanitization reads a single
+ * pass as the sanitiser it looks like, and the complete removal is also the
+ * truer count: an agent's converter does not stop at the first match either.
+ */
+function stripUntilStable(text: string, pattern: RegExp): string {
+  let current = text;
+  for (;;) {
+    const next = current.replace(pattern, '');
+    if (next === current) return current;
+    current = next;
+  }
+}
+
+/** Raw-text elements: an unclosed one runs to the end of the document, as it does in a parser. */
+const RAW_TEXT_ELEMENTS = ['script', 'style'];
+
+/**
+ * Drops the elements an agent never reads, contents included, plus comments.
+ *
+ * Each pattern is applied until it stops matching, and an opener left without
+ * its close is taken to run to the end of the document: that is what the HTML
+ * parser does with an unclosed comment or an unclosed `script`, so nothing an
+ * agent would not read survives into the count.
+ */
 function dropUnreadElements(html: string): string {
-  let out = html.replace(/<!--[\s\S]*?-->/g, '');
+  let out = stripUntilStable(html, /<!--[\s\S]*?-->/g).replace(/<!--[\s\S]*$/, '');
   for (const name of DROPPED_ELEMENTS) {
-    out = out.replace(new RegExp(`<${name}\\b[^>]*>[\\s\\S]*?</${name}\\s*>`, 'gi'), '');
+    out = stripUntilStable(out, new RegExp(`<${name}\\b[^>]*>[\\s\\S]*?</${name}\\s*>`, 'gi'));
+  }
+  for (const name of RAW_TEXT_ELEMENTS) {
+    out = out.replace(new RegExp(`<${name}\\b[^>]*>[\\s\\S]*$`, 'i'), '');
   }
   return out;
 }

@@ -98,6 +98,29 @@ test('rendering: links keep their URL, images their alt text, and the head is go
   assert.equal(rendered.contentLength, 'Hi\nOne two\nthree'.length);
 });
 
+test('rendering: a comment or script that only appears once its inner one is removed is still removed', () => {
+  // `<!-<!---->-` loses its inner comment and the pieces spell `<!--`, so a
+  // single pass leaves an opener behind. The strip repeats until nothing
+  // changes, and an opener with no close runs to the end of the document.
+  const nested = page(`<main><p>Before</p><!-<!---->-<p>Hidden</p>--><p>After</p></main>`);
+  const text = renderAgentText(nested).text;
+  assert.equal(text.includes('<!--'), false, text);
+  assert.equal(text, 'Before\nAfter');
+
+  const unclosed = renderAgentText(page(`<main><p>Shown</p><!-- never closed <p>Gone</p></main>`)).text;
+  assert.equal(unclosed, 'Shown');
+
+  // The inner pair goes first and the pieces spell a second script element,
+  // which the next pass removes; the paragraph after it is ordinary content.
+  const script = page(`<main><p>Shown</p><scr<script></script>ipt>var x = 1;</script><p>Also shown</p></main>`);
+  const stripped = renderAgentText(script).text;
+  assert.equal(stripped.includes('var x'), false, stripped);
+  assert.equal(stripped, 'Shown\nAlso shown');
+
+  const openScript = renderAgentText(page(`<main><p>Shown</p><script>var y = 2;<p>Gone</p></main>`)).text;
+  assert.equal(openScript, 'Shown');
+});
+
 test('markdown: front matter and a list of bare links are chrome, prose is content', () => {
   const frontMatter = '---\ntitle: "A page"\ncanonical: https://example.com/a/\n---\n';
   const navList = '- [Home](/)\n- [Writing](/writing/)\n- [About](/about/)\n';
