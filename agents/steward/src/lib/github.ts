@@ -72,6 +72,32 @@ export async function gh(pathname: string, init?: RequestInit): Promise<any> {
 }
 
 /**
+ * Runs a GitHub call for a polling wait, where a rejected credential is a
+ * retry at the wait's own interval rather than the end of the wait.
+ *
+ * {@link gh} marks a 401 or 403 `nonRetryable`, and the server honours that
+ * flag whatever the workflow's retry policy says, so a wait that should outlast
+ * a token rotation has to throw the failure retryable itself. The type and the
+ * message are kept: `AuthError` still names what GitHub said, and the
+ * workflow's retry policy still decides by that type whether the wait ends.
+ * A wait is bounded by its schedule-to-close timeout, so a token that is
+ * wrong rather than rotating costs one short read per interval until then.
+ *
+ * On 2026-10-21 the token was regenerated while the hosted worker held the old
+ * one, and every run parked in the merge wait failed on its next poll.
+ */
+export async function authRetryable<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    if (err instanceof ApplicationFailure && err.type === 'AuthError' && err.nonRetryable) {
+      throw ApplicationFailure.create({ message: err.message, type: err.type, nonRetryable: false });
+    }
+    throw err;
+  }
+}
+
+/**
  * A plain-text GitHub read, for the one kind of body that is not JSON: an
  * Actions job log. GitHub answers with a redirect to a short-lived storage URL,
  * which `fetch` follows. Null when there is nothing to read: 404, or 410 for a

@@ -6,6 +6,7 @@ import {
   isFindingSlug,
   parseFindingWorkflowId,
   parseFindingsIndex,
+  pendingActivityLine,
   planReconcile,
   setFrontmatterVerdict,
   setIndexVerdict,
@@ -126,4 +127,18 @@ test('planReconcile starts a reopened line with no workflow, as it does a propos
   assert.deepEqual(plan.start.map((l) => [l.key, l.status]), [['back', 'reopened']]);
   assert.deepEqual(plan.signal, []);
   assert.equal(plan.unchanged, 2);
+});
+
+test('a retrying activity is one line: the type, the attempt and the last failure', () => {
+  assert.equal(pendingActivityLine({ activityType: { name: 'awaitFixPrMerge' }, attempt: 1 }), null, 'a first attempt has nothing to say');
+  assert.equal(
+    pendingActivityLine({
+      activityType: { name: 'awaitFixPrMerge' },
+      attempt: 7,
+      lastFailure: { message: 'GitHub rejected the credential (401): Bad credentials.' },
+    }),
+    'awaitFixPrMerge attempt 7: GitHub rejected the credential (401): Bad credentials.',
+  );
+  assert.equal(pendingActivityLine({ activityType: { name: 'awaitFixPr' }, attempt: 3, lastFailure: null }), 'awaitFixPr attempt 3');
+  assert.equal(pendingActivityLine({ attempt: 4 }), null, 'no type, no line');
 });
