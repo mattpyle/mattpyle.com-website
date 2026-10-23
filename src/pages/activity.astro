@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import ActivityHero from '../components/activity/ActivityHero.astro';
 import ActivityBody from '../components/activity/ActivityBody.astro';
 import { buildActivity } from '../lib/activity-summary.mjs';
-import { flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import { flattenSignerHashes, flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 // The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
@@ -39,7 +39,9 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-r
 // stamp cannot disagree about what "now" is.
 const renderedAt = new Date();
 const traffic = await readAgentTraffic({ now: renderedAt });
-const activity = traffic.ok ? buildActivity(flattenTraffic(traffic), renderedAt) : null;
+const activity = traffic.ok
+  ? buildActivity(flattenTraffic(traffic), renderedAt, { signers: flattenSignerHashes(traffic.signerHashes) })
+  : null;
 
 /**
  * What the page says when it has no numbers. Three states, not two: "no store configured" and "the

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { buildActivity, utcStamp, verificationLabel } from '../lib/activity-summary.mjs';
-import { flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import { SIGNERS_LEGEND, SIGNER_HOST_NOTES, buildActivity, utcStamp, verificationLabel } from '../lib/activity-summary.mjs';
+import { flattenSignerHashes, flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 import { SITE_ORIGIN } from '../data/site-origin.mjs';
 
@@ -54,7 +54,9 @@ function table(headers: string[], rows: (string | number)[][]): string {
 export const GET: APIRoute = async () => {
   const renderedAt = new Date();
   const traffic = await readAgentTraffic({ now: renderedAt });
-  const activity = traffic.ok ? buildActivity(flattenTraffic(traffic), renderedAt) : null;
+  const activity = traffic.ok
+    ? buildActivity(flattenTraffic(traffic), renderedAt, { signers: flattenSignerHashes(traffic.signerHashes) })
+    : null;
 
   const sections: string[] = [
     [
@@ -148,6 +150,23 @@ export const GET: APIRoute = async () => {
           )
         : 'No page has been served as Markdown yet.'
     );
+
+    sections.push(
+      '## Signers',
+      SIGNERS_LEGEND,
+      activity.signers.rows.length > 0
+        ? table(
+            ['Host', '7 days', '30 days'],
+            activity.signers.rows.map(row => {
+              const note = SIGNER_HOST_NOTES[row.host as keyof typeof SIGNER_HOST_NOTES];
+              return [note ? `${row.host} (${note})` : row.host, row.week, row.month];
+            })
+          )
+        : 'No signature from a signer this site does not name has verified yet.'
+    );
+    if (activity.signers.omitted > 0) {
+      sections.push(`${activity.signers.omitted} further host(s) below the top rows are not shown.`);
+    }
   } else if (traffic.ok) {
     sections.push('Nothing has been counted yet.');
   } else {
@@ -156,7 +175,7 @@ export const GET: APIRoute = async () => {
 
   sections.push(
     '## How this is counted',
-    "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
   );
 
   return new Response(`${sections.join('\n\n')}\n`, {

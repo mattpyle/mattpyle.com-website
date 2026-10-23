@@ -105,9 +105,23 @@
           - cell "·"
           - cell "·"
           - cell "·"
+  - region "Signers":
+    - heading "Signers" [level=2]
+    - table:
+      - rowgroup:
+        - row "Host 7 days 30 days":
+          - columnheader "Host"
+          - columnheader "7 days"
+          - columnheader "30 days"
+      - rowgroup:
+        - row "· · ·":
+          - cell "·"
+          - cell "·"
+          - cell "·"
+    - paragraph: Each row is a Web Bot Auth signature that verified against the key directory at this host, from a signer this site does not yet name. The host is the operator's domain, recorded alone; a signer this site names appears under its own name in By client.
   - region "How this is counted":
     - heading "How this is counted" [level=2]
-    - paragraph: "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    - paragraph: "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
     - text: The same numbers, as data
     - link "activity.json":
       - /url: /activity.json

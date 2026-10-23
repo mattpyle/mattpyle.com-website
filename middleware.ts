@@ -62,7 +62,9 @@ const ENTRY_PAGE = /^\/(?:writing|changelog)\/(?!\d+\/?$)[^/.]+\/?$/;
 // recordHit() awaits it, so a key-directory fetch delays the count and never the response, and a
 // verification that fails is a hit counted on its user agent alone (src/lib/web-bot-auth.mjs).
 // The address goes in and does not come out: it is tested against the published bot ranges and
-// dropped, and only a state from a fixed list reaches the store.
+// dropped, and only a state from a fixed list reaches the store, plus, for a signature that
+// verified under a signer the site does not name, the hostname of the key directory that verified
+// it: an operator's domain, capped per day (src/lib/agent-hits.mjs).
 function countHit(event: 'surface' | 'markdown' | 'page', path: string, request: Request): void {
   try {
     const identity = identifyRequest(request, { address: ipAddress(request) ?? null });

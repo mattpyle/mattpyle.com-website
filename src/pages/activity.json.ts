@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
-import { buildActivity } from '../lib/activity-summary.mjs';
-import { flattenTraffic, hourStart, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import { SIGNERS_LEGEND, buildActivity } from '../lib/activity-summary.mjs';
+import { flattenSignerHashes, flattenTraffic, hourStart, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import { MAX_SIGNER_HOSTS_PER_DAY, OTHER_SIGNER_HOST } from '../lib/agent-hits.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 import { SITE_ORIGIN } from '../data/site-origin.mjs';
 
@@ -53,7 +54,9 @@ export const GET: APIRoute = async () => {
     );
   }
 
-  const activity = buildActivity(flattenTraffic(traffic), renderedAt);
+  const activity = buildActivity(flattenTraffic(traffic), renderedAt, {
+    signers: flattenSignerHashes(traffic.signerHashes),
+  });
 
   const body = {
     source: CANONICAL,
@@ -64,7 +67,7 @@ export const GET: APIRoute = async () => {
      * What is counted, in the payload rather than only in the page's prose: a reader of the JSON
      * gets the same scope statement a reader of the page does.
      */
-    counts: 'Fetches of this site\'s agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted.',
+    counts: 'Fetches of this site\'s agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted. A request whose Web Bot Auth signature verified under a signer this site does not name is also counted by the hostname of the key directory that verified it, and by nothing else.',
     counted: activity.counted,
     /** Rolling windows ending at `renderedAt`, so none of them is a calendar period in any zone. */
     totals: {
@@ -124,6 +127,24 @@ export const GET: APIRoute = async () => {
         recorded: row.total,
       })),
       omitted: activity.clients.omitted,
+    },
+    /**
+     * Verified signatures from signers this site does not name, by the hostname of the key
+     * directory that verified them. A host is an operator's domain, stored alone. A day names at
+     * most `namedHostsPerDay` hosts; the rest are counted under `otherHost`. A host that proves to
+     * be an operator is added to the site's known signers by hand and then appears in `clients`
+     * under its family instead of here.
+     */
+    signers: {
+      proves: SIGNERS_LEGEND,
+      namedHostsPerDay: MAX_SIGNER_HOSTS_PER_DAY,
+      otherHost: OTHER_SIGNER_HOST,
+      rows: activity.signers.rows.map(row => ({
+        host: row.host,
+        last7Days: row.week,
+        last30Days: row.month,
+      })),
+      omitted: activity.signers.omitted,
     },
     /**
      * The `page` event class: which of this site's pages named bots read as ordinary HTML.
