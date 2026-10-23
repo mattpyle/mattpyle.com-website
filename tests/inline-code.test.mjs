@@ -75,7 +75,7 @@ test('markup characters pass through a segment untouched, for the template to es
   ]);
 });
 
-test('the thirteen checks carry exactly two code terms and no leftover backtick', () => {
+test('the fifteen checks carry exactly two code terms and no leftover backtick', () => {
   const segments = STEWARD_FAST_CHECKS.flatMap((check) => splitInlineCode(check.plain));
 
   assert.deepEqual(

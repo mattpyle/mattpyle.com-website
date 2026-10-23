@@ -4,10 +4,12 @@ import {
   aggregate,
   checkAuditSet,
   decidePublish,
+  summariseReadingBudget,
   type PageAuditOutcome,
   type PublishDecision,
   type ScorecardRunRecord,
 } from '../lib/scorecard-aggregate.js';
+import type { ReadingBudget } from '../lib/agent-audit/reading-budget.js';
 // Pure, and imported into the sandbox on purpose: it has no imports of its own,
 // reads no clock and touches no environment, so the rule that defines a bad run
 // is the same object the workflow and its tests both hold.
@@ -99,7 +101,12 @@ export interface ScorecardAuditResult {
   reason: string;
   prUrl?: string;
   record: ScorecardRunRecord;
-  perPage: Array<{ url: string; scores: Record<string, number>; axeViolations: number }>;
+  perPage: Array<{
+    url: string;
+    scores: Record<string, number>;
+    axeViolations: number;
+    readingBudget?: ReadingBudget;
+  }>;
 }
 
 const light = {
@@ -404,9 +411,21 @@ async function runScorecardAudit(
   const timestamp = stamp.timestamp;
   const perPageSummary = perPage.map((p) =>
     p.ok
-      ? { url: p.url, scores: p.scores, axeViolations: p.axeViolations }
+      ? {
+          url: p.url,
+          scores: p.scores,
+          axeViolations: p.axeViolations,
+          ...(p.readingBudget ? { readingBudget: p.readingBudget } : {}),
+        }
       : { url: p.url, scores: {}, axeViolations: 0 },
   );
+  // The reading budget (2026-10-22): a field `auditLiveUrl` added to its result,
+  // folded here into the record and the per-page detail. Pure, and no command:
+  // a history recorded before the field existed replays with every page's
+  // `readingBudget` absent, this returns `undefined`, and the record omits it,
+  // which is the "note" pattern this file already carries and the dry-run
+  // fixture in tests/workflows/replay.test.ts exercises. No `patched()` marker.
+  const readingBudget = summariseReadingBudget(perPage);
 
   // --- Step 3: decide ------------------------------------------------------
   //
@@ -456,6 +475,7 @@ async function runScorecardAudit(
     entry: input.triggeredBy === 'schedule' ? 'Nightly · automated' : 'Manual · intentional',
     commentary: withNote(input.note, buildCommentary(perPage, metrics, decision)),
     metrics,
+    ...(readingBudget ? { readingBudget } : {}),
   };
 
   // --- Step 4: publish, unless dry-run -------------------------------------

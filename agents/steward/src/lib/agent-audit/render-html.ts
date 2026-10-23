@@ -441,7 +441,7 @@ export function renderHtmlReport(audit: AuditResult): string {
     out.push('<section aria-labelledby="measured">');
     out.push('<h2 id="measured">The numbers</h2>');
     out.push(
-      '<p class="lede">Each number is the worst result across the pages that were rendered, from the same tool runs the checks below were decided on.</p>',
+      '<p class="lede">Each number comes from the same runs the checks below were decided on. A Lighthouse number is the worst result across the pages that were rendered; a first-read number is the content share of one page\'s first 8,000 characters, read as text.</p>',
     );
     out.push('<ul class="tiles">');
     for (const check of measured) out.push(metricTile(check, check.metric));

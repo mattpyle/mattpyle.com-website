@@ -55,6 +55,8 @@ type Break =
 const POST_PATH = '/writing/hello/';
 const POST_TITLE = 'Hello World, a post';
 const HOME_TITLE = 'Example, an entirely fictional test site';
+const HEAVY_PATH = '/heavy/';
+const HEAVY_TITLE = 'A page behind sixty links';
 
 interface Mock {
   origin: string;
@@ -228,12 +230,40 @@ async function mockSite(broken?: Break, opts: SiteOptions = {}): Promise<Mock> {
                     `${Array.from({ length: 120 }, (_, i) => `<${origin}/_astro/chunk-${i}.js>; rel=preload; as=script`).join(', ')}, ${alternate}`
                   : alternate,
             };
-      return send(200, 'text/html', `<!doctype html><title>${title}</title><h1>${title}</h1>`, {
-        ...vary,
-        ...caching,
-        ...signal,
-        ...link,
-      });
+      // A small header and a `main`, so the reading-budget rows measure a page
+      // shaped like a real one rather than a title alone.
+      return send(
+        200,
+        'text/html',
+        `<!doctype html><title>${title}</title><nav><a href="/">Home</a> <a href="${POST_PATH}">Writing</a></nav><main><h1>${title}</h1><p>Body of ${title}.</p></main>`,
+        {
+          ...vary,
+          ...caching,
+          ...signal,
+          ...link,
+        },
+      );
+    }
+
+    if (url === HEAVY_PATH) {
+      // A page past the origin, with the shape the reading budget exists to
+      // catch: sixty links before the first sentence of the body. Not in the
+      // sitemap, so only a run that names it reaches it.
+      if (wantsMarkdown) {
+        return send(
+          200,
+          'text/markdown',
+          `---\ntitle: "${HEAVY_TITLE}"\n---\n\n${Array.from({ length: 60 }, (_, i) => `- [Section ${i}](/s/${i}/)`).join('\n')}\n\n# ${HEAVY_TITLE}\n\nBody of the heavy page.\n`,
+          { vary: 'Accept' },
+        );
+      }
+      const links = Array.from({ length: 60 }, (_, i) => `<a href="/section-${i}/page/">Section ${i}</a>`).join(' ');
+      return send(
+        200,
+        'text/html',
+        `<!doctype html><title>${HEAVY_TITLE}</title><nav>${links}</nav><main><h1>${HEAVY_TITLE}</h1><p>Body of the heavy page.</p></main>`,
+        { vary: 'Accept' },
+      );
     }
 
     return send(404, 'text/html', '<!doctype html><title>Not found</title>');
@@ -713,6 +743,8 @@ test('every fast check declares a decision class, and it is the one recorded in 
       ['a2a-agent-card', 'conditional'],
       ['markdown-negotiation-home', 'provenBlocker'],
       ['markdown-negotiation-content', 'provenBlocker'],
+      ['reading-budget-home', 'emergingConvention'],
+      ['reading-budget-content', 'emergingConvention'],
       ['link-headers', 'bestPractice'],
     ],
   );
@@ -739,4 +771,87 @@ test('the class counts are the failing checks, tallied — nothing else', async 
     failed.length,
     'every finding is counted exactly once',
   );
+});
+
+// ---------------------------------------------------------------------------
+// The reading budget
+// ---------------------------------------------------------------------------
+
+test('the reading budget is measured for the homepage and the content page from the fetches already made', async (t) => {
+  const mock = await mockSite();
+  t.after(() => mock.close());
+  const result = await runFastAudit(mock.origin, {
+    policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
+  });
+
+  for (const id of ['reading-budget-home', 'reading-budget-content']) {
+    const row = check(result, id);
+    assert.equal(row.status, 'pass', row.observed);
+    // The mock pages are short, so the whole page is the window and the line says so.
+    assert.match(row.observed, /^text: \d+% of all \d+ characters \(the whole page, shorter than 8,000\) is content \(the main element\); markdown: \d+% of all \d+ characters/);
+    assert.equal(row.metric?.unit, 'score');
+    assert.ok(row.metric && row.metric.value > 0 && row.metric.value < 100, `metric ${row.metric?.value}`);
+    assert.equal(row.fix, undefined, 'a figure, not a finding');
+    assert.equal(row.evidence.length, 2);
+    assert.match(row.evidence[0].note ?? '', /main element starts at character \d+/);
+    assert.match(row.evidence[1].note ?? '', /front matter/);
+  }
+  // No row for a page nobody named, and no extra request for the two measured:
+  // the homepage is fetched twice by its negotiation check, the post twice by
+  // its own and once more by the llms.txt link sample, and nothing else asks.
+  assert.equal(result.checks.find((c) => c.id === 'reading-budget-page'), undefined);
+  assert.equal(mock.requests.filter((u) => u === '/').length, 2);
+  assert.equal(mock.requests.filter((u) => u === POST_PATH).length, 3);
+});
+
+test('a page named past the origin gets its own row, and sixty links show up in it', async (t) => {
+  const mock = await mockSite();
+  t.after(() => mock.close());
+  const result = await runFastAudit(`${mock.origin}${HEAVY_PATH}`, {
+    policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
+  });
+
+  assert.equal(result.target.origin, mock.origin, 'the audited unit is still the site');
+  const named = check(result, 'reading-budget-page');
+  const home = check(result, 'reading-budget-home');
+  assert.equal(named.status, 'pass', named.observed);
+  assert.ok(named.metric && home.metric && named.metric.value < home.metric.value, `${named.metric?.value} vs ${home.metric?.value}`);
+  assert.match(named.observed, /markdown: \d+% of all/);
+  assert.match(named.evidence[1].note ?? '', /1 navigation list set aside/);
+  assert.deepEqual(mock.requests.filter((u) => u === HEAVY_PATH).length, 2);
+  // The row sits with the other two, before the Link-header check.
+  const ids = result.checks.map((c) => c.id);
+  assert.equal(ids.indexOf('reading-budget-page'), ids.indexOf('reading-budget-content') + 1);
+  assert.equal(ids.indexOf('link-headers'), ids.indexOf('reading-budget-page') + 1);
+});
+
+test('naming the content page, or a page that is not there, is said rather than measured twice', async (t) => {
+  const mock = await mockSite();
+  t.after(() => mock.close());
+  const policy = { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 };
+
+  const same = await runFastAudit(`${mock.origin}${POST_PATH}`, { policy });
+  const already = check(same, 'reading-budget-page');
+  assert.equal(already.status, 'not-applicable');
+  assert.match(already.observed, /already measured/);
+  assert.equal(mock.requests.filter((u) => u === POST_PATH).length, 3, 'not fetched again');
+
+  const missing = await runFastAudit(`${mock.origin}/nowhere/`, { policy });
+  const gone = check(missing, 'reading-budget-page');
+  assert.equal(gone.status, 'error');
+  assert.match(gone.observed, /returned 404/);
+});
+
+test('a page with no main or article measures as no content, and says so', async (t) => {
+  // The catch-all is an HTML page with a title and nothing else: a real shape,
+  // and the one the rule cannot find a body in.
+  const mock = await mockSite('agents-md-html');
+  t.after(() => mock.close());
+  const result = await runFastAudit(`${mock.origin}/agents.md`, {
+    policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
+  });
+  const row = check(result, 'reading-budget-page');
+  assert.equal(row.status, 'pass');
+  assert.match(row.observed, /^text: no main or article element/);
+  assert.equal(row.metric?.value, 0);
 });

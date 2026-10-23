@@ -25,6 +25,7 @@ import {
   type Severity,
 } from './result.js';
 import { reportIntegrity } from './report-shape.js';
+import { describeFigure, measureReadingBudget, READING_BUDGET_CHARS } from './reading-budget.js';
 
 /**
  * The two findings a run reports in prose that a reader outside this file matches on.
@@ -1241,6 +1242,11 @@ interface NegotiationOutcome {
   check: CheckResult;
   /** The HTML response, kept so the Link-header check needs no second fetch. */
   html: SafeResponse | null;
+  /**
+   * The markdown response, kept for the reading-budget check for the same reason.
+   * `null` when none was served: a non-200, or HTML under the markdown request.
+   */
+  markdown: SafeResponse | null;
 }
 
 /**
@@ -1275,7 +1281,9 @@ async function checkNegotiation(
   pageUrl: string,
 ): Promise<NegotiationOutcome> {
   const htmlOutcome = await ctx.get(pageUrl, { accept: 'text/html' });
-  if (htmlOutcome.kind !== 'ok') return { check: fromFailedGet(spec, htmlOutcome), html: null };
+  if (htmlOutcome.kind !== 'ok') {
+    return { check: fromFailedGet(spec, htmlOutcome), html: null, markdown: null };
+  }
   const html = htmlOutcome.res;
   const htmlEv = evidenceOf(html, NEGOTIATION_HEADERS, 'the plain request, Accept: text/html');
   const fix =
@@ -1288,11 +1296,12 @@ async function checkNegotiation(
     return {
       check: result(spec, 'error', `the page itself returned ${html.status}`, [htmlEv]),
       html,
+      markdown: null,
     };
   }
 
   const mdOutcome = await ctx.get(pageUrl, { accept: 'text/markdown' });
-  if (mdOutcome.kind !== 'ok') return { check: fromFailedGet(spec, mdOutcome), html };
+  if (mdOutcome.kind !== 'ok') return { check: fromFailedGet(spec, mdOutcome), html, markdown: null };
   const md = mdOutcome.res;
   const mdEv = evidenceOf(md, NEGOTIATION_HEADERS, 'the markdown request, Accept: text/markdown');
   const evidence = [htmlEv, mdEv];
@@ -1301,6 +1310,7 @@ async function checkNegotiation(
     return {
       check: result(spec, 'fail', `Accept: text/markdown returned ${md.status}`, evidence, fix),
       html,
+      markdown: null,
     };
   }
   if (looksLikeHtml(md)) {
@@ -1313,6 +1323,7 @@ async function checkNegotiation(
         fix,
       ),
       html,
+      markdown: null,
     };
   }
 
@@ -1333,6 +1344,7 @@ async function checkNegotiation(
           'an agent has no way to tell it got the wrong page.',
       ),
       html,
+      markdown: md,
     };
   }
   if (!varyOk) {
@@ -1352,6 +1364,7 @@ async function checkNegotiation(
           'be told about. Setting the header costs nothing and closes the case either way.',
       ),
       html,
+      markdown: md,
     };
   }
 
@@ -1365,7 +1378,126 @@ async function checkNegotiation(
       evidence,
     ),
     html,
+    markdown: md,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The reading budget
+// ---------------------------------------------------------------------------
+
+/**
+ * The three reading-budget rows, one per measured page.
+ *
+ * What is measured, and the exact rule, is `reading-budget.ts`'s docblock: the share
+ * of an agent's first 8,000 characters that is the page's main content, as text and
+ * as markdown. The source is Peec AI's Deep Research study of June 2026, which gives
+ * bands (about 78% of the window on pages with under 20 links, about 33% at 60 or
+ * more) and no target, so **this check never fails**: `pass` means both figures were
+ * taken, `error` means the page could not be read, and the figures are in `observed`
+ * and in `metric`. A threshold, if one is ever adopted, goes here with its source
+ * named in a `fix` text.
+ *
+ * Severity is `medium` because that is the weight of the subject, not because a
+ * finding is ever ranked by it: a check that cannot fail never enters the fix list.
+ * The class is `emergingConvention`: one vendor's study of one agent's logs, with no
+ * sample size published, is worth knowing about and not yet grounds to tell a
+ * stranger they are failing.
+ *
+ * The homepage and the content page reuse the responses the negotiation checks
+ * already fetched, so the two rows cost no request. The third row exists only when
+ * the operator named a page past the origin (`steward audit-url https://site/page`),
+ * which costs two requests for that page; a run given the origin alone has two rows.
+ */
+const READING_BUDGET_HOME: CheckSpec = {
+  id: 'reading-budget-home',
+  title: "The homepage's first 8,000 characters are measured for content share",
+  category: 'content-access',
+  severity: 'medium',
+  decisionClass: 'emergingConvention',
+};
+
+const READING_BUDGET_CONTENT: CheckSpec = {
+  id: 'reading-budget-content',
+  title: "A content page's first 8,000 characters are measured for content share",
+  category: 'content-access',
+  severity: 'medium',
+  decisionClass: 'emergingConvention',
+};
+
+const READING_BUDGET_PAGE: CheckSpec = {
+  id: 'reading-budget-page',
+  title: "The named page's first 8,000 characters are measured for content share",
+  category: 'content-access',
+  severity: 'medium',
+  decisionClass: 'emergingConvention',
+};
+
+/** What the headline tile calls each measured page's text figure. */
+const READING_BUDGET_LABELS: Record<string, string> = {
+  'reading-budget-home': 'Homepage first read',
+  'reading-budget-content': 'Content page first read',
+  'reading-budget-page': 'Named page first read',
+};
+
+const digits = new Intl.NumberFormat('en-US');
+
+/**
+ * Measures one page from responses already in hand, and says what it found.
+ *
+ * `html` is the page under `Accept: text/html`; `markdown` is what the markdown
+ * request got when it got markdown, else `null`. A page that could not be fetched,
+ * or answered anything but 200, is an `error` rather than a figure: there is no
+ * first read to measure.
+ */
+function checkReadingBudget(
+  spec: CheckSpec,
+  html: SafeResponse | null,
+  markdown: SafeResponse | null,
+): CheckResult {
+  if (!html) return result(spec, 'error', 'not measured: the page could not be fetched');
+  if (html.status !== 200) {
+    return result(spec, 'error', `not measured: the page returned ${html.status}`, [evidenceOf(html)]);
+  }
+  const measured = measureReadingBudget({ html: html.body, markdown: markdown?.body ?? null });
+  const { text, markdown: md } = measured;
+
+  const textLine =
+    text.region === null
+      ? `text: no main or article element, so nothing in the first ${digits.format(READING_BUDGET_CHARS)} characters counts as content (${describeFigure(text)})`
+      : `text: ${describeFigure(text)} is content (the ${text.region} element)`;
+  const mdLine =
+    md === null
+      ? 'markdown: no markdown twin to measure'
+      : `markdown: ${describeFigure(md)} is content`;
+
+  const evidence: CheckEvidence[] = [
+    {
+      ...evidenceOf(html, ['content-type'], 'the plain request, Accept: text/html'),
+      excerpt: undefined,
+      note:
+        `rendered to ${digits.format(text.total)} characters of text` +
+        (text.contentStart === null
+          ? ''
+          : `; the ${text.region} element starts at character ${digits.format(text.contentStart)}`),
+    },
+  ];
+  if (markdown && md) {
+    evidence.push({
+      ...evidenceOf(markdown, ['content-type'], 'the markdown request, Accept: text/markdown'),
+      excerpt: undefined,
+      note:
+        `${digits.format(md.total)} characters as served` +
+        (md.frontMatter > 0 ? `, ${digits.format(md.frontMatter)} of them front matter` : '') +
+        (md.navigationLists > 0
+          ? `, ${md.navigationLists} navigation list${md.navigationLists === 1 ? '' : 's'} set aside`
+          : ''),
+    });
+  }
+
+  const check = result(spec, 'pass', `${textLine}; ${mdLine}`, evidence);
+  check.metric = { label: READING_BUDGET_LABELS[spec.id] ?? 'First read', value: text.share, unit: 'score' };
+  return check;
 }
 
 const LINK_HEADERS: CheckSpec = {
@@ -1440,13 +1572,30 @@ export function samplePages(origin: string, sitemapUrls: string[]): string[] {
 
 /**
  * Normalises what a human typed into the origin everything is fetched relative
- * to. A bare hostname gets https, and any path is dropped: the unit audited is
- * a site, not a page.
+ * to. A bare hostname gets https, and any path is dropped from the origin: the
+ * unit audited is a site, not a page. The path is not thrown away, though: the
+ * reading-budget check measures the page it names (`namedPage`), which is the one
+ * thing a typed path has ever done here.
  */
 export function normaliseTarget(input: string): { origin: string; url: URL } {
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
   const url = new URL(withScheme);
   return { origin: url.origin, url };
+}
+
+/**
+ * The page the operator named past the origin, on the site's own origin, or
+ * `null` when the target was the origin alone. The query string and fragment are
+ * dropped, as `samplePages` drops them: usually the same page in a different order.
+ *
+ * `siteOrigin` is where the homepage landed rather than the origin typed, so a
+ * path typed against an apex that redirects to `www.` is measured where the site
+ * actually lives.
+ */
+export function namedPage(input: string, siteOrigin: string): string | null {
+  const { url } = normaliseTarget(input);
+  if (url.pathname.replace(/\/+$/, '') === '') return null;
+  return `${siteOrigin}${url.pathname}`;
 }
 
 export interface RunAuditOptions {
@@ -1564,15 +1713,46 @@ async function runFastPass(input: string, opts: RunAuditOptions): Promise<FastPa
       return false;
     }
   });
+  const content = contentUrl ? await checkNegotiation(NEGOTIATION_CONTENT, ctx, contentUrl) : null;
   checks.push(
-    contentUrl
-      ? (await checkNegotiation(NEGOTIATION_CONTENT, ctx, contentUrl)).check
+    content
+      ? content.check
       : result(
           NEGOTIATION_CONTENT,
           'not-applicable',
           'no content page to test — the sitemap named none, and this audit does not guess URLs',
         ),
   );
+
+  // The reading budget, from the responses the two negotiation checks fetched:
+  // no new request for either page. See the check's docblock.
+  checks.push(checkReadingBudget(READING_BUDGET_HOME, home.html, home.markdown));
+  checks.push(
+    content
+      ? checkReadingBudget(READING_BUDGET_CONTENT, content.html, content.markdown)
+      : result(READING_BUDGET_CONTENT, 'not-applicable', 'no content page to measure — the sitemap named none'),
+  );
+
+  // The page the operator named, when the target carried a path: the one row this
+  // tier adds for a page the audit would not otherwise read. Skipped, with no row,
+  // when the target was the origin alone, and reported as already measured when the
+  // named page is the homepage or the sitemap's content page.
+  const named = namedPage(input, siteOrigin);
+  if (named) {
+    const same = (a: string, b: string | undefined) =>
+      b !== undefined && a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+    if (same(named, home.html?.url ?? `${siteOrigin}/`) || same(named, contentUrl)) {
+      checks.push(
+        result(READING_BUDGET_PAGE, 'not-applicable', `${named} is already measured by the row above`),
+      );
+    } else {
+      const page = await checkNegotiation(READING_BUDGET_PAGE, ctx, named);
+      // `checkNegotiation` fetches the two variants; its own verdict on the named
+      // page's negotiation is dropped, since the content row already covers that
+      // question. What is kept is the failed fetch, which it reports uniformly.
+      checks.push(page.html ? checkReadingBudget(READING_BUDGET_PAGE, page.html, page.markdown) : page.check);
+    }
+  }
 
   // Both read the homepage response the negotiation check already fetched,
   // rather than spending another request on the same URL.

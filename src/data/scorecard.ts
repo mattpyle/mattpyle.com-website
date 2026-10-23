@@ -22,6 +22,18 @@ export interface ScorecardMetric {
   description: string;
 }
 
+/**
+ * The reading budget of a run: the lowest content share of an agent's first 8,000
+ * characters across the audited pages, as text and as markdown, with the page it was
+ * found on. Not a gate: Steward's `summariseReadingBudget` writes it beside the four
+ * metrics, and a record from before the figure existed has none.
+ */
+export interface ScorecardReadingBudget {
+  pages: number;
+  text: { lowest: number; url: string };
+  markdown: { lowest: number; url: string } | null;
+}
+
 export interface ScorecardSnapshot {
   description: string;
   verified: ScorecardVerification;
@@ -31,6 +43,8 @@ export interface ScorecardSnapshot {
   /** The latest run's machine-authored, human-editable commentary (scorecard-audit-spec.md rule 7). Empty when the run has none — the page falls back to a fixed default caption. */
   commentary: string;
   metrics: readonly ScorecardMetric[];
+  /** Absent until a run measured it. */
+  readingBudget?: ScorecardReadingBudget;
 }
 
 export interface ScorecardHistoryRun {
@@ -60,6 +74,7 @@ export interface ScorecardRunRecord {
   entry: string;
   commentary: string;
   metrics: ScorecardMetric[];
+  readingBudget?: ScorecardReadingBudget;
 }
 
 const RUNS = scorecardRunsJson as ScorecardRunRecord[];
@@ -90,6 +105,7 @@ export const SCORECARD: ScorecardSnapshot = {
   entry: latest.entry,
   commentary: latest.commentary,
   metrics: latest.metrics,
+  ...(latest.readingBudget ? { readingBudget: latest.readingBudget } : {}),
 };
 
 /**

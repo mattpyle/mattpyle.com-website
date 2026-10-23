@@ -39,7 +39,7 @@ export const FIXTURE_ORIGIN = 'https://example.com';
 /**
  * What each check did in the fixture run.
  *
- * `pass` five, `fail` four across all three severities, `not-applicable` two and `error` two —
+ * `pass` seven, `fail` four across all three severities, `not-applicable` two and `error` two —
  * the last four all print as N/A, which is the merge worth having a fixture prove.
  */
 const OUTCOMES = {
@@ -55,6 +55,8 @@ const OUTCOMES = {
   'a2a-agent-card': 'error',
   'markdown-negotiation-home': 'pass',
   'markdown-negotiation-content': 'error',
+  'reading-budget-home': 'pass',
+  'reading-budget-content': 'pass',
   'link-headers': 'pass',
 };
 
@@ -71,6 +73,10 @@ const OBSERVED = {
   'a2a-agent-card': 'could not fetch: the connection was reset before any response arrived',
   'markdown-negotiation-home': '200 with Content-Type text/markdown and a markdown body',
   'markdown-negotiation-content': 'could not fetch: the connection was reset before any response arrived',
+  'reading-budget-home':
+    'text: 41% of the first 8,000 characters is content (the main element); markdown: 93% of all 4,210 characters (the whole page, shorter than 8,000) is content',
+  'reading-budget-content':
+    'text: 68% of the first 8,000 characters is content (the main element); markdown: no markdown twin to measure',
   'link-headers': 'the homepage Link header names an alternate of type text/markdown',
 };
 

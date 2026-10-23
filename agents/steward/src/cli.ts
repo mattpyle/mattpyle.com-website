@@ -1677,6 +1677,17 @@ program
     for (const m of result.record.metrics) {
       console.log(`  ${m.name.padEnd(20)} ${`${m.value}/${m.maximum}`.padEnd(10)} ${m.status}`);
     }
+    const budget = result.record.readingBudget;
+    if (budget) {
+      console.log('');
+      console.log(
+        `  reading budget, lowest content share of the first 8,000 characters across ${budget.pages} page(s):`,
+      );
+      console.log(`    text      ${String(budget.text.lowest).padStart(3)}%  ${budget.text.url}`);
+      if (budget.markdown) {
+        console.log(`    markdown  ${String(budget.markdown.lowest).padStart(3)}%  ${budget.markdown.url}`);
+      }
+    }
     console.log('');
     await c.connection.close();
   });

@@ -107,7 +107,7 @@ export const GET: APIRoute = async ({ url }) => {
     origin,
     audit,
     // A run that reached no verdict about the site is not a report, and rendering it as one would
-    // hand a model thirteen failures against a site nothing ever connected to.
+    // hand a model fifteen failures against a site nothing ever connected to.
     failed: Boolean(audit) && classifyRunFailure(audit, FAILURE_MARKERS) !== null,
     renderSummary: renderMarkdownSummary,
     now,

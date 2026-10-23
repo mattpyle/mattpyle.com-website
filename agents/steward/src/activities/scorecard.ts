@@ -15,6 +15,7 @@ import {
   writeRepoFile,
 } from '../lib/github-contents.js';
 import { AUDIT_USER_AGENT } from '../lib/agent-audit/safe-fetch.js';
+import { measureReadingBudget, type ReadingBudget } from '../lib/agent-audit/reading-budget.js';
 import { auditUrl } from '../lib/audit-engine.js';
 import type { AuditRunners } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
@@ -183,7 +184,7 @@ export async function resolveRunStamp(timeZone: string): Promise<RunStamp> {
  */
 export async function auditLiveUrl(
   url: string,
-  opts: { runners?: AuditRunners } = {},
+  opts: { runners?: AuditRunners; fetch?: typeof fetch } = {},
 ): Promise<PageAuditOutcome> {
   const ctx = Context.current();
   const signal = ctx.cancellationSignal;
@@ -191,15 +192,57 @@ export async function auditLiveUrl(
   try {
     ctx.heartbeat(`auditing ${url}`);
     const raw = await auditUrl(url, signal, { userAgent: AUDIT_USER_AGENT, runners: opts.runners });
+    const readingBudget = await measureLiveReadingBudget(url, signal, opts.fetch ?? fetch);
     return {
       url,
       ok: true,
       scores: raw.scores,
       agenticChecks: raw.agenticChecks,
       axeViolations: raw.axeViolations.length,
+      ...(readingBudget ? { readingBudget } : {}),
     };
   } finally {
     clearInterval(pump);
+  }
+}
+
+/**
+ * The page's reading budget (`lib/agent-audit/reading-budget.ts`): two plain
+ * fetches, the page as HTML and the page as markdown, under the same
+ * `steward-audit` identity the browser tools carry, measured with the code the
+ * agent audit's `reading-budget-*` checks use.
+ *
+ * Two fetches beside a Lighthouse run cost nothing worth noting, and a failure
+ * here is not a failure of the page's audit: the figure is optional on the
+ * outcome, so the page keeps its four gates and loses this one number, logged.
+ * A markdown request answered with HTML, or anything but 200, measures as no
+ * twin; the site's own negotiation is the agent audit's business, not this one's.
+ */
+async function measureLiveReadingBudget(
+  url: string,
+  signal: AbortSignal,
+  fetchImpl: typeof fetch,
+): Promise<ReadingBudget | undefined> {
+  const get = async (accept: string) => {
+    const res = await fetchImpl(url, {
+      signal,
+      headers: { accept, 'user-agent': AUDIT_USER_AGENT },
+      redirect: 'follow',
+    });
+    return { ok: res.ok, type: (res.headers.get('content-type') ?? '').toLowerCase(), body: await res.text() };
+  };
+  try {
+    const html = await get('text/html');
+    if (!html.ok) {
+      log.warn({ activity: 'auditLiveUrl', url, status: 'not ok' }, 'reading budget not measured: the page did not answer 200');
+      return undefined;
+    }
+    const md = await get('text/markdown');
+    const twin = md.ok && !md.type.includes('text/html') && !/^\s*(<!doctype html|<html[\s>])/i.test(md.body);
+    return measureReadingBudget({ html: html.body, markdown: twin ? md.body : null }).budget;
+  } catch (err) {
+    log.warn({ activity: 'auditLiveUrl', url, err }, 'reading budget not measured: a fetch failed');
+    return undefined;
   }
 }
 
@@ -261,6 +304,14 @@ export interface PerPageDetail {
   url: string;
   scores: Record<string, number>;
   axeViolations: number;
+  /** The page's reading budget, when it was measured. See `PageAuditOutcome`. */
+  readingBudget?: ReadingBudget;
+}
+
+/** One page's reading budget as the PR body prints it: "61% / 94%", or what is missing. */
+function readingBudgetCell(budget: ReadingBudget | undefined): string {
+  if (!budget) return 'not measured';
+  return `${budget.text.share}% / ${budget.markdown ? `${budget.markdown.share}%` : 'no twin'}`;
 }
 
 export interface PublishScorecardRunInput {
@@ -290,8 +341,20 @@ function uniqueId(iso: string, existing: ScorecardRunRecord[]): string {
 function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail[], dryRun: boolean): string {
   const metricRows = record.metrics.map((m) => `| ${m.name} | ${m.value}/${m.maximum} | ${m.status} |`).join('\n');
   const pageRows = perPage
-    .map((p) => `| ${p.url} | ${p.axeViolations} | ${Object.entries(p.scores).map(([k, v]) => `${k}: ${v}`).join(', ')} |`)
+    .map(
+      (p) =>
+        `| ${p.url} | ${p.axeViolations} | ${readingBudgetCell(p.readingBudget)} | ${Object.entries(p.scores)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(', ')} |`,
+    )
     .join('\n');
+  const budgetLine = record.readingBudget
+    ? `Reading budget, lowest content share of an agent's first 8,000 characters across ${record.readingBudget.pages} page(s): ` +
+      `${record.readingBudget.text.lowest}% as text on ${record.readingBudget.text.url}` +
+      (record.readingBudget.markdown
+        ? `, ${record.readingBudget.markdown.lowest}% as markdown on ${record.readingBudget.markdown.url}.`
+        : '; no markdown twin on any page.')
+    : 'Reading budget: not measured on this run.';
 
   const lines: string[] = [];
   if (dryRun) {
@@ -311,10 +374,12 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
     '',
     `Scope: ${record.scope} · Tools: ${record.tools.join(', ')}`,
     '',
+    budgetLine,
+    '',
     '<details><summary>Per-page detail</summary>',
     '',
-    '| URL | Axe violations | Scores |',
-    '|---|---|---|',
+    '| URL | Axe violations | First read, text / markdown | Scores |',
+    '|---|---|---|---|',
     pageRows,
     '',
     '</details>',

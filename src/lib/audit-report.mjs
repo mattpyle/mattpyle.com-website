@@ -147,7 +147,7 @@ export function secondsLeftInHour(now) {
  * throws.** `runFastAudit` throws only for a target it cannot parse or a scheme it will not fetch;
  * a refused robots.txt, a DNS failure, an address the guard blocks and a spent time budget all
  * come back as a complete document whose checks each carry an `error` status. That document reads
- * as a report — thirteen rows, a passed count of zero — and rendering it would tell a visitor
+ * as a report — fifteen rows, a passed count of zero — and rendering it would tell a visitor
  * their site failed every check when in fact nothing was checked.
  *
  * **The predicate is "did anything come back from the origin", and it is read off the evidence
