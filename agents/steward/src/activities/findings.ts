@@ -3,7 +3,7 @@ import { WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from '@te
 import { FINDINGS_DEFAULT_SITE, GITHUB_REPO, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
-import { gh } from '../lib/github.js';
+import { authRetryable, gh } from '../lib/github.js';
 import { log } from '../lib/logger.js';
 import {
   compareContains,
@@ -377,13 +377,14 @@ export interface FixPrOutcome {
  * retry policy is the loop: a fixed interval, no attempt cap, a
  * schedule-to-close bound. Retries are not events in the history, so a PR open
  * for a month costs one action per poll and no history growth. `PrStillOpen` is
- * the retryable "not yet"; GitHub's permanent errors stay non-retryable
- * through `gh`.
+ * the retryable "not yet"; GitHub's 404 and 422 stay non-retryable through
+ * `gh`, and a 401 or 403 is retryable here through {@link authRetryable}: a
+ * month-long wait is where a token rotation lands.
  */
 export async function awaitFixPrMerge(prUrl: string): Promise<FixPrOutcome> {
   const pr = parsePrUrl(prUrl);
   if (!pr) throw ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
-  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  const data = await authRetryable(() => gh(`/repos/${pr.repo}/pulls/${pr.number}`));
   if (data.merged === true) {
     const mergeSha = (data.merge_commit_sha as string | null) ?? null;
     if (!mergeSha) throw ApplicationFailure.retryable(`${prUrl} is merged but GitHub has no merge commit yet.`, 'PrStillOpen');
@@ -550,11 +551,12 @@ export interface FixPr {
  * The same infrequent-polling pattern as {@link awaitFixPrMerge}: `FixPrNotOpen`
  * is the retryable "not yet", and the workflow's schedule-to-close bound is the
  * 60-minute give-up, which reaches the workflow as a timeout. Each attempt is
- * one short read, so it needs no heartbeat.
+ * one short read, so it needs no heartbeat. A rejected credential is retried
+ * at the same interval, as in the merge wait.
  */
 export async function awaitFixPr(input: AwaitFixPrInput): Promise<FixPr> {
   const prefix = fixPrBranchPrefix(input.issueNumber);
-  const pulls = (await gh(`/repos/${input.repo}/pulls?state=open&per_page=100`)) as {
+  const pulls = (await authRetryable(() => gh(`/repos/${input.repo}/pulls?state=open&per_page=100`))) as {
     html_url: string;
     head?: { ref?: string };
   }[];
@@ -590,10 +592,11 @@ export interface ProductionDeploy {
  * integration posts it. Containment is the compare API, so a later merge whose
  * deploy superseded this one's counts: two merges close together can leave the
  * first without a production deploy of its own. `DeployNotLive` is the
- * retryable "not yet", polled on the same pattern as {@link awaitFixPrMerge}.
+ * retryable "not yet", polled on the same pattern as {@link awaitFixPrMerge},
+ * and a rejected credential is retried the same way.
  */
 export async function awaitProductionDeploy(input: AwaitProductionDeployInput): Promise<ProductionDeploy> {
-  const read = await readLive(input);
+  const read = await authRetryable(() => readLive(input));
   if (!read.live) throw ApplicationFailure.retryable(read.why, 'DeployNotLive');
   if (!read.contains) throw ApplicationFailure.retryable(read.why, 'DeployNotLive');
   log.info({ activity: 'awaitProductionDeploy', mergeSha: input.mergeSha, liveSha: read.live.sha }, 'the merge commit is live');

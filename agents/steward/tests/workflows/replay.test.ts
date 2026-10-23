@@ -372,6 +372,12 @@ test('a lifecycle run whose first fix was a child replays that attempt as a chil
  *
  * Recorded from the pre-change code (76b1680) the same way as the fixture
  * above.
+ *
+ * It is also the fixture behind the waits' retry-policy change (2026-10-22):
+ * its merge and deploy waits were scheduled with `AuthError` in
+ * `nonRetryableErrorTypes`, and the list no longer names it. The history
+ * replays green without a marker because the SDK matches an activity on its
+ * type and does not compare retry attributes, as the workflow docblock says.
  */
 const findingVerifyHeavyHistoryPath = fileURLToPath(
   new URL('../fixtures/histories/finding-verify-child-heavy.bin', import.meta.url),

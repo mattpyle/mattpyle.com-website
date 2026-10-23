@@ -95,6 +95,7 @@ import {
   findingWorkflowId,
   isFindingSlug,
   parsePrUrl,
+  pendingActivityLine,
   verifySourceLabel,
   verifyWorkflowId,
   type FindingVerdict,
@@ -1957,17 +1958,26 @@ finding
     const c = await client();
     try {
       const id = findingWorkflowId(opts.site, key);
+      const handle = c.workflow.getHandle(id);
       let state: FindingState;
       try {
-        state = await c.workflow.getHandle(id).query(findingStateQuery);
+        state = await handle.query(findingStateQuery);
       } catch (err) {
         if (err instanceof WorkflowNotFoundError) fail(`No workflow ${id}. \`steward finding list\` shows the open ones.`);
         throw err;
       }
+      // A wait that is retrying (a PR still open, a token being rotated) is
+      // visible only to the server: the query state knows the step, not the
+      // attempt or what the last one said.
+      const pending = (await handle.describe()).raw.pendingActivities ?? [];
       console.log('');
       console.log(`  ${id}`);
       console.log(`  status: ${state.status}`);
       if (state.step) console.log(`  step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`);
+      for (const activity of pending) {
+        const line = pendingActivityLine(activity);
+        if (line) console.log(`  retrying: ${line}`);
+      }
       if (state.step === 'fixing' && state.issueUrl) {
         console.log(`  issue: ${state.issueUrl}  (waiting for the PR)`);
         if (state.prUrl) console.log(`  last PR: ${state.prUrl}`);

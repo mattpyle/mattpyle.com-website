@@ -790,3 +790,26 @@ export function liveDeployment(deployments: DeploymentRecord[]): DeploymentRecor
 export function compareContains(status: string): boolean {
   return status === 'identical' || status === 'ahead';
 }
+
+/** The slice of a pending activity's describe record that `steward finding status` reports. */
+export interface PendingActivitySummary {
+  activityType?: { name?: string | null } | null;
+  attempt?: number | null;
+  lastFailure?: { message?: string | null } | null;
+}
+
+/**
+ * One line on an activity a run is retrying: what it waits on, which attempt,
+ * and what the last attempt said. A retry is not a history event and the
+ * workflow never sees a failed attempt, so the query state cannot carry this;
+ * it comes from the server's describe. Null on a first attempt with no
+ * failure yet, which is the normal case and not worth a line.
+ */
+export function pendingActivityLine(info: PendingActivitySummary): string | null {
+  const name = info.activityType?.name;
+  if (!name) return null;
+  const attempt = info.attempt ?? 1;
+  const failure = info.lastFailure?.message?.trim();
+  if (attempt <= 1 && !failure) return null;
+  return `${name} attempt ${attempt}${failure ? `: ${failure}` : ''}`;
+}

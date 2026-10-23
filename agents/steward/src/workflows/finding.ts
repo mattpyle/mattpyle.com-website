@@ -70,6 +70,17 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * `steward-findings`. The `confirmed` ending needs no marker here: the child
  * carries `verify-blockless-confirm`, and a child recorded before that marker
  * returns `unverifiable`, which this run still ends on.
+ *
+ * **The waits' retry policies carry no marker** (2026-10-22). Dropping
+ * `AuthError` from the three waits' `nonRetryableErrorTypes` changes an
+ * attribute of a command, not the command: replay matches an activity on its
+ * type, and the SDK does not compare retry policies or timeouts against the
+ * history. The lifecycle fixtures in `tests/workflows/replay.test.ts`
+ * (`finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`) were
+ * recorded with `AuthError` in those lists and replay green against this code,
+ * which is the proof. The new policy applies to a wait scheduled after the
+ * worker picks this up; a wait already pending keeps the policy it was
+ * scheduled with, and no open run was inside a wait when this shipped.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -184,7 +195,21 @@ export const verdictSignal = wf.defineSignal<[FindingVerdict]>('verdict');
 export const fixSignal = wf.defineSignal<[FixRequest]>('fix');
 export const findingStateQuery = wf.defineQuery<FindingState>('state');
 
-const GITHUB_PERMANENT = ['AuthError', 'NotFound', 'UnprocessableRequest'];
+/**
+ * GitHub's permanent answers, as `gh` names them. A 401 or 403 is permanent
+ * for a wrong token and transient during a rotation, and the two cases look
+ * the same from here, so where it goes depends on how long the activity runs.
+ * A write is five quick attempts, and five against a dead token is enough:
+ * `AuthError` is permanent there. A wait runs for hours or days at a fixed
+ * interval, which is where a rotation window lands, so a wait retries it at
+ * that interval and its schedule-to-close bound is the give-up. The wait
+ * activities throw the failure retryable themselves (`authRetryable` in
+ * `lib/github.ts`): the flag `gh` sets would otherwise end the wait whatever
+ * this policy says. On 2026-10-21 a rotation with the old token still in the
+ * hosted worker ended every run parked in the merge wait on its next poll.
+ */
+const GITHUB_PERMANENT_FOR_WAITS = ['NotFound', 'UnprocessableRequest'];
+const GITHUB_PERMANENT = ['AuthError', ...GITHUB_PERMANENT_FOR_WAITS];
 
 /**
  * Five attempts with backoff, because the retryable failure here is a real one:
@@ -213,7 +238,8 @@ const writing = wf.proxyActivities<
 });
 
 // The PR wait: every minute for up to 60. The Action took minutes in the
-// spike, so an hour with no PR is a run that is not coming.
+// spike, so an hour with no PR is a run that is not coming. A rejected
+// credential is one more poll, not the end of the wait.
 const awaitingPr = wf.proxyActivities<Pick<typeof activities, 'awaitFixPr'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -221,13 +247,14 @@ const awaitingPr = wf.proxyActivities<Pick<typeof activities, 'awaitFixPr'>>({
   retry: {
     initialInterval: '1 minute',
     backoffCoefficient: 1,
-    nonRetryableErrorTypes: GITHUB_PERMANENT,
+    nonRetryableErrorTypes: GITHUB_PERMANENT_FOR_WAITS,
   },
 });
 
 // The merge wait: every 5 minutes for up to 30 days. No `maximumAttempts`, so
 // no attempt cap; the schedule-to-close bound ends it. A PR a person has not
-// merged yet is the normal case, not a failure.
+// merged yet is the normal case, not a failure, and so is a token being
+// rotated under the worker: the next poll reads with the new one.
 const merging = wf.proxyActivities<Pick<typeof activities, 'awaitFixPrMerge'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -235,12 +262,13 @@ const merging = wf.proxyActivities<Pick<typeof activities, 'awaitFixPrMerge'>>({
   retry: {
     initialInterval: '5 minutes',
     backoffCoefficient: 1,
-    nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMalformed'],
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT_FOR_WAITS, 'FindingMalformed'],
   },
 });
 
 // The deploy wait: every 2 minutes for up to 24 hours. A Vercel build takes
-// about three, so a day is a deploy that is not coming.
+// about three, so a day is a deploy that is not coming. A rejected credential
+// is one more poll, as in the merge wait.
 const deploying = wf.proxyActivities<Pick<typeof activities, 'awaitProductionDeploy'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -248,7 +276,7 @@ const deploying = wf.proxyActivities<Pick<typeof activities, 'awaitProductionDep
   retry: {
     initialInterval: '2 minutes',
     backoffCoefficient: 1,
-    nonRetryableErrorTypes: GITHUB_PERMANENT,
+    nonRetryableErrorTypes: GITHUB_PERMANENT_FOR_WAITS,
   },
 });
 

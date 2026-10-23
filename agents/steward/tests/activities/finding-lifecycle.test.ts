@@ -2,7 +2,13 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
-import { awaitFixPrMerge, awaitProductionDeploy, readProductionDeploy, writeFindingReturned } from '../../src/activities/findings.js';
+import {
+  awaitFixPr,
+  awaitFixPrMerge,
+  awaitProductionDeploy,
+  readProductionDeploy,
+  writeFindingReturned,
+} from '../../src/activities/findings.js';
 import { compareContains, liveDeployment, setFindingReturned } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { DEFECT_KEY, FIXING_FINDING, FIX_PR } from '../helpers/finding-fixtures.js';
@@ -150,6 +156,39 @@ test('a live commit that predates the merge, or none at all, is a retryable Depl
 
   scriptGitHub({ [DEPLOYS]: [] });
   await rejectsWith(awaitProductionDeploy(input), 'DeployNotLive', false);
+});
+
+// ---------------------------------------------------------------------------
+// A rejected credential: the waits poll on, the writes stop
+// ---------------------------------------------------------------------------
+
+/** Every GitHub call answers with one status: a token GitHub no longer accepts. */
+function rejectGitHub(status: number): void {
+  process.env.GITHUB_TOKEN = ['fake', 'token', 'for', 'tests'].join('-');
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ message: 'Bad credentials' }), { status, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+}
+
+test('a 401 during the merge wait is a retryable AuthError, so the wait outlives a token rotation', async () => {
+  rejectGitHub(401);
+  const err = await rejectsWith(awaitFixPrMerge(FIX_PR), 'AuthError', false);
+  assert.match(err.message, /GitHub rejected the credential \(401\): Bad credentials/);
+});
+
+test('a 403 during the PR wait and a 401 during the deploy wait are retryable too', async () => {
+  rejectGitHub(403);
+  await rejectsWith(awaitFixPr({ repo: SITE_REPO, issueNumber: 363 }), 'AuthError', false);
+  rejectGitHub(401);
+  await rejectsWith(awaitProductionDeploy(input), 'AuthError', false);
+});
+
+test('a 401 during a write is still a permanent AuthError', async () => {
+  rejectGitHub(401);
+  await rejectsWith(
+    writeFindingReturned({ repo: 'mattpyle/argus', site: 'mattpyle-com', key: DEFECT_KEY, findingPath: FINDING, indexPath: INDEX, prUrl: FIX_PR, at: AT }),
+    'AuthError',
+    true,
+  );
 });
 
 // ---------------------------------------------------------------------------
