@@ -21,7 +21,14 @@
  * NO TOP-LEVEL SIDE EFFECTS — this is imported at build time.
  */
 
-/** The 13 fast checks, in the order `runFastAudit` reports them. */
+/**
+ * The 15 fast checks, in the order `runFastAudit` reports them.
+ *
+ * A sixteenth, `reading-budget-page`, exists only in a run given a page past the origin
+ * (`steward audit-url https://example.com/some-page`): the same measurement as the two
+ * reading-budget rows below, on the page named. The parity test audits an origin, so the row
+ * is documented here rather than listed.
+ */
 export const STEWARD_FAST_CHECKS = [
   {
     id: 'robots-txt',
@@ -111,6 +118,22 @@ export const STEWARD_FAST_CHECKS = [
     severity: 'high',
     plain:
       'The same question against a real content page, taken from the site’s own sitemap rather than guessed.',
+  },
+  {
+    id: 'reading-budget-home',
+    title: "The homepage's first 8,000 characters are measured for content share",
+    category: 'content-access',
+    severity: 'medium',
+    plain:
+      'How much of the first 8,000 characters an agent reads is the page’s own content rather than navigation, as text and as markdown. A figure, not a verdict: the study it follows gives no target.',
+  },
+  {
+    id: 'reading-budget-content',
+    title: "A content page's first 8,000 characters are measured for content share",
+    category: 'content-access',
+    severity: 'medium',
+    plain:
+      'The same measurement on the sitemap-named content page. Give the audit a page URL and it measures that page too.',
   },
   {
     id: 'link-headers',

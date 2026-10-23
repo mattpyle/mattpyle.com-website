@@ -6,6 +6,7 @@ import { MockActivityEnvironment } from '@temporalio/testing';
 import { auditUrl } from '../../src/lib/audit-engine.js';
 import type { AuditRunners } from '../../src/lib/audit-engine.js';
 import { AUDIT_USER_AGENT } from '../../src/lib/agent-audit/safe-fetch.js';
+import type { PageAuditOutcome } from '../../src/lib/scorecard-aggregate.js';
 
 /**
  * One identity, three places.
@@ -80,12 +81,57 @@ process.env.STEWARD_SITE_DIR = path.resolve(
 );
 const { auditLiveUrl } = await import('../../src/activities/scorecard.js');
 
+/**
+ * The reading-budget fetches, answered here: a fourth place the identity has to
+ * reach, since `auditLiveUrl` fetches the page twice more, as HTML and as markdown,
+ * beside the two browser tools. Records what each request asked for.
+ */
+function recordingFetch(): { fetch: typeof fetch; asked: Array<{ accept: string; ua: string }> } {
+  const asked: Array<{ accept: string; ua: string }> = [];
+  const impl = (async (_input: string | URL | Request, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    const accept = headers.get('accept') ?? '';
+    asked.push({ accept, ua: headers.get('user-agent') ?? '' });
+    return accept.includes('markdown')
+      ? new Response('---\ntitle: Home\n---\n\n# Home\n\nHello.\n', { headers: { 'content-type': 'text/markdown' } })
+      : new Response('<!doctype html><nav><a href="/">Home</a></nav><main><p>Hello there, reader.</p></main>', {
+          headers: { 'content-type': 'text/html' },
+        });
+  }) as typeof fetch;
+  return { fetch: impl, asked };
+}
+
 test('auditLiveUrl audits as steward-audit', async () => {
   const { runners, axeOpts, lighthouseOpts } = recordingRunners();
+  const { fetch: fetchImpl, asked } = recordingFetch();
   const env = new MockActivityEnvironment();
-  await env.run(() => auditLiveUrl('https://www.mattpyle.com/', { runners }));
+  const outcome = (await env.run(() => auditLiveUrl('https://www.mattpyle.com/', { runners, fetch: fetchImpl }))) as PageAuditOutcome;
 
   assert.equal(axeOpts[0].userAgent, AUDIT_USER_AGENT);
   assert.deepEqual(lighthouseOpts[0].flags, { emulatedUserAgent: AUDIT_USER_AGENT });
   assert.match(AUDIT_USER_AGENT, /^steward-audit\//);
+
+  // The two reading-budget fetches carry the same identity, and ask for each
+  // variant by name.
+  assert.deepEqual(asked, [
+    { accept: 'text/html', ua: AUDIT_USER_AGENT },
+    { accept: 'text/markdown', ua: AUDIT_USER_AGENT },
+  ]);
+  assert.ok(outcome.ok);
+  assert.ok(outcome.ok && outcome.readingBudget, 'the page carries its reading budget');
+  if (outcome.ok && outcome.readingBudget) {
+    assert.ok(outcome.readingBudget.text.share > 0 && outcome.readingBudget.text.share < 100);
+    assert.ok(outcome.readingBudget.markdown && outcome.readingBudget.markdown.share < 100);
+  }
+});
+
+test('auditLiveUrl keeps the page when the reading-budget fetch fails', async () => {
+  const { runners } = recordingRunners();
+  const failing = (async () => {
+    throw new Error('ECONNRESET');
+  }) as unknown as typeof fetch;
+  const env = new MockActivityEnvironment();
+  const outcome = (await env.run(() => auditLiveUrl('https://www.mattpyle.com/', { runners, fetch: failing }))) as PageAuditOutcome;
+  assert.ok(outcome.ok);
+  assert.equal(outcome.ok && outcome.readingBudget, undefined);
 });

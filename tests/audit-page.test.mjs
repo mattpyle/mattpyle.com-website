@@ -211,7 +211,7 @@ test('a form with no live region is left alone rather than half-wired', () => {
 /** Steward's renderer, stubbed. What it produces is its own tests' business, not this file's. */
 const renderSummary = (audit) => `# Agent-readiness audit: ${audit.target.origin}`;
 
-test('with no address, the twin is the page: its own words and all thirteen checks', () => {
+test('with no address, the twin is the page: its own words and all fifteen checks', () => {
   const { body, maxAge } = auditMarkdownDocument({ asked: null, now: new Date('2026-09-05T13:30:00.000Z') });
 
   // The frontmatter describes the page the way the HTML's <title> and meta description do, and
@@ -343,7 +343,7 @@ test('an address originFor refuses is the bad-address state, with a 400', () => 
 
 test('a private address is the bad-address state, read off the run rather than off a throw', () => {
   // The address guard does not stop the audit starting: it refuses each fetch, so the run finishes
-  // as a document of thirteen errors. Classifying that as "the site did not answer" would tell a
+  // as a document of fifteen errors. Classifying that as "the site did not answer" would tell a
   // visitor their own localhost was down, when in fact this auditor will never look at it.
   assert.equal(classifyRunFailure(blockedRun(`could not fetch: 127.0.0.1 ${MARKERS.privateAddress} a loopback address`), MARKERS), 'bad-address');
   assert.equal(errorView('bad-address').status, 400);
@@ -551,8 +551,8 @@ test('the counts, the headline and the fix list all come from one tally', () => 
   const now = new Date('2026-09-05T13:30:00.000Z');
   const view = reportView(fixtureAudit({ now, minutesAgo: 3 }), now);
 
-  assert.equal(view.total, 13);
-  assert.equal(view.passed, 5);
+  assert.equal(view.total, 15);
+  assert.equal(view.passed, 7);
 
   // Checked is the applicable count, exactly as Steward's own report uses it, so Failed is
   // Checked minus Passed and the two reports cannot disagree about what a column means.

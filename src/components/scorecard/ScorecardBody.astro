@@ -106,6 +106,31 @@ const provenance = [
 const findings = SCORECARD.commentary.trim();
 
 /**
+ * The reading budget, one sentence, rendered only on a run that measured it.
+ *
+ * Not a fifth gate, so it does not join the grid: the study it follows (Peec AI, June 2026)
+ * found an agent reads about 8,000 characters of a page at most and gives no target for how
+ * much of that should be content. The sentence names the page where the share is lowest, which
+ * is the one fact a layout decision needs. The number of pages is the run's own, not the
+ * scope string's, because a page whose fetch failed carries no figure.
+ */
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+const budget = SCORECARD.readingBudget;
+const readingBudget = budget
+  ? `Reading budget: of the first 8,000 characters an agent reads, the content share is lowest on ${pathOf(budget.text.url)} at ${budget.text.lowest}% as text` +
+    (budget.markdown
+      ? `, and on ${pathOf(budget.markdown.url)} at ${budget.markdown.lowest}% as markdown`
+      : '') +
+    `, across ${budget.pages} page${budget.pages === 1 ? '' : 's'}.`
+  : '';
+
+/**
  * "Agentic Browsing" as the design writes it, "Agentic browsing", without turning "SEO" into
  * "Seo". Only a word that is already plain Capitalised is lowered; an all-caps acronym is left
  * alone, and the first word always is.
@@ -146,6 +171,8 @@ const previousRuns = SCORECARD_HISTORY.map(run => ({
     </div>
 
     {findings && <p class="findings">{findings}</p>}
+
+    {readingBudget && <p class="findings reading-budget">{readingBudget}</p>}
 
     {/*
       Where the Agent traffic block used to be. It moved to /activity in the same change — this

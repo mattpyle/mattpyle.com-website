@@ -41,6 +41,10 @@ function serialiseRun(run: ScorecardRunRecord) {
     commentary: run.commentary,
     gatesPassing: passingGates(run.metrics),
     gateCount: run.metrics.length,
+    // Beside the gates, not among them: the lowest content share of an agent's first 8,000
+    // characters across the run's pages, text and markdown, with the page it was found on.
+    // `null` on a run from before it was measured.
+    readingBudget: run.readingBudget ?? null,
     gates: scorecardGates(run.metrics).map((gate, index) => ({
       name: gate.label,
       score: gate.score,

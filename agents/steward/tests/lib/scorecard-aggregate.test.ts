@@ -9,6 +9,7 @@ import {
   checkAuditSet,
   decidePublish,
   parsePageCount,
+  summariseReadingBudget,
   validateCommentary,
   type PageAuditOutcome,
   type ScorecardMetric,
@@ -483,4 +484,41 @@ test('a coverage change outranks staleness in the stated reason', () => {
   );
   assert.equal(decision.decision, 'open-pr');
   assert.equal(decision.reason, 'Coverage 18→19 pages');
+});
+
+// ---------------------------------------------------------------------------
+// The reading budget: carried per page, summarised as the lowest, never a gate.
+// ---------------------------------------------------------------------------
+
+test('summariseReadingBudget names the page with the lowest share, text and markdown each', () => {
+  const pages: PageAuditOutcome[] = [
+    page({ url: 'https://www.mattpyle.com/', readingBudget: { text: { share: 82, measured: 5840 }, markdown: { share: 90, measured: 2966 } } }),
+    page({ url: 'https://www.mattpyle.com/about/', readingBudget: { text: { share: 74, measured: 3934 }, markdown: { share: 95, measured: 3170 } } }),
+    page({ url: 'https://www.mattpyle.com/activity/', readingBudget: { text: { share: 85, measured: 6881 }, markdown: null } }),
+  ];
+  assert.deepEqual(summariseReadingBudget(pages), {
+    pages: 3,
+    text: { lowest: 74, url: 'https://www.mattpyle.com/about/' },
+    markdown: { lowest: 90, url: 'https://www.mattpyle.com/' },
+  });
+});
+
+test('summariseReadingBudget skips pages without a figure and is undefined when none has one', () => {
+  const withOne: PageAuditOutcome[] = [
+    page({ url: 'https://www.mattpyle.com/' }),
+    { url: 'https://www.mattpyle.com/broken/', ok: false, error: 'timed out' },
+    page({ url: 'https://www.mattpyle.com/about/', readingBudget: { text: { share: 60, measured: 8000 }, markdown: null } }),
+  ];
+  assert.deepEqual(summariseReadingBudget(withOne), {
+    pages: 1,
+    text: { lowest: 60, url: 'https://www.mattpyle.com/about/' },
+    markdown: null,
+  });
+  // An older history, or a run whose fetches all failed: no field at all.
+  assert.equal(summariseReadingBudget([page(), page({ url: 'https://www.mattpyle.com/about/' })]), undefined);
+});
+
+test('the reading budget never moves a metric or the publish decision', () => {
+  const measuredPages = [page({ readingBudget: { text: { share: 10, measured: 8000 }, markdown: { share: 20, measured: 8000 } } })];
+  assert.deepEqual(aggregate(measuredPages), aggregate([page()]));
 });

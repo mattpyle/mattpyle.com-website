@@ -220,6 +220,20 @@
   ],
   "changelog": [
     {
+      "slug": "agent-reading-budget",
+      "title": "Steward measures an agent's reading budget",
+      "url": "https://www.mattpyle.com/changelog/agent-reading-budget/",
+      "date": "2026-10-22T00:00:00.000Z",
+      "publishedAt": "2026-10-23T06:30:00.000Z",
+      "type": "feature",
+      "significance": "minor",
+      "tags": [
+        "measurement",
+        "agents"
+      ],
+      "summary": "The agent audit and the nightly scorecard now measure how much of the first 8,000 characters an agent reads on each page is content rather than navigation, as text and as markdown, so a header that eats an agent's first read shows up as a number."
+    },
+    {
       "slug": "agent-signed-guestbook",
       "title": "A guest book an agent can sign",
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
@@ -347,24 +361,12 @@
         "accessibility"
       ],
       "summary": "Published /scorecard as a manually verified snapshot of the site's latest Accessibility, Performance, SEO, and Agentic Browsing results — the same facts exposed to human and agent readers from one source."
-    },
-    {
-      "slug": "site-live",
-      "title": "mattpyle.com goes live",
-      "url": "https://www.mattpyle.com/changelog/site-live/",
-      "date": "2026-07-14T00:00:00.000Z",
-      "type": "launch",
-      "significance": "major",
-      "tags": [
-        "infra"
-      ],
-      "summary": "The domain went live with www as the canonical host. Fixed every emitted URL to the canonical host, fixed a layout-shift regression, captured the first live-network baseline, and confirmed every AI crawler gets a 200."
     }
   ],
   "counts": {
     "writing": 3,
     "projects": 3,
-    "changelog": 13,
+    "changelog": 14,
     "changelogListed": 10
   }
 }

@@ -865,3 +865,52 @@ test('a monitoring service that cannot be reached does not fail the run', async 
   );
   assert.equal(result.decision, 'open-pr');
 });
+
+test('a page\'s reading budget reaches the record, the PR body input and the archive, lowest page named', async () => {
+  const budgets: Record<string, { text: { share: number; measured: number }; markdown: { share: number; measured: number } | null }> = {
+    'https://www.mattpyle.com/': { text: { share: 82, measured: 5840 }, markdown: { share: 90, measured: 2966 } },
+    'https://www.mattpyle.com/about/': { text: { share: 74, measured: 3934 }, markdown: null },
+  };
+  const published: unknown[] = [];
+  const { activities, archived } = mockActivities({
+    resolveAuditUrls: async () => Object.keys(budgets),
+    auditLiveUrl: async (url: string) => ({ ...GREEN_PAGE, url, readingBudget: budgets[url] }),
+    readPublishedScorecard: async () => undefined,
+    publishScorecardRun: async (input: unknown) => {
+      published.push(input);
+      return { branch: 'b', prUrl: 'https://github.com/o/r/pull/10', id: '2026-07-22' };
+    },
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-reading-budget',
+      taskQueue: QUEUE,
+      args: [baseInput()],
+    }),
+  );
+
+  const expected = {
+    pages: 2,
+    text: { lowest: 74, url: 'https://www.mattpyle.com/about/' },
+    markdown: { lowest: 90, url: 'https://www.mattpyle.com/' },
+  };
+  assert.deepEqual(result.record.readingBudget, expected);
+  assert.deepEqual(result.perPage[1].readingBudget, budgets['https://www.mattpyle.com/about/']);
+  assert.deepEqual((published[0] as { record: { readingBudget?: unknown } }).record.readingBudget, expected);
+  assert.deepEqual((archived[0] as { readingBudget?: unknown }).readingBudget, expected);
+  // Still four metrics: the figure sits beside the gates, never among them.
+  assert.equal(result.record.metrics.length, 4);
+});
+
+test('pages without a reading budget leave the record without one', async () => {
+  const { activities, archived } = mockActivities({ readPublishedScorecard: async () => undefined });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-no-reading-budget',
+      taskQueue: QUEUE,
+      args: [baseInput()],
+    }),
+  );
+  assert.equal('readingBudget' in result.record, false);
+  assert.equal('readingBudget' in (archived[0] as object), false);
+});

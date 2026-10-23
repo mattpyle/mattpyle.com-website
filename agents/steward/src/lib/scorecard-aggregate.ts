@@ -11,6 +11,7 @@
  */
 
 import type { AgenticCheck } from './audit-map.js';
+import type { ReadingBudget } from './agent-audit/reading-budget.js';
 
 export type ScorecardStatus = 'Pass' | 'Partial' | 'Fail';
 
@@ -36,6 +37,14 @@ export type PageAuditOutcome =
       /** The four real Agentic Browsing checks for this page (audit-map.ts's `agenticChecks`) — accessibility tree, layout stability, llms.txt, WebMCP schema validity. */
       agenticChecks: AgenticCheck[];
       axeViolations: number;
+      /**
+       * The content share of an agent's first 8,000 characters of this page, as
+       * text and as markdown (`agent-audit/reading-budget.ts`). Optional twice
+       * over: a history recorded before the field existed has activity results
+       * without it, and a page whose two fetches failed is still an audited page.
+       * Not a gate and not in `aggregate()`; `summariseReadingBudget` reads it.
+       */
+      readingBudget?: ReadingBudget;
     }
   | {
       url: string;
@@ -43,6 +52,48 @@ export type PageAuditOutcome =
       /** Why the tool failed to produce a result for this URL, after retries. */
       error: string;
     };
+
+/**
+ * The reading budget as the public run-log carries it: the lowest share across
+ * the pages that have one, with the page it was found on, so the template that
+ * eats the most of an agent's first read is named rather than averaged away.
+ *
+ * Not a fifth metric. The study it tests against gives no target, so there is no
+ * status to give it, and `decidePublish` never reads it: the figure rides along
+ * on a run that publishes for its own reasons. That is the smaller change by a
+ * wide margin, and the one that keeps the four gates meaning what they meant.
+ */
+export interface ScorecardReadingBudget {
+  /** How many audited pages carried a figure. */
+  pages: number;
+  text: { lowest: number; url: string };
+  /** `null` when no page served a markdown twin to measure. */
+  markdown: { lowest: number; url: string } | null;
+}
+
+/**
+ * The lowest reading-budget share across the audited pages, text and markdown
+ * each, or `undefined` when no page carried a figure (an older history, or a run
+ * whose every fetch failed). Ties keep the first page in audit order.
+ */
+export function summariseReadingBudget(perPage: PageAuditOutcome[]): ScorecardReadingBudget | undefined {
+  let text: { lowest: number; url: string } | undefined;
+  let markdown: { lowest: number; url: string } | undefined;
+  let pages = 0;
+  for (const page of perPage) {
+    if (!page.ok || !page.readingBudget) continue;
+    pages += 1;
+    const { readingBudget } = page;
+    if (!text || readingBudget.text.share < text.lowest) {
+      text = { lowest: readingBudget.text.share, url: page.url };
+    }
+    if (readingBudget.markdown && (!markdown || readingBudget.markdown.share < markdown.lowest)) {
+      markdown = { lowest: readingBudget.markdown.share, url: page.url };
+    }
+  }
+  if (!text) return undefined;
+  return { pages, text, markdown: markdown ?? null };
+}
 
 interface NormalizedPage {
   scores: Record<string, number>;
@@ -231,6 +282,8 @@ export interface ScorecardRunRecord extends PublishableRun {
   tools: string[];
   entry: string;
   commentary: string;
+  /** Present on a run whose pages were measured; absent on older records. See the type. */
+  readingBudget?: ScorecardReadingBudget;
 }
 
 export interface PublishDecision {
