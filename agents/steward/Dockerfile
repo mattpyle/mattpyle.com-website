@@ -52,12 +52,31 @@ RUN apt-get update \
 # depends on Debian's alternatives symlinks staying where they are.
 ENV CHROME_PATH=/usr/bin/chromium
 
+# Everything from here on runs as `node` and every COPY says `--chown`, so the
+# files are owned by `node` in the layer that creates them. No later step
+# rewrites them.
+#
+# This replaces a trailing `RUN chown -R node:node /app`. Docker implements a
+# recursive chown as a copy of every touched file into a new layer, and /app held
+# the whole `npm ci` tree with its chromedriver download. On 2026-10-23 that one
+# step took 6 min 17 s of a 12 min build.
+#
+# /app and the two workspace directories are made and handed over here, empty and
+# as root, which costs nothing. `npm ci` as `node` needs to write
+# /app/node_modules and may need agents/steward/node_modules, and a directory
+# `COPY` creates on the way is not guaranteed to be `node`'s.
+#
+# Anything that must be root (the apt layer above) stays above this line.
+RUN mkdir -p /app/agents/steward \
+  && chown node:node /app /app/agents /app/agents/steward
+
 WORKDIR /app
+USER node
 
 # The manifests first, as their own layer: dependencies change far less often
 # than Steward's source, so an ordinary code deploy reuses the cached `npm ci`.
-COPY package.json package-lock.json ./
-COPY agents/steward/package.json ./agents/steward/
+COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node agents/steward/package.json ./agents/steward/
 
 # `--workspace` so the site's own dependencies (Astro, Playwright, the OG-image
 # toolchain) never enter this image; none of them is reachable from the worker.
@@ -104,17 +123,16 @@ RUN chromium_major="$(chromium --version | grep -oE '[0-9]+' | head -n 1)" \
   && test -n "$chromium_major" \
   && test "$chromium_major" = "$driver_major"
 
-COPY agents/steward/ ./agents/steward/
+COPY --chown=node:node agents/steward/ ./agents/steward/
 
 # Chrome is launched with `--no-sandbox` (see `lib/audit-engine.ts`), which is
 # the usual container arrangement and is why this image needs no seccomp
 # profile. Running as a non-root user is what keeps that acceptable: the
 # sandbox is off, so the process boundary is the boundary.
 #
-# The `node` user ships with the base image. It owns /app so `tsx`'s on-disk
-# cache and Chrome's user-data directory are both writable.
-RUN chown -R node:node /app
-USER node
+# The `node` user ships with the base image, and the `USER node` above is what
+# the container runs as. It owns /app so `tsx`'s on-disk cache and Chrome's
+# user-data directory are both writable.
 
 # `dumb-init` as PID 1, doing two jobs that both failed silently without it.
 #
