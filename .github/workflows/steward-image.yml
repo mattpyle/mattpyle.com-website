@@ -1,0 +1,67 @@
+name: Steward worker image build
+
+# Builds the hosted worker image on a PR that can change it. No machine in this
+# project has Docker, so until this job the first build of a Dockerfile change
+# was Railway's, after merge, about 12 minutes later. Nothing is pushed.
+#
+# The filter is the image's inputs: the Dockerfile, the root `.dockerignore`, the
+# manifests it copies for `npm ci`, and this file. Source under agents/steward/
+# is COPY'd last and cannot break the build, so it does not trigger this job.
+on:
+  pull_request:
+    paths:
+      - agents/steward/Dockerfile
+      - .dockerignore
+      - package.json
+      - package-lock.json
+      - agents/steward/package.json
+      - .github/workflows/steward-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: steward-image-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only: checks out and builds locally. Stated explicitly rather than
+# inherited, matching security-scan.yml.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and smoke-test the image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The context is the repo root, as the Dockerfile header says. The apt and
+      # `npm ci` layers are the slow ones; the layer cache is what spares them.
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: agents/steward/Dockerfile
+          tags: steward-worker:ci
+          load: true
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The default entrypoint is replaced and the worker is not started: it
+      # needs Temporal credentials and would exit. WORKDIR is /app, and the
+      # image's own user is `node`.
+      - name: Smoke test
+        run: |
+          docker run --rm --entrypoint sh steward-worker:ci -euc '
+            test "$(whoami)" = node
+            test "$(stat -c %U /app)" = node
+            test "$(stat -c %U /app/node_modules)" = node
+            cd /app/agents/steward
+            npx tsx --version
+            npx chromedriver --version
+          '
