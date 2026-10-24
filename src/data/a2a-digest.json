@@ -225,6 +225,20 @@
   ],
   "changelog": [
     {
+      "slug": "activity-agent-identity",
+      "title": "/activity shows who an agent is",
+      "url": "https://www.mattpyle.com/changelog/activity-agent-identity/",
+      "date": "2026-10-24T00:00:00.000Z",
+      "publishedAt": "2026-10-24T07:35:00.000Z",
+      "type": "feature",
+      "significance": "minor",
+      "tags": [
+        "measurement",
+        "agents"
+      ],
+      "summary": "/activity now shows how many agent hits proved who sent them, names the key directories behind signatures the site does not yet recognise, and lists the MCP clients that give a name and a protocol revision."
+    },
+    {
       "slug": "agent-reading-budget",
       "title": "Steward measures an agent's reading budget",
       "url": "https://www.mattpyle.com/changelog/agent-reading-budget/",
@@ -351,27 +365,12 @@
         "aeo"
       ],
       "summary": "Every post now has a token-efficient raw-markdown sibling at /writing/<slug>.md, and the canonical URL itself serves markdown when a request genuinely prefers it. Took three attempts to land the negotiation."
-    },
-    {
-      "slug": "public-scorecard",
-      "title": "The public Scorecard",
-      "url": "https://www.mattpyle.com/changelog/public-scorecard/",
-      "date": "2026-07-15T00:00:00.000Z",
-      "type": "feature",
-      "significance": "minor",
-      "tags": [
-        "measurement",
-        "agents",
-        "performance",
-        "accessibility"
-      ],
-      "summary": "Published /scorecard as a manually verified snapshot of the site's latest Accessibility, Performance, SEO, and Agentic Browsing results — the same facts exposed to human and agent readers from one source."
     }
   ],
   "counts": {
     "writing": 3,
     "projects": 3,
-    "changelog": 14,
+    "changelog": 15,
     "changelogListed": 10
   }
 }
