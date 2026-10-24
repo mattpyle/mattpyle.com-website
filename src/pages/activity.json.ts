@@ -1,7 +1,23 @@
 import type { APIRoute } from 'astro';
-import { SIGNERS_LEGEND, buildActivity } from '../lib/activity-summary.mjs';
-import { flattenSignerHashes, flattenTraffic, hourStart, readAgentTraffic } from '../lib/agent-traffic.mjs';
-import { MAX_SIGNER_HOSTS_PER_DAY, OTHER_SIGNER_HOST } from '../lib/agent-hits.mjs';
+import {
+  MCP_CLIENTS_LEGEND,
+  MCP_COUNTS_NOTE,
+  MCP_METHODS_LEGEND,
+  SIGNERS_LEGEND,
+  buildActivity,
+} from '../lib/activity-summary.mjs';
+import { flattenMcpHashes, flattenSignerHashes, flattenTraffic, hourStart, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import {
+  MAX_MCP_CLIENTS_PER_DAY,
+  MAX_MCP_VERSIONS_PER_DAY,
+  MAX_SIGNER_HOSTS_PER_DAY,
+  OTHER_MCP_CLIENT,
+  OTHER_MCP_METHOD,
+  OTHER_MCP_VERSION,
+  OTHER_SIGNER_HOST,
+  UNNAMED_MCP_CLIENT,
+  UNSTATED_MCP_VERSION,
+} from '../lib/agent-hits.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 import { SITE_ORIGIN } from '../data/site-origin.mjs';
 
@@ -56,6 +72,7 @@ export const GET: APIRoute = async () => {
 
   const activity = buildActivity(flattenTraffic(traffic), renderedAt, {
     signers: flattenSignerHashes(traffic.signerHashes),
+    mcp: flattenMcpHashes(traffic.mcpHashes),
   });
 
   const body = {
@@ -67,7 +84,7 @@ export const GET: APIRoute = async () => {
      * What is counted, in the payload rather than only in the page's prose: a reader of the JSON
      * gets the same scope statement a reader of the page does.
      */
-    counts: 'Fetches of this site\'s agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted. A request whose Web Bot Auth signature verified under a signer this site does not name is also counted by the hostname of the key directory that verified it, and by nothing else.',
+    counts: 'Fetches of this site\'s agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted. A request whose Web Bot Auth signature verified under a signer this site does not name is also counted by the hostname of the key directory that verified it, and by nothing else. ' + MCP_COUNTS_NOTE,
     counted: activity.counted,
     /** Rolling windows ending at `renderedAt`, so none of them is a calendar period in any zone. */
     totals: {
@@ -145,6 +162,42 @@ export const GET: APIRoute = async () => {
         last30Days: row.month,
       })),
       omitted: activity.signers.omitted,
+    },
+    /**
+     * The MCP census: what clients send the /mcp endpoint. `methods` has a row for every counted
+     * method, zeros included, so a method nobody has sent reads as zero and not as absent.
+     * `clients` has a row for every client name and protocol revision an initialize request gave.
+     * A day names at most `namedClientsPerDay` names and `namedVersionsPerDay` revisions; the
+     * rest are counted under `otherClient` and `otherVersion`. `unnamed` and `unstated` are
+     * requests that gave none.
+     */
+    mcp: {
+      methods: {
+        proves: MCP_METHODS_LEGEND,
+        otherMethod: OTHER_MCP_METHOD,
+        rows: activity.mcp.methods.rows.map(row => ({
+          method: row.method,
+          last24Hours: row.day,
+          last7Days: row.week,
+          last30Days: row.month,
+        })),
+      },
+      clients: {
+        proves: MCP_CLIENTS_LEGEND,
+        namedClientsPerDay: MAX_MCP_CLIENTS_PER_DAY,
+        namedVersionsPerDay: MAX_MCP_VERSIONS_PER_DAY,
+        otherClient: OTHER_MCP_CLIENT,
+        otherVersion: OTHER_MCP_VERSION,
+        unnamed: UNNAMED_MCP_CLIENT,
+        unstated: UNSTATED_MCP_VERSION,
+        rows: activity.mcp.clients.rows.map(row => ({
+          client: row.name,
+          protocolVersion: row.protocolVersion,
+          last7Days: row.week,
+          last30Days: row.month,
+        })),
+        omitted: activity.mcp.clients.omitted,
+      },
     },
     /**
      * The `page` event class: which of this site's pages named bots read as ordinary HTML.

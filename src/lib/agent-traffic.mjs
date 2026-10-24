@@ -30,16 +30,20 @@ import {
   KEY_VERSION,
   KEY_VERSIONS,
   LEGACY_KEY_VERSION,
+  MCP_METHODS,
+  OTHER_MCP_METHOD,
   ROLLUP_LOCK_KEY,
   VERIFICATION_STATES,
   dayKeyFor,
   daysKeyFor,
   isCounterMonth,
+  mcpKeyFor,
   monthFieldFor,
   monthKeyFor,
   monthOf,
   monthsKeyFor,
   parseHitField,
+  parseMcpField,
   parseMonthField,
   parseSignerField,
   readStoreConfig,
@@ -185,6 +189,35 @@ export function flattenSignerHashes(signerHashes) {
 }
 
 /**
+ * MCP census hashes in, one flat row per bucket out: `{ hour, kind: 'method', method, count }` for
+ * a method count and `{ hour, kind: 'client', name, protocolVersion, count }` for a client count.
+ *
+ * Kept apart from flattenTraffic()'s rows for the reason the signers rows are: each is a second
+ * count of a request that is already in the day hash as a `surface` hit on /mcp. Same
+ * drop-rather-than-guess rule as the other three.
+ *
+ * @param {Array<{ day: string, fields: Record<string, string | number> }>} mcpHashes
+ * @returns {Array<{ hour: number, kind: 'method', method: string, count: number }
+ *   | { hour: number, kind: 'client', name: string, protocolVersion: string, count: number }>}
+ */
+export function flattenMcpHashes(mcpHashes) {
+  const rows = [];
+  for (const { day, fields } of mcpHashes ?? []) {
+    for (const [field, rawCount] of Object.entries(fields ?? {})) {
+      const parsed = parseMcpField(field);
+      if (!parsed) continue;
+      const hour = bucketHour(day, parsed.hour);
+      if (hour === null) continue;
+      const count = Number(rawCount);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      if (parsed.kind === 'method') rows.push({ hour, kind: 'method', method: parsed.method, count });
+      else rows.push({ hour, kind: 'client', name: parsed.name, protocolVersion: parsed.protocolVersion, count });
+    }
+  }
+  return rows;
+}
+
+/**
  * The oldest hour bucket inside a window ending now.
  *
  * A window of N hours is the last N hour buckets, the newest of which is the one in progress. So
@@ -228,8 +261,9 @@ function windowTotals(rows, nowHour) {
 }
 
 /**
- * @typedef {{ path?: string, family?: string, verification?: string, total: number, day: number,
- *             week: number, month: number, lastHour: number | null }} TallyRow
+ * @typedef {{ path?: string, family?: string, verification?: string, method?: string, name?: string,
+ *             protocolVersion?: string, total: number, day: number, week: number, month: number,
+ *             lastHour: number | null }} TallyRow
  */
 
 /**
@@ -366,6 +400,39 @@ export function summarizeSigners(rows, now = new Date()) {
   );
 }
 
+/**
+ * The MCP census: the method mix and the Clients table, from the rows flattenMcpHashes() produced.
+ *
+ * `methods` has one row per counted method, always, in MCP_METHODS order with the bucket last, and
+ * a method nobody has sent is a row of zeros: `server/discover` at zero is a finding, and a table
+ * that left the row out would read as not having looked. `clients` is cut at MAX_TABLE_ROWS and
+ * sorted by the 7-day column, like the other tables, and `omitted` says so when it cuts.
+ *
+ * @param {ReturnType<typeof flattenMcpHashes>} rows
+ * @param {Date} now
+ */
+export function summarizeMcp(rows, now = new Date()) {
+  const nowHour = epochHour(now);
+  const methodRows = rows.filter((row) => row.kind === 'method');
+  const clientRows = rows.filter((row) => row.kind === 'client');
+  const counted = new Map(tally(methodRows, ({ method }) => ({ method }), nowHour).rows.map((row) => [row.method, row]));
+
+  return {
+    methods: {
+      rows: [...MCP_METHODS, OTHER_MCP_METHOD].map((method) => {
+        const found = counted.get(method);
+        return { method, day: found?.day ?? 0, week: found?.week ?? 0, month: found?.month ?? 0, total: found?.total ?? 0 };
+      }),
+    },
+    clients: tally(
+      clientRows,
+      ({ name, protocolVersion }) => ({ name, protocolVersion }),
+      nowHour,
+      (a, b) => b.week - a.week || b.month - a.month
+    ),
+  };
+}
+
 // ── The monthly rollup ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -457,7 +524,7 @@ export function foldDayFields(fields, version = KEY_VERSION) {
  * 2. `SADD` the month to the month set, before anything lands in the month hash, so a hash can
  *    never exist unreachably.
  * 3. `HINCRBY` the folded counts.
- * 4. `DEL` the day hash, and for a `v2` day its signers hash with it.
+ * 4. `DEL` the day hash, and for a `v2` day its signers hash and its MCP census hash with it.
  *
  * Interrupted between 1 and 3, one old day's counts are gone from the all-time total. Interrupted
  * between 3 and 4, an orphan day hash is left behind that nothing reads. The reverse order would
@@ -470,7 +537,8 @@ export function foldDayFields(fields, version = KEY_VERSION) {
  * The signers hash is deleted rather than folded, and that is the one count the rollup gives up:
  * the Signers table has no all-time column, so past the longest window a host count is provably
  * unread (signersKeyFor() in agent-hits.mjs). Its DEL follows the day hash's in the same pipeline,
- * so the two leave together.
+ * so the two leave together. The MCP census hash is deleted the same way and for the same reason:
+ * its tables have no all-time column.
  *
  * @param {Array<{ day: string, fields: Record<string, string>, version?: string }>} dayHashes
  * @returns {string[][]}
@@ -488,7 +556,10 @@ export function rollupCommands(dayHashes) {
       }
     }
     commands.push(['DEL', dayKeyFor(day, version)]);
-    if (version === KEY_VERSION) commands.push(['DEL', signersKeyFor(day, version)]);
+    if (version === KEY_VERSION) {
+      commands.push(['DEL', signersKeyFor(day, version)]);
+      commands.push(['DEL', mcpKeyFor(day, version)]);
+    }
   }
   return commands;
 }
@@ -568,9 +639,9 @@ async function pipeline(store, commands, fetchImpl) {
  *
  * Two round trips, because the two sets have to come back before the hashes can be asked for. The
  * second is pipelined into one request whatever the count. The bill for a render is therefore
- * `2 + 2D + M`, where D is capped by the rollup at around 33 recent days and M grows twelve a year;
- * the second D is one HGETALL of each `v2` day's signers hash, which is empty for most days and
- * costs the same either way.
+ * `2 + 3D + M`, where D is capped by the rollup at around 33 recent days and M grows twelve a year;
+ * the second and third D are one HGETALL each of a `v2` day's signers hash and MCP census hash,
+ * which are empty for most days and cost the same either way.
  *
  * The rollup rides along rather than costing a third round trip: eligibility is decided from the
  * day NAMES, which the first round trip already returned, so the lock attempt is appended to the
@@ -591,7 +662,8 @@ async function pipeline(store, commands, fetchImpl) {
  * @returns {Promise<{ ok: true,
  *                     dayHashes: Array<{ day: string, version: string, fields: Record<string, string> }>,
  *                     monthHashes: Array<{ month: string, version: string, fields: Record<string, string> }>,
- *                     signerHashes: Array<{ day: string, fields: Record<string, string> }> }
+ *                     signerHashes: Array<{ day: string, fields: Record<string, string> }>,
+ *                     mcpHashes: Array<{ day: string, fields: Record<string, string> }> }
  *                  | { ok: false, reason: string }>}
  */
 export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, now = new Date() } = {}) {
@@ -602,6 +674,7 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
         dayHashes: fixtureDayHashes(now),
         monthHashes: fixtureMonthHashes(now),
         signerHashes: fixtureSignerHashes(now),
+        mcpHashes: fixtureMcpHashes(now),
       };
     }
 
@@ -637,7 +710,7 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       }
     });
     if (orderedDays.length === 0 && orderedMonths.length === 0) {
-      return { ok: true, dayHashes: [], monthHashes: [], signerHashes: [] };
+      return { ok: true, dayHashes: [], monthHashes: [], signerHashes: [], mcpHashes: [] };
     }
 
     const eligible = new Set(
@@ -647,12 +720,13 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       )
     );
     const anyEligible = orderedDays.some(({ day }) => eligible.has(day));
-    // Only a `v2` day can have a signers hash; the `v1` days predate the key.
+    // Only a `v2` day can have a signers hash or an MCP census hash; the `v1` days predate both keys.
     const signerDays = orderedDays.filter(({ version }) => version === KEY_VERSION).map(({ day }) => day);
     const commands = [
       ...orderedDays.map(({ day, version }) => ['HGETALL', dayKeyFor(day, version)]),
       ...orderedMonths.map(({ month, version }) => ['HGETALL', monthKeyFor(month, version)]),
       ...signerDays.map((day) => ['HGETALL', signersKeyFor(day)]),
+      ...signerDays.map((day) => ['HGETALL', mcpKeyFor(day)]),
     ];
     if (anyEligible) commands.push(rollupLockCommand(now.toISOString()));
 
@@ -673,13 +747,18 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       fields: toFieldMap(results[orderedDays.length + orderedMonths.length + index]),
     }));
 
+    const mcpHashes = signerDays.map((day, index) => ({
+      day,
+      fields: toFieldMap(results[orderedDays.length + orderedMonths.length + signerDays.length + index]),
+    }));
+
     // Null means another render holds the lock, which is a reason to do nothing at all: the read
     // above is already complete and correct, and the fold will happen on some later render.
     if (anyEligible && results[commands.length - 1] !== null) {
       await rollUp(store, dayHashes.filter(({ day }) => eligible.has(day)), fetchImpl);
     }
 
-    return { ok: true, dayHashes, monthHashes, signerHashes };
+    return { ok: true, dayHashes, monthHashes, signerHashes, mcpHashes };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.name || error.message : 'error' };
   }
@@ -774,6 +853,41 @@ function fixtureSignerHashes(now) {
     const hour = at.toISOString().slice(11, 13);
     const fields = byDay.get(day) ?? {};
     fields[`${hour}|${host}`] = String(count);
+    byDay.set(day, fields);
+  }
+  return [...byDay.entries()].sort().map(([day, fields]) => ({ day, fields }));
+}
+
+/**
+ * A canned MCP census, so the Clients and Methods tables are in the aria golden and under axe like
+ * every other table. The names are invented, not clients, and one row is the unnamed bucket.
+ *
+ * @param {Date} now
+ */
+function fixtureMcpHashes(now) {
+  const nowHour = epochHour(now);
+  /** @type {Array<[number, string, number]>} hours-ago, field suffix, count */
+  const seed = [
+    [1, 'method|initialize', 3],
+    [1, 'method|tools/list', 3],
+    [2, 'method|tools/call', 2],
+    [9, 'method|other-method', 4],
+    [30, 'method|server/discover', 2],
+    [400, 'method|initialize', 5],
+    [1, 'client|example-client|2025-06-18', 3],
+    [30, 'client|probe.example|2025-03-26', 2],
+    [400, 'client|example-client|2025-06-18', 5],
+    [500, 'client|unnamed|unstated', 1],
+  ];
+
+  /** @type {Map<string, Record<string, string>>} */
+  const byDay = new Map();
+  for (const [hoursAgo, suffix, count] of seed) {
+    const at = hourStart(nowHour - hoursAgo);
+    const day = at.toISOString().slice(0, 10);
+    const hour = at.toISOString().slice(11, 13);
+    const fields = byDay.get(day) ?? {};
+    fields[`${hour}|${suffix}`] = String(count);
     byDay.set(day, fields);
   }
   return [...byDay.entries()].sort().map(([day, fields]) => ({ day, fields }));

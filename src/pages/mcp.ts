@@ -16,7 +16,10 @@ import {
 import { createSiteFastAudit, TEMPORAL_ENABLED } from '../lib/fast-audit.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { readAuditView, startDeepAudit } from '../lib/mcp-temporal.mjs';
+import { MCP_ENDPOINT_PATH, recordHit, recordMcpRequest } from '../lib/agent-hits.mjs';
+import { identifyRequest } from '../lib/web-bot-auth.mjs';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { ipAddress, waitUntil } from '@vercel/functions';
 
 /**
  * The public MCP endpoint. Stateless streamable HTTP over POST; one tool; the report comes back in
@@ -57,6 +60,15 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
  *
  * `enableJsonResponse: true`: the answer is one JSON object, so an SSE stream would be a framing
  * for progress this endpoint does not report.
+ *
+ * **Counted here, because the middleware cannot.** `middleware.ts` leaves `/mcp` out of its
+ * matcher on purpose: a slash rule that reached it would 308 a JSON-RPC call. So the route counts
+ * itself, once per POST and before anything can refuse the request, which makes a parse error, a
+ * refused batch and a rate-limited call data points like any other. `countRequest` writes two
+ * things through `waitUntil`: the same `surface` hit the middleware writes for every other agent
+ * surface, so `/mcp` joins By client and By surface, and the census (src/lib/agent-hits.mjs,
+ * recordMcpRequest) of the JSON-RPC method and, for an `initialize`, the client name and protocol
+ * revision. Neither write delays the response and neither can fail it.
  */
 export const prerender = false;
 
@@ -163,6 +175,26 @@ function jsonResponse(payload: unknown, status: number, headers: Record<string, 
   });
 }
 
+/**
+ * Count one POST: the surface hit and the census. Fire-and-forget, in its own try/catch, for the
+ * reason the middleware's countHit() is: recordHit() and recordMcpRequest() swallow what they can,
+ * and this catch covers the one gap that leaves, a throw raised before `waitUntil` is handed a
+ * promise.
+ *
+ * `body` is the parsed JSON, or undefined when it did not parse. The census reads three facts off
+ * it and keeps nothing else (mcpFactsFrom in src/lib/agent-hits.mjs); the address goes to
+ * identifyRequest() and does not come out, exactly as in the middleware.
+ */
+function countRequest(request: Request, body: unknown): void {
+  try {
+    const identity = identifyRequest(request, { address: ipAddress(request) ?? null });
+    waitUntil(recordHit({ event: 'surface', path: MCP_ENDPOINT_PATH, ua: request.headers.get('user-agent'), identity }));
+    waitUntil(recordMcpRequest({ body }));
+  } catch {
+    // Deliberately empty: observation is never worth a failed response.
+  }
+}
+
 export const POST: APIRoute = async ({ request }) => {
   const raw = await request.text();
   const ua = request.headers.get('user-agent') ?? '';
@@ -171,12 +203,17 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     body = JSON.parse(raw);
   } catch {
+    countRequest(request, undefined);
     log({ path: '/mcp', http: 'POST', outcome: 'parse-error', status: 400, bytes: raw.length, ua });
     return jsonResponse(
       { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error: the request body is not JSON.' } },
       400
     );
   }
+
+  // Counted before the screen and the limiter, so every request that parsed is a data point whether
+  // it is refused, limited or answered.
+  countRequest(request, body);
 
   // Batches are refused before anything is counted or run. The endpoint's cost model is one audit
   // per POST, and the SDK dispatches every member of an array body, so admitting one would buy N

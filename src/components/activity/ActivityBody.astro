@@ -46,7 +46,17 @@
  * src/styles/retro.css. The prefix is load-bearing — Astro appends a `[data-astro-cid-…]` to the
  * selectors below and that attribute counts as a class, so a retro rule without it loses silently.
  */
-import { FAMILY_NOTES, SIGNERS_LEGEND, SIGNER_HOST_NOTES, verificationLabel } from '../../lib/activity-summary.mjs';
+import {
+  FAMILY_NOTES,
+  MCP_CLIENTS_LEGEND,
+  MCP_CLIENT_NOTES,
+  MCP_COUNTS_NOTE,
+  MCP_METHODS_LEGEND,
+  MCP_VERSION_NOTES,
+  SIGNERS_LEGEND,
+  SIGNER_HOST_NOTES,
+  verificationLabel,
+} from '../../lib/activity-summary.mjs';
 import { MAX_TABLE_ROWS } from '../../lib/agent-traffic.mjs';
 // The store counts the page path a client asked for; the table shows the URL that answered, so a
 // row reads as the markdown document it was. Same function the middleware derives the sibling
@@ -74,6 +84,15 @@ function familyNote(family: string): string | undefined {
 /** The one Signers row that is a bucket rather than a host gets the same kind of gloss. */
 function signerHostNote(host: string): string | undefined {
   return SIGNER_HOST_NOTES[host as keyof typeof SIGNER_HOST_NOTES];
+}
+
+/** The MCP Clients rows that are a bucket rather than a name or a revision a client gave. */
+function mcpClientNote(name: string): string | undefined {
+  return MCP_CLIENT_NOTES[name as keyof typeof MCP_CLIENT_NOTES];
+}
+
+function mcpVersionNote(version: string): string | undefined {
+  return MCP_VERSION_NOTES[version as keyof typeof MCP_VERSION_NOTES];
 }
 ---
 
@@ -375,6 +394,81 @@ function signerHostNote(host: string): string | undefined {
         )}
         <p class="state-legend">{SIGNERS_LEGEND}</p>
       </section>
+
+      {/*
+        The MCP census, since 2026-10-23: what clients send the /mcp endpoint, counted in the route
+        itself (src/pages/mcp.ts) because the middleware does not see it. Two halves in the same
+        two-column band By client and Markdown negotiation share. Clients is every initialize, by
+        the name the client gave and the revision it asked for; Methods is every POST, by method,
+        with a row for each counted method so a method nobody sent reads as zero and not as absent.
+
+        No marker column: a client name is what a piece of software calls itself, and the marker
+        means a bot this site has classified, which is a different claim. Each half carries its own
+        legend, and the same constants feed activity.md and activity.json.
+      */}
+      <div class="rd-section band-tables band-mcp">
+        <section class="table-half" aria-labelledby="activity-mcp-clients-title">
+          <div class="band-head">
+            <h2 id="activity-mcp-clients-title">MCP clients</h2>
+          </div>
+          {activity.mcp.clients.rows.length > 0 ? (
+            <table class="grid-table mcp-client-table">
+              <thead>
+                <tr>
+                  <th scope="col" class="c-client">Client</th>
+                  <th scope="col" class="c-version">Protocol version</th>
+                  <th scope="col" class="c-num">7 days</th>
+                  <th scope="col" class="c-num">30 days</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activity.mcp.clients.rows.map(row => (
+                  <tr>
+                    <td class="c-client">{row.name}{mcpClientNote(row.name ?? '') && <span class="family-note"> ({mcpClientNote(row.name ?? '')})</span>}</td>
+                    <td class="c-version">{row.protocolVersion}{mcpVersionNote(row.protocolVersion ?? '') && <span class="family-note"> ({mcpVersionNote(row.protocolVersion ?? '')})</span>}</td>
+                    <td class="c-num c-lead">{counts.format(row.week)}</td>
+                    <td class="c-num">{counts.format(row.month)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p class="band-empty">
+              No client has sent an initialize request to the MCP endpoint yet. The first one fills
+              this in.
+            </p>
+          )}
+          {activity.mcp.clients.omitted > 0 && (
+            <p class="omitted">{activity.mcp.clients.omitted} further client(s) below the top {MAX_TABLE_ROWS} are not shown.</p>
+          )}
+          <p class="state-legend">{MCP_CLIENTS_LEGEND}</p>
+        </section>
+
+        <section class="table-half" aria-labelledby="activity-mcp-methods-title">
+          <div class="band-head">
+            <h2 id="activity-mcp-methods-title">MCP methods</h2>
+          </div>
+          <table class="grid-table mcp-method-table">
+            <thead>
+              <tr>
+                <th scope="col" class="c-client">Method</th>
+                <th scope="col" class="c-num">7 days</th>
+                <th scope="col" class="c-num">30 days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activity.mcp.methods.rows.map(row => (
+                <tr>
+                  <td class="c-client">{row.method}</td>
+                  <td class="c-num c-lead">{counts.format(row.week)}</td>
+                  <td class="c-num">{counts.format(row.month)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p class="state-legend">{MCP_METHODS_LEGEND}</p>
+        </section>
+      </div>
     </Fragment>
   ) : (
     <section class="rd-section band-counts" aria-labelledby="activity-unavailable-title">
@@ -387,7 +481,7 @@ function signerHostNote(host: string): string | undefined {
     <div>
       <h2 id="activity-how-title">How this is counted</h2>
       <p class="how-prose">
-        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
+        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. {MCP_COUNTS_NOTE} What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
       </p>
     </div>
     <div class="as-data">
@@ -656,6 +750,16 @@ function signerHostNote(host: string): string | undefined {
 
   .grid-table td.c-state { color: var(--ink-2); }
 
+  /* The protocol revision is the MCP Clients table's counterpart of the verification state: the
+     client is the row's subject and the revision steps back. A date such as 2025-06-18 needs 118px
+     at the desktop size. */
+  .grid-table .c-version {
+    width: 138px;
+    padding-left: 16px;
+  }
+
+  .grid-table td.c-version { color: var(--ink-2); }
+
   .state-legend {
     margin: 14px 0 0;
     font-size: 17px;
@@ -897,6 +1001,8 @@ function signerHostNote(host: string): string | undefined {
 
     .grid-table .c-state { width: 100px; padding-left: 12px; }
 
+    .grid-table .c-version { width: 112px; padding-left: 12px; }
+
     .state-legend { font-size: 16px; }
 
     .hour-table thead tr,
@@ -918,7 +1024,11 @@ function signerHostNote(host: string): string | undefined {
     .markdown-table th:last-child,
     .markdown-table td:last-child,
     .signer-table th:last-child,
-    .signer-table td:last-child { display: none; }
+    .signer-table td:last-child,
+    .mcp-client-table th:last-child,
+    .mcp-client-table td:last-child,
+    .mcp-method-table th:last-child,
+    .mcp-method-table td:last-child { display: none; }
   }
 
   /* ── The bar-height ladder ──────────────────────────────────────────────── */

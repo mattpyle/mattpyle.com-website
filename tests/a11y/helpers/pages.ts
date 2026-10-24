@@ -195,7 +195,7 @@ export const PAGES: PageSpec[] = [
   {
     name: 'activity',
     path: '/activity',
-    why: 'Activity template: the 24-column hour chart, the last-hour table and the five count tables',
+    why: 'Activity template: the 24-column hour chart, the last-hour table and the count tables, MCP census included',
     // ONE TREE as of 2026-08-29 (one-dom phase 6): the inline `.activity-shell` and its
     // `#agent-traffic` section are deleted, so the hero and the six bands below it are the whole
     // page in either appearance.
@@ -222,6 +222,8 @@ export const PAGES: PageSpec[] = [
       '.client-table tbody tr',
       '.markdown-table tbody tr',
       '.signer-table tbody tr',
+      '.mcp-client-table tbody tr',
+      '.mcp-method-table tbody tr',
     ],
     snapshotRedact: [
       '.stamp-rendered',
@@ -233,6 +235,8 @@ export const PAGES: PageSpec[] = [
       '.client-table tbody tr',
       '.markdown-table tbody tr',
       '.signer-table tbody tr',
+      '.mcp-client-table tbody tr',
+      '.mcp-method-table tbody tr',
     ],
   },
   {
