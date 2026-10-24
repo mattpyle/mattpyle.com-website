@@ -52,6 +52,7 @@ test('the named well-known surfaces are the ones the site actually publishes', (
     '/.well-known/ard.json',
     '/.well-known/ai-catalog.json',
     '/.well-known/mcp/server-card.json',
+    '/.well-known/poppy.json',
     SKILLS_INDEX_PATH,
     ...readSkills().map((skill) => skillUrlFor(skill.name)),
     '/.well-known/http-message-signatures-directory',
@@ -76,6 +77,7 @@ test('the named well-known surfaces are the ones the site actually publishes', (
     '/.well-known/agent-card.json',
     '/.well-known/mcp-server',
     '/.well-known/ard.json',
+    '/.well-known/poppy.json',
     '/mcp/server-card',
   ]) {
     const file = fileURLToPath(new URL(`../public${path}`, import.meta.url));

@@ -192,6 +192,12 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
           'Agentic Resource Discovery publisher catalogue pointing at the A2A Agent Card, the MCP Server Card and the two Agent Skills.',
       },
       {
+        name: 'Poppy discovery document',
+        url: `${base}/.well-known/poppy.json`,
+        description:
+          'Personal Agent Protocol poppy.json, draft 0.2: protocol version, organization and an empty web object only, because the draft requires an OAuth issuer for every other member and this site has no sign-in.',
+      },
+      {
         name: "Steward's Signature Agent Card",
         url: `${base}/.well-known/signature-agent-card`,
         description:

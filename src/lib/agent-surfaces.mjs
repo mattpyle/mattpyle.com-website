@@ -91,6 +91,15 @@ const WELL_KNOWN_PREFIX = '/.well-known/';
  * fetch of one rather than the other says is which of those two the client believes — which is
  * precisely the finding, and a single merged line would throw it away.
  *
+ * `/.well-known/poppy.json` is the Personal Agent Protocol's discovery document, draft 0.2. It
+ * holds `protocol_version`, `organization` and an empty `web`, and nothing else, because every other
+ * member (`apis`, `agent`, `feedback`, `web.browser_session_endpoint`) requires an `auth.issuer` and
+ * this site has no sign-in to issue from. `organization.domain` is `www.mattpyle.com` and not the
+ * apex: the draft requires the host that serves the document after redirects, and the apex 308s to
+ * www. It is named here, not left to the prefix rule, so a fetch is its own row on /activity and not
+ * a line in the bucket for paths the site does not serve. Nothing links it; a fetch is a Personal
+ * Agent, or a scanner, resolving the Company by its domain, which is the question the file asks.
+ *
  * The Agent Skills entries are the instrument for that card's hypothesis. The index and each skill
  * are separate lines in the log on purpose: "something fetched the index" and "something that
  * fetched the index went on to fetch the skill" are different findings, and only the second one
@@ -103,6 +112,7 @@ export const WELL_KNOWN_SURFACE_PATHS = [
   '/.well-known/ard.json',
   '/.well-known/ai-catalog.json',
   '/.well-known/mcp/server-card.json',
+  '/.well-known/poppy.json',
   '/.well-known/agent-skills/index.json',
   '/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md',
   '/.well-known/agent-skills/using-mattpyle-com/SKILL.md',
