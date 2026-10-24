@@ -9,6 +9,7 @@ import {
   checkAuditSet,
   decidePublish,
   parsePageCount,
+  summariseLighthouseTool,
   summariseReadingBudget,
   validateCommentary,
   type PageAuditOutcome,
@@ -521,4 +522,40 @@ test('summariseReadingBudget skips pages without a figure and is undefined when 
 test('the reading budget never moves a metric or the publish decision', () => {
   const measuredPages = [page({ readingBudget: { text: { share: 10, measured: 8000 }, markdown: { share: 20, measured: 8000 } } })];
   assert.deepEqual(aggregate(measuredPages), aggregate([page()]));
+});
+
+// ---------------------------------------------------------------------------
+// The Lighthouse tools-line entry: read off the reports, not written by hand.
+// ---------------------------------------------------------------------------
+
+test('summariseLighthouseTool names major.minor from the first report that carries a version', () => {
+  const pages: PageAuditOutcome[] = [
+    { url: 'https://www.mattpyle.com/broken/', ok: false, error: 'timed out' },
+    page({ url: 'https://www.mattpyle.com/', lighthouseVersion: '13.5.0' }),
+    page({ url: 'https://www.mattpyle.com/about/', lighthouseVersion: '13.6.2' }),
+  ];
+  assert.equal(summariseLighthouseTool(pages), 'Lighthouse 13.5');
+});
+
+test('summariseLighthouseTool falls back to 13.5 when no report carries a version', () => {
+  // An older history, a malformed stamp, or a run whose every page failed.
+  assert.equal(summariseLighthouseTool([page(), page({ url: 'https://www.mattpyle.com/about/', lighthouseVersion: 'unknown' })]), 'Lighthouse 13.5');
+  assert.equal(summariseLighthouseTool([{ url: 'https://www.mattpyle.com/', ok: false, error: 'timed out' }]), 'Lighthouse 13.5');
+  assert.equal(summariseLighthouseTool([]), 'Lighthouse 13.5');
+});
+
+test('a failing ard-schema check counts in the Agentic Browsing total and reads as "AI catalog"', () => {
+  const four = [
+    { id: 'agent-accessibility-tree', title: 'Accessibility tree is well-formed', applicable: true, passed: true },
+    { id: 'webmcp-schema-validity', title: 'WebMCP schemas are valid', applicable: true, passed: true },
+    { id: 'cumulative-layout-shift', title: 'Cumulative Layout Shift', applicable: true, passed: true },
+    { id: 'llms-txt', title: 'llms.txt follows recommendations', applicable: true, passed: true },
+  ];
+  const ard = { id: 'ard-schema', title: '`ai-catalog.json` schema is valid', applicable: true, passed: false };
+  const metric = aggregate([page({ agenticChecks: [...four, ard] })]).find((m) => m.name === 'Agentic Browsing');
+  assert.equal(metric?.value, '4');
+  assert.equal(metric?.maximum, '5');
+  assert.equal(metric?.status, 'Partial');
+  assert.match(metric?.description ?? '', /AI catalog/);
+  assert.doesNotMatch(metric?.description ?? '', /`/);
 });

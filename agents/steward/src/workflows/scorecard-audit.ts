@@ -4,6 +4,7 @@ import {
   aggregate,
   checkAuditSet,
   decidePublish,
+  summariseLighthouseTool,
   summariseReadingBudget,
   type PageAuditOutcome,
   type PublishDecision,
@@ -455,7 +456,12 @@ async function runScorecardAudit(
   // change could strand is an all-failed `pr`-mode run that a deploy catches
   // past step 4. The dry-run replay fixture skips step 4 and replays unchanged.
   const scope = `${urls.length} live page${urls.length === 1 ? '' : 's'}`;
-  const tools = ['Lighthouse 13.4', 'axe-core 4.12'];
+  // The Lighthouse entry is read from the reports, so a pin bump renames it
+  // without an edit here. It is the same kind of fold as `readingBudget`: pure,
+  // no command, so no `patched()` marker. An activity result recorded before
+  // `lighthouseVersion` existed replays to the fallback label, and replay does
+  // not compare an activity's input, so the publish call it feeds is unchanged.
+  const tools = [summariseLighthouseTool(perPage), 'axe-core 4.12'];
   const auditedCount = perPage.filter((p) => p.ok).length;
   const decision: PublishDecision =
     auditedCount === 0

@@ -45,6 +45,12 @@ export type PageAuditOutcome =
        * Not a gate and not in `aggregate()`; `summariseReadingBudget` reads it.
        */
       readingBudget?: ReadingBudget;
+      /**
+       * The version Lighthouse stamped on this page's report (`lhr.lighthouseVersion`).
+       * Optional for the same reason as `readingBudget`: a history recorded before
+       * the field existed has activity results without it.
+       */
+      lighthouseVersion?: string;
     }
   | {
       url: string;
@@ -93,6 +99,24 @@ export function summariseReadingBudget(perPage: PageAuditOutcome[]): ScorecardRe
   }
   if (!text) return undefined;
   return { pages, text, markdown: markdown ?? null };
+}
+
+/** The tools-line label when no page's report carried a version: the pin's major.minor. */
+export const LIGHTHOUSE_TOOL_FALLBACK = 'Lighthouse 13.5';
+
+/**
+ * The scorecard tools-line entry for Lighthouse, read off the reports the run
+ * received: `Lighthouse <major>.<minor>`, the shape the published run-log keeps.
+ * The first audited page that carries a version names it; when none does (an
+ * older history, or every page failed) it is `LIGHTHOUSE_TOOL_FALLBACK`.
+ */
+export function summariseLighthouseTool(perPage: PageAuditOutcome[]): string {
+  for (const page of perPage) {
+    if (!page.ok) continue;
+    const m = /^(\d+)\.(\d+)/.exec(page.lighthouseVersion ?? '');
+    if (m) return `Lighthouse ${m[1]}.${m[2]}`;
+  }
+  return LIGHTHOUSE_TOOL_FALLBACK;
 }
 
 interface NormalizedPage {
@@ -181,6 +205,7 @@ export function aggregate(perPage: PageAuditOutcome[]): ScorecardMetric[] {
 /** Short, human labels for the known checks. Falls back to the Lighthouse audit title (or id) for any check this map hasn't caught up with yet — a future Lighthouse addition/removal to the category must never make the description blank. */
 const AGENTIC_CHECK_LABELS: Record<string, string> = {
   'agent-accessibility-tree': 'accessibility tree',
+  'ard-schema': 'AI catalog',
   'cumulative-layout-shift': 'layout stability',
   'llms-txt': 'llms.txt',
   'webmcp-schema-validity': 'WebMCP',

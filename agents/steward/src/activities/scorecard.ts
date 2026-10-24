@@ -199,6 +199,7 @@ export async function auditLiveUrl(
       scores: raw.scores,
       agenticChecks: raw.agenticChecks,
       axeViolations: raw.axeViolations.length,
+      ...(raw.lhr.lighthouseVersion ? { lighthouseVersion: raw.lhr.lighthouseVersion } : {}),
       ...(readingBudget ? { readingBudget } : {}),
     };
   } finally {
