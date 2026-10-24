@@ -49,13 +49,15 @@
       - listitem: An A2A agent card is published An A2A agent card is served at one of the two well-known paths, and it is JSON. low
     - heading "Content access" [level=3]
     - paragraph: Whether the content comes back in a form a model can read.
-    - paragraph: 3 checks
+    - paragraph: 5 checks
     - list "Content access":
       - listitem:
         - text: The homepage serves markdown when asked for it A request for the homepage with
         - code: "Accept: text/markdown"
         - text: returns markdown, not HTML with a markdown content type. high
       - listitem: A content page serves markdown when asked for it The same question against a real content page, taken from the site’s own sitemap rather than guessed. high
+      - listitem: "/The homepage's first \\d+,\\d+ characters are measured for content share How much of the first \\d+,\\d+ characters an agent reads is the page’s own content rather than navigation, as text and as markdown\\. A figure, not a verdict: the study it follows gives no target\\. medium/"
+      - listitem: /A content page's first \d+,\d+ characters are measured for content share The same measurement on the sitemap-named content page\. Give the audit a page URL and it measures that page too\. medium/
       - listitem:
         - text: The homepage advertises its alternates in a Link header The homepage points at its own machine-readable alternates in a
         - code: Link
