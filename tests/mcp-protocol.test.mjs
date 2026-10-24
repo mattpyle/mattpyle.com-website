@@ -146,13 +146,15 @@ test('the newest served revision is the one server/discover reports, and the car
 
 test('a tools/call with the envelope returns resultType complete and the server identity in _meta', async () => {
   const session = newSession();
-  const { status, message } = await post(
+  const { status, headers, message } = await post(
     session,
     modern(2, 'tools/call', { name: TOOL_NAME, arguments: { url: 'example.com' } }),
     modernHeaders('tools/call', TOOL_NAME),
   );
 
   assert.equal(status, 200);
+  // One JSON body under `responseMode: 'auto'`, because nothing is emitted before the result.
+  assert.match(headers.get('content-type'), /^application\/json/);
   assert.equal(message.result.resultType, 'complete');
   // Read back, not reimplemented: the SDK stamps the identity on every modern response.
   assert.deepEqual(message.result._meta['io.modelcontextprotocol/serverInfo'], { name: SERVER_NAME, version: '9.9.9' });

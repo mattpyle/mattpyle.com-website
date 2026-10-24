@@ -61,12 +61,15 @@ export const SERVED_PROTOCOL_VERSIONS = Object.freeze([MODERN_PROTOCOL_VERSION, 
 /**
  * The options `createMcpHandler` is built with, in the route and in the tests that drive it.
  *
- * `responseMode: 'json'` because a 2026-07-28 answer here is one JSON object and a stream would be a
- * framing for progress this endpoint does not report. The SDK's default `legacy: 'stateless'` stays
- * unset on purpose: it serves 2025-era clients per request, which is the whole of the compatibility
- * story.
+ * `responseMode: 'auto'`: a 2026-07-28 answer is one JSON body unless a handler emits a related
+ * message before its result, and no tool here emits progress or logs, so every answer is one JSON
+ * body. `'json'` would say the same thing but makes the SDK log a warning on every
+ * `createMcpHandler` call, which this route makes once per POST: a log line per request in
+ * production. A `subscriptions/listen` stream is SSE under every mode, and ends at once because the
+ * server advertises no `listChanged`. The SDK's default `legacy: 'stateless'` stays unset on
+ * purpose: it serves 2025-era clients per request, which is the whole of the compatibility story.
  */
-export const MCP_HANDLER_OPTIONS = Object.freeze({ responseMode: 'json' });
+export const MCP_HANDLER_OPTIONS = Object.freeze({ responseMode: 'auto' });
 
 /**
  * The name a client sees after `initialize`, and the name the registry listing carries.
