@@ -241,8 +241,8 @@ jobs:
         if: always()
         run: npm run --silent validate:llms-txt
 
-  # Files a failed master golden run as one open issue, and comments on it when a later merge
-  # fails again, so a drift is a single thread rather than one issue per merge. A job of its own so
+  # Files a failed master golden run as one open issue, and comments on it at most once per 20
+  # hours while later merges keep failing, so a drift is a single thread rather than one issue per merge. A job of its own so
   # that `issues: write` never reaches the job that builds and runs this repo's code.
   golden-drift:
     needs: axe
@@ -268,6 +268,14 @@ jobs:
           Read the diff in the run log. An intended page change gets a new golden with \`npm run a11y -- --update-snapshots --grep <template>\`; a regression gets a fix to the page."
           existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
+            # One comment per 20 hours while the same drift persists. The issue already names the
+            # first failing merge, and a comment on every later push buried it: eight in one evening
+            # on 2026-10-23. Each push's run is still linked from the Actions tab.
+            last=$(gh issue view "$existing" --json comments --jq '[.comments[].createdAt] | max // empty')
+            if [ -n "$last" ] && [ $(( $(date +%s) - $(date -d "$last" +%s) )) -lt 72000 ]; then
+              echo "Drift already reported on #$existing at $last; not commenting again within 20 hours."
+              exit 0
+            fi
             gh issue comment "$existing" --body "$body"
           else
             gh issue create --title "$title" --body "$body"
