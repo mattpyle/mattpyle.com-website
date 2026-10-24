@@ -213,12 +213,12 @@ test('an audit that throws reaches the caller as a tool error', async (t) => {
   assert.match(result.content[0].text, /link-local/);
 });
 
-test('the tool passes the auditor the origin it validated, and fresh defaults to false', async (t) => {
+test('the tool passes the auditor the run key it validated, and fresh defaults to false', async (t) => {
   const { client, asked, close } = await connect();
   t.after(close);
 
   await client.callTool({ name: TOOL_NAME, arguments: { url: 'example.com/a/path' } });
-  assert.deepEqual(asked, [{ url: 'example.com/a/path', fresh: false, origin: 'https://example.com' }]);
+  assert.deepEqual(asked, [{ url: 'example.com/a/path', fresh: false, origin: 'https://example.com/a/path' }]);
 });
 
 test('fresh rides through to the auditor, and the origin is the key either spelling produces', async (t) => {
