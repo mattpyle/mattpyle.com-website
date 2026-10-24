@@ -718,7 +718,7 @@ test('an unchanged page count with unchanged metrics still no-ops', async () => 
   const published: PublishedScorecard = {
     iso: '2000-01-01',
     scope: '19 live pages',
-    tools: ['Lighthouse 13.4', 'axe-core 4.12'],
+    tools: ['Lighthouse 13.5', 'axe-core 4.12'],
     pageCount: 19,
     metrics: PUBLISHED_GREEN_METRICS,
   };
@@ -736,6 +736,34 @@ test('an unchanged page count with unchanged metrics still no-ops', async () => 
 
   assert.equal(result.decision, 'no-op');
   assert.ok(!calls.includes('publishScorecardRun'));
+});
+
+test('the tools line names the Lighthouse version the reports carry', async () => {
+  const published: PublishedScorecard = {
+    iso: '2000-01-01',
+    scope: '19 live pages',
+    tools: ['Lighthouse 13.5', 'axe-core 4.12'],
+    pageCount: 19,
+    metrics: PUBLISHED_GREEN_METRICS,
+  };
+  const { activities, calls } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(19),
+    readPublishedScorecard: async () => published,
+    auditLiveUrl: async (url: string) => ({ ...GREEN_PAGE, url, lighthouseVersion: '13.6.1' }),
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-tools-1',
+      taskQueue: QUEUE,
+      args: [baseInput({ maxAgeDays: 100_000 })],
+    }),
+  );
+
+  assert.deepEqual(result.record.tools, ['Lighthouse 13.6', 'axe-core 4.12']);
+  // A tool bump changes what the numbers mean, so it publishes on its own.
+  assert.equal(result.decision, 'open-pr');
+  assert.match(result.reason, /^Tools .*13\.5.*13\.6/);
+  assert.ok(calls.includes('publishScorecardRun'));
 });
 
 /**

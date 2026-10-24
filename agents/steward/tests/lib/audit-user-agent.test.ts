@@ -135,3 +135,24 @@ test('auditLiveUrl keeps the page when the reading-budget fetch fails', async ()
   assert.ok(outcome.ok);
   assert.equal(outcome.ok && outcome.readingBudget, undefined);
 });
+
+test('auditLiveUrl carries the Lighthouse version the report stamped', async () => {
+  const { runners } = recordingRunners();
+  const stamped: AuditRunners = {
+    ...runners,
+    async lighthouse(...args) {
+      const lhr = await runners.lighthouse(...args);
+      return { ...lhr, lighthouseVersion: '13.5.0' };
+    },
+  };
+  const { fetch: fetchImpl } = recordingFetch();
+  const env = new MockActivityEnvironment();
+  const outcome = (await env.run(() => auditLiveUrl('https://www.mattpyle.com/', { runners: stamped, fetch: fetchImpl }))) as PageAuditOutcome;
+  assert.ok(outcome.ok);
+  assert.equal(outcome.ok && outcome.lighthouseVersion, '13.5.0');
+
+  // A report with no stamp leaves the field off rather than inventing one.
+  const bare = (await env.run(() => auditLiveUrl('https://www.mattpyle.com/', { runners, fetch: fetchImpl }))) as PageAuditOutcome;
+  assert.ok(bare.ok);
+  assert.equal(bare.ok && 'lighthouseVersion' in bare, false);
+});
