@@ -371,6 +371,21 @@ export function originFor(url, normalise) {
 }
 
 /**
+ * The identity of a shared run: the origin plus the page path the caller named, trailing slashes
+ * dropped, so `/about` and `/about/` share and the bare origin has the key `originFor` returns.
+ * A run measures the page it was given (`namedPage`), so two callers naming different pages of one
+ * origin must not read each other's run. Query and fragment are dropped, as `namedPage` drops them.
+ *
+ * @param {string} url
+ * @param {(input: string) => { origin: string, url: URL }} normalise
+ * @returns {string}
+ */
+export function runKeyFor(url, normalise) {
+  const origin = originFor(url, normalise);
+  return origin + normalise(url).url.pathname.replace(/\/+$/, '');
+}
+
+/**
  * Builds the server.
  *
  * `version` and `userAgent` are injected for the same reason `runAudit` is: they belong to the
@@ -449,7 +464,7 @@ export function createAuditServer({
       // immediately rather than after the fetch layer refuses it. The origin it returns is also
       // what the shared result is keyed on, so the key and the validation are one step: two
       // spellings of one site cannot become two audits.
-      const origin = originFor(url, normaliseTarget);
+      const origin = runKeyFor(url, normaliseTarget);
       const audit = await runAudit(url, { fresh: Boolean(fresh), origin });
       return {
         structuredContent: audit,

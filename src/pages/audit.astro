@@ -70,7 +70,7 @@ import {
   RUN_FAILURE_MARKERS,
   normaliseTarget,
 } from '@mattpyle/steward/agent-audit/fast';
-import { originFor } from '../lib/mcp-audit-server.mjs';
+import { originFor, runKeyFor } from '../lib/mcp-audit-server.mjs';
 import { createSiteFastAudit } from '../lib/fast-audit.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { getClient, withDeadline } from '../lib/mcp-temporal.mjs';
@@ -176,7 +176,8 @@ if (method === 'POST') {
 
     if (origin) {
       const started = Date.now();
-      const audit = await runAudit(address, { fresh: false, origin });
+      const runKey = runKeyFor(address, normaliseTarget);
+      const audit = await runAudit(address, { fresh: false, origin: runKey });
       const kind = classifyRunFailure(audit, FAILURE_MARKERS);
       const toolPath = String(audit.tool?.path ?? 'unknown');
       log({
@@ -203,12 +204,12 @@ if (method === 'POST') {
         const activityId = audit.tool?.activityId;
         const remembered =
           activityId && (toolPath === 'standalone' || toolPath === 'standalone-shared')
-            ? { origin, activityId }
-            : { origin, report: audit };
+            ? { origin: runKey, activityId }
+            : { origin: runKey, report: audit };
         const written = await writePointer(remembered);
         if (!written.ok) log({ path: '/audit', outcome: 'pointer-write-failed', reason: written.reason ?? 'error' });
 
-        return Astro.redirect(`/audit/?url=${encodeURIComponent(origin)}`, 303);
+        return Astro.redirect(`/audit/?url=${encodeURIComponent(runKey)}`, 303);
       }
     }
   }
@@ -256,7 +257,7 @@ if (method === 'POST') {
         process.env.AUDIT_REPORT_FIXTURE === '1' && !process.env.VERCEL
           ? fixtureAudit({ now, origin })
           : await (async () => {
-              const pointer = await readPointer({ origin });
+              const pointer = await readPointer({ origin: runKeyFor(asked, normaliseTarget) });
               if (!pointer) return null;
               return pointer.report ?? (await readActivityResult(pointer.activityId!));
             })();
