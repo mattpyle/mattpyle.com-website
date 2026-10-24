@@ -6,6 +6,7 @@ import {
   findingsIndexPath,
   hasParkedDefect,
   planReconcile,
+  startsParked,
   type FindingVerdict,
 } from '../lib/findings.js';
 import { fixSignal, verdictSignal } from './finding.js';
@@ -32,6 +33,12 @@ import { fixSignal, verdictSignal } from './finding.js';
  *   `fix` nobody sends. The flag is read once per site, and only for a site
  *   with such a run;
  * - everything else is unchanged.
+ *
+ * A start for a line whose kind is not `defect` (an opportunity or a direction)
+ * carries `waitsForPerson`, so the run parks at `waiting-fix` without the
+ * automatic fix attempt. The kind is read from the index line the plan already
+ * holds, so no command is added: a history recorded before the field replays
+ * the same start, and the activity's arguments are not compared on replay.
  *
  * A second run straight after the first finds nothing to do, which is the
  * property the design needs from a poller that runs every hour forever.
@@ -132,6 +139,7 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
         indexPath: findingsIndexPath(site),
         stopAfter: 'resolved',
         indexStatus: line.status === 'reopened' ? 'reopened' : 'proposed',
+        ...(startsParked(line) ? { waitsForPerson: true } : {}),
       });
       if (outcome === 'started') counts.started++;
       else counts.unchanged++;

@@ -231,6 +231,15 @@ function openById(open: (OpenFindingWorkflow | string)[]): Map<string, OpenFindi
   );
 }
 
+/**
+ * Whether a started run should park without the automatic fix attempt: the
+ * line names a kind and it is not `defect`. A line that names none (an index
+ * with no kind column) starts as it always did.
+ */
+export function startsParked(line: FindingsIndexLine): boolean {
+  return line.kind !== '' && line.kind !== 'defect';
+}
+
 function parkedDefect(line: FindingsIndexLine, run: OpenFindingWorkflow | undefined): boolean {
   return line.status === 'approved' && line.kind === 'defect' && run?.step === 'waiting-fix' && run.fixAttempts === 0;
 }
@@ -789,6 +798,15 @@ export function liveDeployment(deployments: DeploymentRecord[]): DeploymentRecor
  */
 export function compareContains(status: string): boolean {
   return status === 'identical' || status === 'ahead';
+}
+
+/**
+ * The line `steward finding status` prints for a run parked without an
+ * automatic fix attempt, or null for any other run. The state query sets
+ * `waitsForPerson` only while the run waits at `waiting-fix` for that reason.
+ */
+export function waitingReasonLine(state: { waitsForPerson?: boolean }): string | null {
+  return state.waitsForPerson === true ? 'waits for a person: kind is not defect, so no fix was attempted' : null;
 }
 
 /** The slice of a pending activity's describe record that `steward finding status` reports. */

@@ -440,3 +440,42 @@ test('a lifecycle run whose child ended unverifiable still replays to that endin
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });
+
+/**
+ * An approved opportunity on an `auto_fix` site as `findingWorkflow` ran it
+ * before `waitsForPerson`: the file verdict, `readSiteAutoFix` answering true,
+ * the automatic `openFixIssue` refused by the gate with `FindingNotFixable`, and
+ * the run parked at `waiting-fix` with `fixAttempts` 1. 24 events. This is the
+ * shape of the two opportunity runs the 2026-10-23 reconcile approved. New code
+ * must replay that attempt, which it does because the input carries no
+ * `waitsForPerson` and the workflow reads the field as `=== true`: no marker.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at 0b28c29) against
+ * the time-skipping server with mocked activities, so it holds no real finding
+ * text.
+ *
+ * Probe (2026-10-23): replacing `input.waitsForPerson === true` in `lifecycle`
+ * with `input.waitsForPerson !== false`, so an absent field parks the run,
+ * made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ * for change fixer-action-adapter, but there is no corresponding change command!
+ * ```
+ *
+ * The verify-heavy fixture above, which also made its automatic attempt, failed
+ * the same way; the other 11 replays stayed green. The `=== true` read was
+ * restored and all 13 re-run green.
+ */
+const findingOpportunityAttemptHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-opportunity-auto-fix-attempt.bin', import.meta.url),
+);
+
+test('an opportunity that made its automatic fix attempt before waitsForPerson replays that attempt', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingOpportunityAttemptHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/opportunity-park-example--steward',
+  );
+});

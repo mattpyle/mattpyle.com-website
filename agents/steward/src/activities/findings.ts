@@ -1027,6 +1027,8 @@ export interface StartFindingWorkflowInput {
   stopAfter: FindingStopAfter;
   /** The index line's status. Absent from inputs recorded before `reopened` was started; read it as `proposed`. */
   indexStatus?: 'proposed' | 'reopened';
+  /** The index line's kind is not `defect`. Passed on to the workflow's input as it is. */
+  waitsForPerson?: boolean;
 }
 
 /**
