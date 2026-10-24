@@ -166,7 +166,7 @@ export const GET: APIRoute = async () => {
     /**
      * The MCP census: what clients send the /mcp endpoint. `methods` has a row for every counted
      * method, zeros included, so a method nobody has sent reads as zero and not as absent.
-     * `clients` has a row for every client name and protocol revision an initialize request gave.
+     * `clients` has a row for every client name and protocol revision a request gave, an initialize or a 2026-07-28 _meta envelope.
      * A day names at most `namedClientsPerDay` names and `namedVersionsPerDay` revisions; the
      * rest are counted under `otherClient` and `otherVersion`. `unnamed` and `unstated` are
      * requests that gave none.

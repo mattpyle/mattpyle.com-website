@@ -139,7 +139,7 @@ export const MCP_VERSION_NOTES = Object.freeze({
  * the same thing.
  */
 export const MCP_CLIENTS_LEGEND =
-  'Each row is an initialize request to /mcp: the name the client gave itself and the protocol revision it asked for. The client chooses both, so a row shows what a piece of software says it is, not who runs it.';
+  'Each row is a client that identified itself to /mcp: the name it gave itself and the protocol revision it asked for. A 2025-era client gives both in its initialize request, once per session; a 2026-07-28 client gives them in the _meta envelope of every request, so its row counts requests. The client chooses both, so a row shows what a piece of software says it is, not who runs it.';
 
 export const MCP_METHODS_LEGEND =
   'Every POST to /mcp counts once under its JSON-RPC method, whether the server answered it or refused it. other-method covers any method not listed, a notification, and a body that is not a JSON-RPC request. server/discover is the discovery request of the 2026-07-28 protocol revision.';
@@ -149,7 +149,7 @@ export const MCP_METHODS_LEGEND =
  * /activity.json each carry, so the three say the same thing.
  */
 export const MCP_COUNTS_NOTE =
-  'A POST to the MCP endpoint is also counted by its JSON-RPC method, and an initialize request by the client name and protocol revision it gives. A client name is the name of a piece of software, such as an editor or an inspector tool, and not of a person; it is stored alone, lowercased and cut to 64 characters, and nothing else in the request body is read.';
+  'A POST to the MCP endpoint is also counted by its JSON-RPC method, and a request that identifies its client, an initialize or any request carrying the 2026-07-28 _meta envelope, by the client name and protocol revision it gives. A client name is the name of a piece of software, such as an editor or an inspector tool, and not of a person; it is stored alone, lowercased and cut to 64 characters, and nothing else in the request body is read.';
 
 /** Two-digit UTC hour, the form the chart's ticks are written in. @param {number} hour */
 function hourLabel(hour) {
