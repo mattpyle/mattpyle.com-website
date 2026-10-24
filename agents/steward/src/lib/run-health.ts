@@ -238,11 +238,11 @@ export const TRACKED_CREDENTIALS: TrackedCredential[] = [
       'names no cause; the nightly scorecard stops producing runs.',
   },
   {
-    // Reissued 2026-10-21, lapsing on 2026-11-06, which is inside the 30-day
-    // window from the day it was issued. Account-level Metrics Read-Only,
-    // which is a narrower role than the workers' key holds.
+    // Reissued 2026-10-21 with a 30-day lifetime; the row first recorded
+    // 2026-11-06 and was corrected against the issuer on 2026-10-23.
+    // Account-level Metrics Read-Only, a narrower role than the workers' key.
     name: 'Temporal Cloud metrics API key',
-    expires: '2026-11-06',
+    expires: '2026-11-20',
     failure:
       'the nightly action-usage check fails with a 401 body naming the endpoint, and nothing ' +
       'else breaks: the scorecard still runs, still measures the site, and still publishes.',
