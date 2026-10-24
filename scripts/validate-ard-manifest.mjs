@@ -20,15 +20,11 @@
  *
  * ## The three decisions this file exists to hold
  *
- * **1. The skill entries keep `type: "application/ai-skill+md"`, and the conformance CLI's two
- * warnings about it are accepted.** `conformance/bin/conformance-test manifest` reports PASS with
- * 2 warnings against this file, both saying that media type "is not one of standard discovery
- * types". The tool's list and the specification text disagree: §4.4's own worked skill example
- * uses `application/ai-skill+md`, and the tool offers `text/markdown; profile="urn:air:agent-skills"`
- * instead. The spec text wins here, so a future run of the CLI reporting exactly those 2 warnings
- * is the expected result and not drift. Asserted rather than left as a comment because the
- * obvious way to "fix" a warning is to change the value, and the change would look like an
- * improvement.
+ * **1. The skill entries carry `type: "text/markdown; profile=\"urn:air:agent-skills\""`.** As of
+ * 2026-10-23 the spec allows two forms for a skill in markdown, `application/agent-skills+md` and
+ * this profiled `text/markdown`, and Lighthouse 13.5.0's `ard-schema` audit accepts only the
+ * profiled one. The earlier value, `application/ai-skill+md`, is on neither list. The spec calls
+ * its types "tracking towards formal registration", so re-read both lists before changing it.
  *
  * **2. `specVersion` is `"1.0"`, and it does not name the ARD version.** ARD v0.91's `ArdManifest`
  * requires only `entries` and ignores unknown top-level members, so this line is invisible to a
@@ -69,8 +65,8 @@ const PUBLISHER = 'mattpyle.com';
  */
 const IDENTIFIER_PATTERN = /^urn:air:mattpyle\.com(?::[a-zA-Z0-9._-]+){2,}$/;
 
-/** Decision 1. The spec's §4.4 example type for a markdown skill; the CLI's type list disagrees. */
-const SKILL_TYPE = 'application/ai-skill+md';
+/** Decision 1. The one markdown skill type that both the spec's list and Lighthouse's accept. */
+const SKILL_TYPE = 'text/markdown; profile="urn:air:agent-skills"';
 
 /** Decision 2. The ai-catalog data model version, not ARD's. The predecessor enum is exactly this. */
 const SPEC_VERSION = '1.0';
@@ -124,7 +120,7 @@ for (const [index, entry] of entries.entries()) {
 }
 
 // Decisions 1 and 3, together: the skill entries are exactly the published skills, and each one
-// keeps the media type the conformance CLI warns about.
+// carries the profiled markdown type.
 const skillEntries = entries.filter((entry) => String(entry?.identifier ?? '').includes(':skill:'));
 const expectedSkillUrls = readSkills().map((skill) => `${ORIGIN}${skillUrlFor(skill.name)}`);
 const foundSkillUrls = skillEntries.map((entry) => entry.url);
@@ -138,7 +134,7 @@ if (JSON.stringify([...foundSkillUrls].sort()) !== JSON.stringify([...expectedSk
 for (const entry of skillEntries) {
   if (entry.type !== SKILL_TYPE) {
     failures.push(
-      `[${entry.identifier}] type must stay ${SKILL_TYPE}, the spec's §4.4 example type. The conformance CLI warns about it and the warning is accepted; see this file's docblock before changing it. Found ${JSON.stringify(entry.type)}`
+      `[${entry.identifier}] type must be ${SKILL_TYPE}, the markdown skill type both the spec and Lighthouse's ard-schema audit accept; see this file's docblock. Found ${JSON.stringify(entry.type)}`
     );
   }
 }
@@ -150,5 +146,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `✓ /.well-known/ard.json conforms to ARD v0.91; ${entries.length} entries, ${skillEntries.length} tracking the skills index, 2 accepted conformance warnings`
+  `✓ /.well-known/ard.json conforms to ARD v0.91; ${entries.length} entries, ${skillEntries.length} tracking the skills index`
 );

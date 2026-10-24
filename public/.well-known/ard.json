@@ -35,7 +35,7 @@
     {
       "identifier": "urn:air:mattpyle.com:skill:implement-markdown-negotiation",
       "displayName": "implement-markdown-negotiation",
-      "type": "application/ai-skill+md",
+      "type": "text/markdown; profile=\"urn:air:agent-skills\"",
       "url": "https://www.mattpyle.com/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md",
       "description": "Implement site-wide Markdown content negotiation, so every HTML page also answers `Accept: text/markdown` with a clean Markdown representation of itself. Covers the sibling URL rule, build-time conversion from the page's main landmark, edge negotiation with a fallback to HTML, and the traps that only surface in production: output roots, response headers, recursion, extraction, and registration drift. Use when adding Markdown representations to a site for AI agents, or when an agent-readiness check reports that a site does not serve Markdown.",
       "tags": ["markdown", "content-negotiation", "agent-experience", "web-standards"],
@@ -48,7 +48,7 @@
     {
       "identifier": "urn:air:mattpyle.com:skill:using-mattpyle-com",
       "displayName": "using-mattpyle-com",
-      "type": "application/ai-skill+md",
+      "type": "text/markdown; profile=\"urn:air:agent-skills\"",
       "url": "https://www.mattpyle.com/.well-known/agent-skills/using-mattpyle-com/SKILL.md",
       "description": "Work with mattpyle.com as an agent. Covers which discovery surface answers which question, fetching any page as Markdown instead of HTML, calling the site's A2A endpoint, using its in-browser WebMCP tools, and how to cite it. Use when reading, summarising, citing, or interacting with mattpyle.com.",
       "tags": ["personal-site", "agent-experience", "markdown", "a2a", "webmcp", "citation"],
