@@ -13,8 +13,8 @@ import { refusalForBody } from '../src/lib/mcp-audit-server.mjs';
 // increment — a 10x bypass of both the per-caller and the global limit, available to anyone who
 // can write a JSON array.
 //
-// Batching was removed from the MCP protocol in 2025-06-18, the version this server speaks, so
-// refusing an array costs a conformant client nothing at all.
+// Batching was removed from the MCP protocol in 2025-06-18, so nothing on either revision this
+// server speaks sends one, and refusing an array costs a conformant client nothing at all.
 //
 // Two halves, and they only mean something together: the pure function refuses a batch, and the
 // route consults it before it reaches the store or the auditor. The second half is asserted against
@@ -70,27 +70,49 @@ test('a body that is not an object at all is left to the transport to reject', (
   }
 });
 
-test('the route refuses a batch before it reaches the rate limiter or the transport', () => {
+test('the route refuses a batch before it reaches the rate limiter or the handler', () => {
   // The whole point of the guard. If the screen ran after `checkRateLimit`, a batch would still
   // cost one increment and buy N audits; if it ran after `handleRequest`, the audits would already
   // have happened. Ordering, asserted against the source because it is not observable from the
   // exports.
   const screen = routeSource.indexOf('refusalForBody(body)');
   const limiter = routeSource.indexOf('checkRateLimit(');
-  const transport = routeSource.indexOf('transport.handleRequest(');
+  const handler = routeSource.indexOf('handler.fetch(');
 
   assert.ok(screen > 0, 'src/pages/mcp.ts must consult refusalForBody');
   assert.ok(limiter > 0, 'src/pages/mcp.ts must still call checkRateLimit');
-  assert.ok(transport > 0, 'src/pages/mcp.ts must still hand the request to the transport');
+  assert.ok(handler > 0, 'src/pages/mcp.ts must still hand the request to the handler');
   assert.ok(screen < limiter, 'the batch screen must run before the rate limiter');
-  assert.ok(screen < transport, 'the batch screen must run before the transport');
+  assert.ok(screen < handler, 'the batch screen must run before the handler');
 });
 
-test('the rate limiter runs before the transport', () => {
+test('the rate limiter runs before the handler', () => {
   // The property the limiter is worthless without: an audit that has not been counted must not
   // have run. Pinned here rather than left to review, because both call sites are one `await` apart.
   assert.ok(
-    routeSource.indexOf('checkRateLimit(') < routeSource.indexOf('transport.handleRequest('),
-    'no audit may reach the transport before it has been counted',
+    routeSource.indexOf('checkRateLimit(') < routeSource.indexOf('handler.fetch('),
+    'no audit may reach the handler before it has been counted',
   );
+});
+
+test('the handler is built after the refusal and the limiter, and answers both revisions', () => {
+  // Refusal, limiter, handler, in that order. The handler is constructed per request, after the
+  // limiter, so a refused or limited call never builds a server and a warm instance never carries one
+  // caller's handler into another's request. No `isLegacyRequest` branch: the SDK's default
+  // `legacy: 'stateless'` serves 2025-era clients through the same factory.
+  const screen = routeSource.indexOf('refusalForBody(body)');
+  const limiter = routeSource.indexOf('checkRateLimit(');
+  const built = routeSource.indexOf('createMcpHandler(');
+  const called = routeSource.indexOf('handler.fetch(');
+  const closed = routeSource.indexOf('handler.close()');
+
+  assert.ok(built > 0, 'src/pages/mcp.ts must build the handler with createMcpHandler');
+  assert.ok(screen < limiter && limiter < built && built < called, 'refusal, then limiter, then handler');
+  assert.ok(called < closed, 'the handler is closed after the response');
+  // Code only: the docblock names both in prose.
+  const code = routeSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!code.includes('isLegacyRequest'), 'one handler serves both revisions');
+  assert.ok(!code.includes('legacy:'), 'the default stateless legacy leg is left as the SDK ships it');
+  assert.match(routeSource, /createMcpHandler\(\(\) => server, MCP_HANDLER_OPTIONS\)/);
+  assert.match(routeSource, /handler\.fetch\(request, \{ parsedBody: body \}\)/);
 });

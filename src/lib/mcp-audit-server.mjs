@@ -40,8 +40,33 @@
  * accident would get a workflow ID where it expected findings.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+
+/**
+ * The newest revision this server speaks, served per request with no `initialize` handshake. The
+ * SDK's `createMcpHandler` answers it; tests/mcp-protocol.test.mjs pins this constant to what
+ * `server/discover` reports.
+ */
+export const MODERN_PROTOCOL_VERSION = '2026-07-28';
+
+/**
+ * Every revision the endpoint answers, newest first: the modern one, then the SDK's 2025-era list.
+ * The server card's `supportedProtocolVersions` is held to this list by
+ * scripts/validate-mcp-discovery.mjs, so an SDK upgrade that changes the 2025-era half fails the
+ * build instead of leaving the card out of date.
+ */
+export const SERVED_PROTOCOL_VERSIONS = Object.freeze([MODERN_PROTOCOL_VERSION, ...SUPPORTED_PROTOCOL_VERSIONS]);
+
+/**
+ * The options `createMcpHandler` is built with, in the route and in the tests that drive it.
+ *
+ * `responseMode: 'json'` because a 2026-07-28 answer here is one JSON object and a stream would be a
+ * framing for progress this endpoint does not report. The SDK's default `legacy: 'stateless'` stays
+ * unset on purpose: it serves 2025-era clients per request, which is the whole of the compatibility
+ * story.
+ */
+export const MCP_HANDLER_OPTIONS = Object.freeze({ responseMode: 'json' });
 
 /**
  * The name a client sees after `initialize`, and the name the registry listing carries.
@@ -249,6 +274,27 @@ export const GET_AUDIT_OUTPUT_SHAPE = z.looseObject({
 });
 
 /**
+ * What the server advertises: tools, and no `listChanged` on them.
+ *
+ * The SDK advertises `tools.listChanged: true` unless told otherwise. This server never changes its
+ * tool list under a running instance: the list changes only on a deploy, and a deploy replaces every
+ * instance. A 2026-07-28 client that sees the bit asks for a `subscriptions/listen` stream, which the
+ * SDK serves as an open SSE response until the client or the platform ends it. On a Vercel function
+ * that is a held invocation killed at its time limit (modelcontextprotocol/typescript-sdk issue
+ * 2873). With the bit off the SDK honours nothing the client asked for and ends the stream at once.
+ */
+const SERVER_CAPABILITIES = { tools: { listChanged: false } };
+
+/**
+ * The cache policy of the 2026-07-28 `tools/list` result: an hour, shared caches allowed.
+ *
+ * The SDK's default is `ttlMs: 0, cacheScope: 'private'`, the most conservative policy, so `public`
+ * is a deliberate setting. The list is the same for every caller and changes only on a deploy. A
+ * 2025-era response never carries either field.
+ */
+const CACHE_HINTS = { 'tools/list': { ttlMs: 3_600_000, cacheScope: 'public' } };
+
+/**
  * What a client is told this server is, before it calls anything.
  *
  * The User-Agent is interpolated rather than written out, because it is the auditor's and this file
@@ -422,7 +468,11 @@ export function createAuditServer({
 }) {
   const server = new McpServer(
     { name: SERVER_NAME, version },
-    { instructions: instructionsFor(userAgent, Boolean(deep)) },
+    {
+      instructions: instructionsFor(userAgent, Boolean(deep)),
+      capabilities: SERVER_CAPABILITIES,
+      cacheHints: CACHE_HINTS,
+    },
   );
 
   server.registerTool(
@@ -430,7 +480,7 @@ export function createAuditServer({
     {
       title: 'Audit a site for agent-readiness',
       description: TOOL_DESCRIPTION,
-      inputSchema: {
+      inputSchema: z.object({
         url: z
           .string()
           .min(1)
@@ -447,8 +497,8 @@ export function createAuditServer({
               'costs the target a second visit and still counts against your rate limit exactly ' +
               'as a shared result does.',
           ),
-      },
-      outputSchema: AUDIT_OUTPUT_SHAPE,
+      }),
+      outputSchema: z.object(AUDIT_OUTPUT_SHAPE),
       annotations: {
         // It reads a third party's site and changes nothing, anywhere. Not idempotent in the sense
         // that matters to a client, though: two calls are two audits, and the second one may
@@ -503,7 +553,7 @@ function registerDeepTools(server, deep, normaliseTarget) {
         '"done" is true, then read view "report" or "summary". Deep audits are strictly capped ' +
         'per caller and per day; if you only need the HTTP-level checks, call audit_site instead ' +
         'and get the whole report in one call.',
-      inputSchema: {
+      inputSchema: z.object({
         url: z
           .string()
           .min(1)
@@ -511,14 +561,14 @@ function registerDeepTools(server, deep, normaliseTarget) {
             'The site to audit: https://example.com, or just example.com. Any path is ignored — ' +
               'the unit audited is a site.',
           ),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         workflowId: z.string().describe('Pass this to get_audit. Valid while Temporal keeps the run.'),
         origin: z.string(),
         tier: z.literal('deep'),
         expectedDuration: z.string(),
         nextStep: z.string(),
-      },
+      }),
       annotations: {
         // It starts a durable run against a third party's origin and spends real
         // browser time doing it. Not a read of this server's own state, and two
@@ -579,7 +629,7 @@ function registerDeepTools(server, deep, normaliseTarget) {
         'is markdown, and its structuredContent is { view: "summary", markdown } carrying that ' +
         'same text. Note that "progress" on the status view is an object with "phase", "steps" ' +
         'and "checks", not a list; the output schema says so field by field.',
-      inputSchema: {
+      inputSchema: z.object({
         workflowId: z
           .string()
           .min(1)
@@ -588,7 +638,7 @@ function registerDeepTools(server, deep, normaliseTarget) {
           .enum(['status', 'report', 'summary'])
           .optional()
           .describe('Which document to read. Defaults to status, the one that is always readable.'),
-      },
+      }),
       outputSchema: GET_AUDIT_OUTPUT_SHAPE,
       annotations: {
         // A read of a run's own state. The same read twice is the same answer

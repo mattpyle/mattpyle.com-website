@@ -106,7 +106,81 @@ test('the four named methods keep their name and every other request is other-me
   }
 });
 
-test('only an initialize carries a client and a revision', () => {
+/** A request of the 2026-07-28 revision: no handshake, the client in the `_meta` envelope. */
+function enveloped(method, { name, protocolVersion = '2026-07-28', params = {}, meta = {} } = {}) {
+  return {
+    jsonrpc: '2.0',
+    id: 2,
+    method,
+    params: {
+      ...params,
+      _meta: {
+        'io.modelcontextprotocol/protocolVersion': protocolVersion,
+        ...(name === undefined ? {} : { 'io.modelcontextprotocol/clientInfo': { name, version: '4.5.6' } }),
+        'io.modelcontextprotocol/clientCapabilities': {},
+        ...meta,
+      },
+    },
+  };
+}
+
+test('a request with the 2026-07-28 envelope carries a client and a revision on any method', () => {
+  for (const method of ['tools/call', 'tools/list', 'server/discover', 'subscriptions/listen']) {
+    const expected = MCP_METHODS.includes(method) ? method : OTHER_MCP_METHOD;
+    assert.deepEqual(
+      mcpFactsFrom(enveloped(method, { name: 'Claude-AI' })),
+      { method: expected, clientName: 'claude-ai', protocolVersion: '2026-07-28' },
+      method
+    );
+  }
+});
+
+test('the envelope gives a name or a revision or both, and the missing half says so', () => {
+  // clientInfo is optional in the 2026-07-28 revision, so a request with a revision and no name is
+  // a client that did not identify itself, the same finding an initialize with no name is.
+  assert.deepEqual(mcpFactsFrom(enveloped('tools/list')), {
+    method: 'tools/list',
+    clientName: UNNAMED_MCP_CLIENT,
+    protocolVersion: '2026-07-28',
+  });
+  assert.deepEqual(
+    mcpFactsFrom({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: { 'io.modelcontextprotocol/clientInfo': { name: 'Solo' } } } }),
+    { method: 'tools/list', clientName: 'solo', protocolVersion: UNSTATED_MCP_VERSION }
+  );
+  assert.deepEqual(mcpFactsFrom(enveloped('tools/list', { name: 7, protocolVersion: 20260728 })), {
+    method: 'tools/list',
+    clientName: UNNAMED_MCP_CLIENT,
+    protocolVersion: UNSTATED_MCP_VERSION,
+  });
+});
+
+test('a request without the envelope keys, or with a malformed _meta, carries no client', () => {
+  for (const params of [
+    undefined,
+    null,
+    'text',
+    [],
+    {},
+    { _meta: null },
+    { _meta: 'text' },
+    { _meta: [] },
+    // A 2025-era call that only asks for progress: `_meta` is there and the envelope is not.
+    { _meta: { progressToken: 'tok-1' } },
+  ]) {
+    assert.deepEqual(
+      mcpFactsFrom({ jsonrpc: '2.0', id: 1, method: 'tools/call', params }),
+      { method: 'tools/call', clientName: null, protocolVersion: null },
+      JSON.stringify(params)
+    );
+  }
+});
+
+test('an initialize keeps its own path, whatever else is in the envelope', () => {
+  const body = initialize('Claude-AI', '2025-06-18', { _meta: { 'io.modelcontextprotocol/clientInfo': { name: 'Other' } } });
+  assert.deepEqual(mcpFactsFrom(body), { method: 'initialize', clientName: 'claude-ai', protocolVersion: '2025-06-18' });
+});
+
+test('only an initialize or an enveloped request carries a client and a revision', () => {
   assert.deepEqual(mcpFactsFrom({ jsonrpc: '2.0', id: 1, method: 'tools/list' }), {
     method: 'tools/list',
     clientName: null,
@@ -259,6 +333,43 @@ test('an initialize costs one read and writes its method and its client in one p
   assert.equal(store.calls.length, 2);
   assert.deepEqual(store.calls[1][0], ['HINCRBY', KEY, '20|method|initialize', '1']);
   assert.deepEqual(store.calls[1][1], ['HINCRBY', KEY, '20|client|claude-ai|2025-06-18', '1']);
+});
+
+test('a 2026-era tools/call writes a Clients row from its envelope, with one read', async () => {
+  const store = storeNaming(['07|client|earlier|2025-03-26']);
+  const result = await recordMcpRequest({
+    body: enveloped('tools/call', {
+      name: 'Claude-AI',
+      params: { name: 'audit_site', arguments: { url: 'https://secret.example/x' } },
+      meta: { 'io.modelcontextprotocol/clientCapabilities': { sampling: {}, roots: { listChanged: true } } },
+    }),
+    now: AT,
+    env: STORE_ENV,
+    fetchImpl: store,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.methodField, '20|method|tools/call');
+  assert.equal(result.clientField, '20|client|claude-ai|2026-07-28');
+  assert.deepEqual(store.calls[0], [['HKEYS', KEY]]);
+  assert.deepEqual(store.calls[1][0], ['HINCRBY', KEY, '20|method|tools/call', '1']);
+  assert.deepEqual(store.calls[1][1], ['HINCRBY', KEY, '20|client|claude-ai|2026-07-28', '1']);
+  // The same three facts and nothing else: not the version of the client, the target or the
+  // capabilities the envelope declares.
+  const sent = JSON.stringify(store.calls);
+  for (const leaked of ['4.5.6', 'secret.example', 'sampling', 'listChanged', 'audit_site']) {
+    assert.ok(!sent.includes(leaked), `leaked: ${leaked}`);
+  }
+});
+
+test('the seventeenth name of a day is other-client on the envelope path too', async () => {
+  const full = storeNaming(Array.from({ length: MAX_MCP_CLIENTS_PER_DAY }, (_, i) => `07|client|client-${i}|2026-07-28`));
+  const result = await recordMcpRequest({
+    body: enveloped('tools/list', { name: 'seventeenth' }),
+    now: AT,
+    env: STORE_ENV,
+    fetchImpl: full,
+  });
+  assert.equal(result.clientField, `20|client|${OTHER_MCP_CLIENT}|2026-07-28`);
 });
 
 test('any other method is one pipeline and no read', async () => {
@@ -453,13 +564,13 @@ test('the route counts every POST before it can refuse one, and through waitUnti
   const parsed = routeSource.indexOf('countRequest(request, body)');
   const screen = routeSource.indexOf('refusalForBody(body)');
   const limiter = routeSource.indexOf('checkRateLimit(');
-  const transport = routeSource.indexOf('transport.handleRequest(');
+  const handler = routeSource.indexOf('handler.fetch(');
 
   assert.ok(parseError > 0, 'a body that does not parse is counted');
   assert.ok(parsed > 0, 'a body that parses is counted');
   assert.ok(parsed < screen, 'a refused batch is counted: the count runs before the screen');
   assert.ok(parsed < limiter, 'a rate-limited call is counted: the count runs before the limiter');
-  assert.ok(parsed < transport);
+  assert.ok(parsed < handler);
   assert.match(routeSource, /waitUntil\(recordMcpRequest\(\{ body \}\)\)/);
   assert.match(routeSource, /waitUntil\(recordHit\(\{ event: 'surface', path: MCP_ENDPOINT_PATH/);
   assert.equal(routeSource.match(/countRequest\(request,/g).length, 2, 'the two call sites, and no third');

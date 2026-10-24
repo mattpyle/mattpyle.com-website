@@ -22,7 +22,8 @@
  *    never a person, and it is stored alone, with no path, no user agent and no address beside it.
  *    Two more are stored since 2026-10-23, both read off the body of a POST to /mcp and both in
  *    the MCP census (mcpKeyFor() below): the name an MCP client gives itself in `initialize`
- *    (`clientInfo.name`), and the protocol revision it asks for. A client name is the name of a
+ *    (`clientInfo.name`), or in the `_meta` envelope of any request of the 2026-07-28 revision,
+ *    and the protocol revision it asks for. A client name is the name of a
  *    piece of software, such as an editor, a coding assistant or an inspector tool, chosen by the
  *    people who wrote it and not by the person running it. It is lowercased, cut to 64 characters,
  *    held to a short list of characters and stored alone as a count. The method of each request
@@ -544,13 +545,19 @@ export function mcpKeyFor(day, version = KEY_VERSION) {
  * not a JSON-RPC request at all count as OTHER_MCP_METHOD, so the method part of a field is one of
  * five values whatever a caller sends.
  *
- * `server/discover` is the discovery request of the 2026-07-28 protocol revision. This server does
- * not answer it yet; counting it is how the revision card learns how many clients already ask.
+ * `server/discover` is the discovery request of the 2026-07-28 protocol revision, which the server
+ * answers.
  */
 export const MCP_METHODS = Object.freeze(['initialize', 'tools/list', 'tools/call', 'server/discover']);
 
 /** The bucket for any other method. */
 export const OTHER_MCP_METHOD = 'other-method';
+
+/** Where a 2026-07-28 request carries the client's name. The SDK exports the same string; this module imports nothing of it. */
+const MCP_CLIENT_INFO_META_KEY = 'io.modelcontextprotocol/clientInfo';
+
+/** Where a 2026-07-28 request carries the revision it speaks. */
+const MCP_PROTOCOL_VERSION_META_KEY = 'io.modelcontextprotocol/protocolVersion';
 
 const COUNTED_MCP_METHODS = new Set([...MCP_METHODS, OTHER_MCP_METHOD]);
 
@@ -618,9 +625,16 @@ export function cleanMcpProtocolVersion(raw) {
  * Everything else in it, arguments, target URLs, `clientInfo.version`, capabilities, dies here, the
  * way a user agent dies in classifyClient().
  *
- * `clientName` and `protocolVersion` are present for an `initialize` and null for every other
- * method. A body that is not an object, is an array, or has no string `method` is OTHER_MCP_METHOD:
- * the request is still a data point, and the census does not guess what it was.
+ * `clientName` and `protocolVersion` come from two places, and both are the same two facts. An
+ * `initialize` of the 2025-era revisions carries them in `params.clientInfo.name` and
+ * `params.protocolVersion`. A request of the 2026-07-28 revision, any method at all, carries them in
+ * the `_meta` envelope: `params._meta['io.modelcontextprotocol/clientInfo'].name` and
+ * `params._meta['io.modelcontextprotocol/protocolVersion']`. Both are null for a request that
+ * carries neither. The envelope's `clientInfo` is optional in that revision, so an envelope with a
+ * revision and no name counts under UNNAMED_MCP_CLIENT, as an `initialize` with no name does.
+ *
+ * A body that is not an object, is an array, or has no string `method` is OTHER_MCP_METHOD: the
+ * request is still a data point, and the census does not guess what it was.
  *
  * @param {unknown} body the parsed JSON, or undefined when the body did not parse
  * @returns {{ method: string, clientName: string | null, protocolVersion: string | null }}
@@ -628,13 +642,24 @@ export function cleanMcpProtocolVersion(raw) {
 export function mcpFactsFrom(body) {
   const message = body && typeof body === 'object' && !Array.isArray(body) ? /** @type {any} */ (body) : null;
   const method = typeof message?.method === 'string' && MCP_METHODS.includes(message.method) ? message.method : OTHER_MCP_METHOD;
-  if (method !== 'initialize') return { method, clientName: null, protocolVersion: null };
-  const params = message.params && typeof message.params === 'object' ? message.params : {};
-  const info = params.clientInfo && typeof params.clientInfo === 'object' ? params.clientInfo : {};
+  const params = message?.params && typeof message.params === 'object' && !Array.isArray(message.params) ? message.params : {};
+  if (method === 'initialize') {
+    const info = params.clientInfo && typeof params.clientInfo === 'object' ? params.clientInfo : {};
+    return {
+      method,
+      clientName: cleanMcpClientName(info.name),
+      protocolVersion: cleanMcpProtocolVersion(params.protocolVersion),
+    };
+  }
+  const meta = params._meta && typeof params._meta === 'object' && !Array.isArray(params._meta) ? params._meta : {};
+  const envelopeInfo = meta[MCP_CLIENT_INFO_META_KEY];
+  const envelopeVersion = meta[MCP_PROTOCOL_VERSION_META_KEY];
+  if (envelopeInfo === undefined && envelopeVersion === undefined) return { method, clientName: null, protocolVersion: null };
+  const info = envelopeInfo && typeof envelopeInfo === 'object' ? envelopeInfo : {};
   return {
     method,
     clientName: cleanMcpClientName(info.name),
-    protocolVersion: cleanMcpProtocolVersion(params.protocolVersion),
+    protocolVersion: cleanMcpProtocolVersion(envelopeVersion),
   };
 }
 
