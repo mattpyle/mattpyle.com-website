@@ -14,6 +14,7 @@ export const PAGE_PATHS = [
   '/activity',
   '/audit',
   '/changelog',
+  '/changelog/activity-agent-identity',
   '/changelog/agent-driven-retro-mode',
   '/changelog/agent-reading-budget',
   '/changelog/agent-signed-guestbook',
