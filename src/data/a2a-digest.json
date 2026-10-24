@@ -226,7 +226,7 @@
   "changelog": [
     {
       "slug": "activity-agent-identity",
-      "title": "/activity shows who an agent is, not only what it fetched",
+      "title": "/activity shows who an agent is",
       "url": "https://www.mattpyle.com/changelog/activity-agent-identity/",
       "date": "2026-10-24T00:00:00.000Z",
       "publishedAt": "2026-10-24T07:35:00.000Z",
