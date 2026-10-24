@@ -21,7 +21,7 @@
   - region "https://example.com":
     - heading "https://example.com" [level=2]
     - paragraph: ·
-    - paragraph: 5 of 13 checks passed
+    - paragraph: 7 of 15 checks passed
     - heading "Crawlability" [level=3]
     - term: Checked
     - definition: "4"
@@ -42,9 +42,9 @@
     - definition: "3"
     - heading "Content access" [level=3]
     - term: Checked
-    - definition: "2"
+    - definition: "4"
     - term: Passed
-    - definition: "2"
+    - definition: "4"
     - term: Failed
     - definition: "0"
     - term: N/A
@@ -99,10 +99,12 @@
       - listitem: "An A2A agent card is published could not fetch: the connection was reset before any response arrived N/A low"
     - heading "Content access" [level=3]
     - paragraph: Whether the content comes back in a form a model can read.
-    - paragraph: 3 checks
+    - paragraph: 5 checks
     - list "Content access":
       - listitem: The homepage serves markdown when asked for it 200 with Content-Type text/markdown and a markdown body Pass high
       - listitem: "A content page serves markdown when asked for it could not fetch: the connection was reset before any response arrived N/A high"
+      - listitem: "/The homepage's first \\d+,\\d+ characters are measured for content share text: \\d+% of the first \\d+,\\d+ characters is content \\(the main element\\); markdown: \\d+% of all \\d+,\\d+ characters \\(the whole page, shorter than \\d+,\\d+\\) is content Pass medium/"
+      - listitem: "/A content page's first \\d+,\\d+ characters are measured for content share text: \\d+% of the first \\d+,\\d+ characters is content \\(the main element\\); markdown: no markdown twin to measure Pass medium/"
       - listitem: The homepage advertises its alternates in a Link header the homepage Link header names an alternate of type text/markdown Pass low
   - region "Notes on the run":
     - heading "Notes on the run" [level=2]
