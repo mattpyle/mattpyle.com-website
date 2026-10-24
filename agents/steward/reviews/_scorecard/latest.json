@@ -1,45 +1,45 @@
 {
-  "iso": "2026-10-23",
-  "timestamp": "2026-10-23T03:34:20-07:00",
-  "scope": "27 live pages",
+  "iso": "2026-10-24",
+  "timestamp": "2026-10-24T03:35:16-07:00",
+  "scope": "28 live pages",
   "tools": [
-    "Lighthouse 13.4",
+    "Lighthouse 13.5",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Coverage rose from 26 to 27 pages; all 27 pages passed all four public metrics.",
+  "commentary": "Agentic Browsing rose from 4/4 to 6/6; all 28 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
       "value": "100",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse accessibility score across 27 tested pages. No automated WCAG violations."
+      "description": "The lowest Lighthouse accessibility score across 28 tested pages. No automated WCAG violations."
     },
     {
       "name": "Performance",
-      "value": "99",
+      "value": "98",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse performance score across 27 tested pages."
+      "description": "The lowest Lighthouse performance score across 28 tested pages."
     },
     {
       "name": "SEO",
       "value": "100",
       "maximum": "100",
       "status": "Pass",
-      "description": "The lowest Lighthouse SEO score across 27 tested pages."
+      "description": "The lowest Lighthouse SEO score across 28 tested pages."
     },
     {
       "name": "Agentic Browsing",
-      "value": "4",
-      "maximum": "4",
+      "value": "6",
+      "maximum": "6",
       "status": "Pass",
-      "description": "4 of 4 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt."
+      "description": "6 of 6 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt, AI catalog, WebMCP form coverage."
     }
   ],
   "readingBudget": {
-    "pages": 27,
+    "pages": 28,
     "text": {
       "lowest": 50,
       "url": "https://www.mattpyle.com/writing/"
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-10-23",
+  "id": "2026-10-24",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -64,11 +64,11 @@
       "readingBudget": {
         "text": {
           "share": 84,
-          "measured": 5686
+          "measured": 5726
         },
         "markdown": {
           "share": 90,
-          "measured": 3062
+          "measured": 3102
         }
       }
     },
@@ -105,12 +105,12 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 87,
-          "measured": 6902
+          "share": 95,
+          "measured": 8000
         },
         "markdown": {
           "share": 95,
-          "measured": 7848
+          "measured": 8000
         }
       }
     },
@@ -138,6 +138,27 @@
     {
       "url": "https://www.mattpyle.com/changelog/",
       "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "readingBudget": {
+        "text": {
+          "share": 83,
+          "measured": 5332
+        },
+        "markdown": {
+          "share": 93,
+          "measured": 4809
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/activity-agent-identity/",
+      "scores": {
         "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
@@ -147,19 +168,19 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 82,
-          "measured": 5028
+          "share": 83,
+          "measured": 5344
         },
         "markdown": {
-          "share": 93,
-          "measured": 4498
+          "share": 88,
+          "measured": 4965
         }
       }
     },
     {
       "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
       "scores": {
-        "performance": 99,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -189,19 +210,19 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 71,
-          "measured": 3145
+          "share": 72,
+          "measured": 3323
         },
         "markdown": {
-          "share": 75,
-          "measured": 2535
+          "share": 76,
+          "measured": 2622
         }
       }
     },
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 99,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -222,7 +243,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -483,12 +504,12 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 76,
-          "measured": 3843
+          "share": 78,
+          "measured": 4134
         },
         "markdown": {
-          "share": 90,
-          "measured": 3346
+          "share": 91,
+          "measured": 3642
         }
       }
     },
@@ -620,8 +641,8 @@
     }
   ],
   "decision": "open-pr",
-  "reason": "Coverage 26→27 pages",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/437",
+  "reason": "Agentic Browsing 4/4→6/6",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/460",
   "dryRun": false,
-  "archiveId": "2026-10-23"
+  "archiveId": "2026-10-24"
 }
