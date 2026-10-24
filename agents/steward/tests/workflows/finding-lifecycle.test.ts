@@ -365,6 +365,46 @@ test('without auto_fix the approved run waits at waiting-fix and opens no issue'
   });
 });
 
+test('auto_fix on, kind not a defect: the approved run parks at waiting-fix with no attempt and no issue', async () => {
+  const mocks = lifecycle({ autoFix: true, merge: {} });
+  await withWorkers(mocks, async () => {
+    const handle = await env.client.workflow.start(findingWorkflow, {
+      workflowId: 'finding/mattpyle-com/lifecycle-opportunity-parks',
+      taskQueue: FINDINGS,
+      args: [{ ...input('opportunity-parks'), waitsForPerson: true }],
+    });
+    await handle.signal(verdictSignal, APPROVE);
+    await untilState(handle, (s) => s.step === 'waiting-fix', 'waiting-fix');
+    await env.sleep('10 minutes');
+    const state = await handle.query(findingStateQuery);
+    assert.equal(state.step, 'waiting-fix');
+    assert.equal(state.fixAttempts, 0);
+    assert.equal(state.lastFixError, null);
+    assert.equal(state.waitsForPerson, true);
+    assert.deepEqual(mocks.calls, ['writeFindingVerdict', 'readSiteAutoFix'], 'no openFixIssue was scheduled');
+    await handle.terminate('test over');
+  });
+});
+
+test('a fix signal on the parked opportunity runs the attempt, and the waiting reason clears', async () => {
+  const mocks = lifecycle({ autoFix: true, prPolls: [3], merge: {} });
+  await withWorkers(mocks, async () => {
+    const handle = await env.client.workflow.start(findingWorkflow, {
+      workflowId: 'finding/mattpyle-com/lifecycle-opportunity-fix-signal',
+      taskQueue: FINDINGS,
+      args: [{ ...input('opportunity-fix-signal'), waitsForPerson: true }],
+    });
+    await handle.signal(verdictSignal, APPROVE);
+    await untilState(handle, (s) => s.step === 'waiting-fix' && s.waitsForPerson === true, 'parked');
+    await handle.signal(fixSignal, FIX);
+    const fixing = await untilState(handle, (s) => s.step === 'fixing' && Boolean(s.issueUrl), 'fixing with an issue');
+    assert.equal(fixing.fixAttempts, 1);
+    assert.equal(fixing.waitsForPerson, false);
+    assert.deepEqual(mocks.calls.slice(0, 3), ['writeFindingVerdict', 'readSiteAutoFix', 'openFixIssue']);
+    await handle.terminate('test over');
+  });
+});
+
 test('merged and deployed, but a check fails on production: reopened with both values', async () => {
   const mocks = lifecycle({
     merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },

@@ -57,7 +57,19 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * run waits for the next `fix`. So does a fix that fails, and an issue with no
  * PR after 60 minutes: the finding is still approved, and a second `fix` is the
  * retry. The retry closes the last attempt's issue with a comment saying why,
- * and opens a new one. `auto_fix` covers the first attempt only.
+ * and opens a new one. `auto_fix` covers the first attempt only, and only for a
+ * defect: a run started with `waitsForPerson` (the index line's kind is not
+ * `defect`) parks at `waiting-fix` with `fixAttempts` 0 and waits for a `fix`
+ * signal, because the gate in `openFixIssue` would refuse it anyway.
+ *
+ * **`waitsForPerson` carries no marker** (2026-10-23). It is a new optional input
+ * field read as `=== true`, so a history recorded without it takes the branch it
+ * always took, the automatic attempt. A run that has it was started after this
+ * shipped and has no earlier history to disagree. The `readSiteAutoFix` call
+ * stays where it was, so no command is added, removed or moved. The
+ * `finding-opportunity-auto-fix-attempt.bin` fixture in
+ * `tests/workflows/replay.test.ts` is an opportunity that made and failed its
+ * attempt, recorded before this change, and replays green.
  *
  * **Versioned with `patched`.** A run whose history started a
  * `fixFindingWorkflow` child replays that attempt as a child: it has no
@@ -118,6 +130,13 @@ export interface FindingWorkflowInput {
   branch?: string;
   /** The production origin every verify check must name. Required for `'resolved'`. */
   origin?: string;
+  /**
+   * Set by the reconciler when the index line's kind is not `defect`: the
+   * fixer's gate refuses such a finding, so the run parks at `waiting-fix`
+   * without the automatic attempt. Read as `=== true` (determinism rule 3):
+   * a history recorded before the field existed made that attempt.
+   */
+  waitsForPerson?: boolean;
 }
 
 /**
@@ -182,6 +201,11 @@ export interface FindingState {
   fixAttempts?: number;
   /** Why the last fix failed, while the run waits for the next `fix`. */
   lastFixError?: string | null;
+  /**
+   * True while the run is parked at `waiting-fix` because the finding is not a
+   * defect, and no attempt has been made. `steward finding status` prints it.
+   */
+  waitsForPerson?: boolean;
 }
 
 /** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
@@ -439,7 +463,10 @@ async function lifecycle(
 
   for (;;) {
     state.step = 'waiting-fix';
-    if (!(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
+    const parked = input.waitsForPerson === true && fixAttempts === 0;
+    if (parked) state.waitsForPerson = true;
+    if (parked || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
+    state.waitsForPerson = false;
     fix.requested = false;
     fixAttempts++;
     state.fixAttempts = fixAttempts;

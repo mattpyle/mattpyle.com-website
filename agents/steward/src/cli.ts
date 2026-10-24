@@ -98,6 +98,7 @@ import {
   pendingActivityLine,
   verifySourceLabel,
   verifyWorkflowId,
+  waitingReasonLine,
   type FindingVerdict,
 } from './lib/findings.js';
 import {
@@ -1996,6 +1997,8 @@ finding
         if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
         if (state.issueUrl) console.log(`  issue: ${state.issueUrl}`);
       }
+      const waiting = waitingReasonLine(state);
+      if (waiting) console.log(`  ${waiting}`);
       if (state.lastFixError) console.log(`  last fix failed: ${state.lastFixError}`);
       if (state.verdict) {
         console.log(`  verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);

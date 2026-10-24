@@ -47,7 +47,8 @@ that's the property being dogfooded here, on a low-stakes, real target.
   reconciler, which starts a `'resolved'` workflow for each `proposed` or `reopened` finding with
   none open, signals the ones whose file already carries a verdict, and sends `fix` to an approved
   defect parked at `waiting-fix` with no attempt on a site with `auto_fix: true`. A `reopened`
-  finding is back at the verdict gate.
+  finding is back at the verdict gate. A run started for an opportunity or a direction parks at
+  `waiting-fix` without the automatic attempt, and `steward finding status` says why.
 - **`fixFindingWorkflow`**: the fixer, one execution per approved finding (`fix/<site>/<key>`),
   started as a child of a `'resolved'` `findingWorkflow`, or alone by `steward finding fix <key>` for
   a finding whose workflow stops at the verdict. Five activities: read the finding, generate a handoff from

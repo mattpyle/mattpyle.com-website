@@ -258,6 +258,52 @@ test('an approved defect parked at waiting-fix on an auto_fix site gets one fix;
   assert.match(s.pings[2].summary, /mattpyle-com started 0, signalled 0, fixed 1, unchanged 1/);
 });
 
+test('a started opportunity carries waitsForPerson and parks unattempted on an auto_fix site; a defect does not and tries', async () => {
+  const kinded = (lines: string[]) =>
+    ['# Findings index', '', 'Format: `key | status | kind | title | verdict reason`.', '', ...lines].join('\n');
+  const s = store({
+    'mattpyle-com': kinded([
+      'w-defect | proposed | defect | Title | ',
+      'w-opportunity | proposed | opportunity | Title | ',
+      'w-direction | proposed | direction | Title | ',
+    ]),
+  });
+  s.flags.autoFix = true;
+  const startedInput = async (key: string) => {
+    const history = await client.workflow.getHandle(findingWorkflowId('mattpyle-com', key)).fetchHistory();
+    const payload = history.events?.[0]?.workflowExecutionStartedEventAttributes?.input?.payloads?.[0]?.data;
+    return JSON.parse(Buffer.from(payload as Uint8Array).toString('utf8'));
+  };
+
+  await withWorker(s.activities, async () => {
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 3, signalled: 0, fixed: 0, unchanged: 0 });
+    assert.ok(!('waitsForPerson' in (await startedInput('w-defect'))), 'a defect starts without the field');
+    assert.equal((await startedInput('w-opportunity')).waitsForPerson, true);
+    assert.equal((await startedInput('w-direction')).waitsForPerson, true);
+
+    s.indexes['mattpyle-com'] = kinded([
+      'w-defect | approved | defect | Title | Yes.',
+      'w-opportunity | approved | opportunity | Title | Yes.',
+      'w-direction | approved | direction | Title | Yes.',
+    ]);
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 3, fixed: 0, unchanged: 0 });
+
+    const tried = await stateWhen(findingWorkflowId('mattpyle-com', 'w-defect'), (st) => st.fixAttempts === 1 && st.step === 'waiting-fix');
+    assert.match(tried.lastFixError ?? '', /opens no issue/);
+    for (const key of ['w-opportunity', 'w-direction']) {
+      const parked = await stateWhen(findingWorkflowId('mattpyle-com', key), (st) => st.step === 'waiting-fix');
+      assert.equal(parked.fixAttempts, 0);
+      assert.equal(parked.lastFixError, null);
+      assert.equal(parked.waitsForPerson, true);
+    }
+    assert.deepEqual(s.fixIssues, ['w-defect'], 'openFixIssue ran for the defect alone');
+
+    for (const key of ['w-defect', 'w-opportunity', 'w-direction']) {
+      await client.workflow.getHandle(findingWorkflowId('mattpyle-com', key)).terminate('test over');
+    }
+  });
+});
+
 test('a proposed line whose last run completed is not started again', async () => {
   const s = store({ 'site-f': header(['f-one | proposed | Title | ']) });
   await withWorker(s.activities, async () => {

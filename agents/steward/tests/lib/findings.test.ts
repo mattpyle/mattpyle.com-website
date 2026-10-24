@@ -8,8 +8,11 @@ import {
   parseFindingsIndex,
   pendingActivityLine,
   planReconcile,
+  type FindingsIndexLine,
   setFrontmatterVerdict,
   setIndexVerdict,
+  startsParked,
+  waitingReasonLine,
 } from '../../src/lib/findings.js';
 
 /** The findings store's pure rules: ID, slug guard, index format, and the reconcile decision. */
@@ -141,4 +144,18 @@ test('a retrying activity is one line: the type, the attempt and the last failur
   );
   assert.equal(pendingActivityLine({ activityType: { name: 'awaitFixPr' }, attempt: 3, lastFailure: null }), 'awaitFixPr attempt 3');
   assert.equal(pendingActivityLine({ attempt: 4 }), null, 'no type, no line');
+});
+
+test('a run parked for its kind says so in `steward finding status`, and no other run does', () => {
+  assert.equal(waitingReasonLine({ waitsForPerson: true }), 'waits for a person: kind is not defect, so no fix was attempted');
+  assert.equal(waitingReasonLine({ waitsForPerson: false }), null, 'cleared once a fix signal arrives');
+  assert.equal(waitingReasonLine({}), null, 'a run recorded before the field');
+});
+
+test('a started run parks without the automatic attempt when its line names a kind other than defect', () => {
+  const line = (kind: string): FindingsIndexLine => ({ key: 'k', status: 'proposed', kind, reason: '', lineNumber: 0, columns: [] });
+  assert.equal(startsParked(line('opportunity')), true);
+  assert.equal(startsParked(line('direction')), true);
+  assert.equal(startsParked(line('defect')), false);
+  assert.equal(startsParked(line('')), false, 'an index with no kind column starts as it always did');
 });
