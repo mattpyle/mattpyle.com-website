@@ -199,7 +199,7 @@ export const GET: APIRoute = async () => {
               ];
             })
           )
-        : 'No client has sent an initialize request to the MCP endpoint yet.'
+        : 'No client has identified itself to the MCP endpoint yet.'
     );
     if (activity.mcp.clients.omitted > 0) {
       sections.push(`${activity.mcp.clients.omitted} further client(s) below the top rows are not shown.`);
