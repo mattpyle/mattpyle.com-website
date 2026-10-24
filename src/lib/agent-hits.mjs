@@ -20,9 +20,19 @@
  *    src/lib/web-bot-auth.mjs does not already name. That hostname is an operator's domain, which
  *    the operator publishes so that any site can fetch its keys; it names a company or a service,
  *    never a person, and it is stored alone, with no path, no user agent and no address beside it.
+ *    Two more are stored since 2026-10-23, both read off the body of a POST to /mcp and both in
+ *    the MCP census (mcpKeyFor() below): the name an MCP client gives itself in `initialize`
+ *    (`clientInfo.name`), and the protocol revision it asks for. A client name is the name of a
+ *    piece of software, such as an editor, a coding assistant or an inspector tool, chosen by the
+ *    people who wrote it and not by the person running it. It is lowercased, cut to 64 characters,
+ *    held to a short list of characters and stored alone as a count. The method of each request
+ *    is stored too, from a fixed list. No `clientInfo.version`, no argument, no target URL and no
+ *    other part of the body is read at all; mcpFactsFrom() is the only function that sees it.
  * 2. Bounded cardinality. Every component of every key comes from a fixed list or is bucketed into
  *    one. Nothing a stranger can send mints a new key. The signer hostname is bucketed by a cap:
- *    MAX_SIGNER_HOSTS_PER_DAY distinct hosts a day, the rest counted as OTHER_SIGNER_HOST.
+ *    MAX_SIGNER_HOSTS_PER_DAY distinct hosts a day, the rest counted as OTHER_SIGNER_HOST. The MCP
+ *    client name and protocol revision are bucketed the same way (MAX_MCP_CLIENTS_PER_DAY and
+ *    MAX_MCP_VERSIONS_PER_DAY), and the method is one of five.
  * 3. Fail open. A missing env var, a slow store, a 500 from Upstash: all of them are undercounting,
  *    never a failed response. The caller fires this through `waitUntil` and this module never
  *    rejects.
@@ -258,8 +268,17 @@ export function isPageClient(family) {
   return PAGE_CLIENTS.has(family);
 }
 
+/**
+ * The MCP endpoint, counted as a surface since 2026-10-23.
+ *
+ * Not in AGENT_SURFACE_PATHS, which lists the static files the middleware logs: /mcp is a function
+ * that counts itself (src/pages/mcp.ts), and listing it there would put it in the middleware's
+ * matcher, where a slash rule would 308 a JSON-RPC call. The counter names it here instead.
+ */
+export const MCP_ENDPOINT_PATH = '/mcp';
+
 /** The surfaces that get a key of their own; anything else under /.well-known/ buckets. */
-const NAMED_SURFACES = new Set([...AGENT_SURFACE_PATHS, ...WELL_KNOWN_SURFACE_PATHS]);
+const NAMED_SURFACES = new Set([...AGENT_SURFACE_PATHS, ...WELL_KNOWN_SURFACE_PATHS, MCP_ENDPOINT_PATH]);
 const WELL_KNOWN_PREFIX = '/.well-known/';
 
 /** The bucket for a well-known path the site does not publish. */
@@ -490,6 +509,232 @@ export function signerHostsFrom(fields) {
   return hosts;
 }
 
+// ── MCP census ───────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The hash holding one UTC day of POSTs to /mcp, counted by what the body says rather than by who
+ * sent it. Two kinds of field, told apart by their second part:
+ *
+ * | Field | Counts |
+ * |---|---|
+ * | `<utc-hour>\|method\|<method>` | every POST, under its JSON-RPC method |
+ * | `<utc-hour>\|client\|<name>\|<protocol-version>` | every `initialize`, under the client name and the revision it gave |
+ *
+ * A key of its own for the reason the signers hash is one: these are second counts of a request
+ * that is already in the day hash as a `surface` hit on `/mcp`, so folding them into that hash
+ * would count the request twice in every total. The hour leads the field so the census tables'
+ * columns are rolling windows over hour buckets, like every other number the page shows.
+ *
+ * The name and the revision share a field because the Clients table reads them as a pair: one
+ * client asking for two revisions is two rows. The cost is that the two caps multiply, 17 by 17 at
+ * most a day, which is still a bound.
+ *
+ * Written beside a `v2` day set entry, and the rollup deletes it with the day hash rather than
+ * folding it: the tables have no all-time column, so past the longest window a census count is
+ * provably unread.
+ *
+ * @param {string} day YYYY-MM-DD, UTC @param {string} [version]
+ */
+export function mcpKeyFor(day, version = KEY_VERSION) {
+  return `hits:${version}:mcp:${day}`;
+}
+
+/**
+ * The JSON-RPC methods the census names. Every other method, a notification, and a body that is
+ * not a JSON-RPC request at all count as OTHER_MCP_METHOD, so the method part of a field is one of
+ * five values whatever a caller sends.
+ *
+ * `server/discover` is the discovery request of the 2026-07-28 protocol revision. This server does
+ * not answer it yet; counting it is how the revision card learns how many clients already ask.
+ */
+export const MCP_METHODS = Object.freeze(['initialize', 'tools/list', 'tools/call', 'server/discover']);
+
+/** The bucket for any other method. */
+export const OTHER_MCP_METHOD = 'other-method';
+
+const COUNTED_MCP_METHODS = new Set([...MCP_METHODS, OTHER_MCP_METHOD]);
+
+/** The most distinct client names one UTC day records by name. The 17th and later count as OTHER_MCP_CLIENT. */
+export const MAX_MCP_CLIENTS_PER_DAY = 16;
+
+/** The most distinct protocol revisions one UTC day records by name, capped the same way. */
+export const MAX_MCP_VERSIONS_PER_DAY = 16;
+
+/** The bucket for a client name past the day's cap. */
+export const OTHER_MCP_CLIENT = 'other-client';
+
+/** The bucket for a protocol revision past the day's cap. */
+export const OTHER_MCP_VERSION = 'other-version';
+
+/** An `initialize` that gave no usable client name. A finding on its own: the client did not identify itself. */
+export const UNNAMED_MCP_CLIENT = 'unnamed';
+
+/** An `initialize` that gave no usable protocol revision. */
+export const UNSTATED_MCP_VERSION = 'unstated';
+
+/** The longest client name stored. A longer one is cut, not refused. */
+const MAX_MCP_CLIENT_NAME_LENGTH = 64;
+
+/**
+ * What a stored client name may look like: lowercase ASCII letters and digits, and a few marks that
+ * software names use. Rules out the field delimiter by shape.
+ */
+const MCP_CLIENT_NAME_SHAPE = /^[a-z0-9 ._\-/+@:()]{1,64}$/;
+
+/** What a stored protocol revision may look like. A date such as 2025-06-18 fits; so does a draft tag. */
+const MCP_VERSION_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
+
+/**
+ * A client name as the census stores it: lowercased, cut to 64 characters, any character outside
+ * the short list above replaced by an underscore, and the empty string and a non-string both
+ * UNNAMED_MCP_CLIENT.
+ *
+ * @param {unknown} raw
+ * @returns {string}
+ */
+export function cleanMcpClientName(raw) {
+  if (typeof raw !== 'string') return UNNAMED_MCP_CLIENT;
+  const cleaned = raw
+    .toLowerCase()
+    .slice(0, MAX_MCP_CLIENT_NAME_LENGTH)
+    .replace(/[^a-z0-9 ._\-/+@:()]/g, '_')
+    .trim();
+  return cleaned || UNNAMED_MCP_CLIENT;
+}
+
+/**
+ * A protocol revision as the census stores it: as given when it has the shape of one, and
+ * UNSTATED_MCP_VERSION when it is missing or does not.
+ *
+ * @param {unknown} raw
+ * @returns {string}
+ */
+export function cleanMcpProtocolVersion(raw) {
+  return typeof raw === 'string' && MCP_VERSION_SHAPE.test(raw) ? raw : UNSTATED_MCP_VERSION;
+}
+
+/**
+ * The three facts the census keeps from one POST body, and the only code that reads the body.
+ * Everything else in it, arguments, target URLs, `clientInfo.version`, capabilities, dies here, the
+ * way a user agent dies in classifyClient().
+ *
+ * `clientName` and `protocolVersion` are present for an `initialize` and null for every other
+ * method. A body that is not an object, is an array, or has no string `method` is OTHER_MCP_METHOD:
+ * the request is still a data point, and the census does not guess what it was.
+ *
+ * @param {unknown} body the parsed JSON, or undefined when the body did not parse
+ * @returns {{ method: string, clientName: string | null, protocolVersion: string | null }}
+ */
+export function mcpFactsFrom(body) {
+  const message = body && typeof body === 'object' && !Array.isArray(body) ? /** @type {any} */ (body) : null;
+  const method = typeof message?.method === 'string' && MCP_METHODS.includes(message.method) ? message.method : OTHER_MCP_METHOD;
+  if (method !== 'initialize') return { method, clientName: null, protocolVersion: null };
+  const params = message.params && typeof message.params === 'object' ? message.params : {};
+  const info = params.clientInfo && typeof params.clientInfo === 'object' ? params.clientInfo : {};
+  return {
+    method,
+    clientName: cleanMcpClientName(info.name),
+    protocolVersion: cleanMcpProtocolVersion(params.protocolVersion),
+  };
+}
+
+/**
+ * An MCP-hash field, back into its parts. Same contract as parseHitField(): a field that is not
+ * exactly what the schema promises is null, and the caller drops it rather than guessing.
+ *
+ * @param {string} field
+ * @returns {{ hour: string, kind: 'method', method: string }
+ *   | { hour: string, kind: 'client', name: string, protocolVersion: string } | null}
+ */
+export function parseMcpField(field) {
+  const parts = field.split(FIELD_DELIMITER);
+  const [hour, kind] = parts;
+  if (!/^\d{2}$/.test(hour ?? '')) return null;
+  if (kind === 'method' && parts.length === 3) {
+    return COUNTED_MCP_METHODS.has(parts[2]) ? { hour, kind, method: parts[2] } : null;
+  }
+  if (kind === 'client' && parts.length === 4) {
+    const [, , name, protocolVersion] = parts;
+    if (!MCP_CLIENT_NAME_SHAPE.test(name) || name !== name.trim() || !MCP_VERSION_SHAPE.test(protocolVersion)) return null;
+    return { hour, kind, name, protocolVersion };
+  }
+  return null;
+}
+
+/**
+ * The client names and revisions an MCP hash already names, from its fields, with the buckets left
+ * out. The caps count these.
+ *
+ * @param {string[]} fields
+ * @returns {{ names: Set<string>, versions: Set<string> }}
+ */
+export function mcpNamedFrom(fields) {
+  const names = new Set();
+  const versions = new Set();
+  for (const field of fields ?? []) {
+    const parsed = parseMcpField(String(field));
+    if (parsed?.kind !== 'client') continue;
+    if (parsed.name !== OTHER_MCP_CLIENT && parsed.name !== UNNAMED_MCP_CLIENT) names.add(parsed.name);
+    if (parsed.protocolVersion !== OTHER_MCP_VERSION && parsed.protocolVersion !== UNSTATED_MCP_VERSION) {
+      versions.add(parsed.protocolVersion);
+    }
+  }
+  return { names, versions };
+}
+
+/**
+ * The name a client is counted under, given the names the day has already recorded. A name already
+ * recorded keeps it whatever the count; a new one takes it while the day has room and is the bucket
+ * once it does not. The two fixed buckets are never counted towards the cap. The revision follows
+ * the same rule against its own cap.
+ *
+ * @param {{ clientName: string, protocolVersion: string }} facts
+ * @param {{ names: Iterable<string>, versions: Iterable<string> }} seen
+ * @returns {{ name: string, protocolVersion: string }}
+ */
+export function mcpClientField({ clientName, protocolVersion }, { names, versions }) {
+  const seenNames = new Set(names);
+  const seenVersions = new Set(versions);
+  for (const bucket of [OTHER_MCP_CLIENT, UNNAMED_MCP_CLIENT]) seenNames.delete(bucket);
+  for (const bucket of [OTHER_MCP_VERSION, UNSTATED_MCP_VERSION]) seenVersions.delete(bucket);
+  const nameFixed = clientName === UNNAMED_MCP_CLIENT || clientName === OTHER_MCP_CLIENT;
+  const versionFixed = protocolVersion === UNSTATED_MCP_VERSION || protocolVersion === OTHER_MCP_VERSION;
+  return {
+    name: nameFixed || seenNames.has(clientName) || seenNames.size < MAX_MCP_CLIENTS_PER_DAY ? clientName : OTHER_MCP_CLIENT,
+    protocolVersion:
+      versionFixed || seenVersions.has(protocolVersion) || seenVersions.size < MAX_MCP_VERSIONS_PER_DAY
+        ? protocolVersion
+        : OTHER_MCP_VERSION,
+  };
+}
+
+/**
+ * The commands that count one POST to /mcp: its method, its client when it is an `initialize`, and
+ * the day's entry in the day set so a reader that starts from the set finds the hash even when the
+ * request's own `surface` hit (recordHit) was the write that failed.
+ *
+ * @param {{ method: string, clientName: string | null, protocolVersion: string | null }} facts
+ * @param {{ names: Iterable<string>, versions: Iterable<string> }} seen
+ * @param {Date} now
+ * @returns {{ day: string, methodField: string, clientField: string | null, commands: string[][] }}
+ */
+export function mcpCensusKeys(facts, seen, now = new Date()) {
+  const day = counterDay(now);
+  const hour = counterHour(now);
+  const key = mcpKeyFor(day);
+  const methodField = [hour, 'method', facts.method].join(FIELD_DELIMITER);
+  const counted =
+    facts.clientName !== null && facts.protocolVersion !== null
+      ? mcpClientField({ clientName: facts.clientName, protocolVersion: facts.protocolVersion }, seen)
+      : null;
+  const clientField = counted ? [hour, 'client', counted.name, counted.protocolVersion].join(FIELD_DELIMITER) : null;
+
+  const commands = [['HINCRBY', key, methodField, '1']];
+  if (clientField) commands.push(['HINCRBY', key, clientField, '1']);
+  commands.push(['SADD', DAYS_KEY, day]);
+  return { day, methodField, clientField, commands };
+}
+
 /** How many parts a field has, per version and hash kind. */
 const DAY_FIELD_PARTS = Object.freeze({ v1: 4, v2: 5 });
 const MONTH_FIELD_PARTS = Object.freeze({ v1: 3, v2: 4 });
@@ -575,6 +820,13 @@ export function parseMonthField(field, version = KEY_VERSION) {
  * | Key | Type | Answers |
  * |---|---|---|
  * | `hits:v2:signers:<utc-day>` | hash, field `<utc-hour>\|<host>` | which key directories verified the day's unnamed signers, and how often |
+ *
+ * And one more, since 2026-10-23, written by recordMcpRequest() for every POST to /mcp rather than
+ * by a hit (mcpKeyFor() above says what its two kinds of field count):
+ *
+ * | Key | Type | Answers |
+ * |---|---|---|
+ * | `hits:v2:mcp:<utc-day>` | hash, field `<utc-hour>\|method\|<method>` or `<utc-hour>\|client\|<name>\|<revision>` | which JSON-RPC methods clients send /mcp, and which clients and protocol revisions open a session |
  *
  * The `v1` keys have the same shape with the verification part absent: four parts in a day field,
  * three in a month field. They hold every hit from 2026-07-21 to 2026-10-17.
@@ -765,6 +1017,63 @@ async function readSignerHosts(store, day, fetchImpl) {
     const fields = Array.isArray(payload) ? payload[0]?.result : null;
     if (!Array.isArray(fields)) return null;
     return signerHostsFrom(fields);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Count one POST to /mcp in the census. Never throws, never rejects, and returns what it did so a
+ * test can assert the env-absent path made no network call at all.
+ *
+ * The route fires this through `waitUntil` beside its recordHit() call (src/pages/mcp.ts), so the
+ * write never delays the response, and every request is counted: a refused batch, a body that did
+ * not parse and a rate-limited call included, because the refusal is the data point.
+ *
+ * An `initialize` costs one more round trip before the write, the client names and revisions the
+ * day has already recorded, so the caps in mcpClientField() can be applied. That read fails open on
+ * its own: if it does not answer, the method is still counted and only the client is not. The cap is
+ * enforced from a read just before the write, so a burst of brand-new names landing in the same
+ * instant can overrun it by the number of requests in flight; the tables cut at MAX_TABLE_ROWS and
+ * say how many rows they left out, so the page stays a table.
+ *
+ * @param {{ body: unknown, now?: Date, env?: Record<string, string | undefined>, fetchImpl?: typeof fetch }} request
+ * @returns {Promise<{ ok: boolean, reason?: string, methodField?: string, clientField?: string | null }>}
+ */
+export async function recordMcpRequest({ body, now, env = process.env, fetchImpl = fetch }) {
+  try {
+    const store = readStoreConfig(env);
+    if (!store) return { ok: false, reason: 'no-store' };
+
+    const facts = mcpFactsFrom(body);
+    const at = now ?? new Date();
+    const seen = facts.clientName === null ? null : await readMcpNamed(store, counterDay(at), fetchImpl);
+    // A read that did not answer records no client: the method is still counted below.
+    const keys = mcpCensusKeys(seen ? facts : { ...facts, clientName: null, protocolVersion: null }, seen ?? { names: [], versions: [] }, at);
+
+    const response = await pipeline(store, keys.commands, fetchImpl);
+    if (!response.ok) return { ok: false, reason: `status-${response.status}`, methodField: keys.methodField, clientField: keys.clientField };
+    return { ok: true, methodField: keys.methodField, clientField: keys.clientField };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.name : 'error' };
+  }
+}
+
+/**
+ * The names and revisions a day's MCP hash already records, or null when the store did not say.
+ * Its own try/catch, for the reason readSignerHosts() has one.
+ *
+ * @param {{ url: string, token: string }} store @param {string} day @param {typeof fetch} fetchImpl
+ * @returns {Promise<{ names: Set<string>, versions: Set<string> } | null>}
+ */
+async function readMcpNamed(store, day, fetchImpl) {
+  try {
+    const response = await pipeline(store, [['HKEYS', mcpKeyFor(day)]], fetchImpl);
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const fields = Array.isArray(payload) ? payload[0]?.result : null;
+    if (!Array.isArray(fields)) return null;
+    return mcpNamedFrom(fields);
   } catch {
     return null;
   }

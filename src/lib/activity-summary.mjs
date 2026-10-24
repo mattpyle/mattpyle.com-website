@@ -20,8 +20,16 @@
  * buckets with no store and no deploy. Same split as agent-traffic.mjs itself.
  */
 
-import { epochHour, hourStart, summarizeSigners, summarizeTraffic } from './agent-traffic.mjs';
-import { OTHER_SIGNER_HOST } from './agent-hits.mjs';
+import { epochHour, hourStart, summarizeMcp, summarizeSigners, summarizeTraffic } from './agent-traffic.mjs';
+import {
+  MAX_MCP_CLIENTS_PER_DAY,
+  MAX_MCP_VERSIONS_PER_DAY,
+  OTHER_MCP_CLIENT,
+  OTHER_MCP_VERSION,
+  OTHER_SIGNER_HOST,
+  UNNAMED_MCP_CLIENT,
+  UNSTATED_MCP_VERSION,
+} from './agent-hits.mjs';
 
 /** How many hour buckets the chart shows. One day, ending with the hour in progress. */
 export const CHART_HOURS = 24;
@@ -111,6 +119,37 @@ export const SIGNER_HOST_NOTES = Object.freeze({
  */
 export const SIGNERS_LEGEND =
   'Each row is a Web Bot Auth signature that verified against the key directory at this host, from a signer this site does not yet name. The host is the operator\'s domain, recorded alone; a signer this site names appears under its own name in By client.';
+
+/**
+ * The Clients row buckets, glossed the way FAMILY_NOTES glosses a family. Every other row of the
+ * table is a name or a revision a client gave.
+ */
+export const MCP_CLIENT_NOTES = Object.freeze({
+  [UNNAMED_MCP_CLIENT]: 'the request gave no name',
+  [OTHER_MCP_CLIENT]: `past the day's cap of ${MAX_MCP_CLIENTS_PER_DAY} names`,
+});
+
+export const MCP_VERSION_NOTES = Object.freeze({
+  [UNSTATED_MCP_VERSION]: 'the request gave no revision',
+  [OTHER_MCP_VERSION]: `past the day's cap of ${MAX_MCP_VERSIONS_PER_DAY} revisions`,
+});
+
+/**
+ * What one row of each MCP table proves, printed under it on every surface so the three renders say
+ * the same thing.
+ */
+export const MCP_CLIENTS_LEGEND =
+  'Each row is an initialize request to /mcp: the name the client gave itself and the protocol revision it asked for. The client chooses both, so a row shows what a piece of software says it is, not who runs it.';
+
+export const MCP_METHODS_LEGEND =
+  'Every POST to /mcp counts once under its JSON-RPC method, whether the server answered it or refused it. other-method covers any method not listed, a notification, and a body that is not a JSON-RPC request. server/discover is the discovery request of the 2026-07-28 protocol revision.';
+
+/**
+ * The sentence the "How this is counted" note on /activity, /activity.md and the `counts` field of
+ * /activity.json each carry, so the three say the same thing.
+ */
+export const MCP_COUNTS_NOTE =
+  'A POST to the MCP endpoint is also counted by its JSON-RPC method, and an initialize request by the client name and protocol revision it gives. A client name is the name of a piece of software, such as an editor or an inspector tool, and not of a person; it is stored alone, lowercased and cut to 64 characters, and nothing else in the request body is read.';
 
 /** Two-digit UTC hour, the form the chart's ticks are written in. @param {number} hour */
 function hourLabel(hour) {
@@ -212,9 +251,13 @@ export function utcStamp(at) {
  *
  * @param {Array<{ hour: number | null, event: string, family: string, path: string, count: number }>} rows
  * @param {Date} now
- * @param {{ signers?: Array<{ hour: number | null, host: string, count: number }> }} [extra]
+ * `mcp` is the third (flattenMcpHashes() in agent-traffic.mjs), for the same reason: the census
+ * counts are second counts of requests that are already in `rows` as `surface` hits on /mcp.
+ *
+ * @param {{ signers?: Array<{ hour: number | null, host: string, count: number }>,
+ *           mcp?: ReturnType<typeof import('./agent-traffic.mjs').flattenMcpHashes> }} [extra]
  */
-export function buildActivity(rows, now = new Date(), { signers = [] } = {}) {
+export function buildActivity(rows, now = new Date(), { signers = [], mcp = [] } = {}) {
   const summary = summarizeTraffic(rows, now);
   const hours = hourlySeries(rows, now);
   const lastHour = lastHourRows(rows, now);
@@ -239,6 +282,12 @@ export function buildActivity(rows, now = new Date(), { signers = [] } = {}) {
      * signature came from a signer in KNOWN_SIGNERS, which is the state the table exists to reach.
      */
     signers: summarizeSigners(signers, now),
+    /**
+     * The MCP census: the method mix (a row for each counted method, zeros included) and the
+     * Clients table (name and protocol revision of every initialize). Both are empty of rows,
+     * not absent, before any client has called /mcp.
+     */
+    mcp: summarizeMcp(mcp, now),
     pages: summary.pages,
     /**
      * Which of this site's pages named bots have read, from the `page` event class.

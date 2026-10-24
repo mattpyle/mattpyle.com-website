@@ -1,6 +1,17 @@
 import type { APIRoute } from 'astro';
-import { SIGNERS_LEGEND, SIGNER_HOST_NOTES, buildActivity, utcStamp, verificationLabel } from '../lib/activity-summary.mjs';
-import { flattenSignerHashes, flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import {
+  MCP_CLIENTS_LEGEND,
+  MCP_CLIENT_NOTES,
+  MCP_COUNTS_NOTE,
+  MCP_METHODS_LEGEND,
+  MCP_VERSION_NOTES,
+  SIGNERS_LEGEND,
+  SIGNER_HOST_NOTES,
+  buildActivity,
+  utcStamp,
+  verificationLabel,
+} from '../lib/activity-summary.mjs';
+import { flattenMcpHashes, flattenSignerHashes, flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 import { SITE_ORIGIN } from '../data/site-origin.mjs';
 
@@ -55,7 +66,10 @@ export const GET: APIRoute = async () => {
   const renderedAt = new Date();
   const traffic = await readAgentTraffic({ now: renderedAt });
   const activity = traffic.ok
-    ? buildActivity(flattenTraffic(traffic), renderedAt, { signers: flattenSignerHashes(traffic.signerHashes) })
+    ? buildActivity(flattenTraffic(traffic), renderedAt, {
+        signers: flattenSignerHashes(traffic.signerHashes),
+        mcp: flattenMcpHashes(traffic.mcpHashes),
+      })
     : null;
 
   const sections: string[] = [
@@ -167,6 +181,38 @@ export const GET: APIRoute = async () => {
     if (activity.signers.omitted > 0) {
       sections.push(`${activity.signers.omitted} further host(s) below the top rows are not shown.`);
     }
+
+    sections.push(
+      '## MCP clients',
+      MCP_CLIENTS_LEGEND,
+      activity.mcp.clients.rows.length > 0
+        ? table(
+            ['Client', 'Protocol version', '7 days', '30 days'],
+            activity.mcp.clients.rows.map(row => {
+              const clientNote = MCP_CLIENT_NOTES[row.name as keyof typeof MCP_CLIENT_NOTES];
+              const versionNote = MCP_VERSION_NOTES[row.protocolVersion as keyof typeof MCP_VERSION_NOTES];
+              return [
+                clientNote ? `${row.name} (${clientNote})` : (row.name ?? ''),
+                versionNote ? `${row.protocolVersion} (${versionNote})` : (row.protocolVersion ?? ''),
+                row.week,
+                row.month,
+              ];
+            })
+          )
+        : 'No client has sent an initialize request to the MCP endpoint yet.'
+    );
+    if (activity.mcp.clients.omitted > 0) {
+      sections.push(`${activity.mcp.clients.omitted} further client(s) below the top rows are not shown.`);
+    }
+
+    sections.push(
+      '## MCP methods',
+      MCP_METHODS_LEGEND,
+      table(
+        ['Method', '7 days', '30 days'],
+        activity.mcp.methods.rows.map(row => [row.method, row.week, row.month])
+      )
+    );
   } else if (traffic.ok) {
     sections.push('Nothing has been counted yet.');
   } else {
@@ -175,7 +221,7 @@ export const GET: APIRoute = async () => {
 
   sections.push(
     '## How this is counted',
-    "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+    `Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. ${MCP_COUNTS_NOTE} What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.`
   );
 
   return new Response(`${sections.join('\n\n')}\n`, {
