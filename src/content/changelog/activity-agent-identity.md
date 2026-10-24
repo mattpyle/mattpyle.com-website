@@ -1,7 +1,7 @@
 ---
-title: "/activity shows who an agent is, not only what it fetched"
+title: "/activity shows who an agent is"
 summary: "/activity now shows how many agent hits proved who sent them, names the key directories behind signatures the site does not yet recognise, and lists the MCP clients that give a name and a protocol revision."
-seoTitle: "/activity now shows who an agent is, not only what it fetched"
+seoTitle: "/activity now shows who an agent is"
 seoDescription: "The /activity page splits agent hits into signed, IP-verified and claimed, names unrecognised Web Bot Auth signers, and counts MCP clients and methods."
 date: 2026-10-24
 publishedAt: 2026-10-24T00:35:00-07:00
@@ -75,7 +75,7 @@ The Clients table holds five rows today, and all five are this site's own probes
 | architect-review-legacy | 2025-06-18 | 1 |
 | census-check | 2025-06-18 | 1 |
 
-No outside client has named itself yet. Of the ten POSTs, two named no client. So the table shows the shape of the census, not a finding.
+No outside client has named itself yet. Of the ten POSTs, two named no client. So the table shows the shape of the census.
 
 Since 2026-10-24, `/mcp` also speaks the 2026-07-28 revision of the protocol. A client on that revision gives its name and version in the `_meta` envelope of every request. It adds a Clients row on any request, with no handshake. A 2025-era client still names itself once per session, in `initialize`, so its row counts sessions and a 2026-07-28 row counts requests.
 
