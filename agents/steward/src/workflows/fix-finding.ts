@@ -3,7 +3,7 @@ import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 // Pure, no imports of its own: the same parser and the same refusal rule the
 // PR body and the tests hold.
-import { fixRefusal, parseFindingBody, parsePrUrl } from '../lib/findings.js';
+import { defectFixRefusal, parseFindingBody, parsePrUrl } from '../lib/findings.js';
 import type { FixerDiffReview } from '../lib/diff-review.js';
 import type { FixerSiteChecks } from '../lib/fixer.js';
 import type { VerifyCheck, VerifyCheckResult } from '../lib/verify-checks.js';
@@ -33,7 +33,7 @@ import type { VerifyCheck, VerifyCheckResult } from '../lib/verify-checks.js';
  * quotes is one string in the history. So are the checks, the production
  * origin they name and the preview's origin: each is an activity result.
  *
- * **The gate** is {@link fixRefusal}: approved, `kind: defect`, a cause and a
+ * **The gate** is {@link defectFixRefusal}: approved, `kind: defect`, a cause and a
  * measure. A finding that fails it ends the workflow as `FindingNotFixable`
  * before a model is called.
  *
@@ -409,7 +409,7 @@ export async function fixFindingWorkflow(input: FixFindingInput): Promise<FixFin
   wf.setHandler(fixFindingStateQuery, () => state);
 
   const finding = await reading.readFinding(input.repo, input.findingPath);
-  const refusal = fixRefusal(finding.data, parseFindingBody(finding.text));
+  const refusal = defectFixRefusal(finding.data, parseFindingBody(finding.text));
   if (refusal) {
     throw wf.ApplicationFailure.nonRetryable(
       `${input.key} does not go to the fixer: ${refusal}.`,

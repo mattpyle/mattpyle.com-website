@@ -222,11 +222,20 @@ test('a proposed finding is refused with its status', async () => {
   });
 });
 
-test('an approved opportunity is refused before a run starts', async () => {
+test('an approved opportunity that names no page is refused before a run starts', async () => {
   const key = 'one-fix-path-opportunity--page';
   const h = harness(key, { ...approvedFile(), kind: 'opportunity' });
   await withWorkers(h.activities, async () => {
-    await assert.rejects(requestFix(h.deps, SITE, key), /its kind is opportunity, not defect/);
+    await assert.rejects(requestFix(h.deps, SITE, key), /names no page/);
+    await assert.rejects(client.workflow.getHandle(findingWorkflowId(SITE, key)).describe(), WorkflowNotFoundError);
+  });
+});
+
+test('an approved direction is refused before a run starts', async () => {
+  const key = 'one-fix-path-direction--page';
+  const h = harness(key, { ...approvedFile(), kind: 'direction' });
+  await withWorkers(h.activities, async () => {
+    await assert.rejects(requestFix(h.deps, SITE, key), /its kind is direction, not defect or opportunity/);
     await assert.rejects(client.workflow.getHandle(findingWorkflowId(SITE, key)).describe(), WorkflowNotFoundError);
   });
 });

@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  defectFixRefusal,
   findingHandoffPath,
+  findingPages,
   fixBranch,
   fixRefusal,
   fixWorkflowId,
@@ -53,10 +55,109 @@ test('the fixer takes an approved defect with a cause and a measure, and names w
   assert.equal(fixRefusal(data(DEFECT_FINDING), defect), null);
   assert.match(fixRefusal({ ...data(DEFECT_FINDING), status: 'proposed' }, defect) ?? '', /status is proposed, not approved/);
   assert.match(fixRefusal({ ...data(DEFECT_FINDING), status: 'fixing' }, defect) ?? '', /status is fixing/);
-  assert.match(fixRefusal(data(OPPORTUNITY_FINDING), parseFindingBody(OPPORTUNITY_FINDING)) ?? '', /kind is opportunity, not defect/);
   assert.match(fixRefusal({ status: 'approved' }, defect) ?? '', /kind is unset/);
   assert.match(fixRefusal(data(DEFECT_FINDING), { ...defect, cause: null }) ?? '', /names no cause/);
   assert.match(fixRefusal(data(DEFECT_FINDING), { ...defect, measure: null }) ?? '', /no "How to measure"/);
+});
+
+/** The first real case: one link to add on one page, filed with a verify check on that page. */
+const ONE_PAGE = [
+  '---',
+  'key: study-uncited--changelog-entry',
+  'status: approved',
+  'kind: opportunity',
+  'verdict_reason: "approve"',
+  'verify:',
+  '  - url: "https://www.mattpyle.com/changelog/agent-reading-budget/"',
+  '    kind: text',
+  '    expect:',
+  '      contains: "peec.ai"',
+  '---',
+  '',
+  '# The entry rests every number on a study and never links to it',
+  '',
+  '## What happened',
+  '',
+  '- URL: https://www.mattpyle.com/changelog/agent-reading-budget/',
+  '- What happened: the page has 0 occurrences of `peec.ai`.',
+  '- Cause, from the source, if found: `src/content/changelog/agent-reading-budget.md` names the study with no link.',
+  '',
+  '## What would serve them',
+  '',
+  "Link the study in the entry's first sentence. Effort S.",
+  '',
+  '## How to measure',
+  '',
+  'The entry links to peec.ai (the verify check).',
+  '',
+].join('\n');
+
+/** The same finding with its verify block cut and its "What would serve them" replaced. */
+const withoutVerify = (serve: string) =>
+  ONE_PAGE.replace(/verify:\n(  .*\n)+/, '').replace(/^Link the study.*$/m, serve);
+
+test('the fixer takes an approved opportunity whose verify block names one page, with no cause asked', () => {
+  const parsed = parseFindingBody(ONE_PAGE);
+  assert.equal(fixRefusal(data(ONE_PAGE), parsed), null);
+  assert.equal(fixRefusal(data(ONE_PAGE), { ...parsed, cause: null }), null, 'an opportunity needs no cause');
+  assert.deepEqual(findingPages(data(ONE_PAGE), parsed), ['/changelog/agent-reading-budget']);
+});
+
+test('a verify block that checks one page twice, or the page with and without its slash, is still one page', () => {
+  const twice = ONE_PAGE.replace(
+    '      contains: "peec.ai"\n---',
+    '      contains: "peec.ai"\n  - url: "https://www.mattpyle.com/changelog/agent-reading-budget"\n    kind: markdown\n    expect:\n      contains: "peec.ai"\n---',
+  );
+  const parsed = parseFindingBody(twice);
+  assert.equal(fixRefusal(data(twice), parsed), null);
+  assert.equal(findingPages(data(twice), parsed).length, 1);
+});
+
+test('an opportunity with no verify block is judged on the page path in "What would serve them"', () => {
+  const one = withoutVerify('On `/about/`, link the repository from the first paragraph. Effort S.');
+  assert.equal(fixRefusal(data(one), parseFindingBody(one)), null);
+
+  const url = withoutVerify('On https://www.mattpyle.com/about/, link the repository (see src/content/x.md).');
+  assert.deepEqual(findingPages(data(url), parseFindingBody(url)), ['/about']);
+  assert.equal(fixRefusal(data(url), parseFindingBody(url)), null);
+
+  const sentence = withoutVerify('Add the link to /llms.txt. Both and/or either work.');
+  assert.deepEqual(findingPages(data(sentence), parseFindingBody(sentence)), ['/llms.txt']);
+});
+
+test('an opportunity that names several pages, or none, is refused with the reason', () => {
+  const several = ONE_PAGE.replace(
+    '      contains: "peec.ai"\n---',
+    '      contains: "peec.ai"\n  - url: "https://www.mattpyle.com/about/"\n    kind: text\n    expect:\n      contains: "x"\n---',
+  );
+  assert.match(fixRefusal(data(several), parseFindingBody(several)) ?? '', /names more than one page \(\/changelog\/agent-reading-budget, \/about\)/);
+
+  const body = withoutVerify('Link it from `/about/` and from `/writing/`.');
+  assert.match(fixRefusal(data(body), parseFindingBody(body)) ?? '', /names more than one page/);
+
+  const none = withoutVerify('A styled feed, or one line that says what to do with the link.');
+  assert.match(fixRefusal(data(none), parseFindingBody(none)) ?? '', /names no page/);
+  assert.match(fixRefusal(data(OPPORTUNITY_FINDING), parseFindingBody(OPPORTUNITY_FINDING)) ?? '', /names no page/);
+});
+
+test('an opportunity still needs approval, a title and a measure', () => {
+  const parsed = parseFindingBody(ONE_PAGE);
+  assert.match(fixRefusal({ ...data(ONE_PAGE), status: 'proposed' }, parsed) ?? '', /status is proposed, not approved/);
+  assert.match(fixRefusal(data(ONE_PAGE), { ...parsed, measure: null }) ?? '', /no "How to measure"/);
+  assert.match(fixRefusal(data(ONE_PAGE), { ...parsed, title: '' }) ?? '', /no title line/);
+});
+
+test('the fixer refuses a direction, even one that names a single page', () => {
+  const direction = ONE_PAGE.replace('kind: opportunity', 'kind: direction');
+  assert.match(fixRefusal(data(direction), parseFindingBody(direction)) ?? '', /kind is direction, not defect or opportunity/);
+});
+
+test('the custom fixer keeps the defect-only gate', () => {
+  const parsed = parseFindingBody(ONE_PAGE);
+  assert.equal(fixRefusal(data(ONE_PAGE), parsed), null);
+  assert.match(defectFixRefusal(data(ONE_PAGE), parsed) ?? '', /kind is opportunity, not defect/);
+  const defect = parseFindingBody(DEFECT_FINDING);
+  assert.equal(defectFixRefusal(data(DEFECT_FINDING), defect), null);
 });
 
 const PR = 'https://github.com/mattpyle/mattpyle.com-website/pull/312';

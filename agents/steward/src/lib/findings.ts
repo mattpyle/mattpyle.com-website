@@ -388,16 +388,88 @@ export function parseFindingBody(text: string): ParsedFinding {
 }
 
 /**
- * Why a finding cannot go to the fixer, or null when it can (the card's
- * decision 4): approved, a defect, with a cause named in the source and a
- * measure to verify against. Opportunities and directions stay Matt's.
+ * The custom fixer's gate (the card's decision 4): approved, a defect, with a
+ * cause named in the source and a measure to verify against. The frozen
+ * `fixFindingWorkflow` keeps this rule so its replays do not move; every other
+ * caller uses {@link fixRefusal}.
  */
-export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding): string | null {
+export function defectFixRefusal(data: Record<string, unknown>, parsed: ParsedFinding): string | null {
   if (data.status !== 'approved') return `its status is ${String(data.status ?? 'unset')}, not approved`;
   if (data.kind !== 'defect') return `its kind is ${String(data.kind ?? 'unset')}, not defect`;
   if (!parsed.title) return 'it has no title line';
   if (!parsed.cause) return 'its "What happened" names no cause';
   if (!parsed.measure) return 'it has no "How to measure"';
+  return null;
+}
+
+/** `/about/` and `/about` are one page; a query or fragment names the same page. */
+function pagePath(raw: string): string | null {
+  let pathname: string;
+  try {
+    pathname = new URL(raw, 'https://page.invalid').pathname;
+  } catch {
+    return null;
+  }
+  const trimmed = pathname.replace(/\/+$/, '');
+  return trimmed === '' ? '/' : trimmed;
+}
+
+/**
+ * The pages a finding's fix is about, as distinct paths: the URLs of its
+ * `verify` checks, or, when that block is empty, the URLs and the leading-slash
+ * paths in the body's "What would serve them". A source path such as
+ * `src/content/x.md` has a letter before its slash and is not a page.
+ */
+export function findingPages(data: Record<string, unknown>, parsed: ParsedFinding): string[] {
+  const pages = new Set<string>();
+  const add = (raw: string) => {
+    const path = pagePath(raw);
+    if (path) pages.add(path);
+  };
+
+  if (Array.isArray(data.verify)) {
+    for (const check of data.verify) {
+      const url = check && typeof check === 'object' ? (check as { url?: unknown }).url : undefined;
+      for (const one of Array.isArray(url) ? url : [url]) if (typeof one === 'string') add(one);
+    }
+  }
+  if (pages.size > 0) return [...pages];
+
+  const serve = parsed.sections['what would serve them'] ?? '';
+  const bare = serve.replace(/https?:\/\/[^\s)\]>"'`,;]+/g, (url) => {
+    add(url.replace(/[.:]+$/, ''));
+    return ' ';
+  });
+  for (const match of bare.matchAll(/(?<![\w./:@~-])\/[\w~%-]+(?:[\w.~%/-]*[\w~%/-])?/g)) add(match[0]);
+  return [...pages];
+}
+
+/**
+ * Why a finding cannot go to the fixer, or null when it can: approved, with a
+ * title and a measure to verify against, and either
+ *
+ * 1. a defect that names its cause in the source, or
+ * 2. an opportunity whose fix is one change on one page, told by
+ *    {@link findingPages}. A cause is not asked of it: an opportunity has none.
+ *
+ * Directions, and opportunities that name several pages or none, stay a
+ * person's.
+ */
+export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding): string | null {
+  if (data.kind !== 'opportunity') {
+    if (data.status === 'approved' && data.kind !== 'defect') {
+      return `its kind is ${String(data.kind ?? 'unset')}, not defect or opportunity`;
+    }
+    return defectFixRefusal(data, parsed);
+  }
+  if (data.status !== 'approved') return `its status is ${String(data.status ?? 'unset')}, not approved`;
+  if (!parsed.title) return 'it has no title line';
+  if (!parsed.measure) return 'it has no "How to measure"';
+  const pages = findingPages(data, parsed);
+  if (pages.length === 0) {
+    return 'it names no page: its verify block has no URL and "What would serve them" gives no page path';
+  }
+  if (pages.length > 1) return `it names more than one page (${pages.join(', ')}), so its fix is not one change`;
   return null;
 }
 
@@ -451,7 +523,7 @@ const ISSUE_TITLE_MAX = 256;
 export const FIX_ISSUE_HEADER = [
   '@claude Fix the approved finding below.',
   '',
-  'Rules: one finding, one fix, one PR. Change only what the cause needs; no adjacent tidying. Run `npm test` and `npm run check` before you push and leave both passing. Open the PR yourself. Keep the PR body short: what changed, why, and the evidence. The PR is done when the "How to measure" check passes on the Vercel preview.',
+  'Rules: one finding, one fix, one PR. Change only what the finding needs; no adjacent tidying. The Verdict line below is the scope: a part it rejects is out of scope. Run `npm test` and `npm run check` before you push and leave both passing. Open the PR yourself. Keep the PR body short: what changed, why, and the evidence. The PR is done when the "How to measure" check passes on the Vercel preview.',
   '',
   '---',
   '',
@@ -473,12 +545,16 @@ export function fixIssueTitle(text: string): string {
 }
 
 /**
- * `Verdict: approved. <reason>`, the line the spike put under the H1. A reason
- * that already opens with "Approved" is kept as the verdict's own words.
+ * `Verdict: approved. <reason>`, the line the spike put under the H1 and the
+ * issue's scope line: the header tells the Action a part the reason rejects is
+ * out of scope. A reason that already opens with "Approved" is kept as the
+ * verdict's own words, so "approved in part: X; rejected: Y" reaches the Action
+ * verbatim. A bare "approve" adds nothing and is dropped; a reason that runs
+ * over several lines is joined to one.
  */
 export function fixIssueVerdictLine(reason: unknown): string {
-  const text = typeof reason === 'string' ? reason.trim() : '';
-  if (!text) return 'Verdict: approved.';
+  const text = typeof reason === 'string' ? reason.replace(/\s+/g, ' ').trim() : '';
+  if (!text || /^approved?\.?$/i.test(text)) return 'Verdict: approved.';
   if (/^approved\b/i.test(text)) return `Verdict: a${text.slice(1)}`;
   return `Verdict: approved. ${text}`;
 }

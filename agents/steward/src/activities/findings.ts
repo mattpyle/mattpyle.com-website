@@ -473,9 +473,11 @@ async function findOpenIssue(repo: string, marker: string): Promise<{ number: nu
  * 27): one issue in the site repository, the finding file as its body under
  * the spike's six-line header, titled with the finding's H1.
  *
- * **The gate first.** {@link fixRefusal}, the rule the custom fixer ran: an
- * approved defect with a cause and a measure. A finding that fails it is
- * `FindingNotFixable` and no issue opens.
+ * **The gate first.** {@link fixRefusal}: an approved defect with a cause and a
+ * measure, or an approved opportunity with a measure whose fix is one change
+ * on one page. A finding that fails it is `FindingNotFixable` and no issue
+ * opens. The verdict reason becomes the body's `Verdict:` line, the scope the
+ * Action is told to keep to.
  *
  * **Idempotent on the finding key.** The body ends with a hidden marker naming
  * the finding, and an open issue that carries it is returned instead of a
