@@ -2,7 +2,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
-import { DEFECT_FINDING, DEFECT_KEY } from '../helpers/finding-fixtures.js';
+import { DEFECT_FINDING, DEFECT_KEY, OPPORTUNITY_FINDING, OPPORTUNITY_KEY } from '../helpers/finding-fixtures.js';
 import { awaitFixPr, openFixIssue, readSiteAutoFix, siteAutoFix } from '../../src/activities/findings.js';
 import {
   FIX_ISSUE_HEADER,
@@ -65,6 +65,68 @@ test('the verdict line keeps a reason that opens with "Approved" and prefixes an
   assert.equal(fixIssueVerdictLine('Add the Link header in middleware.ts.'), 'Verdict: approved. Add the Link header in middleware.ts.');
   assert.equal(fixIssueVerdictLine(''), 'Verdict: approved.');
   assert.equal(fixIssueVerdictLine(null), 'Verdict: approved.');
+});
+
+test('a bare "approve" adds nothing, and a reason over several lines stays one line', () => {
+  assert.equal(fixIssueVerdictLine('approve'), 'Verdict: approved.');
+  assert.equal(fixIssueVerdictLine('Approved.'), 'Verdict: approved.');
+  assert.equal(
+    fixIssueVerdictLine('Approved in part: link the study.\n  Rejected: the rewrite of the second paragraph.'),
+    'Verdict: approved in part: link the study. Rejected: the rewrite of the second paragraph.',
+  );
+});
+
+test('a partial approval reaches the Action word for word, as the line under the H1, and the header makes it the scope', () => {
+  const reason = 'Approved in part: link the study in the first sentence; rejected: rewriting the second paragraph.';
+  const body = fixIssueBody(SITE, OPPORTUNITY_KEY, OPPORTUNITY_FINDING, reason);
+  const lines = body.split('\n');
+  const h1 = lines.findIndex((line) => line.startsWith('# '));
+  assert.equal(lines[h1 + 2], 'Verdict: approved in part: link the study in the first sentence; rejected: rewriting the second paragraph.');
+  assert.match(lines[2], /The Verdict line below is the scope: a part it rejects is out of scope\./);
+  assert.equal(FIX_ISSUE_HEADER.split('\n').length - 1, 6, 'the header keeps its six lines');
+});
+
+test('openFixIssue opens an issue for an approved one-page opportunity, with its verdict reason as the scope', async () => {
+  const key = 'content-reading-budget-study-uncited--changelog-agent-reading-budget';
+  const finding = [
+    '---',
+    `key: ${key}`,
+    'status: approved',
+    'kind: opportunity',
+    'verdict_reason: "Approved in part: link the study; rejected: restyle the entry."',
+    'verify:',
+    '  - url: "https://www.mattpyle.com/changelog/agent-reading-budget/"',
+    '    kind: text',
+    '    expect:',
+    '      contains: "peec.ai"',
+    '---',
+    '',
+    '# The entry never links to its study',
+    '',
+    '## What would serve them',
+    '',
+    'Link the study in the first sentence.',
+    '',
+    '## How to measure',
+    '',
+    'The entry links to peec.ai.',
+    '',
+  ].join('\n');
+  const path = `sites/${SITE}/findings/${key}.md`;
+  const gh = seed(finding, { [path]: finding });
+  const issue = await openFixIssue({ repo: REPO, site: SITE, key, findingPath: path, supersedes: null });
+  assert.equal(issue.reused, false);
+  assert.equal(gh.issues.length, 1);
+  const body = gh.issues[0].body;
+  assert.ok(body.includes('\nVerdict: approved in part: link the study; rejected: restyle the entry.\n'), 'the scope line, read back');
+  assert.ok(body.includes('## How to measure'));
+  assert.ok(body.trimEnd().endsWith(fixIssueMarker(SITE, key)));
+});
+
+test('a direction opens no issue', async () => {
+  const gh = seed(DEFECT_FINDING.replace('kind: defect', 'kind: direction'));
+  await assert.rejects(open(), (err: unknown) => err instanceof ApplicationFailure && err.type === 'FindingNotFixable');
+  assert.equal(gh.issues.length, 0);
 });
 
 test('the title is the H1, cut to GitHub\'s 256 characters', () => {
