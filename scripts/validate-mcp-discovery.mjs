@@ -73,10 +73,11 @@
  *    `.js` file that does not exist. The regex is the pin the AUDIT_VERSION docblock asks for,
  *    "anything that cannot import this is pinned against it by a test rather than left to agree by
  *    hand", and if the declaration's shape ever changes this fails loudly instead of skipping.
- * 4. `remotes[0].supportedProtocolVersions` is the SDK's `SUPPORTED_PROTOCOL_VERSIONS`, exactly and
- *    in order. This is the field that drifts on its own: the endpoint negotiates whatever the SDK
- *    it is built against supports, so an SDK upgrade silently makes the card understate or
- *    overstate the endpoint. Measured against production on 2026-08-27, an `initialize` for each of
+ * 4. `remotes[0].supportedProtocolVersions` is `SERVED_PROTOCOL_VERSIONS`, exactly and in order:
+ *    the 2026-07-28 revision, then the SDK's 2025-era list. This is the field that drifts on its
+ *    own: the endpoint answers whatever the SDK it is built against supports, so an SDK upgrade
+ *    silently makes the card understate or overstate the endpoint. tests/mcp-protocol.test.mjs
+ *    holds the first entry to what `server/discover` reports. Measured against production on 2026-08-27, an `initialize` for each of
  *    the five was echoed back and an unsupported version fell back to the newest.
  * 5. The fast-tier-only rule, carried over from the draft document above. It costs more here: the
  *    schema caps `description` at 100 characters, so naming the fast tool and staying silent about
@@ -86,8 +87,8 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js';
 import {
+  SERVED_PROTOCOL_VERSIONS,
   SERVER_NAME,
   TOOL_NAME,
   DEEP_TOOL_NAME,
@@ -209,10 +210,10 @@ if (cardFailures.length === 0) {
   }
 
   const declared = remote?.supportedProtocolVersions ?? [];
-  if (declared.join(',') !== SUPPORTED_PROTOCOL_VERSIONS.join(',')) {
+  if (declared.join(',') !== SERVED_PROTOCOL_VERSIONS.join(',')) {
     cardFailures.push(
-      `remotes[0].supportedProtocolVersions must be the SDK's SUPPORTED_PROTOCOL_VERSIONS ` +
-        `(${SUPPORTED_PROTOCOL_VERSIONS.join(', ')}); found ${declared.join(', ') || 'nothing'}`
+      `remotes[0].supportedProtocolVersions must be SERVED_PROTOCOL_VERSIONS from ` +
+        `src/lib/mcp-audit-server.mjs (${SERVED_PROTOCOL_VERSIONS.join(', ')}); found ${declared.join(', ') || 'nothing'}`
     );
   }
 

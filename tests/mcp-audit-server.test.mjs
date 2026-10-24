@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createAuditServer, originFor, SERVER_NAME, TOOL_NAME } from '../src/lib/mcp-audit-server.mjs';
 
 // The MCP surface /mcp serves, driven by a real MCP client over an in-memory transport pair.

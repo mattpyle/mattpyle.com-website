@@ -9,6 +9,7 @@ import {
   createAuditServer,
   DEEP_TOOL_NAME,
   GET_AUDIT_TOOL_NAME,
+  MCP_HANDLER_OPTIONS,
   refusalForBody,
   SERVER_NAME,
   TOOL_NAME,
@@ -18,7 +19,7 @@ import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { readAuditView, startDeepAudit } from '../lib/mcp-temporal.mjs';
 import { MCP_ENDPOINT_PATH, recordHit, recordMcpRequest } from '../lib/agent-hits.mjs';
 import { identifyRequest } from '../lib/web-bot-auth.mjs';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { createMcpHandler } from '@modelcontextprotocol/server';
 import { ipAddress, waitUntil } from '@vercel/functions';
 
 /**
@@ -51,15 +52,24 @@ import { ipAddress, waitUntil } from '@vercel/functions';
  * return a JSON-RPC error when Cloud is unreachable, and are not registered at all when the
  * deployment carries no Temporal configuration, while the fast tool keeps answering.
  *
- * **Stateless, per the stage-2 card's transport decision.** `sessionIdGenerator: undefined`, so
- * every POST is self-contained: no session ID, no server-side session state, nothing for a second
- * request to resume. That is the only shape that fits a serverless function, where consecutive
- * requests may land on different instances, and it is all a one-shot synchronous audit needs. The
- * server and transport are built per request rather than at module scope for the same reason — an
- * instance kept warm by Fluid Compute must not carry one caller's transport into another's request.
+ * **Two protocol revisions on one endpoint.** `createMcpHandler` from the SDK's v2 server package
+ * serves the 2026-07-28 revision (`server/discover`, the `_meta` envelope on every request, the
+ * `Mcp-Method` and `Mcp-Name` headers checked against the body) and, by its default
+ * `legacy: 'stateless'`, 2025-era clients through the same factory, with no `isLegacyRequest`
+ * branch here. A 2026-07-28 reply is one JSON body. A 2025-era reply is one SSE event, which the
+ * SDK's legacy leg does whatever `responseMode` says.
  *
- * `enableJsonResponse: true`: the answer is one JSON object, so an SSE stream would be a framing
- * for progress this endpoint does not report.
+ * **Stateless, per the stage-2 card's transport decision.** Neither era keeps a session: no session
+ * ID, no server-side state, nothing for a second request to resume. That is the only shape that
+ * fits a serverless function, where consecutive requests may land on different instances, and it is
+ * all a one-shot synchronous audit needs. The server and handler are built per request rather than
+ * at module scope for the same reason — an instance kept warm by Fluid Compute must not carry one
+ * caller's state into another's request.
+ *
+ * **No listen stream.** `subscriptions/listen` holds its response open until the client or the
+ * platform ends it, which on a Vercel function is a held invocation killed at its time limit. The
+ * server advertises no `listChanged` capability (src/lib/mcp-audit-server.mjs), so the SDK answers
+ * a listen request at once, with nothing to deliver.
  *
  * **Counted here, because the middleware cannot.** `middleware.ts` leaves `/mcp` out of its
  * matcher on purpose: a slash rule that reached it would 308 a JSON-RPC call. So the route counts
@@ -67,8 +77,9 @@ import { ipAddress, waitUntil } from '@vercel/functions';
  * refused batch and a rate-limited call data points like any other. `countRequest` writes two
  * things through `waitUntil`: the same `surface` hit the middleware writes for every other agent
  * surface, so `/mcp` joins By client and By surface, and the census (src/lib/agent-hits.mjs,
- * recordMcpRequest) of the JSON-RPC method and, for an `initialize`, the client name and protocol
- * revision. Neither write delays the response and neither can fail it.
+ * recordMcpRequest) of the JSON-RPC method and, for an `initialize` or a request carrying the
+ * 2026-07-28 `_meta` envelope, the client name and protocol revision. Neither write delays the
+ * response and neither can fail it.
  */
 export const prerender = false;
 
@@ -261,7 +272,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
   }
 
-  // Per request, both of them. A stateless transport holds no session, but it does hold the
+  // Per request, both of them. A stateless handler holds no session, but it does hold the
   // in-flight request's streams, and a warm function instance serves more than one caller.
   // Per request, so the success log line below can name the path this caller's audit took and how
   // long it took. Module scope would be one instance's running total rather than one call's fact.
@@ -300,21 +311,17 @@ export const POST: APIRoute = async ({ request }) => {
         }
       : {}),
   });
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
+  const handler = createMcpHandler(() => server, MCP_HANDLER_OPTIONS);
 
   try {
-    await server.connect(transport);
     // `parsedBody` because the body has already been read off the Request above, to decide the rate
     // limit. Reading it twice is not possible and re-wrapping it in a new Request would be a second
-    // place for the two copies to disagree.
-    const response = await transport.handleRequest(request, { parsedBody: body });
+    // place for the two copies to disagree. The handler takes the parsed body as an option.
+    const response = await handler.fetch(request, { parsedBody: body });
 
-    // Buffered before the transport closes rather than relayed. In JSON-response mode the body is
-    // already complete, so this costs nothing and removes the question of whether closing the
-    // transport can truncate a response still being read.
+    // Buffered before the handler closes rather than relayed. Both eras answer with one complete
+    // body (a listen request ends at once, see the docblock), so this costs nothing and removes the
+    // question of whether closing the handler can truncate a response still being read.
     const text = await response.text();
     log({
       path: '/mcp',
@@ -336,7 +343,7 @@ export const POST: APIRoute = async ({ request }) => {
       headers: { ...Object.fromEntries(response.headers), 'Cache-Control': 'no-store' },
     });
   } finally {
-    await server.close();
+    await handler.close();
   }
 };
 
