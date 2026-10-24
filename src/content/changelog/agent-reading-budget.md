@@ -12,7 +12,7 @@ tags: ["measurement", "agents"]
 draft: false
 ---
 
-Peec AI's study of Deep Research session logs (June 2026) found that an agent sees a capped window of a page on first read, about 5,700 characters at the median and about 8,000 at most, and that links eat it: real content fell from about 78% of the window on pages with under 20 links to about 33% on pages with 60 or more. A page is read in source order, so a header full of links is read before the first sentence of the body, whatever the screen shows.
+[Peec AI's study of Deep Research session logs](https://peec.ai/blog/how-chatgpt-deep-research-reads-your-site-what-the-logs-reveal) (June 2026) found that an agent sees a capped window of a page on first read, about 5,700 characters at the median and about 8,000 at most, and that links eat it: real content fell from about 78% of the window on pages with under 20 links to about 33% on pages with 60 or more. A page is read in source order, so a header full of links is read before the first sentence of the body, whatever the screen shows.
 
 This site now measures that number for itself.
 
