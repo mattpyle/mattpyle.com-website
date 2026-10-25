@@ -1,13 +1,13 @@
 {
-  "iso": "2026-10-24",
-  "timestamp": "2026-10-24T03:35:16-07:00",
+  "iso": "2026-10-25",
+  "timestamp": "2026-10-25T03:35:37-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Agentic Browsing rose from 4/4 to 6/6; all 28 pages passed all four public metrics.",
+  "commentary": "All 28 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-10-24",
+  "id": "2026-10-25",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -75,7 +75,7 @@
     {
       "url": "https://www.mattpyle.com/about/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -138,7 +138,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -180,7 +180,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
       "scores": {
-        "performance": 98,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -222,7 +222,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 98,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -243,7 +243,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -348,7 +348,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/public-scorecard/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -505,11 +505,11 @@
       "readingBudget": {
         "text": {
           "share": 78,
-          "measured": 4134
+          "measured": 4237
         },
         "markdown": {
           "share": 91,
-          "measured": 3642
+          "measured": 3749
         }
       }
     },
@@ -579,7 +579,7 @@
     {
       "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -621,7 +621,7 @@
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -640,9 +640,8 @@
       }
     }
   ],
-  "decision": "open-pr",
-  "reason": "Agentic Browsing 4/4→6/6",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/460",
+  "decision": "no-op",
+  "reason": "unchanged, published 1d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-10-24"
+  "archiveId": "2026-10-25"
 }
