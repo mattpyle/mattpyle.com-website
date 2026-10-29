@@ -1,6 +1,6 @@
 {
-  "iso": "2026-10-28",
-  "timestamp": "2026-10-28T03:35:38-07:00",
+  "iso": "2026-10-29",
+  "timestamp": "2026-10-29T03:35:38-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "97",
+      "value": "96",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 28 tested pages."
@@ -49,12 +49,12 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-10-28",
+  "id": "2026-10-29",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
       "scores": {
-        "performance": 100,
+        "performance": 97,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -75,7 +75,7 @@
     {
       "url": "https://www.mattpyle.com/about/",
       "scores": {
-        "performance": 100,
+        "performance": 96,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -138,7 +138,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/",
       "scores": {
-        "performance": 100,
+        "performance": 96,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -222,7 +222,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 99,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -243,7 +243,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -327,7 +327,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/public-changelog/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -348,7 +348,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/public-scorecard/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -369,7 +369,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/scorecard-run-history/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -390,7 +390,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/self-hosted-fonts/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -411,7 +411,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/site-live/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -516,7 +516,7 @@
     {
       "url": "https://www.mattpyle.com/steward/",
       "scores": {
-        "performance": 100,
+        "performance": 97,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -537,7 +537,7 @@
     {
       "url": "https://www.mattpyle.com/webmcp/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -579,7 +579,7 @@
     {
       "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -600,7 +600,7 @@
     {
       "url": "https://www.mattpyle.com/writing/hello-world/",
       "scores": {
-        "performance": 97,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -621,7 +621,7 @@
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "scores": {
-        "performance": 97,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -641,7 +641,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 4d ago (<= 7d threshold)",
+  "reason": "unchanged, published 5d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-10-28"
+  "archiveId": "2026-10-29"
 }
