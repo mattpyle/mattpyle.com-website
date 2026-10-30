@@ -289,6 +289,10 @@ export { AUDIT_TASK_QUEUE as QUEUE_AUDIT } from './lib/agent-audit/deep-contract
  * a queue whose worker never renders one.
  */
 export { AUDIT_FAST_TASK_QUEUE as QUEUE_AUDIT_FAST } from './lib/agent-audit/deep-contract.js';
+import { AUDIT_FAST_TASK_QUEUE, AUDIT_TASK_QUEUE } from './lib/agent-audit/deep-contract.js';
+
+/** The queues the laptop worker (`src/worker.ts`) serves. `steward up` prints this list and the worker creates one `Worker` per entry. */
+export const LAPTOP_WORKER_QUEUES: readonly string[] = [QUEUE_LIGHT, QUEUE_HEAVY, AUDIT_TASK_QUEUE, AUDIT_FAST_TASK_QUEUE];
 
 /**
  * How many activities the **hosted** worker runs at once. One, and it is a
