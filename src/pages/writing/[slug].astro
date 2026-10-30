@@ -112,7 +112,7 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
     {nextArticle && (
       <div class="post-next-wrap rd-section">
         <a href={`/writing/${nextArticle.id}/`} class="post-next">
-          <span class="post-next-label">next &middot; {formatSiteDate(nextArticle.data.date)}</span>
+          <span class="post-next-label">older &middot;{formatSiteDate(nextArticle.data.date)}</span>
           <span class="post-next-title">{nextArticle.data.title}</span>
         </a>
       </div>
