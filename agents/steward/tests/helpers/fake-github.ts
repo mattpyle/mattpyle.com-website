@@ -43,6 +43,12 @@ export interface FakeGitHub {
     stateReason: string | null;
     comments: string[];
   }>;
+  /** Every ref update, in order. `force` is what the request asked for. */
+  refUpdates: Array<{ branch: string; sha: string; force: boolean }>;
+  /** Commit messages per branch, oldest first, one per commit that landed. */
+  history(branch: string): string[];
+  /** Simulates another writer: one commit on `branch` that sets `path`. */
+  push(branch: string, path: string, text: string, message?: string): void;
   /** Every request, as `METHOD /path`, for asserting call shape and count. */
   calls: string[];
   /** The `owner/name` each request in `calls` addressed, index for index. */
@@ -105,6 +111,24 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const issues: FakeGitHub['issues'] = [];
   const calls: string[] = [];
   const repos: string[] = [];
+  const refUpdates: FakeGitHub['refUpdates'] = [];
+
+  // Git Data model: a head per branch, and a snapshot of the tree behind every
+  // commit sha, so a ref update can be checked for being a fast forward.
+  let seq = 0;
+  const heads = new Map<string, string>();
+  const snapshots = new Map<string, { files: Map<string, FakeRepoFile>; parent?: string; message: string }>();
+  const trees = new Map<string, Map<string, FakeRepoFile>>();
+  const blobs = new Map<string, string>();
+  const history = new Map<string, string[]>();
+  function advance(branch: string, message: string): string {
+    const sha = `commit-${++seq}`;
+    snapshots.set(sha, { files: new Map(branches.get(branch)), parent: heads.get(branch), message });
+    heads.set(branch, sha);
+    history.set(branch, [...(history.get(branch) ?? []), message]);
+    return sha;
+  }
+  advance(DEFAULT_BRANCH, 'seed');
 
   globalThis.fetch = (async (input: any, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -128,7 +152,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     if (method === 'GET' && refMatch) {
       const branch = decodeURIComponent(refMatch[1]);
       if (!branches.has(branch)) return response(404, { message: 'Not Found' });
-      return response(200, { object: { sha: `commit-${branch}` } });
+      return response(200, { object: { sha: heads.get(branch) } });
     }
 
     // POST /git/refs — create a branch. 422 when it exists, which is the signal
@@ -140,15 +164,63 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       }
       // Branching copies the tree, so a write to the branch cannot mutate base.
       branches.set(branch, new Map(branches.get(DEFAULT_BRANCH)));
+      heads.set(branch, heads.get(DEFAULT_BRANCH)!);
       return response(201, { ref: body.ref });
     }
 
-    // PATCH /git/refs/heads/{branch} — the force reset back to base.
+    // PATCH /git/refs/heads/{branch}. `force: true` is the reset back to base.
+    // Without it, GitHub accepts only a descendant of the current head.
     const patchRef = /^\/git\/refs\/heads\/(.+)$/.exec(route);
     if (method === 'PATCH' && patchRef) {
       const branch = decodeURIComponent(patchRef[1]);
-      branches.set(branch, new Map(branches.get(DEFAULT_BRANCH)));
-      return response(200, { ref: `refs/heads/${branch}` });
+      refUpdates.push({ branch, sha: String(body.sha), force: body.force === true });
+      if (body.force === true) {
+        branches.set(branch, new Map(branches.get(DEFAULT_BRANCH)));
+        heads.set(branch, heads.get(DEFAULT_BRANCH)!);
+        return response(200, { ref: `refs/heads/${branch}` });
+      }
+      const target = snapshots.get(String(body.sha));
+      if (!target || !branches.has(branch)) return response(422, { message: 'Object does not exist' });
+      if (target.parent !== heads.get(branch)) {
+        return response(422, { message: 'Update is not a fast forward' });
+      }
+      branches.set(branch, new Map(target.files));
+      heads.set(branch, String(body.sha));
+      history.set(branch, [...(history.get(branch) ?? []), target.message]);
+      return response(200, { ref: `refs/heads/${branch}`, object: { sha: body.sha } });
+    }
+
+    // The Git Data path the archive commits through: blob, commit read, tree, commit.
+    if (method === 'POST' && route === '/git/blobs') {
+      const sha = `blob-${++seq}`;
+      blobs.set(sha, Buffer.from(String(body.content), 'base64').toString('utf8'));
+      return response(201, { sha });
+    }
+    const getCommit = /^\/git\/commits\/(.+)$/.exec(route);
+    if (method === 'GET' && getCommit) {
+      const snap = snapshots.get(getCommit[1]);
+      if (!snap) return response(404, { message: 'Not Found' });
+      const treeSha = `tree-${getCommit[1]}`;
+      trees.set(treeSha, snap.files);
+      return response(200, { sha: getCommit[1], tree: { sha: treeSha } });
+    }
+    if (method === 'POST' && route === '/git/trees') {
+      const files = new Map(trees.get(String(body.base_tree)));
+      for (const entry of body.tree as Array<{ path: string; sha: string }>) {
+        const text = blobs.get(entry.sha);
+        if (text === undefined) return response(422, { message: 'blob does not exist' });
+        files.set(entry.path, { text, sha: shaOf(text) });
+      }
+      const sha = `tree-${++seq}`;
+      trees.set(sha, files);
+      return response(201, { sha });
+    }
+    if (method === 'POST' && route === '/git/commits') {
+      const files = trees.get(String(body.tree));
+      if (!files) return response(422, { message: 'tree does not exist' });
+      const sha = `commit-${++seq}`;
+      snapshots.set(sha, { files, parent: String(body.parents?.[0]), message: String(body.message) });
+      return response(201, { sha });
     }
 
     // GET /contents/{path}?ref=
@@ -202,7 +274,8 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       }
       const text = Buffer.from(String(body.content), 'base64').toString('utf8');
       tree.set(path, { text, sha: shaOf(text) });
-      return response(200, { commit: { sha: `commit-${shaOf(text)}` }, content: { sha: shaOf(text) } });
+      const commitSha = advance(branch, String(body.message));
+      return response(200, { commit: { sha: commitSha }, content: { sha: shaOf(text) } });
     }
 
     // GET /pulls?head=, or with no head every PR: the fix-PR wait's list.
@@ -299,6 +372,12 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     issues,
     calls,
     repos,
+    refUpdates,
+    history: (branch) => history.get(branch) ?? [],
+    push(branch, path, text, message = `external push to ${path}`) {
+      branches.get(branch)!.set(path, { text, sha: shaOf(text) });
+      advance(branch, message);
+    },
     file: (branch, path) => branches.get(branch)?.get(path),
     json(branch, path) {
       const file = branches.get(branch)?.get(path);

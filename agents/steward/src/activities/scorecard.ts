@@ -6,9 +6,10 @@ import {
 } from '../config.js';
 import {
   branchSha,
+  commitFiles,
   defaultBranch,
   ensureBranch,
-  isAlreadyExists,
+  fastForwardBranch,
   openOrUpdatePr,
   readRepoFile,
   resetBranch,
@@ -549,6 +550,9 @@ export interface ArchiveScorecardRunResult {
   committed: boolean;
 }
 
+/** Rebuilds after the archive branch moved, before the activity gives up. */
+const ARCHIVE_MOVED_RETRIES = 3;
+
 /**
  * Writes the full run — public metrics plus per-page raw detail — to the
  * private archive (spec §5.2). **Runs on every execution, published or not**
@@ -584,15 +588,28 @@ export interface ArchiveScorecardRunResult {
  * That is easy to hit — two manual runs in a day, or a `--dry-run` followed by
  * the real thing — and the destroyed record is the *only* copy.
  *
- * The atomic claim survives the move intact, in a nicer form. The filesystem
- * version needed `writeFile` with `flag: 'wx'` because a check-then-write is a
- * race; here, a Contents API `PUT` **with no `sha`** means "create, and fail if
- * this path exists", so the create is the claim and the retry loop walks
- * `<id>`, `<id>-2`, `<id>-3` exactly as before.
+ * ## One commit per run (2026-10-29)
  *
- * `latest.json` is still overwritten every run. It is a pointer at the newest
- * record, not a record of its own, so it is written with the sha it is
- * replacing.
+ * The record and `latest.json` used to be two Contents API writes, so two
+ * commits about a second apart, and Vercel starts a preview per push. On
+ * 2026-10-12 the two previews raced and the head one failed with
+ * `git_info_fail`, which turned a PR red with every check green. Both files now
+ * go in one commit through the Git Data API: blobs, a tree on `base_tree`, a
+ * commit, then a ref update.
+ *
+ * The ref update is never forced. A Contents `PUT` with no `sha` used to be the
+ * create-only claim; a tree write replaces what is at a path, so the activity
+ * reads whether `<id>.json` exists on the branch and walks `<id>`, `<id>-2`,
+ * `<id>-3` itself. A push that lands between that read and the ref update makes
+ * GitHub refuse the update as not a fast forward, so nothing is dropped and no
+ * name is taken twice. The activity then reads the branch again and rebuilds
+ * the commit, at most {@link ARCHIVE_MOVED_RETRIES} times before it throws.
+ *
+ * `latest.json` is overwritten every run. It is a pointer at the newest
+ * record, not a record of its own.
+ *
+ * The workflow issues the same commands as before, so this change carries no
+ * `patched` marker.
  */
 export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promise<ArchiveScorecardRunResult> {
   if (record.dryRun) {
@@ -606,36 +623,37 @@ export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promi
   const base = await defaultBranch();
   await ensureBranch(SCORECARD_ARCHIVE_BRANCH, await branchSha(base));
 
+  const latestPath = `${SCORECARD_ARCHIVE_REL}/latest.json`;
   let archiveId = record.id;
   let archivePath = '';
-  for (let n = 1; ; n++) {
-    archiveId = n === 1 ? record.id : `${record.id}-${n}`;
-    archivePath = `${SCORECARD_ARCHIVE_REL}/${archiveId}.json`;
-    const json = JSON.stringify({ ...record, archiveId }, null, 2) + '\n';
-    try {
-      // No `sha`: this must be a create. A collision comes back 422 rather than
-      // overwriting the earlier run's only copy of its per-page detail.
-      await writeRepoFile({
-        path: archivePath,
-        text: json,
-        message: `chore(scorecard): archive ${archiveId}`,
-        branch: SCORECARD_ARCHIVE_BRANCH,
-      });
-      break;
-    } catch (err) {
-      if (!isAlreadyExists(err)) throw err;
+  let moved = 0;
+  for (;;) {
+    const head = await branchSha(SCORECARD_ARCHIVE_BRANCH);
+    // Create-only, checked here because a tree write replaces whatever is at
+    // the path. A name taken between this read and the ref update is caught by
+    // the ref update below: the branch moved, so the whole pass reruns.
+    for (let n = 1; ; n++) {
+      archiveId = n === 1 ? record.id : `${record.id}-${n}`;
+      archivePath = `${SCORECARD_ARCHIVE_REL}/${archiveId}.json`;
+      if (!(await readRepoFile(archivePath, SCORECARD_ARCHIVE_BRANCH))) break;
     }
+    const json = JSON.stringify({ ...record, archiveId }, null, 2) + '\n';
+    const commit = await commitFiles({
+      parent: head,
+      message: `chore(scorecard): archive ${archiveId}`,
+      files: [
+        { path: archivePath, text: json },
+        { path: latestPath, text: json },
+      ],
+    });
+    if (await fastForwardBranch(SCORECARD_ARCHIVE_BRANCH, commit)) break;
+    if (++moved > ARCHIVE_MOVED_RETRIES) {
+      throw new Error(
+        `${SCORECARD_ARCHIVE_BRANCH} moved under ${ARCHIVE_MOVED_RETRIES + 1} archive attempts in a row; giving up.`,
+      );
+    }
+    log.info({ activity: 'archiveScorecardRun', id: record.id, moved }, 'archive branch moved — rebuilding from a fresh read');
   }
-
-  const latestPath = `${SCORECARD_ARCHIVE_REL}/latest.json`;
-  const latest = await readRepoFile(latestPath, SCORECARD_ARCHIVE_BRANCH);
-  await writeRepoFile({
-    path: latestPath,
-    text: JSON.stringify({ ...record, archiveId }, null, 2) + '\n',
-    message: `chore(scorecard): point latest at ${archiveId}`,
-    branch: SCORECARD_ARCHIVE_BRANCH,
-    sha: latest?.sha,
-  });
 
   await openOrUpdatePr({
     branch: SCORECARD_ARCHIVE_BRANCH,

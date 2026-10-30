@@ -30,7 +30,8 @@ import { gh } from './github.js';
  * The Contents API is used rather than the Git Data API (blob → tree → commit →
  * ref) for the same reason `github.ts` uses `fetch` rather than `octokit`: one
  * file per commit is exactly what these callers need, and the four-call dance
- * buys nothing when the tree has one changed entry.
+ * buys nothing when the tree has one changed entry. The exception is
+ * {@link commitFiles}, for a caller that needs several files in one commit.
  */
 
 /** `main`/`master`, whichever this repo actually uses. Never assumed. */
@@ -204,6 +205,71 @@ export async function writeRepoFile(input: WriteFileInput): Promise<WriteFileRes
     body: JSON.stringify(body),
   });
   return { commitSha: res.commit.sha as string, contentSha: res.content.sha as string };
+}
+
+export interface CommitFilesInput {
+  /** `owner/name`. Defaults to `GITHUB_REPO`. */
+  repo?: string;
+  /** The commit the new one is built on: the branch head the caller read. */
+  parent: string;
+  message: string;
+  /** Each entry replaces or adds the file at `path`; the rest of the tree is kept. */
+  files: Array<{ path: string; text: string }>;
+}
+
+/**
+ * Builds one commit holding every file in `files` on top of `parent`, through
+ * the Git Data API (blobs, a tree on `base_tree`, a commit), and returns its sha.
+ * No branch moves: the commit is unreachable until {@link fastForwardBranch}
+ * points a ref at it.
+ *
+ * Exists because two Contents API writes are two commits, and Vercel starts a
+ * preview deploy per push. The pair raced once and failed a PR check.
+ */
+export async function commitFiles(input: CommitFilesInput): Promise<string> {
+  const repo = input.repo ?? GITHUB_REPO;
+  const entries = [];
+  for (const file of input.files) {
+    const blob = await gh(`/repos/${repo}/git/blobs`, {
+      method: 'POST',
+      body: JSON.stringify({ content: Buffer.from(file.text, 'utf8').toString('base64'), encoding: 'base64' }),
+    });
+    entries.push({ path: file.path, mode: '100644', type: 'blob', sha: blob.sha as string });
+  }
+  const parent = await gh(`/repos/${repo}/git/commits/${input.parent}`);
+  const tree = await gh(`/repos/${repo}/git/trees`, {
+    method: 'POST',
+    body: JSON.stringify({ base_tree: parent.tree.sha, tree: entries }),
+  });
+  const commit = await gh(`/repos/${repo}/git/commits`, {
+    method: 'POST',
+    body: JSON.stringify({ message: input.message, tree: tree.sha, parents: [input.parent] }),
+  });
+  return commit.sha as string;
+}
+
+/**
+ * Moves `branch` to `sha` without `force`, so GitHub refuses unless `sha` is a
+ * descendant of the current head. Returns false when it refuses for that reason
+ * (the branch moved since the caller read it) and throws on any other failure.
+ */
+export async function fastForwardBranch(
+  branch: string,
+  sha: string,
+  repo: string = GITHUB_REPO,
+): Promise<boolean> {
+  try {
+    await gh(`/repos/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ sha, force: false }),
+    });
+    return true;
+  } catch (err) {
+    if (err instanceof ApplicationFailure && err.type === 'UnprocessableRequest' && /fast.?forward/i.test(err.message)) {
+      return false;
+    }
+    throw err;
+  }
 }
 
 /** Raised by {@link writeRepoFile} through `gh`'s 422 mapping when a create collided. */
