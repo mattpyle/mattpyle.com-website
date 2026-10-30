@@ -79,7 +79,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow` and `verifyFindingWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **laptop worker** (`steward up`, `src/worker.ts`)
-registers four of them, every queue but `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
+polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
 the three queues that depend on nothing local, each with a hand-written activity map: a worker that
 claimed `snapshotDraft` would fail it, because the container has no drafts, and a failed task is
 worse than an unclaimed one. `steward-findings` has the hosted worker alone: with a second poller on

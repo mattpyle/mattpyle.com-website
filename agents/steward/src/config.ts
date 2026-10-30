@@ -291,8 +291,19 @@ export { AUDIT_TASK_QUEUE as QUEUE_AUDIT } from './lib/agent-audit/deep-contract
 export { AUDIT_FAST_TASK_QUEUE as QUEUE_AUDIT_FAST } from './lib/agent-audit/deep-contract.js';
 import { AUDIT_FAST_TASK_QUEUE, AUDIT_TASK_QUEUE } from './lib/agent-audit/deep-contract.js';
 
+/**
+ * The queues a laptop worker polls. On Temporal Cloud the hosted worker owns the
+ * two audit queues, so the laptop polls only the local-file ones: a second poller
+ * runs old code after every audit merge until it restarts. Against the local dev
+ * server no hosted worker exists, so the laptop keeps all four. Pure so a test
+ * can pin both cases; the module constant below resolves it once.
+ */
+export function laptopWorkerQueues(isCloud: boolean): readonly string[] {
+  return isCloud ? [QUEUE_LIGHT, QUEUE_HEAVY] : [QUEUE_LIGHT, QUEUE_HEAVY, AUDIT_TASK_QUEUE, AUDIT_FAST_TASK_QUEUE];
+}
+
 /** The queues the laptop worker (`src/worker.ts`) serves. `steward up` prints this list and the worker creates one `Worker` per entry. */
-export const LAPTOP_WORKER_QUEUES: readonly string[] = [QUEUE_LIGHT, QUEUE_HEAVY, AUDIT_TASK_QUEUE, AUDIT_FAST_TASK_QUEUE];
+export const LAPTOP_WORKER_QUEUES: readonly string[] = laptopWorkerQueues(IS_TEMPORAL_CLOUD);
 
 /**
  * How many activities the **hosted** worker runs at once. One, and it is a
