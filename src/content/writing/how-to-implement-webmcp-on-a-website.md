@@ -145,8 +145,8 @@ Two things this implementation does, and why:
 To use a WebMCP tool, an agent makes two calls to the browser. `getTools()` lists the registered tools on the site, and `executeTool()` runs one. These calls go through five steps:
 
 1. The agent asks for the tool list. `getTools()` returns every registered tool with its `name`, `description`, and `inputSchema`. The agent reads the descriptions against what the user asked for and picks one.
-2. The agent calls `executeTool()` with the tool object and the arguments as a JSON string.
-3. The browser parses the string into an object and calls the tool's `execute` with it.
+2. The agent calls `executeTool()` with the tool object and the arguments as an object.
+3. The browser calls the tool's `execute` with that object.
 4. The browser serialises whatever `execute` returns back into a JSON string.
 5. The agent reads the result and decides what to do next: answer the user, call another tool, or stop.
 
@@ -179,7 +179,7 @@ In the DevTools console:
 
 ```js
 const tool = (await document.modelContext.getTools()).find(t => t.name === 'set_appearance');
-await document.modelContext.executeTool(tool, '{"mode":"retro"}');
+await document.modelContext.executeTool(tool, {"mode":"retro"});
 ```
 
 4. Watch the site respond to the tool call and change the website's CSS. Enjoy the retro web!

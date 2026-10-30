@@ -66,7 +66,7 @@
         - text: How an agent calls it
         - button "Copy"
       - 'region "Snippet: how an agent calls describe_site"':
-        - code: "const tool = (await document.modelContext.getTools()).find(t => t.name === 'describe_site'); await document.modelContext.executeTool(tool, '{}');"
+        - code: "const tool = (await document.modelContext.getTools()).find(t => t.name === 'describe_site'); await document.modelContext.executeTool(tool, {});"
       - paragraph: No inputs. Call it as-is.
       - button "Run describe_site"
       - paragraph:
@@ -81,11 +81,11 @@
       - code: document.modelContext
       - text: as it loads, including after a client-side navigation. An agent in the browser discovers them there and invokes one by name. Nothing is exposed over the network, there is no endpoint and no authentication — the tools live in the page you already have open.
     - paragraph:
-      - text: Arguments go over as a
-      - strong: JSON string
-      - text: ", not an object; passing an object throws"
-      - code: Failed to parse input arguments
-      - text: . Results come back as a JSON string too.
+      - text: Arguments go over as a plain
+      - strong: object
+      - text: ". Chrome changed this in M155: earlier versions took a JSON string, and from M155 a string is rejected with a"
+      - code: TypeError
+      - text: . Results come back as a JSON string.
     - paragraph:
       - text: "Chrome does not enforce the declared input schema, so every handler validates its own inputs: clamping"
       - code: limit
