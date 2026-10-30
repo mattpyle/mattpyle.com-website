@@ -17,7 +17,10 @@ export async function GET(context: APIContext) {
     title: 'Matt Pyle — Writing',
     description:
       'Growth marketer and hobbyist builder. Director of Growth at Temporal Technologies. Writing on agent-ready websites, accessibility, and agent-led growth.',
-    site: context.site!,
+    // `site` is the channel link, the feed's home in a reader, so it points at
+    // /writing/ and not the site root. It is also the base for the item links,
+    // which stay correct because they are root-relative.
+    site: new URL('/writing/', context.site),
     items: articles.map((article) => ({
       title: article.data.title,
       description: article.data.description,
