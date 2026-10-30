@@ -29,7 +29,7 @@
       - /url: /
     - link "/writing Every post, newest first.":
       - /url: /writing/
-    - link "/changelog What has shipped on this site, including pages that moved.":
+    - link "/changelog What has shipped on this site.":
       - /url: /changelog/
 - contentinfo:
   - text: Matt Pyle
