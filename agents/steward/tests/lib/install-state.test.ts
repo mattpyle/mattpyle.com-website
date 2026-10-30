@@ -41,6 +41,42 @@ test('a locked package that is not installed, and the reverse, are stale', () =>
   assert.match(installStaleReason(extra, lock('13.5.0')) ?? '', /left-pad is installed but not locked/);
 });
 
+// Shaped like the real lockfile on Windows: platform builds are locked as
+// optional and never installed.
+const platformLock = {
+  packages: {
+    '': {},
+    'node_modules/lighthouse': { version: '13.5.0' },
+    'node_modules/@astrojs/compiler-binding-android-arm64': { version: '1.0.0', optional: true },
+    'node_modules/@esbuild/aix-ppc64': { version: '0.25.0', optional: true, os: ['aix'] },
+  },
+};
+const platformInstalled = { packages: { 'node_modules/lighthouse': { version: '13.5.0' } } };
+
+test('locked optional packages that npm did not install do not make the install stale', () => {
+  assert.equal(installStaleReason(platformInstalled, platformLock), null);
+});
+
+test('an absent non-optional entry, a version difference and an extra entry still read as stale', () => {
+  const absent = { packages: { ...platformLock.packages, 'node_modules/axe-core': { version: '4.12.0' } } };
+  assert.match(installStaleReason(platformInstalled, absent) ?? '', /axe-core is locked but not installed/);
+  const flagFalse = {
+    packages: { ...platformLock.packages, 'node_modules/axe-core': { version: '4.12.0', optional: false } },
+  };
+  assert.match(installStaleReason(platformInstalled, flagFalse) ?? '', /axe-core is locked but not installed/);
+  const older = { packages: { 'node_modules/lighthouse': { version: '13.4.1' } } };
+  assert.match(installStaleReason(older, platformLock) ?? '', /lighthouse is installed at 13\.4\.1/);
+  const extra = { packages: { ...platformInstalled.packages, 'node_modules/left-pad': { version: '1.0.0' } } };
+  assert.match(installStaleReason(extra, platformLock) ?? '', /left-pad is installed but not locked/);
+});
+
+test('an optional package that is installed at another version is still stale', () => {
+  const installed = {
+    packages: { ...platformInstalled.packages, 'node_modules/@esbuild/aix-ppc64': { version: '0.24.0' } },
+  };
+  assert.match(installStaleReason(installed, platformLock) ?? '', /aix-ppc64 is installed at 0\.24\.0/);
+});
+
 test('the Lighthouse message names both versions and the fix', () => {
   const m = lighthouseMismatch('13.4.1', '13.5.0');
   assert.ok(m);
@@ -78,4 +114,17 @@ test('a root with no install is refused, and readInstallStaleReason reports the 
   const root = fixtureRoot(null, '13.5.0');
   assert.throws(() => assertLighthouseMatchesLock(root), /not installed/);
   assert.match(readInstallStaleReason(root) ?? '', /missing/);
+});
+
+test('a process counts as running from node_modules only under the repository root', async () => {
+  const { runsFromNodeModules } = await import('../../src/lib/stack.js');
+  const BS = String.fromCharCode(92);
+  const root = 'C:/Users/me/repo';
+  assert.equal(runsFromNodeModules('C:/Users/me/repo/node_modules/@esbuild/win32-x64/esbuild.exe', root), true);
+  assert.equal(runsFromNodeModules(['C:', 'Users', 'me', 'repo', 'node_modules', 'a.exe'].join(BS), 'C:' + BS + 'Users' + BS + 'me' + BS + 'repo'), true);
+  assert.equal(runsFromNodeModules('c:/users/ME/repo/NODE_MODULES/x/a.exe', root), true);
+  assert.equal(runsFromNodeModules('C:/Users/me/repo/node_modules_other/a.exe', root), false);
+  assert.equal(runsFromNodeModules('C:/Users/me/other/node_modules/a.exe', root), false);
+  assert.equal(runsFromNodeModules('C:/Program Files/nodejs/node.exe', root), false);
+  assert.equal(runsFromNodeModules(null, root), false);
 });
