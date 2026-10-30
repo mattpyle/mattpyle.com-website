@@ -68,6 +68,8 @@
 
       if (target.closest('#appearance-exit')) {
         setAppearance('modern');
+        // The banner hides outside retro, taking the focused button with it.
+        document.getElementById('main')?.focus({ preventScroll: true });
       }
     });
 
