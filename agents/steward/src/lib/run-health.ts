@@ -42,6 +42,7 @@
  */
 
 import type { ActionUsageSample } from './action-usage.js';
+import { lighthouseVersionCounts } from './scorecard-aggregate.js';
 import { renderedNothing } from './agent-audit/report-shape.js';
 
 /** One check at the alerting service. */
@@ -97,7 +98,7 @@ export interface RunShape {
 
 export interface ScorecardShapeInput {
   /** One entry per audited page. */
-  pages: Array<{ url: string; ok: boolean; error?: string }>;
+  pages: Array<{ url: string; ok: boolean; error?: string; lighthouseVersion?: string }>;
   /** `open-pr` or `no-op`, for the healthy summary. */
   decision: string;
   /** The run's calendar day. */
@@ -123,6 +124,24 @@ export interface ScorecardShapeInput {
  * A partial failure keeps its wording, because that run may still open a PR.
  */
 export function scorecardRunShape(input: ScorecardShapeInput): RunShape {
+  const versions = lighthouseVersionCounts(input.pages);
+  if (versions.length > 1) {
+    const named = versions.map((v) => `Lighthouse ${v.version} on ${v.pages} page(s)`).join(', ');
+    const base = pagesShape(input);
+    return {
+      ok: false,
+      summary:
+        `Scorecard ${input.iso} completed but its pages were measured by different Lighthouse versions: ${named}. ` +
+        'The two workers on steward-audit disagree about the install; run `npm ci` on the one that is stale ' +
+        '(the laptop worker refuses to start on a mismatch, so a worker started before that guard is the likely one). ' +
+        'No run-log PR opened; the per-run record is archived.' +
+        (base.ok ? '' : ` ${base.summary}`),
+    };
+  }
+  return pagesShape(input);
+}
+
+function pagesShape(input: ScorecardShapeInput): RunShape {
   const failed = input.pages.filter((p) => !p.ok);
   if (failed.length === 0) {
     return {

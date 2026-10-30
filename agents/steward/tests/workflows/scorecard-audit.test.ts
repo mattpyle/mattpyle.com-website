@@ -766,6 +766,31 @@ test('the tools line names the Lighthouse version the reports carry', async () =
   assert.ok(calls.includes('publishScorecardRun'));
 });
 
+test('pages measured by two Lighthouse versions open no PR and fail the run shape', async () => {
+  const { activities, calls, signals } = mockActivities({
+    resolveAuditUrls: async () => THREE_URLS,
+    readPublishedScorecard: async () => undefined,
+    auditLiveUrl: async (url: string) => ({
+      ...GREEN_PAGE,
+      url,
+      lighthouseVersion: url.endsWith('/about/') ? '13.4.1' : '13.5.0',
+    }),
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-mixed-lh',
+      taskQueue: QUEUE,
+      args: [baseInput()],
+    }),
+  );
+  assert.equal(result.decision, 'no-op');
+  assert.equal(result.prUrl, undefined);
+  assert.ok(!calls.includes('publishScorecardRun'));
+  assert.ok(calls.includes('archiveScorecardRun'));
+  assert.equal(signals.at(-1)?.ok, false);
+  assert.match(signals.at(-1)?.summary ?? '', /13\.5\.0 on 2 page.*13\.4\.1 on 1 page/);
+});
+
 /**
  * The alerting leg (audit-stack-alerting-and-monitoring card).
  *
