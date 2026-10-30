@@ -8,6 +8,7 @@ import {
   type WorkflowExecutionInfo,
 } from '@temporalio/client';
 import { Command } from 'commander';
+import { INSTALLED_BY_SHIM_ENV, REINSTALL_EXIT_CODE } from '../scripts/shim-decision.mjs';
 import {
   ENABLE_AI_TELLS,
   ENABLE_BUILD_AUDIT,
@@ -1438,33 +1439,33 @@ program
 
 /**
  * `steward up` starts a worker from whatever `node_modules` holds, so it checks
- * the install against `package-lock.json` first and reinstalls when they differ.
- * `steward update` makes the same check after its pull (`lib/steward-update.ts`).
- * The worker's own startup guard is the backstop if this install fails.
+ * the install against `package-lock.json` first. `steward update` makes the same
+ * check after its pull (`lib/steward-update.ts`). Neither installs: the CLI runs
+ * under tsx, whose `esbuild.exe` child locks a file `npm ci` must delete. A stale
+ * install exits with `REINSTALL_EXIT_CODE`, and the shim (`scripts/steward.mjs`)
+ * runs `npm ci` and re-runs the verb. When the shim just did, a still-stale
+ * install refuses with the reason. The worker's startup guard is the backstop.
  */
-async function reinstallIfStale(): Promise<void> {
-  const { readInstallStaleReason, installWithRetry, NpmCiError } = await import('./lib/install-state.js');
+async function requireFreshInstall(): Promise<void> {
+  const { readInstallStaleReason } = await import('./lib/install-state.js');
   const { REPO_ROOT } = await import('./config.js');
   const reason = readInstallStaleReason(REPO_ROOT);
   if (!reason) return;
-  const { runCancellable } = await import('./lib/proc.js');
-  const { waitUntilNodeModulesFree } = await import('./lib/stack.js');
-  const { npmCommand } = await import('./activities/build-audit.js');
-  console.log(`\n  ${reason}: running npm ci`);
-  try {
-    await installWithRetry(
-      async () => {
-        const { binary, args } = npmCommand(['ci']);
-        const res = await runCancellable(binary, args, { cwd: REPO_ROOT });
-        if (res.exitCode !== 0) throw new NpmCiError(res.exitCode, res.output);
-      },
-      () => waitUntilNodeModulesFree(REPO_ROOT),
-    );
-  } catch (err) {
-    if (!(err instanceof NpmCiError)) throw err;
-    const tail = err.output.trim().split(/\r?\n/).slice(-15).join('\n');
-    fail(`npm ci failed (exit ${err.exitCode}).\n${tail}`);
+  if (installedByShim()) {
+    fail(`${reason}, and npm ci has just run. Run \`npm ci\` at the repository root and read its output.`);
   }
+  exitForReinstall(reason);
+}
+
+/** True on the run the shim started right after its own `npm ci`. */
+function installedByShim(): boolean {
+  return process.env[INSTALLED_BY_SHIM_ENV] === '1';
+}
+
+/** Prints why, then exits for the shim to run `npm ci` and re-run this verb. */
+function exitForReinstall(reason: string): never {
+  console.log(`\n  ${reason}: handing off to the shim for npm ci`);
+  process.exit(REINSTALL_EXIT_CODE);
 }
 
 /**
@@ -1515,7 +1516,7 @@ program
     const { readOnlyKeyRefusal } = await import('./lib/read-only-key-guard.js');
     const refusal = readOnlyKeyRefusal();
     if (refusal) fail(refusal);
-    await reinstallIfStale();
+    await requireFreshInstall();
     await serveStack();
   });
 
@@ -1534,11 +1535,10 @@ program
     // Every module the update uses loads **before** the pull. A lazy import after
     // it would mix the old code already running with the new files on disk.
     const { prepareUpdate, UpdateRefused } = await import('./lib/steward-update.js');
-    const { waitUntilNoOrphans, killOrphans, waitUntilNodeModulesFree } = await import('./lib/stack.js');
-    const { run, runCancellable, killTree, tsxCommand } = await import('./lib/proc.js');
-    const { npmCommand } = await import('./activities/build-audit.js');
+    const { waitUntilNoOrphans, killOrphans } = await import('./lib/stack.js');
+    const { run, killTree, tsxCommand } = await import('./lib/proc.js');
     const { REPO_ROOT, STEWARD_DIR } = await import('./config.js');
-    const { readInstallStaleReason, NpmCiError } = await import('./lib/install-state.js');
+    const { readInstallStaleReason } = await import('./lib/install-state.js');
     const { spawn } = await import('node:child_process');
 
     const runGit = (args: string[]) => run('git', args, { cwd: REPO_ROOT });
@@ -1558,26 +1558,19 @@ program
             if (killed > 0) await waitUntilNoOrphans();
             return killed;
           },
-          npmCi: async () => {
-            const { binary, args } = npmCommand(['ci']);
-            const res = await runCancellable(binary, args, { cwd: REPO_ROOT });
-            if (res.exitCode !== 0) throw new NpmCiError(res.exitCode, res.output);
-          },
-          waitForInstallRelease: () => waitUntilNodeModulesFree(REPO_ROOT),
+          installedByShim: installedByShim(),
           installStaleReason: async () => readInstallStaleReason(REPO_ROOT),
           log: (line) => console.log(`  ${line}`),
         },
       );
     } catch (err) {
       if (err instanceof UpdateRefused) fail(err.message);
-      if (err instanceof NpmCiError) {
-        fail(
-          `npm ci failed (exit ${err.exitCode}). The worker is stopped; fix the install and run ` +
-            `\`steward up\`.\n${err.output.trim().split(/\r?\n/).slice(-15).join('\n')}`,
-        );
-      }
       throw err;
     }
+
+    // The pull and the stop are done. The shim installs and re-runs this verb,
+    // which finds nothing left to pull or stop and goes on to start the stack.
+    if (result.reinstallReason) exitForReinstall(result.reinstallReason);
 
     const head = await runGit(['log', '-1', '--format=%h %s']);
     console.log(`\n  steward now runs ${head.stdout.trim()}\n`);

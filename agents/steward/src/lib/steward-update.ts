@@ -1,5 +1,4 @@
 import type { Client } from '@temporalio/client';
-import { installWithRetry } from './install-state.js';
 
 /**
  * `steward update`: pull `master` and restart the laptop worker, refusing while
@@ -98,10 +97,8 @@ export interface UpdateDeps {
   connect(): Promise<{ client: ListingClient; close(): Promise<void> }>;
   /** `steward down`'s teardown: the worker and, locally, the dev server. Returns how many trees it killed. */
   killOrphans(): Promise<number>;
-  /** `npm ci` at the repository root. Throws `NpmCiError` on a non-zero exit. */
-  npmCi(): Promise<void>;
-  /** Waits until no process runs from `node_modules`, so `npm ci` can unlink every file. */
-  waitForInstallRelease(): Promise<void>;
+  /** True on the CLI run the shim started right after its own `npm ci`. A reinstall wanted again then is a refusal. */
+  installedByShim: boolean;
   /** Why the install differs from `package-lock.json`, or null when it matches. */
   installStaleReason(): Promise<string | null>;
   log(line: string): void;
@@ -114,8 +111,12 @@ export interface UpdateOptions {
 export interface UpdateResult {
   from: string;
   to: string;
-  /** True when `npm ci` ran: the lockfile changed between the commits, or the install was stale. */
-  installed: boolean;
+  /**
+   * Why the install needs `npm ci`, or null. The lockfile changed between the
+   * commits, or the install was stale. The command does not install: it exits
+   * with `REINSTALL_EXIT_CODE` and the shim runs `npm ci` (`scripts/steward.mjs`).
+   */
+  reinstallReason: string | null;
 }
 
 /**
@@ -161,11 +162,14 @@ async function dirtyTrackedFiles(deps: UpdateDeps): Promise<string[]> {
  *    is a refusal too, since the check could not run.
  * 3. `git pull --ff-only`.
  * 4. Stop the running stack.
- * 5. `npm ci` when the install is stale: `node_modules/.package-lock.json`
+ * 5. Report a reinstall when the install is stale: `node_modules/.package-lock.json`
  *    differs from `package-lock.json`, or is missing. Decided from the install
- *    itself and run whether or not `HEAD` moved, because a checkout moved by any
- *    other `git pull` keeps a stale `node_modules` (`lib/install-state.ts`). A
- *    lockfile that changed between the two commits also installs.
+ *    itself whether or not `HEAD` moved, because a checkout moved by any other
+ *    `git pull` keeps a stale `node_modules` (`lib/install-state.ts`). A lockfile
+ *    that changed between the two commits also asks. This function never runs
+ *    `npm ci`: the CLI's own `tsx` child holds `esbuild.exe` open, so the shim
+ *    installs. When the shim just did and the install still reads stale, the
+ *    command refuses with the reason instead of asking again.
  */
 export async function prepareUpdate(options: UpdateOptions, deps: UpdateDeps): Promise<UpdateResult> {
   const branch = await mustGit(deps, ['rev-parse', '--abbrev-ref', 'HEAD']);
@@ -225,19 +229,18 @@ export async function prepareUpdate(options: UpdateOptions, deps: UpdateDeps): P
   const killed = await deps.killOrphans();
   deps.log(killed === 0 ? 'no running stack to stop' : `stopped ${killed} process tree(s)`);
 
-  let installed = false;
   let reason: string | null = null;
   if (from !== to) {
     const changed = await mustGit(deps, ['diff', '--name-only', from, to, '--', 'package-lock.json']);
     if (changed !== '') reason = 'package-lock.json changed';
   }
   reason ??= await deps.installStaleReason();
-  if (reason) {
-    deps.log(`${reason}: running npm ci`);
-    await installWithRetry(() => deps.npmCi(), () => deps.waitForInstallRelease());
-    installed = true;
+  if (reason && deps.installedByShim) {
+    throw new UpdateRefused(
+      `${reason}, and npm ci has just run. Run \`npm ci\` at the repository root and read its output, then \`steward up\`.`,
+    );
   }
   deps.log(from === to ? `already at ${to.slice(0, 7)}` : `${from.slice(0, 7)}..${to.slice(0, 7)}`);
 
-  return { from, to, installed };
+  return { from, to, reinstallReason: reason };
 }

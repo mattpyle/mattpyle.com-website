@@ -115,16 +115,3 @@ test('a root with no install is refused, and readInstallStaleReason reports the 
   assert.throws(() => assertLighthouseMatchesLock(root), /not installed/);
   assert.match(readInstallStaleReason(root) ?? '', /missing/);
 });
-
-test('a process counts as running from node_modules only under the repository root', async () => {
-  const { runsFromNodeModules } = await import('../../src/lib/stack.js');
-  const BS = String.fromCharCode(92);
-  const root = 'C:/Users/me/repo';
-  assert.equal(runsFromNodeModules('C:/Users/me/repo/node_modules/@esbuild/win32-x64/esbuild.exe', root), true);
-  assert.equal(runsFromNodeModules(['C:', 'Users', 'me', 'repo', 'node_modules', 'a.exe'].join(BS), 'C:' + BS + 'Users' + BS + 'me' + BS + 'repo'), true);
-  assert.equal(runsFromNodeModules('c:/users/ME/repo/NODE_MODULES/x/a.exe', root), true);
-  assert.equal(runsFromNodeModules('C:/Users/me/repo/node_modules_other/a.exe', root), false);
-  assert.equal(runsFromNodeModules('C:/Users/me/other/node_modules/a.exe', root), false);
-  assert.equal(runsFromNodeModules('C:/Program Files/nodejs/node.exe', root), false);
-  assert.equal(runsFromNodeModules(null, root), false);
-});

@@ -80,37 +80,6 @@ function readJson<T>(file: string): T | null {
   }
 }
 
-/** `npm ci` ran and exited non-zero. Carries the output so a caller can tell `EPERM` from the rest. */
-export class NpmCiError extends Error {
-  constructor(
-    readonly exitCode: number,
-    readonly output: string,
-  ) {
-    super(`npm ci failed (exit ${exitCode})`);
-    this.name = 'NpmCiError';
-  }
-}
-
-/**
- * `npm ci` after the stack stopped. Waits first for every process still running
- * from `node_modules`: `tsx` leaves an `esbuild.exe` child that outlives the
- * worker and locks its own file. An `EPERM` failure waits again and retries once;
- * any other failure, or a second `EPERM`, throws for the caller to report.
- */
-export async function installWithRetry(
-  npmCi: () => Promise<void>,
-  waitForRelease: () => Promise<void>,
-): Promise<void> {
-  await waitForRelease();
-  try {
-    await npmCi();
-  } catch (err) {
-    if (!(err instanceof NpmCiError) || !/EPERM/.test(err.output)) throw err;
-    await waitForRelease();
-    await npmCi();
-  }
-}
-
 /** Null when the install matches the lockfile; otherwise why not. Reads `root`. */
 export function readInstallStaleReason(root: string): string | null {
   const locked = readJson<{ packages?: PackageMap }>(path.join(root, 'package-lock.json'));
