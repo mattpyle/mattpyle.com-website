@@ -39,13 +39,14 @@ export const GET: APIRoute = async ({ params, site, request }) => {
 
   const base = site!.toString().replace(/\/$/, '');
   const canonicalUrl = `${base}/writing/${article.id}/`;
-  const { title, date, description, tags } = article.data;
+  const { title, date, updated, description, tags } = article.data;
 
   const frontmatter = [
     '---',
     `title: ${yamlString(title)}`,
     `author: ${yamlString(AUTHOR)}`,
     `datePublished: ${date.toISOString()}`,
+    ...(updated ? [`dateModified: ${updated.toISOString()}`] : []),
     `description: ${yamlString(description)}`,
     ...(tags.length > 0 ? [`tags: ${yamlList(tags)}`] : []),
     `canonical: ${canonicalUrl}`,
