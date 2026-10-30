@@ -942,3 +942,70 @@ test('pages without a reading budget leave the record without one', async () => 
   assert.equal('readingBudget' in result.record, false);
   assert.equal('readingBudget' in (archived[0] as object), false);
 });
+
+/**
+ * The Performance re-check: a page under 95 on its first audit is measured twice
+ * more and scored on the median of three. `perfByUrl` lists each page's samples
+ * in call order; the mock serves them one per call and counts the calls.
+ */
+function samplingActivities(perfByUrl: Record<string, number[]>) {
+  const served: Record<string, number> = {};
+  const mocks = mockActivities({
+    resolveAuditUrls: async () => Object.keys(perfByUrl),
+    auditLiveUrl: async (url: string) => {
+      const i = served[url] ?? 0;
+      served[url] = i + 1;
+      const seq = perfByUrl[url];
+      return { ...GREEN_PAGE, url, scores: { ...(GREEN_PAGE.ok ? GREEN_PAGE.scores : {}), performance: seq[Math.min(i, seq.length - 1)] } };
+    },
+  });
+  return { ...mocks, served };
+}
+
+async function runSampling(id: string, perfByUrl: Record<string, number[]>) {
+  const { activities, served, archived } = samplingActivities(perfByUrl);
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: id,
+      taskQueue: QUEUE,
+      args: [baseInput({ publishMode: 'dry-run' })],
+    }),
+  );
+  return { result, served, archived };
+}
+
+test('a page at 87 that recovers is re-audited twice and scored on the median', async () => {
+  const a = 'https://www.mattpyle.com/a/';
+  const b = 'https://www.mattpyle.com/b/';
+  const { result, served, archived } = await runSampling('sc-recheck-1', { [a]: [87, 99, 98], [b]: [100] });
+  assert.equal(served[a], 3);
+  assert.equal(served[b], 1);
+  const perf = result.record.metrics.find((m) => m.name === 'Performance');
+  assert.equal(perf?.value, '98');
+  assert.equal(perf?.status, 'Pass');
+  const pa = result.perPage.find((p) => p.url === a);
+  const pb = result.perPage.find((p) => p.url === b);
+  assert.deepEqual(pa?.performanceSamples, [87, 99, 98]);
+  assert.equal(pa?.scores.performance, 98);
+  assert.ok(pb && !('performanceSamples' in pb));
+  const record = archived[0] as { perPage: Array<{ url: string; performanceSamples?: number[] }> };
+  assert.deepEqual(record.perPage.find((p) => p.url === a)?.performanceSamples, [87, 99, 98]);
+});
+
+test('a page that stays below 95 on all three samples still yields Fail', async () => {
+  const a = 'https://www.mattpyle.com/a/';
+  const { result, served } = await runSampling('sc-recheck-2', { [a]: [87, 86, 88] });
+  assert.equal(served[a], 3);
+  const perf = result.record.metrics.find((m) => m.name === 'Performance');
+  assert.equal(perf?.value, '87');
+  assert.equal(perf?.status, 'Fail');
+});
+
+test('a run with no flagged page issues no extra audit calls', async () => {
+  const a = 'https://www.mattpyle.com/a/';
+  const b = 'https://www.mattpyle.com/b/';
+  const { result, served } = await runSampling('sc-recheck-3', { [a]: [95], [b]: [100] });
+  assert.equal(served[a], 1);
+  assert.equal(served[b], 1);
+  assert.ok(result.perPage.every((p) => !('performanceSamples' in p)));
+});
