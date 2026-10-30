@@ -128,7 +128,7 @@ This site runs a public MCP server. It audits any site for agent-readiness, on t
 | Endpoint | `https://www.mattpyle.com/mcp` |
 | Discovery | `https://www.mattpyle.com/.well-known/mcp-server` (IETF draft) and `https://www.mattpyle.com/mcp/server-card` (SEP-2127 Server Card) |
 | Transport | Streamable HTTP over POST, stateless — no session ID, one request per POST |
-| Protocol version | MCP 2026-07-28 and, on the same endpoint, 2025-06-18 and earlier. The newer revision needs no `initialize`: send `server/discover`, or any request with the `_meta` envelope. `tools/list` carries a one-hour public cache hint. JSON-RPC batches are refused; they were removed from the spec in 2025-06-18. |
+| Protocol version | MCP 2026-07-28 and, on the same endpoint, 2025-11-25 and earlier. The newer revision needs no `initialize`: send `server/discover`, or any request with the `_meta` envelope. `tools/list` carries a one-hour public cache hint. JSON-RPC batches are refused; they were removed from the spec in 2025-06-18. |
 | Tools | `audit_site(url)`, plus the deep tier below. `tools/list` enumerates them; this file is not the register. |
 | Auth | None. It reads public documents on a third-party site and writes nothing anywhere. |
 | Write-up | [/steward](https://www.mattpyle.com/steward) |
