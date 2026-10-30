@@ -86,6 +86,7 @@ export const FAMILY_NOTES = Object.freeze({
   none: 'sent no user agent',
   other: 'unrecognised',
   'other-bot': 'says it is a bot, unnamed here',
+  'steward-audit': 'this site\'s own nightly auditor',
 });
 
 /**
