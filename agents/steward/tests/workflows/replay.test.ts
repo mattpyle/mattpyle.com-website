@@ -479,3 +479,73 @@ test('an opportunity that made its automatic fix attempt before waitsForPerson r
     'finding/mattpyle-com/opportunity-park-example--steward',
   );
 });
+
+/**
+ * Two scorecard histories from before the 2026-10-29 markers. Both are manual
+ * `publishMode: 'pr'` runs, so the publish leg is in the history and a guard
+ * that skips it would show. Neither is a real run: each was recorded against
+ * the time-skipping server with mocked activities, so it holds no real page
+ * data. Stored as protobuf binary for the reason the fix-child fixtures give.
+ * Each was recorded from a separate `git archive` of its commit, so current
+ * code never ran the recording.
+ *
+ * - `scorecard-performance-recheck-pre.bin`, from `8853333` (before PR 464).
+ *   Two pages, Performance 87 and 100, one Lighthouse version. The workflow
+ *   went from the fan-out to `resolveRunStamp`. Current code re-measures the
+ *   87 page, so it replays only because `scorecard-performance-recheck` sends
+ *   a history without the marker down the old path. 55 events.
+ * - `scorecard-mixed-lighthouse-pre.bin`, from `6a416c5` (before PR 465). Two
+ *   pages at Performance 100 with Lighthouse 13.5.0 and 13.4.0. The workflow
+ *   went on to `publishScorecardRun`. Current code refuses a mixed run, so it
+ *   replays only because `scorecard-mixed-lighthouse-refusal` keeps the old
+ *   history on the publish path. 55 events.
+ *
+ * `scorecard-dry-run.json` holds neither shape and replays green with or
+ * without either guard (probe, 2026-10-29), which is why these two exist.
+ *
+ * Probes (2026-10-29), each with that marker's `wf.patched()` call removed:
+ *
+ * - Performance re-check: the performance fixture failed with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'resolveRunStamp' does not match activity type of activity command
+ * 'auditLiveUrl'
+ * ```
+ *
+ * - Mixed refusal: the mixed fixture failed with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'publishScorecardRun' does not match activity type of activity command
+ * 'archiveScorecardRun'
+ * ```
+ *
+ * Each probe failed its own fixture alone: the other 14 replays stayed green,
+ * `scorecard-dry-run.json` included. Both guards were restored and all 15
+ * re-ran green.
+ */
+const scorecardPerformanceHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/scorecard-performance-recheck-pre.bin', import.meta.url),
+);
+const scorecardMixedHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/scorecard-mixed-lighthouse-pre.bin', import.meta.url),
+);
+
+test('a scorecard run recorded before the Performance re-check replays without it', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardPerformanceHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'steward-scorecard-fixture-perf',
+  );
+});
+
+test('a scorecard run recorded before the mixed-Lighthouse refusal replays down its publish leg', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardMixedHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'steward-scorecard-fixture-mixed',
+  );
+});
