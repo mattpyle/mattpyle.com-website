@@ -1,7 +1,7 @@
 ---
 title: "Accessibility, AI, and testing with screen readers"
 date: 2026-07-13
-updated: 2026-07-31
+updated: 2026-10-30
 description: "AI built this site. Every automated tool gave it top marks. Then I installed a screen reader for the first time, spent an evening fumbling with it, and heard what my site actually sounds like."
 seoTitle: "Accessibility, AI, and screen reader testing"
 seoDescription: "AI built this website and every automated tool gave it top marks. Then I used a screen reader for the first time and heard what those tools missed."
@@ -33,7 +33,7 @@ Will the bot revolution bring fair online experiences for all humans? We'll see.
 
 ## What the code review caught and missed
 
-The filter buttons on my writing index communicate their active state through a CSS class and nothing else. Nothing in the markup says which filter is on.
+The filter buttons on my writing index communicated their active state through a CSS class and nothing else. Nothing in the markup said which filter was on. (Those filters have since been removed in a redesign, so there is no pill to try on `/writing` today. The one filter left on the site is the type filter on [`/changelog`](/changelog/).)
 
 A sighted human sees the highlighted pill and knows which filter is applied. The accessibility tree sees **multiple identical, indistinguishable buttons.** A screen reader user, and an agent, cannot tell which filter is active, or that clicking one did anything at all.
 
@@ -73,7 +73,7 @@ My first attempt was in Chrome and NVDA was just repeating "Chrome Legacy Window
 
 I ran the test on the wrong page. A happy little accident.
 
-My site has *two* filter widgets — one on `/writing`, one on `/builds`. I had only ever fixed one of them. I didn't account for the other one (who has two filter components?!).
+My site then had *two* filter widgets — one on `/writing`, one on `/builds`. I had only ever fixed one of them. I didn't account for the other one (who has two filter components?!).
 
 So the first thing I heard was the original bug, still live:
 
