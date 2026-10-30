@@ -168,8 +168,79 @@ test('the archive branch is never reset, so earlier nights survive a later one',
   assert.ok(hub.file(SCORECARD_ARCHIVE_BRANCH, `${SCORECARD_ARCHIVE_REL}/early.json`));
   assert.ok(hub.file(SCORECARD_ARCHIVE_BRANCH, `${SCORECARD_ARCHIVE_REL}/late.json`));
   assert.equal(
-    hub.calls.filter((c) => c.startsWith('PATCH /git/refs/heads/')).length,
+    hub.refUpdates.filter((u) => u.force).length,
     0,
     'the archive branch was force-reset',
   );
+});
+
+// ---------------------------------------------------------------------------
+// One commit per run
+// ---------------------------------------------------------------------------
+
+test('a run adds exactly one commit, holding the record and latest.json', async () => {
+  // Two commits a second apart meant two Vercel previews that raced; one failed
+  // with git_info_fail on 2026-10-12 and turned a PR red.
+  await archiveScorecardRun(record({ id: 'one-commit' }));
+
+  assert.deepEqual(hub.history(SCORECARD_ARCHIVE_BRANCH), ['chore(scorecard): archive one-commit']);
+  assert.equal(hub.calls.filter((c) => c.startsWith('PUT /contents/')).length, 0, 'used the Contents API');
+  assert.equal(hub.refUpdates.length, 1);
+  assert.equal(readArchive('one-commit').archiveId, 'one-commit');
+  const latest = hub.json(SCORECARD_ARCHIVE_BRANCH, `${SCORECARD_ARCHIVE_REL}/latest.json`);
+  assert.equal(latest.archiveId, 'one-commit');
+  // The tree is built on the branch's tree, so unrelated files survive.
+  assert.ok(hub.file(SCORECARD_ARCHIVE_BRANCH, 'src/data/scorecard-runs.json'));
+});
+
+test('a second run on an archived day adds one commit and leaves the first record unchanged', async () => {
+  await archiveScorecardRun(record({ id: 'same-day', reason: 'first' }));
+  const before = hub.file(SCORECARD_ARCHIVE_BRANCH, `${SCORECARD_ARCHIVE_REL}/same-day.json`)!.text;
+  const commitsBefore = hub.history(SCORECARD_ARCHIVE_BRANCH).length;
+  await archiveScorecardRun(record({ id: 'same-day', reason: 'second' }));
+
+  assert.equal(hub.history(SCORECARD_ARCHIVE_BRANCH).length, commitsBefore + 1);
+  assert.equal(hub.file(SCORECARD_ARCHIVE_BRANCH, `${SCORECARD_ARCHIVE_REL}/same-day.json`)!.text, before);
+  assert.equal(readArchive('same-day-2').reason, 'second');
+});
+
+test('a push between the read and the ref update is rebuilt from a fresh read, never forced', async () => {
+  const realFetch = globalThis.fetch;
+  let injected = false;
+  globalThis.fetch = (async (input: any, init?: RequestInit) => {
+    if ((init?.method ?? 'GET').toUpperCase() === 'PATCH' && !injected) {
+      injected = true;
+      // Another writer takes the very name this attempt chose.
+      hub.push(SCORECARD_ARCHIVE_BRANCH, `${SCORECARD_ARCHIVE_REL}/race.json`, '{"id":"other"}\n', 'other writer');
+    }
+    return realFetch(input, init);
+  }) as typeof fetch;
+
+  const result = await archiveScorecardRun(record({ id: 'race', reason: 'mine' }));
+
+  assert.equal(injected, true);
+  assert.equal(result.archiveId, 'race-2', 'the rebuilt commit did not re-check the name');
+  assert.equal(hub.file(SCORECARD_ARCHIVE_BRANCH, `${SCORECARD_ARCHIVE_REL}/race.json`)!.text, '{"id":"other"}\n');
+  assert.equal(readArchive('race-2').reason, 'mine');
+  assert.deepEqual(hub.history(SCORECARD_ARCHIVE_BRANCH).slice(-2), [
+    'other writer',
+    'chore(scorecard): archive race-2',
+  ]);
+  assert.equal(hub.refUpdates.filter((u) => u.force).length, 0);
+  assert.equal(hub.refUpdates.length, 2, 'the refused update and the retry');
+});
+
+test('the activity gives up when the branch keeps moving', async () => {
+  const realFetch = globalThis.fetch;
+  let n = 0;
+  globalThis.fetch = (async (input: any, init?: RequestInit) => {
+    if ((init?.method ?? 'GET').toUpperCase() === 'PATCH') {
+      hub.push(SCORECARD_ARCHIVE_BRANCH, `moving-${n++}.txt`, 'x');
+    }
+    return realFetch(input, init);
+  }) as typeof fetch;
+
+  await assert.rejects(archiveScorecardRun(record({ id: 'never' })), /moved under 4 archive attempts/);
+  assert.equal(hub.refUpdates.length, 4);
+  assert.equal(hub.refUpdates.filter((u) => u.force).length, 0);
 });
