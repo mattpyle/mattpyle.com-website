@@ -125,46 +125,6 @@ export async function waitUntilNoOrphans(timeoutMs = 15_000): Promise<void> {
   }
 }
 
-/** True when `exePath` lies under `<root>/node_modules`, compared case-insensitively on either separator. */
-export function runsFromNodeModules(exePath: string | null | undefined, root: string): boolean {
-  if (!exePath) return false;
-  const norm = (p: string) => p.split('\\').join('/').toLowerCase();
-  return norm(exePath).startsWith(`${norm(root).replace(/\/+$/, '')}/node_modules/`);
-}
-
-async function scanNodeModulesProcesses(root: string): Promise<number[]> {
-  const script = `
-    Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath } |
-      Select-Object @{N='processId';E={$_.ProcessId}}, @{N='path';E={$_.ExecutablePath}} |
-      ConvertTo-Json -Compress
-  `;
-  const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-Command', script], {
-    windowsHide: true,
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  const text = stdout.trim();
-  if (!text) return [];
-  const parsed = JSON.parse(text) as { processId: number; path: string } | { processId: number; path: string }[];
-  return (Array.isArray(parsed) ? parsed : [parsed])
-    .filter((p) => runsFromNodeModules(p.path, root))
-    .map((p) => p.processId);
-}
-
-/**
- * Waits until no process runs an executable under `<REPO_ROOT>/node_modules`.
- * `waitUntilNoOrphans` counts workers, servers and ports, not the `esbuild.exe`
- * a worker's `tsx` spawned, and `npm ci` cannot unlink a running executable.
- * Gives up quietly at the deadline; `npm ci` then reports what is still held.
- */
-export async function waitUntilNodeModulesFree(root = REPO_ROOT, timeoutMs = 15_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    if ((await scanNodeModulesProcesses(root)).length === 0) return;
-    if (Date.now() > deadline) return;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-}
-
 function prefixLines(prefix: string, chunk: Buffer, sink: (line: string) => void): void {
   for (const line of chunk.toString().split(/\r?\n/)) {
     if (line.trim()) sink(`  [${prefix}] ${line}`);

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NpmCiError } from '../../src/lib/install-state.js';
 import {
   HEAVY_ACTIVITY_TYPES,
   UpdateRefused,
@@ -57,7 +56,6 @@ interface Harness {
   deps: UpdateDeps;
   calls: string[];
   logs: string[];
-  waits: string[];
 }
 
 /** A passing environment; each test overrides the one thing it is about. */
@@ -72,14 +70,11 @@ function harness(
     pullResult?: GitResult;
     head?: string[];
     staleReason?: string | null;
-    /** One entry per `npm ci` attempt, in order; an absent entry succeeds. */
-    npmCiFailures?: (NpmCiError | undefined)[];
+    installedByShim?: boolean;
   } = {},
 ): Harness {
   const calls: string[] = [];
   const logs: string[] = [];
-  const waits: string[] = [];
-  const failures = [...(overrides.npmCiFailures ?? [])];
   const heads = [...(overrides.head ?? [OLD, NEW])];
   const deps: UpdateDeps = {
     git: async (args) => {
@@ -108,16 +103,11 @@ function harness(
       calls.push('killOrphans');
       return 1;
     },
-    npmCi: async () => {
-      calls.push('npmCi');
-      const failure = failures.shift();
-      if (failure) throw failure;
-    },
-    waitForInstallRelease: async () => void waits.push('wait'),
+    installedByShim: overrides.installedByShim ?? false,
     installStaleReason: async () => overrides.staleReason ?? null,
     log: (line) => void logs.push(line),
   };
-  return { deps, calls, logs, waits };
+  return { deps, calls, logs };
 }
 
 test('findBusyWorkflows names a workflow with a pending steward-heavy activity and skips the rest', async () => {
@@ -155,7 +145,7 @@ test('--force skips the check and goes on to pull and restart', async () => {
   });
   const result = await prepareUpdate({ force: true }, h.deps);
   assert.deepEqual(h.calls, ['pull', 'killOrphans']);
-  assert.deepEqual(result, { from: OLD, to: NEW, installed: false });
+  assert.deepEqual(result, { from: OLD, to: NEW, reinstallReason: null });
 });
 
 test('an idle namespace pulls, stops the stack, and skips npm ci when the lockfile is unchanged', async () => {
@@ -164,35 +154,33 @@ test('an idle namespace pulls, stops the stack, and skips npm ci when the lockfi
   });
   const result = await prepareUpdate({ force: false }, h.deps);
   assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans']);
-  assert.equal(result.installed, false);
+  assert.equal(result.reinstallReason, null);
 });
 
-test('npm ci runs only when package-lock.json changed between the old and new HEAD', async () => {
+test('a reinstall is signalled only when package-lock.json changed between the old and new HEAD', async () => {
   const h = harness({ lockChanged: true });
   const result = await prepareUpdate({ force: false }, h.deps);
-  assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans', 'npmCi']);
-  assert.equal(result.installed, true);
+  assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans']);
+  assert.equal(result.reinstallReason, 'package-lock.json changed');
 });
 
-test('a stale install runs npm ci although HEAD did not move, and logs why', async () => {
+test('a stale install signals a reinstall although HEAD did not move', async () => {
   const h = harness({ head: [OLD], staleReason: 'node_modules/lighthouse is installed at 13.4.1, locked at 13.5.0' });
   const result = await prepareUpdate({ force: false }, h.deps);
-  assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans', 'npmCi']);
-  assert.equal(result.installed, true);
-  assert.ok(h.logs.some((l) => /lighthouse is installed at 13\.4\.1, locked at 13\.5\.0: running npm ci/.test(l)));
+  assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans']);
+  assert.equal(result.reinstallReason, 'node_modules/lighthouse is installed at 13.4.1, locked at 13.5.0');
 });
 
-test('a stale install runs npm ci once when HEAD moved without a lockfile change', async () => {
+test('a stale install signals the reason when HEAD moved without a lockfile change', async () => {
   const h = harness({ staleReason: 'node_modules/.package-lock.json is missing' });
   const result = await prepareUpdate({ force: false }, h.deps);
-  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 1);
-  assert.equal(result.installed, true);
+  assert.equal(result.reinstallReason, 'node_modules/.package-lock.json is missing');
 });
 
 test('a pull that moves nothing never asks git about the lockfile', async () => {
   const h = harness({ head: [OLD] });
   const result = await prepareUpdate({ force: false }, h.deps);
-  assert.equal(result.installed, false);
+  assert.equal(result.reinstallReason, null);
   assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans']);
 });
 
@@ -255,34 +243,22 @@ test('HEAVY_ACTIVITY_TYPES matches the activities the workflows schedule on stew
   assert.deepEqual([...found].sort(), [...HEAVY_ACTIVITY_TYPES].sort());
 });
 
-const EPERM = ['npm error code EPERM', 'npm error syscall unlink', 'npm error path esbuild.exe'].join('\n');
-
-test('npm ci waits for node_modules to be free before it runs', async () => {
+test('prepareUpdate never installs: its dependencies have no npm ci', () => {
   const h = harness({ lockChanged: true });
-  await prepareUpdate({ force: false }, h.deps);
-  assert.deepEqual(h.waits, ['wait']);
+  assert.ok(!('npmCi' in h.deps));
 });
 
-test('an EPERM from npm ci waits again and retries once', async () => {
-  const h = harness({ lockChanged: true, npmCiFailures: [new NpmCiError(1, EPERM)] });
-  const result = await prepareUpdate({ force: false }, h.deps);
-  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 2);
-  assert.deepEqual(h.waits, ['wait', 'wait']);
-  assert.equal(result.installed, true);
-});
-
-test('a second EPERM surfaces the npm ci failure', async () => {
-  const h = harness({ lockChanged: true, npmCiFailures: [new NpmCiError(1, EPERM), new NpmCiError(1, EPERM)] });
+test('a stale install right after the shim installed refuses with the reason, so the shim never loops', async () => {
+  const h = harness({ installedByShim: true, staleReason: 'node_modules/lighthouse is installed at 13.4.1, locked at 13.5.0' });
   await assert.rejects(prepareUpdate({ force: false }, h.deps), (err: unknown) => {
-    assert.ok(err instanceof NpmCiError);
-    assert.match(err.output, /EPERM/);
+    assert.ok(err instanceof UpdateRefused);
+    assert.match(err.message, /lighthouse is installed at 13.4.1.*npm ci has just run/s);
     return true;
   });
-  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 2);
 });
 
-test('an npm ci failure that is not EPERM is not retried', async () => {
-  const h = harness({ lockChanged: true, npmCiFailures: [new NpmCiError(1, 'npm error code E404')] });
-  await assert.rejects(prepareUpdate({ force: false }, h.deps), NpmCiError);
-  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 1);
+test('a fresh install right after the shim installed goes on without a reinstall', async () => {
+  const h = harness({ installedByShim: true, head: [OLD] });
+  const result = await prepareUpdate({ force: false }, h.deps);
+  assert.equal(result.reinstallReason, null);
 });
