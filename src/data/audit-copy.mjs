@@ -146,7 +146,7 @@ export const ERRORS = {
   'bad-address': {
     status: 400,
     title: () => 'That address cannot be audited',
-    body: () => 'Enter a public website address, starting with http or https.',
+    body: () => 'Enter a public website address, such as example.com.',
   },
   refused: {
     status: 502,
