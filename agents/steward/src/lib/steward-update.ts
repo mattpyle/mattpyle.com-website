@@ -1,4 +1,5 @@
 import type { Client } from '@temporalio/client';
+import { installWithRetry } from './install-state.js';
 
 /**
  * `steward update`: pull `master` and restart the laptop worker, refusing while
@@ -97,8 +98,10 @@ export interface UpdateDeps {
   connect(): Promise<{ client: ListingClient; close(): Promise<void> }>;
   /** `steward down`'s teardown: the worker and, locally, the dev server. Returns how many trees it killed. */
   killOrphans(): Promise<number>;
-  /** `npm ci` at the repository root. */
+  /** `npm ci` at the repository root. Throws `NpmCiError` on a non-zero exit. */
   npmCi(): Promise<void>;
+  /** Waits until no process runs from `node_modules`, so `npm ci` can unlink every file. */
+  waitForInstallRelease(): Promise<void>;
   /** Why the install differs from `package-lock.json`, or null when it matches. */
   installStaleReason(): Promise<string | null>;
   log(line: string): void;
@@ -231,7 +234,7 @@ export async function prepareUpdate(options: UpdateOptions, deps: UpdateDeps): P
   reason ??= await deps.installStaleReason();
   if (reason) {
     deps.log(`${reason}: running npm ci`);
-    await deps.npmCi();
+    await installWithRetry(() => deps.npmCi(), () => deps.waitForInstallRelease());
     installed = true;
   }
   deps.log(from === to ? `already at ${to.slice(0, 7)}` : `${from.slice(0, 7)}..${to.slice(0, 7)}`);

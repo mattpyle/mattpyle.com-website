@@ -1443,18 +1443,27 @@ program
  * The worker's own startup guard is the backstop if this install fails.
  */
 async function reinstallIfStale(): Promise<void> {
-  const { readInstallStaleReason } = await import('./lib/install-state.js');
+  const { readInstallStaleReason, installWithRetry, NpmCiError } = await import('./lib/install-state.js');
   const { REPO_ROOT } = await import('./config.js');
   const reason = readInstallStaleReason(REPO_ROOT);
   if (!reason) return;
   const { runCancellable } = await import('./lib/proc.js');
+  const { waitUntilNodeModulesFree } = await import('./lib/stack.js');
   const { npmCommand } = await import('./activities/build-audit.js');
   console.log(`\n  ${reason}: running npm ci`);
-  const { binary, args } = npmCommand(['ci']);
-  const res = await runCancellable(binary, args, { cwd: REPO_ROOT });
-  if (res.exitCode !== 0) {
-    const tail = res.output.trim().split(/\r?\n/).slice(-15).join('\n');
-    fail(`npm ci failed (exit ${res.exitCode}).\n${tail}`);
+  try {
+    await installWithRetry(
+      async () => {
+        const { binary, args } = npmCommand(['ci']);
+        const res = await runCancellable(binary, args, { cwd: REPO_ROOT });
+        if (res.exitCode !== 0) throw new NpmCiError(res.exitCode, res.output);
+      },
+      () => waitUntilNodeModulesFree(REPO_ROOT),
+    );
+  } catch (err) {
+    if (!(err instanceof NpmCiError)) throw err;
+    const tail = err.output.trim().split(/\r?\n/).slice(-15).join('\n');
+    fail(`npm ci failed (exit ${err.exitCode}).\n${tail}`);
   }
 }
 
@@ -1525,11 +1534,11 @@ program
     // Every module the update uses loads **before** the pull. A lazy import after
     // it would mix the old code already running with the new files on disk.
     const { prepareUpdate, UpdateRefused } = await import('./lib/steward-update.js');
-    const { waitUntilNoOrphans, killOrphans } = await import('./lib/stack.js');
+    const { waitUntilNoOrphans, killOrphans, waitUntilNodeModulesFree } = await import('./lib/stack.js');
     const { run, runCancellable, killTree, tsxCommand } = await import('./lib/proc.js');
     const { npmCommand } = await import('./activities/build-audit.js');
     const { REPO_ROOT, STEWARD_DIR } = await import('./config.js');
-    const { readInstallStaleReason } = await import('./lib/install-state.js');
+    const { readInstallStaleReason, NpmCiError } = await import('./lib/install-state.js');
     const { spawn } = await import('node:child_process');
 
     const runGit = (args: string[]) => run('git', args, { cwd: REPO_ROOT });
@@ -1552,19 +1561,21 @@ program
           npmCi: async () => {
             const { binary, args } = npmCommand(['ci']);
             const res = await runCancellable(binary, args, { cwd: REPO_ROOT });
-            if (res.exitCode !== 0) {
-              throw new UpdateRefused(
-                `npm ci failed (exit ${res.exitCode}). The worker is stopped; fix the install and run ` +
-                  `\`steward up\`.\n${res.output.trim().split(/\r?\n/).slice(-15).join('\n')}`,
-              );
-            }
+            if (res.exitCode !== 0) throw new NpmCiError(res.exitCode, res.output);
           },
+          waitForInstallRelease: () => waitUntilNodeModulesFree(REPO_ROOT),
           installStaleReason: async () => readInstallStaleReason(REPO_ROOT),
           log: (line) => console.log(`  ${line}`),
         },
       );
     } catch (err) {
       if (err instanceof UpdateRefused) fail(err.message);
+      if (err instanceof NpmCiError) {
+        fail(
+          `npm ci failed (exit ${err.exitCode}). The worker is stopped; fix the install and run ` +
+            `\`steward up\`.\n${err.output.trim().split(/\r?\n/).slice(-15).join('\n')}`,
+        );
+      }
       throw err;
     }
 

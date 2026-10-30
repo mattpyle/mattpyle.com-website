@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { NpmCiError } from '../../src/lib/install-state.js';
 import {
   HEAVY_ACTIVITY_TYPES,
   UpdateRefused,
@@ -56,6 +57,7 @@ interface Harness {
   deps: UpdateDeps;
   calls: string[];
   logs: string[];
+  waits: string[];
 }
 
 /** A passing environment; each test overrides the one thing it is about. */
@@ -70,10 +72,14 @@ function harness(
     pullResult?: GitResult;
     head?: string[];
     staleReason?: string | null;
+    /** One entry per `npm ci` attempt, in order; an absent entry succeeds. */
+    npmCiFailures?: (NpmCiError | undefined)[];
   } = {},
 ): Harness {
   const calls: string[] = [];
   const logs: string[] = [];
+  const waits: string[] = [];
+  const failures = [...(overrides.npmCiFailures ?? [])];
   const heads = [...(overrides.head ?? [OLD, NEW])];
   const deps: UpdateDeps = {
     git: async (args) => {
@@ -102,11 +108,16 @@ function harness(
       calls.push('killOrphans');
       return 1;
     },
-    npmCi: async () => void calls.push('npmCi'),
+    npmCi: async () => {
+      calls.push('npmCi');
+      const failure = failures.shift();
+      if (failure) throw failure;
+    },
+    waitForInstallRelease: async () => void waits.push('wait'),
     installStaleReason: async () => overrides.staleReason ?? null,
     log: (line) => void logs.push(line),
   };
-  return { deps, calls, logs };
+  return { deps, calls, logs, waits };
 }
 
 test('findBusyWorkflows names a workflow with a pending steward-heavy activity and skips the rest', async () => {
@@ -242,4 +253,36 @@ test('HEAVY_ACTIVITY_TYPES matches the activities the workflows schedule on stew
     }
   }
   assert.deepEqual([...found].sort(), [...HEAVY_ACTIVITY_TYPES].sort());
+});
+
+const EPERM = ['npm error code EPERM', 'npm error syscall unlink', 'npm error path esbuild.exe'].join('\n');
+
+test('npm ci waits for node_modules to be free before it runs', async () => {
+  const h = harness({ lockChanged: true });
+  await prepareUpdate({ force: false }, h.deps);
+  assert.deepEqual(h.waits, ['wait']);
+});
+
+test('an EPERM from npm ci waits again and retries once', async () => {
+  const h = harness({ lockChanged: true, npmCiFailures: [new NpmCiError(1, EPERM)] });
+  const result = await prepareUpdate({ force: false }, h.deps);
+  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 2);
+  assert.deepEqual(h.waits, ['wait', 'wait']);
+  assert.equal(result.installed, true);
+});
+
+test('a second EPERM surfaces the npm ci failure', async () => {
+  const h = harness({ lockChanged: true, npmCiFailures: [new NpmCiError(1, EPERM), new NpmCiError(1, EPERM)] });
+  await assert.rejects(prepareUpdate({ force: false }, h.deps), (err: unknown) => {
+    assert.ok(err instanceof NpmCiError);
+    assert.match(err.output, /EPERM/);
+    return true;
+  });
+  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 2);
+});
+
+test('an npm ci failure that is not EPERM is not retried', async () => {
+  const h = harness({ lockChanged: true, npmCiFailures: [new NpmCiError(1, 'npm error code E404')] });
+  await assert.rejects(prepareUpdate({ force: false }, h.deps), NpmCiError);
+  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 1);
 });

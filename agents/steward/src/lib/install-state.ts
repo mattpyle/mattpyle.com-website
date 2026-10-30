@@ -36,7 +36,13 @@ export function installStaleReason(
   // install into node_modules, so compare only the entries it can hold.
   const names = Object.keys(want).filter((n) => n !== '' && n.startsWith('node_modules/'));
   for (const name of names) {
-    if (!(name in have)) return `${name} is locked but not installed`;
+    // npm skips a locked optional package its platform cannot use (125 of them on
+    // Windows, such as `@astrojs/compiler-binding-android-arm64`), so an absent
+    // optional entry is how a good install looks.
+    if (!(name in have)) {
+      if ((want[name] as { optional?: boolean } | undefined)?.optional === true) continue;
+      return `${name} is locked but not installed`;
+    }
     const a = (want[name] as { version?: string } | undefined)?.version;
     const b = (have[name] as { version?: string } | undefined)?.version;
     if (a !== b) return `${name} is installed at ${b ?? 'no version'}, locked at ${a ?? 'no version'}`;
@@ -71,6 +77,37 @@ function readJson<T>(file: string): T | null {
     return JSON.parse(fs.readFileSync(file, 'utf8')) as T;
   } catch {
     return null;
+  }
+}
+
+/** `npm ci` ran and exited non-zero. Carries the output so a caller can tell `EPERM` from the rest. */
+export class NpmCiError extends Error {
+  constructor(
+    readonly exitCode: number,
+    readonly output: string,
+  ) {
+    super(`npm ci failed (exit ${exitCode})`);
+    this.name = 'NpmCiError';
+  }
+}
+
+/**
+ * `npm ci` after the stack stopped. Waits first for every process still running
+ * from `node_modules`: `tsx` leaves an `esbuild.exe` child that outlives the
+ * worker and locks its own file. An `EPERM` failure waits again and retries once;
+ * any other failure, or a second `EPERM`, throws for the caller to report.
+ */
+export async function installWithRetry(
+  npmCi: () => Promise<void>,
+  waitForRelease: () => Promise<void>,
+): Promise<void> {
+  await waitForRelease();
+  try {
+    await npmCi();
+  } catch (err) {
+    if (!(err instanceof NpmCiError) || !/EPERM/.test(err.output)) throw err;
+    await waitForRelease();
+    await npmCi();
   }
 }
 

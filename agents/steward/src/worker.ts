@@ -4,10 +4,7 @@ import * as activities from './activities/index.js';
 import {
   IS_TEMPORAL_CLOUD,
   NAMESPACE,
-  QUEUE_AUDIT,
-  QUEUE_AUDIT_FAST,
-  QUEUE_HEAVY,
-  QUEUE_LIGHT,
+  LAPTOP_WORKER_QUEUES,
   REPO_ROOT,
   TEMPORAL_ADDRESS,
   SITE_DIR,
@@ -73,16 +70,11 @@ async function main() {
 
   const common = { connection, namespace: NAMESPACE, workflowsPath, activities };
 
-  const workers = await Promise.all([
-    Worker.create({ ...common, taskQueue: QUEUE_LIGHT }),
-    Worker.create({ ...common, taskQueue: QUEUE_HEAVY }),
-    Worker.create({ ...common, taskQueue: QUEUE_AUDIT }),
-    Worker.create({ ...common, taskQueue: QUEUE_AUDIT_FAST }),
-  ]);
+  const workers = await Promise.all(LAPTOP_WORKER_QUEUES.map((taskQueue) => Worker.create({ ...common, taskQueue })));
 
   log.info(
     {
-      queues: [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT, QUEUE_AUDIT_FAST],
+      queues: LAPTOP_WORKER_QUEUES,
       lighthouse,
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
