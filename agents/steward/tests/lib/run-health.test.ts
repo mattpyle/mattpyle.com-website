@@ -44,6 +44,31 @@ test('a run where every page was audited is a good shape', () => {
   assert.match(shape.summary, /2 page\(s\) audited, none failed/);
 });
 
+test('pages measured by two Lighthouse versions are a bad shape naming each version and its page count', () => {
+  const pages = [
+    { url: 'https://www.mattpyle.com/', ok: true, lighthouseVersion: '13.5.0' },
+    { url: 'https://www.mattpyle.com/a', ok: true, lighthouseVersion: '13.4.1' },
+    { url: 'https://www.mattpyle.com/b', ok: true, lighthouseVersion: '13.4.1' },
+    { url: 'https://www.mattpyle.com/c', ok: true },
+  ];
+  const shape = scorecardRunShape({ pages, decision: 'no-op', iso: '2026-10-29' });
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /Lighthouse 13\.5\.0 on 1 page\(s\), Lighthouse 13\.4\.1 on 2 page\(s\)/);
+});
+
+test('one Lighthouse version, or none, across the pages is a good shape', () => {
+  const same = scorecardRunShape({
+    pages: [
+      { url: 'u1', ok: true, lighthouseVersion: '13.5.0' },
+      { url: 'u2', ok: true, lighthouseVersion: '13.5.0' },
+      { url: 'u3', ok: true },
+    ],
+    decision: 'no-op',
+    iso: '2026-10-29',
+  });
+  assert.equal(same.ok, true);
+});
+
 test('one failed page out of many is a bad shape — the rule is a count, not a ratio', () => {
   // The 2026-08-15 incident in miniature: the run completed, the numbers were
   // published-shaped, and every axe run had failed. A ratio rule would have

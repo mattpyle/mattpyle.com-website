@@ -119,6 +119,22 @@ export function summariseLighthouseTool(perPage: PageAuditOutcome[]): string {
   return LIGHTHOUSE_TOOL_FALLBACK;
 }
 
+/**
+ * Each distinct `lighthouseVersion` across the ok pages with its page count, in
+ * first-seen order. Pages with no version (a history older than the field) are
+ * ignored. More than one entry means the run mixed Lighthouse versions.
+ */
+export function lighthouseVersionCounts(
+  pages: Array<{ ok: boolean; lighthouseVersion?: string }>,
+): Array<{ version: string; pages: number }> {
+  const counts = new Map<string, number>();
+  for (const p of pages) {
+    if (!p.ok || !p.lighthouseVersion) continue;
+    counts.set(p.lighthouseVersion, (counts.get(p.lighthouseVersion) ?? 0) + 1);
+  }
+  return [...counts].map(([version, n]) => ({ version, pages: n }));
+}
+
 /** The Pass line for Performance, and the score below which a page is re-measured. */
 export const PERFORMANCE_PASS_THRESHOLD = 95;
 

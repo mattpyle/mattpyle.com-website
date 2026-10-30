@@ -46,10 +46,12 @@ import {
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
   QUEUE_FINDINGS,
+  REPO_ROOT,
   TEMPORAL_ADDRESS,
   WORKER_READY_LOG,
   temporalConnectionOptions,
 } from './config.js';
+import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { log } from './lib/logger.js';
 import {
   ActivityTracker,
@@ -314,6 +316,8 @@ function watchForRecycle(
 }
 
 async function main() {
+  // Before the first poll; see the same guard in `worker.ts`.
+  const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);
   assertPublishCredentials();
   warnIfUnmonitored();
 
@@ -414,6 +418,7 @@ async function main() {
   log.info(
     {
       queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS],
+      lighthouse,
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',

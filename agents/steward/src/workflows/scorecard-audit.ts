@@ -6,6 +6,7 @@ import {
   decidePublish,
   PERFORMANCE_PASS_THRESHOLD,
   performanceFromSamples,
+  lighthouseVersionCounts,
   summariseLighthouseTool,
   summariseReadingBudget,
   type PageAuditOutcome,
@@ -53,6 +54,21 @@ const QUEUE_AUDIT = 'steward-audit';
  * now sends. Histories recorded before it ended at the archive leg and lack it.
  */
 export const RUN_SHAPE_RECOVERY_PATCH = 'scorecard-run-shape-recovery';
+
+/**
+ * The `patched` marker of the mixed-Lighthouse-version refusal: a run whose ok
+ * pages carry more than one `lighthouseVersion` publishes nothing and reports a
+ * bad shape (`scorecardRunShape`).
+ *
+ * It changes which commands a run issues (determinism rules 4 and 5): a history
+ * recorded before it that mixed versions went on to `publishScorecardRun`, and
+ * replayed through this code it would skip that call. So the marker sits behind
+ * the mixed check and is evaluated **only** when the versions disagree. Every
+ * other run, including the `scorecard-dry-run.json` fixture (one version
+ * throughout), records no marker and replays unchanged. The same flag gates the
+ * shape's version check, so an old mixed history also keeps its old health ping.
+ */
+export const MIXED_LIGHTHOUSE_PATCH = 'scorecard-mixed-lighthouse-refusal';
 
 /**
  * The `patched` marker of the Performance re-check: after the fan-out, each page
@@ -523,6 +539,8 @@ async function runScorecardAudit(
   // not compare an activity's input, so the publish call it feeds is unchanged.
   const tools = [summariseLighthouseTool(perPage), 'axe-core 4.12'];
   const auditedCount = perPage.filter((p) => p.ok).length;
+  // Short-circuit: `patched` is evaluated only for a mixed run. See MIXED_LIGHTHOUSE_PATCH.
+  const mixedVersions = lighthouseVersionCounts(perPage).length > 1 && wf.patched(MIXED_LIGHTHOUSE_PATCH);
   const decision: PublishDecision =
     auditedCount === 0
       ? {
@@ -531,7 +549,14 @@ async function runScorecardAudit(
             `the auditor read 0 of ${perPage.length} pages, so the run measured the worker, ` +
             'not the site; no run-log PR',
         }
-      : decidePublish({ iso, metrics, scope, tools }, published, input.maxAgeDays);
+      : mixedVersions
+        ? {
+            decision: 'no-op',
+            reason:
+              'the pages were measured by different Lighthouse versions, so the run is not one ' +
+              'measurement of the site; no run-log PR',
+          }
+        : decidePublish({ iso, metrics, scope, tools }, published, input.maxAgeDays);
 
   const candidate: Omit<ScorecardRunRecord, 'id'> = {
     iso,
@@ -579,7 +604,12 @@ async function runScorecardAudit(
     // Read off `perPage`, which still carries each page's `ok`, before the
     // summary above flattens it.
     shape: scorecardRunShape({
-      pages: perPage.map((p) => ({ url: p.url, ok: p.ok, error: p.ok ? undefined : p.error })),
+      pages: perPage.map((p) => ({
+        url: p.url,
+        ok: p.ok,
+        error: p.ok ? undefined : p.error,
+        lighthouseVersion: mixedVersions && p.ok ? p.lighthouseVersion : undefined,
+      })),
       decision: decision.decision,
       iso,
     }),

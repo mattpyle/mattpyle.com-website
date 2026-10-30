@@ -69,6 +69,7 @@ function harness(
     lockChanged?: boolean;
     pullResult?: GitResult;
     head?: string[];
+    staleReason?: string | null;
   } = {},
 ): Harness {
   const calls: string[] = [];
@@ -102,6 +103,7 @@ function harness(
       return 1;
     },
     npmCi: async () => void calls.push('npmCi'),
+    installStaleReason: async () => overrides.staleReason ?? null,
     log: (line) => void logs.push(line),
   };
   return { deps, calls, logs };
@@ -158,6 +160,21 @@ test('npm ci runs only when package-lock.json changed between the old and new HE
   const h = harness({ lockChanged: true });
   const result = await prepareUpdate({ force: false }, h.deps);
   assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans', 'npmCi']);
+  assert.equal(result.installed, true);
+});
+
+test('a stale install runs npm ci although HEAD did not move, and logs why', async () => {
+  const h = harness({ head: [OLD], staleReason: 'node_modules/lighthouse is installed at 13.4.1, locked at 13.5.0' });
+  const result = await prepareUpdate({ force: false }, h.deps);
+  assert.deepEqual(h.calls, ['connect', 'close', 'pull', 'killOrphans', 'npmCi']);
+  assert.equal(result.installed, true);
+  assert.ok(h.logs.some((l) => /lighthouse is installed at 13\.4\.1, locked at 13\.5\.0: running npm ci/.test(l)));
+});
+
+test('a stale install runs npm ci once when HEAD moved without a lockfile change', async () => {
+  const h = harness({ staleReason: 'node_modules/.package-lock.json is missing' });
+  const result = await prepareUpdate({ force: false }, h.deps);
+  assert.equal(h.calls.filter((c) => c === 'npmCi').length, 1);
   assert.equal(result.installed, true);
 });
 

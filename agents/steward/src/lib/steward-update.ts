@@ -99,6 +99,8 @@ export interface UpdateDeps {
   killOrphans(): Promise<number>;
   /** `npm ci` at the repository root. */
   npmCi(): Promise<void>;
+  /** Why the install differs from `package-lock.json`, or null when it matches. */
+  installStaleReason(): Promise<string | null>;
   log(line: string): void;
 }
 
@@ -109,7 +111,7 @@ export interface UpdateOptions {
 export interface UpdateResult {
   from: string;
   to: string;
-  /** True when `package-lock.json` differs between the two commits and `npm ci` ran. */
+  /** True when `npm ci` ran: the lockfile changed between the commits, or the install was stale. */
   installed: boolean;
 }
 
@@ -156,8 +158,11 @@ async function dirtyTrackedFiles(deps: UpdateDeps): Promise<string[]> {
  *    is a refusal too, since the check could not run.
  * 3. `git pull --ff-only`.
  * 4. Stop the running stack.
- * 5. `npm ci` only when `package-lock.json` differs between the old and new
- *    `HEAD`.
+ * 5. `npm ci` when the install is stale: `node_modules/.package-lock.json`
+ *    differs from `package-lock.json`, or is missing. Decided from the install
+ *    itself and run whether or not `HEAD` moved, because a checkout moved by any
+ *    other `git pull` keeps a stale `node_modules` (`lib/install-state.ts`). A
+ *    lockfile that changed between the two commits also installs.
  */
 export async function prepareUpdate(options: UpdateOptions, deps: UpdateDeps): Promise<UpdateResult> {
   const branch = await mustGit(deps, ['rev-parse', '--abbrev-ref', 'HEAD']);
@@ -218,13 +223,16 @@ export async function prepareUpdate(options: UpdateOptions, deps: UpdateDeps): P
   deps.log(killed === 0 ? 'no running stack to stop' : `stopped ${killed} process tree(s)`);
 
   let installed = false;
+  let reason: string | null = null;
   if (from !== to) {
     const changed = await mustGit(deps, ['diff', '--name-only', from, to, '--', 'package-lock.json']);
-    if (changed !== '') {
-      deps.log('package-lock.json changed: running npm ci');
-      await deps.npmCi();
-      installed = true;
-    }
+    if (changed !== '') reason = 'package-lock.json changed';
+  }
+  reason ??= await deps.installStaleReason();
+  if (reason) {
+    deps.log(`${reason}: running npm ci`);
+    await deps.npmCi();
+    installed = true;
   }
   deps.log(from === to ? `already at ${to.slice(0, 7)}` : `${from.slice(0, 7)}..${to.slice(0, 7)}`);
 

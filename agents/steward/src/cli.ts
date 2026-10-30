@@ -1437,6 +1437,28 @@ program
   });
 
 /**
+ * `steward up` starts a worker from whatever `node_modules` holds, so it checks
+ * the install against `package-lock.json` first and reinstalls when they differ.
+ * `steward update` makes the same check after its pull (`lib/steward-update.ts`).
+ * The worker's own startup guard is the backstop if this install fails.
+ */
+async function reinstallIfStale(): Promise<void> {
+  const { readInstallStaleReason } = await import('./lib/install-state.js');
+  const { REPO_ROOT } = await import('./config.js');
+  const reason = readInstallStaleReason(REPO_ROOT);
+  if (!reason) return;
+  const { runCancellable } = await import('./lib/proc.js');
+  const { npmCommand } = await import('./activities/build-audit.js');
+  console.log(`\n  ${reason}: running npm ci`);
+  const { binary, args } = npmCommand(['ci']);
+  const res = await runCancellable(binary, args, { cwd: REPO_ROOT });
+  if (res.exitCode !== 0) {
+    const tail = res.output.trim().split(/\r?\n/).slice(-15).join('\n');
+    fail(`npm ci failed (exit ${res.exitCode}).\n${tail}`);
+  }
+}
+
+/**
  * Starts the stack and stays up until Ctrl+C or a child dies. The body of `up`,
  * a function so `update` can name the same behaviour without copying it.
  */
@@ -1484,6 +1506,7 @@ program
     const { readOnlyKeyRefusal } = await import('./lib/read-only-key-guard.js');
     const refusal = readOnlyKeyRefusal();
     if (refusal) fail(refusal);
+    await reinstallIfStale();
     await serveStack();
   });
 
@@ -1506,6 +1529,7 @@ program
     const { run, runCancellable, killTree, tsxCommand } = await import('./lib/proc.js');
     const { npmCommand } = await import('./activities/build-audit.js');
     const { REPO_ROOT, STEWARD_DIR } = await import('./config.js');
+    const { readInstallStaleReason } = await import('./lib/install-state.js');
     const { spawn } = await import('node:child_process');
 
     const runGit = (args: string[]) => run('git', args, { cwd: REPO_ROOT });
@@ -1535,6 +1559,7 @@ program
               );
             }
           },
+          installStaleReason: async () => readInstallStaleReason(REPO_ROOT),
           log: (line) => console.log(`  ${line}`),
         },
       );
