@@ -97,15 +97,15 @@ Three things to know before you call it. The auditor obeys the target's robots.t
 
 The site registers six WebMCP tools on its pages: four that read published content, two that write. **You can only call them if you are executing JavaScript in a browser that implements WebMCP.** If you are reading this file as text, you cannot invoke them, and there is no HTTP fallback that runs them. Fetch `https://www.mattpyle.com/webmcp/tools.json` for the definitions and `https://www.mattpyle.com/webmcp/index.json` for the same data the read tools return.
 
-If you are driving a browser, the calling convention is narrower than the API looks. Measured on Chrome 150.0.7871.182 against the live origin trial:
+If you are driving a browser, the calling convention is narrower than the API looks. The argument shape changed in Chrome M155:
 
 ```js
 const tool = (await document.modelContext.getTools()).find(t => t.name === 'describe_site');
-const result = await document.modelContext.executeTool(tool, '{}');  // a JSON string
+const result = await document.modelContext.executeTool(tool, {});  // a plain object
 ```
 
 - `executeTool` takes the **registered tool object**, not its name. A name throws `TypeError: The provided value is not of type 'RegisteredTool'`.
-- The second argument is a **JSON string**, not an object. An object throws `Failed to parse input arguments`. Both arguments are required.
+- The second argument is a plain **object**. Chrome M155 and later reject a JSON string with a `TypeError`; Chrome 154 and earlier took a JSON string and threw `Failed to parse input arguments` on an object. Both arguments are required.
 - Results come back as **JSON strings**. Parse them.
 - Chrome does **not** enforce the declared `inputSchema`. `required`, `maximum`, and `enum` were each ignored and passed straight through, so the tools validate their own inputs and you should not rely on the browser rejecting a bad call.
 
