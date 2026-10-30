@@ -218,7 +218,7 @@
         "accessibility",
         "AEO"
       ],
-      "description": "This site. A static Astro 7 personal site used as a live testbed for emerging web/agent standards — llms.txt, agents.md, Lighthouse's Agentic Browsing audits.",
+      "description": "This site. An Astro 7 personal site, mostly static, with server routes on Vercel for /mcp, /a2a and /activity, used as a live testbed for emerging web/agent standards — llms.txt, agents.md, Lighthouse's Agentic Browsing audits.",
       "github": "https://github.com/mattpyle/mattpyle.com-website",
       "live": "https://www.mattpyle.com"
     }

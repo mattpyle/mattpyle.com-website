@@ -331,7 +331,7 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
       <h2 id="rd-uses-title">How an agent uses them</h2>
       <div class="band-prose">
         <p>Every page registers the tools on <code>document.modelContext</code> as it loads, including after a client-side navigation. An agent in the browser discovers them there and invokes one by name. Nothing is exposed over the network, there is no endpoint and no authentication — the tools live in the page you already have open.</p>
-        <p>Arguments go over as a <strong>JSON string</strong>, not an object; passing an object throws <code>Failed to parse input arguments</code>. Results come back as a JSON string too.</p>
+        <p>Arguments go over as a plain <strong>object</strong>. Chrome changed this in M155: earlier versions took a JSON string, and from M155 a string is rejected with a <code>TypeError</code>. Results come back as a JSON string.</p>
         <p>Chrome does not enforce the declared input schema, so every handler validates its own inputs: clamping <code>limit</code>, rejecting a blank query, falling back to modern for an unknown mode, trimming an over-long guest-book entry to the limits the visible form enforces.</p>
       </div>
     </section>

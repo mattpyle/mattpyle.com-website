@@ -12,11 +12,14 @@ dead end.
 
 ## Stack
 
-- **[Astro 7](https://astro.build)**, static output, deployed on [Vercel](https://vercel.com).
+- **[Astro 7](https://astro.build)**, mostly static output, deployed on [Vercel](https://vercel.com).
+  A handful of routes set `prerender = false` and run as Vercel functions on each request: `/mcp`,
+  `/a2a`, `/audit`, `/scorecard`, `/activity`, and the `.md` negotiation routes for writing,
+  changelog, audit and activity.
 - Content lives in Astro content collections — `src/content/writing/`, `src/content/projects/`,
   `src/content/changelog/` — validated against a Zod schema (`src/content.config.ts`). No CMS.
-- No framework components, no client-side state, no backend. Plain HTML/CSS plus a handful of
-  build-time scripts.
+- No framework components and no client-side state. Plain HTML/CSS plus a handful of build-time
+  scripts. The only server code is the on-demand routes above.
 
 ## Notable parts
 
