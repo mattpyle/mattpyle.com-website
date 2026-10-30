@@ -16,7 +16,7 @@ Match the question to the cheapest surface that answers it. Fetching the whole s
 | You want | Fetch |
 |---|---|
 | A map of the site in a few hundred tokens | `https://www.mattpyle.com/llms.txt` |
-| Every published word, in one request | `https://www.mattpyle.com/llms-full.txt` |
+| Every article, project and changelog entry, in one request | `https://www.mattpyle.com/llms-full.txt` |
 | One page, without the navigation and footer | The page URL with `Accept: text/markdown`, or the same path with `.md` on the end |
 | One article's original source | `https://www.mattpyle.com/writing/<slug>.md` |
 | How to cite the site, and what the storage keys mean | `https://www.mattpyle.com/agents.md` |

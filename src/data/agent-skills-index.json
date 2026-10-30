@@ -13,7 +13,7 @@
       "type": "skill-md",
       "description": "Work with mattpyle.com as an agent. Covers which discovery surface answers which question, fetching any page as Markdown instead of HTML, calling the site's A2A endpoint, using its in-browser WebMCP tools, and how to cite it. Use when reading, summarising, citing, or interacting with mattpyle.com.",
       "url": "/.well-known/agent-skills/using-mattpyle-com/SKILL.md",
-      "digest": "sha256:5a4016492b3f751938d865f65d6fc3fd8976bd47d80dc0c0f55dfbb1186749cb"
+      "digest": "sha256:3787290aab30394e241c6083eccc180769d6adfeac07a1ca1f4f76efaacbec0f"
     }
   ]
 }
