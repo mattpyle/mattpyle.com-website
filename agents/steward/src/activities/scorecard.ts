@@ -307,6 +307,8 @@ export interface PerPageDetail {
   axeViolations: number;
   /** The page's reading budget, when it was measured. See `PageAuditOutcome`. */
   readingBudget?: ReadingBudget;
+  /** Performance samples, first audit first, on a page that was re-measured. Absent on every other page. */
+  performanceSamples?: number[];
 }
 
 /** One page's reading budget as the PR body prints it: "61% / 94%", or what is missing. */

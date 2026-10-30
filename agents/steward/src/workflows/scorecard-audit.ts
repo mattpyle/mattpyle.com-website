@@ -4,6 +4,8 @@ import {
   aggregate,
   checkAuditSet,
   decidePublish,
+  PERFORMANCE_PASS_THRESHOLD,
+  performanceFromSamples,
   summariseLighthouseTool,
   summariseReadingBudget,
   type PageAuditOutcome,
@@ -51,6 +53,22 @@ const QUEUE_AUDIT = 'steward-audit';
  * now sends. Histories recorded before it ended at the archive leg and lack it.
  */
 export const RUN_SHAPE_RECOVERY_PATCH = 'scorecard-run-shape-recovery';
+
+/**
+ * The `patched` marker of the Performance re-check: after the fan-out, each page
+ * scoring under {@link PERFORMANCE_PASS_THRESHOLD} gets two more serial
+ * `auditLiveUrl` calls. A history recorded before it that flagged a page ended
+ * the fan-out there and went on to `resolveRunStamp`, so the new calls would
+ * strand it. The marker is evaluated only when a page is flagged: a run that
+ * flags none issues no new command and records no marker.
+ *
+ * The committed `scorecard-dry-run.json` fixture holds no page under 95 (every
+ * Performance score in it is 98 to 100), so it replays green with or without the
+ * guard. Probe, 2026-10-29: with the guard deleted, that replay still passed.
+ * The fixture therefore cannot prove this marker. The workflow tests in
+ * `tests/workflows/scorecard-audit.test.ts` cover the re-check path instead.
+ */
+export const PERFORMANCE_RECHECK_PATCH = 'scorecard-performance-recheck';
 
 export interface ScorecardAuditInput {
   /** Manual `--urls` override. Omitted -> resolved from the live sitemap (spec §4.2 step 0). */
@@ -107,6 +125,8 @@ export interface ScorecardAuditResult {
     scores: Record<string, number>;
     axeViolations: number;
     readingBudget?: ReadingBudget;
+    /** First audit first. Present only on a page that was re-measured. */
+    performanceSamples?: number[];
   }>;
 }
 
@@ -238,6 +258,44 @@ async function auditAll(urls: string[]): Promise<PageAuditOutcome[]> {
     results.push(...batchResults);
   }
   return results;
+}
+
+/**
+ * Re-measures every page whose first Performance sample is under the Pass line.
+ * Each flagged page gets two more serial `auditLiveUrl` calls and is credited
+ * with the median of the three samples. Only Performance changes: every other
+ * score, axe and the reading budget keep the first audit. A page whose first
+ * audit failed is not re-checked; a re-check call that fails is dropped from the
+ * samples. Serial for the reason `AUDIT_CONCURRENCY` gives.
+ */
+async function recheckLowPerformance(
+  outcomes: PageAuditOutcome[],
+): Promise<{ outcomes: PageAuditOutcome[]; samples: Map<string, number[]> }> {
+  const samples = new Map<string, number[]>();
+  const flagged = outcomes.filter(
+    (p) => p.ok && (p.scores.performance ?? 0) < PERFORMANCE_PASS_THRESHOLD,
+  );
+  if (flagged.length === 0 || !wf.patched(PERFORMANCE_RECHECK_PATCH)) return { outcomes, samples };
+
+  const rechecked = new Map<string, PageAuditOutcome>();
+  for (const page of flagged) {
+    if (!page.ok) continue;
+    const taken = [page.scores.performance ?? 0];
+    for (let n = 0; n < 2; n++) {
+      try {
+        const again = await heavy.auditLiveUrl(page.url);
+        if (again.ok && typeof again.scores.performance === 'number') taken.push(again.scores.performance);
+      } catch {
+        // Dropped from the samples (design rule 4).
+      }
+    }
+    samples.set(page.url, taken);
+    rechecked.set(page.url, {
+      ...page,
+      scores: { ...page.scores, performance: performanceFromSamples(taken) },
+    });
+  }
+  return { outcomes: outcomes.map((p) => rechecked.get(p.url) ?? p), samples };
 }
 
 /**
@@ -398,7 +456,8 @@ async function runScorecardAudit(
   }
 
   // --- Step 1: fan out --------------------------------------------------
-  const perPage = await auditAll(urls);
+  const firstPass = await auditAll(urls);
+  const { outcomes: perPage, samples } = await recheckLowPerformance(firstPass);
 
   // --- Step 2: aggregate (pure, deterministic) ---------------------------
   const metrics = aggregate(perPage);
@@ -417,6 +476,7 @@ async function runScorecardAudit(
           scores: p.scores,
           axeViolations: p.axeViolations,
           ...(p.readingBudget ? { readingBudget: p.readingBudget } : {}),
+          ...(samples.has(p.url) ? { performanceSamples: samples.get(p.url) } : {}),
         }
       : { url: p.url, scores: {}, axeViolations: 0 },
   );

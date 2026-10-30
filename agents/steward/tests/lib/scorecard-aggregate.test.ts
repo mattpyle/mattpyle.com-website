@@ -559,3 +559,13 @@ test('a failing ard-schema check counts in the Agentic Browsing total and reads 
   assert.match(metric?.description ?? '', /AI catalog/);
   assert.doesNotMatch(metric?.description ?? '', /`/);
 });
+
+import { performanceFromSamples } from '../../src/lib/scorecard-aggregate.js';
+import { test as perfTest } from 'node:test';
+import perfAssert from 'node:assert/strict';
+
+perfTest('performanceFromSamples: median of three, lower of two, one kept', () => {
+  perfAssert.equal(performanceFromSamples([87, 99, 98]), 98);
+  perfAssert.equal(performanceFromSamples([99, 87]), 87);
+  perfAssert.equal(performanceFromSamples([91]), 91);
+});

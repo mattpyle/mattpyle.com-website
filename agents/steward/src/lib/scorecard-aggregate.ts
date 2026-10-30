@@ -119,6 +119,22 @@ export function summariseLighthouseTool(perPage: PageAuditOutcome[]): string {
   return LIGHTHOUSE_TOOL_FALLBACK;
 }
 
+/** The Pass line for Performance, and the score below which a page is re-measured. */
+export const PERFORMANCE_PASS_THRESHOLD = 95;
+
+/**
+ * The Performance score a page is credited with, from its samples (first audit
+ * first). Three samples: the median. Two (a re-check call failed): the lower.
+ * One: that one. Lighthouse's own variance guidance is the median; the lower of
+ * two is the conservative read when the tie cannot be broken.
+ */
+export function performanceFromSamples(samples: number[]): number {
+  if (samples.length === 0) return 0;
+  const sorted = [...samples].sort((a, b) => a - b);
+  if (sorted.length === 2) return sorted[0];
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+}
+
 interface NormalizedPage {
   scores: Record<string, number>;
   axeViolations: number;
@@ -181,7 +197,7 @@ export function aggregate(perPage: PageAuditOutcome[]): ScorecardMetric[] {
     name: 'Performance',
     value: String(minPerf),
     maximum: '100',
-    status: minPerf >= 95 ? 'Pass' : minPerf >= 90 ? 'Partial' : 'Fail',
+    status: minPerf >= PERFORMANCE_PASS_THRESHOLD ? 'Pass' : minPerf >= 90 ? 'Partial' : 'Fail',
     description: `The lowest Lighthouse performance score across ${pageCount} tested page${pageCount === 1 ? '' : 's'}.`,
   };
 
