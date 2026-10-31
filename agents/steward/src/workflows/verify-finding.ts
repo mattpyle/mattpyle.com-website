@@ -101,8 +101,8 @@ export interface VerifyFindingResult {
   site: string;
   key: string;
   outcome: VerifyOutcome;
-  /** The block as it was run: `{url, kind, expect}` per check, and a `viewport` where the check names one. */
-  block: { url: string | string[]; kind: string; expect: unknown; viewport?: string }[];
+  /** The block as it was run: `{url, kind, expect}` per check, and a `viewport` or a `status` where the check names one. */
+  block: { url: string | string[]; kind: string; expect: unknown; viewport?: string; status?: number }[];
   checks: VerifyFindingCheck[];
   /** Where the checks came from: `finding` since decision 29. An older result may name the handoff. */
   source: VerifyBlockSource;
