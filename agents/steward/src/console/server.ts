@@ -24,7 +24,10 @@ import { renderFindingsPage, renderMessagePage, renderVerdictResult, type PageOp
  *    `src/mcp/http.ts` explains. It runs before the routing.
  * 2. A POST must carry an `Origin` equal to this server's own origin. A form
  *    on another site sends that site's origin, and a browser always sends one
- *    on a cross-origin POST.
+ *    on a cross-origin POST. A missing or `null` Origin is refused. The page
+ *    sends `referrer-policy: same-origin` so its own POST carries the real
+ *    Origin: under `no-referrer` the browser sends `null` and the guard
+ *    refuses the console's own form.
  * 3. A POST must carry the per-process random token, which only a page this
  *    process rendered holds.
  *
@@ -70,7 +73,9 @@ const HEADERS = {
     "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
-  'referrer-policy': 'no-referrer',
+  // Not `no-referrer`: under that policy a browser sends `Origin: null` on the page's own form POST,
+  // and the same-origin guard below refuses it. `same-origin` sends no referrer to any other site.
+  'referrer-policy': 'same-origin',
 };
 
 class Refused extends Error {

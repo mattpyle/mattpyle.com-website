@@ -82,6 +82,33 @@ test('the listener is on 127.0.0.1 and the page renders for a loopback Host', as
   }
 });
 
+test('every response sends referrer-policy same-origin, so the page POST carries its own Origin', async () => {
+  for (const path of ['/findings', '/nope']) {
+    const res = await consoleRequest({ port: server.port, path });
+    assert.equal(res.headers['referrer-policy'], 'same-origin', path);
+  }
+  const refused = await consoleRequest({
+    port: server.port,
+    path: '/findings/verdict',
+    method: 'POST',
+    origin: 'null',
+    form: form(),
+  });
+  assert.equal(refused.headers['referrer-policy'], 'same-origin');
+});
+
+test('a POST whose Origin is the console origin and carries the token is accepted', async () => {
+  const res = await consoleRequest({
+    port: server.port,
+    path: '/findings/verdict',
+    method: 'POST',
+    origin: origin(),
+    form: form(),
+  });
+  assert.equal(res.status, 200, res.body);
+  assert.equal(sent.length, 1);
+});
+
 test('a request whose Host is not loopback is refused, on every path', async () => {
   for (const path of ['/findings', '/', '/fonts/jetbrains-mono-latin.woff2', '/nope']) {
     const res = await consoleRequest({ port: server.port, path, host: 'attacker.example:80' });
