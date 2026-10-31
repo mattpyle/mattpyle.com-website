@@ -120,7 +120,7 @@ const { address, failure, report, byGroup } = Astro.props;
     <section class="rd-section band band--callout" aria-labelledby="audit-error">
       <div class="callout">
         <h2 id="audit-error">{failure.title}</h2>
-        <p>{failure.body}</p>
+        <p id="audit-error-body">{failure.body}</p>
       </div>
     </section>
   )}
@@ -185,6 +185,8 @@ const { address, failure, report, byGroup } = Astro.props;
               required
               placeholder={FORM.placeholder}
               value={address}
+              aria-invalid={failure ? "true" : undefined}
+              aria-describedby={failure ? "audit-error-body" : undefined}
               toolparamdescription={TOOL.param}
             />
             <button type="submit" data-audit-submit>{FORM.button}</button>
