@@ -5,7 +5,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { Client, WorkflowNotFoundError } from '@temporalio/client';
 import { ApplicationFailure } from '@temporalio/common';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { reconcileFindingsWorkflow } from '../../src/workflows/reconcile-findings.js';
 import { findingStateQuery, type FindingState, type FindingWorkflowResult } from '../../src/workflows/finding.js';
 import { startFindingWorkflow } from '../../src/activities/findings.js';
@@ -108,7 +108,7 @@ async function withWorker<T>(activities: Record<string, unknown>, fn: () => Prom
     taskQueue: QUEUE,
     bundlerOptions: {},
   });
-  return await worker.runUntil(fn());
+  return await worker.runUntil(bounded(fn()));
 }
 
 let runs = 0;

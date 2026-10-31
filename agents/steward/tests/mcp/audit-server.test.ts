@@ -108,12 +108,13 @@ const activities = {
 };
 
 let workers: Worker[] = [];
+let running: Promise<void>[] = [];
 
 before(async () => {
   env = await createTestEnv();
   const common = { connection: env.nativeConnection, workflowsPath, activities, bundlerOptions: {} };
   workers = [await Worker.create({ ...common, taskQueue: QUEUE_AUDIT })];
-  for (const worker of workers) void worker.run();
+  running = workers.map((worker) => worker.run());
   // Port 0: the OS picks a free one, so the suite cannot collide with a real
   // `steward mcp-serve` on the default port.
   server = await startMcpHttpServer({ client: env.client, host: '127.0.0.1', port: 0 });
@@ -123,6 +124,8 @@ before(async () => {
 after(async () => {
   await server?.close();
   for (const worker of workers) worker.shutdown();
+  // Teardown closes the connection, which throws while a worker still holds it.
+  await Promise.allSettled(running);
   await env?.teardown();
 });
 

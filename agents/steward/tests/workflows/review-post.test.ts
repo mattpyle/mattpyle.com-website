@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { Worker } from '@temporalio/worker';
 import type { DraftSnapshot, PassResult, ReviewReport } from '../../src/lib/report.js';
 import {
@@ -250,7 +250,7 @@ async function withWorker<T>(
   };
   const light = await Worker.create({ ...common, taskQueue: QUEUE });
   const heavy = await Worker.create({ ...common, taskQueue: QUEUE_HEAVY });
-  return await light.runUntil(heavy.runUntil(fn()));
+  return await light.runUntil(heavy.runUntil(bounded(fn())));
 }
 
 function start(id: string) {

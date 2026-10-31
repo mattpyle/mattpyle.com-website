@@ -6,7 +6,7 @@ import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { WorkflowFailedError } from '@temporalio/client';
 import { CancelledFailure } from '@temporalio/common';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { fixFindingStateQuery, fixFindingWorkflow, type FixFindingInput } from '../../src/workflows/fix-finding.js';
 import type { WriteFindingFixInput } from '../../src/activities/findings.js';
 import {
@@ -132,7 +132,7 @@ async function withWorker<T>(activities: Record<string, unknown>, fn: () => Prom
     // throttles heartbeats to 80% of the 30-second timeout by default.
     maxHeartbeatThrottleInterval: '100 milliseconds',
   });
-  return await worker.runUntil(fn());
+  return await worker.runUntil(bounded(fn()));
 }
 
 function input(key: string = DEFECT_KEY, overrides: Partial<FixFindingInput> = {}): FixFindingInput {
