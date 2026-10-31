@@ -73,7 +73,7 @@ My first attempt was in Chrome and NVDA was just repeating "Chrome Legacy Window
 
 I ran the test on the wrong page. A happy little accident.
 
-My site then had *two* filter widgets — one on `/writing`, one on `/builds`. I had only ever fixed one of them. I didn't account for the other one (who has two filter components?!).
+At the time, my site had *two* filter widgets: one on `/writing` and one on `/builds`, both since removed in a redesign. I had only ever fixed one of them. I didn't account for the other one (who has two filter components?!).
 
 So the first thing I heard was the original bug, still live:
 
