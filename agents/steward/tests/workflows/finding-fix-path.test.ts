@@ -102,6 +102,8 @@ function harness(
   const issues: OpenFixIssueInput[] = [];
   const activities = {
     readSiteAutoFix: async () => false,
+    // A cause with no path: the activity grants, and no dispatcher runs.
+    requestFixSlot: async () => ({ paths: [], dispatched: false }),
     openFixIssue: async (input: OpenFixIssueInput): Promise<FixIssue> => {
       issues.push(input);
       const number = 100 + issues.length;

@@ -62,6 +62,11 @@ export {
   writeFindingReturned,
   listOpenFindingWorkflows,
   startFindingWorkflow,
+  // The fix dispatcher (fix-dispatch-by-surface): a slot request and the
+  // sweep through the worker's client, and the conflicting PR's close.
+  requestFixSlot,
+  runningWorkflowIds,
+  closeConflictingFixPr,
 } from './findings.js';
 // The fixer, on `steward-heavy`: it needs the checkout, a local Claude Code
 // login and git credentials, so it runs on the laptop worker only.

@@ -1,5 +1,5 @@
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import { WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from '@temporalio/client';
+import { WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError, type Client } from '@temporalio/client';
 import { FINDINGS_DEFAULT_SITE, GITHUB_REPO, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
@@ -39,6 +39,7 @@ import {
   type VerifyBlockSource,
 } from '../lib/findings.js';
 import { validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
+import { causePaths, dispatchWorkflowId, type SlotRequest } from '../lib/fix-dispatch.js';
 import type { FindingState, FindingStopAfter, FindingWorkflowInput } from '../workflows/finding.js';
 
 /**
@@ -363,11 +364,29 @@ export async function readFixPr(prUrl: string): Promise<FixPrState> {
 
 export interface FixPrOutcome {
   prUrl: string;
-  state: 'merged' | 'closed';
+  /** `conflicting` only when the caller asked for it with `reportConflict`. */
+  state: 'merged' | 'closed' | 'conflicting';
   /** The merge commit on the base branch, or null for a PR closed unmerged. */
   mergeSha: string | null;
   /** ISO 8601: when it merged or closed. */
   at: string | null;
+}
+
+export interface AwaitFixPrMergeOptions {
+  /**
+   * End the wait with `conflicting` when GitHub says the PR cannot merge
+   * cleanly (fix-dispatch-by-surface). Only a dispatched attempt passes it: an
+   * attempt scheduled without it keeps the two outcomes its workflow code reads.
+   */
+  reportConflict?: boolean;
+}
+
+/**
+ * A PR GitHub has computed as conflicting with its base. `mergeable` is null
+ * while GitHub computes it, which reads as "not yet", never as a conflict.
+ */
+export function prConflicts(data: { mergeable?: unknown; mergeable_state?: unknown }): boolean {
+  return data.mergeable === false && data.mergeable_state === 'dirty';
 }
 
 /**
@@ -381,7 +400,7 @@ export interface FixPrOutcome {
  * `gh`, and a 401 or 403 is retryable here through {@link authRetryable}: a
  * month-long wait is where a token rotation lands.
  */
-export async function awaitFixPrMerge(prUrl: string): Promise<FixPrOutcome> {
+export async function awaitFixPrMerge(prUrl: string, options: AwaitFixPrMergeOptions = {}): Promise<FixPrOutcome> {
   const pr = parsePrUrl(prUrl);
   if (!pr) throw ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
   const data = await authRetryable(() => gh(`/repos/${pr.repo}/pulls/${pr.number}`));
@@ -393,7 +412,99 @@ export async function awaitFixPrMerge(prUrl: string): Promise<FixPrOutcome> {
   if (data.state === 'closed') {
     return { prUrl, state: 'closed', mergeSha: null, at: (data.closed_at as string | null) ?? null };
   }
+  if (options.reportConflict === true && prConflicts(data)) {
+    log.info({ activity: 'awaitFixPrMerge', pr: prUrl }, 'the fix PR conflicts with its base');
+    return { prUrl, state: 'conflicting', mergeSha: null, at: null };
+  }
   throw ApplicationFailure.retryable(`${prUrl} is still open.`, 'PrStillOpen');
+}
+
+export interface CloseConflictingFixPrResult {
+  /** False when the PR was no longer open: merged or closed between the read and this call. */
+  closed: boolean;
+  /** PRs merged since this one opened that change a file it changes, newest first. */
+  siblings: string[];
+  /** The files this PR shares with them. */
+  files: string[];
+}
+
+/** The hidden marker on Steward's close comment, so a retry does not post it twice. */
+const RECUT_MARKER = '<!-- steward:recut -->';
+
+/** How many recently merged PRs the sibling search reads the files of. */
+const SIBLING_CANDIDATES = 10;
+
+async function prFiles(repo: string, number: number): Promise<string[]> {
+  const files = (await gh(`/repos/${repo}/pulls/${number}/files?per_page=100`)) as { filename: string }[];
+  return files.map((f) => f.filename);
+}
+
+/**
+ * Steward's close comment on a conflicting fix PR: what it collided with, and
+ * that the fix is re-cut. Pure, for the test.
+ */
+export function recutComment(siblings: string[], files: string[]): string {
+  const on = files.length > 0 ? `, on ${files.map((f) => '`' + f + '`').join(', ')}` : '';
+  const withWhat =
+    siblings.length > 0
+      ? `It conflicts with \`master\` since ${siblings.join(', ')} merged${on}.`
+      : 'It conflicts with `master` since another change merged.';
+  return [
+    RECUT_MARKER,
+    `Steward closed this PR. ${withWhat}`,
+    '',
+    'The fix is re-cut: a new issue opens for the same finding once no in-flight fix names its files, and its PR is cut from the new `master`.',
+  ].join('\n');
+}
+
+/**
+ * Closes a fix PR that conflicts with its base, with a comment naming the
+ * sibling (fix-dispatch-by-surface). The sibling is read from GitHub, not from
+ * the dispatcher: a conflict happens precisely when the two findings named
+ * different paths, so the dispatcher never saw them as related. The search
+ * reads the PRs merged into the same base since this one opened, up to
+ * {@link SIBLING_CANDIDATES}, and keeps those that change a file this one
+ * changes. None found still closes, with a comment that says so.
+ *
+ * Safe to retry: a PR already closed is left alone, and the comment is posted
+ * once, told by its hidden marker.
+ */
+export async function closeConflictingFixPr(prUrl: string): Promise<CloseConflictingFixPrResult> {
+  const pr = parsePrUrl(prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
+  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  if (data.state !== 'open') return { closed: false, siblings: [], files: [] };
+
+  const mine = new Set(await prFiles(pr.repo, pr.number));
+  const createdAt = String(data.created_at ?? '');
+  const baseRef = String(data.base?.ref ?? 'master');
+  const recent = (await gh(
+    `/repos/${pr.repo}/pulls?state=closed&base=${encodeURIComponent(baseRef)}&sort=updated&direction=desc&per_page=30`,
+  )) as { number: number; html_url: string; merged_at: string | null }[];
+  const candidates = recent
+    .filter((p) => p.number !== pr.number && p.merged_at && p.merged_at > createdAt)
+    .sort((a, b) => String(b.merged_at).localeCompare(String(a.merged_at)))
+    .slice(0, SIBLING_CANDIDATES);
+  const siblings: string[] = [];
+  const shared = new Set<string>();
+  for (const candidate of candidates) {
+    const overlap = (await prFiles(pr.repo, candidate.number)).filter((f) => mine.has(f));
+    if (overlap.length === 0) continue;
+    siblings.push(candidate.html_url);
+    for (const f of overlap) shared.add(f);
+  }
+  const files = [...shared].sort();
+
+  const comments = (await gh(`/repos/${pr.repo}/issues/${pr.number}/comments?per_page=100`)) as { body?: string | null }[];
+  if (!comments.some((c) => (c.body ?? '').includes(RECUT_MARKER))) {
+    await gh(`/repos/${pr.repo}/issues/${pr.number}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ body: recutComment(siblings, files) }),
+    });
+  }
+  await gh(`/repos/${pr.repo}/pulls/${pr.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed' }) });
+  log.info({ activity: 'closeConflictingFixPr', pr: prUrl, siblings, files }, 'conflicting fix PR closed');
+  return { closed: true, siblings, files };
 }
 
 /**
@@ -1133,4 +1244,88 @@ export async function listOpenFindingWorkflows(): Promise<OpenFindingWorkflow[]>
     }
   }
   return runs.sort((a, b) => a.workflowId.localeCompare(b.workflowId));
+}
+
+export interface RequestFixSlotInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+  key: string;
+  /** `sites/<site>/findings/<key>.md` */
+  findingPath: string;
+  /** The asking run's workflow ID, where the grant goes. */
+  workflowId: string;
+  /** The attempt the slot is for. */
+  ticket: number;
+  /** ISO 8601, the asking run's clock. */
+  at: string;
+}
+
+export interface FixSlotRequested {
+  /** The repository paths the finding's cause names. */
+  paths: string[];
+  /**
+   * False when the finding names no path: such a fix shares nothing with any
+   * other, so it is granted here and the dispatcher never hears of it.
+   */
+  dispatched: boolean;
+}
+
+/**
+ * Sends one slot request to the site's dispatcher, starting it when none runs.
+ * Exported so a test can send a request with paths of its own choosing.
+ */
+export async function sendSlotRequest(client: Client, site: string, request: SlotRequest): Promise<void> {
+  await client.workflow.signalWithStart('fixDispatchWorkflow', {
+    workflowId: dispatchWorkflowId(site),
+    taskQueue: QUEUE_FINDINGS,
+    args: [{ site }],
+    signal: 'slot-request',
+    signalArgs: [request],
+  });
+}
+
+/**
+ * A fix attempt's slot request (fix-dispatch-by-surface): reads the finding,
+ * takes the repository paths its "Cause, from the source" line names
+ * ({@link causePaths}), and signals them with start to `dispatch/<site>`. The
+ * grant comes back to the run as a signal. Read at each request, so a cause
+ * Argus has edited since the last attempt is the one that counts.
+ *
+ * Safe to retry: the dispatcher reads a second request with the same workflow
+ * ID and ticket as the same request.
+ */
+export async function requestFixSlot(input: RequestFixSlotInput): Promise<FixSlotRequested> {
+  const finding = await readFinding(input.repo, input.findingPath);
+  const paths = causePaths(parseFindingBody(finding.text).cause);
+  if (paths.length === 0) return { paths, dispatched: false };
+  await sendSlotRequest(Context.current().client, input.site, {
+    workflowId: input.workflowId,
+    key: input.key,
+    paths,
+    ticket: input.ticket,
+    at: input.at,
+  });
+  log.info({ activity: 'requestFixSlot', key: input.key, paths, ticket: input.ticket }, 'fix slot requested');
+  return { paths, dispatched: true };
+}
+
+/**
+ * Which of these workflow IDs have a running execution: the dispatcher's sweep
+ * for slots abandoned by a run that ended without releasing. An ID the server
+ * does not know is not running.
+ */
+export async function runningWorkflowIds(ids: string[]): Promise<string[]> {
+  const client = Context.current().client;
+  const running: string[] = [];
+  for (const id of ids) {
+    try {
+      const described = await client.workflow.getHandle(id).describe();
+      if (described.status.name === 'RUNNING') running.push(id);
+    } catch (err) {
+      if (err instanceof WorkflowNotFoundError) continue;
+      throw err;
+    }
+  }
+  return running;
 }

@@ -80,6 +80,7 @@ function store(initial: Record<string, string>) {
     },
     // Read by a finding run at its verdict and by the reconciler for a parked defect.
     readSiteAutoFix: async () => flags.autoFix,
+    requestFixSlot: async () => ({ paths: [], dispatched: false }),
     openFixIssue: async (input: { key: string }) => {
       fixIssues.push(input.key);
       throw ApplicationFailure.nonRetryable('the test opens no issue', 'FindingNotFixable');

@@ -109,6 +109,8 @@ function lifecycle(script: Script) {
       calls.push('writeFindingVerdict');
       return { findingCommitSha: 'c-v1', indexCommitSha: 'c-v2', commitSha: 'c-v2' };
     },
+    // A cause with no path: the activity grants, and no dispatcher runs.
+    requestFixSlot: async () => ({ paths: [], dispatched: false }),
     readSiteAutoFix: async () => {
       calls.push('readSiteAutoFix');
       return script.autoFix ?? false;
