@@ -1,4 +1,4 @@
-import { test, before, after } from 'node:test';
+import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
@@ -41,6 +41,22 @@ import { FIXING_FINDING, ORIGIN } from '../helpers/finding-fixtures.js';
  * the real merge wait and close against a scripted GitHub.
  *
  * Each test uses its own site, so each has its own dispatcher.
+ *
+ * **Each test has its own test server**, started in `beforeEach`. A shared
+ * one let a test stall a later one. When a time-skipping `result()` returns,
+ * the run's last workflow task completes and the server's time lock touches
+ * zero before the client locks again. In that instant the server skips to the
+ * next timer anywhere on it, such as an earlier test's idle dispatcher reaching
+ * its 24-hour close. That timer schedules a workflow task just as the test's
+ * worker shuts down; the task is never started, and the server keeps a time
+ * lock for it from then on, so every later wait on time skipping stalls. On
+ * CI on 2026-10-30 that was the sweep test, behind tests 1 and 3. A fresh
+ * server per test has no earlier runs to fire, and a task lost at a test's end
+ * goes with that test's server.
+ *
+ * For the same reason each test awaits at most one result through the
+ * time-skipping client: the gap after a first await could strand a task the
+ * second await then waits on.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
@@ -52,12 +68,12 @@ let env: TestWorkflowEnvironment;
 // while it awaits a result, which is wanted only where a test awaits one.
 let client: Client;
 
-before(async () => {
+beforeEach(async () => {
   env = await createTestEnv();
   client = new Client({ connection: env.connection, namespace: env.namespace });
 }, { timeout: 120_000 });
 
-after(async () => {
+afterEach(async () => {
   await env?.teardown();
 });
 
@@ -233,14 +249,13 @@ test('two findings naming one path: the second waits at waiting-slot, and its is
     assert.deepEqual(slotBlocker(await dispatchState(site), second.workflowId), { key: a, path: 'src/shared.ts', held: true });
     assert.deepEqual(m.log, [`issue:${a}`, `pr:${a}`], 'no issue for the second fix while the first is in flight');
 
-    // Awaiting through the time-skipping client lets the merge polls run. One
-    // await at a time: each `result()` unlocks time skipping and locks it again
-    // after, and two at once unlock past zero, which the test server refuses
-    // (`IllegalStateException: Unbalanced lock and unlock calls`).
+    // One await through the time-skipping client, which lets the merge polls
+    // run (see the file's docblock). The second run is granted only once the
+    // first is live, and the first needs no timer after that, so the plain
+    // client finishes it.
     const results: FindingWorkflowResult[] = [];
-    for (const handle of [first, second]) {
-      results.push((await env.client.workflow.getHandle(handle.workflowId).result()) as FindingWorkflowResult);
-    }
+    const secondResult = (await env.client.workflow.getHandle(second.workflowId).result()) as FindingWorkflowResult;
+    results.push((await first.result()) as FindingWorkflowResult, secondResult);
     assert.deepEqual(results.map((r) => r.outcome), ['resolved', 'resolved']);
   });
 

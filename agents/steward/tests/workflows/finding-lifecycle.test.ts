@@ -1,7 +1,8 @@
-import { test, before, after } from 'node:test';
+import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
+import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
@@ -44,6 +45,25 @@ import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../h
  * The waits are scripted per attempt, so a test reads as the sequence of polls
  * GitHub would answer. The retry intervals are the real ones (1, 5 and 2
  * minutes); the time-skipping server jumps them.
+ *
+ * **Each test has its own test server**, started in `beforeEach`. A shared one
+ * let a test stall a later one. When a time-skipping `result()` returns, the
+ * run's last workflow task completes and the server's time lock touches zero
+ * before the client locks again. In that instant the server skips to the next
+ * timer anywhere on it, such as an earlier test's parked run reaching its
+ * execution timeout. That timer schedules a workflow task just as the test's
+ * worker shuts down; the task is never started, and the server keeps a time
+ * lock for it from then on, so every later wait on time skipping stalls. On CI
+ * on 2026-10-30 that was the 30-day and 24-hour timeout tests. A fresh server
+ * per test has no earlier runs to fire, and a task lost at a test's end goes
+ * with that test's server.
+ *
+ * For the same reason each test awaits at most one thing through the
+ * time-skipping client: a `result()` through `skipResult`, or one `env.sleep`.
+ * Everything else, the starts, the signals and the state polls, goes through the
+ * plain `client`, in real time. A test whose run needs a timer to reach a state
+ * it asserts on spends its one await on the run's result; a test that must see
+ * two time-separated states scripts the run with no timers.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
@@ -56,14 +76,22 @@ const ISSUE_2 = `https://github.com/${SITE_REPO}/issues/102`;
 const CHECK: VerifyCheck = { url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { contains: '1 axe violation (Fail)' } };
 
 let env: TestWorkflowEnvironment;
+// A plain client: it never unlocks time skipping. Only `skipResult` does.
+let client: Client;
 
-before(async () => {
+beforeEach(async () => {
   env = await createTestEnv();
+  client = new Client({ connection: env.connection, namespace: env.namespace });
 }, { timeout: 120_000 });
 
-after(async () => {
+afterEach(async () => {
   await env?.teardown();
 });
+
+/** The test's one time-skipping await: the run's result, with the server free to skip its timers. */
+function skipResult(handle: { workflowId: string }) {
+  return env.client.workflow.getHandle<typeof findingWorkflow>(handle.workflowId).result();
+}
 
 interface Script {
   /** The site config's `auto_fix`. */
@@ -261,7 +289,7 @@ const FIX = { source: 'cli' as const, at: '2026-10-13T18:05:00Z' };
 
 /** Starts a lifecycle, approves it and sends the first `fix`. */
 async function startApproved(id: string) {
-  const handle = await env.client.workflow.start(findingWorkflow, {
+  const handle = await client.workflow.start(findingWorkflow, {
     workflowId: `finding/mattpyle-com/lifecycle-${id}`,
     taskQueue: FINDINGS,
     args: [input(id)],
@@ -281,7 +309,7 @@ test('merged, deployed and every check passes: resolved, with one execution carr
   let childQueues: (string | null | undefined)[] = [];
   const result = (await withWorkers(mocks, async () => {
     const handle = await startApproved('resolved');
-    const done = await handle.result();
+    const done = await skipResult(handle);
     const history = await handle.fetchHistory();
     childQueues = (history.events ?? [])
       .map((e) => e.startChildWorkflowExecutionInitiatedEventAttributes)
@@ -332,7 +360,7 @@ test('auto_fix: the approved verdict goes to the issue with no fix signal, and t
     deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
   });
   const result = await withWorkers(mocks, async () => {
-    const handle = await env.client.workflow.start(findingWorkflow, {
+    const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-auto-fix',
       taskQueue: FINDINGS,
       args: [input('auto-fix')],
@@ -341,7 +369,7 @@ test('auto_fix: the approved verdict goes to the issue with no fix signal, and t
     const waiting = await untilState(handle, (s) => s.step === 'fixing' && Boolean(s.issueUrl), 'fixing with an issue');
     assert.equal(waiting.issueUrl, ISSUE_1, 'the issue is in the state while the run waits for the PR');
     assert.equal(waiting.prUrl, null);
-    return handle.result();
+    return skipResult(handle);
   });
 
   assert.equal(result.outcome, 'resolved');
@@ -353,7 +381,7 @@ test('auto_fix: the approved verdict goes to the issue with no fix signal, and t
 test('without auto_fix the approved run waits at waiting-fix and opens no issue', async () => {
   const mocks = lifecycle({ autoFix: false, merge: {} });
   await withWorkers(mocks, async () => {
-    const handle = await env.client.workflow.start(findingWorkflow, {
+    const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-no-auto-fix',
       taskQueue: FINDINGS,
       args: [input('no-auto-fix')],
@@ -370,7 +398,7 @@ test('without auto_fix the approved run waits at waiting-fix and opens no issue'
 test('auto_fix on, kind not a defect: the approved run parks at waiting-fix with no attempt and no issue', async () => {
   const mocks = lifecycle({ autoFix: true, merge: {} });
   await withWorkers(mocks, async () => {
-    const handle = await env.client.workflow.start(findingWorkflow, {
+    const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-opportunity-parks',
       taskQueue: FINDINGS,
       args: [{ ...input('opportunity-parks'), waitsForPerson: true }],
@@ -391,7 +419,7 @@ test('auto_fix on, kind not a defect: the approved run parks at waiting-fix with
 test('a fix signal on the parked opportunity runs the attempt, and the waiting reason clears', async () => {
   const mocks = lifecycle({ autoFix: true, prPolls: [3], merge: {} });
   await withWorkers(mocks, async () => {
-    const handle = await env.client.workflow.start(findingWorkflow, {
+    const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-opportunity-fix-signal',
       taskQueue: FINDINGS,
       args: [{ ...input('opportunity-fix-signal'), waitsForPerson: true }],
@@ -413,7 +441,7 @@ test('merged and deployed, but a check fails on production: reopened with both v
     deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
     passes: false,
   });
-  const result = await withWorkers(mocks, async () => (await startApproved('reopened')).result());
+  const result = await withWorkers(mocks, async () => skipResult(await startApproved('reopened')));
 
   assert.equal(result.outcome, 'reopened');
   assert.equal(mocks.seen.verification?.verification.status, 'reopened');
@@ -428,7 +456,7 @@ test('merged and deployed, and the finding has no verify block: confirmed by the
     deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
     noBlock: true,
   });
-  const result = await withWorkers(mocks, async () => (await startApproved('confirmed')).result());
+  const result = await withWorkers(mocks, async () => skipResult(await startApproved('confirmed')));
 
   assert.equal(result.outcome, 'confirmed');
   assert.match(result.note ?? '', /^Confirmed by its deploy: production serves m1, which contains m1\. No check could measure the fix\.$/);
@@ -452,7 +480,7 @@ test('no verify block, and production does not contain the fix: verify-failed, t
     noBlock: true,
     liveContains: false,
   });
-  const result = await withWorkers(mocks, async () => (await startApproved('not-contained')).result());
+  const result = await withWorkers(mocks, async () => skipResult(await startApproved('not-contained')));
 
   assert.equal(result.outcome, 'verify-failed');
   assert.match(result.note ?? '', /could not be confirmed by the deploy: Production serves old.+The finding is still fixing\./);
@@ -460,9 +488,12 @@ test('no verify block, and production does not contain the fix: verify-failed, t
 });
 
 test('a PR closed unmerged writes approved back, and the next fix closes the first issue naming the PR and opens a second', async () => {
+  // No timer anywhere: the run reaches both of its waiting-fix states in real
+  // time, so the test needs no time skipping and the plain client finishes it.
   const mocks = lifecycle({
+    prPolls: [0, 0],
     merge: {
-      [PR_1]: { openPolls: 1, outcome: { prUrl: PR_1, state: 'closed', mergeSha: null, at: '2026-10-13T19:00:00Z' } },
+      [PR_1]: { openPolls: 0, outcome: { prUrl: PR_1, state: 'closed', mergeSha: null, at: '2026-10-13T19:00:00Z' } },
       [PR_2]: { openPolls: 0, outcome: merged(PR_2, 'm2') },
     },
     deploys: [[{ id: 3, sha: 'm2', state: 'success' }]],
@@ -474,7 +505,6 @@ test('a PR closed unmerged writes approved back, and the next fix closes the fir
       handle,
       (state) => state.step === 'waiting-fix' && mocks.seen.returned.length === 1,
       'waiting-fix after one returned PR',
-      '10 seconds',
     );
     const waiting = await handle.query(findingStateQuery);
     assert.equal(waiting.prUrl, PR_1, 'the closed PR is still the last one');
@@ -517,7 +547,7 @@ test('no PR within 60 minutes: the reason lands in lastFixError and the run goes
     // A pending result() lets the server skip the hour of polls. Once the run
     // idles at waiting-fix it skips on to the test server's own execution
     // timeout, so the state is read on the way and the run is left there.
-    const done = handle.result().catch(() => undefined);
+    const done = skipResult(handle).catch(() => undefined);
     let waiting: FindingState;
     const deadline = Date.now() + 60_000;
     for (;;) {
@@ -576,7 +606,7 @@ test('a deploy that never serves the merge commit times out after 24 hours: stil
     merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
     deploys: [[{ id: 1, sha: 'old', state: 'success' }]],
   });
-  const result = await withWorkers(mocks, async () => (await startApproved('deploy-timeout')).result());
+  const result = await withWorkers(mocks, async () => skipResult(await startApproved('deploy-timeout')));
 
   assert.equal(result.outcome, 'deploy-timeout');
   assert.equal(result.mergeSha, 'm1');
@@ -590,7 +620,7 @@ test('a PR nobody merges or closes times out after 30 days: still fixing, no dep
   const mocks = lifecycle({
     merge: { [PR_1]: { openPolls: Number.POSITIVE_INFINITY, outcome: merged(PR_1, 'never') } },
   });
-  const result = await withWorkers(mocks, async () => (await startApproved('merge-timeout')).result());
+  const result = await withWorkers(mocks, async () => skipResult(await startApproved('merge-timeout')));
 
   assert.equal(result.outcome, 'merge-timeout');
   assert.equal(result.prUrl, PR_1);
@@ -612,7 +642,7 @@ test('two merges close together: production skips the first one\'s deploy, and t
     ],
     contains: { 'm1...m2': true, 'm1...old': false },
   });
-  const result = await withWorkers(mocks, async () => (await startApproved('two-merges')).result());
+  const result = await withWorkers(mocks, async () => skipResult(await startApproved('two-merges')));
 
   assert.equal(result.outcome, 'resolved');
   assert.equal(result.mergeSha, 'm1');
@@ -621,14 +651,14 @@ test('two merges close together: production skips the first one\'s deploy, and t
 });
 
 /**
- * Polls the run's state until `ready` holds, and fails after `limitMs` of
- * wall-clock time rather than spinning until CI kills the job.
+ * Polls the run's state with the plain client until `ready` holds, in real
+ * time, and fails after `limitMs` rather than spinning until CI kills the job.
  */
 async function untilState(
-  handle: { query: (q: typeof findingStateQuery) => Promise<FindingState> },
+  handle: Pick<WorkflowHandle<typeof findingWorkflow>, 'query'>,
   ready: (state: FindingState) => boolean,
   what: string,
-  every: Parameters<typeof env.sleep>[0] = '1 second',
+  everyMs = 100,
   limitMs = 30_000,
 ) {
   const deadline = Date.now() + limitMs;
@@ -636,14 +666,14 @@ async function untilState(
     const state = await handle.query(findingStateQuery);
     if (ready(state)) return state;
     if (Date.now() > deadline) assert.fail(`the run never reached ${what}; it is at ${state.step}`);
-    await env.sleep(every);
+    await new Promise((r) => setTimeout(r, everyMs));
   }
 }
 
 test('a fix sent before the verdict is dropped, and a verdict-only run ignores fix entirely', async () => {
   const mocks = lifecycle({ merge: {} });
   await withWorkers(mocks, async () => {
-    const handle = await env.client.workflow.start(findingWorkflow, {
+    const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-early-fix',
       taskQueue: FINDINGS,
       args: [input('early-fix')],
@@ -658,14 +688,14 @@ test('a fix sent before the verdict is dropped, and a verdict-only run ignores f
     assert.ok(!mocks.calls.includes('openFixIssue'), 'the early fix started nothing');
     await handle.terminate('test over');
 
-    const verdictOnly = await env.client.workflow.start(findingWorkflow, {
+    const verdictOnly = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-verdict-only',
       taskQueue: FINDINGS,
       args: [{ ...input('verdict-only'), stopAfter: 'verdict' }],
     });
     await verdictOnly.signal(verdictSignal, APPROVE);
     await verdictOnly.signal(fixSignal, FIX);
-    const result = await verdictOnly.result();
+    const result = await skipResult(verdictOnly);
     assert.equal(result.outcome, undefined, 'a verdict-only result keeps its old shape');
     assert.equal(result.verdict.status, 'approved');
   });
@@ -674,13 +704,13 @@ test('a fix sent before the verdict is dropped, and a verdict-only run ignores f
 test('a rejected verdict ends a resolved run at the gate', async () => {
   const mocks = lifecycle({ merge: {} });
   const result = await withWorkers(mocks, async () => {
-    const handle = await env.client.workflow.start(findingWorkflow, {
+    const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-rejected',
       taskQueue: FINDINGS,
       args: [input('rejected')],
     });
     await handle.signal(verdictSignal, { ...APPROVE, status: 'rejected', reason: 'By design.' });
-    return handle.result();
+    return skipResult(handle);
   });
   assert.equal(result.outcome, 'rejected');
   assert.deepEqual(mocks.calls, ['writeFindingVerdict']);

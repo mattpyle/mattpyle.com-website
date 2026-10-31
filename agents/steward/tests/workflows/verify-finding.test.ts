@@ -1,10 +1,10 @@
-import { test, before, after } from 'node:test';
+import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
-import { WorkflowFailedError } from '@temporalio/client';
+import { Client, WorkflowFailedError } from '@temporalio/client';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import {
   verifyFindingStateQuery,
@@ -31,6 +31,20 @@ import { DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-f
  * finding's text, so the finding is the only source a test can give the
  * checks. The check run is the real `runChecks` over a fetch that serves one
  * page, so a pass and a fail are measured rather than declared.
+ *
+ * **Each test has its own test server**, started in `beforeEach`. A shared one
+ * let a test stall a later one. When a time-skipping `result()` returns, the
+ * run's last workflow task completes and the server's time lock touches zero
+ * before the client locks again. In that instant the server skips to the next
+ * timer anywhere on it, such as an earlier test's retry backoff. That timer
+ * schedules a workflow task just as the test's worker shuts down; the task is
+ * never started, and the server keeps a time lock for it from then on, so every
+ * later wait on time skipping stalls. A fresh server per test has no earlier
+ * runs to fire, and a task lost at a test's end goes with that test's server.
+ *
+ * For the same reason each test awaits at most one result through the
+ * time-skipping client. Only the retry test needs it, to skip the backoff; every
+ * other run schedules no timer, so the plain `client` finishes it in real time.
  */
 
 const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
@@ -47,14 +61,22 @@ function withBlock(checks: VerifyCheck[]): string {
 }
 
 let env: TestWorkflowEnvironment;
+// A plain client: it never unlocks time skipping. Only `skipResult` does.
+let client: Client;
 
-before(async () => {
+beforeEach(async () => {
   env = await createTestEnv();
+  client = new Client({ connection: env.connection, namespace: env.namespace });
 }, { timeout: 120_000 });
 
-after(async () => {
+afterEach(async () => {
   await env?.teardown();
 });
+
+/** The test's one time-skipping await: the run's result, with the server free to skip its retry backoff. */
+function skipResult(handle: { workflowId: string }) {
+  return env.client.workflow.getHandle<typeof verifyFindingWorkflow>(handle.workflowId).result();
+}
 
 interface Mocks {
   /** The finding file. Defaults to the fixing finding with `[RIGHT]` as its block. */
@@ -153,7 +175,7 @@ function input(overrides: Partial<VerifyFindingInput> = {}): VerifyFindingInput 
 
 let runs = 0;
 function start(args: VerifyFindingInput) {
-  return env.client.workflow.start(verifyFindingWorkflow, {
+  return client.workflow.start(verifyFindingWorkflow, {
     // The stamp is the same in every test; the suffix keeps the IDs apart.
     workflowId: `${verifyWorkflowId(args.site, args.key, args.at)}-${runs++}`,
     taskQueue: QUEUE,
@@ -365,7 +387,7 @@ test('production being down is retried, and a run that never measures writes not
       throw new Error('https://www.mattpyle.com/scorecard/ answered 503');
     },
   });
-  await withWorker(activities, async () => failure((await start(input())).result()));
+  await withWorker(activities, async () => failure(skipResult(await start(input()))));
   assert.equal(attempts, 3);
   assert.ok(!calls.includes('writeFindingVerification'), 'an outage does not reopen a finding');
 });
