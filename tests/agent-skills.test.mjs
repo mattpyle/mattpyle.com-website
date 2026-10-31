@@ -7,7 +7,6 @@ import {
   MAX_DESCRIPTION_LENGTH,
   SKILLS_INDEX_PATH,
   SKILLS_SCHEMA_URI,
-  buildSkillsIndex,
   digestOf,
   firstSentence,
   formatSkillsIndexLines,
@@ -19,27 +18,20 @@ import {
 } from '../src/lib/agent-skills.mjs';
 import { readSchema, validateSkillsIndex } from '../scripts/validate-agent-skills-index.mjs';
 
-const committed = JSON.parse(
+const generated = JSON.parse(
   readFileSync(fileURLToPath(new URL('../src/data/agent-skills-index.json', import.meta.url)), 'utf8')
 );
 const schema = readSchema();
 
-test('the committed index matches what the generator produces', () => {
-  // Same contract as the A2A digest: the file is committed so a reviewer sees the digest change in
-  // the diff, which is worth nothing unless the two cannot drift. Edit a skill, forget to re-run
-  // prebuild, and this fails rather than shipping an index that fails verification in the field.
-  assert.deepEqual(committed, buildSkillsIndex());
-});
-
 test('the index is a v0.2.0 document listing at least one skill', () => {
-  assert.equal(committed.$schema, SKILLS_SCHEMA_URI);
+  assert.equal(generated.$schema, SKILLS_SCHEMA_URI);
   assert.equal(SKILLS_INDEX_PATH, '/.well-known/agent-skills/index.json');
-  assert.ok(committed.skills.length >= 1);
-  assert.deepEqual(Object.keys(committed), ['$schema', 'skills']);
+  assert.ok(generated.skills.length >= 1);
+  assert.deepEqual(Object.keys(generated), ['$schema', 'skills']);
 });
 
 test('every entry carries exactly the five required fields', () => {
-  for (const skill of committed.skills) {
+  for (const skill of generated.skills) {
     assert.deepEqual(Object.keys(skill), ['name', 'type', 'description', 'url', 'digest']);
     assert.equal(skill.type, 'skill-md');
     assert.equal(skill.url, skillUrlFor(skill.name));
@@ -52,7 +44,7 @@ test('each digest is the SHA-256 of the skill body, computed independently', () 
   // Recomputed here with plain node:crypto rather than through digestOf, so a bug in digestOf
   // cannot make the generator and its own test agree with each other and with nothing else.
   const bodies = new Map(readSkills().map((skill) => [skill.name, skill.body]));
-  for (const skill of committed.skills) {
+  for (const skill of generated.skills) {
     const body = bodies.get(skill.name);
     assert.ok(body, `no source body for ${skill.name}`);
     assert.equal(skill.digest, `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`);
@@ -63,11 +55,11 @@ test('the index description is the skill file frontmatter description', () => {
   // The RFC says SHOULD; this site treats it as MUST, because the index description is the only
   // thing an agent reads before deciding whether to spend a request on the artifact.
   for (const skill of readSkills()) {
-    const entry = committed.skills.find((candidate) => candidate.name === skill.name);
+    const entry = generated.skills.find((candidate) => candidate.name === skill.name);
     assert.ok(entry, `${skill.name} is on disk but missing from the index`);
     assert.equal(entry.description, skill.description);
   }
-  assert.equal(committed.skills.length, readSkills().length);
+  assert.equal(generated.skills.length, readSkills().length);
 });
 
 test('the skill body is a usable SKILL.md, not just a file that exists', () => {
@@ -114,7 +106,7 @@ test('the naming rules reject every shape the spec forbids', () => {
 
 test('normalisation makes the digest a property of the content, not of the checkout', () => {
   // The reason this exists: core.autocrlf is on with no .gitattributes, so the same skill file is
-  // CRLF in a Windows working tree and LF in CI. Without this, the committed digest would be
+  // CRLF in a Windows working tree and LF in CI. Without this, the generated digest would be
   // correct only on the machine that generated it.
   assert.equal(digestOf(normaliseSkillBody('a\r\nb\r\n')), digestOf(normaliseSkillBody('a\nb\n')));
   assert.equal(normaliseSkillBody('no trailing newline'), 'no trailing newline\n');
@@ -133,11 +125,11 @@ test('the frontmatter reader refuses the shapes it cannot represent', () => {
   }
 });
 
-test('the validator accepts the committed index against real artifacts', () => {
+test('the validator accepts the generated index against real artifacts', () => {
   // Artifacts are stubbed from the source bodies rather than read from dist/, so this suite stays
   // runnable without a build; scripts/validate-agent-skills-index.mjs does the real output-root
   // check inside the build chain, where the built bytes exist.
-  assert.deepEqual(validateSkillsIndex(committed, schema, []), []);
+  assert.deepEqual(validateSkillsIndex(generated, schema, []), []);
 });
 
 test('digest verification is the build chain\'s job; version drift is caught anywhere', () => {
@@ -146,13 +138,13 @@ test('digest verification is the build chain\'s job; version drift is caught any
   // scripts/validate-agent-skills-index.mjs against dist/. Asserted rather than left implicit so
   // nobody reads a green run of this file as proof the digest was checked.
   const stale = {
-    ...committed,
-    skills: committed.skills.map((skill) => ({ ...skill, digest: `sha256:${'0'.repeat(64)}` })),
+    ...generated,
+    skills: generated.skills.map((skill) => ({ ...skill, digest: `sha256:${'0'.repeat(64)}` })),
   };
   assert.deepEqual(validateSkillsIndex(stale, schema, []), []);
 
   assert.deepEqual(
-    validateSkillsIndex({ ...committed, $schema: 'https://example.com/other.json' }, schema, []),
+    validateSkillsIndex({ ...generated, $schema: 'https://example.com/other.json' }, schema, []),
     [
       '/$schema: "https://example.com/other.json" is not one of https://schemas.agentskills.io/discovery/0.2.0/schema.json',
       `$schema: this build implements ${SKILLS_SCHEMA_URI}, index claims "https://example.com/other.json"`,
@@ -162,8 +154,8 @@ test('digest verification is the build chain\'s job; version drift is caught any
 
 test('the validator rejects malformed and hand-written entries', () => {
   const withEntry = (overrides) => ({
-    ...committed,
-    skills: [{ ...committed.skills[0], ...overrides }],
+    ...generated,
+    skills: [{ ...generated.skills[0], ...overrides }],
   });
 
   assert.deepEqual(validateSkillsIndex({ $schema: SKILLS_SCHEMA_URI, skills: [] }, schema, []), [
@@ -200,7 +192,7 @@ test('the validator rejects malformed and hand-written entries', () => {
 });
 
 test('a duplicate skill name is caught', () => {
-  const doubled = { ...committed, skills: [committed.skills[0], committed.skills[0]] };
+  const doubled = { ...generated, skills: [generated.skills[0], generated.skills[0]] };
   assert.ok(
     validateSkillsIndex(doubled, schema, []).some((error) => error.includes('is listed more than once'))
   );
@@ -209,7 +201,7 @@ test('a duplicate skill name is caught', () => {
 // --- llms.txt enumeration -----------------------------------------------------------------
 //
 // llms.txt used to name the single published skill in prose, which is a sentence that goes stale
-// the day a second skill lands. These guard the replacement: the line is built from the committed
+// the day a second skill lands. These guard the replacement: the line is built from the generated
 // index, and the route holds no skill name of its own.
 
 const llmsRoute = readFileSync(
@@ -217,11 +209,11 @@ const llmsRoute = readFileSync(
   'utf8'
 );
 
-test('the llms.txt skills lines enumerate every committed skill', () => {
+test('the llms.txt skills lines enumerate every generated skill', () => {
   const base = 'https://www.example.com';
-  const lines = formatSkillsIndexLines(base, committed.skills);
+  const lines = formatSkillsIndexLines(base, generated.skills);
 
-  assert.equal(lines.length, committed.skills.length + 1);
+  assert.equal(lines.length, generated.skills.length + 1);
   // A literal containment check, not a regex. The `new RegExp` version of this line lost its
   // backslashes to the template literal, so it asserted a capture group where it meant literal
   // parentheses and matched the URL's dots as wildcards: it passed on strings this test means to
@@ -231,11 +223,11 @@ test('the llms.txt skills lines enumerate every committed skill', () => {
     `index line does not link the index as a markdown target: ${lines[0]}`
   );
   assert.ok(
-    lines[0].includes(`lists ${committed.skills.length} skill${committed.skills.length === 1 ? '' : 's'}`),
+    lines[0].includes(`lists ${generated.skills.length} skill${generated.skills.length === 1 ? '' : 's'}`),
     `index line does not state the skill count: ${lines[0]}`
   );
 
-  committed.skills.forEach((skill, i) => {
+  generated.skills.forEach((skill, i) => {
     const line = lines[i + 1];
     assert.ok(line.startsWith('  - '), `skill line is not nested under the index line: ${line}`);
     assert.ok(line.includes(`[${skill.name}](${base}${skill.url})`), `skill line does not link ${skill.name}`);
@@ -245,7 +237,7 @@ test('the llms.txt skills lines enumerate every committed skill', () => {
 
 test('llms.txt names no skill of its own', () => {
   // The point of enumerating: publishing skill three is adding a file, with no edit here.
-  for (const skill of committed.skills) {
+  for (const skill of generated.skills) {
     assert.ok(
       !llmsRoute.includes(skill.name),
       `llms.txt.ts hard-codes the skill name "${skill.name}"; it should enumerate from the index`

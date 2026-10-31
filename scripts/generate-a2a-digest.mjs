@@ -10,9 +10,10 @@
  * as a pure function of this file's output. The alternative (reading astro:content per request)
  * buys freshness the site does not have and costs all three.
  *
- * The generated file is committed rather than gitignored, deliberately: it is small, it is the
- * exact payload a reviewer needs to see to know what the responder will say, and a diff on it is
- * the review signal when content changes what an agent gets told.
+ * The generated file is gitignored. `npm run generate` writes it, and `pretest` and `precheck`
+ * call that. The review signal is the diff of this file between the base and the head in the
+ * `Site tests & astro check` job summary (.github/workflows/ci.yml), which shows what content
+ * changes an agent gets told.
  *
  * Ordering note: the changelog is sorted by the real compareChangelogEntries from
  * src/lib/changelog-order.ts, the same function every page and generator uses, imported straight

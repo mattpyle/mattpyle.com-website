@@ -50,7 +50,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push('');
   lines.push(`- [WebMCP tool manifest](${base}/webmcp/tools.json): names, descriptions, and input schemas for the tools above, generated from the live tool objects.`);
   lines.push(`- [WebMCP content index](${base}/webmcp/index.json): the JSON index those tools read — author entity, section map, and every published article, project, and changelog entry.`);
-  // Enumerated from the committed index rather than named in prose, so publishing a skill stays
+  // Enumerated from the generated index rather than named in prose, so publishing a skill stays
   // "add a file in src/data/skills/" with no edit here.
   lines.push(...formatSkillsIndexLines(base, skillsIndex.skills));
   lines.push(`- [A2A Agent Card](${base}/.well-known/agent-card.json): this site as an A2A agent. Two skills, answered by a JSON-RPC 2.0 endpoint at ${base}/a2a (A2A 1.0, no auth): ask-about-site returns a direct Message about this site, and audit-a-site audits a site you name, its deep tier as a Task you poll with GetTask. Full calling notes are in agents.md.`);

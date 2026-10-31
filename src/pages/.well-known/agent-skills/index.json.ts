@@ -9,7 +9,7 @@ import index from '../../../data/agent-skills-index.json';
  * adapter copies them into the static output; verified by building, because it is the kind of
  * thing that is easy to assume either way.
  *
- * Serves the committed src/data/agent-skills-index.json rather than rebuilding the index here, so
+ * Serves the generated src/data/agent-skills-index.json rather than rebuilding the index here, so
  * what deploys is what a reviewer read in the diff. scripts/generate-agent-skills-index.mjs writes
  * that file in prebuild, and scripts/validate-agent-skills-index.mjs re-derives every digest from
  * the built output before the build passes.
