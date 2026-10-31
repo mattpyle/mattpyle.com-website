@@ -18,16 +18,15 @@
  * since the last build reads as `/*` until the next one, which is the same fail-soft direction
  * everything else in that module leans.
  *
- * DRAFTS ARE EXCLUDED, and that is not only a routing detail: this file is committed and rides
+ * DRAFTS ARE EXCLUDED, and that is not only a routing detail: this file rides
  * into the client-visible middleware bundle, so a draft slug here would publish the existence of
  * an unpublished post. `draft: true` already keeps an entry out of getStaticPaths, so a draft has
  * no page to count either way.
  *
- * The generated file is committed rather than gitignored, for the same reasons
- * src/data/a2a-digest.json is: it is small, a reviewer can see exactly what the counter will be
- * able to name, and a diff on it is the review signal when the route set changes. It is committed
- * for one further reason the digest does not have — the platform bundles middleware.ts from the
- * repository, and this module has to be importable whether or not the build command has run yet.
+ * The generated file is gitignored, like src/data/a2a-digest.json. `npm run generate` writes it,
+ * and `prebuild` and `predev` run it before anything bundles middleware.ts. The review signal is
+ * its diff in the `Site tests & astro check` job summary (.github/workflows/ci.yml), which shows
+ * what the counter will be able to name.
  *
  * NO TOP-LEVEL SIDE EFFECTS beyond the write at the foot of the file, which only runs when this
  * script is the entry point, so tests/page-paths.test.mjs can import the builder.

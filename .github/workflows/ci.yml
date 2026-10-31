@@ -47,6 +47,27 @@ jobs:
       - name: Run site tests
         run: npm test
 
+      # `src/data/a2a-digest.json`, `agent-skills-index.json` and `page-paths.mjs`
+      # are gitignored: `pretest` and `precheck` generate them. A pull request's
+      # own diff therefore no longer shows what an agent will be told, so this
+      # step generates the three files on the base commit as well and writes the
+      # difference to the job summary. The generators import only `node:`
+      # builtins and repo files, so the base worktree needs no `npm ci`. They are
+      # run directly, not through `npm run generate`, because an older base has
+      # no such script. `!cancelled()` keeps the summary when a test fails, which
+      # is when a reviewer wants it.
+      - name: Show generated data diff
+        if: github.event_name == 'pull_request' && !cancelled()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+          for generator in a2a-digest agent-skills-index page-paths; do
+            node "$RUNNER_TEMP/base/scripts/generate-$generator.mjs"
+          done
+          node scripts/summarise-generated-diff.mjs "$RUNNER_TEMP/base" . >> "$GITHUB_STEP_SUMMARY"
+
   steward:
     name: Steward tests & tsc
     runs-on: ubuntu-latest

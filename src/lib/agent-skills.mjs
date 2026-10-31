@@ -180,7 +180,7 @@ export function firstSentence(description) {
 
 /**
  * The llms.txt entry for the Agent Skills index: a line for the index itself, then one nested line
- * per skill, enumerated from the committed index.
+ * per skill, enumerated from the generated index.
  *
  * Enumerated rather than hand-written because llms.txt previously named the single skill in prose,
  * which is a sentence that goes stale the day a second skill lands. Publishing a skill is adding a
@@ -210,7 +210,7 @@ export function formatSkillsIndexLines(base, skills) {
  * to be, while these URLs name artifacts alongside the index itself, so a preview should serve its
  * own copies and a production fetch should get production's.
  *
- * No `generated` timestamp, same reason as the A2A digest: the file is committed, and a wall-clock
+ * No `generated` timestamp, same reason as the A2A digest: the file is diffed in CI, and a wall-clock
  * field would make every build a diff while telling a reader nothing the digest does not.
  *
  * @param {string} [dir]

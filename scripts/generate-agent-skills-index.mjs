@@ -3,14 +3,14 @@
  *
  * Runs in `prebuild` (and `predev`) beside generate-a2a-digest.mjs, and the Astro route at
  * src/pages/.well-known/agent-skills/index.json.ts serves the result verbatim. Same posture as the
- * A2A digest, for the same two reasons: what deploys is exactly what a reviewer read, and the file
- * is small enough that a diff on it is a useful review signal rather than noise.
+ * A2A digest: the file is gitignored, `npm run generate` writes it, and the review signal is its
+ * diff in the `Site tests & astro check` job summary (.github/workflows/ci.yml).
  *
  * The digest in here is the thing this exists to keep honest. A hand-maintained SHA-256 is wrong
  * the first time somebody edits a skill and fixes a typo, and the symptom lands in a stranger's
  * agent as "content failed verification, refusing to load" rather than anywhere Matt would see it.
  * Three things keep it true: this generator recomputes it from the skill file, tests/agent-skills
- * .test.mjs fails when the committed file drifts from a fresh run, and scripts/validate-agent-
+ * .test.mjs asserts the digest of the generated file against the skill body, and scripts/validate-agent-
  * skills-index.mjs re-derives it from the actual built output before the build is allowed to pass.
  *
  * All the interesting logic is in src/lib/agent-skills.mjs, shared with the routes so the served

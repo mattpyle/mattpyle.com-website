@@ -30,6 +30,7 @@ mattpyle.com is a personal site and a testbed for emerging web standards (WebMCP
 |---|---|
 | `npm run dev` | Dev server. Iterate layout here; fonts, images and CSS inlining differ from prod, layout does not. |
 | `SHOW_DRAFTS=true npm run build`, then `npm run serve` | Production build and a server that renders `/scorecard` on demand. A static server 404s it. |
+| `npm run generate` | Writes the gitignored `src/data/a2a-digest.json`, `agent-skills-index.json` and `page-paths.mjs`. `pretest`, `precheck`, `predev` and `prebuild` run it. On a pull request, the CI job summary shows their diff against the base. |
 | `npm test` | The site test suite. CI runs it on every PR, and the fix Action runs it before it pushes. |
 | `npm run check` | The Astro and TypeScript check. CI runs it on every PR, and the fix Action runs it before it pushes. |
 | `npm run new-post -- "Title"` | Scaffold a draft with correct frontmatter. |
