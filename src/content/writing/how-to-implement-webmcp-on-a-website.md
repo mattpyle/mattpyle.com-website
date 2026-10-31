@@ -166,7 +166,7 @@ The handler wrote entry #009, badged it as signed by an agent, and returned a me
 
 When I first implemented WebMCP tools, they were easiest to try from the browser console. Open DevTools on a page that registers tools, list them, and run one.
 
-Try it on this website! You'll need Chrome 149 or later for the browser to use the registered token on this domain.
+Try it on this website! You'll need Chrome 155 or later for the browser to use the registered token on this domain.
 
 In the DevTools console:
 
