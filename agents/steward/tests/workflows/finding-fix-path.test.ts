@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, WorkflowNotFoundError } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { DEFECT_FINDING } from '../helpers/finding-fixtures.js';
 import { FixRefused, followFix, requestFix, type FindingFixDeps } from '../../src/lib/finding-fix.js';
 import { findingPath, findingWorkflowId } from '../../src/lib/findings.js';
@@ -140,7 +140,7 @@ async function withWorkers<T>(activities: object, fn: () => Promise<T>): Promise
     taskQueue: FINDINGS,
     bundlerOptions: {},
   });
-  return await findingsWorker.runUntil(fn());
+  return await findingsWorker.runUntil(bounded(fn()));
 }
 
 async function closeRun(key: string): Promise<void> {

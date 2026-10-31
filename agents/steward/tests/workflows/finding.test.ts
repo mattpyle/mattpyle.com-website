@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { WorkflowFailedError } from '@temporalio/client';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -52,7 +52,7 @@ async function withWorker<T>(activities: Record<string, unknown>, fn: () => Prom
     taskQueue: QUEUE,
     bundlerOptions: {},
   });
-  return await worker.runUntil(fn());
+  return await worker.runUntil(bounded(fn()));
 }
 
 function input(key: string, overrides: Partial<FindingWorkflowInput> = {}): FindingWorkflowInput {
