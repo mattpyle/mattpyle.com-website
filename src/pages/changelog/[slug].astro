@@ -27,6 +27,8 @@ const { Content } = await render(entry);
 
 const { title, summary, seoTitle, seoDescription, date, publishedAt, updated, type, significance, hero, heroAlt, draft } = entry.data;
 const markdownUrl = `/changelog/${entry.id}.md`;
+// Same rule as PostRail: shown only when `updated` says something `date` does not.
+const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : null;
 ---
 
 <Layout
@@ -81,6 +83,9 @@ const markdownUrl = `/changelog/${entry.id}.md`;
         <time datetime={date.toISOString()}>{formatSiteDate(date)}</time>
         <span class="entry-type">{type}</span>
         <span class="entry-sig">{significance}</span>
+        {revisedOn && (
+          <span>updated <time datetime={revisedOn.toISOString()}>{formatSiteDate(revisedOn)}</time></span>
+        )}
       </p>
     </div>
 
