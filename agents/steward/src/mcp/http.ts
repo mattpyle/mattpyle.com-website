@@ -40,7 +40,7 @@ export const MCP_PATH = '/mcp';
  *
  * IPv6 keeps its brackets, because that is what `new URL().hostname` returns.
  */
-const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+export const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
 /**
  * Why this is hand-rolled rather than the SDK's `enableDnsRebindingProtection`.
@@ -54,7 +54,7 @@ const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
  * semantics below are that middleware's: port-agnostic hostname compare, 403,
  * and a JSON-RPC error body.
  */
-function hostIsAllowed(hostHeader: string | undefined, allowed: string[]): boolean {
+export function hostIsAllowed(hostHeader: string | undefined, allowed: string[]): boolean {
   if (!hostHeader) return false;
   let hostname: string;
   try {
