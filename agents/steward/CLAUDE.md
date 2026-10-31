@@ -59,12 +59,14 @@ Before changing workflow code:
 Run it with `npm test -w @mattpyle/steward`. Typecheck Steward with `npx tsc --noEmit -p agents/steward` and the site with `npm run check`. CI runs both as `check:steward` and `test:steward` in the `Steward tests & tsc` job of `.github/workflows/ci.yml`.
 
 1. A bare `npx tsc --noEmit` at the repository root crashes inside TypeScript. The root `tsconfig.json` excludes only `dist`, so it compiles dependency JavaScript. The crash is not your branch.
-2. The workflow suites share a time-skipping test server from `createTestEnv` in `tests/helpers/test-env.ts`. Its binary is downloaded once per user, about 57 MB, into a per-user cache; `STEWARD_TEST_SERVER_DIR` overrides the path.
+2. The workflow suites get a time-skipping test server from `createTestEnv` in `tests/helpers/test-env.ts`. Its binary is downloaded once per user, about 57 MB, into a per-user cache; `STEWARD_TEST_SERVER_DIR` overrides the path.
 3. The time-skipping client's `result()` unlocks time. A run idle at a signal wait then jumps past the test server's ten-year execution timeout and reads `TIMED_OUT`. Use a plain `Client` on `env.connection`, as the header of `tests/workflows/reconcile-findings.test.ts` explains.
-4. The suite runs four files at a time (`--test-concurrency=4` in `package.json`). The default starts up to 12 test servers at once on a large desktop. Each test has 60 seconds (`--test-timeout=60000`).
-5. `tests/helpers/no-real-credentials.ts` blanks `GITHUB_TOKEN`, `ANTHROPIC_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET` in every test process. A test that needs GitHub installs `tests/helpers/fake-github.ts`.
-6. Build a fake secret at run time, never as a literal: the gitleaks job in `.github/workflows/security-scan.yml` scans full history. See the stand-in secret in `tests/lib/fixer.test.ts`.
-7. `npm ci` leaves `agents/steward/scripts/steward.mjs` modified with a line-ending-only diff. Leave it out of the commit.
+4. A workflow test file starts a server per test (`beforeEach`, `afterEach`) and awaits at most one result per test through the time-skipping client.
+   Why: an earlier test's timer can fire as a finishing test's worker shuts down, strand its task and hold the server's time lock, which stalls every later wait. See `tests/workflows/fix-dispatch.test.ts`.
+5. The suite runs four files at a time (`--test-concurrency=4` in `package.json`). The default starts up to 12 test servers at once on a large desktop. Each test has 60 seconds (`--test-timeout=60000`).
+6. `tests/helpers/no-real-credentials.ts` blanks `GITHUB_TOKEN`, `ANTHROPIC_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET` in every test process. A test that needs GitHub installs `tests/helpers/fake-github.ts`.
+7. Build a fake secret at run time, never as a literal: the gitleaks job in `.github/workflows/security-scan.yml` scans full history. See the stand-in secret in `tests/lib/fixer.test.ts`.
+8. `npm ci` leaves `agents/steward/scripts/steward.mjs` modified with a line-ending-only diff. Leave it out of the commit.
 
 ## Running the CLI
 
