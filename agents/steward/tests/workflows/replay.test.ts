@@ -549,3 +549,42 @@ test('a scorecard run recorded before the mixed-Lighthouse refusal replays down 
     'steward-scorecard-fixture-mixed',
   );
 });
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the fix dispatcher: CLI
+ * approve, one `fix`, the issue, the PR, the PR closed unmerged, the return
+ * written, and the run parked back at `waiting-fix` with `fixAttempts` 1. 55
+ * events. This is the shape an approved run is in while a person decides on a
+ * closed PR. New code asks `dispatch/<site>` for a slot before the issue, so
+ * this replays only because the `fix-dispatch` patch sends an attempt without
+ * its marker straight to `openFixIssue`, with the one-argument merge wait and
+ * no release.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at d8ddc8a) against
+ * the time-skipping server with mocked activities, so it holds no real finding
+ * text.
+ *
+ * Probe (2026-10-30): replacing `wf.patched(FIX_DISPATCH_PATCH)` with `true`,
+ * so every attempt asks for a slot, made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ * for change fixer-action-adapter, but there is no corresponding change command!
+ * ```
+ *
+ * The four older lifecycle fixtures above failed too (`finding-child-fix-returned.bin`
+ * on its child start, the other three on the same marker); the 11 replays of
+ * other workflows stayed green. The guard was restored and all 16 re-ran green.
+ */
+const findingPrClosedBeforeDispatchPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-pr-closed-before-dispatch.bin', import.meta.url),
+);
+
+test('a lifecycle run whose PR closed before the dispatcher replays that attempt without a slot', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingPrClosedBeforeDispatchPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});

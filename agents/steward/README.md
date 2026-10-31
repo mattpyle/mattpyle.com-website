@@ -49,6 +49,14 @@ that's the property being dogfooded here, on a low-stakes, real target.
   defect parked at `waiting-fix` with no attempt on a site with `auto_fix: true`. A `reopened`
   finding is back at the verdict gate. A run started for an opportunity or a direction parks at
   `waiting-fix` without the automatic attempt, and `steward finding status` says why.
+- **`fixDispatchWorkflow`**: one execution per site (`dispatch/<site>`) on `steward-findings`,
+  started by the first slot request. Before each fix attempt opens its issue, the
+  `findingWorkflow` sends it the repository paths its finding's cause names and parks at
+  `waiting-slot`. A fix that names a path an in-flight fix names waits until that fix is live, so
+  its PR is cut from the new `master`; fixes that share no path run side by side. Every exit from
+  the fix loop releases the slot. A dispatched PR that GitHub computes as conflicting is closed with
+  a comment naming the sibling PR and re-cut under a new issue. `steward finding status` names the
+  path and the fix a waiting run is behind, and `steward finding list` tags it.
 - **`fixFindingWorkflow`**: the fixer, one execution per approved finding (`fix/<site>/<key>`),
   started as a child of a `'resolved'` `findingWorkflow`, or alone by `steward finding fix <key>` for
   a finding whose workflow stops at the verdict. Five activities: read the finding, generate a handoff from
@@ -76,7 +84,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-heavy` | `buildAndAuditDraft`, and the frozen custom fixer: `fixFindingWorkflow` with its activities, which only a lifecycle run that started that child before the issue path replays, and a `verifyFindingWorkflow` child started before the verifier moved to `steward-findings` | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
-| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow` and `verifyFindingWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
+| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow`, `verifyFindingWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **laptop worker** (`steward up`, `src/worker.ts`)
 polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
@@ -158,7 +166,7 @@ steward cleanup my-draft-slug    # after the merge: drop the local draft twin an
 steward inbox                    # every review waiting on you, across every slug
 steward audit-url example.com    # agent-readiness checks against any site
 steward mcp-serve                # serve the audit over MCP, backed by local Temporal
-steward finding list             # open finding workflows, one per line
+steward finding list             # open finding workflows, one per line; a run waiting for a fix slot is tagged
 steward finding status <key>     # the verdict, and the lifecycle step for a 'resolved' run
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"

@@ -151,6 +151,9 @@ test('the findings worker runs a small bounded cap and registers only the findin
       'readVerifyBlock',
       'runFindingChecks',
       'writeFindingVerification',
+      'requestFixSlot',
+      'runningWorkflowIds',
+      'closeConflictingFixPr',
       'reportRunHealth',
     ],
   );

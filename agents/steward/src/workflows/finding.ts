@@ -10,7 +10,9 @@ import {
   type FindingVerdict,
   type VerifyOutcome,
 } from '../lib/findings.js';
+import { dispatchWorkflowId } from '../lib/fix-dispatch.js';
 import { fixFindingWorkflow } from './fix-finding.js';
+import { releaseSlotSignal, slotGrantSignal } from './fix-dispatch.js';
 import { verifyFindingWorkflow } from './verify-finding.js';
 
 /**
@@ -93,6 +95,30 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * which is the proof. The new policy applies to a wait scheduled after the
  * worker picks this up; a wait already pending keeps the policy it was
  * scheduled with, and no open run was inside a wait when this shipped.
+ *
+ * **Dispatch by surface** (fix-dispatch-by-surface, 2026-10-30). Each attempt
+ * now asks the site's `fixDispatchWorkflow` for a slot before it opens its
+ * issue: `requestFixSlot` sends the repository paths the finding's cause names,
+ * the run parks at `waiting-slot`, and the dispatcher's `slot-grant` signal
+ * resumes it. A fix that names a path an in-flight fix names waits until that
+ * fix is live, so its PR is cut from a `master` that already has the first.
+ * A finding whose cause names no path is granted by the activity itself.
+ *
+ * The slot is released on every exit from the fix loop: live on production,
+ * the PR closed unmerged, a conflict, a failed fix, either timeout, and the run
+ * ending for any other reason (the `finally`, outside cancellation). A
+ * dispatched attempt's merge wait also reports a PR GitHub computes as
+ * conflicting: the run closes it with a comment naming the sibling PR,
+ * releases its slot, asks for a new one without waiting for a `fix`, and opens
+ * a fresh issue once granted, which closes the last one with the reason.
+ *
+ * **Versioned with `patched`, per attempt.** {@link FIX_DISPATCH_PATCH} is read
+ * after the fix wait of each attempt, as {@link ACTION_ADAPTER_PATCH} is. An
+ * attempt recorded before it has no marker and replays straight to
+ * `openFixIssue`, with the merge wait it scheduled and no release. A run
+ * parked at `waiting-fix` before this shipped takes the slot on its next
+ * attempt. The fixture is `finding-pr-closed-before-dispatch.bin` in
+ * `tests/workflows/replay.test.ts`.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -108,6 +134,17 @@ export const AUTO_FIX_PATCH = 'fixer-auto-fix';
 
 /** The `patched` marker of the verify child on `steward-findings` in place of `steward-heavy` (decision 29). */
 export const VERIFIER_HOSTED_PATCH = 'verifier-hosted';
+
+/** The `patched` marker of an attempt's slot from `dispatch/<site>` and its conflict re-cut (fix-dispatch-by-surface). */
+export const FIX_DISPATCH_PATCH = 'fix-dispatch';
+
+/**
+ * How long a run waits for its grant before it sends the same request again.
+ * The dispatcher reads a re-send as the request it holds; the re-send exists
+ * so a dispatcher that ended (terminated by hand, say) is started again and
+ * hears of the run.
+ */
+const SLOT_RESEND = '6 hours';
 
 /** The GitHub deployment environment Vercel's integration posts production to. */
 const PRODUCTION_ENVIRONMENT = 'Production';
@@ -175,6 +212,7 @@ export interface FindingWorkflowResult {
 export type FindingStep =
   | 'waiting-verdict'
   | 'waiting-fix'
+  | 'waiting-slot'
   | 'fixing'
   | 'waiting-merge'
   | 'waiting-deploy'
@@ -206,6 +244,12 @@ export interface FindingState {
    * defect, and no attempt has been made. `steward finding status` prints it.
    */
   waitsForPerson?: boolean;
+  /**
+   * The repository paths the current attempt's slot request named, once the
+   * request is sent. `steward finding status` prints them at `waiting-slot`.
+   * Absent from a run whose attempts predate the dispatcher.
+   */
+  slotPaths?: string[];
 }
 
 /** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
@@ -242,7 +286,16 @@ const GITHUB_PERMANENT = ['AuthError', ...GITHUB_PERMANENT_FOR_WAITS];
  * rest are permanent and named so they fail on the first attempt.
  */
 const writing = wf.proxyActivities<
-  Pick<typeof activities, 'writeFindingVerdict' | 'writeFindingReturned' | 'writeFindingFix' | 'openFixIssue' | 'readSiteAutoFix'>
+  Pick<
+    typeof activities,
+    | 'writeFindingVerdict'
+    | 'writeFindingReturned'
+    | 'writeFindingFix'
+    | 'openFixIssue'
+    | 'readSiteAutoFix'
+    | 'requestFixSlot'
+    | 'closeConflictingFixPr'
+  >
 >({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -403,6 +456,13 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     fix.requested = true;
   });
 
+  // The dispatcher's grant counts only for the request the run is waiting on.
+  // A grant for an earlier ticket (an attempt already released) is dropped.
+  const slot: Slot = { ticket: 0, granted: false, active: false, dispatched: false };
+  wf.setHandler(slotGrantSignal, (grant) => {
+    if (slot.active && grant?.ticket === slot.ticket) slot.granted = true;
+  });
+
   await wf.condition(() => state.verdict !== null);
   const verdict = state.verdict as unknown as FindingVerdict;
 
@@ -433,78 +493,264 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     return { ...base, outcome: 'rejected', note: 'Rejected at the gate.' };
   }
 
-  return await lifecycle(input as Required<FindingWorkflowInput>, state, base, fix);
+  return await lifecycle(input as Required<FindingWorkflowInput>, state, base, fix, slot);
+}
+
+/**
+ * The current attempt's slot. `active` from the request until the release,
+ * granted or not; `dispatched` when the dispatcher holds it, so the release
+ * goes there.
+ */
+interface Slot {
+  ticket: number;
+  granted: boolean;
+  active: boolean;
+  dispatched: boolean;
 }
 
 /**
  * Fix, merge, deploy, verify, looping back to the fix wait when a PR closes
- * unmerged or a fix child fails.
+ * unmerged or a fix fails, and straight to a new slot when a dispatched PR
+ * conflicts.
  */
 async function lifecycle(
   input: Required<FindingWorkflowInput>,
   state: FindingState,
   base: Pick<FindingWorkflowResult, 'site' | 'key' | 'verdict' | 'commitSha'>,
   fix: { requested: boolean },
+  slot: Slot,
 ): Promise<FindingWorkflowResult> {
   let fixAttempts = 0;
   const end = (outcome: FindingOutcome, note: string, extra: Partial<FindingWorkflowResult> = {}): FindingWorkflowResult => {
     state.step = 'done';
     return { ...base, outcome, note, prUrl: state.prUrl ?? null, fixAttempts, ...extra };
   };
+  const workflowId = wf.workflowInfo().workflowId;
 
-  // Read once, at the verdict: the flag the site had when the finding was approved.
-  let autoFix = false;
-  if (wf.patched(AUTO_FIX_PATCH)) {
-    autoFix = await writing.readSiteAutoFix({ repo: input.repo, site: input.site });
+  /**
+   * Asks for this attempt's slot and waits for the grant. A finding that names
+   * no path is granted by the activity. A grant that has not come in
+   * {@link SLOT_RESEND} is asked for again with the same ticket.
+   */
+  const takeSlot = async (ticket: number): Promise<void> => {
+    slot.ticket = ticket;
+    slot.granted = false;
+    slot.active = true;
+    slot.dispatched = false;
+    const request = {
+      repo: input.repo,
+      site: input.site,
+      key: input.key,
+      findingPath: input.findingPath,
+      workflowId,
+      ticket,
+      at: nowIso(),
+    };
+    const requested = await writing.requestFixSlot(request);
+    state.slotPaths = requested.paths;
+    if (!requested.dispatched) return;
+    slot.dispatched = true;
+    while (!(await wf.condition(() => slot.granted, SLOT_RESEND))) {
+      const again = await writing.requestFixSlot({ ...request, at: nowIso() });
+      // The cause no longer names a path: nothing to wait for.
+      if (!again.dispatched) return;
+    }
+  };
+
+  /** Gives the slot back. A no-op when none is held; a dispatcher that is gone has nothing to release. */
+  const release = async (reason: string): Promise<void> => {
+    if (!slot.active) return;
+    slot.active = false;
+    slot.granted = false;
+    if (!slot.dispatched) return;
+    try {
+      await wf
+        .getExternalWorkflowHandle(dispatchWorkflowId(input.site))
+        .signal(releaseSlotSignal, { workflowId, ticket: slot.ticket, reason });
+    } catch (err) {
+      wf.log.warn('the slot release did not reach the dispatcher', { key: input.key, reason, error: describeError(err) });
+    }
+  };
+
+  try {
+    return await fixLoop();
+  } finally {
+    // Every other exit: a failure, or a cancellation, which the release must outlive.
+    if (slot.active) await wf.CancellationScope.nonCancellable(() => release('ended'));
   }
 
-  // The last attempt's issue, and why it ended: the next attempt closes it with that.
-  let lastIssue: { url: string; reason: string } | null = null;
+  async function fixLoop(): Promise<FindingWorkflowResult> {
+    // Read once, at the verdict: the flag the site had when the finding was approved.
+    let autoFix = false;
+    if (wf.patched(AUTO_FIX_PATCH)) {
+      autoFix = await writing.readSiteAutoFix({ repo: input.repo, site: input.site });
+    }
 
-  for (;;) {
-    state.step = 'waiting-fix';
-    const parked = input.waitsForPerson === true && fixAttempts === 0;
-    if (parked) state.waitsForPerson = true;
-    if (parked || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
-    state.waitsForPerson = false;
-    fix.requested = false;
-    fixAttempts++;
-    state.fixAttempts = fixAttempts;
+    // The last attempt's issue, and why it ended: the next attempt closes it with that.
+    let lastIssue: { url: string; reason: string } | null = null;
+    // Set when a conflicting PR was closed: the next attempt starts without a `fix`.
+    let recut = false;
 
-    state.step = 'fixing';
-    let prUrl: string;
-    try {
-      if (wf.patched(ACTION_ADAPTER_PATCH)) {
-        const issue: FixIssue = await writing.openFixIssue({
-          repo: input.repo,
-          site: input.site,
-          key: input.key,
-          findingPath: input.findingPath,
-          supersedes: lastIssue,
-        });
-        state.issueUrl = issue.url;
-        lastIssue = { url: issue.url, reason: '' };
-        try {
-          prUrl = (await awaitingPr.awaitFixPr({ repo: issue.repo, issueNumber: issue.number })).prUrl;
-        } catch (err) {
-          if (isTimeout(err)) throw new Error(`No PR from ${issue.url} within 60 minutes.`);
-          throw err;
+    for (;;) {
+      state.step = 'waiting-fix';
+      if (!recut) {
+        const parked = input.waitsForPerson === true && fixAttempts === 0;
+        if (parked) state.waitsForPerson = true;
+        if (parked || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
+      }
+      recut = false;
+      state.waitsForPerson = false;
+      fix.requested = false;
+      fixAttempts++;
+      state.fixAttempts = fixAttempts;
+
+      // Per attempt: an attempt recorded before the dispatcher replays without it.
+      const dispatched = wf.patched(FIX_DISPATCH_PATCH);
+      state.step = dispatched ? 'waiting-slot' : 'fixing';
+      let prUrl: string;
+      try {
+        if (dispatched) {
+          await takeSlot(fixAttempts);
+          state.step = 'fixing';
         }
-        // The custom fixer wrote this from inside its child; the Action cannot.
-        await writing.writeFindingFix({
+        if (wf.patched(ACTION_ADAPTER_PATCH)) {
+          const issue: FixIssue = await writing.openFixIssue({
+            repo: input.repo,
+            site: input.site,
+            key: input.key,
+            findingPath: input.findingPath,
+            supersedes: lastIssue,
+          });
+          state.issueUrl = issue.url;
+          lastIssue = { url: issue.url, reason: '' };
+          try {
+            prUrl = (await awaitingPr.awaitFixPr({ repo: issue.repo, issueNumber: issue.number })).prUrl;
+          } catch (err) {
+            if (isTimeout(err)) throw new Error(`No PR from ${issue.url} within 60 minutes.`);
+            throw err;
+          }
+          // The custom fixer wrote this from inside its child; the Action cannot.
+          await writing.writeFindingFix({
+            repo: input.repo,
+            site: input.site,
+            key: input.key,
+            findingPath: input.findingPath,
+            indexPath: input.indexPath,
+            prUrl,
+          });
+          // From here the only way back to the fix wait is the PR closing unmerged.
+          lastIssue.reason = `${prUrl} closed unmerged`;
+        } else {
+          const fixed = await wf.executeChild(fixFindingWorkflow, {
+            workflowId: fixWorkflowId(input.site, input.key),
+            taskQueue: QUEUE_HEAVY,
+            args: [
+              {
+                site: input.site,
+                key: input.key,
+                repo: input.repo,
+                findingPath: input.findingPath,
+                indexPath: input.indexPath,
+                handoffPath: input.handoffPath,
+                branch: input.branch,
+                stopAfter: 'pr',
+              },
+            ],
+          });
+          prUrl = fixed.prUrl;
+        }
+      } catch (err) {
+        if (wf.isCancellation(err)) throw err;
+        state.lastFixError = describeError(err);
+        if (lastIssue && !lastIssue.reason) lastIssue.reason = state.lastFixError;
+        wf.log.warn('the fix failed; waiting for the next fix signal', { key: input.key, error: state.lastFixError });
+        await release('fix failed');
+        continue;
+      }
+      state.prUrl = prUrl;
+      state.lastFixError = null;
+
+      state.step = 'waiting-merge';
+      let merge;
+      let reportConflict = dispatched;
+      try {
+        for (;;) {
+          merge = reportConflict ? await merging.awaitFixPrMerge(prUrl, { reportConflict: true }) : await merging.awaitFixPrMerge(prUrl);
+          if (merge.state !== 'conflicting') break;
+          let closed;
+          try {
+            closed = await writing.closeConflictingFixPr(prUrl);
+          } catch (err) {
+            if (wf.isCancellation(err)) throw err;
+            // It could not be closed: leave it to a person, and wait on it as before.
+            state.lastFixError = `${prUrl} conflicts and could not be closed: ${describeError(err)}`;
+            reportConflict = false;
+            continue;
+          }
+          // Merged or closed since the read: the next read says which.
+          if (!closed.closed) continue;
+          const sibling = closed.siblings.length > 0 ? ` with ${closed.siblings.join(', ')}` : '';
+          if (lastIssue) lastIssue.reason = `${prUrl} conflicted${sibling} and was closed; the fix is re-cut from the new master`;
+          break;
+        }
+      } catch (err) {
+        if (isTimeout(err)) {
+          await release('merge timeout');
+          return end('merge-timeout', `${prUrl} was not merged or closed within 30 days. The finding is still fixing.`);
+        }
+        throw err;
+      }
+
+      if (merge.state === 'conflicting') {
+        await release('conflict');
+        recut = true;
+        continue;
+      }
+
+      if (merge.state === 'closed') {
+        await release('closed unmerged');
+        await writing.writeFindingReturned({
           repo: input.repo,
           site: input.site,
           key: input.key,
           findingPath: input.findingPath,
           indexPath: input.indexPath,
           prUrl,
+          at: nowIso(),
         });
-        // From here the only way back to the fix wait is the PR closing unmerged.
-        lastIssue.reason = `${prUrl} closed unmerged`;
-      } else {
-        const fixed = await wf.executeChild(fixFindingWorkflow, {
-          workflowId: fixWorkflowId(input.site, input.key),
-          taskQueue: QUEUE_HEAVY,
+        continue;
+      }
+
+      const mergeSha = merge.mergeSha as string;
+      const pr = parsePrUrl(prUrl);
+      if (!pr) throw wf.ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
+
+      state.step = 'waiting-deploy';
+      let deploy;
+      try {
+        deploy = await deploying.awaitProductionDeploy({ repo: pr.repo, mergeSha, environment: PRODUCTION_ENVIRONMENT });
+      } catch (err) {
+        if (isTimeout(err)) {
+          await release('deploy timeout');
+          return end(
+            'deploy-timeout',
+            `Production did not serve ${mergeSha.slice(0, 7)} within 24 hours. The finding is still fixing.`,
+            { mergeSha },
+          );
+        }
+        throw err;
+      }
+      // Live: the next fix on these paths can be cut from this master.
+      await release('live');
+
+      state.step = 'verifying';
+      const at = nowIso();
+      const verifyId = verifyWorkflowId(input.site, input.key, at);
+      const verifyQueue = wf.patched(VERIFIER_HOSTED_PATCH) ? QUEUE_FINDINGS : QUEUE_HEAVY;
+      try {
+        const verified = await wf.executeChild(verifyFindingWorkflow, {
+          workflowId: verifyId,
+          taskQueue: verifyQueue,
           args: [
             {
               site: input.site,
@@ -513,112 +759,37 @@ async function lifecycle(
               findingPath: input.findingPath,
               indexPath: input.indexPath,
               handoffPath: input.handoffPath,
-              branch: input.branch,
-              stopAfter: 'pr',
+              origin: input.origin,
+              at,
             },
           ],
         });
-        prUrl = fixed.prUrl;
+        const live = { mergeSha, liveSha: deploy.liveSha, verifyWorkflowId: verifyId };
+        if (verified.outcome === 'confirmed') {
+          return end(
+            'confirmed',
+            `Confirmed by its deploy: production serves ${(verified.deploy?.liveSha ?? deploy.liveSha).slice(0, 7)}, which contains ${mergeSha.slice(0, 7)}. No check could measure the fix.`,
+            live,
+          );
+        }
+        // A child recorded before decision 30 ended here; nothing produces it now.
+        if (verified.outcome === 'unverifiable') {
+          const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
+          return end(
+            'unverifiable',
+            `Live at ${deploy.liveSha.slice(0, 7)}, but unverifiable: the finding ${why}, so no check ran. The finding is still fixing.`,
+            live,
+          );
+        }
+        return end(verified.outcome, `Verified on production at ${deploy.liveSha.slice(0, 7)}: ${verified.outcome}.`, live);
+      } catch (err) {
+        if (wf.isCancellation(err)) throw err;
+        return end('verify-failed', `The verify failed: ${describeError(err)}. The finding is still fixing.`, {
+          mergeSha,
+          liveSha: deploy.liveSha,
+          verifyWorkflowId: verifyId,
+        });
       }
-    } catch (err) {
-      if (wf.isCancellation(err)) throw err;
-      state.lastFixError = describeError(err);
-      if (lastIssue && !lastIssue.reason) lastIssue.reason = state.lastFixError;
-      wf.log.warn('the fix failed; waiting for the next fix signal', { key: input.key, error: state.lastFixError });
-      continue;
-    }
-    state.prUrl = prUrl;
-    state.lastFixError = null;
-
-    state.step = 'waiting-merge';
-    let merge;
-    try {
-      merge = await merging.awaitFixPrMerge(prUrl);
-    } catch (err) {
-      if (isTimeout(err)) {
-        return end('merge-timeout', `${prUrl} was not merged or closed within 30 days. The finding is still fixing.`);
-      }
-      throw err;
-    }
-
-    if (merge.state === 'closed') {
-      await writing.writeFindingReturned({
-        repo: input.repo,
-        site: input.site,
-        key: input.key,
-        findingPath: input.findingPath,
-        indexPath: input.indexPath,
-        prUrl,
-        at: nowIso(),
-      });
-      continue;
-    }
-
-    const mergeSha = merge.mergeSha as string;
-    const pr = parsePrUrl(prUrl);
-    if (!pr) throw wf.ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
-
-    state.step = 'waiting-deploy';
-    let deploy;
-    try {
-      deploy = await deploying.awaitProductionDeploy({ repo: pr.repo, mergeSha, environment: PRODUCTION_ENVIRONMENT });
-    } catch (err) {
-      if (isTimeout(err)) {
-        return end(
-          'deploy-timeout',
-          `Production did not serve ${mergeSha.slice(0, 7)} within 24 hours. The finding is still fixing.`,
-          { mergeSha },
-        );
-      }
-      throw err;
-    }
-
-    state.step = 'verifying';
-    const at = nowIso();
-    const verifyId = verifyWorkflowId(input.site, input.key, at);
-    const verifyQueue = wf.patched(VERIFIER_HOSTED_PATCH) ? QUEUE_FINDINGS : QUEUE_HEAVY;
-    try {
-      const verified = await wf.executeChild(verifyFindingWorkflow, {
-        workflowId: verifyId,
-        taskQueue: verifyQueue,
-        args: [
-          {
-            site: input.site,
-            key: input.key,
-            repo: input.repo,
-            findingPath: input.findingPath,
-            indexPath: input.indexPath,
-            handoffPath: input.handoffPath,
-            origin: input.origin,
-            at,
-          },
-        ],
-      });
-      const live = { mergeSha, liveSha: deploy.liveSha, verifyWorkflowId: verifyId };
-      if (verified.outcome === 'confirmed') {
-        return end(
-          'confirmed',
-          `Confirmed by its deploy: production serves ${(verified.deploy?.liveSha ?? deploy.liveSha).slice(0, 7)}, which contains ${mergeSha.slice(0, 7)}. No check could measure the fix.`,
-          live,
-        );
-      }
-      // A child recorded before decision 30 ended here; nothing produces it now.
-      if (verified.outcome === 'unverifiable') {
-        const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
-        return end(
-          'unverifiable',
-          `Live at ${deploy.liveSha.slice(0, 7)}, but unverifiable: the finding ${why}, so no check ran. The finding is still fixing.`,
-          live,
-        );
-      }
-      return end(verified.outcome, `Verified on production at ${deploy.liveSha.slice(0, 7)}: ${verified.outcome}.`, live);
-    } catch (err) {
-      if (wf.isCancellation(err)) throw err;
-      return end('verify-failed', `The verify failed: ${describeError(err)}. The finding is still fixing.`, {
-        mergeSha,
-        liveSha: deploy.liveSha,
-        verifyWorkflowId: verifyId,
-      });
     }
   }
 }

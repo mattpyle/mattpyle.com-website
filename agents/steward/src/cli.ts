@@ -126,6 +126,8 @@ import {
   type FindingState,
   type FindingWorkflowResult,
 } from './workflows/finding.js';
+import { dispatchStateQuery } from './workflows/fix-dispatch.js';
+import { dispatchWorkflowId, slotBlocker, waitingSlotLine, type DispatchState } from './lib/fix-dispatch.js';
 
 /**
  * `audit-url`'s default time budgets, per tier.
@@ -1952,6 +1954,18 @@ async function sendFindingVerdict(site: string, key: string, status: FindingVerd
   }
 }
 
+/**
+ * A site's fix dispatcher state, or null when none runs or it does not answer:
+ * the status line then says so rather than failing the command.
+ */
+async function readDispatchState(c: Client, site: string): Promise<DispatchState | null> {
+  try {
+    return await c.workflow.getHandle(dispatchWorkflowId(site)).query(dispatchStateQuery);
+  } catch {
+    return null;
+  }
+}
+
 const finding = program
   .command('finding')
   .description('The findings gate: list, inspect and decide Argus findings (steward/docs/record-a-finding-verdict.md)');
@@ -1971,6 +1985,14 @@ finding
         rows.push(info);
       }
       rows.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      // One dispatcher query per site, not a state query per run: a waiting
+      // run is a waiter in its site's dispatcher.
+      const dispatchers = new Map<string, DispatchState | null>();
+      for (const row of rows) {
+        const site = row.workflowId.split('/')[1];
+        if (!site || dispatchers.has(site)) continue;
+        dispatchers.set(site, await readDispatchState(c, site));
+      }
       console.log('');
       if (rows.length === 0) console.log('  No open finding workflows.');
       for (const row of rows) {
@@ -1982,7 +2004,10 @@ finding
         }).format(row.startTime);
         // The reconciler's start puts the index line's status in the memo.
         const reopened = row.memo?.indexStatus === 'reopened' ? '  reopened' : '';
-        console.log(`  ${row.workflowId}  since ${since}${reopened}`);
+        const dispatch = dispatchers.get(row.workflowId.split('/')[1] ?? '');
+        const blocker = dispatch ? slotBlocker(dispatch, row.workflowId) : null;
+        const slot = blocker ? `  waiting-slot (${blocker.path}, behind ${blocker.key})` : '';
+        console.log(`  ${row.workflowId}  since ${since}${reopened}${slot}`);
       }
       console.log('');
     } finally {
@@ -2028,6 +2053,9 @@ finding
       }
       const waiting = waitingReasonLine(state);
       if (waiting) console.log(`  ${waiting}`);
+      if (state.step === 'waiting-slot') {
+        console.log(`  ${waitingSlotLine(await readDispatchState(c, opts.site), id, state.slotPaths)}`);
+      }
       if (state.lastFixError) console.log(`  last fix failed: ${state.lastFixError}`);
       if (state.verdict) {
         console.log(`  verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
@@ -2206,6 +2234,13 @@ finding
       } catch (err) {
         await c.connection.close();
         fail(err instanceof Error ? err.message : String(err));
+      }
+      if (fixed.queued) {
+        console.log(`  ${elapsed()}  queued: another fix on the same path is in flight`);
+        console.log('');
+        console.log(`  The issue opens once that fix is live. \`steward finding status ${key}\` names the path and the fix.`);
+        console.log('');
+        return;
       }
       console.log(`  ${elapsed()}  PR ${fixed.prUrl}`);
       console.log('');

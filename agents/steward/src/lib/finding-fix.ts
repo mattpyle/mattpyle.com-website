@@ -296,7 +296,14 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
 
 export interface FixFollowed {
   issueUrl: string | null;
-  prUrl: string;
+  /** Null only when `queued` is true. */
+  prUrl: string | null;
+  /**
+   * True when the attempt sat at `waiting-slot` past the grace period: another
+   * fix on the same path is in flight, and this one opens its issue once that
+   * fix is live. `steward finding status` names the path and the fix.
+   */
+  queued?: boolean;
 }
 
 /**
@@ -307,17 +314,25 @@ export interface FixFollowed {
  *
  * The default wait outlasts the run's own 60-minute PR wait, so the run's
  * verdict on a missing PR is the one the operator sees.
+ *
+ * An attempt at `waiting-slot` is in progress: most slots are granted within a
+ * second. One still waiting after `slotGraceMs` is queued behind another fix
+ * on the same path, which can take hours, so it returns `queued` rather than
+ * holding the terminal. The run's `prUrl` there is the last attempt's, never
+ * this one's.
  */
 export async function followFix(
   requested: FixRequested,
   onIssue: (issueUrl: string) => void,
-  opts: { waitMs?: number; pollMs?: number } = {},
+  opts: { waitMs?: number; pollMs?: number; slotGraceMs?: number } = {},
 ): Promise<FixFollowed> {
   const waitMs = opts.waitMs ?? 65 * 60_000;
   const pollMs = opts.pollMs ?? 5000;
+  const slotGraceMs = opts.slotGraceMs ?? 30_000;
   const id = requested.lifecycle.workflowId;
   const deadline = Date.now() + waitMs;
   let reported: string | null = null;
+  let slotSince: number | null = null;
 
   for (;;) {
     const state = await queryState(requested.lifecycle, deadline, pollMs);
@@ -329,6 +344,12 @@ export async function followFix(
       // Back at the fix wait with no error: the PR opened, and has closed since.
       if (state.step === 'waiting-fix' && state.lastFixError) {
         throw new Error(`The fix failed: ${state.lastFixError}`);
+      }
+      if (state.step === 'waiting-slot') {
+        slotSince ??= Date.now();
+        if (Date.now() - slotSince > slotGraceMs) return { issueUrl: null, prUrl: null, queued: true };
+        await sleep(pollMs);
+        continue;
       }
       if (state.step !== 'fixing') {
         if (!state.prUrl) throw new Error(`${id} is ${state.step} with no PR.`);
