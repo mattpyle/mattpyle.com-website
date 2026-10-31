@@ -31,6 +31,7 @@ import {
   SCORECARD_MAX_AGE_DAYS_DEFAULT,
   SCORECARD_RUNS_PATH,
   STEWARD_TIMEZONE,
+  REPO_ROOT,
   SITE_DIR,
   postRelPath,
   workflowIdFor,
@@ -61,7 +62,13 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
-import { FixRefused, approvedNextStep, followFix, requestFix } from './lib/finding-fix.js';
+import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
+import {
+  CLI_APPROVE_REASON,
+  FindingVerdictError,
+  sendFindingVerdict as sendVerdict,
+  type FindingVerdictResult,
+} from './lib/finding-verdict.js';
 import {
   LIFECYCLE_CANCEL_WAIT_MS,
   VerifyRefused,
@@ -105,7 +112,6 @@ import {
 import {
   readFinding,
   readFindingsIndex,
-  readSiteAutoFix,
   writeFindingFix,
   writeFindingReturned,
 } from './activities/findings.js';
@@ -120,12 +126,7 @@ import {
   isFindingsScheduleAction,
   runFindingsScheduleAction,
 } from './lib/findings-schedule.js';
-import {
-  findingStateQuery,
-  verdictSignal,
-  type FindingState,
-  type FindingWorkflowResult,
-} from './workflows/finding.js';
+import { findingStateQuery, type FindingState } from './workflows/finding.js';
 import { dispatchStateQuery } from './workflows/fix-dispatch.js';
 import { dispatchWorkflowId, slotBlocker, waitingSlotLine, type DispatchState } from './lib/fix-dispatch.js';
 
@@ -1880,75 +1881,38 @@ function parseFindingSlug(label: string) {
   };
 }
 
-/** How long `approve` and `reject` wait for the workflow to finish writing. */
-const FINDING_VERDICT_POLL_MS = 60_000;
-
 /**
- * The open workflow for one finding, or a one-line refusal. A closed or missing
- * workflow is the same answer to the operator: there is nothing to send a
- * verdict to, and `list` shows what there is.
+ * The verbs' side of {@link sendVerdict}: the same signal the console sends,
+ * printed as the verbs always printed it.
  */
-async function openFindingHandle(c: Client, site: string, key: string) {
-  const id = findingWorkflowId(site, key);
-  const handle = c.workflow.getHandle(id);
-  let running = false;
-  try {
-    running = (await handle.describe()).status.name === 'RUNNING';
-  } catch (err) {
-    if (!(err instanceof WorkflowNotFoundError)) throw err;
-  }
-  if (!running) {
-    await c.connection.close();
-    fail(`No open workflow ${id}. \`steward finding list\` shows the open ones.`);
-  }
-  return handle;
-}
-
 async function sendFindingVerdict(site: string, key: string, status: FindingVerdict['status'], reason: string) {
   const c = await client();
   try {
-    const handle = await openFindingHandle(c, site, key);
-    const verdict: FindingVerdict = { status, reason, source: 'cli', at: new Date().toISOString() };
-    await handle.signal(verdictSignal, verdict);
-    console.log(`\n  ${status} signal sent to ${handle.workflowId}`);
-
-    const deadline = Date.now() + FINDING_VERDICT_POLL_MS;
-    let state: FindingState | undefined;
-    for (;;) {
-      const described = await handle.describe();
-      if (described.status.name !== 'RUNNING') break;
-      state = await handle.query(findingStateQuery);
-      if (state.status === 'done') break;
-      if (Date.now() > deadline) {
-        fail(
-          `Still ${state.status} after ${FINDING_VERDICT_POLL_MS / 1000}s. The signal is recorded; ` +
-            `check \`steward finding status ${key}\` or the workflow in ${WEB_UI}.`,
-        );
+    let result: FindingVerdictResult;
+    try {
+      result = await sendVerdict(
+        { site, key, status, reason },
+        { client: c, onSent: (id) => console.log(`\n  ${status} signal sent to ${id}`) },
+      );
+    } catch (err) {
+      if (err instanceof FindingVerdictError) {
+        await c.connection.close();
+        fail(err.message);
       }
-      await new Promise((r) => setTimeout(r, 1000));
+      throw err;
     }
-
-    // A `resolved` run stays open past the verdict, so its state, not its
-    // result, carries what was recorded.
-    const stillOpen = (await handle.describe()).status.name === 'RUNNING';
-    const recorded = stillOpen && state ? state : ((await handle.result()) as FindingWorkflowResult);
-    const recordedVerdict = recorded.verdict as FindingVerdict;
-    console.log(`  verdict: ${recordedVerdict.status} (source ${recordedVerdict.source})`);
-    if (recordedVerdict.source !== 'cli') {
+    console.log(`  verdict: ${result.recorded.status} (source ${result.recorded.source})`);
+    if (result.recorded.source !== 'cli') {
       console.log('  An earlier verdict from the file was recorded first, so nothing was written.');
     }
-    console.log(`  commit: ${recorded.commitSha ?? 'none (the file already carried this verdict)'}`);
-    if (stillOpen && recordedVerdict.status === 'approved') {
-      // The verdict is recorded by now, so a failed read changes this line, not the exit.
-      let autoFix: boolean | undefined;
-      try {
-        autoFix = await readSiteAutoFix({ repo: ARGUS_REPO, site });
-      } catch (err) {
-        console.log(`  auto_fix unread (${describeCliError(err)}): \`steward finding status ${key}\` shows the next step.`);
-      }
-      if (autoFix !== undefined) console.log(`  ${approvedNextStep(key, autoFix)}`);
+    console.log(`  commit: ${result.commitSha ?? 'none (the file already carried this verdict)'}`);
+    if (result.nextStepError) {
+      console.log(
+        `  auto_fix unread (${describeCliError(result.nextStepError)}): \`steward finding status ${key}\` shows the next step.`,
+      );
     }
-    console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(handle.workflowId)}\n`);
+    if (result.nextStep) console.log(`  ${result.nextStep}`);
+    console.log(`  ${result.webUrl}\n`);
   } finally {
     await c.connection.close();
   }
@@ -2127,7 +2091,7 @@ finding
   .command('approve')
   .argument('<key>', 'finding key', parseFindingSlug('key'))
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
-  .option('--reason <text>', 'optional note recorded as the verdict reason', 'Approved by Matt via steward finding approve.')
+  .option('--reason <text>', 'optional note recorded as the verdict reason', CLI_APPROVE_REASON)
   .description('Approve a finding: signal the workflow, which writes the verdict into the file')
   .action(async (key: string, opts: { site: string; reason: string }) => {
     await sendFindingVerdict(opts.site, key, 'approved', opts.reason);
@@ -2262,6 +2226,62 @@ keys
   .description('Print a new Ed25519 key pair as JWK. Writes nothing: store both halves yourself')
   .action((opts: { json?: boolean }) => {
     runKeysGenerate(opts);
+  });
+
+/** Opens a URL in the default browser, detached, without waiting for it. */
+async function openInBrowser(url: string): Promise<void> {
+  const { spawn } = await import('node:child_process');
+  const [command, args] =
+    process.platform === 'win32'
+      ? ['cmd', ['/c', 'start', '', url]]
+      : process.platform === 'darwin'
+        ? ['open', [url]]
+        : ['xdg-open', [url]];
+  const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true });
+  child.on('error', () => console.log(`  ${paint(`Could not open a browser; open ${url} yourself.`, DIM)}`));
+  child.unref();
+}
+
+program
+  .command('console')
+  .option('--port <n>', 'port on 127.0.0.1', String(8766))
+  .option('--no-open', 'print the URL without opening the browser')
+  .description(
+    'Serve the findings page on 127.0.0.1: every finding with its step, PR and last verification, and approve or reject',
+  )
+  .action(async (opts: { port: string; open: boolean }) => {
+    const port = Number(opts.port);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) fail(`--port ${opts.port} is not a port number.`);
+    const { startConsoleServer } = await import('./console/server.js');
+    const { createFindingsLoader } = await import('./console/findings-model.js');
+    const c = await client();
+    const loader = createFindingsLoader({ repo: ARGUS_REPO, ghJson: (p) => gh(p), client: c });
+    let server;
+    try {
+      server = await startConsoleServer({
+        port,
+        loadFindings: () => loader.load(),
+        sendVerdict: (request) => sendVerdict(request, { client: c }),
+        page: { timeZone: STEWARD_TIMEZONE, webUi: WEB_UI, namespace: NAMESPACE },
+        fontsDir: path.join(REPO_ROOT, 'public', 'fonts'),
+      });
+    } catch (err) {
+      await c.connection.close();
+      if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') fail(`Port ${port} is in use. Pass --port.`);
+      throw err;
+    }
+    console.log('');
+    console.log(`  ${BOLD}steward console${RESET}  ${server.url}`);
+    console.log(`  ${paint('Loopback only. Ctrl-C stops it.', DIM)}`);
+    console.log('');
+    if (opts.open) await openInBrowser(server.url);
+    const stop = async () => {
+      await server.close();
+      await c.connection.close();
+      process.exit(0);
+    };
+    process.once('SIGINT', () => void stop());
+    process.once('SIGTERM', () => void stop());
   });
 
 program

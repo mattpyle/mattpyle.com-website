@@ -798,6 +798,80 @@ export function buildVerificationSection(verification: Verification): string {
   return lines.join('\n');
 }
 
+/** One check line of a written Verification section, read back. */
+export interface ParsedVerificationCheck {
+  n: number;
+  pass: boolean;
+  kind: string;
+  /** The URL label as written: one URL, or the count and the list. */
+  url: string;
+  viewport: string | null;
+  expected: string;
+  measured: string;
+}
+
+/** A finding's `## Verification` section, read back for the console. */
+export interface ParsedVerification {
+  /** `resolved`, `reopened` or `confirmed`, as the section's outcome line names it. */
+  outcome: string;
+  at: string | null;
+  workflowId: string | null;
+  checks: ParsedVerificationCheck[];
+  /** Check lines that did not parse, kept verbatim so nothing measured is hidden. */
+  unparsed: string[];
+}
+
+const VERIFICATION_LEAD =
+  /^Steward (?:ran this finding's checks against production|confirmed this finding's fix by its deploy) at (\S+)\. Outcome: (\w+)\. Workflow `([^`]+)`\.$/;
+const VERIFICATION_CHECK =
+  /^(\d+)\. (Pass|Fail), `([^`]+)` on (.+?)(?: at (\d+x\d+|\d+×\d+))?\. Expected: (.*)\. Measured: (.*)\.$/;
+
+/**
+ * The inverse of {@link buildVerificationSection}: the outcome, the time, the
+ * workflow and each check's expected and measured values. Null when the file
+ * has no such section. A line in an older or hand-written shape lands in
+ * `unparsed` rather than being dropped.
+ */
+export function parseVerificationSection(text: string): ParsedVerification | null {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^##\s+Verification\s*$/.test(line));
+  if (start < 0) return null;
+  let end = lines.findIndex((line, i) => i > start && /^##\s/.test(line));
+  if (end < 0) end = lines.length;
+  const parsed: ParsedVerification = { outcome: '', at: null, workflowId: null, checks: [], unparsed: [] };
+  for (const raw of lines.slice(start + 1, end)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const lead = VERIFICATION_LEAD.exec(line);
+    if (lead) {
+      parsed.at = lead[1];
+      parsed.outcome = lead[2];
+      parsed.workflowId = lead[3];
+      continue;
+    }
+    const check = VERIFICATION_CHECK.exec(line);
+    if (check) {
+      parsed.checks.push({
+        n: Number(check[1]),
+        pass: check[2] === 'Pass',
+        kind: check[3],
+        url: check[4],
+        viewport: check[5] ?? null,
+        expected: check[6],
+        measured: check[7],
+      });
+      continue;
+    }
+    if (/^\d+\.\s/.test(line)) parsed.unparsed.push(line);
+    else if (!parsed.outcome) {
+      // An older lead line: take the outcome word if it names one.
+      const outcome = /Outcome: (\w+)/.exec(line);
+      if (outcome) parsed.outcome = outcome[1];
+    }
+  }
+  return parsed;
+}
+
 /**
  * The finding file with the verifier's result in it and every other byte kept:
  * `status`, `resolved_run` when it resolved, `resolved_by: deploy` when the

@@ -183,6 +183,7 @@ steward finding verify <key>     # fixing or reopened finding to resolved or reo
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
+steward console                  # findings page on 127.0.0.1: state, step, PR, last verify; approve and reject
 steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
 steward update                   # after a merge: pull master in the main checkout, restart the worker
 ```
