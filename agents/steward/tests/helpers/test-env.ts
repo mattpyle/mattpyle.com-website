@@ -51,3 +51,72 @@ export function createTestEnv(): Promise<TestWorkflowEnvironment> {
     },
   });
 }
+
+/**
+ * How long a test's worker may run before the harness stops it: under the
+ * suite's 60-second `--test-timeout`, with room for the worker to drain.
+ */
+export const WORKER_BOUND_MS = 50_000;
+
+/**
+ * Rejects when `promise` has not settled within {@link WORKER_BOUND_MS}.
+ * Pass it to `worker.runUntil(bounded(fn()))`, never a bare `fn()`.
+ *
+ * `runUntil` shuts the worker down only when its promise settles, and a
+ * node:test timeout settles nothing: it marks the test failed and moves on.
+ * The worker then keeps polling, the file's `env.teardown()` throws
+ * `Cannot close connection while Workers hold a reference to it`, and the
+ * process never exits. On CI that is a job cancelled at its 15-minute limit
+ * with no test summary. Bounded, a stalled test fails with this message, its
+ * worker drains, and the file ends.
+ */
+export function bounded<T>(promise: Promise<T>, ms = WORKER_BOUND_MS): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`The test's workflows did not finish within ${ms / 1000} s; the harness stopped its worker.`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Waits until the run's pending `activityType` has failed an attempt and sits
+ * in its retry backoff, so no attempt is in flight. Call it before terminating
+ * or cancelling a run whose activity retries, and close the run straight after.
+ *
+ * The test server reports a retrying activity as `STARTED` even during the
+ * backoff, so the sign is `attempt` 2 or more with `lastFailure` set. The
+ * next attempt is a whole retry interval away: time does not skip while no
+ * time-skipping client awaits a result, so that interval passes in wall time.
+ *
+ * The time-skipping server takes a time lock while an activity attempt runs.
+ * If the run closes during that attempt, the worker's completion is refused
+ * and the lock is never released: from then on the server's clock advances
+ * only in real time, for every workflow in the environment, so a later test
+ * that relies on skipping waits until its timeout. Observed on 2026-10-30
+ * with the server `@temporalio/testing` 1.20.3 downloads: a run terminated
+ * mid-attempt, then 170 s with the clock at wall time and nothing pending on
+ * any open run.
+ */
+export async function untilBetweenAttempts(
+  handle: { describe(): Promise<{ raw: { pendingActivities?: PendingActivityLike[] | null } }>; workflowId: string },
+  activityType: string,
+  ms = 20_000,
+): Promise<void> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const pending = (await handle.describe()).raw.pendingActivities ?? [];
+    const activity = pending.find((a) => a.activityType?.name === activityType);
+    if (activity && (activity.attempt ?? 1) >= 2 && activity.lastFailure) return;
+    if (Date.now() > deadline) throw new Error(`${handle.workflowId}'s ${activityType} never reached its retry backoff.`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+interface PendingActivityLike {
+  activityType?: { name?: string | null } | null;
+  attempt?: number | null;
+  lastFailure?: unknown;
+}

@@ -2,7 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { ApplicationFailure } from '@temporalio/common';
 import { Worker } from '@temporalio/worker';
 import {
@@ -150,7 +150,7 @@ async function withWorker<T>(activities: Record<string, unknown>, fn: () => Prom
     bundlerOptions: {},
     taskQueue: QUEUE_AUDIT,
   });
-  return await worker.runUntil(fn());
+  return await worker.runUntil(bounded(fn()));
 }
 
 function baseInput(overrides: Partial<AuditSiteInput> = {}): AuditSiteInput {

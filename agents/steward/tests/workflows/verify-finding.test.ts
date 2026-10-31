@@ -5,7 +5,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
 import { WorkflowFailedError } from '@temporalio/client';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import {
   verifyFindingStateQuery,
   verifyFindingWorkflow,
@@ -135,7 +135,7 @@ async function withWorker<T>(activities: Record<string, unknown>, fn: () => Prom
     taskQueue: QUEUE,
     bundlerOptions: {},
   });
-  return await worker.runUntil(fn());
+  return await worker.runUntil(bounded(fn()));
 }
 
 function input(overrides: Partial<VerifyFindingInput> = {}): VerifyFindingInput {

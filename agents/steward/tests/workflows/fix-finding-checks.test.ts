@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { fixFindingWorkflow, type FixFindingInput } from '../../src/workflows/fix-finding.js';
 import type { AwaitPreviewDeployInput, PreviewDeploy, WriteFindingFixInput } from '../../src/activities/findings.js';
 import {
@@ -221,11 +221,13 @@ async function execute(activities: Record<string, unknown>) {
     bundlerOptions: {},
   });
   return worker.runUntil(
-    env.client.workflow.execute(fixFindingWorkflow, {
-      workflowId: `fix/mattpyle-com/checks-${++runs}`,
-      taskQueue: QUEUE,
-      args: [input()],
-    }),
+    bounded(
+      env.client.workflow.execute(fixFindingWorkflow, {
+        workflowId: `fix/mattpyle-com/checks-${++runs}`,
+        taskQueue: QUEUE,
+        args: [input()],
+      }),
+    ),
   );
 }
 

@@ -2,7 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { Worker } from '@temporalio/worker';
 import { buildCommentary, scorecardAuditWorkflow, type ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js';
 import type { PageAuditOutcome, PublishableRun } from '../../src/lib/scorecard-aggregate.js';
@@ -129,7 +129,7 @@ function mockActivities(overrides: MockOverrides = {}) {
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
   const common = { connection: env.nativeConnection, workflowsPath, activities, bundlerOptions: {} };
   const worker = await Worker.create({ ...common, taskQueue: QUEUE });
-  return await worker.runUntil(fn());
+  return await worker.runUntil(bounded(fn()));
 }
 
 function baseInput(overrides: Partial<ScorecardAuditInput> = {}): ScorecardAuditInput {

@@ -5,7 +5,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv, untilBetweenAttempts } from '../helpers/test-env.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -163,7 +163,7 @@ async function withWorker<T>(activities: object, fn: () => Promise<T>): Promise<
     taskQueue: FINDINGS,
     bundlerOptions: {},
   });
-  return await worker.runUntil(fn());
+  return await worker.runUntil(bounded(fn()));
 }
 
 function input(site: string, key: string): FindingWorkflowInput {
@@ -233,11 +233,14 @@ test('two findings naming one path: the second waits at waiting-slot, and its is
     assert.deepEqual(slotBlocker(await dispatchState(site), second.workflowId), { key: a, path: 'src/shared.ts', held: true });
     assert.deepEqual(m.log, [`issue:${a}`, `pr:${a}`], 'no issue for the second fix while the first is in flight');
 
-    // Awaiting through the time-skipping client lets the merge polls run.
-    const results = (await Promise.all([
-      env.client.workflow.getHandle(second.workflowId).result(),
-      env.client.workflow.getHandle(first.workflowId).result(),
-    ])) as FindingWorkflowResult[];
+    // Awaiting through the time-skipping client lets the merge polls run. One
+    // await at a time: each `result()` unlocks time skipping and locks it again
+    // after, and two at once unlock past zero, which the test server refuses
+    // (`IllegalStateException: Unbalanced lock and unlock calls`).
+    const results: FindingWorkflowResult[] = [];
+    for (const handle of [first, second]) {
+      results.push((await env.client.workflow.getHandle(handle.workflowId).result()) as FindingWorkflowResult);
+    }
     assert.deepEqual(results.map((r) => r.outcome), ['resolved', 'resolved']);
   });
 
@@ -267,8 +270,11 @@ test('two findings naming different paths open their issues within the same PR p
     assert.deepEqual([...m.log].sort(), [`issue:${a}`, `issue:${b}`]);
     assert.equal((await dispatchState(site)).holders.length, 2);
 
-    // A run that ends some other way gives its slot back.
+    // A run that ends some other way gives its slot back. Cancelled between PR
+    // polls: a run closed mid-attempt stops the test server's time skipping
+    // for every later test (`untilBetweenAttempts`).
     for (const handle of [first, second]) {
+      await untilBetweenAttempts(handle, 'awaitFixPr');
       await handle.cancel();
       await handle.result().catch(() => undefined);
     }
@@ -357,7 +363,11 @@ test('a holder that ends without releasing is swept within the hour, and the run
     const waiter = await startApproved(site, waiterKey);
     await until(waiter, (s) => s.step === 'waiting-slot' && (s.slotPaths?.length ?? 0) > 0);
 
-    // Terminated: no `finally` runs, so no release is sent.
+    // Terminated: no `finally` runs, so no release is sent. Only between
+    // merge polls: `until` sees `waiting-merge` when the poll is scheduled,
+    // and a run terminated during its first attempt leaves the test server's
+    // time lock held, so the hourly sweep never comes (`untilBetweenAttempts`).
+    await untilBetweenAttempts(holder, 'awaitFixPrMerge');
     await holder.terminate('abandoned for the test');
     // Awaiting through the time-skipping client lets the hourly sweep fire.
     return await env.client.workflow.getHandle(waiter.workflowId).result();

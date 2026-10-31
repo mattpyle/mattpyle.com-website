@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
-import { createTestEnv } from '../helpers/test-env.js';
+import { bounded, createTestEnv } from '../helpers/test-env.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -239,7 +239,7 @@ async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Pro
     taskQueue: FINDINGS,
     bundlerOptions: {},
   });
-  return await findingsWorker.runUntil(fn());
+  return await findingsWorker.runUntil(bounded(fn()));
 }
 
 function input(id: string): FindingWorkflowInput {
