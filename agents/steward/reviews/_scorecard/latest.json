@@ -1,13 +1,13 @@
 {
-  "iso": "2026-10-29",
-  "timestamp": "2026-10-29T22:23:59-07:00",
+  "iso": "2026-10-30",
+  "timestamp": "2026-10-30T03:34:23-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Performance moved from Fail to Pass; all 28 pages passed all four public metrics.",
+  "commentary": "All 28 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-10-29",
+  "id": "2026-10-30",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -201,7 +201,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-reading-budget/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -243,7 +243,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -432,7 +432,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -483,12 +483,12 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 52,
-          "measured": 1915
+          "share": 54,
+          "measured": 1984
         },
         "markdown": {
-          "share": 75,
-          "measured": 1304
+          "share": 76,
+          "measured": 1373
         }
       }
     },
@@ -505,11 +505,11 @@
       "readingBudget": {
         "text": {
           "share": 79,
-          "measured": 4321
+          "measured": 4422
         },
         "markdown": {
           "share": 92,
-          "measured": 3837
+          "measured": 3942
         }
       }
     },
@@ -592,7 +592,7 @@
           "measured": 8000
         },
         "markdown": {
-          "share": 94,
+          "share": 93,
           "measured": 8000
         }
       }
@@ -613,8 +613,8 @@
           "measured": 8000
         },
         "markdown": {
-          "share": 95,
-          "measured": 7500
+          "share": 94,
+          "measured": 7539
         }
       }
     },
@@ -640,9 +640,8 @@
       }
     }
   ],
-  "decision": "open-pr",
-  "reason": "Performance Fail→Pass",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/470",
+  "decision": "no-op",
+  "reason": "unchanged, published 1d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-10-29-2"
+  "archiveId": "2026-10-30"
 }
