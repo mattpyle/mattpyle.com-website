@@ -187,6 +187,44 @@ test('a viewport on a status, header, text or markdown check is refused', () => 
   }
 });
 
+test('a text or markdown check may name the status it expects, and keeps it', () => {
+  const errors: VerifyCheck[] = [
+    { url: `${ORIGIN}/writing/webmcp/`, kind: 'text', expect: { count: 0, of: 'moved' }, status: 404 },
+    { url: [`${ORIGIN}/a/`, `${ORIGIN}/b/`], kind: 'markdown', expect: { contains: 'x' }, status: 410 },
+  ];
+  assert.deepEqual(validateVerifyBlock(errors, ORIGIN), { checks: errors, problems: [] });
+  // As Argus writes it: a bare number in YAML is a number.
+  const { raw } = parseVerifyReply(`verify:
+  - url: "${ORIGIN}/x/"
+    kind: "text"
+    expect: {contains: "x"}
+    status: 400
+`);
+  assert.equal(validateVerifyBlock(raw, ORIGIN).checks[0].status, 400);
+  assert.ok(!('status' in validateVerifyBlock(GOOD, ORIGIN).checks[0]), 'a check with none gets none');
+});
+
+test('a status on any other kind is refused, and so is one that is not an HTTP status', () => {
+  const others: [VerifyCheck['kind'], unknown][] = [
+    ['status', 200],
+    ['header', { name: 'link', contains: 'text/markdown' }],
+    ['selector', { selector: 'h1', count: 1 }],
+    ['js', { expression: 'document.title', equals: 'x' }],
+  ];
+  for (const [kind, expect] of others) {
+    const result = validateVerifyBlock([{ url: `${ORIGIN}/`, kind, expect, status: 404 }], ORIGIN);
+    assert.deepEqual(result.problems, [`verify check 1 (${kind}): a status applies to text and markdown checks only`]);
+    assert.deepEqual(result.checks, []);
+  }
+  for (const status of [99, 600, 404.5, '404', null, true]) {
+    const result = validateVerifyBlock([{ url: `${ORIGIN}/`, kind: 'text', expect: { contains: 'x' }, status }], ORIGIN);
+    assert.match(result.problems.join('; '), /verify check 1 \(text\): status .* is not an HTTP status code, 100 to 599/, String(status));
+  }
+  // A status and a viewport never ride together: a viewport belongs to the browser kinds.
+  const both = validateVerifyBlock([{ url: `${ORIGIN}/`, kind: 'text', expect: { contains: 'x' }, status: 404, viewport: '390x844' }], ORIGIN);
+  assert.match(both.problems.join('; '), /is not \{url, kind, expect\}/);
+});
+
 test('a malformed viewport is refused', () => {
   for (const viewport of ['390', '390X844', '390 x 844', ' 390x844', '390x844px', 'phone', '50x844', '390x5000', '0390x844', 390, null, '']) {
     const result = validateVerifyBlock(
@@ -254,6 +292,14 @@ test('the guide names the list form, its cap and the kinds it applies to', () =>
   assert.ok(
     verifyBlockGuide(ORIGIN).includes(
       'One fact measured across many pages is one check: its `url` is a list of up to 20 full URLs, and it passes when every URL passes. A list applies to `status`, `header`, `text` and `markdown`.',
+    ),
+  );
+});
+
+test('the guide names the status field, for a page whose correct answer is an error', () => {
+  assert.ok(
+    verifyBlockGuide(ORIGIN).includes(
+      'A `text` or `markdown` check reads a body only from a page that answers 200. For a page whose correct answer is an error status, add `status: 404` (an integer 100 to 599) to the check: it then reads the body of a 404 and fails on any other status.',
     ),
   );
 });
@@ -487,6 +533,31 @@ test('markdown: the negotiated body, and a fail when the answer is not markdown'
   assert.deepEqual(rows.map((r) => r.pass), [true, true, false]);
   assert.equal(rows[2].measured, 'content-type "text/html", not markdown');
   assert.equal(seen.at(-1)!.accept, 'text/markdown');
+});
+
+test('text and markdown: a declared status passes the body judgement on that status and fails on any other', async () => {
+  const rows = await run([
+    { ...check('/nowhere/', 'text', { contains: 'Not found' }), status: 404 },
+    { ...check('/nowhere/', 'text', { count: 0, of: 'moved' }), status: 404 },
+    { ...check('/audit/', 'text', { contains: 'Audit' }), status: 404 },
+    { ...check('/nowhere/', 'text', { contains: 'Absent string' }), status: 404 },
+    { ...check('/nowhere/', 'markdown', { contains: 'x' }), status: 404 },
+    check('/nowhere/', 'text', { contains: 'Not found' }),
+    { ...check('/audit/', 'text', { contains: 'Audit' }), status: 200 },
+  ]);
+  assert.deepEqual(rows.map((r) => r.pass), [true, true, false, false, false, false, true]);
+  assert.equal(rows[0].expected, 'contains "Not found", on status 404');
+  assert.equal(rows[2].measured, 'status 200', 'a page that answers 200 where an error was declared fails on the status');
+  assert.equal(rows[3].measured, '0 occurrences', 'the body is still judged on the declared status');
+  assert.equal(rows[4].measured, 'content-type "text/html", not markdown');
+  assert.equal(rows[5].measured, 'status 404', 'a check without a status still fails on a 404');
+  assert.equal(rows[5].expected, 'contains "Not found"', 'the default names no status');
+});
+
+test('a list of URLs under one declared status names each URL that answers another', async () => {
+  const [row] = await run([{ url: [`${origin}/nowhere/`, `${origin}/audit/`], kind: 'text', expect: { contains: 'Not found' }, status: 404 }]);
+  assert.equal(row.pass, false);
+  assert.match(row.measured, /^1 of 2 pass; failed: .*\/audit\/ \(status 200\)$/);
 });
 
 test('selector: a count, a text and an attribute, each as one expression in the page', async () => {

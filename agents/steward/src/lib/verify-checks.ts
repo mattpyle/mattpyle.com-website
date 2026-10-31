@@ -24,6 +24,8 @@ export interface VerifyCheck {
   expect: unknown;
   /** `selector` and `js` only: the size the page is opened at, `<width>x<height>`. Absent means {@link DEFAULT_VIEWPORT}. */
   viewport?: string;
+  /** `text` and `markdown` only: the HTTP status the page answers with, 100 to 599. Absent means 200. */
+  status?: number;
 }
 
 export interface VerifyCheckResult {
@@ -53,6 +55,9 @@ export const VERIFY_URLS_MAX = 20;
 
 /** The two kinds that open the page in a browser, and so the only two a viewport applies to. */
 export const BROWSER_KINDS: readonly VerifyKind[] = ['selector', 'js'];
+
+/** The two kinds that judge a body, and so the only two a `status` qualifier applies to. */
+export const BODY_KINDS: readonly VerifyKind[] = ['text', 'markdown'];
 
 /** A check's `url` as a list: the one URL, or every URL it names. */
 export function checkUrls(url: string | string[]): string[] {
@@ -107,6 +112,7 @@ export function verifyBlockGuide(origin: string): string[] {
     '',
     `One fact measured across many pages is one check: its \`url\` is a list of up to ${VERIFY_URLS_MAX} full URLs, and it passes when every URL passes. A list applies to \`status\`, \`header\`, \`text\` and \`markdown\`.`,
     `Every \`selector\` and \`js\` check names the viewport its measurement was taken at, as \`viewport: "390x844"\`; a check without one runs at ${DEFAULT_VIEWPORT}.`,
+    'A `text` or `markdown` check reads a body only from a page that answers 200. For a page whose correct answer is an error status, add `status: 404` (an integer 100 to 599) to the check: it then reads the body of a 404 and fails on any other status.',
     'Every check passes on production once the fix is live and fails before it.',
     'Prefer `status`, `header`, `text` and `markdown`. Use `selector` or `js` only when the fact exists in the rendered page alone.',
     'The retro appearance is the one page state a check may set. Its stylesheet loads on every page and applies when `<html>` carries `data-appearance="retro"`. A check in retro is a `js` check whose expression sets `document.documentElement.dataset.appearance = \'retro\'` before it measures, and fails on an empty match: `expect: {expression: "(() => { document.documentElement.dataset.appearance = \'retro\'; const cells = [...document.querySelectorAll(\'.facts td\')]; return cells.length > 0 && cells.every((cell) => getComputedStyle(cell).paddingLeft === \'8px\'); })()", equals: true}`.',
@@ -297,8 +303,8 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
   const checks: VerifyCheck[] = [];
   raw.forEach((item, i) => {
     const at = `verify check ${i + 1}`;
-    if (!isRecord(item) || !keysAre(item, ['url', 'kind', 'expect'], ['url', 'kind', 'expect', 'viewport'])) {
-      problems.push(`${at} is not {url, kind, expect}, with a viewport or without`);
+    if (!isRecord(item) || !keysAre(item, ['url', 'kind', 'expect'], ['url', 'kind', 'expect', 'viewport'], ['url', 'kind', 'expect', 'status'])) {
+      problems.push(`${at} is not {url, kind, expect}, with a viewport or a status or without`);
       return;
     }
     if (!VERIFY_KINDS.includes(item.kind as VerifyKind)) {
@@ -334,7 +340,19 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
     } else if (hasViewport && !parseViewport(item.viewport)) {
       problems.push(`${at} (${kind}): viewport ${show(item.viewport)} is not "<width>x<height>", each 100 to 4096`);
     }
-    checks.push({ url: list ? (item.url as unknown[]).map(String) : String(item.url), kind, expect: item.expect, ...(hasViewport ? { viewport: String(item.viewport) } : {}) });
+    const hasStatus = Object.prototype.hasOwnProperty.call(item, 'status');
+    if (hasStatus && !BODY_KINDS.includes(kind)) {
+      problems.push(`${at} (${kind}): a status applies to text and markdown checks only`);
+    } else if (hasStatus && !(Number.isInteger(item.status) && (item.status as number) >= 100 && (item.status as number) <= 599)) {
+      problems.push(`${at} (${kind}): status ${show(item.status)} is not an HTTP status code, 100 to 599`);
+    }
+    checks.push({
+      url: list ? (item.url as unknown[]).map(String) : String(item.url),
+      kind,
+      expect: item.expect,
+      ...(hasViewport ? { viewport: String(item.viewport) } : {}),
+      ...(hasStatus ? { status: item.status as number } : {}),
+    });
   });
   return problems.length > 0 ? { checks: [], problems } : { checks, problems };
 }
@@ -641,7 +659,9 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
         const res = await get(check, url, markdown ? { headers: { Accept: 'text/markdown' } } : {});
         const type = (res.headers.get('content-type') ?? '').toLowerCase();
         const verdict = judgeText((await res.text()).slice(0, BODY_MAX), expect);
-        if (res.status !== 200) return { ...verdict, pass: false, measured: `status ${res.status}` };
+        const wanted = check.status ?? 200;
+        if (wanted !== 200) verdict.expected = `${verdict.expected}, on status ${wanted}`;
+        if (res.status !== wanted) return { ...verdict, pass: false, measured: `status ${res.status}` };
         if (markdown && !type.includes('text/markdown')) {
           return { ...verdict, pass: false, measured: `content-type ${show(type)}, not markdown` };
         }
