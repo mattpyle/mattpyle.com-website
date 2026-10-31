@@ -588,3 +588,42 @@ test('a lifecycle run whose PR closed before the dispatcher replays that attempt
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
 });
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the preview test: file
+ * approve, one `fix`, the issue, the PR, the PR closed unmerged, the return
+ * written, and the run parked back at `waiting-fix` with `fixAttempts` 1. 57
+ * events. New code reads the finding's checks and waits for the PR's preview
+ * right after the PR is known, so this replays only because the
+ * `fix-preview-test` patch sends an attempt without its marker straight to the
+ * merge wait.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at 3b47ac8, a
+ * `git archive` of it) against the time-skipping server with mocked
+ * activities, so it holds no real finding text.
+ *
+ * Probe (2026-10-31): replacing `wf.patched(PREVIEW_TEST_PATCH)` with `true`
+ * made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'awaitFixPrMerge' does not match activity type of activity command 'readFinding'
+ * ```
+ *
+ * The three older lifecycle fixtures that reach the merge wait on the issue path
+ * (`finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin` and
+ * `finding-pr-closed-before-dispatch.bin`) failed the same way; the other 13
+ * replays stayed green. The guard was restored and all 17 re-ran green.
+ */
+const findingPrClosedBeforePreviewTestPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-pr-closed-before-preview-test.bin', import.meta.url),
+);
+
+test('a lifecycle run whose PR closed before the preview test replays that attempt without it', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingPrClosedBeforePreviewTestPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'finding/mattpyle-com/content-post-describes-removed-filter-pills--writing-accessibility-and-ai',
+  );
+});

@@ -17,19 +17,29 @@ import {
 } from '../../src/workflows/finding.js';
 import type {
   AwaitFixPrInput,
+  AwaitPrPreviewInput,
   AwaitProductionDeployInput,
   FixIssue,
   FixPr,
   FixPrOutcome,
   OpenFixIssueInput,
+  PrPreview,
   ProductionDeploy,
   ProductionRead,
   ReadProductionDeployInput,
+  ReportPreviewChecksInput,
+  ReportPreviewChecksResult,
   WriteFindingReturnedInput,
   WriteFindingVerificationInput,
 } from '../../src/activities/findings.js';
 import type { RunFindingChecksInput } from '../../src/activities/verify-finding.js';
-import { compareContains, liveDeployment, type DeploymentRecord, type FindingVerdict } from '../../src/lib/findings.js';
+import {
+  compareContains,
+  failedChecks,
+  liveDeployment,
+  type DeploymentRecord,
+  type FindingVerdict,
+} from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import type { VerifyCheck } from '../../src/lib/verify-checks.js';
 import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
@@ -73,6 +83,7 @@ const PR_1 = `https://github.com/${SITE_REPO}/pull/401`;
 const PR_2 = `https://github.com/${SITE_REPO}/pull/402`;
 const ISSUE_1 = `https://github.com/${SITE_REPO}/issues/101`;
 const ISSUE_2 = `https://github.com/${SITE_REPO}/issues/102`;
+const PREVIEW = 'https://mattpyle-com-website-abc123-mattpyles-projects.vercel.app';
 const CHECK: VerifyCheck = { url: `${ORIGIN}/scorecard/`, kind: 'text', expect: { contains: '1 axe violation (Fail)' } };
 
 let env: TestWorkflowEnvironment;
@@ -106,8 +117,18 @@ interface Script {
   deploys?: DeploymentRecord[][];
   /** Which merge commit's compare against which live commit contains it: `merge...live` keys. */
   contains?: Record<string, boolean>;
-  /** Whether the verify checks pass. */
+  /** Whether the verify checks pass on production. */
   passes?: boolean;
+  /** Whether the verify checks pass on the PR's preview. Default true. */
+  previewPasses?: boolean;
+  /** How many preview polls answer "not yet" per PR before it is ready. Default 0, so a run with no timer reaches its waits in real time. */
+  previewPolls?: number;
+  /** The preview is never ready: every poll answers "not yet" until the wait's bound ends it. */
+  previewNever?: boolean;
+  /** The preview's build failed: the poll fails non-retryably with this type. */
+  previewFail?: string;
+  /** The worker has no bypass secret: the preview run fails with `PreviewBypassMissing`. */
+  noBypass?: boolean;
   /** The finding has no `verify` key. */
   noBlock?: boolean;
   /** What the blockless verify's production read says: contained unless false. */
@@ -125,12 +146,19 @@ function lifecycle(script: Script) {
     issues: OpenFixIssueInput[];
     returned: WriteFindingReturnedInput[];
     deploy: AwaitProductionDeployInput[];
+    previews: AwaitPrPreviewInput[];
+    previewRuns: RunFindingChecksInput[];
+    reports: ReportPreviewChecksInput[];
     verification?: WriteFindingVerificationInput;
   } = {
     issues: [],
     returned: [],
     deploy: [],
+    previews: [],
+    previewRuns: [],
+    reports: [],
   };
+  const previewPolls: Record<string, number> = {};
 
   const findings = {
     writeFindingVerdict: async () => {
@@ -166,6 +194,22 @@ function lifecycle(script: Script) {
       calls.push('writeFindingFix');
       finding = FIXING_FINDING;
       return { findingCommitSha: 'c-f1', indexCommitSha: 'c-f2', commitSha: 'c-f2' };
+    },
+    awaitPrPreview: async (input: AwaitPrPreviewInput): Promise<PrPreview> => {
+      seen.previews.push(input);
+      const n = (previewPolls[input.prUrl] = (previewPolls[input.prUrl] ?? 0) + 1);
+      if (script.previewFail) throw ApplicationFailure.nonRetryable('The Preview deployment ended failure.', script.previewFail);
+      if (script.previewNever || n <= (script.previewPolls ?? 0)) {
+        throw ApplicationFailure.retryable('No Preview deployment of the head yet.', 'PreviewNotReady');
+      }
+      calls.push('awaitPrPreview');
+      return { origin: PREVIEW, deploymentId: 7, sha: 'head-sha-1' };
+    },
+    reportPreviewChecks: async (input: ReportPreviewChecksInput): Promise<ReportPreviewChecksResult> => {
+      calls.push('reportPreviewChecks');
+      seen.reports.push(input);
+      const failed = failedChecks(input.results);
+      return { posted: true, failed, draft: failed.length > 0 };
     },
     awaitFixPrMerge: async (prUrl: string): Promise<FixPrOutcome> => {
       const n = (mergePolls[prUrl] = (mergePolls[prUrl] ?? 0) + 1);
@@ -227,7 +271,13 @@ function lifecycle(script: Script) {
     },
     runFindingChecks: async (input: RunFindingChecksInput) => {
       calls.push('runFindingChecks');
-      const pass = script.passes ?? true;
+      if (input.previewOrigin) {
+        seen.previewRuns.push(input);
+        if (script.noBypass) {
+          throw ApplicationFailure.nonRetryable('VERCEL_AUTOMATION_BYPASS_SECRET is not set on the worker.', 'PreviewBypassMissing');
+        }
+      }
+      const pass = input.previewOrigin ? (script.previewPasses ?? true) : (script.passes ?? true);
       return {
         ranAt: '2026-10-13T21:00:00.000Z',
         passed: pass,
@@ -342,6 +392,11 @@ test('merged, deployed and every check passes: resolved, with one execution carr
     'openFixIssue',
     'awaitFixPr',
     'writeFindingFix',
+    'readFinding',
+    'readVerifyBlock',
+    'awaitPrPreview',
+    'runFindingChecks',
+    'reportPreviewChecks',
     'awaitFixPrMerge:merged',
     'awaitProductionDeploy:m1',
     'readFinding',
@@ -350,6 +405,10 @@ test('merged, deployed and every check passes: resolved, with one execution carr
     'runFindingChecks',
     'writeFindingVerification:resolved',
   ]);
+  assert.deepEqual(mocks.seen.previews, [{ prUrl: PR_1, environment: 'Preview' }]);
+  assert.equal(mocks.seen.previewRuns[0].previewOrigin, PREVIEW, 'the checks ran on the preview');
+  assert.equal(mocks.seen.reports[0].sha, 'head-sha-1');
+  assert.equal(mocks.seen.reports[0].results?.every((row) => row.pass), true);
 });
 
 test('auto_fix: the approved verdict goes to the issue with no fix signal, and the run waits on the PR', async () => {
@@ -528,11 +587,13 @@ test('a PR closed unmerged writes approved back, and the next fix closes the fir
       'openFixIssue',
       'awaitFixPr',
       'writeFindingFix',
+      'awaitPrPreview',
       'awaitFixPrMerge:closed',
       'writeFindingReturned',
       'openFixIssue',
       'awaitFixPr',
       'writeFindingFix',
+      'awaitPrPreview',
       'awaitFixPrMerge:merged',
       'awaitProductionDeploy:m2',
       'writeFindingVerification:resolved',
@@ -714,4 +775,114 @@ test('a rejected verdict ends a resolved run at the gate', async () => {
   });
   assert.equal(result.outcome, 'rejected');
   assert.deepEqual(mocks.calls, ['writeFindingVerdict']);
+});
+
+// ---------------------------------------------------------------------------
+// The preview test (fix-pr-runs-the-verify-block)
+// ---------------------------------------------------------------------------
+
+/** A resolved run's final state, read after its result. */
+async function finalState(handle: { workflowId: string }): Promise<FindingState> {
+  return await client.workflow.getHandle(handle.workflowId).query(findingStateQuery);
+}
+
+const mergedAtOnce = { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } };
+const liveAtOnce = [[{ id: 2, sha: 'm1', state: 'success' as const }]];
+
+test('the preview test: a failing check is reported with its measured value, and the run waits on the merge as before', async () => {
+  const mocks = lifecycle({ merge: mergedAtOnce, deploys: liveAtOnce, previewPasses: false, previewPolls: 2 });
+  let state!: FindingState;
+  const result = await withWorkers(mocks, async () => {
+    const handle = await startApproved('preview-fails');
+    const done = await skipResult(handle);
+    state = await finalState(handle);
+    return done;
+  });
+
+  assert.equal(mocks.seen.previews.length, 3, 'two "not yet" polls, then the preview');
+  assert.equal(mocks.seen.reports.length, 1);
+  const report = mocks.seen.reports[0];
+  assert.equal(report.prUrl, PR_1);
+  assert.equal(report.sha, 'head-sha-1');
+  assert.equal(report.results?.[0].pass, false);
+  assert.equal(report.results?.[0].expected, 'contains "1 axe violation (Fail)"');
+  assert.equal(report.results?.[0].measured, '0 occurrences');
+  assert.equal(state.previewResult, 'check 1 of 1 fails on the preview; PR marked draft');
+  // The finding itself is judged on production, and production passed.
+  assert.equal(result.outcome, 'resolved');
+  assert.ok(mocks.calls.indexOf('reportPreviewChecks') < mocks.calls.indexOf('awaitFixPrMerge:merged'), 'the preview test comes first');
+});
+
+test('the preview test: every check passing is reported, and the line says so', async () => {
+  const mocks = lifecycle({ merge: mergedAtOnce, deploys: liveAtOnce });
+  let state!: FindingState;
+  await withWorkers(mocks, async () => {
+    const handle = await startApproved('preview-passes');
+    const done = await skipResult(handle);
+    state = await finalState(handle);
+    return done;
+  });
+  assert.equal(mocks.seen.reports.length, 1);
+  assert.equal(mocks.seen.reports[0].results?.[0].pass, true);
+  assert.equal(state.previewResult, '1 of 1 check passes on the preview');
+});
+
+test('the preview test: a finding with no checks skips the step, waits for no preview and posts nothing', async () => {
+  const mocks = lifecycle({ merge: mergedAtOnce, deploys: liveAtOnce, noBlock: true });
+  let state!: FindingState;
+  await withWorkers(mocks, async () => {
+    const handle = await startApproved('preview-skipped');
+    const done = await skipResult(handle);
+    state = await finalState(handle);
+    return done;
+  });
+  assert.deepEqual(mocks.seen.previews, []);
+  assert.deepEqual(mocks.seen.reports, []);
+  assert.equal(state.previewResult, 'skipped: the finding has no checks');
+});
+
+test('the preview test: a preview that never comes is unmeasured after 30 minutes, and the merge wait goes on', async () => {
+  const mocks = lifecycle({ merge: mergedAtOnce, deploys: liveAtOnce, previewNever: true });
+  let state!: FindingState;
+  const result = await withWorkers(mocks, async () => {
+    const handle = await startApproved('preview-never');
+    const done = await skipResult(handle);
+    state = await finalState(handle);
+    return done;
+  });
+  assert.equal(state.previewResult, 'unmeasured: No Preview deployment of the PR head was ready within 30 minutes.');
+  assert.equal(mocks.seen.reports[0].results, null);
+  assert.equal(mocks.seen.reports[0].note, 'No Preview deployment of the PR head was ready within 30 minutes.');
+  assert.deepEqual(mocks.seen.previewRuns, [], 'no check ran');
+  assert.equal(result.outcome, 'resolved');
+});
+
+test('the preview test: a build that failed is unmeasured with the reason, not a failed fix', async () => {
+  const mocks = lifecycle({ merge: mergedAtOnce, deploys: liveAtOnce, previewFail: 'PreviewFailed' });
+  let state!: FindingState;
+  const result = await withWorkers(mocks, async () => {
+    const handle = await startApproved('preview-build-failed');
+    const done = await skipResult(handle);
+    state = await finalState(handle);
+    return done;
+  });
+  assert.match(state.previewResult ?? '', /^unmeasured: .*ended failure/);
+  assert.equal(mocks.seen.reports[0].results, null);
+  assert.equal(result.outcome, 'resolved');
+});
+
+test('the preview test: a worker without the bypass secret records the step as unmeasured, and the fix goes on', async () => {
+  const mocks = lifecycle({ merge: mergedAtOnce, deploys: liveAtOnce, noBypass: true });
+  let state!: FindingState;
+  const result = await withWorkers(mocks, async () => {
+    const handle = await startApproved('preview-no-bypass');
+    const done = await skipResult(handle);
+    state = await finalState(handle);
+    return done;
+  });
+  assert.match(state.previewResult ?? '', /^unmeasured: The checks did not run on .*VERCEL_AUTOMATION_BYPASS_SECRET is not set/);
+  assert.equal(mocks.seen.previewRuns.length, 1, 'a non-retryable failure is tried once');
+  assert.equal(mocks.seen.reports[0].results, null);
+  assert.equal(mocks.seen.reports[0].sha, 'head-sha-1');
+  assert.equal(result.outcome, 'resolved');
 });

@@ -4,10 +4,13 @@ import type { FixIssue } from '../activities/findings.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
 // same objects the reconciler and the CLI hold.
 import {
+  PREVIEW_SKIPPED_LINE,
   fixWorkflowId,
   parsePrUrl,
+  previewResultLine,
   verifyWorkflowId,
   type FindingVerdict,
+  type PreviewChecksReport,
   type VerifyOutcome,
 } from '../lib/findings.js';
 import { dispatchWorkflowId } from '../lib/fix-dispatch.js';
@@ -119,6 +122,26 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * parked at `waiting-fix` before this shipped takes the slot on its next
  * attempt. The fixture is `finding-pr-closed-before-dispatch.bin` in
  * `tests/workflows/replay.test.ts`.
+ *
+ * **The preview test** (fix-pr-runs-the-verify-block, 2026-10-31). Once
+ * `awaitFixPr` returns the PR, the run reads the finding's `verify:` block and,
+ * when it has checks, waits for the PR head's Vercel preview, runs the checks
+ * against it, and writes the measured values as one PR comment. A failed check
+ * also turns the PR into a draft; a person marks it ready after judging it. The
+ * run then waits on the merge as before. The step is `testing-preview`, and
+ * `previewResult` holds how it came out in one line.
+ *
+ * Nothing in it fails the fix. A block that does not read, a preview that does
+ * not come in {@link PREVIEW_WAIT}, a worker without the bypass secret
+ * (`PreviewBypassMissing`) and a check that does not run are each recorded as
+ * unmeasured, with the reason in the comment. The checks still run on
+ * production after the merge.
+ *
+ * **Versioned with `patched`.** {@link PREVIEW_TEST_PATCH} is read per attempt,
+ * on the issue path only, right after the PR is known. An attempt recorded
+ * before it has no marker and replays straight to the merge wait. The custom
+ * fixer's child ran its own preview test and is untouched. The fixture is
+ * `finding-pr-closed-before-preview-test.bin` in `tests/workflows/replay.test.ts`.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -138,6 +161,15 @@ export const VERIFIER_HOSTED_PATCH = 'verifier-hosted';
 /** The `patched` marker of an attempt's slot from `dispatch/<site>` and its conflict re-cut (fix-dispatch-by-surface). */
 export const FIX_DISPATCH_PATCH = 'fix-dispatch';
 
+/** The `patched` marker of the preview test between the fix PR and its merge wait (fix-pr-runs-the-verify-block). */
+export const PREVIEW_TEST_PATCH = 'fix-preview-test';
+
+/**
+ * How long a run waits for the fix PR's preview. A Vercel preview takes about
+ * three minutes, so half an hour is a preview that is not coming.
+ */
+const PREVIEW_WAIT = '30 minutes';
+
 /**
  * How long a run waits for its grant before it sends the same request again.
  * The dispatcher reads a re-send as the request it holds; the re-send exists
@@ -148,6 +180,9 @@ const SLOT_RESEND = '6 hours';
 
 /** The GitHub deployment environment Vercel's integration posts production to. */
 const PRODUCTION_ENVIRONMENT = 'Production';
+
+/** The one Vercel's integration posts a pull request's preview to. */
+const PREVIEW_ENVIRONMENT = 'Preview';
 
 export type FindingStopAfter = 'verdict' | 'resolved';
 
@@ -214,6 +249,7 @@ export type FindingStep =
   | 'waiting-fix'
   | 'waiting-slot'
   | 'fixing'
+  | 'testing-preview'
   | 'waiting-merge'
   | 'waiting-deploy'
   | 'verifying'
@@ -250,6 +286,11 @@ export interface FindingState {
    * Absent from a run whose attempts predate the dispatcher.
    */
   slotPaths?: string[];
+  /**
+   * How the current attempt's preview test came out, in one line. Set when
+   * `testing-preview` ends; absent from a run whose attempt predates the test.
+   */
+  previewResult?: string | null;
 }
 
 /** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
@@ -325,6 +366,57 @@ const awaitingPr = wf.proxyActivities<Pick<typeof activities, 'awaitFixPr'>>({
     initialInterval: '1 minute',
     backoffCoefficient: 1,
     nonRetryableErrorTypes: GITHUB_PERMANENT_FOR_WAITS,
+  },
+});
+
+// The preview test's reads: the finding and its block. A block that does not
+// validate and a finding that moved are not mended by a retry.
+const readingChecks = wf.proxyActivities<Pick<typeof activities, 'readFinding' | 'readVerifyBlock'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: {
+    maximumAttempts: 3,
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMissing', 'FindingMalformed', 'VerifyBlockInvalid'],
+  },
+});
+
+// The preview wait: every 30 seconds for up to half an hour. A failed build
+// (`PreviewFailed`) is a permanent answer. A rejected credential is one more
+// poll, as in the merge wait.
+const previewing = wf.proxyActivities<Pick<typeof activities, 'awaitPrPreview'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  scheduleToCloseTimeout: PREVIEW_WAIT,
+  retry: {
+    initialInterval: '30 seconds',
+    backoffCoefficient: 1,
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT_FOR_WAITS, 'PreviewFailed', 'FindingMalformed'],
+  },
+});
+
+// The verifier's policy, for the same reason: what is retried is the preview
+// answering 5xx while it warms. A broken check and a worker with no bypass
+// secret are not mended by a retry.
+const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '5 minutes',
+  retry: {
+    maximumAttempts: 3,
+    initialInterval: '15 seconds',
+    backoffCoefficient: 4,
+    nonRetryableErrorTypes: ['VerifyCheckBroken', 'PreviewBypassMissing'],
+  },
+});
+
+// The comment and the draft: both safe to repeat, so five attempts with backoff.
+const reporting = wf.proxyActivities<Pick<typeof activities, 'reportPreviewChecks'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: {
+    maximumAttempts: 5,
+    initialInterval: '2 seconds',
+    backoffCoefficient: 2,
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMalformed'],
   },
 });
 
@@ -572,6 +664,73 @@ async function lifecycle(
     }
   };
 
+  /**
+   * The preview test (fix-pr-runs-the-verify-block). Never throws except for
+   * cancellation: whatever stops it is recorded as an unmeasured preview, and
+   * the merge wait goes on.
+   */
+  const testOnPreview = async (prUrl: string): Promise<void> => {
+    state.step = 'testing-preview';
+    state.previewResult = null;
+    const unmeasured = async (note: string, sha: string | null = null): Promise<void> => {
+      const report: PreviewChecksReport = { prUrl, sha, results: null, note };
+      state.previewResult = previewResultLine(report);
+      try {
+        await reporting.reportPreviewChecks({ ...report, key: input.key });
+      } catch (err) {
+        if (wf.isCancellation(err)) throw err;
+        state.previewResult = `${state.previewResult} (the PR comment failed: ${describeError(err)})`;
+      }
+    };
+
+    let checks;
+    try {
+      const finding = await readingChecks.readFinding(input.repo, input.findingPath);
+      checks = (
+        await readingChecks.readVerifyBlock({
+          repo: input.repo,
+          findingPath: input.findingPath,
+          findingText: finding.text,
+          origin: input.origin,
+        })
+      ).checks;
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      return await unmeasured(`The finding's checks could not be read: ${describeError(err)}.`);
+    }
+    if (checks.length === 0) {
+      state.previewResult = PREVIEW_SKIPPED_LINE;
+      return;
+    }
+
+    let preview;
+    try {
+      preview = await previewing.awaitPrPreview({ prUrl, environment: PREVIEW_ENVIRONMENT });
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      return await unmeasured(
+        isTimeout(err) ? `No ${PREVIEW_ENVIRONMENT} deployment of the PR head was ready within ${PREVIEW_WAIT}.` : describeError(err),
+      );
+    }
+
+    let results;
+    try {
+      results = (await checking.runFindingChecks({ key: input.key, checks, previewOrigin: preview.origin })).results;
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      return await unmeasured(`The checks did not run on ${preview.origin}: ${describeError(err)}.`, preview.sha);
+    }
+
+    const report: PreviewChecksReport = { prUrl, sha: preview.sha, results, note: null };
+    state.previewResult = previewResultLine(report);
+    try {
+      await reporting.reportPreviewChecks({ ...report, key: input.key });
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      state.previewResult = `${state.previewResult} (the PR comment failed: ${describeError(err)})`;
+    }
+  };
+
   try {
     return await fixLoop();
   } finally {
@@ -608,12 +767,14 @@ async function lifecycle(
       const dispatched = wf.patched(FIX_DISPATCH_PATCH);
       state.step = dispatched ? 'waiting-slot' : 'fixing';
       let prUrl: string;
+      let viaIssue = false;
       try {
         if (dispatched) {
           await takeSlot(fixAttempts);
           state.step = 'fixing';
         }
         if (wf.patched(ACTION_ADAPTER_PATCH)) {
+          viaIssue = true;
           const issue: FixIssue = await writing.openFixIssue({
             repo: input.repo,
             site: input.site,
@@ -669,6 +830,10 @@ async function lifecycle(
       }
       state.prUrl = prUrl;
       state.lastFixError = null;
+
+      // Per attempt, and only for the PR the Action opened: the custom fixer's
+      // child ran its own preview test.
+      if (viaIssue && wf.patched(PREVIEW_TEST_PATCH)) await testOnPreview(prUrl);
 
       state.step = 'waiting-merge';
       let merge;

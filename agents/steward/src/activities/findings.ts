@@ -3,7 +3,7 @@ import { WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError, type Clien
 import { FINDINGS_DEFAULT_SITE, GITHUB_REPO, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
-import { authRetryable, gh } from '../lib/github.js';
+import { authRetryable, convertPrToDraft, gh } from '../lib/github.js';
 import { log } from '../lib/logger.js';
 import {
   compareContains,
@@ -14,6 +14,7 @@ import {
   fixIssueClosingComment,
   fixIssueMarker,
   fixIssueTitle,
+  failedChecks,
   fixPrBranchPrefix,
   fixRefusal,
   isFindingSlug,
@@ -22,7 +23,9 @@ import {
   parseFindingsIndex,
   parseIssueUrl,
   parsePrUrl,
+  previewChecksComment,
   findingsIndexPath,
+  PREVIEW_CHECKS_MARKER,
   setFindingReturned,
   setFindingVerification,
   setFrontmatterFix,
@@ -34,6 +37,7 @@ import {
   type FindingVerdictStatus,
   type FindingsIndexLine,
   type OpenFindingWorkflow,
+  type PreviewChecksReport,
   type DeploymentRecord,
   type Verification,
   type VerifyBlockSource,
@@ -863,6 +867,84 @@ export async function awaitPreviewDeploy(input: AwaitPreviewDeployInput): Promis
   }
   log.info({ activity: 'awaitPreviewDeploy', sha: input.sha, origin }, 'the preview is ready');
   return { origin, deploymentId: deployment.id };
+}
+
+export interface AwaitPrPreviewInput {
+  /** The fix PR. */
+  prUrl: string;
+  /** The GitHub deployment environment Vercel posts previews to. */
+  environment: string;
+}
+
+export interface PrPreview extends PreviewDeploy {
+  /** The PR head commit the preview was built from. */
+  sha: string;
+}
+
+/**
+ * The fix PR's preview wait: one read of the PR's head commit, then
+ * {@link awaitPreviewDeploy} on it. The head is read on every poll, so a fixer
+ * that pushes after it opens the PR is measured at its last commit, and the
+ * result names the commit it measured. `PreviewNotReady` is the retryable
+ * "not yet"; `PreviewFailed` is a build that will not become ready.
+ */
+export async function awaitPrPreview(input: AwaitPrPreviewInput): Promise<PrPreview> {
+  const pr = parsePrUrl(input.prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${input.prUrl} is not a pull request URL.`, 'FindingMalformed');
+  const data = await authRetryable(() => gh(`/repos/${pr.repo}/pulls/${pr.number}`));
+  const sha = String(data.head?.sha ?? '');
+  if (!sha) throw ApplicationFailure.retryable(`GitHub has no head commit for ${input.prUrl} yet.`, 'PreviewNotReady');
+  const preview = await authRetryable(() => awaitPreviewDeploy({ repo: pr.repo, sha, environment: input.environment }));
+  return { ...preview, sha };
+}
+
+export interface ReportPreviewChecksInput extends PreviewChecksReport {
+  key: string;
+}
+
+export interface ReportPreviewChecksResult {
+  /** True when this call posted the comment; false when a retry found it already there. */
+  posted: boolean;
+  /** The numbers of the checks that failed. */
+  failed: number[];
+  /** True when the PR is a draft after the call: a failed check turned it, or it already was. */
+  draft: boolean;
+}
+
+/**
+ * The preview test's write: one comment on the fix PR with the measured values,
+ * and, when a check failed, the PR turned into a draft.
+ *
+ * Safe to retry. The comment carries {@link PREVIEW_CHECKS_MARKER} and is
+ * posted once. The draft conversion leaves a draft alone, and skips a PR that
+ * is no longer open, since GitHub refuses the mutation there. Steward never
+ * turns a draft back to ready: a person judges the failure.
+ */
+export async function reportPreviewChecks(input: ReportPreviewChecksInput): Promise<ReportPreviewChecksResult> {
+  const pr = parsePrUrl(input.prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${input.prUrl} is not a pull request URL.`, 'FindingMalformed');
+  const comments = (await gh(`/repos/${pr.repo}/issues/${pr.number}/comments?per_page=100`)) as { body?: string | null }[];
+  let posted = false;
+  if (!comments.some((c) => (c.body ?? '').includes(PREVIEW_CHECKS_MARKER))) {
+    await gh(`/repos/${pr.repo}/issues/${pr.number}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ body: previewChecksComment(input) }),
+    });
+    posted = true;
+  }
+  const failed = failedChecks(input.results);
+  let draft = false;
+  if (failed.length > 0) {
+    const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+    if (data.state === 'open') {
+      await convertPrToDraft(pr.repo, pr.number);
+      draft = true;
+    } else {
+      draft = data.draft === true;
+    }
+  }
+  log.info({ activity: 'reportPreviewChecks', key: input.key, prUrl: input.prUrl, posted, failed, draft }, 'preview checks reported');
+  return { posted, failed, draft };
 }
 
 export interface WriteFindingReturnedInput {

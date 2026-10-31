@@ -33,7 +33,31 @@ export interface FakeGitHub {
   /** `branch → (path → file)`. Inspect it directly in assertions. */
   branches: Map<string, Map<string, FakeRepoFile>>;
   /** Every PR opened, in order. */
-  pulls: Array<{ number: number; head: string; base: string; title: string; body: string; draft: boolean }>;
+  pulls: Array<{
+    number: number;
+    head: string;
+    base: string;
+    title: string;
+    body: string;
+    draft: boolean;
+    /** The head commit. Defaults to `head-<number>`. */
+    sha?: string;
+    /** Defaults to open. */
+    state?: 'open' | 'closed';
+    /** Comments on the PR, oldest first. */
+    comments?: string[];
+  }>;
+  /**
+   * Every deployment GitHub lists, newest first as the API lists them. Push one
+   * to script a preview: `statuses` newest first, `environment_url` on the
+   * status that carries the URL.
+   */
+  deployments: Array<{
+    id: number;
+    sha: string;
+    environment: string;
+    statuses: Array<{ state: string; environment_url?: string }>;
+  }>;
   /** Every issue opened, in order, numbered from 101. */
   issues: Array<{
     number: number;
@@ -108,6 +132,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   branches.set(DEFAULT_BRANCH, base);
 
   const pulls: FakeGitHub['pulls'] = [];
+  const deployments: FakeGitHub['deployments'] = [];
   const issues: FakeGitHub['issues'] = [];
   const calls: string[] = [];
   const repos: string[] = [];
@@ -305,6 +330,33 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       return response(201, { number, html_url: issueUrl(number) });
     }
 
+    // GET and POST /issues/{n}/comments on a pull request: GitHub files a PR's
+    // conversation comments under its issue number.
+    const prComments = /^\/issues\/(\d+)\/comments$/.exec(route);
+    const commentedPull = prComments ? pulls.find((p) => p.number === Number(prComments[1])) : undefined;
+    if (commentedPull && !issues.some((i) => i.number === commentedPull.number)) {
+      commentedPull.comments ??= [];
+      if (method === 'GET') return response(200, commentedPull.comments.map((text) => ({ body: text })));
+      if (method === 'POST') {
+        commentedPull.comments.push(String(body.body));
+        return response(201, {});
+      }
+    }
+
+    // GET /deployments?sha=&environment=, and a deployment's statuses.
+    if (method === 'GET' && route === '/deployments') {
+      const sha = url.searchParams.get('sha');
+      const environment = url.searchParams.get('environment');
+      const list = deployments.filter((d) => (!sha || d.sha === sha) && (!environment || d.environment === environment));
+      return response(200, list.map((d) => ({ id: d.id, sha: d.sha, environment: d.environment })));
+    }
+    const statusRoute = /^\/deployments\/(\d+)\/statuses$/.exec(route);
+    if (method === 'GET' && statusRoute) {
+      const deployment = deployments.find((d) => d.id === Number(statusRoute[1]));
+      if (!deployment) return response(404, { message: 'Not Found' });
+      return response(200, deployment.statuses);
+    }
+
     const issueRoute = /^\/issues\/(\d+)(\/comments)?$/.exec(route);
     if (issueRoute) {
       const issue = issues.find((i) => i.number === Number(issueRoute[1]));
@@ -350,7 +402,14 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       const number = Number(patchPull[1]);
       const pull = pulls.find((p) => p.number === number);
       if (!pull) return response(404, { message: 'Not Found' });
-      return response(200, { number, html_url: prUrl(number), draft: pull.draft, node_id: `PR_${number}` });
+      return response(200, {
+        number,
+        html_url: prUrl(number),
+        draft: pull.draft,
+        state: pull.state ?? 'open',
+        head: { ref: pull.head, sha: pull.sha ?? `head-${number}` },
+        node_id: `PR_${number}`,
+      });
     }
 
     // POST /graphql: `convertPullRequestToDraft`, the one mutation this codebase sends.
@@ -369,6 +428,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   return {
     branches,
     pulls,
+    deployments,
     issues,
     calls,
     repos,

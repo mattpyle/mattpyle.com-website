@@ -167,6 +167,9 @@ function mocks(script: Script) {
       results: [{ n: 1, url: `${ORIGIN}/`, kind: 'text', pass: true, expected: 'contains "x"', measured: '1 occurrence' }],
     }),
     writeFindingVerification: async () => ({ findingCommitSha: null, indexCommitSha: null, commitSha: null }),
+    // The preview test between the PR and its merge wait: a ready preview, and the same passing check.
+    awaitPrPreview: async () => ({ origin: 'https://preview.example.invalid', deploymentId: 1, sha: 'h1' }),
+    reportPreviewChecks: async () => ({ posted: true, failed: [], draft: false }),
   };
   return { activities, log, issues };
 }

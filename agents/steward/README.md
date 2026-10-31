@@ -49,6 +49,14 @@ that's the property being dogfooded here, on a low-stakes, real target.
   defect parked at `waiting-fix` with no attempt on a site with `auto_fix: true`. A `reopened`
   finding is back at the verdict gate. A run started for an opportunity or a direction parks at
   `waiting-fix` without the automatic attempt, and `steward finding status` says why.
+  The fix issue carries the finding's `verify:` block verbatim. Once the Action's PR is open, the run
+  reads the block and, at step `testing-preview`, waits up to 30 minutes for the PR head's Vercel
+  `Preview` deployment, runs the checks against it with the bypass secret, and posts the expected
+  and measured values as one PR comment. A failed check also makes the PR a draft; a person marks
+  it ready after judging it. A finding with no checks skips the step. A preview that never comes,
+  a build that failed, or a worker without `VERCEL_AUTOMATION_BYPASS_SECRET` is recorded as
+  unmeasured, and the merge wait goes on. `steward finding status` prints the result on a `preview:`
+  line.
 - **`fixDispatchWorkflow`**: one execution per site (`dispatch/<site>`) on `steward-findings`,
   started by the first slot request. Before each fix attempt opens its issue, the
   `findingWorkflow` sends it the repository paths its finding's cause names and parks at

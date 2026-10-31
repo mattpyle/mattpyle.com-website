@@ -7,7 +7,7 @@ import { runClaude } from '../lib/claude-runner.js';
 import { parseFindingBody, parsePrUrl } from '../lib/findings.js';
 import { git, needsInstall, recordInstall, worktreeExists } from '../lib/git.js';
 import { openOrUpdatePr, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
-import { gh } from '../lib/github.js';
+import { convertPrToDraft, gh } from '../lib/github.js';
 import { log } from '../lib/logger.js';
 import { runCancellable } from '../lib/proc.js';
 import {
@@ -869,24 +869,9 @@ export async function openFixerPr(input: OpenFixerPrInput): Promise<OpenFixerPrR
   return { prUrl, draft };
 }
 
-/**
- * Turns an open PR into a draft. REST has no field for it, so this is GraphQL's
- * `convertPullRequestToDraft`, by the PR's node ID. A PR that is already a
- * draft is left alone, which also makes a retry a no-op.
- */
+/** Turns an open PR into a draft; see {@link convertPrToDraft}. */
 async function markDraft(prUrl: string): Promise<void> {
   const pr = parsePrUrl(prUrl);
   if (!pr) throw ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
-  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
-  if (data.draft === true) return;
-  const reply = await gh('/graphql', {
-    method: 'POST',
-    body: JSON.stringify({
-      query: 'mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { pullRequest { isDraft } } }',
-      variables: { id: data.node_id },
-    }),
-  });
-  if (Array.isArray(reply.errors) && reply.errors.length > 0) {
-    throw new Error(`GitHub refused to make ${prUrl} a draft: ${reply.errors.map((e: { message?: string }) => e.message).join('; ')}`);
-  }
+  await convertPrToDraft(pr.repo, pr.number);
 }

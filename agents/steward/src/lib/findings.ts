@@ -560,9 +560,54 @@ export function fixIssueVerdictLine(reason: unknown): string {
 }
 
 /**
+ * The finding's `verify:` block as written in its frontmatter, from the key to
+ * the line before the next top-level key, or null when the file has no
+ * frontmatter or no such key. Verbatim, comments and quoting included: the
+ * fixer greps its tree for the same needles the checks count.
+ */
+export function verifyBlockSource(text: string): string | null {
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== '---') return null;
+  const close = lines.indexOf('---', 1);
+  if (close < 0) return null;
+  const front = lines.slice(1, close);
+  const at = front.findIndex((line) => /^verify:/.test(line));
+  if (at < 0) return null;
+  let end = at + 1;
+  // A sequence may sit at the key's own indent, so a `-` line belongs to it.
+  while (end < front.length && /^(\s|-|#|$)/.test(front[end])) end++;
+  const block = front.slice(at, end);
+  while (block.length > 0 && block[block.length - 1].trim() === '') block.pop();
+  return block.join('\n');
+}
+
+/** The heading over the verify block in a fix issue. */
+export const FIX_ISSUE_VERIFY_HEADING = '## Verify checks';
+
+/**
+ * The fix issue's verify section, or an empty list when the finding has no
+ * checks to run (no key, or `verify: []`): the block verbatim in a fence, under
+ * a heading that says when it runs.
+ */
+export function fixIssueVerifyLines(text: string): string[] {
+  const block = verifyBlockSource(text);
+  if (block === null || /^verify:\s*\[\s*\]\s*(#.*)?$/.test(block.trim())) return [];
+  return [
+    FIX_ISSUE_VERIFY_HEADING,
+    '',
+    "Steward runs these checks on this PR's Vercel preview before the merge, and on production after it. Each `text` needle must read on your tree as its check expects. Search your tree for every needle before you push.",
+    '',
+    '```yaml',
+    block,
+    '```',
+  ];
+}
+
+/**
  * The fix issue's body: the header, the finding with its frontmatter dropped and
- * the verdict line under its H1, and the marker last. `verdictReason` is the
- * file's `verdict_reason`, parsed by the caller.
+ * the verdict line under its H1, the finding's verify block when it has one, and
+ * the marker last. `verdictReason` is the file's `verdict_reason`, parsed by the
+ * caller.
  */
 export function fixIssueBody(site: string, key: string, text: string, verdictReason: unknown): string {
   const lines = text.split(/\r?\n/);
@@ -576,6 +621,8 @@ export function fixIssueBody(site: string, key: string, text: string, verdictRea
   while (body.length > 0 && body[body.length - 1].trim() === '') body.pop();
   const h1 = body.findIndex((line) => /^#\s+\S/.test(line));
   if (h1 >= 0) body.splice(h1 + 1, 0, '', fixIssueVerdictLine(verdictReason));
+  const verify = fixIssueVerifyLines(text);
+  if (verify.length > 0) body.push('', ...verify);
   return `${FIX_ISSUE_HEADER}${body.join('\n')}\n\n${fixIssueMarker(site, key)}\n`;
 }
 
@@ -906,4 +953,93 @@ export function pendingActivityLine(info: PendingActivitySummary): string | null
   const failure = info.lastFailure?.message?.trim();
   if (attempt <= 1 && !failure) return null;
   return `${name} attempt ${attempt}${failure ? `: ${failure}` : ''}`;
+}
+
+// ---------------------------------------------------------------------------
+// The fix PR's preview test (fix-pr-runs-the-verify-block)
+// ---------------------------------------------------------------------------
+
+/** The hidden line on Steward's preview comment, so a retry does not post it twice. */
+export const PREVIEW_CHECKS_MARKER = '<!-- steward:preview-checks -->';
+
+/** One check's measured row, the slice of `VerifyCheckResult` the comment prints. */
+export interface PreviewCheckRow {
+  n: number;
+  url: string | string[];
+  kind: string;
+  pass: boolean;
+  expected: string;
+  measured: string;
+}
+
+/** What the preview test found, for the comment and the status line. */
+export interface PreviewChecksReport {
+  /** The fix PR. */
+  prUrl: string;
+  /** The commit whose preview was measured, or null when none was. */
+  sha: string | null;
+  /** Each check on the preview. Null when the test did not run. */
+  results: PreviewCheckRow[] | null;
+  /** Why `results` is null. */
+  note: string | null;
+}
+
+/** The numbers of the checks that failed, in block order. */
+export function failedChecks(results: PreviewCheckRow[] | null): number[] {
+  return (results ?? []).filter((row) => !row.pass).map((row) => row.n);
+}
+
+/** "Check 2", "Checks 1 and 3", "Checks 1, 2 and 4". */
+function checkNumbers(numbers: number[]): string {
+  if (numbers.length === 1) return `Check ${numbers[0]}`;
+  return `Checks ${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`;
+}
+
+/**
+ * Steward's one comment on a fix PR after its preview test: each check's
+ * expected and measured value, and a lead line that says whether the PR was
+ * marked a draft. Pure, for the test.
+ */
+export function previewChecksComment(report: PreviewChecksReport): string {
+  const sha = report.sha ? ` for commit \`${report.sha.slice(0, 7)}\`` : '';
+  const lines = [PREVIEW_CHECKS_MARKER, `Steward ran the finding's \`verify:\` checks on this PR's preview${sha}, before the merge.`, ''];
+  if (!report.results) {
+    lines.push(
+      `> **The preview was not measured.** ${report.note ?? 'No reason was recorded.'} The same checks run on production after the merge.`,
+    );
+    return `${lines.join('\n')}\n`;
+  }
+  const failed = failedChecks(report.results);
+  if (failed.length > 0) {
+    lines.push(
+      `> **${checkNumbers(failed)} ${failed.length === 1 ? 'fails' : 'fail'} on the preview.** Steward marks this PR a draft. A person marks it ready after judging it.`,
+    );
+  } else {
+    lines.push(`> **All ${report.results.length} ${report.results.length === 1 ? 'check passes' : 'checks pass'} on the preview.**`);
+  }
+  lines.push('');
+  for (const row of report.results) {
+    const where = Array.isArray(row.url) ? `${row.url.length} URLs (${row.url.join(', ')})` : row.url;
+    lines.push(`${row.n}. \`${row.kind}\` ${where}`);
+    lines.push(`   - Expects: ${row.expected}`);
+    lines.push(`   - Measured: ${row.measured}`);
+    lines.push(`   - ${row.pass ? 'Pass.' : 'Fail.'}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/** The step line for a finding with no checks: nothing to run, nothing posted. */
+export const PREVIEW_SKIPPED_LINE = 'skipped: the finding has no checks';
+
+/**
+ * The one line `steward finding status` prints after `testing-preview`:
+ * how the preview test came out.
+ */
+export function previewResultLine(report: PreviewChecksReport): string {
+  if (!report.results) return `unmeasured: ${report.note ?? 'no reason recorded'}`;
+  const failed = failedChecks(report.results);
+  if (failed.length === 0) {
+    return `${report.results.length} of ${report.results.length} ${report.results.length === 1 ? 'check passes' : 'checks pass'} on the preview`;
+  }
+  return `${checkNumbers(failed).toLowerCase()} of ${report.results.length} ${failed.length === 1 ? 'fails' : 'fail'} on the preview; PR marked draft`;
 }
