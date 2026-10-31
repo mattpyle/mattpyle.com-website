@@ -10,6 +10,7 @@ import { checkActionUsage, checkCredentialExpiry, reportRunHealth } from './acti
 import {
   awaitFixPr,
   awaitFixPrMerge,
+  awaitPrPreview,
   awaitProductionDeploy,
   closeConflictingFixPr,
   readProductionDeploy,
@@ -21,6 +22,7 @@ import {
   readFixPr,
   readSiteAutoFix,
   readVerifyBlock,
+  reportPreviewChecks,
   requestFixSlot,
   runningWorkflowIds,
   startFindingWorkflow,
@@ -159,11 +161,13 @@ const fastActivities = { auditSiteFast };
 
 /**
  * The findings queue's registry (findings-loop design, decisions 18, 26, 29
- * and 30, and fix-dispatch-by-surface): the twenty-one findings activities,
+ * and 30, fix-dispatch-by-surface and fix-pr-runs-the-verify-block): the
+ * twenty-three findings activities,
  * plus `reportRunHealth` because the reconciler pings its check from this
  * queue. GitHub API calls against the findings repository, the fix issue, the
- * fix PR, the lifecycle's three waits, the conflicting PR's close and the
- * blockless verify's one production read against the site repository; a
+ * fix PR, the lifecycle's three waits, the conflicting PR's close, the fix
+ * PR's preview wait and its comment and draft write, and the blockless
+ * verify's one production read against the site repository; a
  * visibility list, a workflow start, a dispatcher signal and a status sweep
  * through the worker's own client; and the verifier's checks: fetch against
  * production and this image's Chromium for `selector` and `js`, as the deep
@@ -181,6 +185,7 @@ const findingsActivities = {
   awaitFixPr,
   writeFindingFix,
   awaitFixPrMerge,
+  awaitPrPreview,
   awaitProductionDeploy,
   readProductionDeploy,
   listOpenFindingWorkflows,
@@ -189,6 +194,7 @@ const findingsActivities = {
   readVerifyBlock,
   runFindingChecks,
   writeFindingVerification,
+  reportPreviewChecks,
   requestFixSlot,
   runningWorkflowIds,
   closeConflictingFixPr,

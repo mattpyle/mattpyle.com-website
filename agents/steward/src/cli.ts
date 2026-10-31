@@ -2051,6 +2051,7 @@ finding
         if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
         if (state.issueUrl) console.log(`  issue: ${state.issueUrl}`);
       }
+      if (state.previewResult) console.log(`  preview: ${state.previewResult}`);
       const waiting = waitingReasonLine(state);
       if (waiting) console.log(`  ${waiting}`);
       if (state.step === 'waiting-slot') {

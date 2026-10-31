@@ -115,3 +115,26 @@ export async function ghText(pathname: string): Promise<string | null> {
   if (res.status === 404 || res.status === 410) return null;
   throw new Error(`GitHub ${res.status} for ${pathname}: ${await res.text()}`);
 }
+
+/**
+ * Turns an open PR into a draft. REST has no field for it, so this is GraphQL's
+ * `convertPullRequestToDraft`, by the PR's node ID. A PR that is already a
+ * draft is left alone, which also makes a retry a no-op. The caller checks
+ * that the PR is open: GitHub refuses the mutation on a merged or closed one.
+ */
+export async function convertPrToDraft(repo: string, number: number): Promise<void> {
+  const data = await gh(`/repos/${repo}/pulls/${number}`);
+  if (data.draft === true) return;
+  const reply = await gh('/graphql', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: 'mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { pullRequest { isDraft } } }',
+      variables: { id: data.node_id },
+    }),
+  });
+  if (Array.isArray(reply.errors) && reply.errors.length > 0) {
+    throw new Error(
+      `GitHub refused to make ${repo}#${number} a draft: ${reply.errors.map((e: { message?: string }) => e.message).join('; ')}`,
+    );
+  }
+}

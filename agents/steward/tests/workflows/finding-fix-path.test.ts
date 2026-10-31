@@ -111,6 +111,14 @@ function harness(
       return { repo: 'mattpyle/mattpyle.com-website', number, url: `https://github.com/mattpyle/mattpyle.com-website/issues/${number}`, reused: false };
     },
     awaitFixPr: async () => ({ prUrl: ACTION_PR, branch: 'claude/issue-101-x' }),
+    // The preview test reads the finding's checks first; this one has none, so the step is skipped.
+    readFinding: async (_repo: string, findingFile: string) => ({
+      path: findingFile,
+      text: DEFECT_FINDING,
+      sha: 's',
+      data: {} as Record<string, unknown>,
+    }),
+    readVerifyBlock: async () => ({ handoff: null, hasBlock: false, checks: [], source: 'finding' as const }),
     writeFindingFix: async () => {
       activityCalls.push('writeFindingFix');
       return { findingCommitSha: null, indexCommitSha: null, commitSha: null };

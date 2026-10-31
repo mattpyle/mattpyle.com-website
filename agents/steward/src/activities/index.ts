@@ -59,6 +59,8 @@ export {
   awaitProductionDeploy,
   readProductionDeploy,
   awaitPreviewDeploy,
+  awaitPrPreview,
+  reportPreviewChecks,
   writeFindingReturned,
   listOpenFindingWorkflows,
   startFindingWorkflow,
