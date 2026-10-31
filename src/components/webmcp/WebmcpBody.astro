@@ -166,7 +166,12 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
               pipeline puts around every prose table.
             */}
             {entry.fields.length > 0 && (
-              <div class="schema-scroll" tabindex="0">
+              <div
+                class="schema-scroll"
+                role="region"
+                aria-label={`Inputs for ${entry.name}`}
+                tabindex="0"
+              >
                 <table class="schema-table">
                   <thead>
                     <tr>
