@@ -105,7 +105,7 @@ const result = await document.modelContext.executeTool(tool, {});  // a plain ob
 ```
 
 - `executeTool` takes the **registered tool object**, not its name. A name throws `TypeError: The provided value is not of type 'RegisteredTool'`.
-- The second argument is a plain **object**. Chrome M155 and later reject a JSON string with a `TypeError`; Chrome 154 and earlier took a JSON string and threw `Failed to parse input arguments` on an object. Both arguments are required.
+- The second argument is a plain **object**. Chrome M155 and later reject a JSON string with a `TypeError`; Chrome 154 and earlier took a JSON string and rejected an object. Both arguments are required.
 - Results come back as **JSON strings**. Parse them.
 - Chrome does **not** enforce the declared `inputSchema`. `required`, `maximum`, and `enum` were each ignored and passed straight through, so the tools validate their own inputs and you should not rely on the browser rejecting a bad call.
 
