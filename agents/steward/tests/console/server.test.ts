@@ -247,7 +247,7 @@ test('the page, its stylesheet, its script and its icons are served with their t
   assert.match(page.body, /<link rel="stylesheet" href="\/findings\.css">/);
   assert.match(page.body, /<script src="\/findings\.js" defer><\/script>/);
   assert.match(page.body, /<link rel="icon" href="\/icons\/steward-console\.svg" type="image\/svg\+xml">/);
-  assert.doesNotMatch(page.body, /<style|<script>| style="| on[a-z]+="/);
+  assert.doesNotMatch(page.body, /<style|<script>| style="| on[a-z]+="/i);
   assert.match(page.body, /data-time-zone="America\/Vancouver"/);
   // The phase-one script is gone.
   assert.equal((await consoleRequest({ port: server.port, path: '/console.js' })).status, 404);

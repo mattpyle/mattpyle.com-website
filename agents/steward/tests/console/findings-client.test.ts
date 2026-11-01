@@ -21,6 +21,18 @@ function load(): any {
 }
 const F = load();
 
+/** The text of a fragment with its tags dropped, for an assertion. A reader for tests, not a sanitiser. */
+function textOf(html: string): string {
+  let out = '';
+  let depth = 0;
+  for (const ch of html) {
+    if (ch === '<') depth++;
+    else if (ch === '>') depth--;
+    else if (depth === 0) out += ch;
+  }
+  return out;
+}
+
 const RUN = { open: true, since: null, step: 'waiting-verdict', queried: false, queryError: null, prUrl: null, issueUrl: null, previewResult: null, lastFixError: null, slotLine: null };
 
 function row(partial: Partial<FindingRow> & Pick<FindingRow, 'site' | 'key' | 'status'>): FindingRow {
@@ -218,7 +230,7 @@ test('drift: a flag on the row, a chip with the count, and a box in the finding;
 
 test('a resolved row: its events oldest first with the PR link, and the foot links to the PR', () => {
   const { v } = render({ status: 'resolved', current: `${MP}/ux-resolved--about` });
-  const events = [...v.doc.matchAll(/<li><span>(.*?)<\/span>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''));
+  const events = [...v.doc.matchAll(/<li><span>(.*?)<\/span>/g)].map((m) => textOf(m[1]));
   assert.deepEqual(events, ['First seen by Argus', 'Approved: Fix it. via cli', 'PR #500 opened', 'Verified on production: 1 of 1 checks passed']);
   assert.match(v.foot, />Open PR #500<\/a>/);
 });
