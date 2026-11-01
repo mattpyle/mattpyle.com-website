@@ -26,7 +26,6 @@ import {
   QUEUE_AUDIT,
   QUEUE_FINDINGS,
   QUEUE_LIGHT,
-  PROD_ORIGIN,
   temporalConnectionOptions,
   WEB_UI,
   SITEMAP_URL,
@@ -65,7 +64,19 @@ import {
   getReviewState,
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
-import { FixRefused, followFix, requestFix } from './lib/finding-fix.js';
+import { FixRefused, followFix } from './lib/finding-fix.js';
+import {
+  FIX_NEXT_STEP,
+  SyncError,
+  finishVerify,
+  fixStarted,
+  launchVerify,
+  readPrState,
+  requestFindingFix,
+  startVerify,
+  syncFindings,
+  syncSummary,
+} from './lib/finding-actions.js';
 import {
   CLI_APPROVE_REASON,
   FindingVerdictError,
@@ -75,8 +86,6 @@ import {
 import {
   LIFECYCLE_CANCEL_WAIT_MS,
   VerifyRefused,
-  buildVerifyInput,
-  cancelLifecycleRun,
   parseScratchRoot,
   recordHandFix,
 } from './lib/finding-verify.js';
@@ -108,7 +117,6 @@ import {
   parsePrUrl,
   pendingActivityLine,
   verifySourceLabel,
-  verifyWorkflowId,
   waitingReasonLine,
   type FindingVerdict,
 } from './lib/findings.js';
@@ -116,11 +124,9 @@ import {
   readFinding,
   readFindingsIndex,
   writeFindingFix,
-  writeFindingReturned,
 } from './activities/findings.js';
 import {
   verifyFindingStateQuery,
-  verifyFindingWorkflow,
   type VerifyFindingResult,
 } from './workflows/verify-finding.js';
 import {
@@ -1853,13 +1859,6 @@ program
 // steward finding: the findings gate (findings-loop design, decisions 16 to 19)
 // ---------------------------------------------------------------------------
 
-/** Where a PR stands on GitHub, for `fix` and `verify --pr`. */
-async function readPrState(prUrl: string): Promise<'open' | 'merged' | 'closed'> {
-  const pr = parsePrUrl(prUrl) as { repo: string; number: number };
-  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
-  return data.merged === true ? 'merged' : data.state === 'closed' ? 'closed' : 'open';
-}
-
 /** A `--pr` value: a GitHub pull request URL, refused before anything connects. */
 function parsePrOption(value: string): string {
   if (!parsePrUrl(value)) fail(`--pr ${value} is not a GitHub pull request URL.`);
@@ -2150,9 +2149,30 @@ finding
 
 finding
   .command('sync')
-  .description('Run the findings reconcile now (the short form of `finding schedule trigger`)')
+  .description('Run the findings reconcile now and print its plan counts (`finding schedule trigger` only starts it)')
   .action(async () => {
-    await runFindingsSchedule('trigger');
+    const c = await client();
+    try {
+      let result;
+      try {
+        result = await syncFindings(c);
+      } catch (err) {
+        if (err instanceof SyncError) {
+          await c.connection.close();
+          fail(err.message);
+        }
+        throw err;
+      }
+      console.log('');
+      if (result.workflowId) console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(result.workflowId)}`);
+      for (const [site, counts] of Object.entries(result.sites ?? {})) {
+        console.log(`  ${site}: started ${counts.started}, signalled ${counts.signalled}, fixed ${counts.fixed}, unchanged ${counts.unchanged}`);
+      }
+      console.log(`  ${syncSummary(result)}`);
+      console.log('');
+    } finally {
+      await c.connection.close();
+    }
   });
 
 finding
@@ -2169,20 +2189,7 @@ finding
     try {
       let requested;
       try {
-        requested = await requestFix(
-          {
-            client: c,
-            repo: ARGUS_REPO,
-            taskQueue: QUEUE_FINDINGS,
-            origin: opts.site === FINDINGS_DEFAULT_SITE ? PROD_ORIGIN : undefined,
-            readFinding: (p) => readFinding(ARGUS_REPO, p),
-            readPr: readPrState,
-            returnFinding: writeFindingReturned,
-            say: (line) => console.log(`  ${line}`),
-          },
-          opts.site,
-          key,
-        );
+        requested = await requestFindingFix(c, opts.site, key, (line) => console.log(`  ${line}`));
       } catch (err) {
         if (err instanceof FixRefused) {
           await c.connection.close();
@@ -2190,9 +2197,9 @@ finding
         }
         throw err;
       }
-      const lifecycleId = requested.lifecycle.workflowId;
-      console.log('  It opens an issue for claude-code-action, then waits for its PR, the merge, the deploy and the verify.');
-      console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(lifecycleId)}\n`);
+      const { workflowId: lifecycleId, webUrl } = fixStarted(requested);
+      console.log(`  ${FIX_NEXT_STEP}`);
+      console.log(`  ${webUrl}\n`);
 
       // The run's state is the answer. Ctrl-C here stops the watching, not the fix.
       const elapsed = () => paint(`${Math.round((Date.now() - started) / 1000)}s`.padStart(6), DIM);
@@ -2291,6 +2298,13 @@ program
       port,
       loadFindings: () => loader.load(),
       sendVerdict: (request: Parameters<typeof sendVerdict>[0]) => sendVerdict(request, { client: c }),
+      runSync: () => syncFindings(c),
+      runFix: async (site: string, key: string) => fixStarted(await requestFindingFix(c, site, key, () => {})),
+      runVerify: (site: string, key: string) =>
+        launchVerify(c, site, key, ({ workflowId, finished, error }) => {
+          if (error) console.error('steward console: verify %s failed:', workflowId, error);
+          else console.error('steward console: verify %s ended %s', workflowId, finished?.result.outcome);
+        }),
       timeZone: STEWARD_TIMEZONE,
       webUi: WEB_UI,
       namespace: NAMESPACE,
@@ -2427,17 +2441,15 @@ async function verifyOneFinding(
   reason?: string,
   root?: string,
 ): Promise<VerifyFindingResult> {
-  const at = new Date().toISOString();
-  const input = buildVerifyInput({ site, key, repo: ARGUS_REPO, origin: PROD_ORIGIN, at, reason, root });
-  const workflowId = verifyWorkflowId(site, key, at);
+  const begun = await startVerify(c, site, key, { reason, root });
+  const { workflowId, input, handle } = begun;
   const started = Date.now();
-  const handle = await c.workflow.start(verifyFindingWorkflow, { workflowId, taskQueue: QUEUE_FINDINGS, args: [input] });
   console.log(`\n  verifying ${key}`);
   if (root) console.log(`  root: ${root}, so the run reads and writes ${input.findingPath} and ${input.indexPath}`);
   console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}\n`);
 
   let done = false;
-  const result = handle.result().finally(() => {
+  const result = finishVerify(c, site, key, begun).finally(() => {
     done = true;
   });
   result.catch(() => undefined);
@@ -2454,7 +2466,7 @@ async function verifyOneFinding(
     }
     await Promise.race([result.catch(() => undefined), new Promise((r) => setTimeout(r, 3000))]);
   }
-  const verified = await result;
+  const { result: verified, lifecycle } = await result;
 
   console.log('');
   console.log(`  checks from: ${verifySourceLabel(verified.source)}`);
@@ -2492,14 +2504,10 @@ async function verifyOneFinding(
   }
   if (root) {
     console.log(`  a scratch copy under ${root}: no lifecycle run is touched`);
-  } else if (verified.outcome === 'resolved' || verified.outcome === 'confirmed') {
-    const lifecycle = c.workflow.getHandle(findingWorkflowId(site, key));
-    const closed = await cancelLifecycleRun(lifecycle);
-    if (closed === 'cancelled') {
-      console.log(`  cancelled ${lifecycle.workflowId}: the fix is live, so the run has nothing left to do`);
-    } else if (closed === 'requested') {
-      console.log(`  cancel requested for ${lifecycle.workflowId}; it had not closed after ${LIFECYCLE_CANCEL_WAIT_MS / 1000}s`);
-    }
+  } else if (lifecycle?.closed === 'cancelled') {
+    console.log(`  cancelled ${lifecycle.id}: the fix is live, so the run has nothing left to do`);
+  } else if (lifecycle?.closed === 'requested') {
+    console.log(`  cancel requested for ${lifecycle.id}; it had not closed after ${LIFECYCLE_CANCEL_WAIT_MS / 1000}s`);
   }
   console.log('');
   return verified;

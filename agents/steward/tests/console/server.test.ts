@@ -1,6 +1,7 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { consoleRequest } from '../helpers/console-request.js';
+import { CONSOLE_RESTART_STUBS } from '../helpers/console-options.js';
 import { startConsoleServer, type ConsoleServer } from '../../src/console/server.js';
 import {
   CONSOLE_APPROVE_REASON,
@@ -62,6 +63,7 @@ before(async () => {
     timeZone: 'America/Vancouver',
     webUi: 'https://web.example',
     namespace: 'ns.test',
+    ...{ runSync: CONSOLE_RESTART_STUBS.runSync, runFix: CONSOLE_RESTART_STUBS.runFix, runVerify: CONSOLE_RESTART_STUBS.runVerify },
     commit: 'abc1234',
     behindMaster: true,
     spawnReplacement: (port) => {

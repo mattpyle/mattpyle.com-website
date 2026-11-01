@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { consoleRequest } from '../helpers/console-request.js';
+import { CONSOLE_RESTART_STUBS } from '../helpers/console-options.js';
 import { startConsoleServer } from '../../src/console/server.js';
 import type { FindingsModel } from '../../src/console/findings-model.js';
 
@@ -40,6 +41,9 @@ test('a restart spawns the replacement on the same port before the listener clos
     timeZone: 'America/Vancouver',
     webUi: 'https://web.example',
     namespace: 'ns.test',
+    runSync: CONSOLE_RESTART_STUBS.runSync,
+    runFix: CONSOLE_RESTART_STUBS.runFix,
+    runVerify: CONSOLE_RESTART_STUBS.runVerify,
     commit: 'abc1234',
     behindMaster: false,
     spawnReplacement: (port) => {
@@ -78,6 +82,9 @@ test('a replacement that cannot start answers an error and keeps the console up'
     timeZone: 'America/Vancouver',
     webUi: 'https://web.example',
     namespace: 'ns.test',
+    runSync: CONSOLE_RESTART_STUBS.runSync,
+    runFix: CONSOLE_RESTART_STUBS.runFix,
+    runVerify: CONSOLE_RESTART_STUBS.runVerify,
     commit: 'abc1234',
     behindMaster: false,
     spawnReplacement: () => {
@@ -112,6 +119,9 @@ test('a tab closed at the instant of the restart still lets the old process exit
     timeZone: 'America/Vancouver',
     webUi: 'https://web.example',
     namespace: 'ns.test',
+    runSync: CONSOLE_RESTART_STUBS.runSync,
+    runFix: CONSOLE_RESTART_STUBS.runFix,
+    runVerify: CONSOLE_RESTART_STUBS.runVerify,
     commit: 'abc1234',
     behindMaster: false,
     spawnReplacement: () => {},

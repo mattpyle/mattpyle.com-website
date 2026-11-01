@@ -86,6 +86,8 @@
       status: 'proposed', site: 'all', pri: 'all', sort: 'priority', drift: false, q: '', menu: null,
       appMenu: false, // the header's menu
       restart: null, // null, 'restarting', or the sentence a failed restart left
+      sync: null, // null, 'running', { text } or { error }: the last Sync findings
+      ran: {}, // id -> { verb, workflowId, nextStep } or { verb, error }: Fix or Verify started from the page since it opened
       current: null, // the open row's id, site/key
       decided: {}, // id -> { status, reason, at, result }: verdicts sent from this page since the last load
       foot: { error: null, sending: false, reasonError: false },
@@ -322,10 +324,33 @@
         <h2 class="doc-title">${esc(shortTitle(r))}</h2>
         ${summary ? `<p class="doc-summary">${esc(summary)}</p>` : ''}
       </header>
-      ${r.drift.length ? `<div class="drift-box" role="note"><p class="drift-title">${DRIFT_ICON}Drift</p><ul class="drift-lines">${r.drift.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+      ${r.drift.length ? `<div class="drift-box" role="note"><p class="drift-title">${DRIFT_ICON}Drift</p><ul class="drift-lines">${r.drift.map((x) => `<li>${esc(x)}${driftRemedy(r, x, state)}</li>`).join('')}</ul></div>` : ''}
       <dl class="facts">${facts.filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
       ${(r.sections || []).map((x) => `<section class="section"><h3>${heading(x.heading)}</h3><div class="prose">${x.html}</div></section>`).join('')}
       <section class="section"><h3>Timeline</h3><ol class="timeline">${timeline(r, state).map((e) => eventHTML(e, c, link)).join('')}</ol></section>`;
+  }
+
+  // ---------- The verbs run from the page ----------
+
+  // The line "proposed with no open run" offers Sync, and "approved with no open run" offers Fix: the same buttons the menu and the foot hold.
+  function driftRemedy(r, line, state) {
+    if (line === 'proposed with no open run') {
+      if (state.sync === 'running') return '<button class="btn" type="button" data-act="sync" disabled>Syncing</button>';
+      const said = state.sync && (state.sync.error || state.sync.text);
+      return said ? `<span class="drift-run" role="status">${esc(said)}</span>` : '<button class="btn" type="button" data-act="sync" title="Runs the findings reconcile now">Sync</button>';
+    }
+    const ran = state.ran[idOf(r)];
+    if (line === 'approved with no open run' && r.actions && r.actions.fix && !(ran && ran.workflowId)) {
+      return `<button class="btn" type="button" data-act="fix" title="Opens the fix issue and waits for its PR"${state.foot.sending ? ' disabled' : ''}>Fix</button>`;
+    }
+    return '';
+  }
+
+  // What Fix or Verify answered, in the foot: the run's id and what happens next, or the refusal.
+  function ranHTML(ran, link) {
+    if (!ran) return '';
+    if (ran.error) return `<div class="result"><p class="reason-error" role="alert">${esc(ran.error)}</p></div>`;
+    return `<div class="result" role="status"><p>${ran.verb === 'fix' ? 'Fix' : 'Verify'} started: ${link(ran.workflowId)}</p><p>${esc(plain(ran.nextStep))}</p></div>`;
   }
 
   // The next proposed finding after a verdict, in the list's order and within the chosen site.
@@ -335,7 +360,7 @@
   }
 
   // The foot holds the controls. After a verdict it shows what was recorded, the commit and the next step.
-  function renderFoot(r, rows, state) {
+  function renderFoot(r, rows, state, link) {
     const s = statusOf(r, state);
     const d = state.decided[idOf(r)];
     const f = state.foot;
@@ -369,10 +394,17 @@
         </div>`;
     }
     const pr = safeUrl(r.prUrl);
-    if ((s === 'fixing' || s === 'resolved') && pr) {
-      return `<div class="actions"><a class="btn" href="${pr}" target="_blank" rel="noopener noreferrer">Open PR #${esc(prNum(r.prUrl))}</a></div>`;
-    }
-    return '';
+    const ran = state.ran[idOf(r)];
+    const started = !!(ran && ran.workflowId);
+    const can = r.actions || {};
+    const busy = f.sending ? ' disabled' : '';
+    const buttons = [
+      (s === 'fixing' || s === 'resolved') && pr ? `<a class="btn" href="${pr}" target="_blank" rel="noopener noreferrer">Open PR #${esc(prNum(r.prUrl))}</a>` : '',
+      !started && s === 'approved' && can.fix ? `<button class="btn btn-fill" type="button" data-act="fix" title="Opens the fix issue and waits for its PR"${busy}>Fix</button>` : '',
+      !started && s === 'fixing' && can.verify ? `<button class="btn btn-fill" type="button" data-act="verify" title="Measures the finding's checks on production"${busy}>Verify</button>` : '',
+    ].filter(Boolean);
+    const note = ranHTML(ran, link || ((id) => `<code>${esc(id)}</code>`));
+    return buttons.length || note ? `${note}${buttons.length ? `<div class="actions">${buttons.join('')}</div>` : ''}` : '';
   }
 
   // ---------- The header menu: the running commit and a restart ----------
@@ -382,9 +414,12 @@
     if (!state.appMenu) return '';
     const commit = model && model.commit ? model.commit : 'unknown';
     const note = model && model.behindMaster ? '<p class="menu-note">master has moved on. Restart does not pull: run <code>steward update</code> first.</p>' : '';
+    const syncing = state.sync === 'running';
+    const synced = state.sync && !syncing ? state.sync : null;
+    const sync = `<button class="menu-item" type="button" role="menuitem" data-act="sync"${syncing ? ' disabled' : ''}><span>${syncing ? 'Syncing findings' : 'Sync findings'}</span></button>${synced ? `<p class="menu-note${synced.error ? ' menu-error' : ''}" role="${synced.error ? 'alert' : 'status'}">${esc(synced.error || synced.text)}</p>` : ''}`;
     const action = state.restart === 'restarting'
       ? '<p class="menu-note" role="status">Restarting</p>'
-      : `<button class="menu-item" type="button" role="menuitem" data-act="restart"><span>Restart console</span></button>${state.restart ? `<p class="menu-note menu-error" role="alert">${esc(state.restart)}</p>` : ''}`;
+      : `${sync}<button class="menu-item" type="button" role="menuitem" data-act="restart"><span>Restart console</span></button>${state.restart ? `<p class="menu-note menu-error" role="alert">${esc(state.restart)}</p>` : ''}`;
     return `<div class="menu menu-app" role="menu"><p class="menu-note">Running commit <code>${esc(commit)}</code></p>${note}${action}</div>`;
   }
 
@@ -396,7 +431,7 @@
     const link = runLinker(options);
     const rows = rowsOf(model);
     const current = rows.find((r) => idOf(r) === state.current) || null;
-    const foot = current ? renderFoot(current, rows, state) : '';
+    const foot = current ? renderFoot(current, rows, state, link) : '';
     return {
       sort: state.sort,
       ageSort: state.sort === 'oldest' ? 'ascending' : state.sort === 'newest' ? 'descending' : 'none',
@@ -527,6 +562,51 @@
     }
   }
 
+  // Sync findings, Fix and Verify post to /api/run/<verb>: the CLI's own functions, answered as JSON.
+  async function runPost(verb, fields) {
+    const res = await fetch(`/api/run/${verb}`, {
+      method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ token, ...fields }),
+    });
+    const data = await res.json().catch(() => ({ error: `The console answered ${res.status}.` }));
+    if (!res.ok) throw new Error(data.error || `The console answered ${res.status}.`);
+    return data;
+  }
+  // A repaint that leaves the open finding where the reader scrolled it.
+  function repaint(parts) {
+    const top = el.doc.scrollTop;
+    paint(parts);
+    el.doc.scrollTop = top;
+  }
+  async function runSync() {
+    if (state.sync === 'running') return;
+    state.sync = 'running';
+    repaint(['menu', 'doc']);
+    try {
+      const data = await runPost('sync', {});
+      state.sync = { text: data.summary };
+      repaint(['menu', 'doc']);
+      await load();
+    } catch (err) {
+      state.sync = { error: err.message };
+      repaint(['menu', 'doc']);
+    }
+  }
+  async function runRow(verb) {
+    const r = model && rowsOf(model).find((x) => idOf(x) === state.current);
+    if (!r || state.foot.sending) return;
+    delete state.ran[idOf(r)];
+    state.foot = { error: null, sending: true, reasonError: false };
+    repaint(['foot', 'doc']);
+    try {
+      const data = await runPost(verb, { site: r.site, key: r.key });
+      state.ran[idOf(r)] = { verb, workflowId: data.workflowId, nextStep: data.nextStep };
+    } catch (err) {
+      state.ran[idOf(r)] = { verb, error: err.message };
+    }
+    state.foot = { error: null, sending: false, reasonError: false };
+    repaint(['foot', 'doc']);
+  }
+
   // ---------- Events ----------
 
   el.groups.addEventListener('click', (e) => {
@@ -628,9 +708,14 @@
     paint(['menu']);
   }
   el.menuBtn.addEventListener('click', () => setAppMenu(!state.appMenu));
-  el.menuPop.addEventListener('click', (e) => { if (e.target.closest('[data-act="restart"]')) restart(); });
+  el.menuPop.addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="restart"]')) restart();
+    else if (e.target.closest('[data-act="sync"]')) runSync();
+  });
   document.addEventListener('click', (e) => {
-    if (state.appMenu && state.restart !== 'restarting' && !e.target.closest('.app-menu')) setAppMenu(false);
+    // The path, not `e.target`: Sync repaints the menu inside its own click, which detaches the button before this runs.
+    const inside = e.composedPath().some((n) => n.classList && n.classList.contains('app-menu'));
+    if (state.appMenu && state.restart !== 'restarting' && !inside) setAppMenu(false);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.appMenu && state.restart !== 'restarting') { setAppMenu(false); el.menuBtn.focus(); }
@@ -655,6 +740,14 @@
     const act = btn.dataset.act;
     if (act === 'next') { open(btn.dataset.id); return; }
     if (act === 'approve' || act === 'reject') sendVerdict(act);
+    if (act === 'fix' || act === 'verify') runRow(act);
+  });
+  // The drift box's remedies are the same buttons.
+  el.doc.addEventListener('click', (e) => {
+    const btn = e.target.closest('.drift-lines [data-act]');
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.act === 'sync') runSync();
+    else if (btn.dataset.act === 'fix') runRow('fix');
   });
   el.foot.addEventListener('input', (e) => {
     if (!e.target.matches('textarea') || !e.target.value.trim() || !state.foot.reasonError) return;

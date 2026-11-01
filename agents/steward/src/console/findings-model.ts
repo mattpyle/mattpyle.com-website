@@ -13,6 +13,8 @@ import {
 } from '../lib/findings.js';
 import { buildEvents, type FindingEvent } from './finding-events.js';
 import { renderFindingBody, type FindingSection } from './finding-markdown.js';
+import { fixOffered, verifyOffered } from '../lib/finding-actions.js';
+import { parsePrUrl } from '../lib/findings.js';
 import { dispatchWorkflowId, waitingSlotLine, type DispatchState } from '../lib/fix-dispatch.js';
 import { findingStateQuery, type FindingState } from '../workflows/finding.js';
 import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
@@ -106,6 +108,12 @@ export interface FindingRow {
   sections: FindingSection[];
   /** Dated history, oldest first. */
   events: FindingEvent[];
+  /**
+   * The buttons the foot offers: only where the CLI's own gate accepts the verb (`fixRefusal`, the verifier's
+   * gate with a merged PR). Decided on the server; the page never re-derives them. Fix is for a row with no
+   * open run, so it is false until the loader has seen the run list.
+   */
+  actions: { fix: boolean; verify: boolean };
 }
 
 export interface SiteSection {
@@ -273,6 +281,19 @@ function errorLine(err: unknown): string {
  */
 export function createFindingsLoader(sources: FindingsSources): { load(): Promise<FindingsModel> } {
   const blobs = new Map<string, string>();
+  // A merged PR stays merged, so a yes is asked once per process; a no is asked again on the next refresh.
+  const mergedPrs = new Set<string>();
+  const prMerged = async (prUrl: string): Promise<boolean> => {
+    if (mergedPrs.has(prUrl)) return true;
+    const pr = parsePrUrl(prUrl) as { repo: string; number: number };
+    try {
+      const data = await sources.ghJson(`/repos/${pr.repo}/pulls/${pr.number}`);
+      if (data.merged === true) mergedPrs.add(prUrl);
+      return data.merged === true;
+    } catch {
+      return false;
+    }
+  };
 
   return {
     async load() {
@@ -319,8 +340,9 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
           const sha = shaByPath.get(findingPath(site, line.key));
           let data: Record<string, unknown> = {};
           let body = '';
+          let text = '';
           if (sha) {
-            const text = await readBlob(sha);
+            text = await readBlob(sha);
             const parsed = parseFrontmatter(text);
             data = parsed.data;
             body = parsed.content;
@@ -367,6 +389,12 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             body: rendered.body,
             sections: rendered.sections,
             events: sha ? buildEvents({ data, body, status: line.status, prUrl: filePr || null, verification }) : [],
+            actions: {
+              fix: sha
+                ? fixOffered({ site, status: line.status, runOpen: run.open, stopAfter, data, text })
+                : false,
+              verify: sha ? await verifyOffered({ site, data }, prMerged) : false,
+            },
           };
         });
 
