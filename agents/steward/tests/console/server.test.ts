@@ -27,11 +27,19 @@ const MODEL: FindingsModel = {
 let server: ConsoleServer;
 let sent: FindingVerdictRequest[] = [];
 let refuseNext: string | null = null;
+let failLoad: Error | null = null;
 
 before(async () => {
   server = await startConsoleServer({
     port: 0,
-    loadFindings: async () => MODEL,
+    loadFindings: async () => {
+      if (failLoad) {
+        const err = failLoad;
+        failLoad = null;
+        throw err;
+      }
+      return MODEL;
+    },
     sendVerdict: async (request) => {
       if (refuseNext) {
         const message = refuseNext;
@@ -50,6 +58,8 @@ before(async () => {
       };
     },
     timeZone: 'America/Vancouver',
+    webUi: 'https://web.example',
+    namespace: 'ns.test',
   });
 });
 
@@ -89,10 +99,10 @@ test('every response sends referrer-policy same-origin, so the page POST carries
   }
   const refused = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     origin: 'null',
-    form: form(),
+    json: form(),
   });
   assert.equal(refused.headers['referrer-policy'], 'same-origin');
 });
@@ -100,10 +110,10 @@ test('every response sends referrer-policy same-origin, so the page POST carries
 test('a POST whose Origin is the console origin and carries the token is accepted', async () => {
   const res = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     origin: origin(),
-    form: form(),
+    json: form(),
   });
   assert.equal(res.status, 200, res.body);
   assert.equal(sent.length, 1);
@@ -117,11 +127,11 @@ test('a request whose Host is not loopback is refused, on every path', async () 
   }
   const post = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     host: 'rebound.example',
     origin: 'http://rebound.example',
-    form: form(),
+    json: form(),
   });
   assert.equal(post.status, 403);
   assert.deepEqual(sent, []);
@@ -131,19 +141,19 @@ test('a POST without the token, or with a wrong one, is refused and sends nothin
   const { token: _token, ...noToken } = form();
   const missing = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     origin: origin(),
-    form: noToken,
+    json: noToken,
   });
   assert.equal(missing.status, 403);
   assert.match(missing.body, /token/);
   const wrong = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     origin: origin(),
-    form: form({ token: `${server.token.slice(0, -1)}x` }),
+    json: form({ token: `${server.token.slice(0, -1)}x` }),
   });
   assert.equal(wrong.status, 403);
   assert.deepEqual(sent, []);
@@ -153,10 +163,10 @@ test('a POST with a foreign Origin, or none, is refused even with the token', as
   for (const o of ['https://evil.example', `http://localhost:${server.port}`, 'null', null]) {
     const res = await consoleRequest({
       port: server.port,
-      path: '/findings/verdict',
+      path: '/api/verdict',
       method: 'POST',
       origin: o,
-      form: form(),
+      json: form(),
     });
     assert.equal(res.status, 403, String(o));
     assert.match(res.body, /Origin/);
@@ -167,10 +177,10 @@ test('a POST with a foreign Origin, or none, is refused even with the token', as
 test('a reject needs a reason; an approve without one takes the console reason', async () => {
   const reject = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     origin: origin(),
-    form: form({ reason: '   ' }),
+    json: form({ reason: '   ' }),
   });
   assert.equal(reject.status, 400);
   assert.match(reject.body, /needs a reason/);
@@ -178,17 +188,17 @@ test('a reject needs a reason; an approve without one takes the console reason',
 
   const approve = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     origin: origin(),
-    form: form({ verdict: 'approved', reason: '' }),
+    json: form({ verdict: 'approved', reason: '' }),
   });
   assert.equal(approve.status, 200, approve.body);
   assert.deepEqual(sent, [
     { site: 'mattpyle-com', key: 'ux-thing--about', status: 'approved', reason: CONSOLE_APPROVE_REASON },
   ]);
-  assert.match(approve.body, /commit: <code>abc1234<\/code>/);
-  assert.match(approve.body, /steward finding fix k/);
+  assert.equal(JSON.parse(approve.body).commitSha, 'abc1234');
+  assert.match(JSON.parse(approve.body).nextStep, /steward finding fix k/);
 });
 
 test('a slug that could traverse, or an unknown verdict, is refused before the sender', async () => {
@@ -196,10 +206,10 @@ test('a slug that could traverse, or an unknown verdict, is refused before the s
   for (const extra of cases) {
     const res = await consoleRequest({
       port: server.port,
-      path: '/findings/verdict',
+      path: '/api/verdict',
       method: 'POST',
       origin: origin(),
-      form: form(extra),
+      json: form(extra),
     });
     assert.equal(res.status, 400, JSON.stringify(extra));
   }
@@ -210,10 +220,10 @@ test('a verdict for a finding with no open run comes back as the refusal the CLI
   refuseNext = 'No open workflow finding/mattpyle-com/ux-thing--about. `steward finding list` shows the open ones.';
   const res = await consoleRequest({
     port: server.port,
-    path: '/findings/verdict',
+    path: '/api/verdict',
     method: 'POST',
     origin: origin(),
-    form: form(),
+    json: form(),
   });
   assert.equal(res.status, 409);
   assert.match(res.body, /No open workflow finding\/mattpyle-com\/ux-thing--about/);
@@ -262,17 +272,44 @@ test('/, /finding and /findings/ redirect to /findings', async () => {
   }
 });
 
-test('the verdict form answers with the message page, which carries no script', async () => {
-  const res = await consoleRequest({ port: server.port, path: '/findings/verdict', method: 'POST', origin: origin(), form: form() });
-  assert.equal(res.status, 200, res.body);
-  assert.match(res.body, /<main class="message">/);
-  assert.match(res.body, /<link rel="stylesheet" href="\/findings\.css">/);
-  assert.doesNotMatch(res.body, /<script/);
-  assert.match(res.body, /<a href="\/findings">Back to findings<\/a>/);
+test('the verdict form route is gone, and a form body is refused on the JSON route', async () => {
+  const gone = await consoleRequest({ port: server.port, path: '/findings/verdict', method: 'POST', origin: origin(), form: form() });
+  assert.equal(gone.status, 404);
+  const asForm = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin: origin(), form: form() });
+  assert.equal(asForm.status, 415);
+  assert.deepEqual(sent, []);
+});
+
+test('the page carries the zone, the Web UI and the namespace for the script', async () => {
+  const page = await consoleRequest({ port: server.port, path: '/findings' });
+  assert.match(page.body, /data-web-ui="https:\/\/web\.example"/);
+  assert.match(page.body, /data-namespace="ns\.test"/);
+  assert.doesNotMatch(page.body, /\{\{/);
+});
+
+test('an unexpected failure on an API route answers a fixed sentence and logs the real error', async () => {
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => void lines.push(args);
+  failLoad = new Error('boom: secret detail from GitHub');
+  try {
+    const res = await consoleRequest({ port: server.port, path: '/api/findings' });
+    assert.equal(res.status, 502);
+    assert.doesNotMatch(res.body, /boom|secret/);
+    assert.match(JSON.parse(res.body).error, /could not complete the request/);
+  } finally {
+    console.error = original;
+  }
+  assert.equal(lines.length, 1);
+  assert.match(String(lines[0].at(-1)), /boom: secret detail/);
+  // A refusal still passes its own message through.
+  const refused = await consoleRequest({ port: server.port, path: '/api/findings', method: 'POST' });
+  assert.equal(refused.status, 405);
+  assert.match(JSON.parse(refused.body).error, /GET only/);
 });
 
 test('the verdict endpoint takes POST only, and an unknown path is a 404', async () => {
-  assert.equal((await consoleRequest({ port: server.port, path: '/findings/verdict' })).status, 405);
+  assert.equal((await consoleRequest({ port: server.port, path: '/api/verdict' })).status, 405);
   assert.equal((await consoleRequest({ port: server.port, path: '/fonts/../../.env' })).status, 404);
   assert.equal((await consoleRequest({ port: server.port, path: '/elsewhere' })).status, 404);
 });

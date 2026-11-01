@@ -11,7 +11,8 @@ import {
 } from '../lib/finding-verdict.js';
 import { isFindingSlug } from '../lib/findings.js';
 import type { FindingsModel } from './findings-model.js';
-import { renderMessage, renderVerdictMessage } from './message-page.js';
+import { escapeHtml } from '../lib/html.js';
+import { renderMessage } from './message-page.js';
 
 /**
  * `steward console`: a page the Steward CLI serves on 127.0.0.1 while it runs.
@@ -23,8 +24,7 @@ import { renderMessage, renderVerdictMessage } from './message-page.js';
  * open finding, and posts a verdict to `POST /api/verdict`. The page names its
  * icons under `/icons/`, served from the same folder: nothing is fetched from
  * the network. The only server-rendered HTML is the message page: a refusal, an
- * error, or the answer to the verdict form, which stays for a browser with
- * scripts off.
+ * error. The page has no form, so every verdict goes through `POST /api/verdict`.
  *
  * **Who can act.** The listener binds the loopback address only, and three
  * checks stand between another page in the operator's browser and a verdict:
@@ -36,14 +36,15 @@ import { renderMessage, renderVerdictMessage } from './message-page.js';
  *    on a cross-origin POST. A missing or `null` Origin is refused. The page
  *    sends `referrer-policy: same-origin` so its own POST carries the real
  *    Origin: under `no-referrer` the browser sends `null` and the guard
- *    refuses the console's own form.
+ *    refuses the console's own POST.
  * 3. A POST must carry the per-process random token, which only a page this
  *    process rendered holds.
  *
  * **The JSON routes.** `GET /api/findings` returns the loader's model, the footer's
  * `cost` included, and `POST /api/verdict` answers the verdict result as JSON. Both sit behind
- * the same Host check; the POST keeps the Origin and token checks of the form route, and a
- * refusal comes back as `{ error }` with the same status code.
+ * the same Host check; the POST takes `application/json` only, with the Origin and token checks,
+ * and a refusal comes back as `{ error }` with its status code. An unexpected failure answers a
+ * fixed sentence and writes the real error to this process's stderr.
  *
  * The page holds no credential of its own: the process reads the same `.env`
  * the CLI reads, and the browser sees only the page, the model and the token.
@@ -55,6 +56,9 @@ export interface ConsoleServerOptions {
   sendVerdict: (request: FindingVerdictRequest) => Promise<FindingVerdictResult>;
   /** IANA zone the page shows its dates in. */
   timeZone: string;
+  /** The Temporal Web UI origin and the namespace: the only values the page builds a run link from. */
+  webUi: string;
+  namespace: string;
   /** The site's `public/fonts`; the page falls back to the system stack when the files are absent. */
   fontsDir?: string | null;
 }
@@ -111,9 +115,8 @@ class Refused extends Error {
   }
 }
 
-function escapeAttribute(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
+/** What an unexpected failure tells the browser; the real error goes to stderr. */
+const UNEXPECTED = 'The console could not complete the request. Its terminal shows why.';
 
 function tokensMatch(given: string, expected: string): boolean {
   const a = Buffer.from(given);
@@ -128,7 +131,7 @@ function readBody(req: http.IncomingMessage): Promise<string> {
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new Refused(413, 'The form is larger than the console accepts.'));
+        reject(new Refused(413, 'The request is larger than the console accepts.'));
         req.destroy();
         return;
       }
@@ -155,8 +158,11 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
   const assets = new Map<string, Buffer>();
   for (const [route, asset] of Object.entries(ASSETS)) {
     let bytes = await fs.readFile(new URL(asset.file, ASSETS_DIR));
-    // The page's one server value: the zone its dates are shown in, as an attribute the script reads.
-    if (route === '/findings') bytes = Buffer.from(bytes.toString('utf8').replace('{{TIME_ZONE}}', escapeAttribute(options.timeZone)));
+    // The page's server values, as attributes the script reads: the zone its dates are shown in, and the Web UI and namespace for run links.
+    if (route === '/findings') {
+      const values: Record<string, string> = { TIME_ZONE: options.timeZone, WEB_UI: options.webUi, NAMESPACE: options.namespace };
+      bytes = Buffer.from(bytes.toString('utf8').replace(/\{\{([A-Z_]+)\}\}/g, (all, name: string) => (name in values ? escapeHtml(values[name]) : all)));
+    }
     assets.set(route, bytes);
   }
 
@@ -168,41 +174,27 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     send(res, status, renderMessage(title, text));
 
   /**
-   * The guards and the verdict, shared by the form route and the JSON route:
-   * the Origin before the body is read, then the token, then the fields. The
-   * form route reads a form; the JSON route reads a form or a JSON object with
-   * the same four fields plus the token.
+   * The guards and the verdict: the Origin before the body is read, then the
+   * token, then the fields. The body is a JSON object with the verdict's four
+   * fields plus the token.
    */
-  const decide = async (req: http.IncomingMessage, allowJson: boolean): Promise<FindingVerdictResult & { key: string }> => {
-    // The same-origin rule before the body is read: a foreign form gets nothing parsed.
+  const decide = async (req: http.IncomingMessage): Promise<FindingVerdictResult> => {
+    // The same-origin rule before the body is read: a foreign page gets nothing parsed.
     if (req.headers.origin !== `http://${req.headers.host}`) {
       throw new Refused(403, `Refused: the request's Origin (${req.headers.origin ?? 'none'}) is not this console.`);
     }
-    const type = String(req.headers['content-type'] ?? '');
-    const isJson = allowJson && type.startsWith('application/json');
-    if (!isJson && !type.startsWith('application/x-www-form-urlencoded')) {
-      throw new Refused(
-        415,
-        allowJson
-          ? 'Refused: the verdict posts application/json or application/x-www-form-urlencoded.'
-          : 'Refused: the verdict form posts application/x-www-form-urlencoded.',
-      );
+    if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) {
+      throw new Refused(415, 'Refused: the verdict posts application/json.');
     }
     const raw = await readBody(req);
-    let fields: (name: string) => string;
-    if (isJson) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        throw new Refused(400, 'Refused: the body is not JSON.');
-      }
-      const object = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
-      fields = (name) => (typeof object[name] === 'string' ? (object[name] as string) : '');
-    } else {
-      const form = new URLSearchParams(raw);
-      fields = (name) => form.get(name) ?? '';
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Refused(400, 'Refused: the body is not JSON.');
     }
+    const object = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+    const fields = (name: string) => (typeof object[name] === 'string' ? (object[name] as string) : '');
     if (!tokensMatch(fields('token'), token)) {
       throw new Refused(403, "Refused: the request does not carry this console's token. Reload /findings and try again.");
     }
@@ -217,16 +209,11 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     const reason = typed || CONSOLE_APPROVE_REASON;
 
     try {
-      return { ...(await options.sendVerdict({ site, key, status, reason })), key };
+      return await options.sendVerdict({ site, key, status, reason });
     } catch (err) {
       if (err instanceof FindingVerdictError) throw new Refused(409, err.message);
       throw err;
     }
-  };
-
-  const verdict = async (req: http.IncomingMessage, res: http.ServerResponse) => {
-    const result = await decide(req, false);
-    send(res, 200, renderVerdictMessage(result, result.key));
   };
 
   const sendJson = (res: http.ServerResponse, status: number, body: unknown) => {
@@ -264,16 +251,7 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     }
     if (url.pathname === '/api/verdict') {
       if (method !== 'POST') throw new Refused(405, 'The verdict endpoint takes POST only.');
-      const { key: _key, ...result } = await decide(req, true);
-      sendJson(res, 200, result);
-      return;
-    }
-    if (url.pathname === '/findings/verdict') {
-      if (method !== 'POST') {
-        message(res, 405, 'not allowed', 'The verdict endpoint takes the form POST only.');
-        return;
-      }
-      await verdict(req, res);
+      sendJson(res, 200, await decide(req));
       return;
     }
     const font = /^\/fonts\/([a-z0-9-]+\.woff2)$/.exec(url.pathname)?.[1];
@@ -288,14 +266,15 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
 
   const server = http.createServer((req, res) => {
     route(req, res).catch((err: unknown) => {
+      if (!(err instanceof Refused)) console.error(`steward console: ${req.method} ${req.url} failed:`, err);
       if (res.headersSent) {
         res.destroy();
         return;
       }
-      if (req.url?.startsWith('/api/')) {
-        sendJson(res, err instanceof Refused ? err.status : 502, { error: err instanceof Error ? err.message : String(err) });
-      } else if (err instanceof Refused) message(res, err.status, 'refused', err.message);
-      else message(res, 502, 'error', err instanceof Error ? err.message : String(err));
+      const text = err instanceof Refused ? err.message : UNEXPECTED;
+      if (req.url?.startsWith('/api/')) sendJson(res, err instanceof Refused ? err.status : 502, { error: text });
+      else if (err instanceof Refused) message(res, err.status, 'refused', text);
+      else message(res, 502, 'error', text);
     });
   });
 

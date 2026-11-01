@@ -11,16 +11,20 @@ export function consoleRequest(options: {
   host?: string;
   origin?: string | null;
   form?: Record<string, string>;
+  /** A JSON body, sent as application/json. */
+  json?: Record<string, unknown>;
   /** A body sent as it is, with `contentType`. */
   rawBody?: string;
   contentType?: string;
 }): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
-    const body = options.rawBody ?? (options.form ? new URLSearchParams(options.form).toString() : undefined);
+    const body =
+      options.rawBody ??
+      (options.json ? JSON.stringify(options.json) : options.form ? new URLSearchParams(options.form).toString() : undefined);
     const headers: Record<string, string> = { host: options.host ?? `127.0.0.1:${options.port}` };
     if (options.origin !== null && options.origin !== undefined) headers.origin = options.origin;
     if (body !== undefined) {
-      headers['content-type'] = options.contentType ?? 'application/x-www-form-urlencoded';
+      headers['content-type'] = options.contentType ?? (options.json ? 'application/json' : 'application/x-www-form-urlencoded');
       headers['content-length'] = String(Buffer.byteLength(body));
     }
     const req = http.request(

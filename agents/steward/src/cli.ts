@@ -2263,6 +2263,8 @@ program
         loadFindings: () => loader.load(),
         sendVerdict: (request) => sendVerdict(request, { client: c }),
         timeZone: STEWARD_TIMEZONE,
+        webUi: WEB_UI,
+        namespace: NAMESPACE,
         fontsDir: path.join(REPO_ROOT, 'public', 'fonts'),
       });
     } catch (err) {

@@ -104,18 +104,22 @@ test('steward finding reject and the console reject button send the same verdict
           loadFindings: async () => EMPTY_MODEL,
           sendVerdict: (request) => sendFindingVerdict(request, { client }),
           timeZone: 'America/Vancouver',
+          webUi: 'http://localhost:8233',
+          namespace: 'default',
         });
         try {
           const res = await consoleRequest({
             port: server.port,
-            path: '/findings/verdict',
+            path: '/api/verdict',
             method: 'POST',
             origin: `http://127.0.0.1:${server.port}`,
-            form: { token: server.token, site: SITE, key: KEY, verdict: 'rejected', reason: REASON },
+            json: { token: server.token, site: SITE, key: KEY, verdict: 'rejected', reason: REASON },
           });
           assert.equal(res.status, 200, res.body);
-          assert.match(res.body, /verdict: rejected \(source cli\)/);
-          assert.match(res.body, new RegExp(`commit: <code>${STUB_COMMIT}</code>`));
+          const answer = JSON.parse(res.body);
+          assert.equal(answer.recorded.status, 'rejected');
+          assert.equal(answer.recorded.source, 'cli');
+          assert.equal(answer.commitSha, STUB_COMMIT);
         } finally {
           await server.close();
         }

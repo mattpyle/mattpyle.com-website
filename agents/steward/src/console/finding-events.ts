@@ -13,6 +13,8 @@ export interface FindingEvent {
   label: string;
   url?: string;
   detail?: string;
+  /** A verification event's run; the page links it to the Temporal Web UI. */
+  workflowId?: string;
 }
 
 export interface EventSources {
@@ -104,6 +106,7 @@ export function buildEvents(src: EventSources): FindingEvent[] {
       at: v.at,
       label: VERIFICATION_LABEL[v.outcome] ?? 'Verified',
       ...(v.checks.length > 0 ? { detail: `${passed} of ${v.checks.length} checks passed` } : {}),
+      ...(v.workflowId ? { workflowId: v.workflowId } : {}),
     });
   }
 
