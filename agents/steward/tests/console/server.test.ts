@@ -331,6 +331,15 @@ test('GET /api/findings serves the running commit and whether master has moved o
   assert.equal(body.behindMaster, true);
 });
 
+test('GET /api/commit answers the commit, behindMaster and the token under the Host check alone', async () => {
+  const res = await consoleRequest({ port: server.port, path: '/api/commit' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(res.body), { commit: 'abc1234', behindMaster: true, token: server.token });
+  const foreign = await consoleRequest({ port: server.port, path: '/api/commit', host: 'attacker.example:80' });
+  assert.equal(foreign.status, 403);
+  assert.equal((await consoleRequest({ port: server.port, path: '/api/commit', method: 'POST' })).status, 405);
+});
+
 test('the page has one menu button beside Refresh and loads nothing else new', async () => {
   const res = await consoleRequest({ port: server.port, path: '/findings' });
   assert.match(res.body, /class="menu-btn"[^>]*aria-haspopup="menu"/);

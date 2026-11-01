@@ -130,13 +130,13 @@ test('closed: Proposed is selected, rows group under High, Medium and Low with t
 
 test('a row shows the short title and key when Argus writes them, else the full title and the finding key', () => {
   const { v } = render();
-  assert.match(v.list, /<span class="c-ref">MP-1<\/span>\s*<span class="c-title"><span class="t">Short one<\/span>/);
-  assert.match(v.list, /<span class="c-ref">ux-long--home<\/span>\s*<span class="c-title"><span class="t">A &lt;script&gt;alert\(1\)&lt;\/script&gt; title<\/span>/);
+  assert.match(v.list, /<span class="c-ref" title="ux-short--about">MP-1<\/span>\s*<span class="c-title" title="Full title of ux-short--about"><span class="t">Short one<\/span>/);
+  assert.match(v.list, /<span class="c-ref" title="ux-long--home">ux-long--home<\/span>\s*<span class="c-title" title="A &lt;script&gt;alert\(1\)&lt;\/script&gt; title"><span class="t">A &lt;script&gt;alert\(1\)&lt;\/script&gt; title<\/span>/);
   assert.doesNotMatch(v.list, /<script/);
   assert.match(v.list, /<img class="site-mark" src="\/icons\/mattpyle-com-16\.png"/);
   assert.match(v.list, /<img class="site-mark" src="\/icons\/temporal-io\.svg"/);
   assert.match(v.list, /<span class="kind" data-k="opportunity" title="Opportunity">/);
-  assert.match(v.list, /<span class="cat" data-t="accessibility">.*Accessibility<\/span>/);
+  assert.match(v.list, /<span class="cat" data-t="accessibility" title="Accessibility">.*Accessibility<\/span>/);
   assert.match(v.list, /<time datetime="2026-10-27" title="Opened Tue, 27 October 2026">4d<\/time>/);
   assert.match(v.list, /<time datetime="2026-10-01"[^>]*>1 Oct<\/time>/);
 });
@@ -406,4 +406,29 @@ test('a model with no commit reads as unknown', () => {
   const state = F.createState();
   state.appMenu = true;
   assert.match(textOf(F.menuHtml(null, state)), /Running commit unknown/);
+});
+
+test('each cell in a row names its own value on hover, and the row button carries no title', () => {
+  const { v } = render();
+  const li = v.list.split('<li>').find((x: string) => x.includes('data-id="mattpyle-com/ux-short--about"')) as string;
+  assert.doesNotMatch(li.slice(0, li.indexOf('>') + 1), /title=/, 'the row button has no title');
+  assert.match(li, /<span class="c-ref" title="ux-short--about">MP-1</);
+  assert.match(li, /<span class="c-title" title="Full title of ux-short--about">/);
+  assert.match(li, /<span class="site" title="mattpyle\.com">/);
+  assert.match(li, /<span class="cat" data-t="accessibility" title="Accessibility">/);
+  assert.match(li, /<span class="kind" data-k="defect" title="Defect">/);
+  assert.match(li, /<time datetime="2026-10-27" title="Opened Tue, 27 October 2026">/);
+});
+
+test('a query finds a row in any status, the status control reads All, and clearing it returns to the tab', () => {
+  const key = 'ux-resolved--about';
+  assert.deepEqual(F.visible(F.rowsOf(MODEL), { ...F.createState(), status: 'proposed' }).map((r: FindingRow) => r.key).includes(key), false);
+  const { v, state } = render({ status: 'proposed', q: key });
+  assert.deepEqual(ids(v.list), [`${MP}/${key}`]);
+  assert.match(v.statuses, /data-status="all" aria-selected="true"/);
+  assert.match(v.statuses, /data-status="proposed" aria-selected="false"/);
+  assert.match(v.facets, /data-facet="status">\s*<button[^>]*data-on="false">All</);
+  assert.equal(state.status, 'proposed', 'the chosen tab is kept');
+  const back = F.view(MODEL, { ...state, q: '' }, OPTIONS);
+  assert.match(back.statuses, /data-status="proposed" aria-selected="true"/);
 });

@@ -104,11 +104,13 @@
   }
 
   const inSite = (state) => (r) => state.site === 'all' || r.site === state.site;
-  const inStatus = (state) => (r) => state.status === 'all' || r.status === state.status;
+  // A query searches every status and the controls read All while the box holds text; clearing it returns to the tab.
+  const shownStatus = (state) => (state.q.trim() ? 'all' : state.status);
+  const inStatus = (state) => (r) => shownStatus(state) === 'all' || r.status === shownStatus(state);
   const inPri = (state) => (r) => state.pri === 'all' || r.priority === state.pri;
 
   // A count moves with a verdict sent from this page; the list keeps the row where it was until the next load.
-  function count(rows, state, { site = inSite(state), status = (s) => state.status === 'all' || s === state.status, pri = inPri(state) } = {}) {
+  function count(rows, state, { site = inSite(state), status = (s) => shownStatus(state) === 'all' || s === shownStatus(state), pri = inPri(state) } = {}) {
     return rows.filter((r) => site(r) && status(statusOf(r, state)) && pri(r)).length;
   }
 
@@ -145,7 +147,7 @@
     ux: '<path d="M4 3l8 4.5-3.6.9L7 12z" fill="none"/>',
     feature: '<path d="M8 2.5v11M2.5 8h11" fill="none"/>',
   };
-  const catHTML = (t) => (t ? `<span class="cat" data-t="${esc(t)}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="currentColor">${ICON[t] || ICON.feature}</svg>${esc(TYPE[t] || t)}</span>` : '');
+  const catHTML = (t) => (t ? `<span class="cat" data-t="${esc(t)}" title="${esc(TYPE[t] || t)}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="currentColor">${ICON[t] || ICON.feature}</svg>${esc(TYPE[t] || t)}</span>` : '');
   // The list hides the label at narrow widths (`.lbl`); the facet menu and the panel header always show it.
   const siteHTML = (site, { alwaysShowLabel = false } = {}) => {
     const known = SITES[site];
@@ -216,7 +218,7 @@
   function renderStatuses(rows, state) {
     return [...knownStatuses(rows), 'all'].map((s) => {
       const n = count(rows, state, { status: (x) => s === 'all' || x === s });
-      return `<button class="stab" type="button" role="tab" data-status="${esc(s)}" aria-selected="${state.status === s}">${s === 'all' ? 'All' : esc(WORD[s] || s)}<span class="count">${n}</span></button>`;
+      return `<button class="stab" type="button" role="tab" data-status="${esc(s)}" aria-selected="${shownStatus(state) === s}">${s === 'all' ? 'All' : esc(WORD[s] || s)}<span class="count">${n}</span></button>`;
     }).join('');
   }
 
@@ -230,7 +232,7 @@
     const statusOpts = [...knownStatuses(rows), 'all'].map((x) => [x, x === 'all' ? 'All' : esc(WORD[x] || x), count(rows, state, { status: (y) => x === 'all' || y === x })]);
     const drifting = rows.filter((r) => r.drift.length > 0 && inSite(state)(r)).length + signalCount(model, state);
     const siteWord = (v) => siteHTML(v, { alwaysShowLabel: true });
-    return facetHTML(state, 'status', 'All', statusOpts, state.status, (v) => `${esc(WORD[v] || v)}<span class="count">${count(rows, state, { status: (y) => y === v })}</span>`)
+    return facetHTML(state, 'status', 'All', statusOpts, shownStatus(state), (v) => `${esc(WORD[v] || v)}<span class="count">${count(rows, state, { status: (y) => y === v })}</span>`)
       + (drifting ? `<button class="drift-chip" type="button" data-act="drift" aria-pressed="${state.drift}" title="Findings whose index, file and run disagree, and runs no finding accounts for">${DRIFT_ICON}Drift<span class="count">${drifting}</span></button>` : '')
       + facetHTML(state, 'site', 'Site', siteOpts, state.site, siteWord)
       + facetHTML(state, 'pri', 'Priority', priOpts, state.pri, priHTML)
@@ -241,9 +243,9 @@
 
   function rowHTML(r, state, c, now) {
     const id = idOf(r);
-    return `<li><button class="row cols" type="button" data-id="${esc(id)}" ${state.current === id ? 'aria-current="true"' : ''} title="${esc(r.title)}">
-      <span class="c-ref">${esc(refOf(r))}</span>
-      <span class="c-title"><span class="t">${esc(shortTitle(r))}</span>${driftHTML(r)}</span>
+    return `<li><button class="row cols" type="button" data-id="${esc(id)}" ${state.current === id ? 'aria-current="true"' : ''}>
+      <span class="c-ref" title="${esc(r.key)}">${esc(refOf(r))}</span>
+      <span class="c-title" title="${esc(r.title || r.key)}"><span class="t">${esc(shortTitle(r))}</span>${driftHTML(r)}</span>
       <span class="c-pri">${priHTML(r.priority)}</span>
       <span class="c-site">${siteHTML(r.site)}</span>
       <span class="c-cat">${catHTML(r.type)}</span>
@@ -588,12 +590,12 @@
   // Search sits behind an icon; it stays open while it holds a query.
   $('.search-btn').addEventListener('click', () => { el.search.dataset.open = 'true'; el.input.focus(); });
   el.input.addEventListener('blur', () => { if (!el.input.value.trim()) delete el.search.dataset.open; });
-  el.input.addEventListener('input', () => { state.q = el.input.value; paint(['list']); });
+  el.input.addEventListener('input', () => { state.q = el.input.value; paint(['controls', 'list']); });
   $('.close').addEventListener('click', close);
   el.refresh.addEventListener('click', () => load());
 
   // The header menu: the running commit and Restart console. The restart posts, then waits for a process
-  // with a new token (each process draws its own) to answer /api/findings, then reloads the page.
+  // with a new token (each process draws its own) to answer /api/commit, then reloads the page.
   function setAppMenu(on) {
     state.appMenu = on;
     paint(['menu']);
@@ -617,7 +619,7 @@
     for (let waited = 0; waited < 60000; waited += 500) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       try {
-        const res = await fetch('/api/findings', { cache: 'no-store', headers: { accept: 'application/json' } });
+        const res = await fetch('/api/commit', { cache: 'no-store', headers: { accept: 'application/json' } });
         const data = res.ok ? await res.json() : null;
         if (data && data.token && data.token !== oldToken) { location.reload(); return; }
       } catch (err) { /* the old process has closed and the new one is not listening yet */ }
