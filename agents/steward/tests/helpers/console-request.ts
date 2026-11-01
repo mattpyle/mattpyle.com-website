@@ -11,10 +11,12 @@ export function consoleRequest(options: {
   host?: string;
   origin?: string | null;
   form?: Record<string, string>;
+  /** A body sent as it is, with `contentType`. */
+  rawBody?: string;
   contentType?: string;
 }): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
-    const body = options.form ? new URLSearchParams(options.form).toString() : undefined;
+    const body = options.rawBody ?? (options.form ? new URLSearchParams(options.form).toString() : undefined);
     const headers: Record<string, string> = { host: options.host ?? `127.0.0.1:${options.port}` };
     if (options.origin !== null && options.origin !== undefined) headers.origin = options.origin;
     if (body !== undefined) {

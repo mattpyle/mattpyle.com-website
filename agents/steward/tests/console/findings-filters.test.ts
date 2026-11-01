@@ -34,7 +34,11 @@ function row(site: string, key: string, status: string, extra: Partial<FindingRo
     status,
     fileStatus: status,
     kind: 'defect',
+    type: null,
     title: `Title of ${key}`,
+    titleShort: null,
+    summary: null,
+    keyShort: null,
     reason: '',
     priority: 'medium',
     verdictAt: null,
@@ -46,6 +50,10 @@ function row(site: string, key: string, status: string, extra: Partial<FindingRo
     run,
     verification: null,
     drift: [],
+    quietReason: null,
+    body: '',
+    sections: [],
+    events: [],
     ...rest,
   };
   out.drift = driftFor(out.status, out.fileStatus, out.run);

@@ -38,6 +38,11 @@ import {
  * 3. A POST must carry the per-process random token, which only a page this
  *    process rendered holds.
  *
+ * **The JSON routes.** `GET /api/findings` returns the loader's model, the footer's
+ * `cost` included, and `POST /api/verdict` answers the verdict result as JSON. Both sit behind
+ * the same Host check; the POST keeps the Origin and token checks of the form route, and a
+ * refusal comes back as `{ error }` with the same status code.
+ *
  * The page holds no credential of its own: the process reads the same `.env`
  * the CLI reads, and the browser only ever sees HTML.
  */
@@ -153,37 +158,71 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
   const message = (res: http.ServerResponse, status: number, title: string, text: string) =>
     send(res, status, renderMessagePage(title, text, { fonts, favicon }));
 
-  const verdict = async (req: http.IncomingMessage, res: http.ServerResponse) => {
+  /**
+   * The guards and the verdict, shared by the form route and the JSON route:
+   * the Origin before the body is read, then the token, then the fields. The
+   * form route reads a form; the JSON route reads a form or a JSON object with
+   * the same four fields plus the token.
+   */
+  const decide = async (req: http.IncomingMessage, allowJson: boolean): Promise<FindingVerdictResult & { key: string }> => {
     // The same-origin rule before the body is read: a foreign form gets nothing parsed.
     if (req.headers.origin !== `http://${req.headers.host}`) {
       throw new Refused(403, `Refused: the request's Origin (${req.headers.origin ?? 'none'}) is not this console.`);
     }
     const type = String(req.headers['content-type'] ?? '');
-    if (!type.startsWith('application/x-www-form-urlencoded')) {
-      throw new Refused(415, 'Refused: the verdict form posts application/x-www-form-urlencoded.');
+    const isJson = allowJson && type.startsWith('application/json');
+    if (!isJson && !type.startsWith('application/x-www-form-urlencoded')) {
+      throw new Refused(
+        415,
+        allowJson
+          ? 'Refused: the verdict posts application/json or application/x-www-form-urlencoded.'
+          : 'Refused: the verdict form posts application/x-www-form-urlencoded.',
+      );
     }
-    const form = new URLSearchParams(await readBody(req));
-    if (!tokensMatch(form.get('token') ?? '', token)) {
-      throw new Refused(403, 'Refused: the form does not carry this console\'s token. Reload /findings and try again.');
+    const raw = await readBody(req);
+    let fields: (name: string) => string;
+    if (isJson) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Refused(400, 'Refused: the body is not JSON.');
+      }
+      const object = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+      fields = (name) => (typeof object[name] === 'string' ? (object[name] as string) : '');
+    } else {
+      const form = new URLSearchParams(raw);
+      fields = (name) => form.get(name) ?? '';
     }
-    const site = form.get('site') ?? '';
-    const key = form.get('key') ?? '';
-    const status = form.get('verdict');
+    if (!tokensMatch(fields('token'), token)) {
+      throw new Refused(403, "Refused: the request does not carry this console's token. Reload /findings and try again.");
+    }
+    const site = fields('site');
+    const key = fields('key');
+    const status = fields('verdict');
     if (!isFindingSlug(site) || !isFindingSlug(key)) throw new Refused(400, 'Refused: the site or key is not a finding slug.');
     if (status !== 'approved' && status !== 'rejected') throw new Refused(400, 'Refused: the verdict is approve or reject.');
-    const typed = (form.get('reason') ?? '').trim();
+    const typed = fields('reason').trim();
     if (typed.length > MAX_REASON_CHARS) throw new Refused(400, `Refused: the reason is over ${MAX_REASON_CHARS} characters.`);
     if (status === 'rejected' && !typed) throw new Refused(400, 'A reject needs a reason: say why.');
     const reason = typed || CONSOLE_APPROVE_REASON;
 
-    let result: FindingVerdictResult;
     try {
-      result = await options.sendVerdict({ site, key, status, reason });
+      return { ...(await options.sendVerdict({ site, key, status, reason })), key };
     } catch (err) {
       if (err instanceof FindingVerdictError) throw new Refused(409, err.message);
       throw err;
     }
-    send(res, 200, renderVerdictResult(result, key, page));
+  };
+
+  const verdict = async (req: http.IncomingMessage, res: http.ServerResponse) => {
+    const result = await decide(req, false);
+    send(res, 200, renderVerdictResult(result, result.key, page));
+  };
+
+  const sendJson = (res: http.ServerResponse, status: number, body: unknown) => {
+    res.writeHead(status, { ...HEADERS, 'content-type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(body));
   };
 
   const route = async (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -203,6 +242,19 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     }
     if (url.pathname === '/findings' && method === 'GET') {
       send(res, 200, renderFindingsPage(await options.loadFindings(), page, parseFindingsQuery(url.searchParams)));
+      return;
+    }
+    if (url.pathname === '/api/findings') {
+      if (method !== 'GET') throw new Refused(405, 'The findings endpoint takes GET only.');
+      // The token rides here for the client page to post a verdict. A page on another origin cannot read
+      // this response (no CORS headers), and the Host check above stops a rebound name.
+      sendJson(res, 200, { ...(await options.loadFindings()), token });
+      return;
+    }
+    if (url.pathname === '/api/verdict') {
+      if (method !== 'POST') throw new Refused(405, 'The verdict endpoint takes POST only.');
+      const { key: _key, ...result } = await decide(req, true);
+      sendJson(res, 200, result);
       return;
     }
     if (url.pathname === '/findings/verdict') {
@@ -248,7 +300,9 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
         res.destroy();
         return;
       }
-      if (err instanceof Refused) message(res, err.status, 'refused', err.message);
+      if (req.url?.startsWith('/api/')) {
+        sendJson(res, err instanceof Refused ? err.status : 502, { error: err instanceof Error ? err.message : String(err) });
+      } else if (err instanceof Refused) message(res, err.status, 'refused', err.message);
       else message(res, 502, 'error', err instanceof Error ? err.message : String(err));
     });
   });

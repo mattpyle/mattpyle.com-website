@@ -8,8 +8,11 @@ import {
   isFindingSlug,
   parseFindingsIndex,
   parseVerificationSection,
+  siteConfigPath,
   type ParsedVerification,
 } from '../lib/findings.js';
+import { buildEvents, type FindingEvent } from './finding-events.js';
+import { renderFindingBody, type FindingSection } from './finding-markdown.js';
 import { dispatchWorkflowId, waitingSlotLine, type DispatchState } from '../lib/fix-dispatch.js';
 import { findingStateQuery, type FindingState } from '../workflows/finding.js';
 import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
@@ -69,8 +72,17 @@ export interface FindingRow {
   status: string;
   /** The finding file's own `status`; null when there is no file. */
   fileStatus: string | null;
+  /** The `kind` field: defect, opportunity or direction. Never joined with `type`. */
   kind: string;
+  /** The `type` field: content, accessibility and so on; null when the file has none. */
+  type: string | null;
   title: string;
+  /** `title_short` when the file has it; the server never invents one. */
+  titleShort: string | null;
+  /** `summary` when the file has it. */
+  summary: string | null;
+  /** A short key when Argus writes one; null until it does. */
+  keyShort: string | null;
   reason: string;
   priority: string | null;
   verdictAt: string | null;
@@ -86,6 +98,14 @@ export interface FindingRow {
   verification: ParsedVerification | null;
   /** Where the file and the run disagree, one line each. Empty when they agree. */
   drift: string[];
+  /** Why a row with no open run is as designed, in one quiet line; not a drift flag. */
+  quietReason: string | null;
+  /** The finding's body below the H1, rendered as safe HTML. Empty without a file. */
+  body: string;
+  /** The H2 sections in file order, each as safe HTML. */
+  sections: FindingSection[];
+  /** Dated history, oldest first. */
+  events: FindingEvent[];
 }
 
 export interface SiteSection {
@@ -116,12 +136,42 @@ export interface FindingsModel {
   cost: { treeCalls: number; blobReads: number; stateQueries: number; dispatcherQueries: number };
 }
 
+/** What a site's `config.yaml` and the row's kind change about a row with no open run. */
+export interface DriftContext {
+  /** The site's `stop_after`; `verdict` means no fixer runs, so an approved row ends with no run. */
+  stopAfter?: string | null;
+  kind?: string;
+}
+
+export const QUIET_NO_FIXER = 'no fixer for this site';
+export const QUIET_OPPORTUNITY = 'opportunity, yours to take';
+
 /**
  * Where a row's file and run disagree. `run.step` is only known for a queried
  * row; an unqueried row is judged on whether a run is open at all.
  */
-export function driftFor(status: string, fileStatus: string | null, run: FindingRunView): string[] {
+export function driftFor(
+  status: string,
+  fileStatus: string | null,
+  run: FindingRunView,
+  context: DriftContext = {},
+): string[] {
+  return assessRow(status, fileStatus, run, context).drift;
+}
+
+/**
+ * Drift plus the quiet reason. An approved row with no run is designed, not
+ * drift, on a site that stops at the verdict and for an opportunity, which the
+ * fixer gate refuses and which stays Matt's. The site's rule comes first.
+ */
+export function assessRow(
+  status: string,
+  fileStatus: string | null,
+  run: FindingRunView,
+  context: DriftContext = {},
+): { drift: string[]; quietReason: string | null } {
   const drift: string[] = [];
+  let quietReason: string | null = null;
   if (fileStatus !== null && fileStatus !== status) {
     drift.push(`INDEX.md says ${status}, the file says ${fileStatus}`);
   }
@@ -130,8 +180,11 @@ export function driftFor(status: string, fileStatus: string | null, run: Finding
       if (!run.open) drift.push(`${status} with no open run`);
       break;
     case 'flight':
-      if (!run.open) drift.push(`${status} with no open run`);
-      else if (run.step === 'waiting-verdict') drift.push(`${status}, but the run still waits for a verdict`);
+      if (!run.open) {
+        if (status === 'approved' && context.stopAfter === 'verdict') quietReason = QUIET_NO_FIXER;
+        else if (status === 'approved' && context.kind === 'opportunity') quietReason = QUIET_OPPORTUNITY;
+        else drift.push(`${status} with no open run`);
+      } else if (run.step === 'waiting-verdict') drift.push(`${status}, but the run still waits for a verdict`);
       else if (status === 'fixing' && run.step === 'waiting-fix') drift.push('fixing, but the run waits for a fix');
       else if (run.step === 'done') drift.push(`${status}, but the run is done`);
       break;
@@ -142,7 +195,14 @@ export function driftFor(status: string, fileStatus: string | null, run: Finding
       drift.push(`unknown status "${status}"`);
       break;
   }
-  return drift;
+  return { drift, quietReason };
+}
+
+/** A site's `stop_after`, read with Steward's one YAML reader; null when the file sets none. */
+export function siteStopAfter(configText: string): string | null {
+  const data = parseFrontmatter(`---\n${configText}\n---\n`).data as Record<string, any>;
+  const value = data.stop_after ?? data.site?.stop_after;
+  return typeof value === 'string' ? value : null;
 }
 
 /** The H1 of a finding file, the finding in one line. */
@@ -252,6 +312,8 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
       for (const site of sites) {
         const indexText = await readBlob(shaByPath.get(findingsIndexPath(site)) as string);
         const lines = parseFindingsIndex(indexText);
+        const configSha = shaByPath.get(siteConfigPath(site));
+        const stopAfter = configSha ? siteStopAfter(await readBlob(configSha)) : null;
 
         const rows = await mapLimit(lines, PARALLEL, async (line, index): Promise<FindingRow> => {
           const sha = shaByPath.get(findingPath(site, line.key));
@@ -277,13 +339,19 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             slotLine: null,
           };
           const filePr = fixPrUrl(data);
+          const rendered = renderFindingBody(body);
+          const verification = sha ? parseVerificationSection(body) : null;
           return {
             site,
             key: line.key,
             status: line.status,
             fileStatus: sha ? str(data.status) : null,
             kind: line.kind || str(data.kind) || '',
+            type: str(data.type),
             title: findingTitle(body) || line.key,
+            titleShort: str(data.title_short),
+            summary: str(data.summary),
+            keyShort: str(data.key_short),
             reason: line.reason,
             priority: str(data.priority),
             verdictAt: str(data.verdict_at),
@@ -293,8 +361,12 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             prUrl: filePr || null,
             fileMissing: !sha,
             run,
-            verification: sha ? parseVerificationSection(body) : null,
+            verification,
             drift: [],
+            quietReason: null,
+            body: rendered.body,
+            sections: rendered.sections,
+            events: sha ? buildEvents({ data, body, status: line.status, prUrl: filePr || null, verification }) : [],
           };
         });
 
@@ -342,7 +414,9 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
         }
 
         for (const row of rows) {
-          row.drift = driftFor(row.status, row.fileStatus, row.run);
+          const assessed = assessRow(row.status, row.fileStatus, row.run, { stopAfter, kind: row.kind });
+          row.drift = assessed.drift;
+          row.quietReason = assessed.quietReason;
           if (row.fileMissing) row.drift.unshift('no finding file');
         }
 
