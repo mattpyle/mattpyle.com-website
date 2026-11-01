@@ -2,6 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { consoleRequest } from '../helpers/console-request.js';
+import { CONSOLE_RESTART_STUBS } from '../helpers/console-options.js';
 import { startConsoleServer, type ConsoleServer } from '../../src/console/server.js';
 import { createFindingsLoader, driftFor, type ConsoleClient, type FindingRunView } from '../../src/console/findings-model.js';
 import { renderFindingBody } from '../../src/console/finding-markdown.js';
@@ -104,6 +105,7 @@ before(async () => {
   const loader = createFindingsLoader({ repo: REPO, ghJson: fakeGitHub(), client, now: () => new Date('2026-10-31T12:00:00Z') });
   server = await startConsoleServer({
     port: 0,
+    ...CONSOLE_RESTART_STUBS,
     loadFindings: () => loader.load(),
     sendVerdict: async (request) => {
       if (refuseNext) {

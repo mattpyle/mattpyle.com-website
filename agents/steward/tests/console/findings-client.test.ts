@@ -280,9 +280,10 @@ test('an open menu lists its choices with counts and ticks the current one', () 
   assert.match(sort, /aria-checked="true" data-sort="priority">Priority/);
 });
 
-test('the page opens on the top of the Proposed list, and Next skips a decided finding', () => {
+test('a new page has no finding selected, and Next skips a decided finding', () => {
   const state = F.createState();
-  assert.equal(F.firstProposed(MODEL, state), `${MP}/ux-short--about`);
+  assert.equal(state.current, null);
+  assert.equal(F.view(MODEL, state, OPTIONS).open, false);
   const rows = F.rowsOf(MODEL);
   const first = rows.find((r: FindingRow) => r.key === 'ux-short--about');
   state.decided[`${TI}/ti-proposed--docs`] = { status: 'rejected' };
@@ -366,4 +367,43 @@ test('the site label is plain in the facet menu and the panel header, and hidden
   assert.ok(v.facets.includes('<span>mattpyle.com</span>'));
   assert.ok(!v.facets.includes('class="lbl"'));
   assert.ok(v.doc.includes('<span>mattpyle.com</span>'));
+});
+
+test('the header menu is empty while closed; open, it names the commit and offers the restart', () => {
+  const state = F.createState();
+  const model = { commit: 'abc1234', behindMaster: false } as unknown as FindingsModel;
+  assert.equal(F.menuHtml(model, state), '');
+  state.appMenu = true;
+  const html = F.menuHtml(model, state);
+  assert.match(textOf(html), /Running commit abc1234/);
+  assert.match(html, /data-act="restart"/);
+  assert.match(textOf(html), /Restart console/);
+  assert.doesNotMatch(textOf(html), /steward update/);
+});
+
+test('the menu says the restart does not pull only when master has moved on', () => {
+  const state = F.createState();
+  state.appMenu = true;
+  const behind = F.menuHtml({ commit: 'abc1234', behindMaster: true }, state);
+  assert.match(textOf(behind), /Restart does not pull: run steward update first/);
+  assert.equal(F.view({ sites: [], failedVerifies: [], commit: 'abc1234', behindMaster: true }, state, { timeZone: 'America/Vancouver', webUi: '', namespace: '', now: new Date() }).menu, behind);
+});
+
+test('while restarting the menu shows Restarting in place of the item; a failure keeps the item and says why', () => {
+  const state = F.createState();
+  state.appMenu = true;
+  state.restart = 'restarting';
+  const busy = F.menuHtml({ commit: 'abc1234' }, state);
+  assert.match(textOf(busy), /Restarting/);
+  assert.doesNotMatch(busy, /data-act="restart"/);
+  state.restart = 'The restart did not start: nope.';
+  const failed = F.menuHtml({ commit: 'abc1234' }, state);
+  assert.match(failed, /data-act="restart"/);
+  assert.match(textOf(failed), /did not start: nope/);
+});
+
+test('a model with no commit reads as unknown', () => {
+  const state = F.createState();
+  state.appMenu = true;
+  assert.match(textOf(F.menuHtml(null, state)), /Running commit unknown/);
 });

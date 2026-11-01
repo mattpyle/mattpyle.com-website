@@ -43,7 +43,10 @@ import { renderMessage } from './message-page.js';
  * **The JSON routes.** `GET /api/findings` returns the loader's model, the footer's
  * `cost` included, and `POST /api/verdict` answers the verdict result as JSON. Both sit behind
  * the same Host check; the POST takes `application/json` only, with the Origin and token checks,
- * and a refusal comes back as `{ error }` with its status code. An unexpected failure answers a
+ * and a refusal comes back as `{ error }` with its status code. `GET /api/findings` also carries
+ * `commit` and `behindMaster`, which the launcher and the page's menu read. `POST /api/restart`
+ * runs under the same guards: it starts a replacement console, answers `{ restarting: true }`, closes
+ * the listener and exits, so the new process runs whatever the checkout holds. An unexpected failure answers a
  * fixed sentence and writes the real error to this process's stderr.
  *
  * The page holds no credential of its own: the process reads the same `.env`
@@ -61,6 +64,16 @@ export interface ConsoleServerOptions {
   namespace: string;
   /** The site's `public/fonts`; the page falls back to the system stack when the files are absent. */
   fontsDir?: string | null;
+  /** The checkout's short `HEAD` sha when the console started, served as `commit`. */
+  commit: string;
+  /** True when `master` names another commit than `commit`, served as `behindMaster`. */
+  behindMaster: boolean;
+  /**
+   * Starts a detached replacement console on `port`. `POST /api/restart` calls it while the listener
+   * is still open, answers, closes the listener, then calls `exitProcess`.
+   */
+  spawnReplacement: (port: number) => void;
+  exitProcess: () => void;
 }
 
 export interface ConsoleServer {
@@ -174,17 +187,16 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     send(res, status, renderMessage(title, text));
 
   /**
-   * The guards and the verdict: the Origin before the body is read, then the
-   * token, then the fields. The body is a JSON object with the verdict's four
-   * fields plus the token.
+   * The guards for a POST: the Origin before the body is read, then the content type, the JSON
+   * and the token. Returns the body's fields.
    */
-  const decide = async (req: http.IncomingMessage): Promise<FindingVerdictResult> => {
+  const guardedFields = async (req: http.IncomingMessage, what: string): Promise<(name: string) => string> => {
     // The same-origin rule before the body is read: a foreign page gets nothing parsed.
     if (req.headers.origin !== `http://${req.headers.host}`) {
       throw new Refused(403, `Refused: the request's Origin (${req.headers.origin ?? 'none'}) is not this console.`);
     }
     if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) {
-      throw new Refused(415, 'Refused: the verdict posts application/json.');
+      throw new Refused(415, `Refused: ${what} posts application/json.`);
     }
     const raw = await readBody(req);
     let parsed: unknown;
@@ -198,6 +210,12 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     if (!tokensMatch(fields('token'), token)) {
       throw new Refused(403, "Refused: the request does not carry this console's token. Reload /findings and try again.");
     }
+    return fields;
+  };
+
+  /** The verdict: the guards, then the fields. The body is a JSON object with the verdict's four fields plus the token. */
+  const decide = async (req: http.IncomingMessage): Promise<FindingVerdictResult> => {
+    const fields = await guardedFields(req, 'the verdict');
     const site = fields('site');
     const key = fields('key');
     const status = fields('verdict');
@@ -221,6 +239,7 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     res.end(JSON.stringify(body));
   };
 
+  let listenPort = options.port;
   const route = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     // Before the routing, for every path: one rule, so a page added later cannot be the one that forgot it.
     if (!hostIsAllowed(req.headers.host, LOOPBACK_HOSTS)) {
@@ -246,12 +265,26 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
       if (method !== 'GET') throw new Refused(405, 'The findings endpoint takes GET only.');
       // The token rides here for the client page to post a verdict. A page on another origin cannot read
       // this response (no CORS headers), and the Host check above stops a rebound name.
-      sendJson(res, 200, { ...(await options.loadFindings()), token });
+      sendJson(res, 200, { ...(await options.loadFindings()), token, commit: options.commit, behindMaster: options.behindMaster });
       return;
     }
     if (url.pathname === '/api/verdict') {
       if (method !== 'POST') throw new Refused(405, 'The verdict endpoint takes POST only.');
       sendJson(res, 200, await decide(req));
+      return;
+    }
+    if (url.pathname === '/api/restart') {
+      if (method !== 'POST') throw new Refused(405, 'The restart endpoint takes POST only.');
+      await guardedFields(req, 'the restart');
+      // The replacement starts while this listener is still open; it waits for the port. The answer goes out
+      // first, then the listener closes and the process exits.
+      options.spawnReplacement(listenPort);
+      res.once('finish', () => {
+        void closeServer()
+          .catch(() => {})
+          .finally(() => options.exitProcess());
+      });
+      sendJson(res, 200, { restarting: true });
       return;
     }
     const font = /^\/fonts\/([a-z0-9-]+\.woff2)$/.exec(url.pathname)?.[1];
@@ -263,6 +296,12 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     }
     message(res, 404, 'not found', `Nothing at ${url.pathname}. The findings page is /findings.`);
   };
+
+  const closeServer = () =>
+    new Promise<void>((resolve, reject) => {
+      server.closeAllConnections();
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
 
   const server = http.createServer((req, res) => {
     route(req, res).catch((err: unknown) => {
@@ -288,15 +327,7 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
   });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : options.port;
+  listenPort = port;
 
-  return {
-    port,
-    url: `http://${CONSOLE_HOST}:${port}/findings`,
-    token,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.closeAllConnections();
-        server.close((err) => (err ? reject(err) : resolve()));
-      }),
-  };
+  return { port, url: `http://${CONSOLE_HOST}:${port}/findings`, token, close: closeServer };
 }

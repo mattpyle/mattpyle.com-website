@@ -164,6 +164,17 @@ button, input, textarea { font: inherit; color: inherit; }
 .refresh:hover { background: var(--tint); color: var(--ink); }
 .refresh[aria-busy="true"] { cursor: progress; }
 .refresh[aria-busy="true"] svg { animation: spin 900ms linear infinite; }
+.head-tools { display: flex; align-items: center; gap: 4px; }
+.app-menu { position: relative; }
+.menu-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0;
+  border: 0; border-radius: 999px; background: none; color: var(--ink-2); cursor: pointer;
+}
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { background: var(--tint); color: var(--ink); }
+.menu-app { min-width: 260px; white-space: normal; }
+.menu-note { margin: 0; padding: 8px 10px; color: var(--ink-2); }
+.menu-note code { color: var(--ink); }
+.menu-error { color: var(--ink); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- The toolbar: status tabs at the left; drift, site, priority, sort and search at the right ---------- */

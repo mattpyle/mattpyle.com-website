@@ -1,4 +1,6 @@
 import fs from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import {
   Client,
@@ -32,6 +34,7 @@ import {
   SCORECARD_RUNS_PATH,
   STEWARD_TIMEZONE,
   REPO_ROOT,
+  STEWARD_DIR,
   SITE_DIR,
   postRelPath,
   workflowIdFor,
@@ -2242,6 +2245,25 @@ async function openInBrowser(url: string): Promise<void> {
   child.unref();
 }
 
+/**
+ * Starts a detached `steward console --no-open --port <port>` for `POST /api/restart`. It goes through the
+ * shim, so it runs whatever the checkout holds now, and its output appends to the launcher's log.
+ */
+function spawnReplacementConsole(port: number): void {
+  const cacheDir = path.join(STEWARD_DIR, '.cache');
+  fsSync.mkdirSync(cacheDir, { recursive: true });
+  const log = fsSync.openSync(path.join(cacheDir, 'console.log'), 'a');
+  const child = spawn(process.execPath, [path.join(STEWARD_DIR, 'scripts', 'steward.mjs'), 'console', '--no-open', '--port', String(port)], {
+    cwd: STEWARD_DIR,
+    detached: true,
+    stdio: ['ignore', log, log],
+    windowsHide: true,
+    env: { ...process.env, STEWARD_CONSOLE_REPLACES: '1' },
+  });
+  child.unref();
+  fsSync.closeSync(log);
+}
+
 program
   .command('console')
   .option('--port <n>', 'port on 127.0.0.1', String(8766))
@@ -2254,23 +2276,43 @@ program
     if (!Number.isInteger(port) || port < 0 || port > 65535) fail(`--port ${opts.port} is not a port number.`);
     const { startConsoleServer } = await import('./console/server.js');
     const { createFindingsLoader } = await import('./console/findings-model.js');
+    const { readConsoleCommit } = await import('./console/commit.js');
+    const { commit, behindMaster } = await readConsoleCommit(REPO_ROOT);
     const c = await client();
     const loader = createFindingsLoader({ repo: ARGUS_REPO, ghJson: (p) => gh(p), client: c });
+    const options = {
+      port,
+      loadFindings: () => loader.load(),
+      sendVerdict: (request: Parameters<typeof sendVerdict>[0]) => sendVerdict(request, { client: c }),
+      timeZone: STEWARD_TIMEZONE,
+      webUi: WEB_UI,
+      namespace: NAMESPACE,
+      fontsDir: path.join(REPO_ROOT, 'public', 'fonts'),
+      commit,
+      behindMaster,
+      spawnReplacement: spawnReplacementConsole,
+      exitProcess: () => void c.connection.close().finally(() => process.exit(0)),
+    };
     let server;
     try {
-      server = await startConsoleServer({
-        port,
-        loadFindings: () => loader.load(),
-        sendVerdict: (request) => sendVerdict(request, { client: c }),
-        timeZone: STEWARD_TIMEZONE,
-        webUi: WEB_UI,
-        namespace: NAMESPACE,
-        fontsDir: path.join(REPO_ROOT, 'public', 'fonts'),
-      });
+      server = await startConsoleServer(options);
     } catch (err) {
-      await c.connection.close();
-      if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') fail(`Port ${port} is in use. Pass --port.`);
-      throw err;
+      // A replacement started by POST /api/restart reaches the port before the old process has released it.
+      let last = err;
+      for (let waited = 0; process.env.STEWARD_CONSOLE_REPLACES && (last as NodeJS.ErrnoException).code === 'EADDRINUSE' && waited < 15_000; waited += 250) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        try {
+          server = await startConsoleServer(options);
+          break;
+        } catch (retry) {
+          last = retry;
+        }
+      }
+      if (!server) {
+        await c.connection.close();
+        if ((last as NodeJS.ErrnoException).code === 'EADDRINUSE') fail(`Port ${port} is in use. Pass --port.`);
+        throw last;
+      }
     }
     console.log('');
     console.log(`  ${BOLD}steward console${RESET}  ${server.url}`);
