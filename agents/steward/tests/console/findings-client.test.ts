@@ -367,3 +367,42 @@ test('the site label is plain in the facet menu and the panel header, and hidden
   assert.ok(!v.facets.includes('class="lbl"'));
   assert.ok(v.doc.includes('<span>mattpyle.com</span>'));
 });
+
+test('the header menu is empty while closed; open, it names the commit and offers the restart', () => {
+  const state = F.createState();
+  const model = { commit: 'abc1234', behindMaster: false } as unknown as FindingsModel;
+  assert.equal(F.menuHtml(model, state), '');
+  state.appMenu = true;
+  const html = F.menuHtml(model, state);
+  assert.match(textOf(html), /Running commit abc1234/);
+  assert.match(html, /data-act="restart"/);
+  assert.match(textOf(html), /Restart console/);
+  assert.doesNotMatch(textOf(html), /steward update/);
+});
+
+test('the menu says the restart does not pull only when master has moved on', () => {
+  const state = F.createState();
+  state.appMenu = true;
+  const behind = F.menuHtml({ commit: 'abc1234', behindMaster: true }, state);
+  assert.match(textOf(behind), /Restart does not pull: run steward update first/);
+  assert.equal(F.view({ sites: [], failedVerifies: [], commit: 'abc1234', behindMaster: true }, state, { timeZone: 'America/Vancouver', webUi: '', namespace: '', now: new Date() }).menu, behind);
+});
+
+test('while restarting the menu shows Restarting in place of the item; a failure keeps the item and says why', () => {
+  const state = F.createState();
+  state.appMenu = true;
+  state.restart = 'restarting';
+  const busy = F.menuHtml({ commit: 'abc1234' }, state);
+  assert.match(textOf(busy), /Restarting/);
+  assert.doesNotMatch(busy, /data-act="restart"/);
+  state.restart = 'The restart did not start: nope.';
+  const failed = F.menuHtml({ commit: 'abc1234' }, state);
+  assert.match(failed, /data-act="restart"/);
+  assert.match(textOf(failed), /did not start: nope/);
+});
+
+test('a model with no commit reads as unknown', () => {
+  const state = F.createState();
+  state.appMenu = true;
+  assert.match(textOf(F.menuHtml(null, state)), /Running commit unknown/);
+});

@@ -9,6 +9,7 @@ import { Client } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { consoleRequest } from '../helpers/console-request.js';
+import { CONSOLE_RESTART_STUBS } from '../helpers/console-options.js';
 import { startConsoleServer } from '../../src/console/server.js';
 import { sendFindingVerdict } from '../../src/lib/finding-verdict.js';
 import { findingWorkflowId, type FindingVerdict } from '../../src/lib/findings.js';
@@ -101,6 +102,7 @@ test('steward finding reject and the console reject button send the same verdict
         // 2. The button, through the console's own POST handler.
         const server = await startConsoleServer({
           port: 0,
+          ...CONSOLE_RESTART_STUBS,
           loadFindings: async () => EMPTY_MODEL,
           sendVerdict: (request) => sendFindingVerdict(request, { client }),
           timeZone: 'America/Vancouver',

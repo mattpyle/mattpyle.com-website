@@ -28,6 +28,8 @@ let server: ConsoleServer;
 let sent: FindingVerdictRequest[] = [];
 let refuseNext: string | null = null;
 let failLoad: Error | null = null;
+const events: string[] = [];
+const spawned: number[] = [];
 
 before(async () => {
   server = await startConsoleServer({
@@ -60,6 +62,14 @@ before(async () => {
     timeZone: 'America/Vancouver',
     webUi: 'https://web.example',
     namespace: 'ns.test',
+    commit: 'abc1234',
+    behindMaster: true,
+    spawnReplacement: (port) => {
+      spawned.push(port);
+      // The listener is still open when the replacement starts.
+      events.push('spawn');
+    },
+    exitProcess: () => events.push('exit'),
   });
 });
 
@@ -312,4 +322,30 @@ test('the verdict endpoint takes POST only, and an unknown path is a 404', async
   assert.equal((await consoleRequest({ port: server.port, path: '/api/verdict' })).status, 405);
   assert.equal((await consoleRequest({ port: server.port, path: '/fonts/../../.env' })).status, 404);
   assert.equal((await consoleRequest({ port: server.port, path: '/elsewhere' })).status, 404);
+});
+
+test('GET /api/findings serves the running commit and whether master has moved on', async () => {
+  const res = await consoleRequest({ port: server.port, path: '/api/findings' });
+  const body = JSON.parse(res.body);
+  assert.equal(body.commit, 'abc1234');
+  assert.equal(body.behindMaster, true);
+});
+
+test('the page has one menu button beside Refresh and loads nothing else new', async () => {
+  const res = await consoleRequest({ port: server.port, path: '/findings' });
+  assert.match(res.body, /class="menu-btn"[^>]*aria-haspopup="menu"/);
+  assert.match(res.body, /class="head-tools"/);
+});
+
+test('POST /api/restart refuses GET, a foreign Origin, a missing Origin and a missing token, and starts nothing', async () => {
+  const restart = (extra: Omit<Parameters<typeof consoleRequest>[0], 'port' | 'path'>) => consoleRequest({ port: server.port, path: '/api/restart', ...extra });
+  assert.equal((await restart({})).status, 405);
+  assert.equal((await restart({ method: 'POST', origin: 'http://evil.example', json: { token: server.token } })).status, 403);
+  assert.equal((await restart({ method: 'POST', json: { token: server.token } })).status, 403);
+  assert.equal((await restart({ method: 'POST', origin: origin(), json: {} })).status, 403);
+  assert.equal((await restart({ method: 'POST', origin: origin(), json: { token: 'wrong' } })).status, 403);
+  assert.deepEqual(spawned, []);
+  assert.deepEqual(events, []);
+  // The console is still up.
+  assert.equal((await consoleRequest({ port: server.port, path: '/api/findings' })).status, 200);
 });

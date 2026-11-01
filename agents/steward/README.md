@@ -183,12 +183,12 @@ steward finding verify <key>     # fixing or reopened finding to resolved or reo
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
-steward console                  # findings page on 127.0.0.1: a static page over GET /api/findings that filters and sorts every finding, opens one beside the list, and approves or rejects through POST /api/verdict (JSON only; the page has no form)
+steward console                  # findings page on 127.0.0.1: a static page over GET /api/findings that filters and sorts every finding, opens one beside the list, and approves or rejects through POST /api/verdict (JSON only; the page has no form). A header menu shows the running commit and restarts the console onto the checkout's current code (POST /api/restart); the restart does not pull, `steward update` does
 steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
 steward update                   # after a merge: pull master in the main checkout, restart the worker
 ```
 
-`steward <verb> --help` prints the real options for each. `agents/steward/console.cmd` starts the console if it is not running and opens the findings page; a desktop shortcut to it gives one click.
+`steward <verb> --help` prints the real options for each. `agents/steward/console.cmd` starts the console if it is not running and opens the findings page; when a console is running on an older commit than `master`, it replaces that console first. A desktop shortcut to it gives one click.
 
 ### Updating the local worker
 

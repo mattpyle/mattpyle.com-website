@@ -84,6 +84,8 @@
   function createState() {
     return {
       status: 'proposed', site: 'all', pri: 'all', sort: 'priority', drift: false, q: '', menu: null,
+      appMenu: false, // the header's menu
+      restart: null, // null, 'restarting', or the sentence a failed restart left
       current: null, // the open row's id, site/key
       decided: {}, // id -> { status, reason, at, result }: verdicts sent from this page since the last load
       foot: { error: null, sending: false, reasonError: false },
@@ -371,6 +373,19 @@
     return '';
   }
 
+  // ---------- The header menu: the running commit and a restart ----------
+
+  // Empty while the menu is closed. The restart never pulls, so the note shows only when master has moved on.
+  function menuHtml(model, state) {
+    if (!state.appMenu) return '';
+    const commit = model && model.commit ? model.commit : 'unknown';
+    const note = model && model.behindMaster ? '<p class="menu-note">master has moved on. Restart does not pull: run <code>steward update</code> first.</p>' : '';
+    const action = state.restart === 'restarting'
+      ? '<p class="menu-note" role="status">Restarting</p>'
+      : `<button class="menu-item" type="button" role="menuitem" data-act="restart"><span>Restart console</span></button>${state.restart ? `<p class="menu-note menu-error" role="alert">${esc(state.restart)}</p>` : ''}`;
+    return `<div class="menu menu-app" role="menu"><p class="menu-note">Running commit <code>${esc(commit)}</code></p>${note}${action}</div>`;
+  }
+
   // ---------- The whole view ----------
 
   function view(model, state, options) {
@@ -389,6 +404,7 @@
       list: renderSignals(model, state, link, c) + renderList(rows, state, c, now),
       doc: current ? renderDoc(current, state, c, link) : '',
       foot,
+      menu: menuHtml(model, state),
     };
   }
 
@@ -405,7 +421,7 @@
     return r ? idOf(r) : null;
   }
 
-  const api = { STATUSES, SITES, rowsOf, createState, visible, view, firstProposed, nextProposed, loadFailed, clock, esc };
+  const api = { STATUSES, SITES, rowsOf, createState, visible, view, firstProposed, nextProposed, loadFailed, clock, esc, menuHtml };
   globalThis.StewardFindings = api;
 
   if (typeof document === 'undefined' || !document.querySelector('.app')) return;
@@ -425,7 +441,7 @@
 
   const el = {
     statuses: $('.statuses'), facets: $('.facets'), groups: $('.groups'), doc: $('.doc'), foot: $('.foot'),
-    search: $('.search'), input: $('.search input'), refresh: $('.refresh'), age: $('[data-sort-by="age"]'),
+    search: $('.search'), input: $('.search input'), refresh: $('.refresh'), menuBtn: $('.menu-btn'), menuPop: $('.app-menu-pop'), age: $('[data-sort-by="age"]'),
   };
 
   function paint(parts) {
@@ -436,6 +452,7 @@
     if (parts.includes('controls')) { el.statuses.innerHTML = v.statuses; el.facets.innerHTML = v.facets; }
     if (parts.includes('list')) el.groups.innerHTML = v.list;
     if (parts.includes('doc')) { el.doc.innerHTML = v.doc; el.doc.scrollTop = 0; }
+    if (parts.includes('menu')) { el.menuPop.innerHTML = v.menu; el.menuBtn.setAttribute('aria-expanded', String(state.appMenu)); }
     if (parts.includes('foot')) { el.foot.innerHTML = v.foot; el.foot.hidden = !v.foot; }
   }
   const render = () => paint(['controls', 'list']);
@@ -464,7 +481,7 @@
       const rows = rowsOf(model);
       if (first) state.current = firstProposed(model, state);
       else if (!rows.some((r) => idOf(r) === state.current)) state.current = null;
-      paint(['controls', 'list', 'doc', 'foot']);
+      paint(['controls', 'list', 'doc', 'foot', 'menu']);
     } catch (err) {
       const gone = loadFailed(state);
       model = null;
@@ -581,6 +598,48 @@
   el.input.addEventListener('input', () => { state.q = el.input.value; paint(['list']); });
   $('.close').addEventListener('click', close);
   el.refresh.addEventListener('click', () => load());
+
+  // The header menu: the running commit and Restart console. The restart posts, then waits for a process
+  // with a new token (each process draws its own) to answer /api/findings, then reloads the page.
+  function setAppMenu(on) {
+    state.appMenu = on;
+    paint(['menu']);
+    if (on) { const first = el.menuPop.querySelector('.menu-item'); if (first) first.focus(); }
+  }
+  async function restart() {
+    const oldToken = token;
+    state.restart = 'restarting';
+    paint(['menu']);
+    try {
+      const res = await fetch('/api/restart', {
+        method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ token }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `The console answered ${res.status}.`);
+    } catch (err) {
+      state.restart = `The restart did not start: ${err.message}`;
+      paint(['menu']);
+      return;
+    }
+    for (let waited = 0; waited < 60000; waited += 500) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      try {
+        const res = await fetch('/api/findings', { cache: 'no-store', headers: { accept: 'application/json' } });
+        const data = res.ok ? await res.json() : null;
+        if (data && data.token && data.token !== oldToken) { location.reload(); return; }
+      } catch (err) { /* the old process has closed and the new one is not listening yet */ }
+    }
+    state.restart = 'The console did not come back. See agents/steward/.cache/console.log.';
+    paint(['menu']);
+  }
+  el.menuBtn.addEventListener('click', () => setAppMenu(!state.appMenu));
+  el.menuPop.addEventListener('click', (e) => { if (e.target.closest('[data-act="restart"]')) restart(); });
+  document.addEventListener('click', (e) => {
+    if (state.appMenu && state.restart !== 'restarting' && !e.target.closest('.app-menu')) setAppMenu(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.appMenu && state.restart !== 'restarting') { setAppMenu(false); el.menuBtn.focus(); }
+  });
   // The Age heading sorts: oldest first, then newest first.
   el.age.addEventListener('click', () => { state.sort = state.sort === 'oldest' ? 'newest' : 'oldest'; render(); });
 
