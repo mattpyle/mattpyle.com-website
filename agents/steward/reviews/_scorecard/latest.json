@@ -1,6 +1,6 @@
 {
-  "iso": "2026-10-30",
-  "timestamp": "2026-10-30T03:34:23-07:00",
+  "iso": "2026-10-31",
+  "timestamp": "2026-10-31T03:34:43-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-10-30",
+  "id": "2026-10-31",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -189,8 +189,8 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 75,
-          "measured": 3727
+          "share": 76,
+          "measured": 3747
         },
         "markdown": {
           "share": 80,
@@ -232,7 +232,7 @@
       "readingBudget": {
         "text": {
           "share": 76,
-          "measured": 3834
+          "measured": 3854
         },
         "markdown": {
           "share": 80,
@@ -252,8 +252,8 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 60,
-          "measured": 2312
+          "share": 61,
+          "measured": 2332
         },
         "markdown": {
           "share": 63,
@@ -295,7 +295,7 @@
       "readingBudget": {
         "text": {
           "share": 62,
-          "measured": 2395
+          "measured": 2415
         },
         "markdown": {
           "share": 60,
@@ -316,7 +316,7 @@
       "readingBudget": {
         "text": {
           "share": 70,
-          "measured": 3028
+          "measured": 3048
         },
         "markdown": {
           "share": 75,
@@ -358,7 +358,7 @@
       "readingBudget": {
         "text": {
           "share": 54,
-          "measured": 1980
+          "measured": 2000
         },
         "markdown": {
           "share": 52,
@@ -379,7 +379,7 @@
       "readingBudget": {
         "text": {
           "share": 70,
-          "measured": 3067
+          "measured": 3087
         },
         "markdown": {
           "share": 75,
@@ -399,8 +399,8 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 60,
-          "measured": 2313
+          "share": 61,
+          "measured": 2333
         },
         "markdown": {
           "share": 66,
@@ -421,7 +421,7 @@
       "readingBudget": {
         "text": {
           "share": 61,
-          "measured": 2358
+          "measured": 2378
         },
         "markdown": {
           "share": 66,
@@ -442,7 +442,7 @@
       "readingBudget": {
         "text": {
           "share": 76,
-          "measured": 3766
+          "measured": 3786
         },
         "markdown": {
           "share": 82,
@@ -641,7 +641,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 1d ago (<= 7d threshold)",
+  "reason": "unchanged, published 2d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-10-30"
+  "archiveId": "2026-10-31"
 }
