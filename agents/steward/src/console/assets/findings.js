@@ -624,7 +624,7 @@
         if (data && data.token && data.token !== oldToken) { location.reload(); return; }
       } catch (err) { /* the old process has closed and the new one is not listening yet */ }
     }
-    state.restart = 'The console did not come back. See agents/steward/.cache/console.log.';
+    state.restart = 'The console did not come back. See agents/steward/.cache/console-restart.log.';
     paint(['menu']);
   }
   el.menuBtn.addEventListener('click', () => setAppMenu(!state.appMenu));
