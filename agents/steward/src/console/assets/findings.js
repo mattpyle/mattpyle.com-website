@@ -415,13 +415,7 @@
     return { open: false, doc: '', foot: '' };
   }
 
-  // The first finding to open on load: the top of the Proposed list.
-  function firstProposed(model, state) {
-    const r = visible(rowsOf(model), { ...state, status: 'proposed', pri: 'all', drift: false, q: '' })[0];
-    return r ? idOf(r) : null;
-  }
-
-  const api = { STATUSES, SITES, rowsOf, createState, visible, view, firstProposed, nextProposed, loadFailed, clock, esc, menuHtml };
+  const api = { STATUSES, SITES, rowsOf, createState, visible, view, nextProposed, loadFailed, clock, esc, menuHtml };
   globalThis.StewardFindings = api;
 
   if (typeof document === 'undefined' || !document.querySelector('.app')) return;
@@ -474,13 +468,12 @@
       const res = await fetch('/api/findings', { cache: 'no-store', headers: { accept: 'application/json' } });
       const data = await res.json().catch(() => ({ error: `The console answered ${res.status}.` }));
       if (!res.ok) throw new Error(data.error || `The console answered ${res.status}.`);
-      const first = model === null;
       model = data;
       token = data.token;
       state.decided = {};
       const rows = rowsOf(model);
-      if (first) state.current = firstProposed(model, state);
-      else if (!rows.some((r) => idOf(r) === state.current)) state.current = null;
+      // The page opens on the list, with no finding selected and the panel closed.
+      if (!rows.some((r) => idOf(r) === state.current)) state.current = null;
       paint(['controls', 'list', 'doc', 'foot', 'menu']);
     } catch (err) {
       const gone = loadFailed(state);

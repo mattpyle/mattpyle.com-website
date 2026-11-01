@@ -280,9 +280,10 @@ test('an open menu lists its choices with counts and ticks the current one', () 
   assert.match(sort, /aria-checked="true" data-sort="priority">Priority/);
 });
 
-test('the page opens on the top of the Proposed list, and Next skips a decided finding', () => {
+test('a new page has no finding selected, and Next skips a decided finding', () => {
   const state = F.createState();
-  assert.equal(F.firstProposed(MODEL, state), `${MP}/ux-short--about`);
+  assert.equal(state.current, null);
+  assert.equal(F.view(MODEL, state, OPTIONS).open, false);
   const rows = F.rowsOf(MODEL);
   const first = rows.find((r: FindingRow) => r.key === 'ux-short--about');
   state.decided[`${TI}/ti-proposed--docs`] = { status: 'rejected' };
