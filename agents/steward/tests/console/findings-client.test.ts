@@ -224,7 +224,8 @@ test('drift: a flag on the row, a chip with the count, and a box in the finding;
   assert.match(v.doc, /<div class="drift-box" role="note">.*<li>INDEX\.md says approved, the file says proposed<\/li><li>approved with no open run<\/li>/s);
   const quiet = v.list.split('<li>').find((li: string) => li.includes('ti-quiet--home')) ?? '';
   assert.doesNotMatch(quiet, /class="drift"/);
-  assert.equal(render().v.facets.includes('drift-chip'), false, 'no chip when nothing in view drifts');
+  assert.match(render().v.facets, /Drift<span class="count">1</, 'the chip counts drift in every status, so it shows on the Proposed tab');
+  assert.equal(render({ site: TI }).v.facets.includes('drift-chip'), false, 'no chip when nothing in the site drifts');
   assert.deepEqual(ids(render({ status: 'all', drift: true }).v.list), [`${MP}/ux-drift--feed`]);
 });
 

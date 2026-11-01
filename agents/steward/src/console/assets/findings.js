@@ -219,14 +219,13 @@
 
   function renderFacets(model, rows, state) {
     const sites = (model.sites || []).map((s) => s.site);
-    const anyStatus = (s) => state.status === 'all' || s === state.status;
     const siteOpts = [['all', 'All sites', count(rows, state, { site: () => true })],
       ...sites.map((x) => [x, esc(siteName(x)), count(rows, state, { site: (r) => r.site === x })])];
     const priOpts = [['all', 'All priorities', count(rows, state, { pri: () => true })],
       ...LEVELS.map((p) => [p, priHTML(p), count(rows, state, { pri: (r) => r.priority === p })])];
     const sortOpts = Object.entries(SORTS).map(([v, w]) => [v, w, '']);
     const statusOpts = [...knownStatuses(rows), 'all'].map((x) => [x, x === 'all' ? 'All' : esc(WORD[x] || x), count(rows, state, { status: (y) => x === 'all' || y === x })]);
-    const drifting = rows.filter((r) => r.drift.length > 0 && inSite(state)(r) && anyStatus(r.status)).length + signalCount(model, state);
+    const drifting = rows.filter((r) => r.drift.length > 0 && inSite(state)(r)).length + signalCount(model, state);
     const siteWord = (v) => siteHTML(v, { alwaysShowLabel: true });
     return facetHTML(state, 'status', 'All', statusOpts, state.status, (v) => `${esc(WORD[v] || v)}<span class="count">${count(rows, state, { status: (y) => y === v })}</span>`)
       + (drifting ? `<button class="drift-chip" type="button" data-act="drift" aria-pressed="${state.drift}" title="Findings whose index, file and run disagree, and runs no finding accounts for">${DRIFT_ICON}Drift<span class="count">${drifting}</span></button>` : '')
@@ -546,7 +545,14 @@
       render();
       return;
     }
-    if (e.target.closest('[data-act="drift"]')) { state.drift = !state.drift; render(); return; }
+    if (e.target.closest('[data-act="drift"]')) {
+      // The chip counts drift in every status, so turning it on shows them all; turning it off returns to the tab.
+      state.drift = !state.drift;
+      if (state.drift) { state.statusBeforeDrift = state.status; state.status = 'all'; }
+      else if (state.statusBeforeDrift) { state.status = state.statusBeforeDrift; state.statusBeforeDrift = null; }
+      render();
+      return;
+    }
     const btn = e.target.closest('.facet-btn');
     if (btn) {
       const name = btn.parentElement.dataset.facet;
