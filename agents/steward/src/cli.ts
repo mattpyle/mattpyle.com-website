@@ -2247,7 +2247,7 @@ program
   .option('--port <n>', 'port on 127.0.0.1', String(8766))
   .option('--no-open', 'print the URL without opening the browser')
   .description(
-    'Serve the findings page on 127.0.0.1: every finding with its step, PR and last verification, and approve or reject',
+    'Serve the findings page on 127.0.0.1: every finding, filtered and sorted, opened beside the list to approve or reject',
   )
   .action(async (opts: { port: string; open: boolean }) => {
     const port = Number(opts.port);
@@ -2262,9 +2262,8 @@ program
         port,
         loadFindings: () => loader.load(),
         sendVerdict: (request) => sendVerdict(request, { client: c }),
-        page: { timeZone: STEWARD_TIMEZONE, webUi: WEB_UI, namespace: NAMESPACE },
+        timeZone: STEWARD_TIMEZONE,
         fontsDir: path.join(REPO_ROOT, 'public', 'fonts'),
-        faviconFile: path.join(REPO_ROOT, 'public', 'favicon.svg'),
       });
     } catch (err) {
       await c.connection.close();

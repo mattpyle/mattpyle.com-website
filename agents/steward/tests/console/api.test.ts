@@ -121,7 +121,7 @@ before(async () => {
         webUrl: 'https://cloud.temporal.io/x',
       };
     },
-    page: { timeZone: 'America/Vancouver', webUi: 'https://cloud.temporal.io', namespace: 'x' },
+    timeZone: 'America/Vancouver',
   });
 });
 
