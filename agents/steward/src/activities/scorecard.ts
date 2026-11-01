@@ -34,13 +34,13 @@ import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRec
  * Every activity in this file used to be a *local* activity: the run-log was
  * read out of `SITE_DIR`, the publish leg drove git in `WORKTREE_DIR`, and the
  * archive was a `writeFile` under the local reviews directory. That is what pinned
- * the whole scorecard run to Matt's laptop, and therefore what kept the daily
- * Schedule laptop-bound no matter where the Schedule itself lived
+ * the whole scorecard run to Matt's PC, and therefore what kept the daily
+ * Schedule desk-bound no matter where the Schedule itself lived
  * (always-on-audit-worker card, leg 2b).
  *
  * They now read and write the repository through the GitHub API
  * (`lib/github-contents.ts`), so the entire workflow runs on `steward-audit`
- * and finishes end to end on the hosted worker with the laptop off. What the
+ * and finishes end to end on the hosted worker with the PC off. What the
  * activities *mean* is unchanged: same run-log entry, same PR, same archive
  * record, same never-merges-its-own-PR rule.
  *
@@ -278,7 +278,7 @@ export interface PublishedScorecard extends PublishableRun {
  *
  * It is also what lets this activity run on `steward-audit`, which matters more
  * than it sounds: this is step 0.5, *before* the fan-out, so an activity that
- * needs the laptop here parks the run before it measures anything and there is
+ * needs the local machine here parks the run before it measures anything and there is
  * no such thing as a partially-hosted scorecard.
  */
 export async function readPublishedScorecard(): Promise<PublishedScorecard | undefined> {

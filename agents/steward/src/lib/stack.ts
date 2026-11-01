@@ -6,7 +6,7 @@ import { Connection } from '@temporalio/client';
 import {
   IS_TEMPORAL_CLOUD,
   NAMESPACE,
-  LAPTOP_WORKER_QUEUES,
+  LOCAL_WORKER_QUEUES,
   REPO_ROOT,
   TEMPORAL_ADDRESS,
   WEB_UI,
@@ -237,7 +237,7 @@ export async function startStack(): Promise<RunningStack> {
   // steward-heavy" from the moment `worker.ts` gained the audit queue until
   // 2026-08-15, so `steward up` under-reported what it was actually serving —
   // which reads as "the audit queue is hosted-only" and is the opposite of true.
-  console.log(`  starting worker (queues: ${LAPTOP_WORKER_QUEUES.join(', ')})`);
+  console.log(`  starting worker (queues: ${LOCAL_WORKER_QUEUES.join(', ')})`);
   const worker = spawn(binary, args, {
     cwd: stewardDir,
     windowsHide: true,

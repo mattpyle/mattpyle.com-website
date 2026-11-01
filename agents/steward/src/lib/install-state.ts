@@ -7,7 +7,7 @@ import path from 'node:path';
  *
  * `steward update` used to run `npm ci` only when `package-lock.json` differed
  * between the commits on either side of its own pull. A checkout moved forward
- * by any other `git pull` kept a stale `node_modules`: on 2026-10-29 the laptop
+ * by any other `git pull` kept a stale `node_modules`: on 2026-10-29 the local machine
  * ran Lighthouse 13.4.1 against the locked 13.5.0 and scored Agentic Browsing
  * 5/5 where the hosted worker scores 6/6. Both workers poll `steward-audit`, so
  * the public scorecard moved with whichever worker took the task.

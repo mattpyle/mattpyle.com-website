@@ -40,7 +40,7 @@ import { scorecardRunShape, type RunShape } from '../lib/run-health.js';
 // the network and the repository over the GitHub API, so none of them needs a
 // checkout, so all of them can run in a container. That is the whole point: the
 // Schedule moved to Temporal Cloud, where the server never misses a firing, and
-// a firing the laptop has to advance is a run that dies on its execution
+// a firing the local machine has to advance is a run that dies on its execution
 // timeout rather than one that catches up later.
 //
 // The split is still by locality (config.ts's `QUEUE_AUDIT` docblock). What
@@ -212,7 +212,7 @@ const light = {
  *
  * On the audit queue rather than `steward-heavy` since 2026-08-14. It always
  * measured the *live* site rather than the working copy, so the only thing it
- * ever needed from the laptop was a browser, and the hosted image has one.
+ * ever needed from the local machine was a browser, and the hosted image has one.
  */
 const heavy = wf.proxyActivities<Pick<typeof activities, 'auditLiveUrl'>>({
   taskQueue: QUEUE_AUDIT,

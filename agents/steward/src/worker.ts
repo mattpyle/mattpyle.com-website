@@ -4,7 +4,7 @@ import * as activities from './activities/index.js';
 import {
   IS_TEMPORAL_CLOUD,
   NAMESPACE,
-  LAPTOP_WORKER_QUEUES,
+  LOCAL_WORKER_QUEUES,
   REPO_ROOT,
   TEMPORAL_ADDRESS,
   SITE_DIR,
@@ -43,10 +43,10 @@ process.on('unhandledRejection', (reason) => {
 /**
  * One process, every queue but one (spec §3).
  *
- * The laptop worker polls every queue except `steward-findings`, which keeps
+ * The local worker polls every queue except `steward-findings`, which keeps
  * `steward up` a single command. The findings queue is hosted only (design
  * decisions 18 and 29): two workers polling it meant that after every merge an
- * old-code laptop worker could take a hosted run's workflow task and fail it as
+ * old-code local worker could take a hosted run's workflow task and fail it as
  * non-deterministic. The `steward finding` commands reach Temporal through the
  * client and need no worker here.
  *
@@ -57,7 +57,7 @@ process.on('unhandledRejection', (reason) => {
  *
  * `steward-audit-fast` is here for a different reason: it is the queue the site's
  * public `audit_site` tool starts a standalone `auditSiteFast` on, and serving it
- * from the laptop is what lets `npm run dev` against `steward up` exercise the
+ * from the local machine is what lets `npm run dev` against `steward up` exercise the
  * standalone path rather than only the in-function fallback. No concurrency cap
  * and no recycle: this worker is operator-attended and must never exit
  * mid-session.
@@ -70,11 +70,11 @@ async function main() {
 
   const common = { connection, namespace: NAMESPACE, workflowsPath, activities };
 
-  const workers = await Promise.all(LAPTOP_WORKER_QUEUES.map((taskQueue) => Worker.create({ ...common, taskQueue })));
+  const workers = await Promise.all(LOCAL_WORKER_QUEUES.map((taskQueue) => Worker.create({ ...common, taskQueue })));
 
   log.info(
     {
-      queues: LAPTOP_WORKER_QUEUES,
+      queues: LOCAL_WORKER_QUEUES,
       lighthouse,
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,

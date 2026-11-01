@@ -2,7 +2,7 @@
 #
 # One process polling `steward-audit`, with a browser and no checkout of the
 # site. Runs `src/worker-hosted.ts`; `src/worker.ts` — the all-three-queues
-# laptop worker `steward up` starts — is deliberately not what this runs.
+# local worker `steward up` starts — is deliberately not what this runs.
 #
 # THE BUILD CONTEXT IS THE REPO ROOT, NOT THIS DIRECTORY.
 # `agents/steward` is an npm workspace, so its dependency tree is resolved from
@@ -106,7 +106,7 @@ COPY --chown=node:node agents/steward/package.json ./agents/steward/
 # The lockfile pin stays. It is the fallback version and Dependabot's handle;
 # this image no longer depends on it.
 #
-# The root `.npmrc` sets DETECT_CHROMEDRIVER_VERSION for laptop and CI installs.
+# The root `.npmrc` sets DETECT_CHROMEDRIVER_VERSION for local and CI installs.
 # It is not in this image's build context (only the manifests are copied), so
 # the variable on the command above is still what pairs the driver here, and
 # INCLUDE_CHROMIUM is still set only here.

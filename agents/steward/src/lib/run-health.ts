@@ -133,7 +133,7 @@ export function scorecardRunShape(input: ScorecardShapeInput): RunShape {
       summary:
         `Scorecard ${input.iso} completed but its pages were measured by different Lighthouse versions: ${named}. ` +
         'The two workers on steward-audit disagree about the install; run `npm ci` on the one that is stale ' +
-        '(the laptop worker refuses to start on a mismatch, so a worker started before that guard is the likely one). ' +
+        '(the local worker refuses to start on a mismatch, so a worker started before that guard is the likely one). ' +
         'No run-log PR opened; the per-run record is archived.' +
         (base.ok ? '' : ` ${base.summary}`),
     };

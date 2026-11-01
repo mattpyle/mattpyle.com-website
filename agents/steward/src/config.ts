@@ -292,18 +292,18 @@ export { AUDIT_FAST_TASK_QUEUE as QUEUE_AUDIT_FAST } from './lib/agent-audit/dee
 import { AUDIT_FAST_TASK_QUEUE, AUDIT_TASK_QUEUE } from './lib/agent-audit/deep-contract.js';
 
 /**
- * The queues a laptop worker polls. On Temporal Cloud the hosted worker owns the
- * two audit queues, so the laptop polls only the local-file ones: a second poller
+ * The queues a local worker polls. On Temporal Cloud the hosted worker owns the
+ * two audit queues, so the local machine polls only the local-file ones: a second poller
  * runs old code after every audit merge until it restarts. Against the local dev
- * server no hosted worker exists, so the laptop keeps all four. Pure so a test
+ * server no hosted worker exists, so the local machine keeps all four. Pure so a test
  * can pin both cases; the module constant below resolves it once.
  */
-export function laptopWorkerQueues(isCloud: boolean): readonly string[] {
+export function localWorkerQueues(isCloud: boolean): readonly string[] {
   return isCloud ? [QUEUE_LIGHT, QUEUE_HEAVY] : [QUEUE_LIGHT, QUEUE_HEAVY, AUDIT_TASK_QUEUE, AUDIT_FAST_TASK_QUEUE];
 }
 
-/** The queues the laptop worker (`src/worker.ts`) serves. `steward up` prints this list and the worker creates one `Worker` per entry. */
-export const LAPTOP_WORKER_QUEUES: readonly string[] = laptopWorkerQueues(IS_TEMPORAL_CLOUD);
+/** The queues the local worker (`src/worker.ts`) serves. `steward up` prints this list and the worker creates one `Worker` per entry. */
+export const LOCAL_WORKER_QUEUES: readonly string[] = localWorkerQueues(IS_TEMPORAL_CLOUD);
 
 /**
  * How many activities the **hosted** worker runs at once. One, and it is a
@@ -333,7 +333,7 @@ export const LAPTOP_WORKER_QUEUES: readonly string[] = laptopWorkerQueues(IS_TEM
  * activities off, and the failure reads as a wedged Chrome rather than as a
  * setting.
  *
- * Only the hosted worker sets it. `worker.ts` on the laptop is unchanged and
+ * Only the hosted worker sets it. `worker.ts` on the local machine is unchanged and
  * operator-attended; its cross-workflow contention is pre-existing and out of
  * scope here.
  */

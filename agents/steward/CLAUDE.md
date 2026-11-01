@@ -19,11 +19,11 @@ Steward is the editorial agent and audit runner for mattpyle.com, a TypeScript a
 
 1. Temporal Cloud when `TEMPORAL_API_KEY` is set, the local dev server when it is empty. `resolveTemporalConnection` in `src/config.ts` decides for both the CLI and the workers.
 2. The hosted worker is `src/worker-hosted.ts`, built by `agents/steward/Dockerfile` and run as a Railway container. It serves `steward-audit`, `steward-audit-fast` and `steward-findings`, each with a hand-written activity map.
-3. The laptop worker is `src/worker.ts`, started by `steward up` beside the working copy. It serves `steward-light` and `steward-heavy`, and `steward-audit` and `steward-audit-fast` only against the local dev server, where no hosted worker exists.
+3. The local worker is `src/worker.ts`, started by `steward up` beside the working copy. It serves `steward-light` and `steward-heavy`, and `steward-audit` and `steward-audit-fast` only against the local dev server, where no hosted worker exists.
 4. `steward-findings` has the hosted worker alone. `tests/lib/hosted-worker-concurrency.test.ts` pins both queue lists.
 5. The fixer is `claude-code-action`, run by `.github/workflows/claude.yml` on an issue that `openFixIssue` opens. The custom fixer (`fixFindingWorkflow`, `src/activities/fixer.ts`, `src/lib/fixer.ts`) is frozen: it exists so that older lifecycle runs replay.
 
-Some docblocks predate the current split and still say the laptop worker serves every queue: the top of `src/worker-hosted.ts` and the `Dockerfile` header. The README's queue table and the queue test are current.
+Some docblocks predate the current split and still say the local worker serves every queue: the top of `src/worker-hosted.ts` and the `Dockerfile` header. The README's queue table and the queue test are current.
 
 ## Determinism rules
 
@@ -51,7 +51,7 @@ Before changing workflow code:
 
 ## Activities and workers
 
-1. An activity a `steward-findings` workflow schedules must be registered by name in `src/worker-hosted.ts`. Adding one there claims it needs nothing local: no drafts, no checkout, no laptop login. `tests/lib/hosted-worker-concurrency.test.ts` checks the verifier's list.
+1. An activity a `steward-findings` workflow schedules must be registered by name in `src/worker-hosted.ts`. Adding one there claims it needs nothing local: no drafts, no checkout, no local login. `tests/lib/hosted-worker-concurrency.test.ts` checks the verifier's list.
 2. An activity that can launch Chromium joins `BROWSER_ACTIVITY_TYPES` in `src/lib/recycle-policy.ts`. A worker that has run none of them never recycles, so a missing name leaves its memory held.
 
 ## The test suite
