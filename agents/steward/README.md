@@ -188,7 +188,7 @@ steward keys generate            # print a new Web Bot Auth key pair as JWK; wri
 steward update                   # after a merge: pull master in the main checkout, restart the worker
 ```
 
-`steward <verb> --help` prints the real options for each.
+`steward <verb> --help` prints the real options for each. `agents/steward/console.cmd` starts the console if it is not running and opens the findings page; a desktop shortcut to it gives one click.
 
 ### Updating the local worker
 
