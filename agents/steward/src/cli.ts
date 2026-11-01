@@ -2247,12 +2247,19 @@ async function openInBrowser(url: string): Promise<void> {
 
 /**
  * Starts a detached `steward console --no-open --port <port>` for `POST /api/restart`. It goes through the
- * shim, so it runs whatever the checkout holds now, and its output appends to the launcher's log.
+ * shim, so it runs whatever the checkout holds now. Its output goes to `.cache/console-restart.log`, its own
+ * file: the cmd redirect that started this process from the launcher holds `console.log` without write
+ * sharing, so a second open for append fails with EBUSY on Windows (2026-11-01). No log beats no restart.
  */
 function spawnReplacementConsole(port: number): void {
   const cacheDir = path.join(STEWARD_DIR, '.cache');
   fsSync.mkdirSync(cacheDir, { recursive: true });
-  const log = fsSync.openSync(path.join(cacheDir, 'console.log'), 'a');
+  let log: number | 'ignore' = 'ignore';
+  try {
+    log = fsSync.openSync(path.join(cacheDir, 'console-restart.log'), 'a');
+  } catch {
+    log = 'ignore';
+  }
   const child = spawn(process.execPath, [path.join(STEWARD_DIR, 'scripts', 'steward.mjs'), 'console', '--no-open', '--port', String(port)], {
     cwd: STEWARD_DIR,
     detached: true,
@@ -2261,7 +2268,7 @@ function spawnReplacementConsole(port: number): void {
     env: { ...process.env, STEWARD_CONSOLE_REPLACES: '1' },
   });
   child.unref();
-  fsSync.closeSync(log);
+  if (log !== 'ignore') fsSync.closeSync(log);
 }
 
 program
