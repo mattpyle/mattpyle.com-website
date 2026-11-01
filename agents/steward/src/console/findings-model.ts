@@ -75,6 +75,10 @@ export interface FindingRow {
   priority: string | null;
   verdictAt: string | null;
   verdictSource: string | null;
+  /** `first_seen` from the file as YYYY-MM-DD; null when the file has none. */
+  opened: string | null;
+  /** The line's position in INDEX.md from 0, the order Argus wrote them: the fallback for `opened`. */
+  index: number;
   /** `links.pr` from the file, else the run's PR. */
   prUrl: string | null;
   fileMissing: boolean;
@@ -186,13 +190,13 @@ const BRANCH = 'main';
 const PARALLEL = 8;
 const FAILED_VERIFY_DAYS = 7;
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
       const i = next++;
-      out[i] = await fn(items[i]);
+      out[i] = await fn(items[i], i);
     }
   });
   await Promise.all(workers);
@@ -249,7 +253,7 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
         const indexText = await readBlob(shaByPath.get(findingsIndexPath(site)) as string);
         const lines = parseFindingsIndex(indexText);
 
-        const rows = await mapLimit(lines, PARALLEL, async (line): Promise<FindingRow> => {
+        const rows = await mapLimit(lines, PARALLEL, async (line, index): Promise<FindingRow> => {
           const sha = shaByPath.get(findingPath(site, line.key));
           let data: Record<string, unknown> = {};
           let body = '';
@@ -284,6 +288,8 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             priority: str(data.priority),
             verdictAt: str(data.verdict_at),
             verdictSource: str(data.verdict_source),
+            opened: str(data.first_seen)?.slice(0, 10) ?? null,
+            index,
             prUrl: filePr || null,
             fileMissing: !sha,
             run,

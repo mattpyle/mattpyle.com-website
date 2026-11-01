@@ -11,7 +11,14 @@ import {
 } from '../lib/finding-verdict.js';
 import { isFindingSlug } from '../lib/findings.js';
 import type { FindingsModel } from './findings-model.js';
-import { renderFindingsPage, renderMessagePage, renderVerdictResult, type PageOptions } from './findings-page.js';
+import { COPY_SCRIPT } from './copy-script.js';
+import {
+  parseFindingsQuery,
+  renderFindingsPage,
+  renderMessagePage,
+  renderVerdictResult,
+  type PageOptions,
+} from './findings-page.js';
 
 /**
  * `steward console`: a page the Steward CLI serves on 127.0.0.1 while it runs.
@@ -39,9 +46,11 @@ export interface ConsoleServerOptions {
   port: number;
   loadFindings: () => Promise<FindingsModel>;
   sendVerdict: (request: FindingVerdictRequest) => Promise<FindingVerdictResult>;
-  page: Omit<PageOptions, 'token' | 'fonts'>;
+  page: Omit<PageOptions, 'token' | 'fonts' | 'favicon'>;
   /** The site's `public/fonts`; the page falls back to the system stack when the files are absent. */
   fontsDir?: string | null;
+  /** The site's `public/favicon.svg`; the page names no icon when the file is absent. */
+  faviconFile?: string | null;
 }
 
 export interface ConsoleServer {
@@ -70,7 +79,7 @@ const HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'no-store',
   'content-security-policy':
-    "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
   // Not `no-referrer`: under that policy a browser sends `Origin: null` on the page's own form POST,
@@ -111,6 +120,16 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
+async function filePresent(file: string | null | undefined): Promise<boolean> {
+  if (!file) return false;
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function fontsPresent(dir: string | null | undefined): Promise<boolean> {
   if (!dir) return false;
   try {
@@ -124,14 +143,15 @@ async function fontsPresent(dir: string | null | undefined): Promise<boolean> {
 export async function startConsoleServer(options: ConsoleServerOptions): Promise<ConsoleServer> {
   const token = crypto.randomBytes(32).toString('base64url');
   const fonts = await fontsPresent(options.fontsDir);
-  const page: PageOptions = { ...options.page, token, fonts };
+  const favicon = await filePresent(options.faviconFile);
+  const page: PageOptions = { ...options.page, token, fonts, favicon };
 
   const send = (res: http.ServerResponse, status: number, html: string, extra: Record<string, string> = {}) => {
     res.writeHead(status, { ...HEADERS, ...extra });
     res.end(html);
   };
   const message = (res: http.ServerResponse, status: number, title: string, text: string) =>
-    send(res, status, renderMessagePage(title, text, { fonts }));
+    send(res, status, renderMessagePage(title, text, { fonts, favicon }));
 
   const verdict = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     // The same-origin rule before the body is read: a foreign form gets nothing parsed.
@@ -182,7 +202,7 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
       return;
     }
     if (url.pathname === '/findings' && method === 'GET') {
-      send(res, 200, renderFindingsPage(await options.loadFindings(), page));
+      send(res, 200, renderFindingsPage(await options.loadFindings(), page, parseFindingsQuery(url.searchParams)));
       return;
     }
     if (url.pathname === '/findings/verdict') {
@@ -191,6 +211,25 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
         return;
       }
       await verdict(req, res);
+      return;
+    }
+    if (url.pathname === '/console.js' && method === 'GET') {
+      res.writeHead(200, {
+        'content-type': 'text/javascript; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+      });
+      res.end(COPY_SCRIPT);
+      return;
+    }
+    if (url.pathname === '/favicon.svg' && method === 'GET' && favicon) {
+      const bytes = await fs.readFile(options.faviconFile as string);
+      res.writeHead(200, {
+        'content-type': 'image/svg+xml',
+        'cache-control': 'max-age=86400',
+        'x-content-type-options': 'nosniff',
+      });
+      res.end(bytes);
       return;
     }
     const font = /^\/fonts\/([a-z0-9-]+\.woff2)$/.exec(url.pathname)?.[1];

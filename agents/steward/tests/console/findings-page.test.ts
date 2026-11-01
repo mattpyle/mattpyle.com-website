@@ -78,7 +78,12 @@ const INDEX = [
 
 const FILES: Record<string, string> = {
   [`sites/${SITE}/findings/INDEX.md`]: INDEX,
-  [`sites/${SITE}/findings/ux-proposed--about.md`]: finding('ux-proposed--about', 'proposed', 'A proposed <one> & more'),
+  [`sites/${SITE}/findings/ux-proposed--about.md`]: finding(
+    'ux-proposed--about',
+    'proposed',
+    'A proposed <one> & more',
+    'first_seen: 2026-10-27',
+  ),
   [`sites/${SITE}/findings/ux-reopened--about.md`]: finding(
     'ux-reopened--about',
     'reopened',
@@ -183,8 +188,8 @@ test('the page shows the three groups, a drift row, the failed-verify strip and 
   const html = renderFindingsPage(model, PAGE);
 
   // The three groups, in order, with done behind a closed <details>.
-  const verdictAt = html.indexOf('Needs a verdict (2)');
-  const flightAt = html.indexOf('In flight (2)');
+  const verdictAt = html.indexOf('Needs a verdict <span class="n">(2)</span>');
+  const flightAt = html.indexOf('In flight <span class="n">(2)</span>');
   const doneAt = html.indexOf('<details><summary>Done (2)</summary>');
   assert.ok(verdictAt > 0 && flightAt > verdictAt && doneAt > flightAt, 'groups in order');
   assert.doesNotMatch(html, /<details open/);
@@ -213,7 +218,7 @@ test('the page shows the three groups, a drift row, the failed-verify strip and 
   assert.match(html, /<a href="https:\/\/github\.com\/mattpyle\/mattpyle\.com-website\/pull\/500">/);
 
   // The in-flight row carries the step and the last fix error from its state query.
-  assert.match(html, /<span class="label">step<\/span>waiting-fix/);
+  assert.match(html, /<span class="label">step<\/span><div>waiting-fix/);
   assert.match(html, /the issue had no PR after 60 minutes/);
 
   // Forms only on the rows that need a verdict and have a run, each carrying the token.
@@ -225,7 +230,8 @@ test('the page shows the three groups, a drift row, the failed-verify strip and 
   assert.doesNotMatch(html, /A proposed <one>/);
 
   // The counts match INDEX.md and the open-run list.
-  assert.match(html, /6 findings: approved 1 · fixing 1 · proposed 1 · rejected 1 · reopened 1 · resolved 1 · open runs 5/);
+  const counts = /<p class="counts">(.*?)<\/p>/.exec(html)?.[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  assert.equal(counts, '6 findings proposed 1 reopened 1 approved 1 fixing 1 resolved 1 rejected 1 · open runs 5 drift 2');
 });
 
 test('a refresh queries the approved and fixing runs only, and reads GitHub once when nothing changed', async () => {
@@ -234,6 +240,12 @@ test('a refresh queries the approved and fixing runs only, and reads GitHub once
   const loader = createFindingsLoader({ repo: REPO, ghJson: gh.ghJson, client: temporal.client });
 
   const first = await loader.load();
+  // `first_seen` reads as the opened date; a file without one falls back to its INDEX.md position.
+  const proposed = first.sites[0].rows.find((r) => r.key === 'ux-proposed--about');
+  assert.equal(proposed?.opened, '2026-10-27');
+  assert.equal(proposed?.index, 0);
+  assert.equal(first.sites[0].rows.find((r) => r.key === 'ux-rejected--about')?.opened, null);
+  assert.equal(first.sites[0].rows.find((r) => r.key === 'ux-rejected--about')?.index, 5);
   // The approved run is queried; the fixing one has no run; proposed, reopened and resolved are never asked.
   assert.deepEqual(temporal.queried, [`finding/${SITE}/ux-approved--about`]);
   assert.equal(first.cost.stateQueries, 1);
