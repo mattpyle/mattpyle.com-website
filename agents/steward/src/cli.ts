@@ -2264,6 +2264,7 @@ program
         sendVerdict: (request) => sendVerdict(request, { client: c }),
         page: { timeZone: STEWARD_TIMEZONE, webUi: WEB_UI, namespace: NAMESPACE },
         fontsDir: path.join(REPO_ROOT, 'public', 'fonts'),
+        faviconFile: path.join(REPO_ROOT, 'public', 'favicon.svg'),
       });
     } catch (err) {
       await c.connection.close();

@@ -1,5 +1,6 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { consoleRequest } from '../helpers/console-request.js';
 import { startConsoleServer, type ConsoleServer } from '../../src/console/server.js';
 import {
@@ -23,6 +24,9 @@ const MODEL: FindingsModel = {
   failedVerifies: [],
   cost: { treeCalls: 1, blobReads: 0, stateQueries: 0, dispatcherQueries: 0 },
 };
+
+/** The site's own icon, which `steward console` serves. */
+const FAVICON = fileURLToPath(new URL('../../../../public/favicon.svg', import.meta.url));
 
 let server: ConsoleServer;
 let sent: FindingVerdictRequest[] = [];
@@ -50,6 +54,7 @@ before(async () => {
       };
     },
     page: { timeZone: 'America/Vancouver', webUi: 'https://cloud.temporal.io', namespace: 'x' },
+    faviconFile: FAVICON,
   });
 });
 
@@ -217,6 +222,25 @@ test('a verdict for a finding with no open run comes back as the refusal the CLI
   });
   assert.equal(res.status, 409);
   assert.match(res.body, /No open workflow finding\/mattpyle-com\/ux-thing--about/);
+});
+
+test('the copy script and the favicon are served with their types, and the CSP allows them', async () => {
+  const script = await consoleRequest({ port: server.port, path: '/console.js' });
+  assert.equal(script.status, 200);
+  assert.equal(script.headers['content-type'], 'text/javascript; charset=utf-8');
+  assert.match(script.body, /navigator\.clipboard/);
+  const icon = await consoleRequest({ port: server.port, path: '/favicon.svg' });
+  assert.equal(icon.status, 200);
+  assert.equal(icon.headers['content-type'], 'image/svg+xml');
+  assert.match(icon.body, /<svg/);
+  const page = await consoleRequest({ port: server.port, path: '/findings?site=x&sort=sideways' });
+  assert.equal(page.status, 200);
+  const csp = String(page.headers['content-security-policy']);
+  assert.match(csp, /script-src 'self'/);
+  assert.match(csp, /img-src 'self'/);
+  assert.doesNotMatch(csp, /unsafe-inline'[^;]*;\s*script|script-src[^;]*unsafe/);
+  assert.match(page.body, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
+  assert.equal((await consoleRequest({ port: server.port, path: '/console.js', host: 'evil.example' })).status, 403);
 });
 
 test('the verdict endpoint takes POST only, and an unknown path is a 404', async () => {
