@@ -1,6 +1,6 @@
 @echo off
 rem Open the Steward console findings page. Start the console if it is not running, then open the page.
-rem When the port is busy, compare the running console's commit (GET /api/findings) with master's in this checkout.
+rem When the port is busy, compare the running console's commit (GET /api/commit) with master's in this checkout.
 rem If they differ, stop the console that owns the port, log one line to .cache\console.log naming both commits,
 rem and start a fresh one. If they match, or the commit cannot be read, open the page as it is.
 rem Desktop shortcut: right-click console.cmd, Create shortcut, drag the shortcut to the desktop.
@@ -23,7 +23,7 @@ if errorlevel 1 goto start
 rem The port is busy. Compare the running console's commit with master's. A console from before the commit field
 rem answers "none" and counts as stale. A console that does not answer, or no git, leaves it running as it is.
 set RUNNING=
-for /f "delims=" %%c in ('powershell -NoProfile -Command "try { $m = Invoke-RestMethod -TimeoutSec 30 %URL%/api/findings; if ($m.commit) { $m.commit } else { echo none } } catch { }"') do set RUNNING=%%c
+for /f "delims=" %%c in ('powershell -NoProfile -Command "try { $m = Invoke-RestMethod -TimeoutSec 30 %URL%/api/commit; if ($m.commit) { $m.commit } else { echo none } } catch { }"') do set RUNNING=%%c
 set MASTER=
 for /f "delims=" %%c in ('git rev-parse --short master 2^>nul') do set MASTER=%%c
 if "%RUNNING%"=="" goto running

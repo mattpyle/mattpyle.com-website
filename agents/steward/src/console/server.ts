@@ -44,7 +44,8 @@ import { renderMessage } from './message-page.js';
  * `cost` included, and `POST /api/verdict` answers the verdict result as JSON. Both sit behind
  * the same Host check; the POST takes `application/json` only, with the Origin and token checks,
  * and a refusal comes back as `{ error }` with its status code. `GET /api/findings` also carries
- * `commit` and `behindMaster`, which the launcher and the page's menu read. `POST /api/restart`
+ * `commit` and `behindMaster`, which the page's menu reads. `GET /api/commit` answers `{ commit, behindMaster, token }`
+ * under the Host check alone, with no model load: the launcher and the restart poll read it. `POST /api/restart`
  * runs under the same guards: it starts a replacement console, answers `{ restarting: true }`, closes
  * the listener and exits, so the new process runs whatever the checkout holds. An unexpected failure answers a
  * fixed sentence and writes the real error to this process's stderr.
@@ -103,6 +104,9 @@ const ASSETS_DIR = new URL('./assets/', import.meta.url);
 
 /** Paths that answer with a redirect to the findings page. */
 const REDIRECTS = new Set(['/', '/finding', '/finding/', '/findings/']);
+
+/** The longest the old console waits after answering a restart before it closes and exits. */
+const RESTART_EXIT_MS = 2000;
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_REASON_CHARS = 2000;
@@ -268,6 +272,12 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
       sendJson(res, 200, { ...(await options.loadFindings()), token, commit: options.commit, behindMaster: options.behindMaster });
       return;
     }
+    if (url.pathname === '/api/commit') {
+      if (method !== 'GET') throw new Refused(405, 'The commit endpoint takes GET only.');
+      // No model load: the launcher and the restart poll read this to learn one sha and one token.
+      sendJson(res, 200, { commit: options.commit, behindMaster: options.behindMaster, token });
+      return;
+    }
     if (url.pathname === '/api/verdict') {
       if (method !== 'POST') throw new Refused(405, 'The verdict endpoint takes POST only.');
       sendJson(res, 200, await decide(req));
@@ -279,11 +289,21 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
       // The replacement starts while this listener is still open; it waits for the port. The answer goes out
       // first, then the listener closes and the process exits.
       options.spawnReplacement(listenPort);
-      res.once('finish', () => {
+      // Exit on the first of: the response finishing, the connection closing (a tab shut at that instant), or
+      // two seconds after the answer is written. Once only.
+      let leaving = false;
+      const leave = () => {
+        if (leaving) return;
+        leaving = true;
+        clearTimeout(timer);
         void closeServer()
           .catch(() => {})
           .finally(() => options.exitProcess());
-      });
+      };
+      const timer = setTimeout(leave, RESTART_EXIT_MS);
+      timer.unref?.();
+      res.once('finish', leave);
+      res.once('close', leave);
       sendJson(res, 200, { restarting: true });
       return;
     }

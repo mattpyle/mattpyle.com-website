@@ -99,3 +99,40 @@ test('a replacement that cannot start answers an error and keeps the console up'
     await server.close();
   }
 });
+
+test('a tab closed at the instant of the restart still lets the old process exit', async () => {
+  let exited: () => void = () => {};
+  const done = new Promise<void>((resolve) => (exited = resolve));
+  const server = await startConsoleServer({
+    port: 0,
+    loadFindings: async () => MODEL,
+    sendVerdict: async () => {
+      throw new Error('no verdict in this test');
+    },
+    timeZone: 'America/Vancouver',
+    webUi: 'https://web.example',
+    namespace: 'ns.test',
+    commit: 'abc1234',
+    behindMaster: false,
+    spawnReplacement: () => {},
+    exitProcess: () => exited(),
+  });
+  // Send the restart, then drop the connection without reading the answer.
+  const body = JSON.stringify({ token: server.token });
+  const origin = `http://127.0.0.1:${server.port}`;
+  const request = [
+    'POST /api/restart HTTP/1.1',
+    `Host: 127.0.0.1:${server.port}`,
+    `Origin: ${origin}`,
+    'Content-Type: application/json',
+    `Content-Length: ${Buffer.byteLength(body)}`,
+    'Connection: close',
+    '',
+    body,
+  ].join('\r\n');
+  const socket = net.connect(server.port, '127.0.0.1');
+  socket.on('error', () => {});
+  socket.once('connect', () => socket.write(request, () => socket.destroy()));
+  await done;
+  assert.equal(await accepts(server.port), false);
+});
