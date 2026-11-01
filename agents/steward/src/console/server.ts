@@ -11,18 +11,20 @@ import {
 } from '../lib/finding-verdict.js';
 import { isFindingSlug } from '../lib/findings.js';
 import type { FindingsModel } from './findings-model.js';
-import { COPY_SCRIPT } from './copy-script.js';
-import {
-  parseFindingsQuery,
-  renderFindingsPage,
-  renderMessagePage,
-  renderVerdictResult,
-  type PageOptions,
-} from './findings-page.js';
+import { renderMessage, renderVerdictMessage } from './message-page.js';
 
 /**
  * `steward console`: a page the Steward CLI serves on 127.0.0.1 while it runs.
  * `/findings` is the first page (findings-dashboard design, 2026-10-31).
+ *
+ * **The page.** `/findings` is static HTML with one stylesheet (`/findings.css`)
+ * and one script (`/findings.js`) from `assets/`, read once at start. The script
+ * reads `GET /api/findings` on load and on Refresh, renders the list and the
+ * open finding, and posts a verdict to `POST /api/verdict`. The page names its
+ * icons under `/icons/`, served from the same folder: nothing is fetched from
+ * the network. The only server-rendered HTML is the message page: a refusal, an
+ * error, or the answer to the verdict form, which stays for a browser with
+ * scripts off.
  *
  * **Who can act.** The listener binds the loopback address only, and three
  * checks stand between another page in the operator's browser and a verdict:
@@ -44,18 +46,17 @@ import {
  * refusal comes back as `{ error }` with the same status code.
  *
  * The page holds no credential of its own: the process reads the same `.env`
- * the CLI reads, and the browser only ever sees HTML.
+ * the CLI reads, and the browser sees only the page, the model and the token.
  */
 
 export interface ConsoleServerOptions {
   port: number;
   loadFindings: () => Promise<FindingsModel>;
   sendVerdict: (request: FindingVerdictRequest) => Promise<FindingVerdictResult>;
-  page: Omit<PageOptions, 'token' | 'fonts' | 'favicon'>;
+  /** IANA zone the page shows its dates in. */
+  timeZone: string;
   /** The site's `public/fonts`; the page falls back to the system stack when the files are absent. */
   fontsDir?: string | null;
-  /** The site's `public/favicon.svg`; the page names no icon when the file is absent. */
-  faviconFile?: string | null;
 }
 
 export interface ConsoleServer {
@@ -69,13 +70,22 @@ export interface ConsoleServer {
 /** The only address the console listens on. */
 export const CONSOLE_HOST = '127.0.0.1';
 
-/** The four woff2 files the page names; nothing else is served from the fonts directory. */
-export const CONSOLE_FONTS = [
-  'jetbrains-mono-latin.woff2',
-  'jetbrains-mono-latin-ext.woff2',
-  'source-serif-4-latin.woff2',
-  'source-serif-4-latin-ext.woff2',
-] as const;
+/** The two woff2 files the stylesheet names; nothing else is served from the fonts directory. */
+export const CONSOLE_FONTS = ['ibm-plex-sans-latin.woff2', 'ibm-plex-sans-latin-ext.woff2'] as const;
+
+/** The page, its stylesheet, its script and its icons, by URL path: the only files the console serves from `assets/`. */
+const ASSETS: Record<string, { file: string; type: string; cache: string }> = {
+  '/findings': { file: 'findings.html', type: 'text/html; charset=utf-8', cache: 'no-store' },
+  '/findings.css': { file: 'findings.css', type: 'text/css; charset=utf-8', cache: 'no-store' },
+  '/findings.js': { file: 'findings.js', type: 'text/javascript; charset=utf-8', cache: 'no-store' },
+  '/icons/steward-console.svg': { file: 'icons/steward-console.svg', type: 'image/svg+xml', cache: 'max-age=86400' },
+  '/icons/mattpyle-com-16.png': { file: 'icons/mattpyle-com-16.png', type: 'image/png', cache: 'max-age=86400' },
+  '/icons/temporal-io.svg': { file: 'icons/temporal-io.svg', type: 'image/svg+xml', cache: 'max-age=86400' },
+};
+const ASSETS_DIR = new URL('./assets/', import.meta.url);
+
+/** Paths that answer with a redirect to the findings page. */
+const REDIRECTS = new Set(['/', '/finding', '/finding/', '/findings/']);
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_REASON_CHARS = 2000;
@@ -84,7 +94,7 @@ const HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'no-store',
   'content-security-policy':
-    "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "default-src 'none'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
   // Not `no-referrer`: under that policy a browser sends `Origin: null` on the page's own form POST,
@@ -99,6 +109,10 @@ class Refused extends Error {
   ) {
     super(message);
   }
+}
+
+function escapeAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function tokensMatch(given: string, expected: string): boolean {
@@ -125,16 +139,6 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
-async function filePresent(file: string | null | undefined): Promise<boolean> {
-  if (!file) return false;
-  try {
-    await fs.access(file);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function fontsPresent(dir: string | null | undefined): Promise<boolean> {
   if (!dir) return false;
   try {
@@ -148,15 +152,20 @@ async function fontsPresent(dir: string | null | undefined): Promise<boolean> {
 export async function startConsoleServer(options: ConsoleServerOptions): Promise<ConsoleServer> {
   const token = crypto.randomBytes(32).toString('base64url');
   const fonts = await fontsPresent(options.fontsDir);
-  const favicon = await filePresent(options.faviconFile);
-  const page: PageOptions = { ...options.page, token, fonts, favicon };
+  const assets = new Map<string, Buffer>();
+  for (const [route, asset] of Object.entries(ASSETS)) {
+    let bytes = await fs.readFile(new URL(asset.file, ASSETS_DIR));
+    // The page's one server value: the zone its dates are shown in, as an attribute the script reads.
+    if (route === '/findings') bytes = Buffer.from(bytes.toString('utf8').replace('{{TIME_ZONE}}', escapeAttribute(options.timeZone)));
+    assets.set(route, bytes);
+  }
 
   const send = (res: http.ServerResponse, status: number, html: string, extra: Record<string, string> = {}) => {
     res.writeHead(status, { ...HEADERS, ...extra });
     res.end(html);
   };
   const message = (res: http.ServerResponse, status: number, title: string, text: string) =>
-    send(res, status, renderMessagePage(title, text, { fonts, favicon }));
+    send(res, status, renderMessage(title, text));
 
   /**
    * The guards and the verdict, shared by the form route and the JSON route:
@@ -217,7 +226,7 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
 
   const verdict = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     const result = await decide(req, false);
-    send(res, 200, renderVerdictResult(result, result.key, page));
+    send(res, 200, renderVerdictMessage(result, result.key));
   };
 
   const sendJson = (res: http.ServerResponse, status: number, body: unknown) => {
@@ -235,13 +244,15 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     const url = new URL(req.url ?? '/', 'http://localhost');
     const method = req.method ?? 'GET';
 
-    if (url.pathname === '/' && method === 'GET') {
-      res.writeHead(302, { location: '/findings' });
+    if (REDIRECTS.has(url.pathname) && method === 'GET') {
+      res.writeHead(302, { location: '/findings', 'cache-control': 'no-store' });
       res.end();
       return;
     }
-    if (url.pathname === '/findings' && method === 'GET') {
-      send(res, 200, renderFindingsPage(await options.loadFindings(), page, parseFindingsQuery(url.searchParams)));
+    const asset = ASSETS[url.pathname];
+    if (asset && method === 'GET') {
+      res.writeHead(200, { ...HEADERS, 'content-type': asset.type, 'cache-control': asset.cache });
+      res.end(assets.get(url.pathname));
       return;
     }
     if (url.pathname === '/api/findings') {
@@ -263,25 +274,6 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
         return;
       }
       await verdict(req, res);
-      return;
-    }
-    if (url.pathname === '/console.js' && method === 'GET') {
-      res.writeHead(200, {
-        'content-type': 'text/javascript; charset=utf-8',
-        'cache-control': 'no-store',
-        'x-content-type-options': 'nosniff',
-      });
-      res.end(COPY_SCRIPT);
-      return;
-    }
-    if (url.pathname === '/favicon.svg' && method === 'GET' && favicon) {
-      const bytes = await fs.readFile(options.faviconFile as string);
-      res.writeHead(200, {
-        'content-type': 'image/svg+xml',
-        'cache-control': 'max-age=86400',
-        'x-content-type-options': 'nosniff',
-      });
-      res.end(bytes);
       return;
     }
     const font = /^\/fonts\/([a-z0-9-]+\.woff2)$/.exec(url.pathname)?.[1];

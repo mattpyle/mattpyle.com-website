@@ -1,6 +1,5 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import { consoleRequest } from '../helpers/console-request.js';
 import { startConsoleServer, type ConsoleServer } from '../../src/console/server.js';
 import {
@@ -24,9 +23,6 @@ const MODEL: FindingsModel = {
   failedVerifies: [],
   cost: { treeCalls: 1, blobReads: 0, stateQueries: 0, dispatcherQueries: 0 },
 };
-
-/** The site's own icon, which `steward console` serves. */
-const FAVICON = fileURLToPath(new URL('../../../../public/favicon.svg', import.meta.url));
 
 let server: ConsoleServer;
 let sent: FindingVerdictRequest[] = [];
@@ -53,8 +49,7 @@ before(async () => {
         webUrl: 'https://cloud.temporal.io/namespaces/x/workflows/y',
       };
     },
-    page: { timeZone: 'America/Vancouver', webUi: 'https://cloud.temporal.io', namespace: 'x' },
-    faviconFile: FAVICON,
+    timeZone: 'America/Vancouver',
   });
 });
 
@@ -81,7 +76,7 @@ test('the listener is on 127.0.0.1 and the page renders for a loopback Host', as
   for (const host of [`127.0.0.1:${server.port}`, `localhost:${server.port}`]) {
     const res = await consoleRequest({ port: server.port, path: '/findings', host });
     assert.equal(res.status, 200, host);
-    assert.match(res.body, /Steward console/);
+    assert.match(res.body, /<h1>Findings<\/h1>/);
     assert.equal(res.headers['x-frame-options'], 'DENY');
     assert.match(String(res.headers['content-security-policy']), /frame-ancestors 'none'/);
   }
@@ -224,23 +219,56 @@ test('a verdict for a finding with no open run comes back as the refusal the CLI
   assert.match(res.body, /No open workflow finding\/mattpyle-com\/ux-thing--about/);
 });
 
-test('the copy script and the favicon are served with their types, and the CSP allows them', async () => {
-  const script = await consoleRequest({ port: server.port, path: '/console.js' });
-  assert.equal(script.status, 200);
-  assert.equal(script.headers['content-type'], 'text/javascript; charset=utf-8');
-  assert.match(script.body, /navigator\.clipboard/);
-  const icon = await consoleRequest({ port: server.port, path: '/favicon.svg' });
-  assert.equal(icon.status, 200);
-  assert.equal(icon.headers['content-type'], 'image/svg+xml');
-  assert.match(icon.body, /<svg/);
-  const page = await consoleRequest({ port: server.port, path: '/findings?site=x&sort=sideways' });
-  assert.equal(page.status, 200);
+test('the page, its stylesheet, its script and its icons are served with their types under the CSP', async () => {
+  const cases: [string, RegExp][] = [
+    ['/findings', /^text\/html; charset=utf-8$/],
+    ['/findings.css', /^text\/css; charset=utf-8$/],
+    ['/findings.js', /^text\/javascript; charset=utf-8$/],
+    ['/icons/steward-console.svg', /^image\/svg\+xml$/],
+    ['/icons/temporal-io.svg', /^image\/svg\+xml$/],
+    ['/icons/mattpyle-com-16.png', /^image\/png$/],
+  ];
+  for (const [path, type] of cases) {
+    const res = await consoleRequest({ port: server.port, path });
+    assert.equal(res.status, 200, path);
+    assert.match(String(res.headers['content-type']), type, path);
+    assert.equal(res.headers['x-content-type-options'], 'nosniff', path);
+    assert.match(String(res.headers['content-security-policy']), /frame-ancestors 'none'/, path);
+    assert.equal((await consoleRequest({ port: server.port, path, host: 'evil.example' })).status, 403, path);
+  }
+  const page = await consoleRequest({ port: server.port, path: '/findings' });
   const csp = String(page.headers['content-security-policy']);
   assert.match(csp, /script-src 'self'/);
+  assert.match(csp, /style-src 'self'/);
+  assert.match(csp, /connect-src 'self'/);
   assert.match(csp, /img-src 'self'/);
-  assert.doesNotMatch(csp, /unsafe-inline'[^;]*;\s*script|script-src[^;]*unsafe/);
-  assert.match(page.body, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
-  assert.equal((await consoleRequest({ port: server.port, path: '/console.js', host: 'evil.example' })).status, 403);
+  assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval/);
+  // Nothing inline: one stylesheet and one script, both from the console's own paths.
+  assert.match(page.body, /<link rel="stylesheet" href="\/findings\.css">/);
+  assert.match(page.body, /<script src="\/findings\.js" defer><\/script>/);
+  assert.match(page.body, /<link rel="icon" href="\/icons\/steward-console\.svg" type="image\/svg\+xml">/);
+  assert.doesNotMatch(page.body, /<style|<script>| style="| on[a-z]+="/i);
+  assert.match(page.body, /data-time-zone="America\/Vancouver"/);
+  // The phase-one script is gone.
+  assert.equal((await consoleRequest({ port: server.port, path: '/console.js' })).status, 404);
+  assert.equal((await consoleRequest({ port: server.port, path: '/favicon.svg' })).status, 404);
+});
+
+test('/, /finding and /findings/ redirect to /findings', async () => {
+  for (const path of ['/', '/finding', '/findings/']) {
+    const res = await consoleRequest({ port: server.port, path });
+    assert.equal(res.status, 302, path);
+    assert.equal(res.headers.location, '/findings', path);
+  }
+});
+
+test('the verdict form answers with the message page, which carries no script', async () => {
+  const res = await consoleRequest({ port: server.port, path: '/findings/verdict', method: 'POST', origin: origin(), form: form() });
+  assert.equal(res.status, 200, res.body);
+  assert.match(res.body, /<main class="message">/);
+  assert.match(res.body, /<link rel="stylesheet" href="\/findings\.css">/);
+  assert.doesNotMatch(res.body, /<script/);
+  assert.match(res.body, /<a href="\/findings">Back to findings<\/a>/);
 });
 
 test('the verdict endpoint takes POST only, and an unknown path is a 404', async () => {

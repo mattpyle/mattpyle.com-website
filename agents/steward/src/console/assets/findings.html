@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-GB" data-time-zone="{{TIME_ZONE}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Findings · Steward</title>
+<link rel="icon" href="/icons/steward-console.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/findings.css">
+<script src="/findings.js" defer></script>
+</head>
+<body class="no-motion" data-sort="priority">
+<div class="app">
+  <main class="page">
+    <header class="head">
+      <h1>Findings</h1>
+      <button class="refresh" type="button" title="Read the findings again"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12.25 1.75v3h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Refresh</button>
+    </header>
+
+    <div class="toolbar">
+      <div class="statuses" role="tablist" aria-label="Status"></div>
+      <div class="tools">
+        <div class="facets"></div>
+        <div class="search">
+          <button class="search-btn" type="button" aria-label="Search findings" title="Search"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+          <input type="search" placeholder="Search findings" aria-label="Search findings">
+        </div>
+      </div>
+    </div>
+
+    <div class="listbox">
+      <div class="cols list-head">
+        <span class="c-ref">Key</span>
+        <span class="c-title">Finding</span>
+        <span class="c-pri">Priority</span>
+        <span class="c-site">Site</span>
+        <span class="c-cat">Type</span>
+        <span class="c-kind">Kind</span>
+        <span class="c-status">Status</span>
+        <button class="c-age sort-head" type="button" data-sort-by="age" title="Sort by age">Age<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 4.5L6 2l2.5 2.5M3.5 7.5L6 10l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="groups"><p class="loading">Loading findings</p></div>
+    </div>
+  </main>
+
+  <div class="side">
+    <aside class="panel" aria-label="Finding">
+      <div class="panel-top">
+        <button class="close" type="button" aria-label="Close"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      </div>
+      <article class="doc"></article>
+      <footer class="foot" aria-label="Verdict" hidden></footer>
+    </aside>
+  </div>
+</div>
+<noscript><p class="message">This page needs JavaScript. <code>steward finding list</code> shows the same findings.</p></noscript>
+</body>
+</html>

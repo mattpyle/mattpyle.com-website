@@ -103,7 +103,7 @@ test('steward finding reject and the console reject button send the same verdict
           port: 0,
           loadFindings: async () => EMPTY_MODEL,
           sendVerdict: (request) => sendFindingVerdict(request, { client }),
-          page: { timeZone: 'America/Vancouver', webUi: 'http://localhost:8233', namespace: 'default' },
+          timeZone: 'America/Vancouver',
         });
         try {
           const res = await consoleRequest({

@@ -1,0 +1,571 @@
+/* The Steward console's one stylesheet: the findings page and the message page.
+   Built from the approved findings mock (round three, mock 4 "Focus c"). The tokens come first:
+   type, spacing, then colour for light and dark. Everything below reads them. */
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/fonts/ibm-plex-sans-latin.woff2") format("woff2");
+  font-weight: 100 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/fonts/ibm-plex-sans-latin-ext.woff2") format("woff2");
+  font-weight: 100 700;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ---------- Tokens ---------- */
+
+:root {
+  /* Type: one sans, three sizes. Mono is for the key alone. */
+  --font: "IBM Plex Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --t-body: 16px;
+  --t-mid: 20px;
+  --t-title: 32px;
+
+  /* Space. */
+  --gutter: 56px;
+  --panel-w: clamp(480px, 40vw, 600px);
+  --rail-w: clamp(300px, 26vw, 380px);
+  --row-h: 52px;
+  --col-gap: 20px;
+  --reading: 66ch;
+  --facts-w: 220px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Neutrals. */
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --rail: oklch(0.982 0.002 255);
+  --tint: oklch(0.972 0.002 255);
+  --select: oklch(0.94 0.002 255);
+  --line: oklch(0.915 0.003 255);
+  --line-strong: oklch(0.83 0.003 255);
+  --control: oklch(0.62 0.004 255);
+  --raised: #ffffff;
+  --ink: #171717;
+  --ink-2: oklch(0.5 0.006 255);
+  --fill: #171717;
+  --on-fill: #ffffff;
+  --shadow: oklch(0 0 0 / 0.18);
+
+  /* Status dots and the High mark. */
+  --s-proposed: oklch(0.7 0.15 65);
+  --s-fixing: oklch(0.42 0 0);
+  --s-approved: oklch(0.42 0 0);
+  --s-resolved: oklch(0.66 0.12 155);
+  --s-rejected: oklch(0.7 0 0);
+  --p-high: oklch(0.6 0.19 32);
+
+  /* Drift: the flag, the chip and the box. */
+  --drift: oklch(0.6 0.17 45);
+  --on-drift: #ffffff;
+  --drift-bg: oklch(0.97 0.025 55);
+  --drift-line: oklch(0.88 0.06 55);
+
+  /* Kind icons. */
+  --kind-defect: oklch(0.58 0.16 25);
+  --kind-opportunity: oklch(0.6 0.13 95);
+
+  /* Type tags: a soft tint and an ink of the same hue. */
+  --cat-content: oklch(0.95 0.03 250);   --cat-content-ink: oklch(0.42 0.08 250);
+  --cat-a11y: oklch(0.95 0.035 300);     --cat-a11y-ink: oklch(0.43 0.1 300);
+  --cat-agent: oklch(0.95 0.035 200);    --cat-agent-ink: oklch(0.4 0.07 200);
+  --cat-security: oklch(0.95 0.035 25);  --cat-security-ink: oklch(0.45 0.12 25);
+  --cat-seo: oklch(0.95 0.035 130);      --cat-seo-ink: oklch(0.42 0.08 130);
+  --cat-other: oklch(0.945 0.003 255);   --cat-other-ink: oklch(0.42 0.006 255);
+
+  --site-ring: none;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(0.185 0.003 255);
+    --panel: oklch(0.205 0.003 255);
+    --rail: oklch(0.225 0.003 255);
+    --tint: oklch(0.23 0.004 255);
+    --select: oklch(0.275 0.004 255);
+    --line: oklch(0.3 0.004 255);
+    --line-strong: oklch(0.42 0.004 255);
+    --control: oklch(0.56 0.004 255);
+    --raised: oklch(0.31 0.004 255);
+    --ink: oklch(0.95 0 0);
+    --ink-2: oklch(0.72 0.006 255);
+    --fill: oklch(0.95 0 0);
+    --on-fill: #171717;
+
+    --s-fixing: oklch(0.82 0 0);
+    --s-approved: oklch(0.82 0 0);
+    --s-rejected: oklch(0.55 0 0);
+    --p-high: oklch(0.7 0.17 35);
+
+    --drift: oklch(0.72 0.16 50);
+    --on-drift: #171717;
+    --drift-bg: oklch(0.26 0.04 55);
+    --drift-line: oklch(0.38 0.06 55);
+
+    --kind-defect: oklch(0.72 0.14 25);
+    --kind-opportunity: oklch(0.8 0.13 95);
+
+    --cat-content: oklch(0.3 0.04 250);   --cat-content-ink: oklch(0.86 0.05 250);
+    --cat-a11y: oklch(0.3 0.045 300);     --cat-a11y-ink: oklch(0.86 0.06 300);
+    --cat-agent: oklch(0.3 0.04 200);     --cat-agent-ink: oklch(0.86 0.05 200);
+    --cat-security: oklch(0.3 0.05 25);   --cat-security-ink: oklch(0.86 0.07 25);
+    --cat-seo: oklch(0.3 0.045 130);      --cat-seo-ink: oklch(0.86 0.06 130);
+    --cat-other: oklch(0.29 0.004 255);   --cat-other-ink: oklch(0.82 0.006 255);
+
+    /* The mattpyle.com favicon is a black square; a faint ring holds its edge. */
+    --site-ring: 0 0 0 1px var(--line-strong);
+
+    color-scheme: dark;
+  }
+}
+
+/* ---------- Base ---------- */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--t-body) / 1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- The frame: the list, and the finding beside it ---------- */
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 0px;
+  transition: grid-template-columns 240ms var(--ease);
+}
+.is-open .app { grid-template-columns: minmax(0, 1fr) var(--panel-w); }
+.page { min-width: 0; padding: 48px var(--gutter) 96px; container-type: inline-size; }
+.is-open .page { --gutter: 40px; }
+
+/* ---------- Header ---------- */
+
+.head { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.head h1 { margin: 0; font-size: var(--t-title); font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; }
+.refresh {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 0 12px 0 10px; border: 0; border-radius: 999px;
+  background: none; color: var(--ink-2); cursor: pointer; white-space: nowrap;
+}
+.refresh:hover { background: var(--tint); color: var(--ink); }
+.refresh[aria-busy="true"] { cursor: progress; }
+.refresh[aria-busy="true"] svg { animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- The toolbar: status tabs at the left; drift, site, priority, sort and search at the right ---------- */
+
+.toolbar {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 8px 24px; flex-wrap: nowrap;
+  margin-top: 24px; border-bottom: 1px solid var(--line);
+}
+
+/* Status: text tabs with a grey count and an underline. They fade at the right edge and scroll sideways. */
+.statuses {
+  display: flex; gap: 24px; flex: 1 1 auto; min-width: 0; flex-wrap: nowrap;
+  overflow-x: auto; scrollbar-width: none; padding-right: 24px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.stab {
+  position: relative; display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 0 12px; border: 0; border-radius: 0;
+  background: none; color: var(--ink-2); cursor: pointer; white-space: nowrap;
+}
+.stab:hover { color: var(--ink); }
+.stab[aria-selected="true"] { color: var(--ink); font-weight: 500; }
+.stab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--ink); }
+.stab .count { font-weight: 400; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.tools { display: flex; align-items: center; gap: 4px; padding-bottom: 6px; margin-left: auto; flex: none; }
+.facets { display: flex; gap: 4px; }
+.facet { position: relative; }
+.facet-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 0 8px 0 10px; border: 1px solid transparent; border-radius: 999px;
+  background: none; color: var(--ink-2); cursor: pointer; white-space: nowrap;
+}
+.facet-btn:hover, .facet-btn[aria-expanded="true"] { background: var(--tint); color: var(--ink); }
+.facet-btn[data-on="true"] { background: var(--select); color: var(--ink); }
+.facet-btn .chev { color: var(--ink-2); }
+.facet-btn .count { color: var(--ink-2); margin-left: 6px; font-variant-numeric: tabular-nums; }
+
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px;
+  padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  box-shadow: 0 12px 32px -12px var(--shadow);
+}
+.menu-item {
+  width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; align-items: center; gap: 12px;
+  min-height: 38px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--ink);
+  cursor: pointer; text-align: left; white-space: nowrap;
+}
+.menu-item:hover { background: var(--tint); }
+.menu-item .count { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.menu-item .tick { visibility: hidden; color: var(--ink); }
+.menu-item[aria-checked="true"] .tick { visibility: visible; }
+
+/* The status dropdown stands in for the tabs when the toolbar runs out of room. */
+.facet-status { display: none; }
+
+/* Search: an icon until it is used. Closed, it opens over the tools, to the left of its icon, so nothing moves. */
+.search { position: relative; display: flex; align-items: center; }
+.search-btn {
+  width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--ink-2);
+  display: grid; place-items: center; cursor: pointer;
+}
+.search-btn:hover { background: var(--tint); color: var(--ink); }
+.search input {
+  display: none; width: 220px; min-height: 34px; padding: 0 12px 0 36px;
+  border: 1px solid var(--control); border-radius: 999px; background: var(--bg);
+}
+.search input::placeholder { color: var(--ink-2); }
+.search input:focus { outline: none; border-color: var(--ink); }
+.search[data-open] .search-btn { position: absolute; left: 0; pointer-events: none; }
+.search[data-open] input { display: block; }
+body:not(.is-open) .search { width: 34px; height: 34px; }
+body:not(.is-open) .search[data-open] input {
+  position: absolute; right: 0; top: 0; z-index: 3; width: 280px;
+  background: var(--bg); box-shadow: 0 8px 24px -12px var(--shadow);
+}
+body:not(.is-open) .search[data-open] .search-btn { left: auto; right: calc(280px - 34px); top: 0; z-index: 4; }
+
+/* Drift: a chip in the toolbar that shows only when a finding drifts. */
+.drift { display: inline-flex; color: var(--drift); flex: none; }
+.drift-icon { flex: none; }
+.drift-icon .mark { stroke: var(--on-drift); }
+.drift-icon .mark-dot { fill: var(--on-drift); }
+.drift-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px 0 10px;
+  border: 1px solid var(--drift-line); border-radius: 999px; background: var(--drift-bg); color: var(--ink);
+  cursor: pointer; margin-right: 6px; white-space: nowrap;
+}
+.drift-chip .drift-icon { color: var(--drift); }
+.drift-chip .count { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.drift-chip[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--drift); }
+
+@container (max-width: 1080px) {
+  .toolbar { justify-content: flex-start; padding-bottom: 8px; }
+  .toolbar .statuses { display: none; }
+  .tools { width: 100%; }
+  .facets { flex: 1; }
+  .facet-status { display: block; margin-right: auto; }
+  .facet-status .facet-btn { color: var(--ink); font-weight: 500; background: var(--tint); }
+  .facet-status .menu { left: 0; right: auto; }
+}
+
+/* ---------- The list: fixed columns with headings ---------- */
+
+.listbox { container-type: inline-size; margin: 0 -16px; }
+.cols {
+  display: grid;
+  /* Key, finding, priority, site, type, kind, status, age. */
+  --cols: 64px minmax(0, 1fr) 96px 40px 172px 40px 104px 56px;
+  grid-template-columns: var(--cols);
+  column-gap: var(--col-gap);
+  align-items: baseline;
+  padding: 0 16px;
+}
+/* Sorted by priority, the groups carry it, so the column goes. */
+body[data-sort="priority"] .cols { --cols: 64px minmax(0, 1fr) 40px 172px 40px 104px 56px; }
+body[data-sort="priority"] .c-pri { display: none; }
+.c-ref { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-site, .c-kind, .c-age, .c-pri, .c-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-cat { white-space: nowrap; overflow: hidden; }
+.c-age { text-align: right; font-variant-numeric: tabular-nums; }
+
+.list-head { margin-top: 12px; padding-bottom: 10px; margin-bottom: 6px; color: var(--ink-2); }
+.list-head > span { white-space: nowrap; }
+.list-head .c-site, .list-head .c-kind { overflow: visible; }
+
+/* The Age heading is the sort control. */
+.sort-head {
+  display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px;
+  border: 0; background: none; padding: 0; color: inherit; cursor: pointer;
+}
+.sort-head:hover { color: var(--ink); }
+.sort-head[aria-sort="ascending"], .sort-head[aria-sort="descending"] { color: var(--ink); font-weight: 500; }
+
+/* Sorted by priority, a group per level, its heading the level and its count. */
+.group + .group { margin-top: 28px; }
+.group-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 6px; padding: 0 16px; font-size: var(--t-body); font-weight: 600; }
+.group-head .count { color: var(--ink-2); font-weight: 400; font-variant-numeric: tabular-nums; }
+.group-head .pri { gap: 10px; }
+
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.row {
+  width: 100%; min-height: var(--row-h);
+  border: 0; border-radius: 10px; background: none; text-align: left; cursor: pointer;
+  padding-top: 13px; padding-bottom: 13px; line-height: 1.6;
+  color: var(--ink-2);
+}
+.row:hover { background: var(--tint); }
+.row[aria-current="true"] { background: var(--select); }
+.row .c-title { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink); font-weight: 600; }
+.row .c-title .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .c-pri[data-p="high"] { color: var(--ink); }
+/* Site and kind in the table: a 20px icon alone; the word is the tooltip and stays for screen readers. */
+.row .c-site, .row .c-kind { align-self: center; display: flex; }
+.row .c-site .lbl, .row .c-kind .lbl {
+  position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+.linkish { border: 0; background: none; padding: 0; cursor: pointer; color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.linkish:hover { text-decoration-color: currentColor; }
+.empty { padding: 48px 16px; color: var(--ink-2); }
+.empty p { margin: 0 0 8px; color: var(--ink); }
+.loading { padding: 48px 16px; margin: 0; color: var(--ink-2); }
+
+/* ---------- Symbols: status, priority, site, type, kind ---------- */
+
+.status { display: inline-flex; align-items: baseline; gap: 10px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--s-proposed); flex: none; align-self: center; }
+.dot[data-s="fixing"] { background: none; box-shadow: inset 0 0 0 2px var(--s-fixing); }
+.dot[data-s="approved"] { background: var(--s-approved); }
+.dot[data-s="reopened"] { background: var(--s-proposed); }
+.dot[data-s="resolved"] { background: var(--s-resolved); }
+.dot[data-s="rejected"] { background: var(--s-rejected); }
+
+/* Priority: the word and a three-bar mark. High is the one warm mark. */
+.pri { display: inline-flex; align-items: baseline; gap: 8px; }
+.pri-mark { align-self: center; flex: none; fill: var(--ink-2); }
+.pri-mark .off { fill: var(--line-strong); }
+.pri[data-p="high"] { color: var(--ink); }
+.pri[data-p="high"] .pri-mark { fill: var(--p-high); }
+
+.site { display: inline-flex; align-items: center; gap: 8px; }
+.site-mark { width: 20px; height: 20px; flex: none; border-radius: 4px; display: block; box-shadow: var(--site-ring); }
+
+.cat {
+  display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px 1px 7px; border-radius: 999px;
+  background: var(--cat-other); color: var(--cat-other-ink); white-space: nowrap; line-height: 1.6;
+}
+.cat svg { flex: none; }
+.cat[data-t="content"] { background: var(--cat-content); color: var(--cat-content-ink); }
+.cat[data-t="accessibility"] { background: var(--cat-a11y); color: var(--cat-a11y-ink); }
+.cat[data-t="agent-readiness"] { background: var(--cat-agent); color: var(--cat-agent-ink); }
+.cat[data-t="security"] { background: var(--cat-security); color: var(--cat-security-ink); }
+.cat[data-t="seo"] { background: var(--cat-seo); color: var(--cat-seo-ink); }
+
+.kind { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.kind svg { flex: none; width: 20px; height: 20px; color: var(--ink-2); }
+.kind[data-k="defect"] svg { color: var(--kind-defect); }
+.kind[data-k="opportunity"] svg { color: var(--kind-opportunity); }
+
+/* ---------- The rail: a finding is open and the list narrows to key, title, status and age ---------- */
+
+@container (max-width: 520px) {
+  .cols, body[data-sort="priority"] .cols {
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    grid-template-areas: "ref title title" ". status age";
+    row-gap: 2px; column-gap: 8px;
+  }
+  .row { padding-top: 10px; padding-bottom: 10px; }
+  .row .c-ref { grid-area: ref; }
+  .row .c-title { grid-area: title; white-space: normal; line-height: 1.4; }
+  .row .c-title .t { white-space: normal; }
+  .row .c-status { grid-area: status; }
+  .row .c-age { grid-area: age; }
+  .c-pri, .c-cat { display: none; }
+}
+
+/* ---------- The panel ---------- */
+
+.side { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+.panel {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  background: var(--panel); border-left: 1px solid var(--line);
+}
+.panel-top { display: flex; justify-content: flex-end; padding: 16px 16px 0; flex: none; }
+.close {
+  width: 40px; height: 40px; border-radius: 50%; border: 0; background: none; cursor: pointer;
+  display: grid; place-items: center; color: var(--ink-2);
+}
+.close:hover { background: var(--tint); color: var(--ink); }
+
+/* The finding as a document: a reading column and a facts card beside it. */
+.doc {
+  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  display: grid; grid-template-columns: minmax(0, var(--reading)) var(--facts-w); column-gap: 56px;
+  justify-content: center; align-content: start;
+  padding: 8px 48px 48px;
+}
+.doc > * { grid-column: 1; }
+
+/* The head: where the finding lives and its key, the title, then the summary line. */
+.doc-head { padding-bottom: 24px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
+.doc-ref { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 0; }
+.doc-ref .site { gap: 6px; }
+.doc-ref .sep { color: var(--line-strong); }
+.doc-ref .ref { overflow-wrap: anywhere; }
+.doc-title { margin: 0; font-size: var(--t-title); font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; text-wrap: balance; overflow-wrap: anywhere; }
+.doc-summary { margin: 12px 0 0; font-size: var(--t-body); line-height: 1.6; color: var(--ink-2); max-width: 62ch; text-wrap: pretty; }
+
+.drift-box { margin: 0 0 28px; padding: 14px 16px; border: 1px solid var(--drift-line); border-radius: 12px; background: var(--drift-bg); }
+.drift-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-weight: 600; }
+.drift-title .drift-icon { color: var(--drift); }
+.drift-lines { margin: 0; padding: 0; list-style: none; font-weight: 500; }
+.drift-lines li + li { margin-top: 4px; }
+
+/* Facts: a quiet card, label above value, a hairline between pairs. */
+.facts {
+  grid-column: 2; grid-row: 1 / span 40; align-self: start;
+  position: sticky; top: 0; margin: 4px 0 0;
+  display: grid; grid-template-columns: 1fr; gap: 0;
+  padding: 4px 18px; border-radius: 14px; background: var(--rail);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.facts dt { padding-top: 12px; color: var(--ink-2); }
+.facts dd { margin: 4px 0 0; min-width: 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); font-weight: 500; }
+.facts dd:last-of-type { border-bottom: 0; }
+.facts a { color: inherit; text-underline-offset: 3px; }
+.facts .cat, .facts .site, .facts .status, .facts .pri { font-weight: 500; }
+.facts .kind svg { width: 18px; height: 18px; }
+.facts .site-mark { width: 18px; height: 18px; }
+
+/* The key: the whole key is the copy control. Hover tints it and shows the copy icon; a click shows a tick and "Copied". */
+.key-copy {
+  display: inline-flex; align-items: flex-start; gap: 8px; margin: -4px -8px; padding: 4px 8px;
+  border: 0; border-radius: 8px; background: none; color: inherit; text-align: left; cursor: pointer;
+}
+.key-copy:hover { background: var(--tint); }
+.key { font: 15px/1.5 var(--mono); color: var(--ink); overflow-wrap: break-word; min-width: 0; user-select: none; }
+.copy-state { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--ink-2); padding-top: 2px; }
+.copy-state .i-copy { opacity: 0; transition: opacity 120ms ease-out; }
+.copy-state .i-done, .copy-state .copied-word { display: none; }
+.key-copy:hover .copy-state { color: var(--ink); }
+.key-copy:hover .copy-state .i-copy, .key-copy:focus-visible .copy-state .i-copy { opacity: 1; }
+.key-copy[data-copied] .copy-state { color: var(--s-resolved); }
+.key-copy[data-copied] .i-copy { display: none; }
+.key-copy[data-copied] .i-done, .key-copy[data-copied] .copied-word { display: inline; }
+.copied-word { font-weight: 500; }
+
+.section { margin-top: 36px; }
+.doc-head + .section, .drift-box + .section { margin-top: 0; }
+.section h3 { margin: 0 0 8px; font-size: var(--t-body); font-weight: 600; }
+.prose { max-width: 68ch; overflow-wrap: anywhere; text-wrap: pretty; }
+.prose p { margin: 0 0 12px; }
+.prose ul, .prose ol { margin: 0 0 12px; padding-left: 22px; }
+.prose li { margin: 4px 0; }
+.prose li > ul, .prose li > ol { margin: 4px 0; }
+.prose a { color: inherit; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose code { font: inherit; }
+.prose pre { margin: 0 0 12px; white-space: pre-wrap; font: inherit; }
+.prose strong { font-weight: 600; }
+.prose h2, .prose h3, .prose h4 { margin: 16px 0 8px; font-size: var(--t-body); font-weight: 600; }
+
+/* Timeline: events only, oldest first; every dot the same, so colour carries no meaning here. */
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 16px; padding: 6px 0 6px 24px; }
+.timeline li::before { content: ""; position: absolute; left: 3px; top: 15px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-2); }
+.timeline li::after { content: ""; position: absolute; left: 6.5px; top: 27px; bottom: -11px; width: 1px; background: var(--line); }
+.timeline li:last-child::after { display: none; }
+.timeline time { color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.timeline a { color: inherit; text-underline-offset: 3px; }
+
+/* ---------- The verdict, fixed at the panel's foot ---------- */
+
+.foot { flex: none; border-top: 1px solid var(--line); padding: 20px max(48px, calc((100% - var(--reading) - 276px) / 2)) 24px; background: var(--panel); }
+.foot[hidden] { display: none; }
+.foot .reason, .foot .next, .foot .actions, .foot .result { max-width: var(--reading); }
+.reason textarea {
+  display: block; width: 100%; min-height: 72px; resize: vertical; padding: 10px 14px;
+  border: 1px solid var(--control); border-radius: 10px; background: var(--bg); line-height: 1.5;
+}
+.reason textarea::placeholder { color: var(--ink-2); }
+.reason textarea:focus { outline: none; border-color: var(--ink); }
+.reason[data-error] textarea { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.reason-error { margin: 8px 0 0; font-weight: 500; }
+.actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+.actions-split { align-items: center; margin-top: 0; }
+.next { margin: 0; text-wrap: pretty; }
+.spacer { flex: 1; }
+.result { margin: 0 0 12px; color: var(--ink-2); }
+.result p { margin: 0; overflow-wrap: anywhere; }
+.result code { font: 15px/1.5 var(--mono); color: var(--ink); }
+.btn {
+  min-height: 44px; padding: 0 22px; border-radius: 10px; cursor: pointer; font-weight: 500;
+  border: 1px solid var(--control); background: var(--panel); color: var(--ink);
+  display: inline-flex; align-items: center; text-decoration: none;
+}
+.btn:hover { background: var(--tint); }
+.btn-fill { background: var(--fill); color: var(--on-fill); border-color: var(--fill); }
+.btn-fill:hover { background: var(--fill); opacity: 0.88; }
+.btn:disabled { cursor: progress; opacity: 0.6; }
+
+/* ---------- Open: the list becomes a rail and the finding gets the page ---------- */
+
+@media (min-width: 1041px) {
+  .is-open .app { grid-template-columns: var(--rail-w) minmax(0, 1fr); transition: none; }
+  .is-open .page { padding: 28px 16px 64px 24px; }
+  .is-open .head h1 { font-size: var(--t-mid); }
+  .is-open .statuses, .is-open .list-head, .is-open .facets { display: none; }
+  .is-open .toolbar { border-bottom: 0; margin-top: 12px; }
+  .is-open .tools { margin-left: 0; width: 100%; }
+  .is-open .search, .is-open .search input { width: 100%; }
+  .is-open .search .search-btn { position: absolute; left: 0; pointer-events: none; }
+  .is-open .search input { display: block; }
+  .is-open .listbox { margin-top: 12px; }
+  .is-open .group + .group { margin-top: 16px; }
+  .is-open .panel { animation: focus-in 260ms var(--ease); }
+
+  /* One scrollbar each: with a finding open, the window does not scroll; the rail and the finding scroll themselves, thinly. */
+  html:has(.is-open) { overflow: hidden; }
+  .is-open .app { height: 100vh; }
+  .is-open .page { height: 100vh; overflow-y: auto; }
+  .is-open .page, .doc { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  .is-open .page:hover, .doc:hover { scrollbar-color: var(--line-strong) transparent; }
+}
+@keyframes focus-in { from { transform: translateX(32px); } to { transform: none; } }
+
+@media (max-width: 1240px) {
+  .doc { grid-template-columns: minmax(0, 1fr) 200px; column-gap: 32px; padding-inline: 40px; }
+}
+
+/* Too narrow for the rail beside the finding: the finding opens over the list. */
+@media (max-width: 1040px) {
+  .is-open .app { grid-template-columns: minmax(0, 1fr) 0px; }
+  .side {
+    position: fixed; inset: 0 0 0 auto; width: min(100vw, var(--panel-w)); z-index: 10; height: 100vh;
+    transform: translateX(100%); visibility: hidden;
+    transition: transform 240ms var(--ease), visibility 0s 240ms;
+  }
+  .is-open .side { transform: none; visibility: visible; transition-delay: 0s; }
+  .doc { display: block; }
+  .doc > .facts { position: static; grid-template-columns: 88px minmax(0, 1fr); gap: 8px 16px; margin-top: 32px; }
+}
+@media (max-width: 760px) {
+  :root { --gutter: 16px; }
+  .doc { padding-left: 20px; padding-right: 20px; }
+  .foot { padding-left: 20px; padding-right: 20px; }
+}
+
+/* No slide on first paint, and no transitions or animations while the window is being resized. */
+.no-motion *, .no-motion *::before, .no-motion *::after,
+.resizing *, .resizing *::before, .resizing *::after { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .app, .side { transition: none; }
+  .is-open .panel, .refresh[aria-busy="true"] svg { animation: none; }
+}
+
+/* ---------- The message page: a refusal, an error, or a verdict sent with scripts off ---------- */
+
+.message { max-width: 720px; margin: 0 auto; padding: 48px var(--gutter) 96px; }
+.message h1 { margin: 0 0 24px; font-size: var(--t-title); font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; }
+.message p { margin: 0 0 12px; overflow-wrap: anywhere; }
+.message code { font: 15px/1.5 var(--mono); }
+.message a { color: inherit; text-underline-offset: 3px; }
