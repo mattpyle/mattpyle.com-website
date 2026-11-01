@@ -19,6 +19,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import { Marked, type RendererObject, type Tokens } from 'marked';
 import { REPO_ROOT } from '../config.js';
+import { escapeHtml } from './html.js';
 
 /**
  * Anchored on `REPO_ROOT`, never `SITE_DIR`: the units are Steward's own
@@ -71,15 +72,6 @@ export interface DocsViewerResult {
 // ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 /**
  * YAML turns an unquoted `2026-08-16` into a Date at UTC midnight, so read the

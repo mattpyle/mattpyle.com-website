@@ -104,7 +104,7 @@ const MODEL: FindingsModel = {
   cost: { treeCalls: 1, blobReads: 0, stateQueries: 0, dispatcherQueries: 0 },
 };
 
-const OPTIONS = { timeZone: 'America/Vancouver', now: new Date('2026-10-31T19:00:00Z') };
+const OPTIONS = { timeZone: 'America/Vancouver', webUi: 'https://web.example', namespace: 'ns.test', now: new Date('2026-10-31T19:00:00Z') };
 
 function render(change: Record<string, unknown> = {}) {
   const state = { ...F.createState(), ...change };
@@ -224,7 +224,8 @@ test('drift: a flag on the row, a chip with the count, and a box in the finding;
   assert.match(v.doc, /<div class="drift-box" role="note">.*<li>INDEX\.md says approved, the file says proposed<\/li><li>approved with no open run<\/li>/s);
   const quiet = v.list.split('<li>').find((li: string) => li.includes('ti-quiet--home')) ?? '';
   assert.doesNotMatch(quiet, /class="drift"/);
-  assert.equal(render().v.facets.includes('drift-chip'), false, 'no chip when nothing in view drifts');
+  assert.match(render().v.facets, /Drift<span class="count">1</, 'the chip counts drift in every status, so it shows on the Proposed tab');
+  assert.equal(render({ site: TI }).v.facets.includes('drift-chip'), false, 'no chip when nothing in the site drifts');
   assert.deepEqual(ids(render({ status: 'all', drift: true }).v.list), [`${MP}/ux-drift--feed`]);
 });
 
@@ -292,4 +293,77 @@ test('an empty model renders the empty list, not an error', () => {
   const v = F.view({ ...MODEL, sites: [] }, F.createState(), OPTIONS);
   assert.match(v.list, /No findings match/);
   assert.equal(count(v.statuses, 'All'), '0');
+});
+
+const RUN_URL = (id: string) => `https://web.example/namespaces/ns.test/workflows/${encodeURIComponent(id)}`;
+
+test('a verification event and an open run link to the Temporal Web UI', () => {
+  const verified = row({
+    site: MP, key: 'ux-verified--home', status: 'resolved', run: { ...RUN, open: false, step: null },
+    events: [{ kind: 'verification', at: '2026-10-20T09:00:00.000Z', label: 'Verified on production', workflowId: 'verify/mattpyle-com/ux-verified--home/1' }],
+  });
+  const open = row({ site: MP, key: 'ux-fixing--blog', status: 'fixing', run: { ...RUN, step: 'waiting-merge', queried: true } });
+  const model = { ...MODEL, sites: [{ ...MODEL.sites[0], rows: [verified, open] }] };
+  const state = { ...F.createState(), status: 'all' };
+  const doc = (id: string) => F.view(model, { ...state, current: id }, OPTIONS).doc;
+
+  const href = RUN_URL('verify/mattpyle-com/ux-verified--home/1');
+  assert.ok(doc(`${MP}/ux-verified--home`).includes(`<a href="${href}" target="_blank" rel="noopener noreferrer">verify/mattpyle-com/ux-verified--home/1</a>`));
+  assert.doesNotMatch(doc(`${MP}/ux-verified--home`), /<dt>Run<\/dt>/, 'a closed run has no Run fact');
+  assert.ok(doc(`${MP}/ux-fixing--blog`).includes(`<dt>Run</dt><dd><a href="${RUN_URL('finding/mattpyle-com/ux-fixing--blog')}"`));
+  // Without the server's two values the id shows as text and nothing is linked.
+  const bare = F.view(model, { ...state, current: `${MP}/ux-fixing--blog` }, { timeZone: 'America/Vancouver', now: OPTIONS.now }).doc;
+  assert.match(bare, /<dt>Run<\/dt><dd><code>finding\/mattpyle-com\/ux-fixing--blog<\/code>/);
+});
+
+test('orphan runs and failed verifies show in a box above the list, count into the Drift chip, and are silent when empty', () => {
+  const none = render({ status: 'approved' });
+  assert.doesNotMatch(none.v.list, /drift-box/);
+  const model = {
+    ...MODEL,
+    sites: [{ ...MODEL.sites[0], orphanRuns: ['finding/mattpyle-com/ux-orphan--x'] }, MODEL.sites[1]],
+    failedVerifies: [{ workflowId: 'verify/temporal-io/ti-quiet--home/1', site: TI, key: 'ti-quiet--home', status: 'Failed', closeTime: '2026-10-30T18:00:00.000Z' }],
+  };
+  const state = { ...F.createState(), status: 'approved' };
+  const v = F.view(model, state, OPTIONS);
+  assert.match(v.list, /^<div class="drift-box"/);
+  assert.ok(v.list.includes(`mattpyle.com: open run with no INDEX.md line: <a href="${RUN_URL('finding/mattpyle-com/ux-orphan--x')}"`));
+  assert.ok(v.list.includes(`temporal.io: verify run closed as Failed on 30 Oct, 11:00: <a href="${RUN_URL('verify/temporal-io/ti-quiet--home/1')}"`));
+  // One drifting row (ux-drift--feed) plus the two site signals.
+  assert.match(v.facets, /Drift<span class="count">3</);
+  // The site filter narrows the signals and the count.
+  const ti = F.view(model, { ...state, site: TI }, OPTIONS);
+  assert.doesNotMatch(ti.list, /ux-orphan--x/);
+  assert.match(ti.list, /ti-quiet--home\/1/);
+  assert.match(ti.facets, /Drift<span class="count">1</);
+});
+
+test('a failed load closes the open finding and leaves no foot', () => {
+  const state = { ...F.createState(), current: `${MP}/ux-short--about`, foot: { error: 'x', sending: true, reasonError: true } };
+  const gone = F.loadFailed(state);
+  assert.equal(state.current, null);
+  assert.deepEqual({ ...gone }, { open: false, doc: '', foot: '' });
+  assert.equal(state.foot.sending, false);
+  // The page nulls its model on a failed load; a click on a tab or chip then paints the controls without throwing.
+  const v = F.view(null, state, OPTIONS);
+  assert.match(v.statuses, /data-status="all"/);
+  assert.equal(v.facets.includes('drift-chip'), false);
+  assert.match(v.list, /No findings match/);
+});
+
+test('titles and summaries keep their backticks', () => {
+  const r = row({ site: MP, key: 'ux-ticks--home', status: 'proposed', title: 'The `og:image` tag is missing', summary: 'Add `og:image` to the head.' });
+  const model = { ...MODEL, sites: [{ ...MODEL.sites[0], rows: [r] }] };
+  const v = F.view(model, { ...F.createState(), current: `${MP}/ux-ticks--home` }, OPTIONS);
+  assert.ok(v.list.includes('The `og:image` tag is missing'));
+  assert.ok(v.doc.includes('<h2 class="doc-title">The `og:image` tag is missing</h2>'));
+  assert.ok(v.doc.includes('Add `og:image` to the head.'));
+});
+
+test('the site label is plain in the facet menu and the panel header, and hidden-able in the list', () => {
+  const { v } = render({ site: MP, current: `${MP}/ux-short--about` });
+  assert.ok(v.list.includes('<span class="lbl">mattpyle.com</span>'));
+  assert.ok(v.facets.includes('<span>mattpyle.com</span>'));
+  assert.ok(!v.facets.includes('class="lbl"'));
+  assert.ok(v.doc.includes('<span>mattpyle.com</span>'));
 });

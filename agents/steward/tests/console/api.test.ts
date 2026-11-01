@@ -122,6 +122,8 @@ before(async () => {
       };
     },
     timeZone: 'America/Vancouver',
+    webUi: 'https://web.example',
+    namespace: 'ns.test',
   });
 });
 
@@ -216,35 +218,28 @@ test('driftFor without a context keeps the old answer', () => {
   assert.deepEqual(driftFor('fixing', 'fixing', run, { stopAfter: 'verdict', kind: 'opportunity' }), ['fixing with no open run']);
 });
 
-test('POST /api/verdict answers JSON for a form or a JSON body, under the same guards', async () => {
+test('POST /api/verdict answers JSON for a JSON body, under the guards', async () => {
   sent = [];
   const fields = { token: server.token, site: MP, key: 'ux-proposed--about', verdict: 'rejected', reason: 'Duplicate.' };
   const origin = `http://127.0.0.1:${server.port}`;
-  const ok = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, form: fields });
+  const ok = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, json: fields });
   assert.equal(ok.status, 200, ok.body);
   assert.match(String(ok.headers['content-type']), /application\/json/);
   assert.equal(JSON.parse(ok.body).commitSha, 'abc1234');
-  const asJson = await consoleRequest({
-    port: server.port,
-    path: '/api/verdict',
-    method: 'POST',
-    origin,
-    contentType: 'application/json',
-    rawBody: JSON.stringify(fields),
-  });
-  assert.equal(asJson.status, 200, asJson.body);
-  assert.equal(sent.length, 2);
+  const asForm = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, form: fields });
+  assert.equal(asForm.status, 415);
+  assert.equal(sent.length, 1);
 
-  const foreign = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin: 'http://evil.example', form: fields });
+  const foreign = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin: 'http://evil.example', json: fields });
   assert.equal(foreign.status, 403);
   assert.ok(JSON.parse(foreign.body).error);
-  const noToken = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, form: { ...fields, token: 'nope' } });
+  const noToken = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, json: { ...fields, token: 'nope' } });
   assert.equal(noToken.status, 403);
-  const noReason = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, form: { ...fields, reason: '' } });
+  const noReason = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, json: { ...fields, reason: '' } });
   assert.equal(noReason.status, 400);
-  assert.equal(sent.length, 2, 'a refused request never reaches the sender');
+  assert.equal(sent.length, 1, 'a refused request never reaches the sender');
   refuseNext = true;
-  const conflict = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, form: fields });
+  const conflict = await consoleRequest({ port: server.port, path: '/api/verdict', method: 'POST', origin, json: fields });
   assert.equal(conflict.status, 409);
 });
 
@@ -258,7 +253,7 @@ test('both routes refuse a non-loopback Host', async () => {
     method: 'POST',
     host: 'rebound.example',
     origin: 'http://rebound.example',
-    form: { token: server.token, site: MP, key: 'k', verdict: 'approved' },
+    json: { token: server.token, site: MP, key: 'k', verdict: 'approved' },
   });
   assert.equal(post.status, 403);
   assert.deepEqual(sent, []);

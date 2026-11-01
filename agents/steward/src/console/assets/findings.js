@@ -26,6 +26,7 @@
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Only the next-step sentence uses this: the CLI writes it with markdown backticks, and the foot shows plain text.
   const plain = (s) => String(s ?? '').replace(/`/g, '');
   const siteName = (site) => (SITES[site] ? SITES[site].name : site);
   const idOf = (row) => `${row.site}/${row.key}`;
@@ -143,10 +144,11 @@
     feature: '<path d="M8 2.5v11M2.5 8h11" fill="none"/>',
   };
   const catHTML = (t) => (t ? `<span class="cat" data-t="${esc(t)}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="currentColor">${ICON[t] || ICON.feature}</svg>${esc(TYPE[t] || t)}</span>` : '');
-  const siteHTML = (site) => {
+  // The list hides the label at narrow widths (`.lbl`); the facet menu and the panel header always show it.
+  const siteHTML = (site, { alwaysShowLabel = false } = {}) => {
     const known = SITES[site];
     const mark = known ? `<img class="site-mark" src="${known.icon}" width="20" height="20" alt="">` : '';
-    return `<span class="site" title="${esc(siteName(site))}">${mark}<span class="lbl">${esc(siteName(site))}</span></span>`;
+    return `<span class="site" title="${esc(siteName(site))}">${mark}<span${alwaysShowLabel ? '' : ' class="lbl"'}>${esc(siteName(site))}</span></span>`;
   };
   const KIND_ICON = {
     defect: '<ellipse cx="8" cy="9.5" rx="3.6" ry="4.2" fill="none"/><path d="M8 5.3v8.4M4.4 9H2.5M13.5 9h-1.9M4.8 6.3L3 5M11.2 6.3L13 5M4.8 12.4L3 13.6M11.2 12.4l1.8 1.2M6.3 5.6a1.8 1.8 0 0 1 3.4 0" fill="none"/>',
@@ -159,6 +161,42 @@
   const driftHTML = (r) => (r.drift.length ? `<span class="drift" title="${esc(driftTip(r))}" aria-label="${esc(driftTip(r))}">${DRIFT_ICON}</span>` : '');
   const CHEV = '<svg class="chev" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const TICK = '<svg class="tick" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  // A run's link in the Temporal Web UI, built from the two values the server gives the page and the workflow id.
+  // Without them (a page opened some other way) the id shows as text.
+  function runLinker(options) {
+    const base = safeUrl(options.webUi);
+    const ns = options.namespace;
+    return (id) => {
+      if (!base || !ns) return `<code>${esc(id)}</code>`;
+      const href = `${String(options.webUi).replace(/\/+$/, '')}/namespaces/${encodeURIComponent(ns)}/workflows/${encodeURIComponent(id)}`;
+      return `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(id)}</a>`;
+    };
+  }
+
+  // ---------- Signals the rows do not carry ----------
+
+  // Per site: open runs with no INDEX.md line, and verify runs closed other than Completed in the last seven days.
+  function siteSignals(model, state) {
+    // `model` is null after a failed load; the page still paints its controls.
+    const sites = ((model && model.sites) || []).filter((s) => state.site === 'all' || s.site === state.site);
+    const failed = ((model && model.failedVerifies) || []).filter((f) => state.site === 'all' || f.site === state.site);
+    return { orphans: sites.flatMap((s) => (s.orphanRuns || []).map((id) => ({ site: s.site, id }))), failed };
+  }
+  const signalCount = (model, state) => {
+    const s = siteSignals(model, state);
+    return s.orphans.length + s.failed.length;
+  };
+
+  function renderSignals(model, state, link, c) {
+    const { orphans, failed } = siteSignals(model, state);
+    if (!orphans.length && !failed.length) return '';
+    const lines = [
+      ...orphans.map((o) => `<li>${esc(siteName(o.site))}: open run with no INDEX.md line: ${link(o.id)}</li>`),
+      ...failed.map((f) => `<li>${esc(siteName(f.site))}: verify run closed as ${esc(f.status)}${f.closeTime ? ` on ${esc(c.dayTime(f.closeTime))}` : ''}: ${link(f.workflowId)}</li>`),
+    ];
+    return `<div class="drift-box" role="note"><p class="drift-title">${DRIFT_ICON}Drift</p><ul class="drift-lines">${lines.join('')}</ul></div>`;
+  }
 
   // ---------- The toolbar ----------
 
@@ -181,18 +219,17 @@
   }
 
   function renderFacets(model, rows, state) {
-    const sites = (model.sites || []).map((s) => s.site);
-    const anyStatus = (s) => state.status === 'all' || s === state.status;
+    const sites = ((model && model.sites) || []).map((s) => s.site);
     const siteOpts = [['all', 'All sites', count(rows, state, { site: () => true })],
       ...sites.map((x) => [x, esc(siteName(x)), count(rows, state, { site: (r) => r.site === x })])];
     const priOpts = [['all', 'All priorities', count(rows, state, { pri: () => true })],
       ...LEVELS.map((p) => [p, priHTML(p), count(rows, state, { pri: (r) => r.priority === p })])];
     const sortOpts = Object.entries(SORTS).map(([v, w]) => [v, w, '']);
     const statusOpts = [...knownStatuses(rows), 'all'].map((x) => [x, x === 'all' ? 'All' : esc(WORD[x] || x), count(rows, state, { status: (y) => x === 'all' || y === x })]);
-    const drifting = rows.filter((r) => r.drift.length > 0 && inSite(state)(r) && anyStatus(r.status)).length;
-    const siteWord = (v) => `${siteHTML(v).replace('<span class="lbl">', '<span>')}`;
+    const drifting = rows.filter((r) => r.drift.length > 0 && inSite(state)(r)).length + signalCount(model, state);
+    const siteWord = (v) => siteHTML(v, { alwaysShowLabel: true });
     return facetHTML(state, 'status', 'All', statusOpts, state.status, (v) => `${esc(WORD[v] || v)}<span class="count">${count(rows, state, { status: (y) => y === v })}</span>`)
-      + (drifting ? `<button class="drift-chip" type="button" data-act="drift" aria-pressed="${state.drift}" title="Findings whose index, file and run disagree">${DRIFT_ICON}Drift<span class="count">${drifting}</span></button>` : '')
+      + (drifting ? `<button class="drift-chip" type="button" data-act="drift" aria-pressed="${state.drift}" title="Findings whose index, file and run disagree, and runs no finding accounts for">${DRIFT_ICON}Drift<span class="count">${drifting}</span></button>` : '')
       + facetHTML(state, 'site', 'Site', siteOpts, state.site, siteWord)
       + facetHTML(state, 'pri', 'Priority', priOpts, state.pri, priHTML)
       + facetHTML(state, 'sort', 'Sort', sortOpts, state.sort === 'priority' ? 'all' : state.sort, (v) => SORTS[v]);
@@ -202,9 +239,9 @@
 
   function rowHTML(r, state, c, now) {
     const id = idOf(r);
-    return `<li><button class="row cols" type="button" data-id="${esc(id)}" ${state.current === id ? 'aria-current="true"' : ''} title="${esc(plain(r.title))}">
+    return `<li><button class="row cols" type="button" data-id="${esc(id)}" ${state.current === id ? 'aria-current="true"' : ''} title="${esc(r.title)}">
       <span class="c-ref">${esc(refOf(r))}</span>
-      <span class="c-title"><span class="t">${esc(plain(shortTitle(r)))}</span>${driftHTML(r)}</span>
+      <span class="c-title"><span class="t">${esc(shortTitle(r))}</span>${driftHTML(r)}</span>
       <span class="c-pri">${priHTML(r.priority)}</span>
       <span class="c-site">${siteHTML(r.site)}</span>
       <span class="c-cat">${catHTML(r.type)}</span>
@@ -242,17 +279,17 @@
     return events;
   }
 
-  function eventHTML(e, c) {
+  function eventHTML(e, c, link) {
     let text;
     const url = safeUrl(e.url);
     if (e.kind === 'pr' && url) text = `PR <a href="${url}" target="_blank" rel="noopener noreferrer">#${esc(prNum(e.url))}</a> opened`;
-    else text = `${esc(e.label)}${e.detail ? `: ${esc(e.detail)}` : ''}`;
+    else text = `${esc(e.label)}${e.detail ? `: ${esc(e.detail)}` : ''}${e.workflowId ? ` (${link(e.workflowId)})` : ''}`;
     return `<li><span>${text}</span>${e.at ? `<time title="${esc(c.full(e.at))}">${esc(c.dayTime(e.at))}</time>` : '<span></span>'}</li>`;
   }
 
   const KEY_COPY = (key) => `<button class="key-copy" type="button" title="Click to copy" aria-label="Copy key ${esc(key)}"><span class="key">${esc(key)}</span><span class="copy-state" aria-hidden="true"><svg class="i-copy" width="16" height="16" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><svg class="i-done" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="copied-word">Copied</span></span></button><span class="sr-only" role="status" aria-live="polite"></span>`;
 
-  function renderDoc(r, state, c) {
+  function renderDoc(r, state, c, link) {
     const s = statusOf(r, state);
     const d = state.decided[idOf(r)];
     const facts = [
@@ -270,20 +307,21 @@
     if (pr) facts.push(['PR', `<a href="${pr}" target="_blank" rel="noopener noreferrer">#${esc(prNum(r.prUrl))}</a>`]);
     const reason = d ? d.reason : s === 'rejected' ? r.reason : '';
     if (reason) facts.push(['Reason', esc(reason)]);
+    if (r.run && r.run.open) facts.push(['Run', link(`finding/${r.site}/${r.key}`)]);
     facts.push(['Key', KEY_COPY(r.key)]);
 
     const summary = r.summary || (r.titleShort ? r.title : '');
     const heading = (h) => esc(String(h).replace(/^Seen again (\S+)$/, (_, run) => `Seen again on ${c.day(runIso(run))}`));
     return `
       <header class="doc-head">
-        <p class="doc-ref">${siteHTML(r.site).replace('<span class="lbl">', '<span>')}<span class="sep" aria-hidden="true">/</span><span class="ref">${esc(refOf(r))}</span></p>
-        <h2 class="doc-title">${esc(plain(shortTitle(r)))}</h2>
-        ${summary ? `<p class="doc-summary">${esc(plain(summary))}</p>` : ''}
+        <p class="doc-ref">${siteHTML(r.site, { alwaysShowLabel: true })}<span class="sep" aria-hidden="true">/</span><span class="ref">${esc(refOf(r))}</span></p>
+        <h2 class="doc-title">${esc(shortTitle(r))}</h2>
+        ${summary ? `<p class="doc-summary">${esc(summary)}</p>` : ''}
       </header>
       ${r.drift.length ? `<div class="drift-box" role="note"><p class="drift-title">${DRIFT_ICON}Drift</p><ul class="drift-lines">${r.drift.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
       <dl class="facts">${facts.filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
       ${(r.sections || []).map((x) => `<section class="section"><h3>${heading(x.heading)}</h3><div class="prose">${x.html}</div></section>`).join('')}
-      <section class="section"><h3>Timeline</h3><ol class="timeline">${timeline(r, state).map((e) => eventHTML(e, c)).join('')}</ol></section>`;
+      <section class="section"><h3>Timeline</h3><ol class="timeline">${timeline(r, state).map((e) => eventHTML(e, c, link)).join('')}</ol></section>`;
   }
 
   // The next proposed finding after a verdict, in the list's order and within the chosen site.
@@ -338,6 +376,7 @@
   function view(model, state, options) {
     const c = clock(options.timeZone);
     const now = options.now;
+    const link = runLinker(options);
     const rows = rowsOf(model);
     const current = rows.find((r) => idOf(r) === state.current) || null;
     const foot = current ? renderFoot(current, rows, state) : '';
@@ -347,10 +386,17 @@
       open: !!current,
       statuses: renderStatuses(rows, state),
       facets: renderFacets(model, rows, state),
-      list: renderList(rows, state, c, now),
-      doc: current ? renderDoc(current, state, c) : '',
+      list: renderSignals(model, state, link, c) + renderList(rows, state, c, now),
+      doc: current ? renderDoc(current, state, c, link) : '',
       foot,
     };
+  }
+
+  // A load that failed leaves no open finding and no foot: a verdict never goes out against a model that did not load.
+  function loadFailed(state) {
+    state.current = null;
+    state.foot = { error: null, sending: false, reasonError: false };
+    return { open: false, doc: '', foot: '' };
   }
 
   // The first finding to open on load: the top of the Proposed list.
@@ -359,7 +405,7 @@
     return r ? idOf(r) : null;
   }
 
-  const api = { STATUSES, SITES, rowsOf, createState, visible, view, firstProposed, nextProposed, clock, esc };
+  const api = { STATUSES, SITES, rowsOf, createState, visible, view, firstProposed, nextProposed, loadFailed, clock, esc };
   globalThis.StewardFindings = api;
 
   if (typeof document === 'undefined' || !document.querySelector('.app')) return;
@@ -369,6 +415,10 @@
   const $ = (sel) => document.querySelector(sel);
   const zone = document.documentElement.dataset.timeZone;
   const timeZone = zone && !zone.includes('{') ? zone : 'America/Vancouver';
+  // The Web UI origin and namespace the server put on the page; absent, run ids show as text.
+  const given = (v) => (v && !v.includes('{') ? v : '');
+  const webUi = given(document.documentElement.dataset.webUi);
+  const namespace = given(document.documentElement.dataset.namespace);
   const state = createState();
   let model = null;
   let token = '';
@@ -379,7 +429,7 @@
   };
 
   function paint(parts) {
-    const v = view(model, state, { timeZone, now: new Date() });
+    const v = view(model, state, { timeZone, webUi, namespace, now: new Date() });
     document.body.dataset.sort = v.sort;
     document.body.classList.toggle('is-open', v.open);
     el.age.setAttribute('aria-sort', v.ageSort);
@@ -416,6 +466,12 @@
       else if (!rows.some((r) => idOf(r) === state.current)) state.current = null;
       paint(['controls', 'list', 'doc', 'foot']);
     } catch (err) {
+      const gone = loadFailed(state);
+      model = null;
+      document.body.classList.toggle('is-open', gone.open);
+      el.doc.innerHTML = gone.doc;
+      el.foot.innerHTML = gone.foot;
+      el.foot.hidden = true;
       el.groups.innerHTML = `<div class="empty"><p>The findings did not load: ${esc(err.message)}</p><button class="linkish" type="button" data-act="reload">Try again</button></div>`;
     } finally {
       el.refresh.removeAttribute('aria-busy');
@@ -424,7 +480,7 @@
   }
 
   async function sendVerdict(act) {
-    const r = rowsOf(model).find((x) => idOf(x) === state.current);
+    const r = model && rowsOf(model).find((x) => idOf(x) === state.current);
     if (!r) return;
     const textarea = el.foot.querySelector('textarea');
     const reason = textarea.value.trim();
@@ -490,7 +546,14 @@
       render();
       return;
     }
-    if (e.target.closest('[data-act="drift"]')) { state.drift = !state.drift; render(); return; }
+    if (e.target.closest('[data-act="drift"]')) {
+      // The chip counts drift in every status, so turning it on shows them all; turning it off returns to the tab.
+      state.drift = !state.drift;
+      if (state.drift) { state.statusBeforeDrift = state.status; state.status = 'all'; }
+      else if (state.statusBeforeDrift) { state.status = state.statusBeforeDrift; state.statusBeforeDrift = null; }
+      render();
+      return;
+    }
     const btn = e.target.closest('.facet-btn');
     if (btn) {
       const name = btn.parentElement.dataset.facet;

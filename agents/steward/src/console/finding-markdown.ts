@@ -1,4 +1,5 @@
 import { Marked, type Tokens } from 'marked';
+import { escapeHtml } from '../lib/html.js';
 
 /**
  * A finding's markdown as HTML the console client can place with `innerHTML`.
@@ -9,15 +10,6 @@ import { Marked, type Tokens } from 'marked';
  * opens in a new tab; an image becomes a link to its source. Nothing here
  * emits a script, a style or an event attribute.
  */
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 /** The target when it is safe to link, else null. A relative path is not linkable from a loopback page. */
 function safeHref(href: string | null | undefined): string | null {
