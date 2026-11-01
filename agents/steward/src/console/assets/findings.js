@@ -178,8 +178,9 @@
 
   // Per site: open runs with no INDEX.md line, and verify runs closed other than Completed in the last seven days.
   function siteSignals(model, state) {
-    const sites = (model.sites || []).filter((s) => state.site === 'all' || s.site === state.site);
-    const failed = (model.failedVerifies || []).filter((f) => state.site === 'all' || f.site === state.site);
+    // `model` is null after a failed load; the page still paints its controls.
+    const sites = ((model && model.sites) || []).filter((s) => state.site === 'all' || s.site === state.site);
+    const failed = ((model && model.failedVerifies) || []).filter((f) => state.site === 'all' || f.site === state.site);
     return { orphans: sites.flatMap((s) => (s.orphanRuns || []).map((id) => ({ site: s.site, id }))), failed };
   }
   const signalCount = (model, state) => {
@@ -218,7 +219,7 @@
   }
 
   function renderFacets(model, rows, state) {
-    const sites = (model.sites || []).map((s) => s.site);
+    const sites = ((model && model.sites) || []).map((s) => s.site);
     const siteOpts = [['all', 'All sites', count(rows, state, { site: () => true })],
       ...sites.map((x) => [x, esc(siteName(x)), count(rows, state, { site: (r) => r.site === x })])];
     const priOpts = [['all', 'All priorities', count(rows, state, { pri: () => true })],

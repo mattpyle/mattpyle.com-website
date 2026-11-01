@@ -344,6 +344,11 @@ test('a failed load closes the open finding and leaves no foot', () => {
   assert.equal(state.current, null);
   assert.deepEqual({ ...gone }, { open: false, doc: '', foot: '' });
   assert.equal(state.foot.sending, false);
+  // The page nulls its model on a failed load; a click on a tab or chip then paints the controls without throwing.
+  const v = F.view(null, state, OPTIONS);
+  assert.match(v.statuses, /data-status="all"/);
+  assert.equal(v.facets.includes('drift-chip'), false);
+  assert.match(v.list, /No findings match/);
 });
 
 test('titles and summaries keep their backticks', () => {
