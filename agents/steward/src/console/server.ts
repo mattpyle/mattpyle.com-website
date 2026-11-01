@@ -266,7 +266,8 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
 
   const server = http.createServer((req, res) => {
     route(req, res).catch((err: unknown) => {
-      if (!(err instanceof Refused)) console.error(`steward console: ${req.method} ${req.url} failed:`, err);
+      // The method and path go as arguments, never inside the format string: the path is the caller's text.
+      if (!(err instanceof Refused)) console.error('steward console: %s %s failed:', req.method ?? 'GET', req.url ?? '/', err);
       if (res.headersSent) {
         res.destroy();
         return;
