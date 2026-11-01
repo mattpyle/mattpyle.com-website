@@ -17,7 +17,7 @@ const exec = promisify(execFile);
  * `publish.test.ts` covers the pure frontmatter surgery, and the live dry-run
  * covers the REST calls and the push. The staged set sits between the two and
  * used to be provable only by reading a real PR's file list — which is how a
- * publish shipped a post whose hero image existed on one laptop. A throwaway
+ * publish shipped a post whose hero image existed on one local machine. A throwaway
  * repo answers it in milliseconds.
  *
  * The publish commit carries the payload and nothing else. The site's three

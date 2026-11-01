@@ -73,7 +73,7 @@ import {
  *
  * This is the entry the Railway container runs (always-on-audit-worker card,
  * leg 2b). `worker.ts` is unchanged in shape and is still what `steward up`
- * starts on Matt's machine — that one registers every queue, so the laptop can
+ * starts on Matt's machine — that one registers every queue, so the local machine can
  * serve everything when it happens to be on, and the two processes do not
  * compete because they claim different queues.
  *
@@ -98,7 +98,7 @@ import {
  * them, because they read drafts out of a working copy this container does not
  * have. A worker that fails tasks is worse than a worker that never claims
  * them: the failures burn the activity's retries and the review dies rather
- * than waiting for the laptop.
+ * than waiting for the local machine.
  *
  * So the activity map below is written out by hand. It is exactly what
  * `workflows/audit-site.ts` and `workflows/scorecard-audit.ts` name, and adding
@@ -207,7 +207,7 @@ const findingsActivities = {
  * awaits, which would otherwise take the whole process down and with it every
  * concurrent audit. Read that file's docblock for the full account.
  *
- * It matters more here than there. On the laptop a crashed worker is a thing
+ * It matters more here than there. On the local machine a crashed worker is a thing
  * Matt notices; in a container it is a restart loop nobody is watching.
  */
 process.on('unhandledRejection', (reason) => {
@@ -374,7 +374,7 @@ async function main() {
     shutdownForceTime: '40 seconds',
     // The only reason this worker has interceptors: the recycle policy needs to
     // know when a browser activity ran and when the last activity finished, and
-    // the activities themselves are shared with the laptop worker, which must
+    // the activities themselves are shared with the local worker, which must
     // never recycle. Observing from out here keeps them ignorant of hosting.
     interceptors: { activity: [trackActivityExecution(tracker)] },
   });

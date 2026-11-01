@@ -68,25 +68,25 @@ test('each worker sets the option once, from its own constant, in queue order', 
   );
 });
 
-test('the laptop worker serves two queues on Cloud, four on the local dev server, never steward-findings', async () => {
+test('the local worker serves two queues on Cloud, four on the local dev server, never steward-findings', async () => {
   const local = await fs.readFile(path.join(path.dirname(HOSTED_WORKER), 'worker.ts'), 'utf8');
-  const { LAPTOP_WORKER_QUEUES, IS_TEMPORAL_CLOUD, laptopWorkerQueues, QUEUE_LIGHT, QUEUE_HEAVY } = await import(
+  const { LOCAL_WORKER_QUEUES, IS_TEMPORAL_CLOUD, localWorkerQueues, QUEUE_LIGHT, QUEUE_HEAVY } = await import(
     '../../src/config.js'
   );
   assert.deepEqual(
-    [...laptopWorkerQueues(true)],
+    [...localWorkerQueues(true)],
     [QUEUE_LIGHT, QUEUE_HEAVY],
-    'on Cloud the hosted worker owns the audit queues; a laptop poller there runs stale audit code after a merge',
+    'on Cloud the hosted worker owns the audit queues; a local machine poller there runs stale audit code after a merge',
   );
   assert.deepEqual(
-    [...laptopWorkerQueues(false)],
+    [...localWorkerQueues(false)],
     [QUEUE_LIGHT, QUEUE_HEAVY, QUEUE_AUDIT, QUEUE_AUDIT_FAST],
-    'the local dev server has no hosted worker, so the laptop keeps the audit queues',
+    'the local dev server has no hosted worker, so the local machine keeps the audit queues',
   );
-  assert.deepEqual([...LAPTOP_WORKER_QUEUES], [...laptopWorkerQueues(IS_TEMPORAL_CLOUD)], 'the constant resolves from the connection');
-  assert.ok(!LAPTOP_WORKER_QUEUES.includes(QUEUE_FINDINGS), 'a second poller on steward-findings lets an old-code laptop fail a hosted run');
-  assert.match(local, /LAPTOP_WORKER_QUEUES\.map\(/, 'the worker creates one Worker per entry of the shared list');
-  assert.doesNotMatch(local, /QUEUE_FINDINGS/, 'the ready line lists the queues the laptop worker serves');
+  assert.deepEqual([...LOCAL_WORKER_QUEUES], [...localWorkerQueues(IS_TEMPORAL_CLOUD)], 'the constant resolves from the connection');
+  assert.ok(!LOCAL_WORKER_QUEUES.includes(QUEUE_FINDINGS), 'a second poller on steward-findings lets an old-code local worker fail a hosted run');
+  assert.match(local, /LOCAL_WORKER_QUEUES\.map\(/, 'the worker creates one Worker per entry of the shared list');
+  assert.doesNotMatch(local, /QUEUE_FINDINGS/, 'the ready line lists the queues the local worker serves');
 });
 
 test('the second worker serves the fast queue and registers nothing but the fast audit', async () => {

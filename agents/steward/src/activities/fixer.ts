@@ -39,14 +39,14 @@ import {
 import { npmCommand } from './build-audit.js';
 
 /**
- * The fixer's laptop activities: write the handoff, choose its checks and
+ * The fixer's local activities: write the handoff, choose its checks and
  * write them again when they do not show the defect, run Claude Code on it,
  * open the PR. `fixFindingWorkflow` runs them in that order between a read of
  * the finding and the write back to it.
  *
  * All three need this machine: the first two its Claude Code login and its
  * checkout, the second its git credentials as well. They run on `steward-heavy`, which only the
- * laptop worker polls.
+ * local worker polls.
  *
  * `runFixer` follows `buildAndAuditDraft`, the other activity that is minutes
  * long and owns a child process: a background heartbeat pump, the child killed

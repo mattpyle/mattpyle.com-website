@@ -1,10 +1,10 @@
 import type { Client } from '@temporalio/client';
 
 /**
- * `steward update`: pull `master` and restart the laptop worker, refusing while
+ * `steward update`: pull `master` and restart the local worker, refusing while
  * a fix is in flight.
  *
- * After a Steward merge the laptop worker holds old code until it restarts, and
+ * After a Steward merge the local worker holds old code until it restarts, and
  * a restart kills whatever activity it is running. The activity that matters is
  * `runFixer`, which has one attempt: killed mid-run, the fix fails. So the
  * command checks for a pending `steward-heavy` activity before it changes
@@ -25,7 +25,7 @@ export class UpdateRefused extends Error {
 }
 
 /**
- * The activity types a workflow schedules on `steward-heavy`: the laptop worker
+ * The activity types a workflow schedules on `steward-heavy`: the local worker
  * is the only poller, so a restart interrupts them. Kept as a list rather than
  * read from the workflows, because a pending activity does not say which queue it
  * was scheduled on. `tests/lib/steward-update.test.ts` reads the workflow sources

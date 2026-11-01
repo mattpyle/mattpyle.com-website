@@ -70,7 +70,7 @@ import type { VerifyCheck, VerifyCheckResult } from '../lib/verify-checks.js';
 // Duplicated rather than imported from config.ts, as in the sibling workflows:
 // config.ts touches `node:path` and `process.env`, neither available in the
 // workflow sandbox. Every activity runs on the heavy queue, which only the
-// laptop worker polls: two of them need its Claude Code login and its checkout,
+// local worker polls: two of them need its Claude Code login and its checkout,
 // and keeping the GitHub calls and the checks beside them means one worker,
 // running one version of the code, carries a fix from start to end.
 const QUEUE_HEAVY = 'steward-heavy';

@@ -17,10 +17,10 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
  *
  * **The limit this file used to open with is gone (2026-08-14).** It read: the
  * server and worker are local, a Schedule only acts while that stack is up, so
- * this is a daily audit on a laptop rather than unattended nightly auditing.
+ * this is a daily audit on a local machine rather than unattended nightly auditing.
  * Both halves of that moved. The Schedule lives in Temporal Cloud, and the
  * hosted Railway worker polls `steward-audit` continuously, so a firing is taken
- * on time and advanced to completion with the laptop shut
+ * on time and advanced to completion with the local machine shut
  * (always-on-audit-worker card).
  *
  * That is also why the two policy values below changed. They were both written
@@ -29,7 +29,7 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
  *
  * The remaining honest limit is narrower and worth stating plainly: the run
  * depends on Temporal Cloud, on the Railway container, and on GitHub. None of
- * those is Matt's laptop. All three are watched since 2026-08-15
+ * those is Matt's PC. All three are watched since 2026-08-15
  * (audit-stack-alerting-and-monitoring card): the run pings a dead-man's-switch
  * check on success and fails it on a bad result, so a silently dead container
  * is an email rather than a gap somebody notices in the run-log's dates.
@@ -55,7 +55,7 @@ export const SCORECARD_SCHEDULE_WORKFLOW_ID = 'steward-scorecard-scheduled';
  * **03:30, and the reasoning inverted on 2026-08-14.** The old value was 20:00,
  * and its docblock said so explicitly: "the default has to be an hour the stack
  * is plausibly up, and on this machine that is the evening". That was a
- * constraint about Matt's laptop, not about the site, and the hosted worker
+ * constraint about Matt's PC, not about the site, and the hosted worker
  * removed it.
  *
  * Freed of it, the right hour is the quiet one this comment used to rule out.
@@ -73,7 +73,7 @@ export const SCORECARD_SCHEDULE_DEFAULT_AT = '03:30';
  * **One hour, down from 23 on 2026-08-14.** The window shrank because the thing
  * it was compensating for stopped existing.
  *
- * 23 hours was sized for a laptop: the dev server hosting the Schedule was off
+ * 23 hours was sized for a local machine: the dev server hosting the Schedule was off
  * most of the day, firings were missed routinely rather than exceptionally, and
  * a window nearly as long as the firing interval meant a missed evening run
  * could still be recovered on the next `steward up`. The trade it bought was
@@ -293,12 +293,12 @@ function describePolicies(policies: {
 }
 
 /**
- * The two counters that measure the laptop limit, both straight from
+ * The two counters that measure the local machine limit, both straight from
  * `describe()` and neither printed anywhere before this.
  *
  * `numActionsMissedCatchupWindow` is the one that matters, and what it measures
  * changed on 2026-08-14 along with everything else here. It used to count the
- * nights the laptop slept through, and a number climbing daily was the evidence
+ * nights the PC slept through, and a number climbing daily was the evidence
  * that argued for the always-on worker in the first place.
  *
  * In Cloud, with a one-hour window, it should sit at zero permanently: the
@@ -329,7 +329,7 @@ function describeCounters(info: {
  *
  * Every verb reports the Schedule's state afterwards rather than just saying
  * "done": the operator's actual question is always "so when does it fire next",
- * and on a laptop stack that answer is the one that keeps expectations honest.
+ * and on a local stack that answer is the one that keeps expectations honest.
  */
 export async function runScorecardScheduleAction(
   action: ScorecardScheduleAction,

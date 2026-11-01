@@ -199,7 +199,7 @@ test('a fast audit arms nothing and stamps nothing, in flight or finished', asyn
  * at module scope.
  *
  * What this holds is the rule the card states as "the recycle is hosted-only".
- * The laptop worker (`worker.ts`, started by `steward up`) must never exit
+ * The local worker (`worker.ts`, started by `steward up`) must never exit
  * mid-session, and the only thing stopping a later edit from lifting the policy
  * into the shared worker is that somebody notices. This test notices.
  */
@@ -214,6 +214,6 @@ test('the recycle is wired into the hosted worker and nowhere else', async () =>
   assert.doesNotMatch(
     local,
     /recycle-policy/,
-    'worker.ts is the laptop worker; a worker that exits mid-session is a surprise',
+    'worker.ts is the local worker; a worker that exits mid-session is a surprise',
   );
 });

@@ -50,7 +50,7 @@ import type { RenderedPageOutcome, SkippedPage } from '../lib/agent-audit/deep-a
 // `node:path` and `process.env`, neither available in the workflow sandbox.
 // `steward-audit` is the audit's own queue (always-on-audit-worker card): the
 // hosted worker polls it and nothing else, and `reviewPost`, which reads the
-// working copy and writes local files, stays on the queues a laptop serves.
+// working copy and writes local files, stays on the queues a local machine serves.
 const QUEUE_AUDIT = 'steward-audit';
 
 /**

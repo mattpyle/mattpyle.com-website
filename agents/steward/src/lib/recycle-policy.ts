@@ -58,7 +58,7 @@ import type {
  * counted whole: the set names activity types, not what one run did.
  *
  * Kept as a set here rather than as a check inside the activities because the
- * activities are shared with the laptop worker and must not learn about hosting.
+ * activities are shared with the local worker and must not learn about hosting.
  */
 export const BROWSER_ACTIVITY_TYPES: ReadonlySet<string> = new Set([
   'auditRenderedPage',
@@ -175,7 +175,7 @@ export class ActivityTracker {
  * The `WorkerOptions.interceptors.activity` entry that feeds the tracker.
  *
  * An interceptor rather than a line in each activity: the activities are shared
- * with the laptop worker, where the recycle must never happen, and observing
+ * with the local worker, where the recycle must never happen, and observing
  * from outside keeps them ignorant of it. It wraps every activity execution on
  * this worker, so the count is the SDK's own view of in-flight work rather than
  * a second one that can drift.

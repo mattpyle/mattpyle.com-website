@@ -26,7 +26,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
   draft) against a fixed set of public conformance metrics (axe violations, Lighthouse categories,
   agentic-browsing checks). It opens a PR when the result changed or the last run is stale, and never
   self-merges. A daily Temporal Schedule fires it at 03:30 local, in Temporal Cloud, on the hosted
-  worker, so a firing produces a run with this laptop shut.
+  worker, so a firing produces a run with this PC off.
 - **`auditSiteWorkflow`** — one agent-readiness audit of *any* site, run durably: the fetch-based
   checks, and on the deep tier one browser-rendered page per activity, then assembly. Started by the
   local MCP server (`steward mcp-serve`) and by the site's public `/mcp` endpoint's `deep_audit` tool;
@@ -94,12 +94,12 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
 | `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow`, `verifyFindingWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
-Two workers claim them, and never compete. The **laptop worker** (`steward up`, `src/worker.ts`)
+Two workers claim them, and never compete. The **local worker** (`steward up`, `src/worker.ts`)
 polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
 the three queues that depend on nothing local, each with a hand-written activity map: a worker that
 claimed `snapshotDraft` would fail it, because the container has no drafts, and a failed task is
 worse than an unclaimed one. `steward-findings` has the hosted worker alone: with a second poller on
-matt-pc, an old-code laptop worker could take a hosted run's workflow task after a merge and fail it
+matt-pc, an old-code local worker could take a hosted run's workflow task after a merge and fail it
 as non-deterministic. The `steward finding` commands reach Temporal through the client and need no
 local worker.
 
@@ -190,9 +190,9 @@ steward update                   # after a merge: pull master in the main checko
 
 `steward <verb> --help` prints the real options for each.
 
-### Updating the laptop worker
+### Updating the local worker
 
-After a Steward merge the laptop worker holds old code until it restarts, and a restart kills the
+After a Steward merge the local worker holds old code until it restarts, and a restart kills the
 activity it is running. `steward update` does the whole sequence from the main checkout:
 
 1. Stops if the checkout is not on `master` or has tracked local changes. A line-ending-only diff of
@@ -276,7 +276,7 @@ did before, and an unparseable value logs one warning.
 
 | Environment | Where the key lives |
 |---|---|
-| Laptop worker and CLI | `agents/steward/.env` |
+| Local worker and CLI | `agents/steward/.env` |
 | Hosted worker | the Railway service's `STEWARD_WEB_BOT_AUTH_KEY` variable |
 | The site's `/mcp` and `/audit` fast tier | unset, so those audits go unsigned |
 

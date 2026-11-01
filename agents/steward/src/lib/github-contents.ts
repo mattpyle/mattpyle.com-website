@@ -8,8 +8,8 @@ import { gh } from './github.js';
  *
  * **Why this exists at all.** `publishScorecardRun` and `archiveScorecardRun`
  * used to drive git in `WORKTREE_DIR`, which made them local activities: they
- * needed a checkout, so they needed the laptop, so the whole scorecard run
- * needed the laptop. That is what kept the daily Schedule laptop-bound. Every
+ * needed a checkout, so they needed the local machine, so the whole scorecard run
+ * needed the local machine. That is what kept the daily Schedule desk-bound. Every
  * one of those git operations was really "read a file on master, write a file
  * on a branch, open a PR" — three things the API does directly — so the
  * checkout was never the requirement, only the credential was

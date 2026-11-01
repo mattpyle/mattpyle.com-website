@@ -26,7 +26,7 @@ import type { ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js
  *
  * `catchupWindow` is the value both halves guard, and what it is guarding
  * against changed on 2026-08-14 with the move to Cloud and the hosted worker.
- * The old danger was a laptop that slept through most firings, so the window was
+ * The old danger was a local machine that slept through most firings, so the window was
  * sized to recover one of them. The server is always up now, so the window's
  * only remaining job is to absorb a Temporal Cloud outage at the firing hour —
  * and a *long* window became the hazard rather than the safeguard, because a
@@ -126,7 +126,7 @@ test('the spec is a daily calendar firing in the given timezone', () => {
 
 test('the action starts the audit workflow on the hosted queue with a stable base id', () => {
   // `steward-audit`, and this assertion is load-bearing rather than descriptive.
-  // A Schedule in Cloud fires whether or not the laptop is on, so an action
+  // A Schedule in Cloud fires whether or not the PC is on, so an action
   // pointed at `steward-light` would start a workflow nothing polls; it would
   // sit until `workflowExecutionTimeout` killed it and produce no run at all.
   // Reverting this line silently converts the nightly scorecard into a nightly
@@ -156,7 +156,7 @@ test('a firing carries an execution timeout, so a wedged run cannot suppress eve
 
 test('the default firing hour is a quiet one, and off the top of the hour', () => {
   // This test used to assert the opposite — `hour >= 8 && hour <= 22`, on the
-  // grounds that a 3am default on a sleeping laptop turned every firing into a
+  // grounds that a 3am default on a sleeping PC turned every firing into a
   // recovery. The hosted worker removed the premise, so the guard inverts: the
   // audit should now sample the site when nothing else is touching it.
   const { hour, minute } = parseTimeOfDay(SCORECARD_SCHEDULE_DEFAULT_AT);
@@ -299,7 +299,7 @@ test('status reads everything and writes nothing', async () => {
 
 test('status prints the two counters that measure whether firings are being lost', async () => {
   // Both come straight from `describe()` and neither was printed anywhere
-  // before. The missed-catchup count used to measure how often the laptop being
+  // before. The missed-catchup count used to measure how often the local machine being
   // asleep cost a run. Against Cloud it should sit at zero permanently, so a
   // non-zero value now reports a Temporal outage at the firing hour rather than
   // a habit — a rarer and more interesting signal from the same number.
