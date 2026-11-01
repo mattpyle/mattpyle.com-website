@@ -10,6 +10,9 @@ import {
   type FindingVerdictResult,
 } from '../lib/finding-verdict.js';
 import { isFindingSlug } from '../lib/findings.js';
+import { FixRefused } from '../lib/finding-fix.js';
+import { VerifyRefused } from '../lib/finding-verify.js';
+import { SyncError, syncSummary, type FixStarted, type SyncResult, type VerifyLaunched } from '../lib/finding-actions.js';
 import type { FindingsModel } from './findings-model.js';
 import { escapeHtml } from '../lib/html.js';
 import { renderMessage } from './message-page.js';
@@ -46,7 +49,11 @@ import { renderMessage } from './message-page.js';
  * and a refusal comes back as `{ error }` with its status code. `GET /api/findings` also carries
  * `commit` and `behindMaster`, which the page's menu reads. `GET /api/commit` answers `{ commit, behindMaster, token }`
  * under the Host check alone, with no model load: the launcher and the restart poll read it. `POST /api/restart`
- * runs under the same guards: it starts a replacement console, answers `{ restarting: true }`, closes
+ * runs under the same guards, as do `POST /api/run/sync`, `/api/run/fix` and `/api/run/verify`, the three
+ * verbs the CLI shares with the page (`lib/finding-actions.ts`): sync answers the reconcile's plan counts,
+ * fix and verify answer the run's workflow id once it is accepted and never wait for the PR or the checks,
+ * and a refusal the CLI would print comes back as `{ error }` with 409. Each run is logged to stderr with
+ * the verb and the key. `POST /api/restart` starts a replacement console, answers `{ restarting: true }`, closes
  * the listener and exits, so the new process runs whatever the checkout holds. An unexpected failure answers a
  * fixed sentence and writes the real error to this process's stderr.
  *
@@ -58,6 +65,12 @@ export interface ConsoleServerOptions {
   port: number;
   loadFindings: () => Promise<FindingsModel>;
   sendVerdict: (request: FindingVerdictRequest) => Promise<FindingVerdictResult>;
+  /** `POST /api/run/sync`: the reconcile's plan counts, as `steward finding sync` prints them. */
+  runSync: () => Promise<SyncResult>;
+  /** `POST /api/run/fix`: the run's workflow id once the fix signal is sent. Throws `FixRefused`. */
+  runFix: (site: string, key: string) => Promise<FixStarted>;
+  /** `POST /api/run/verify`: the verify run's workflow id at once. Throws `VerifyRefused`. */
+  runVerify: (site: string, key: string) => Promise<VerifyLaunched>;
   /** IANA zone the page shows its dates in. */
   timeZone: string;
   /** The Temporal Web UI origin and the namespace: the only values the page builds a run link from. */
@@ -238,6 +251,29 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     }
   };
 
+  /**
+   * A verb run from the page: the guards, then the verb's own function. A refusal the CLI would print comes
+   * back as 409. The verb and the key go to stderr, so the console's terminal holds a record of every run.
+   */
+  const run = async (req: http.IncomingMessage, verb: string): Promise<unknown> => {
+    const fields = await guardedFields(req, `the ${verb} run`);
+    try {
+      if (verb === 'sync') {
+        console.error('steward console: run sync');
+        const result = await options.runSync();
+        return { ...result, summary: syncSummary(result) };
+      }
+      const site = fields('site');
+      const key = fields('key');
+      if (!isFindingSlug(site) || !isFindingSlug(key)) throw new Refused(400, 'Refused: the site or key is not a finding slug.');
+      console.error('steward console: run %s %s/%s', verb, site, key);
+      return await (verb === 'fix' ? options.runFix(site, key) : options.runVerify(site, key));
+    } catch (err) {
+      if (err instanceof FixRefused || err instanceof VerifyRefused || err instanceof SyncError) throw new Refused(409, err.message);
+      throw err;
+    }
+  };
+
   const sendJson = (res: http.ServerResponse, status: number, body: unknown) => {
     res.writeHead(status, { ...HEADERS, 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(body));
@@ -281,6 +317,12 @@ export async function startConsoleServer(options: ConsoleServerOptions): Promise
     if (url.pathname === '/api/verdict') {
       if (method !== 'POST') throw new Refused(405, 'The verdict endpoint takes POST only.');
       sendJson(res, 200, await decide(req));
+      return;
+    }
+    const verb = /^\/api\/run\/(sync|fix|verify)$/.exec(url.pathname)?.[1];
+    if (verb) {
+      if (method !== 'POST') throw new Refused(405, `The ${verb} endpoint takes POST only.`);
+      sendJson(res, 200, await run(req, verb));
       return;
     }
     if (url.pathname === '/api/restart') {

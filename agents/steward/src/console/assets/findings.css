@@ -580,3 +580,5 @@ body[data-sort="priority"] .c-pri { display: none; }
 .message p { margin: 0 0 12px; overflow-wrap: anywhere; }
 .message code { font: 15px/1.5 var(--mono); }
 .message a { color: inherit; text-underline-offset: 3px; }
+.drift-lines .btn { margin-left: 12px; }
+.drift-run { margin-left: 12px; color: var(--ink-2); }

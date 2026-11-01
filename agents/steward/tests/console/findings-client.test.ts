@@ -53,6 +53,7 @@ function row(partial: Partial<FindingRow> & Pick<FindingRow, 'site' | 'key' | 's
     prUrl: null,
     fileMissing: false,
     run: RUN,
+    actions: { fix: false, verify: false },
     verification: null,
     drift: [],
     quietReason: null,
