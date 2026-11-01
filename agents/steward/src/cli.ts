@@ -1682,7 +1682,7 @@ program
       workflowId,
       // The audit queue, not the light one, since 2026-08-14: the scorecard's
       // activities have no local dependency left, so a manual run is served by
-      // whichever worker is up — the local machine's, which registers all three
+      // whichever worker is up — the local worker, which registers all three
       // queues, or the hosted one.
       taskQueue: QUEUE_AUDIT,
       // Decisions resolved HERE, by the CLI, and frozen into the workflow

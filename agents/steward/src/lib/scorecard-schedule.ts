@@ -20,7 +20,7 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
  * this is a daily audit on a local machine rather than unattended nightly auditing.
  * Both halves of that moved. The Schedule lives in Temporal Cloud, and the
  * hosted Railway worker polls `steward-audit` continuously, so a firing is taken
- * on time and advanced to completion with the local machine shut
+ * on time and advanced to completion with the PC off
  * (always-on-audit-worker card).
  *
  * That is also why the two policy values below changed. They were both written
@@ -293,7 +293,7 @@ function describePolicies(policies: {
 }
 
 /**
- * The two counters that measure the local machine limit, both straight from
+ * The two counters that measure the PC limit, both straight from
  * `describe()` and neither printed anywhere before this.
  *
  * `numActionsMissedCatchupWindow` is the one that matters, and what it measures

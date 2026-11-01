@@ -76,7 +76,7 @@ test('the local worker serves two queues on Cloud, four on the local dev server,
   assert.deepEqual(
     [...localWorkerQueues(true)],
     [QUEUE_LIGHT, QUEUE_HEAVY],
-    'on Cloud the hosted worker owns the audit queues; a local machine poller there runs stale audit code after a merge',
+    'on Cloud the hosted worker owns the audit queues; a local poller there runs stale audit code after a merge',
   );
   assert.deepEqual(
     [...localWorkerQueues(false)],
