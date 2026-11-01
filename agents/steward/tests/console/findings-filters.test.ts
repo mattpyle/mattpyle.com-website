@@ -181,7 +181,8 @@ test('each row has a copy button; the title leads with the verdicts due', () => 
   assert.equal(html.match(/<button type="button" class="copy" data-key="/g)?.length, 10);
   assert.match(html, /data-key="todo-verdict--a"/);
   assert.match(html, /<script src="\/console\.js" defer><\/script>/);
-  assert.doesNotMatch(html, /<script>/);
+  // One script tag on the page, the external one above, whatever its case.
+  assert.equal(html.match(/<script\b/gi)?.length, 1);
   assert.match(html, /<p id="copy-status" class="sr-only" role="status"/);
   assert.match(html, /<title>4 need a verdict · Steward findings<\/title>/);
 });
