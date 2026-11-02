@@ -1,6 +1,6 @@
 {
-  "iso": "2026-11-01",
-  "timestamp": "2026-11-01T04:34:15-07:00",
+  "iso": "2026-11-02",
+  "timestamp": "2026-11-02T04:34:08-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-11-01",
+  "id": "2026-11-02",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -641,7 +641,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 3d ago (<= 7d threshold)",
+  "reason": "unchanged, published 4d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-11-01"
+  "archiveId": "2026-11-02"
 }
