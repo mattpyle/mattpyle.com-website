@@ -314,6 +314,7 @@
     const reason = d ? d.reason : s === 'rejected' ? r.reason : '';
     if (reason) facts.push(['Reason', esc(reason)]);
     if (r.run && r.run.open) facts.push(['Run', link(`finding/${r.site}/${r.key}`)]);
+    if (r.holdLine) facts.push(['Holding', esc(r.holdLine)]);
     facts.push(['Key', KEY_COPY(r.key)]);
 
     const summary = r.summary || (r.titleShort ? r.title : '');

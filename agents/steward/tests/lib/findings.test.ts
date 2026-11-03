@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   findingWorkflowId,
+  fixCandidates,
   hasParkedDefect,
   isFindingSlug,
   parseFindingWorkflowId,
@@ -122,6 +123,56 @@ test('planReconcile sends fix to an approved defect parked at waiting-fix with n
   assert.equal(planReconcile('s', index, bare, true).signal.length, 6);
 });
 
+test('planReconcile with the gate sends fix to any approved parked line the gate accepts and that has no issue', () => {
+  const index = parseFindingsIndex(
+    [
+      'One line per finding: `key | status | kind | scenario | title | verdict reason`.',
+      'defect | approved | defect | s | t | Yes.',
+      'opportunity | approved | opportunity | s | t | Yes.',
+      'refused | approved | opportunity | s | t | Yes.',
+      'direction | approved | direction | s | t | Yes.',
+      'tried-gate | approved | opportunity | s | t | Yes.',
+      'has-issue | approved | defect | s | t | Yes.',
+      'in-flight | approved | defect | s | t | Yes.',
+      'at-gate | approved | defect | s | t | Yes.',
+      'unlisted | approved | defect | s | t | Yes.',
+    ].join('\n'),
+  );
+  const run = (key: string, step: string | null, fixAttempts: number | null, issueUrl: string | null = null) => ({
+    workflowId: findingWorkflowId('s', key),
+    step,
+    fixAttempts,
+    issueUrl,
+  });
+  const open = [
+    run('defect', 'waiting-fix', 0),
+    run('opportunity', 'waiting-fix', 0),
+    run('refused', 'waiting-fix', 0),
+    run('direction', 'waiting-fix', 0),
+    run('tried-gate', 'waiting-fix', 1),
+    run('has-issue', 'waiting-fix', 1, 'https://github.com/o/r/issues/1'),
+    run('in-flight', 'waiting-merge', 1, 'https://github.com/o/r/issues/2'),
+    run('at-gate', 'waiting-verdict', 0),
+  ];
+  assert.deepEqual(
+    fixCandidates('s', index, open).map((l) => l.key),
+    ['defect', 'opportunity', 'refused', 'direction', 'tried-gate'],
+    'an issue, a running step or no run takes a line out',
+  );
+
+  const accepted = new Set(['defect', 'opportunity', 'tried-gate', 'has-issue', 'in-flight']);
+  const plan = planReconcile('s', index, open, true, accepted);
+  assert.deepEqual(plan.fix.map((l) => l.key), ['defect', 'opportunity', 'tried-gate']);
+  assert.deepEqual(plan.signal.map((l) => l.key), ['at-gate']);
+  assert.equal(plan.unchanged, 5);
+
+  assert.deepEqual(planReconcile('s', index, open, false, accepted).fix, [], 'a site without auto_fix');
+  assert.deepEqual(planReconcile('s', index, open, true, new Set()).fix, [], 'the gate accepts none');
+  // A list recorded before issueUrl existed has none, so such a run counts as having no issue.
+  const old = open.map(({ workflowId, step, fixAttempts }) => ({ workflowId, step, fixAttempts }));
+  assert.ok(fixCandidates('s', index, old).some((l) => l.key === 'has-issue'));
+});
+
 test('planReconcile starts a reopened line with no workflow, as it does a proposed one, and leaves one with a workflow', () => {
   const index = parseFindingsIndex(
     ['back | reopened | t | ', 'back-open | reopened | t | ', 'fixing-one | fixing | t | Yes.'].join('\n'),
@@ -154,8 +205,8 @@ test('a run parked for its kind says so in `steward finding status`, and no othe
 
 test('a started run parks without the automatic attempt when its line names a kind other than defect', () => {
   const line = (kind: string): FindingsIndexLine => ({ key: 'k', status: 'proposed', kind, reason: '', lineNumber: 0, columns: [] });
-  assert.equal(startsParked(line('opportunity')), true);
   assert.equal(startsParked(line('direction')), true);
+  assert.equal(startsParked(line('opportunity')), false, 'it attempts at the verdict and the gate decides');
   assert.equal(startsParked(line('defect')), false);
   assert.equal(startsParked(line('')), false, 'an index with no kind column starts as it always did');
 });

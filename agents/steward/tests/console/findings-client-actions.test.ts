@@ -40,6 +40,7 @@ function row(partial: Partial<FindingRow> & Pick<FindingRow, 'key' | 'status'>):
     verification: null,
     drift: [],
     quietReason: null,
+    holdLine: null,
     body: '',
     sections: [],
     events: [],
@@ -55,6 +56,15 @@ const ROWS = [
   row({ key: 'fixing-open', status: 'fixing', prUrl: PR }),
   row({ key: 'resolved-one', status: 'resolved', prUrl: PR }),
   row({ key: 'proposed-orphan', status: 'proposed', drift: ['proposed with no open run'] }),
+  row({
+    key: 'approved-parked',
+    status: 'approved',
+    kind: 'opportunity',
+    run: { ...RUN, open: true, step: 'waiting-fix' },
+    holdLine: "The fixer's gate refuses it: it names more than one page (/a, /b) & more.",
+    actions: { fix: false, verify: false },
+  }),
+  row({ key: 'approved-parked-fixable', status: 'approved', run: { ...RUN, open: true, step: 'waiting-fix' }, actions: { fix: true, verify: false } }),
   row({ key: 'proposed-live', status: 'proposed', run: { ...RUN, open: true, step: 'waiting-verdict' } }),
 ];
 
@@ -80,6 +90,14 @@ test('Fix shows for an approved finding the server accepts, and nowhere else', (
   for (const key of ['approved-refused', 'fixing-merged', 'fixing-open', 'resolved-one', 'proposed-live']) {
     assert.doesNotMatch(open(key).foot, /data-act="fix"/, key);
   }
+});
+
+test('an approved row at waiting-fix shows what holds it, and Fix where the server accepts the parked run', () => {
+  const doc = open('approved-parked').doc;
+  assert.match(doc, /<dt>Holding<\/dt><dd>The fixer&#39;s gate refuses it: it names more than one page \(\/a, \/b\) &amp; more\.<\/dd>/);
+  assert.doesNotMatch(open('approved-fixable').doc, /<dt>Holding<\/dt>/, 'a row with no hold line says nothing');
+  assert.doesNotMatch(open('approved-parked').foot, /data-act="fix"/);
+  assert.match(open('approved-parked-fixable').foot, /data-act="fix"[^>]*>Fix<\/button>/);
 });
 
 test('Verify shows for a fixing finding whose gate accepts it, beside the PR link, and nowhere else', () => {

@@ -190,18 +190,27 @@ export function fixStarted(requested: FixRequested): FixStarted {
 }
 
 /**
- * Whether the page offers Fix: an approved finding with no open run, on a site
- * with a fixer and a known production origin, that `fixRefusal` accepts.
+ * Whether the page offers Fix: an approved finding on a site with a fixer and
+ * a known production origin, that `fixRefusal` accepts, and whose run is
+ * absent or parked. A parked run is open at `waiting-fix` with no issue: it
+ * waits for a `fix` signal, which `requestFix` sends. A run with an issue is
+ * past the gate and mid-fix, or its fix ended and `steward finding fix`
+ * retries it; the page leaves that one to the CLI as it always did.
  */
 export function fixOffered(input: {
   site: string;
   status: string;
   runOpen: boolean;
+  /** The open run's `state.step`, when the loader asked. */
+  runStep?: string | null;
+  /** The open run's fix issue, when the loader asked. */
+  issueUrl?: string | null;
   stopAfter: string | null;
   data: Record<string, unknown>;
   text: string;
 }): boolean {
-  if (input.status !== 'approved' || input.runOpen) return false;
+  if (input.status !== 'approved') return false;
+  if (input.runOpen && !(input.runStep === 'waiting-fix' && !input.issueUrl)) return false;
   if (input.site !== FINDINGS_DEFAULT_SITE || input.stopAfter === 'verdict') return false;
   return fixRefusal(input.data, parseFindingBody(input.text)) === null;
 }

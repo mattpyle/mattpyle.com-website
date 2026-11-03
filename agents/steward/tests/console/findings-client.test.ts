@@ -57,6 +57,7 @@ function row(partial: Partial<FindingRow> & Pick<FindingRow, 'site' | 'key' | 's
     verification: null,
     drift: [],
     quietReason: null,
+    holdLine: null,
     body: '',
     sections: [{ heading: 'Who wanted what', html: '<p>A reader.</p>' }],
     events: [{ kind: 'first-seen', at: partial.opened ?? '2026-10-20', label: 'First seen by Argus' }],

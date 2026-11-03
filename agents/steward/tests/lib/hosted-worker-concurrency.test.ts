@@ -147,6 +147,7 @@ test('the findings worker runs a small bounded cap and registers only the findin
       'awaitProductionDeploy',
       'readProductionDeploy',
       'listOpenFindingWorkflows',
+      'listFixableFindings',
       'startFindingWorkflow',
       'readFixPr',
       'readVerifyBlock',

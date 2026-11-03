@@ -5,8 +5,9 @@ import { createFindingsLoader, type ConsoleClient } from '../../src/console/find
 
 /**
  * `row.actions`: the loader decides, on the server, which buttons a row's foot offers. Fix is for an
- * approved finding with no open run that `fixRefusal` accepts; Verify is for a fixing finding whose
- * PR is merged. A merged PR is asked about once per process.
+ * approved finding that `fixRefusal` accepts and whose run is absent or parked at `waiting-fix` with no
+ * issue (findings-model-hold.test.ts has the parked case); Verify is for a fixing finding whose PR is
+ * merged. A merged PR is asked about once per process.
  */
 
 const REPO = 'test/argus';
@@ -61,7 +62,7 @@ test('actions offer Fix and Verify only where the CLI gate accepts, and ask abou
         }
       },
       getHandle: () => ({
-        query: async () => ({ step: 'waiting-fix', status: 'waiting' }) as never,
+        query: async () => ({ step: 'fixing', status: 'waiting', issueUrl: 'https://github.com/mattpyle/mattpyle.com-website/issues/900' }) as never,
       }),
     },
   };
@@ -72,7 +73,7 @@ test('actions offer Fix and Verify only where the CLI gate accepts, and ask abou
   assert.deepEqual(actions['ux-no-cause'], { fix: false, verify: false });
   assert.deepEqual(actions['ux-merged'], { fix: false, verify: true });
   assert.deepEqual(actions['ux-open-pr'], { fix: false, verify: false });
-  assert.deepEqual(actions['ux-running'], { fix: false, verify: false }, 'an open run is not offered Fix');
+  assert.deepEqual(actions['ux-running'], { fix: false, verify: false }, 'a run mid-fix is not offered Fix');
 
   await loader.load();
   assert.deepEqual(prCalls.filter((n) => n === '600'), ['600'], 'the merged PR is asked once');
