@@ -464,7 +464,16 @@ const REACH = [
     .rail {
       position: static;
       max-width: 300px;
+      order: -1;
     }
+
+    /* The single column puts the rail after the lede, not at the end: the
+       reading column's children join the grid, the lede sorts first and the rail
+       second, so the photo and job title show before "This site is an
+       experiment". */
+    .reading { display: contents; }
+
+    .reading > .prose:first-child { order: -2; }
   }
 
   @media (max-width: 720px) {
