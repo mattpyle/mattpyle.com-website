@@ -1,7 +1,7 @@
 ---
 title: How to implement WebMCP on a website
 date: 2026-09-03
-updated: 2026-09-03
+updated: 2026-10-31
 tags:
   - agents
   - tech
