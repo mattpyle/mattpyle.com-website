@@ -2,7 +2,7 @@ import rss from '@astrojs/rss';
 import type { APIContext } from 'astro';
 import { getCollection } from 'astro:content';
 import { compareChangelogEntries } from '../../lib/changelog-order';
-import { lastBuildDateElement } from '../../lib/feed-build-date.mjs';
+import { dateOnlyToFeedInstant, lastBuildDateElement } from '../../lib/feed-build-date.mjs';
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -42,14 +42,18 @@ export async function GET(context: APIContext) {
       title: entry.data.title,
       // `summary` is plain text, a reader parses an RSS description as HTML, and rss() only escapes it for XML.
       description: escapeHtml(entry.data.summary),
-      pubDate: entry.data.publishedAt ?? entry.data.date,
+      pubDate: entry.data.publishedAt ?? dateOnlyToFeedInstant(entry.data.date),
       link: `/changelog/${entry.id}/`,
     })),
     xmlns: { atom: 'http://www.w3.org/2005/Atom' },
     // lastBuildDate follows content (the newest `publishedAt`, `date` or `updated` of any entry),
     // not the build.
     customData: `<language>en-us</language>${lastBuildDateElement(
-      entries.flatMap((entry) => [entry.data.publishedAt, entry.data.date, entry.data.updated])
+      entries.flatMap((entry) => [
+        entry.data.publishedAt,
+        dateOnlyToFeedInstant(entry.data.date),
+        dateOnlyToFeedInstant(entry.data.updated),
+      ])
     )}<atom:link href="${new URL('/changelog/rss.xml', context.site)}" rel="self" type="application/rss+xml"/>`,
   });
 }
