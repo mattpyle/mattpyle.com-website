@@ -291,7 +291,13 @@ const byGroup = GROUPS.map((group) => ({
 // From the copy module rather than written here, so this page and src/pages/audit.md.ts cannot
 // come to describe the same URL differently.
 const title = PAGE_TITLE;
-const seoTitle = PAGE_SEO_TITLE;
+// The `<title>` is what a full-page form post announces, so it names the answer: the audited host
+// on a report, the failure's own heading on a failure, the form's title otherwise.
+const seoTitle = report
+  ? `Audit of ${new URL(report.origin).host}`
+  : failure
+    ? failure.title
+    : PAGE_SEO_TITLE;
 const description = PAGE_DESCRIPTION;
 
 // The head link names the document negotiation would serve for this same URL. The path comes from
