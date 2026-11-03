@@ -627,3 +627,42 @@ test('a lifecycle run whose PR closed before the preview test replays that attem
     'finding/mattpyle-com/content-post-describes-removed-filter-pills--writing-accessibility-and-ai',
   );
 });
+
+/**
+ * A reconcile run as `reconcileFindingsWorkflow` ran it before the kind-blind
+ * `fix` rule: one site, a parked approved defect on an `auto_fix` site (the
+ * `readSiteAutoFix` read and the `fix` signal), a parked approved opportunity
+ * (left alone) and a new proposed opportunity (one `startFindingWorkflow`). 46
+ * events. New code reads the flag for any parked approved line and asks
+ * `listFixableFindings` before it signals, so this replays only because the
+ * `reconcile-fix-any-kind` patch sends a history without the marker down the
+ * defect rule: `hasParkedDefect`, then `planReconcile` with no `fixable` set.
+ *
+ * Recorded from the pre-change `reconcile-findings.ts` (origin/master at
+ * e983b03, the worktree before its first edit) against the time-skipping server
+ * with mocked activities and real finding runs, so it holds no real finding
+ * text.
+ *
+ * Probe (2026-11-03): replacing `wf.patched(RECONCILE_FIX_ANY_KIND_PATCH)` with
+ * `true`, so every run takes the new rule, made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'startFindingWorkflow' does not match activity type of activity command
+ * 'listFixableFindings'
+ * ```
+ *
+ * The other 17 replays stayed green. The guard was restored and all 18 re-ran green.
+ */
+const reconcileParkedDefectPath = fileURLToPath(
+  new URL('../fixtures/histories/reconcile-parked-defect-pre.bin', import.meta.url),
+);
+
+test('a reconcile run recorded before the kind-blind fix rule replays down the defect rule', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileParkedDefectPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'reconcile-fixture-3',
+  );
+});

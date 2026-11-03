@@ -212,6 +212,11 @@ export interface OpenFindingWorkflow {
   workflowId: string;
   step: string | null;
   fixAttempts: number | null;
+  /**
+   * The run's fix issue, null before it opens one. Absent from a list recorded
+   * before the field existed; read it as null.
+   */
+  issueUrl?: string | null;
 }
 
 export interface ReconcilePlan {
@@ -219,7 +224,11 @@ export interface ReconcilePlan {
   start: FindingsIndexLine[];
   /** `approved`/`rejected` lines whose workflow is open and still waits for its verdict. */
   signal: FindingsIndexLine[];
-  /** Approved defects parked at `waiting-fix` with no attempt, on an `auto_fix` site. */
+  /**
+   * Approved lines parked at `waiting-fix` on an `auto_fix` site: with a `fixable`
+   * set, every kind whose run opened no issue and whose file the gate accepts;
+   * without one, defects with no attempt (the rule before the gate joined the plan).
+   */
   fix: FindingsIndexLine[];
   /** Everything else. */
   unchanged: number;
@@ -232,12 +241,14 @@ function openById(open: (OpenFindingWorkflow | string)[]): Map<string, OpenFindi
 }
 
 /**
- * Whether a started run should park without the automatic fix attempt: the
- * line names a kind and it is not `defect`. A line that names none (an index
- * with no kind column) starts as it always did.
+ * Whether a started run should park without the automatic fix attempt: a
+ * direction, which the fixer's gate never accepts. A defect and an opportunity
+ * attempt at the verdict and the gate decides, so a gate refusal parks the run
+ * with `lastFixError` set. A line that names no kind (an index with no kind
+ * column) starts as it always did.
  */
 export function startsParked(line: FindingsIndexLine): boolean {
-  return line.kind !== '' && line.kind !== 'defect';
+  return line.kind !== '' && line.kind !== 'defect' && line.kind !== 'opportunity';
 }
 
 function parkedDefect(line: FindingsIndexLine, run: OpenFindingWorkflow | undefined): boolean {
@@ -246,12 +257,28 @@ function parkedDefect(line: FindingsIndexLine, run: OpenFindingWorkflow | undefi
 
 /**
  * Whether the site has an approved defect whose run waits at `waiting-fix`
- * with no attempt: the one case where the reconciler needs the site's
- * `auto_fix` flag, so a site without one costs no config read.
+ * with no attempt. The rule before the gate joined the plan: a reconcile
+ * history recorded without the `reconcile-fix-any-kind` marker replays through
+ * it, so it stays. See {@link fixCandidates} for the rule the plan uses now.
  */
 export function hasParkedDefect(site: string, index: FindingsIndexLine[], open: (OpenFindingWorkflow | string)[]): boolean {
   const runs = openById(open);
   return index.some((line) => parkedDefect(line, runs.get(findingWorkflowId(site, line.key))));
+}
+
+/**
+ * The approved lines whose run waits at `waiting-fix` and has opened no issue,
+ * of any kind: the ones the fixer might take. A run with an issue is past the
+ * gate, and its failed Action is a person's retry. The reconciler reads the
+ * site's `auto_fix` flag only when this list is not empty, and asks the gate
+ * about these keys alone.
+ */
+export function fixCandidates(site: string, index: FindingsIndexLine[], open: (OpenFindingWorkflow | string)[]): FindingsIndexLine[] {
+  const runs = openById(open);
+  return index.filter((line) => {
+    const run = runs.get(findingWorkflowId(site, line.key));
+    return line.status === 'approved' && run?.step === 'waiting-fix' && !run.issueUrl;
+  });
 }
 
 /**
@@ -267,23 +294,34 @@ export function hasParkedDefect(site: string, index: FindingsIndexLine[], open: 
  *
  * `fix` is the parked case (design decision 31): a run reads `auto_fix` once,
  * at its verdict, so one that passed it before the flag was set waits for a
- * `fix` nobody sends. Zero attempts only, so a failed attempt stays a
- * person's retry. Opportunities and directions are never sent.
+ * `fix` nobody sends. A run also parks when the gate refused its attempt at
+ * the verdict, and the finding may have changed since.
+ *
+ * `fixable` is the set of keys the gate accepts, which the caller reads from
+ * the finding files. With it, `fix` holds every {@link fixCandidates} line in
+ * the set, of any kind, on an `auto_fix` site: "no issue" replaces "no
+ * attempt", so a gate refusal is retried once the gate accepts and a run
+ * whose Action failed keeps its issue and stays a person's retry. Without it
+ * (a history recorded before the marker), `fix` holds approved defects with no
+ * attempt, as it did.
  */
 export function planReconcile(
   site: string,
   index: FindingsIndexLine[],
   open: (OpenFindingWorkflow | string)[],
   autoFix = false,
+  fixable?: ReadonlySet<string>,
 ): ReconcilePlan {
   const runs = openById(open);
   const plan: ReconcilePlan = { start: [], signal: [], fix: [], unchanged: 0 };
+  const candidates = new Set(fixable ? fixCandidates(site, index, open).map((line) => line.key) : []);
   for (const line of index) {
     const run = runs.get(findingWorkflowId(site, line.key));
     const awaitingVerdict = run !== undefined && (run.step === null || run.step === 'waiting-verdict');
+    const takesFix = fixable ? candidates.has(line.key) && fixable.has(line.key) : parkedDefect(line, run);
     if ((line.status === 'proposed' || line.status === 'reopened') && !run) plan.start.push(line);
     else if ((line.status === 'approved' || line.status === 'rejected') && awaitingVerdict) plan.signal.push(line);
-    else if (autoFix && parkedDefect(line, run)) plan.fix.push(line);
+    else if (autoFix && takesFix) plan.fix.push(line);
     else plan.unchanged++;
   }
   return plan;

@@ -8,6 +8,7 @@ import { log } from '../lib/logger.js';
 import {
   compareContains,
   findingHandoffPath,
+  findingPath,
   findingWorkflowId,
   fixBranch,
   fixIssueBody,
@@ -1291,8 +1292,8 @@ export async function startFindingWorkflow(
 }
 
 /**
- * Every running `findingWorkflow` from the visibility store, with the `step`
- * and `fixAttempts` its `state` query reports.
+ * Every running `findingWorkflow` from the visibility store, with the `step`,
+ * `fixAttempts` and `issueUrl` its `state` query reports.
  *
  * Through the worker's own client (`Context.current().client`), so the activity
  * holds no second connection or credential. Visibility is eventually consistent,
@@ -1315,17 +1316,56 @@ export async function listOpenFindingWorkflows(): Promise<OpenFindingWorkflow[]>
       // By name: importing `findingStateQuery` would load the workflow module here.
       const state = await client.workflow.getHandle(info.workflowId, info.runId).query<FindingState>('state');
       if (state.step === 'done') continue;
-      runs.push({ workflowId: info.workflowId, step: state.step ?? null, fixAttempts: state.fixAttempts ?? null });
+      runs.push({
+        workflowId: info.workflowId,
+        step: state.step ?? null,
+        fixAttempts: state.fixAttempts ?? null,
+        issueUrl: state.issueUrl ?? null,
+      });
     } catch (err) {
       if (err instanceof WorkflowNotFoundError) continue;
       log.warn(
         { activity: 'listOpenFindingWorkflows', workflowId: info.workflowId, error: err instanceof Error ? err.message : String(err) },
         'state query failed; listing the run with no step',
       );
-      runs.push({ workflowId: info.workflowId, step: null, fixAttempts: null });
+      runs.push({ workflowId: info.workflowId, step: null, fixAttempts: null, issueUrl: null });
     }
   }
   return runs.sort((a, b) => a.workflowId.localeCompare(b.workflowId));
+}
+
+export interface ListFixableFindingsInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+  /** The keys the reconciler asks about: approved lines whose run waits for a fix. */
+  keys: string[];
+}
+
+/**
+ * The keys among `keys` that {@link openFixIssue} would accept now: the same
+ * {@link fixRefusal} gate over the file as it stands, and a site with a
+ * repository to open the issue in. The reconciler asks before it sends `fix`,
+ * so a finding the gate refuses is never signalled hourly.
+ *
+ * A key whose file is missing is left out, as a refusal is: one unreadable
+ * finding must not stop the pass. Any other failure, an auth error included,
+ * propagates and the activity retries.
+ */
+export async function listFixableFindings(input: ListFixableFindingsInput): Promise<string[]> {
+  if (!siteRepository(input.site)) return [];
+  const fixable: string[] = [];
+  for (const key of input.keys) {
+    let finding: FindingFile;
+    try {
+      finding = await readFinding(input.repo, findingPath(input.site, key));
+    } catch (err) {
+      if (err instanceof ApplicationFailure && err.type === 'FindingMissing') continue;
+      throw err;
+    }
+    if (fixRefusal(finding.data, parseFindingBody(finding.text)) === null) fixable.push(key);
+  }
+  return fixable;
 }
 
 export interface RequestFixSlotInput {

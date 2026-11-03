@@ -62,10 +62,12 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * run waits for the next `fix`. So does a fix that fails, and an issue with no
  * PR after 60 minutes: the finding is still approved, and a second `fix` is the
  * retry. The retry closes the last attempt's issue with a comment saying why,
- * and opens a new one. `auto_fix` covers the first attempt only, and only for a
- * defect: a run started with `waitsForPerson` (the index line's kind is not
- * `defect`) parks at `waiting-fix` with `fixAttempts` 0 and waits for a `fix`
- * signal, because the gate in `openFixIssue` would refuse it anyway.
+ * and opens a new one. `auto_fix` covers the first attempt only. A run started
+ * with `waitsForPerson` (a direction, which the gate never accepts) parks at
+ * `waiting-fix` with `fixAttempts` 0 and waits for a `fix` signal. Any other
+ * run attempts at the verdict and the gate in `openFixIssue` decides: a refusal
+ * sets `lastFixError` and parks the run, and the hourly reconciler sends `fix`
+ * once the finding passes (a run with no issue is the test, not no attempt).
  *
  * **`waitsForPerson` carries no marker** (2026-10-23). It is a new optional input
  * field read as `=== true`, so a history recorded without it takes the branch it

@@ -55,6 +55,9 @@ function store(initial: Record<string, string>) {
   const writes: unknown[] = [];
   const flags = { autoFix: false };
   const fixIssues: string[] = [];
+  // The keys the gate accepts, and the keys whose attempt opens an issue.
+  const fixable = new Set<string>();
+  const opens = new Set<string>();
 
   const activities = {
     listSites: async () => Object.keys(indexes).sort(),
@@ -70,7 +73,7 @@ function store(initial: Record<string, string>) {
             const handle = client.workflow.getHandle(id);
             if ((await handle.describe()).status.name !== 'RUNNING') continue;
             const state = await handle.query(findingStateQuery);
-            open.push({ workflowId: id, step: state.step ?? null, fixAttempts: state.fixAttempts ?? null });
+            open.push({ workflowId: id, step: state.step ?? null, fixAttempts: state.fixAttempts ?? null, issueUrl: state.issueUrl ?? null });
           } catch (err) {
             if (!(err instanceof WorkflowNotFoundError)) throw err;
           }
@@ -78,12 +81,18 @@ function store(initial: Record<string, string>) {
       }
       return open;
     },
-    // Read by a finding run at its verdict and by the reconciler for a parked defect.
+    // Read by a finding run at its verdict and by the reconciler for a parked line.
     readSiteAutoFix: async () => flags.autoFix,
     requestFixSlot: async () => ({ paths: [], dispatched: false }),
+    listFixableFindings: async (input: { keys: string[] }) => input.keys.filter((key) => fixable.has(key)),
     openFixIssue: async (input: { key: string }) => {
       fixIssues.push(input.key);
+      if (opens.has(input.key)) return { repo: 'o/r', number: 1, url: 'https://github.com/o/r/issues/1', reused: false };
       throw ApplicationFailure.nonRetryable('the test opens no issue', 'FindingNotFixable');
+    },
+    // An issue with no PR: the attempt fails back to waiting-fix with its issue kept.
+    awaitFixPr: async () => {
+      throw ApplicationFailure.nonRetryable('the test sees no PR', 'NoPr');
     },
     readFinding: async () => {
       throw new Error('the reconciler never reads a finding file');
@@ -97,7 +106,7 @@ function store(initial: Record<string, string>) {
       return { signal: input.signal, ok: input.shape.ok, sent: true };
     },
   };
-  return { indexes, activities, pings, writes, flags, fixIssues };
+  return { indexes, activities, pings, writes, flags, fixIssues, fixable, opens };
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
@@ -218,48 +227,96 @@ async function stateWhen(id: string, done: (state: FindingState) => boolean): Pr
   throw new Error(`${id} never reached the expected state`);
 }
 
-test('an approved defect parked at waiting-fix on an auto_fix site gets one fix; an opportunity gets none', async () => {
+test('an approved parked line of any kind gets one fix when the gate accepts it; a run with an issue, or a refused file, gets none', async () => {
   const kinded = (lines: string[]) =>
     ['# Findings index', '', 'Format: `key | status | kind | title | verdict reason`.', '', ...lines].join('\n');
-  const s = store({
-    'mattpyle-com': kinded(['p-defect | proposed | defect | Title | ', 'p-opportunity | proposed | opportunity | Title | ']),
-  });
-  const defect = findingWorkflowId('mattpyle-com', 'p-defect');
-  const opportunity = findingWorkflowId('mattpyle-com', 'p-opportunity');
+  const kindOf: Record<string, string> = {
+    'p-defect': 'defect',
+    'p-opportunity': 'opportunity',
+    'p-refused': 'opportunity',
+    'p-direction': 'direction',
+  };
+  const keys = Object.keys(kindOf);
+  const lines = (status: string) => keys.map((key) => `${key} | ${status} | ${kindOf[key]} | Title | ${status === 'approved' ? 'Yes.' : ''}`);
+  const s = store({ 'mattpyle-com': kinded(lines('proposed')) });
+  const id = (key: string) => findingWorkflowId('mattpyle-com', key);
+  s.opens.add('p-defect');
+  s.opens.add('p-opportunity');
 
   await withWorker(s.activities, async () => {
     await reconcileOnce();
-    // Both approved while the site had no flag: each run reads false at its verdict and parks.
-    s.indexes['mattpyle-com'] = kinded([
-      'p-defect | approved | defect | Title | Yes.',
-      'p-opportunity | approved | opportunity | Title | Yes.',
-    ]);
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 2, fixed: 0, unchanged: 0 });
-    for (const id of [defect, opportunity]) {
-      const parked = await stateWhen(id, (st) => st.step === 'waiting-fix');
+    // All approved while the site had no flag: each run reads false at its verdict and parks.
+    s.indexes['mattpyle-com'] = kinded(lines('approved'));
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 4, fixed: 0, unchanged: 0 });
+    for (const key of keys) {
+      const parked = await stateWhen(id(key), (st) => st.step === 'waiting-fix');
       assert.equal(parked.fixAttempts, 0);
     }
 
-    // The flag is set later. The next pass sends `fix` to the defect only.
+    // The flag is set later, and the gate accepts the defect and the opportunity. The others wait.
     s.flags.autoFix = true;
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, unchanged: 1 });
-    const tried = await stateWhen(defect, (st) => st.fixAttempts === 1 && st.step === 'waiting-fix');
-    assert.match(tried.lastFixError ?? '', /opens no issue/);
-    assert.deepEqual(s.fixIssues, ['p-defect']);
+    s.fixable.add('p-defect');
+    s.fixable.add('p-opportunity');
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 2, unchanged: 2 });
+    for (const key of ['p-defect', 'p-opportunity']) {
+      const tried = await stateWhen(id(key), (st) => st.fixAttempts === 1 && st.step === 'waiting-fix' && Boolean(st.lastFixError));
+      assert.equal(tried.issueUrl, 'https://github.com/o/r/issues/1');
+    }
+    assert.deepEqual([...s.fixIssues].sort(), ['p-defect', 'p-opportunity']);
 
-    // One attempt made, so the next pass sends nothing: a retry is a person's.
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, unchanged: 2 });
-    const left = await client.workflow.getHandle(opportunity).query(findingStateQuery);
-    assert.equal(left.step, 'waiting-fix');
-    assert.equal(left.fixAttempts, 0);
-    assert.deepEqual(s.fixIssues, ['p-defect']);
+    // Each opened an issue, so the next pass sends nothing: a failed Action is a person's retry.
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, unchanged: 4 });
+    for (const key of ['p-refused', 'p-direction']) {
+      const left = await client.workflow.getHandle(id(key)).query(findingStateQuery);
+      assert.equal(left.step, 'waiting-fix');
+      assert.equal(left.fixAttempts, 0, 'the gate runs before the send, so a refused finding is never signalled');
+    }
+    assert.deepEqual([...s.fixIssues].sort(), ['p-defect', 'p-opportunity']);
 
-    for (const id of [defect, opportunity]) await client.workflow.getHandle(id).terminate('test over');
+    // The refused finding is edited and now passes the gate: the next pass sends it, once.
+    s.fixable.add('p-refused');
+    s.opens.add('p-refused');
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, unchanged: 3 });
+    await stateWhen(id('p-refused'), (st) => st.fixAttempts === 1 && st.step === 'waiting-fix' && Boolean(st.issueUrl));
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, unchanged: 4 });
+
+    for (const key of keys) await client.workflow.getHandle(id(key)).terminate('test over');
   });
-  assert.match(s.pings[2].summary, /mattpyle-com started 0, signalled 0, fixed 1, unchanged 1/);
+  assert.match(s.pings[2].summary, /mattpyle-com started 0, signalled 0, fixed 2, unchanged 2/);
 });
 
-test('a started opportunity carries waitsForPerson and parks unattempted on an auto_fix site; a defect does not and tries', async () => {
+test('a gate refusal at the attempt parks the run with lastFixError, and the reconciler retries it once the gate accepts', async () => {
+  const kinded = (lines: string[]) =>
+    ['# Findings index', '', 'Format: `key | status | kind | title | verdict reason`.', '', ...lines].join('\n');
+  const s = store({ 'mattpyle-com': kinded(['g-opportunity | proposed | opportunity | Title | ']) });
+  s.flags.autoFix = true;
+  const id = findingWorkflowId('mattpyle-com', 'g-opportunity');
+
+  await withWorker(s.activities, async () => {
+    await reconcileOnce();
+    s.indexes['mattpyle-com'] = kinded(['g-opportunity | approved | opportunity | Title | Yes.']);
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 1, fixed: 0, unchanged: 0 });
+
+    // The attempt at the verdict reaches the gate, which refuses it: parked, with the reason.
+    const refused = await stateWhen(id, (st) => st.fixAttempts === 1 && st.step === 'waiting-fix');
+    assert.match(refused.lastFixError ?? '', /opens no issue/);
+    assert.equal(refused.issueUrl, null);
+    assert.deepEqual(s.fixIssues, ['g-opportunity']);
+
+    // The gate still refuses, so nothing is sent. Once it accepts, one fix goes.
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, unchanged: 1 });
+    s.fixable.add('g-opportunity');
+    s.opens.add('g-opportunity');
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, unchanged: 0 });
+    const opened = await stateWhen(id, (st) => st.fixAttempts === 2 && st.step === 'waiting-fix' && Boolean(st.issueUrl));
+    assert.equal(opened.issueUrl, 'https://github.com/o/r/issues/1');
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, unchanged: 1 });
+
+    await client.workflow.getHandle(id).terminate('test over');
+  });
+});
+
+test('an opportunity attempts the fix at its verdict with no signal; a direction still waits for a person', async () => {
   const kinded = (lines: string[]) =>
     ['# Findings index', '', 'Format: `key | status | kind | title | verdict reason`.', '', ...lines].join('\n');
   const s = store({
@@ -270,6 +327,7 @@ test('a started opportunity carries waitsForPerson and parks unattempted on an a
     ]),
   });
   s.flags.autoFix = true;
+  s.opens.add('w-opportunity');
   const startedInput = async (key: string) => {
     const history = await client.workflow.getHandle(findingWorkflowId('mattpyle-com', key)).fetchHistory();
     const payload = history.events?.[0]?.workflowExecutionStartedEventAttributes?.input?.payloads?.[0]?.data;
@@ -279,7 +337,7 @@ test('a started opportunity carries waitsForPerson and parks unattempted on an a
   await withWorker(s.activities, async () => {
     assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 3, signalled: 0, fixed: 0, unchanged: 0 });
     assert.ok(!('waitsForPerson' in (await startedInput('w-defect'))), 'a defect starts without the field');
-    assert.equal((await startedInput('w-opportunity')).waitsForPerson, true);
+    assert.ok(!('waitsForPerson' in (await startedInput('w-opportunity'))), 'an opportunity attempts at the verdict');
     assert.equal((await startedInput('w-direction')).waitsForPerson, true);
 
     s.indexes['mattpyle-com'] = kinded([
@@ -291,13 +349,16 @@ test('a started opportunity carries waitsForPerson and parks unattempted on an a
 
     const tried = await stateWhen(findingWorkflowId('mattpyle-com', 'w-defect'), (st) => st.fixAttempts === 1 && st.step === 'waiting-fix');
     assert.match(tried.lastFixError ?? '', /opens no issue/);
-    for (const key of ['w-opportunity', 'w-direction']) {
-      const parked = await stateWhen(findingWorkflowId('mattpyle-com', key), (st) => st.step === 'waiting-fix');
-      assert.equal(parked.fixAttempts, 0);
-      assert.equal(parked.lastFixError, null);
-      assert.equal(parked.waitsForPerson, true);
-    }
-    assert.deepEqual(s.fixIssues, ['w-defect'], 'openFixIssue ran for the defect alone');
+    const opened = await stateWhen(
+      findingWorkflowId('mattpyle-com', 'w-opportunity'),
+      (st) => st.fixAttempts === 1 && st.step === 'waiting-fix' && Boolean(st.issueUrl),
+    );
+    assert.equal(opened.issueUrl, 'https://github.com/o/r/issues/1', 'the opportunity opened its issue at the verdict');
+    const parked = await stateWhen(findingWorkflowId('mattpyle-com', 'w-direction'), (st) => st.step === 'waiting-fix');
+    assert.equal(parked.fixAttempts, 0);
+    assert.equal(parked.lastFixError, null);
+    assert.equal(parked.waitsForPerson, true);
+    assert.deepEqual([...s.fixIssues].sort(), ['w-defect', 'w-opportunity'], 'openFixIssue ran for the defect and the opportunity, not the direction');
 
     for (const key of ['w-defect', 'w-opportunity', 'w-direction']) {
       await client.workflow.getHandle(findingWorkflowId('mattpyle-com', key)).terminate('test over');

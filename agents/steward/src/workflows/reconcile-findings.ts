@@ -4,6 +4,7 @@ import {
   findingPath,
   findingWorkflowId,
   findingsIndexPath,
+  fixCandidates,
   hasParkedDefect,
   planReconcile,
   startsParked,
@@ -26,19 +27,26 @@ import { fixSignal, verdictSignal } from './finding.js';
  * - an `approved` or `rejected` line whose workflow is still open at
  *   `waiting-verdict` gets the `verdict` signal with source `file`, carrying
  *   the reason from the line;
- * - an `approved` defect whose workflow waits at `waiting-fix` with no
- *   attempt, on a site whose `config.yaml` says `auto_fix: true`, gets the
+ * - an `approved` line, of any kind, whose workflow waits at `waiting-fix` and
+ *   has opened no issue, on a site whose `config.yaml` says `auto_fix: true`
+ *   and whose finding file the fixer's gate accepts (`fixRefusal`), gets the
  *   `fix` signal (design decision 31). A run reads the flag once, at its
  *   verdict, so one that passed it before the flag was set would wait for a
- *   `fix` nobody sends. The flag is read once per site, and only for a site
- *   with such a run;
+ *   `fix` nobody sends; a run whose attempt the gate refused waits the same
+ *   way until the finding passes. "No issue" is the test, not "no attempt": a
+ *   run whose Action failed keeps its issue and stays a person's retry. The
+ *   flag is read once per site, and only for a site with such a run. The gate
+ *   runs first, in `listFixableFindings`, so a refused finding is never
+ *   signalled hourly;
  * - everything else is unchanged.
  *
- * A start for a line whose kind is not `defect` (an opportunity or a direction)
- * carries `waitsForPerson`, so the run parks at `waiting-fix` without the
- * automatic fix attempt. The kind is read from the index line the plan already
- * holds, so no command is added: a history recorded before the field replays
- * the same start, and the activity's arguments are not compared on replay.
+ * A start for a direction carries `waitsForPerson`, so the run parks at
+ * `waiting-fix` without the automatic fix attempt. A defect or an opportunity
+ * starts without it: its run attempts the fix at the verdict on an `auto_fix`
+ * site, and the gate decides. The kind is read from the index line the plan
+ * already holds, so no command is added: a history recorded before the field
+ * replays the same start, and the activity's arguments are not compared on
+ * replay.
  *
  * A second run straight after the first finds nothing to do, which is the
  * property the design needs from a poller that runs every hour forever.
@@ -58,6 +66,15 @@ import { fixSignal, verdictSignal } from './finding.js';
  * recorded then replays its list as strings, which `planReconcile` reads as
  * runs of unknown step: no `fix` line and no `auto_fix` read, so the commands
  * match the history without a `patched` marker.
+ *
+ * **`reconcile-fix-any-kind`** (2026-11-03). The kind-blind rule reads the
+ * flag for more runs than the defect rule did (an opportunity, a run with an
+ * attempt) and adds the `listFixableFindings` command after it, so a run in
+ * flight when this shipped would replay a different command sequence. A
+ * history without the marker keeps the defect rule: `hasParkedDefect`, then
+ * `planReconcile` without a `fixable` set. `reconcile-parked-defect-pre.bin`
+ * in `tests/workflows/replay.test.ts` is such a history, recorded from
+ * `e983b03`, and its docblock holds the probe.
  *
  * **Visibility lags.** The open-workflow list comes from the visibility store,
  * which is eventually consistent, so a workflow started a moment ago may not be
@@ -79,15 +96,21 @@ export interface ReconcileFindingsInput {
 export interface SiteReconcileCounts {
   started: number;
   signalled: number;
-  /** Parked approved defects sent the `fix` signal. */
+  /** Parked approved findings sent the `fix` signal. */
   fixed: number;
   unchanged: number;
 }
 
 export type ReconcileFindingsResult = Record<string, SiteReconcileCounts>;
 
+/** A reconcile run recorded without this marker keeps the defect-only `fix` rule. */
+export const RECONCILE_FIX_ANY_KIND_PATCH = 'reconcile-fix-any-kind';
+
 const reading = wf.proxyActivities<
-  Pick<typeof activities, 'listSites' | 'readFindingsIndex' | 'listOpenFindingWorkflows' | 'startFindingWorkflow' | 'readSiteAutoFix'>
+  Pick<
+    typeof activities,
+    'listSites' | 'readFindingsIndex' | 'listOpenFindingWorkflows' | 'startFindingWorkflow' | 'readSiteAutoFix' | 'listFixableFindings'
+  >
 >({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -121,13 +144,24 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
   const sites = await reading.listSites(input.repo);
   const open = await reading.listOpenFindingWorkflows();
   const result: ReconcileFindingsResult = {};
+  const anyKind = wf.patched(RECONCILE_FIX_ANY_KIND_PATCH);
 
   for (const site of sites) {
     const index = await reading.readFindingsIndex(input.repo, site);
-    const autoFix = hasParkedDefect(site, index, open)
-      ? await reading.readSiteAutoFix({ repo: input.repo, site })
-      : false;
-    const plan = planReconcile(site, index, open, autoFix);
+    let autoFix = false;
+    let fixable: ReadonlySet<string> | undefined;
+    if (anyKind) {
+      const candidates = fixCandidates(site, index, open);
+      if (candidates.length > 0) autoFix = await reading.readSiteAutoFix({ repo: input.repo, site });
+      fixable = new Set(
+        autoFix
+          ? await reading.listFixableFindings({ repo: input.repo, site, keys: candidates.map((line) => line.key) })
+          : [],
+      );
+    } else if (hasParkedDefect(site, index, open)) {
+      autoFix = await reading.readSiteAutoFix({ repo: input.repo, site });
+    }
+    const plan = planReconcile(site, index, open, autoFix, fixable);
     const counts: SiteReconcileCounts = { started: 0, signalled: 0, fixed: 0, unchanged: plan.unchanged };
 
     for (const line of plan.start) {

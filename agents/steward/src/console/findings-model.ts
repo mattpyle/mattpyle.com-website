@@ -13,8 +13,9 @@ import {
 } from '../lib/findings.js';
 import { buildEvents, type FindingEvent } from './finding-events.js';
 import { renderFindingBody, type FindingSection } from './finding-markdown.js';
+import { siteAutoFix } from '../activities/findings.js';
 import { fixOffered, verifyOffered } from '../lib/finding-actions.js';
-import { parsePrUrl } from '../lib/findings.js';
+import { fixRefusal, parseFindingBody, parsePrUrl } from '../lib/findings.js';
 import { dispatchWorkflowId, waitingSlotLine, type DispatchState } from '../lib/fix-dispatch.js';
 import { findingStateQuery, type FindingState } from '../workflows/finding.js';
 import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
@@ -102,6 +103,8 @@ export interface FindingRow {
   drift: string[];
   /** Why a row with no open run is as designed, in one quiet line; not a drift flag. */
   quietReason: string | null;
+  /** Why an approved row with a run at `waiting-fix` has not been taken by the fixer; null otherwise. */
+  holdLine: string | null;
   /** The finding's body below the H1, rendered as safe HTML. Empty without a file. */
   body: string;
   /** The H2 sections in file order, each as safe HTML. */
@@ -111,7 +114,7 @@ export interface FindingRow {
   /**
    * The buttons the foot offers: only where the CLI's own gate accepts the verb (`fixRefusal`, the verifier's
    * gate with a merged PR). Decided on the server; the page never re-derives them. Fix is for a row with no
-   * open run, so it is false until the loader has seen the run list.
+   * open run, or a run parked at `waiting-fix` with no issue, so it is settled after the state queries.
    */
   actions: { fix: boolean; verify: boolean };
 }
@@ -153,6 +156,20 @@ export interface DriftContext {
 
 export const QUIET_NO_FIXER = 'no fixer for this site';
 export const QUIET_OPPORTUNITY = 'opportunity, yours to take';
+
+/**
+ * What holds an approved row whose run waits at `waiting-fix`, in one line:
+ * the gate's refusal as the file stands now, else the run's last failure,
+ * else the wait itself. Null for any other row.
+ */
+export function holdLineFor(input: { status: string; run: FindingRunView; refusal: string | null; autoFix: boolean }): string | null {
+  const { run } = input;
+  if (input.status !== 'approved' || !run.open || run.step !== 'waiting-fix') return null;
+  if (input.refusal) return `The fixer's gate refuses it: ${input.refusal}.`;
+  if (run.lastFixError) return `The last fix attempt failed: ${run.lastFixError}`;
+  if (run.issueUrl) return 'Its fix issue ended without a merged PR; Fix retries it.';
+  return input.autoFix ? 'Waits for the fixer; the next hourly reconcile sends it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
+}
 
 /**
  * Where a row's file and run disagree. `run.step` is only known for a queried
@@ -334,7 +351,11 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
         const indexText = await readBlob(shaByPath.get(findingsIndexPath(site)) as string);
         const lines = parseFindingsIndex(indexText);
         const configSha = shaByPath.get(siteConfigPath(site));
-        const stopAfter = configSha ? siteStopAfter(await readBlob(configSha)) : null;
+        const configText = configSha ? await readBlob(configSha) : null;
+        const stopAfter = configText !== null ? siteStopAfter(configText) : null;
+        const autoFix = configText !== null && siteAutoFix(configText);
+        // The gate's view of each file, kept for the pass after the state queries settles Fix and the hold line.
+        const gates = new Map<string, { data: Record<string, unknown>; text: string; refusal: string | null }>();
 
         const rows = await mapLimit(lines, PARALLEL, async (line, index): Promise<FindingRow> => {
           const sha = shaByPath.get(findingPath(site, line.key));
@@ -361,6 +382,10 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             slotLine: null,
           };
           const filePr = fixPrUrl(data);
+          if (sha) {
+            const refusal = line.status === 'approved' ? fixRefusal(data, parseFindingBody(text)) : null;
+            gates.set(line.key, { data, text, refusal });
+          }
           const rendered = renderFindingBody(body);
           const verification = sha ? parseVerificationSection(body) : null;
           return {
@@ -386,13 +411,12 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             verification,
             drift: [],
             quietReason: null,
+            holdLine: null,
             body: rendered.body,
             sections: rendered.sections,
             events: sha ? buildEvents({ data, body, status: line.status, prUrl: filePr || null, verification }) : [],
             actions: {
-              fix: sha
-                ? fixOffered({ site, status: line.status, runOpen: run.open, stopAfter, data, text })
-                : false,
+              fix: false,
               verify: sha ? await verifyOffered({ site, data }, prMerged) : false,
             },
           };
@@ -445,6 +469,20 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
           const assessed = assessRow(row.status, row.fileStatus, row.run, { stopAfter, kind: row.kind });
           row.drift = assessed.drift;
           row.quietReason = assessed.quietReason;
+          const gate = gates.get(row.key);
+          if (gate) {
+            row.actions.fix = fixOffered({
+              site,
+              status: row.status,
+              runOpen: row.run.open,
+              runStep: row.run.step,
+              issueUrl: row.run.issueUrl,
+              stopAfter,
+              data: gate.data,
+              text: gate.text,
+            });
+            row.holdLine = holdLineFor({ status: row.status, run: row.run, refusal: gate.refusal, autoFix });
+          }
           if (row.fileMissing) row.drift.unshift('no finding file');
         }
 

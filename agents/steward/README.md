@@ -46,9 +46,11 @@ that's the property being dogfooded here, on a low-stakes, real target.
   Either wait timing out ends the run with the finding still `fixing`. An hourly Schedule runs the
   reconciler, which starts a `'resolved'` workflow for each `proposed` or `reopened` finding with
   none open, signals the ones whose file already carries a verdict, and sends `fix` to an approved
-  defect parked at `waiting-fix` with no attempt on a site with `auto_fix: true`. A `reopened`
-  finding is back at the verdict gate. A run started for an opportunity or a direction parks at
-  `waiting-fix` without the automatic attempt, and `steward finding status` says why.
+  finding of any kind parked at `waiting-fix` with no issue, on a site with `auto_fix: true`, whose
+  file the fixer's gate accepts. A `reopened` finding is back at the verdict gate. A defect or an
+  opportunity attempts the fix at its verdict and the gate decides; a gate refusal parks the run
+  with `lastFixError`. A run started for a direction parks at `waiting-fix` without the automatic
+  attempt, and `steward finding status` says why.
   The fix issue carries the finding's `verify:` block verbatim. Once the Action's PR is open, the run
   reads the block and, at step `testing-preview`, waits up to 30 minutes for the PR head's Vercel
   `Preview` deployment, runs the checks against it with the bypass secret, and posts the expected
