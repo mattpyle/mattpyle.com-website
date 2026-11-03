@@ -1,7 +1,7 @@
 ---
 title: "Hello, World! Or, this post is a lie."
 date: 2026-07-18
-updated: 2026-07-18
+updated: 2026-11-03
 description: "Testing Temporal workflows, deterministic standards, and agentic AI to build an editor for my website"
 seoTitle: "Hello, World! Or, why this post is a lie"
 seoDescription: "Testing Temporal workflows, deterministic standards, and agentic AI by building an editor for my website. The first post is the smoke test."
@@ -29,7 +29,7 @@ One of the goals of this website is to be as transparent as possible, while rema
 
 This is just the start. As can be read on the changelog, a lot of experimental features, such as adding a [WebMCP surface](/changelog/webmcp-tools/), have been added in the short time since this site went live. Those features and changes are all in the pursuit of learning (something I enjoy) and will be written and shared here (something I'm learning to enjoy!).
 
-There are a few things currently .gitignored. Aside from environment variables, api keys, and config that has no reason to be public I'm currently not sharing:
+At launch, a few things were .gitignored. Aside from environment variables, api keys, and config that has no reason to be public, I wasn't sharing the files below. `Claude.md` and `/steward` have since gone public in the repo:
 - Claude.md - *for Claude*
 - AGENTS.md - *for Codex*
 - Backlog.md - An evolving set of ideas for website features, builds, and content
