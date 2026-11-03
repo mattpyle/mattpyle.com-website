@@ -1,7 +1,7 @@
 import rss from '@astrojs/rss';
 import type { APIContext } from 'astro';
 import { getCollection } from 'astro:content';
-import { lastBuildDateElement } from '../lib/feed-build-date.mjs';
+import { dateOnlyToFeedInstant, lastBuildDateElement } from '../lib/feed-build-date.mjs';
 
 // The draft filter here is unconditional — deliberately stricter than the writing
 // index, which relaxes it under SHOW_DRAFTS. An RSS entry gets cached and
@@ -24,13 +24,15 @@ export async function GET(context: APIContext) {
     items: articles.map((article) => ({
       title: article.data.title,
       description: article.data.description,
-      pubDate: article.data.date,
+      pubDate: dateOnlyToFeedInstant(article.data.date),
       link: `/writing/${article.id}/`,
     })),
     xmlns: { atom: 'http://www.w3.org/2005/Atom' },
     // lastBuildDate follows content (the newest `date` or `updated` of any item), not the build.
     customData: `<language>en-us</language>${lastBuildDateElement(
-      articles.flatMap((article) => [article.data.date, article.data.updated])
+      articles.flatMap((article) =>
+        [article.data.date, article.data.updated].map((d) => d && dateOnlyToFeedInstant(d))
+      )
     )}<atom:link href="${new URL('/rss.xml', context.site)}" rel="self" type="application/rss+xml"/>`,
   });
 }
