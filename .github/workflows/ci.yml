@@ -12,6 +12,9 @@ name: CI (tests & typecheck)
 # Routing. On a pull request, the `changes` job lists the files the PR changes
 # (`git diff --name-only` against the base commit, the same fetch the "Show
 # generated data diff" step uses) and sorts them into the three outputs below.
+# The sorting is `scripts/route-changes.sh`, which `a11y.yml` calls too, so its
+# `axe` job follows the `site` rule below. A change to a row is an edit to that
+# script plus this table.
 # Each suite then runs only when its output is true. A push to `master` skips
 # the diff and runs `steward` and `site`, so master timings and the drift checks
 # that read master runs stay comparable. It leaves `browser` false: the pull
@@ -87,48 +90,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          site=false
-          steward=false
-          browser=false
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            site=true
-            steward=true
-          else
-            git fetch --no-tags --depth=1 origin "$BASE_SHA"
-            git diff --name-only --no-renames "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed.txt"
-            while IFS= read -r file; do
-              [ -n "$file" ] || continue
-              # Markdown is documentation unless it is published content.
-              case "$file" in
-                src/content/*) ;;
-                *.md) continue ;;
-              esac
-              case "$file" in
-                agents/steward/*)
-                  steward=true
-                  case "$file" in
-                    agents/steward/src/lib/agent-audit/*|agents/steward/package.json) site=true; browser=true ;;
-                    agents/steward/src/lib/audit-engine.ts|agents/steward/src/lib/chrome-probe.ts|agents/steward/Dockerfile) browser=true ;;
-                  esac
-                  ;;
-                *)
-                  site=true
-                  case "$file" in
-                    src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml) steward=true ;;
-                  esac
-                  case "$file" in
-                    package-lock.json|.github/workflows/ci.yml) browser=true ;;
-                  esac
-                  ;;
-              esac
-            done < "$RUNNER_TEMP/changed.txt"
-            echo "Changed files: $(wc -l < "$RUNNER_TEMP/changed.txt")"
-          fi
-          echo "site=$site" >> "$GITHUB_OUTPUT"
-          echo "steward=$steward" >> "$GITHUB_OUTPUT"
-          echo "browser=$browser" >> "$GITHUB_OUTPUT"
-          echo "Routing: site=$site steward=$steward browser=$browser"
+        run: bash scripts/route-changes.sh "$EVENT_NAME" "$BASE_SHA"
 
   site:
     name: Site tests & astro check
