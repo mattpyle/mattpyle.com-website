@@ -459,13 +459,16 @@ test('a tab with no match for the query says so and offers Clear filters; the co
   assert.equal(ids(back.list).length, 8);
 });
 
-test('Clear filters shows in the controls row only while something narrows the list', () => {
+test('Clear filters shows in the controls row only while something narrows the list, never on a fresh page', () => {
   const clear = /data-act="clear"/;
-  assert.match(render({ status: 'proposed' }).v.facets, clear, 'a tab other than All');
-  assert.match(render({ status: 'all', q: 'x' }).v.facets, clear, 'a query');
-  assert.match(render({ status: 'all', drift: true }).v.facets, clear, 'the drift chip');
-  assert.doesNotMatch(render({ status: 'all' }).v.facets, clear, 'nothing narrows the list');
-  assert.doesNotMatch(render({ status: 'all', q: '   ' }).v.facets, clear, 'a blank query');
+  assert.doesNotMatch(render().v.facets, clear, 'a fresh page');
+  assert.match(render({ status: 'approved' }).v.facets, clear, 'the Approved tab with nothing else set');
+  assert.match(render({ status: 'all' }).v.facets, clear, 'the All tab, which is not the default');
+  assert.match(render({ q: 'x' }).v.facets, clear, 'a query');
+  assert.match(render({ drift: true }).v.facets, clear, 'the drift chip');
+  assert.match(render({ site: TI }).v.facets, clear, 'a site');
+  assert.match(render({ pri: 'high' }).v.facets, clear, 'a priority');
+  assert.doesNotMatch(render({ q: '   ' }).v.facets, clear, 'a blank query');
 });
 
 test('Clear filters resets the query, the tab, the drift chip and the tab the chip remembered', () => {

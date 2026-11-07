@@ -114,8 +114,8 @@
     const q = state.q.trim().toLowerCase();
     return (r) => !q || `${refOf(r)} ${shortTitle(r)} ${r.title} ${r.key} ${siteName(r.site)}`.toLowerCase().includes(q);
   };
-  // The Clear filters button shows while a query, a tab other than All, the drift chip, a site or a priority narrows the list.
-  const filtering = (state) => !!state.q.trim() || state.status !== 'all' || state.drift || state.site !== 'all' || state.pri !== 'all';
+  // The Clear filters button shows while a query, a tab other than the default (Proposed), the drift chip, a site or a priority narrows the list.
+  const filtering = (state) => !!state.q.trim() || state.status !== 'proposed' || state.drift || state.site !== 'all' || state.pri !== 'all';
   // What Clear filters sets: every control back to All, the query empty, and the drift chip's remembered tab forgotten so a later toggle cannot restore it.
   const clearedFilters = () => ({ site: 'all', pri: 'all', drift: false, statusBeforeDrift: null, status: 'all', q: '', menu: null });
 
