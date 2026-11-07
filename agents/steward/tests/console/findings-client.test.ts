@@ -422,15 +422,60 @@ test('each cell in a row names its own value on hover, and the row button carrie
   assert.match(li, /<time datetime="2026-10-27" title="Opened Tue, 27 October 2026">/);
 });
 
-test('a query finds a row in any status, the status control reads All, and clearing it returns to the tab', () => {
-  const key = 'ux-resolved--about';
-  assert.deepEqual(F.visible(F.rowsOf(MODEL), { ...F.createState(), status: 'proposed' }).map((r: FindingRow) => r.key).includes(key), false);
-  const { v, state } = render({ status: 'proposed', q: key });
-  assert.deepEqual(ids(v.list), [`${MP}/${key}`]);
+test('a query keeps the chosen tab: each tab shows the rows of its status that match, and the tab counts agree', () => {
+  const q = 'ux-';
+  const byTab: Record<string, string[]> = {
+    proposed: [`${MP}/ux-short--about`, `${MP}/ux-long--home`],
+    approved: [`${MP}/ux-drift--feed`],
+    fixing: [`${MP}/ux-fixing--blog`],
+    resolved: [`${MP}/ux-resolved--about`],
+    rejected: [],
+  };
+  for (const [status, want] of Object.entries(byTab)) {
+    const { v } = render({ status, q });
+    assert.deepEqual(ids(v.list).sort(), [...want].sort(), `${status} with the query`);
+    assert.match(v.statuses, new RegExp(`data-status="${status}" aria-selected="true"`));
+    assert.equal(count(v.statuses, status[0].toUpperCase() + status.slice(1)), String(want.length), `${status} tab count`);
+  }
+  const { v } = render({ status: 'proposed', q });
+  assert.equal(count(v.statuses, 'All'), '5', 'the All tab counts every status that matches');
+  assert.match(v.facets, /data-facet="status">\s*<button[^>]*data-on="true">Proposed/, 'the status chip follows the tab');
+});
+
+test('the All tab stays selectable with a query and searches every status', () => {
+  const { v } = render({ status: 'all', q: 'ux-resolved--about' });
+  assert.deepEqual(ids(v.list), [`${MP}/ux-resolved--about`]);
   assert.match(v.statuses, /data-status="all" aria-selected="true"/);
   assert.match(v.statuses, /data-status="proposed" aria-selected="false"/);
-  assert.match(v.facets, /data-facet="status">\s*<button[^>]*data-on="false">All</);
-  assert.equal(state.status, 'proposed', 'the chosen tab is kept');
-  const back = F.view(MODEL, { ...state, q: '' }, OPTIONS);
-  assert.match(back.statuses, /data-status="proposed" aria-selected="true"/);
+});
+
+test('a tab with no match for the query says so and offers Clear filters; the controls row offers it too', () => {
+  const { v, state } = render({ status: 'rejected', q: 'ux-' });
+  assert.deepEqual(ids(v.list), []);
+  assert.match(v.list, /<p>No findings match\.<\/p><button class="linkish" type="button" data-act="clear">Clear filters<\/button>/);
+  assert.match(v.facets, /<button class="linkish clear-filters" type="button" data-act="clear">Clear filters<\/button>/);
+  const back = F.view(MODEL, { ...state, ...F.clearedFilters() }, OPTIONS);
+  assert.match(back.statuses, /data-status="all" aria-selected="true"/);
+  assert.equal(ids(back.list).length, 8);
+});
+
+test('Clear filters shows in the controls row only while something narrows the list, never on a fresh page', () => {
+  const clear = /data-act="clear"/;
+  assert.doesNotMatch(render().v.facets, clear, 'a fresh page');
+  assert.match(render({ status: 'approved' }).v.facets, clear, 'the Approved tab with nothing else set');
+  assert.match(render({ status: 'all' }).v.facets, clear, 'the All tab, which is not the default');
+  assert.match(render({ q: 'x' }).v.facets, clear, 'a query');
+  assert.match(render({ drift: true }).v.facets, clear, 'the drift chip');
+  assert.match(render({ site: TI }).v.facets, clear, 'a site');
+  assert.match(render({ pri: 'high' }).v.facets, clear, 'a priority');
+  assert.doesNotMatch(render({ q: '   ' }).v.facets, clear, 'a blank query');
+});
+
+test('Clear filters resets the query, the tab, the drift chip and the tab the chip remembered', () => {
+  const state = { ...F.createState(), status: 'all', statusBeforeDrift: 'approved', drift: true, q: 'ux-', site: TI, pri: 'high' };
+  Object.assign(state, F.clearedFilters());
+  assert.deepEqual(
+    { status: state.status, q: state.q, drift: state.drift, statusBeforeDrift: state.statusBeforeDrift, site: state.site, pri: state.pri },
+    { status: 'all', q: '', drift: false, statusBeforeDrift: null, site: 'all', pri: 'all' },
+  );
 });
