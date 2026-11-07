@@ -49,6 +49,13 @@ import { fixSignal, verdictSignal } from './finding.js';
  *   person to press Fix. A start that finds the ID taken counts as unchanged and
  *   sends no signal. The gate read covers these lines with the parked ones, and
  *   the flag is read when either list is not empty;
+ * - a `resolved` or `rejected` line whose workflow is open at `waiting-fix` has
+ *   the workflow cancelled. Verify, or a verdict given outside the fixer's path,
+ *   decided the file and left the run parked on a `fix` that will never come.
+ *   An `approved` line's parked run is the fixer's business, and a `rejected`
+ *   line's run at `waiting-verdict` takes the `verdict` signal above, so neither
+ *   is closed here. The reason is the line's status, written to this
+ *   workflow's log: a cancel request carries no reason of its own;
  * - everything else is unchanged.
  *
  * A start for a direction carries `waitsForPerson`, so the run parks at
@@ -94,6 +101,25 @@ import { fixSignal, verdictSignal } from './finding.js';
  * `reconcile-restart-approved-pre.bin` in `tests/workflows/replay.test.ts` is
  * such a history, recorded from `7ea21e5`, and its docblock holds the probe.
  *
+ * **`reconcile-close-parked`** (2026-11-07). The close adds one external cancel
+ * per parked run behind a resolved or rejected line, so a run in flight when this
+ * shipped would replay a different command sequence. A history without the
+ * marker closes nothing and counts those lines as unchanged.
+ * `reconcile-close-parked-pre.bin` in `tests/workflows/replay.test.ts` is such a
+ * history, recorded from `de5f9cd`, and its docblock holds the probe.
+ *
+ * **Closed by cancellation, not termination.** The run parks on
+ * `wf.condition(() => fix.requested)` in `findingWorkflow`, outside every
+ * `try`, so a cancel raises `CancelledFailure` there and the run ends as
+ * Canceled with its history intact. Its `finally` releases a dispatcher slot
+ * only when one is held, and a run at `waiting-fix` holds none. So
+ * `findingWorkflow` needs no handler and no marker. A termination through an
+ * activity would record a reason in the target's history, but it skips every
+ * `finally`; the cancel is the clean end, and the CLI already closes lifecycle
+ * runs the same way (`cancelLifecycleRun`). A cancelled run leaves the
+ * visibility list at once, so the next reconcile sees a line with no run and
+ * counts it unchanged: a `resolved` or `rejected` line is never restarted.
+ *
  * **Visibility lags.** The open-workflow list comes from the visibility store,
  * which is eventually consistent, so a workflow started a moment ago may not be
  * listed yet. A start that finds the workflow already running and a signal to a
@@ -121,6 +147,11 @@ export interface SiteReconcileCounts {
    * Absent from a result recorded before the restart existed.
    */
   restarted?: number;
+  /**
+   * Resolved or rejected findings whose run was parked at `waiting-fix` and got a cancel.
+   * Absent from a result recorded before the close existed.
+   */
+  closed?: number;
   unchanged: number;
 }
 
@@ -131,6 +162,9 @@ export const RECONCILE_FIX_ANY_KIND_PATCH = 'reconcile-fix-any-kind';
 
 /** A reconcile run recorded without this marker never restarts an approved line that has no open run. */
 export const RECONCILE_RESTART_APPROVED_PATCH = 'reconcile-restart-approved';
+
+/** A reconcile run recorded without this marker never cancels the parked run of a resolved or rejected line. */
+export const RECONCILE_CLOSE_PARKED_PATCH = 'reconcile-close-parked';
 
 const reading = wf.proxyActivities<
   Pick<
@@ -172,6 +206,7 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
   const result: ReconcileFindingsResult = {};
   const anyKind = wf.patched(RECONCILE_FIX_ANY_KIND_PATCH);
   const restartApproved = anyKind && wf.patched(RECONCILE_RESTART_APPROVED_PATCH);
+  const closeParked = anyKind && restartApproved && wf.patched(RECONCILE_CLOSE_PARKED_PATCH);
 
   for (const site of sites) {
     const index = await reading.readFindingsIndex(input.repo, site);
@@ -188,8 +223,8 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
     } else if (hasParkedDefect(site, index, open)) {
       autoFix = await reading.readSiteAutoFix({ repo: input.repo, site });
     }
-    const plan = planReconcile(site, index, open, autoFix, fixable);
-    const counts: Required<SiteReconcileCounts> = { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: plan.unchanged };
+    const plan = planReconcile(site, index, open, autoFix, fixable, closeParked);
+    const counts: Required<SiteReconcileCounts> = { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: plan.unchanged };
 
     for (const line of plan.start) {
       const outcome = await reading.startFindingWorkflow({
@@ -263,6 +298,17 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
       }
     }
 
+    for (const line of plan.close) {
+      try {
+        await wf.getExternalWorkflowHandle(findingWorkflowId(site, line.key)).cancel();
+        wf.log.info('closing a parked run', { site, key: line.key, reason: `the index line says ${line.status}` });
+        counts.closed++;
+      } catch (err) {
+        if (!isGone(err)) throw err;
+        counts.unchanged++;
+      }
+    }
+
     result[site] = counts;
   }
   return result;
@@ -272,7 +318,7 @@ function summarise(result: ReconcileFindingsResult): string {
   const sites = Object.entries(result);
   if (sites.length === 0) return 'Findings reconcile: no site folders.';
   const parts = sites.map(
-    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, fixed ${c.fixed}, restarted ${c.restarted ?? 0}, unchanged ${c.unchanged}`,
+    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, fixed ${c.fixed}, restarted ${c.restarted ?? 0}, closed ${c.closed ?? 0}, unchanged ${c.unchanged}`,
   );
   return `Findings reconcile: ${parts.join('; ')}.`;
 }
