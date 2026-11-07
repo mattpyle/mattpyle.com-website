@@ -129,10 +129,20 @@ export interface DeepContext {
   robotsDetail(url: string): Promise<string | null>;
 }
 
-export function defaultRunners(): DeepRunners {
+/** The two tool functions `defaultRunners` calls, as `audit-engine.ts` exports them. */
+export type AuditEngine = Pick<typeof import('../audit-engine.js'), 'runLighthouse' | 'runAxe'>;
+
+/**
+ * `loadEngine` is a parameter so a test can stand a fake engine in for
+ * `audit-engine.ts` and assert on what these runners hand it. The default is
+ * the real, lazily imported module, so production behaviour does not change.
+ */
+export function defaultRunners(
+  loadEngine: () => Promise<AuditEngine> = () => import('../audit-engine.js'),
+): DeepRunners {
   return {
     async lighthouse(url, timeoutMs, proxy) {
-      const { runLighthouse } = await import('../audit-engine.js');
+      const { runLighthouse } = await loadEngine();
       // `maxWaitForLoad` is Lighthouse's own give-up timer. It is what keeps a
       // page that never finishes loading from holding the run open: the outer
       // race below reports the timeout, but only this stops Chrome waiting.
@@ -157,7 +167,7 @@ export function defaultRunners(): DeepRunners {
       });
     },
     async axe(url, timeoutMs, proxy) {
-      const { runAxe } = await import('../audit-engine.js');
+      const { runAxe } = await loadEngine();
       const controller = new AbortController();
       let expired = false;
       const timer = setTimeout(() => {

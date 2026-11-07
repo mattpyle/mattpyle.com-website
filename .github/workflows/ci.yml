@@ -11,25 +11,42 @@ name: CI (tests & typecheck)
 #
 # Routing. On a pull request, the `changes` job lists the files the PR changes
 # (`git diff --name-only` against the base commit, the same fetch the "Show
-# generated data diff" step uses) and sorts them into the two outputs below.
+# generated data diff" step uses) and sorts them into the three outputs below.
 # Each suite then runs only when its output is true. A push to `master` skips
-# the diff and runs both, so master timings and the drift checks that read
-# master runs stay comparable.
+# the diff and runs `steward` and `site`, so master timings and the drift checks
+# that read master runs stay comparable. It leaves `browser` false: the pull
+# request already ran it, and it takes minutes.
 #
-#   Changed file                                         steward  site
-#   Markdown outside src/content/                        no       no
-#   agents/steward/** (not Markdown)                     yes      no
+#   Changed file                                         steward  site  browser
+#   Markdown outside src/content/                        no       no    no
+#   agents/steward/** (not Markdown)                     yes      no    no
 #   agents/steward/src/lib/agent-audit/**, and
-#     agents/steward/package.json                        yes      yes
-#   src/content/**, src/data/**, package.json,
-#     package-lock.json, .github/workflows/ci.yml        yes      yes
-#   anything else outside agents/steward/                no       yes
+#     agents/steward/package.json                        yes      yes   yes
+#   agents/steward/src/lib/audit-engine.ts,
+#     agents/steward/src/lib/chrome-probe.ts,
+#     agents/steward/Dockerfile                          yes      no    yes
+#   package-lock.json, .github/workflows/ci.yml          yes      yes   yes
+#   src/content/**, src/data/**, package.json            yes      yes   no
+#   anything else outside agents/steward/                no       yes   no
 #
 # Why those rows. Steward tests the published content and the scorecard data,
 # so those paths and the shared lockfile and workflow file run it. The site
 # imports Steward's two export entries (tests/steward-*-packaging.test.mjs), so
 # a change to either entry's graph is a site change. Markdown under src/content/
 # is content, not documentation.
+#
+# The `browser` row. `browser` makes the Steward job's test step set
+# `STEWARD_CHROME_TESTS=1`, which turns on the one test that launches a real
+# Chrome (`tests/lib/agent-audit-deep-chrome.test.ts`). It proves the deep
+# audit's browser honours the vetting proxy and the address policy, a property
+# the fake-runner tests cannot show. So it runs for a change to the browser
+# runners and the proxy and policy beside them (`agent-audit/**`,
+# `audit-engine.ts`, `chrome-probe.ts`), to the dependencies that supply the
+# browser tooling (`package.json`, `package-lock.json`) and to the container
+# that ships it (`Dockerfile`). A change to this file runs it too, so a routing
+# mistake here is seen on the PR that makes it. The runner's preinstalled
+# `google-chrome-stable` is the browser (see the note in `a11y.yml`), so the job
+# installs none.
 #
 # Open decision on scorecard and fixer PRs (card STW-510): the paths answer it.
 # A scorecard PR changes src/data/ and runs both suites. A fixer PR that changes
@@ -60,11 +77,12 @@ jobs:
     outputs:
       site: ${{ steps.route.outputs.site }}
       steward: ${{ steps.route.outputs.steward }}
+      browser: ${{ steps.route.outputs.browser }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Sort changed files into site and steward
+      - name: Sort changed files into site, steward and browser
         id: route
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -72,6 +90,7 @@ jobs:
         run: |
           site=false
           steward=false
+          browser=false
           if [ "$EVENT_NAME" != "pull_request" ]; then
             site=true
             steward=true
@@ -89,13 +108,17 @@ jobs:
                 agents/steward/*)
                   steward=true
                   case "$file" in
-                    agents/steward/src/lib/agent-audit/*|agents/steward/package.json) site=true ;;
+                    agents/steward/src/lib/agent-audit/*|agents/steward/package.json) site=true; browser=true ;;
+                    agents/steward/src/lib/audit-engine.ts|agents/steward/src/lib/chrome-probe.ts|agents/steward/Dockerfile) browser=true ;;
                   esac
                   ;;
                 *)
                   site=true
                   case "$file" in
                     src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml) steward=true ;;
+                  esac
+                  case "$file" in
+                    package-lock.json|.github/workflows/ci.yml) browser=true ;;
                   esac
                   ;;
               esac
@@ -104,7 +127,8 @@ jobs:
           fi
           echo "site=$site" >> "$GITHUB_OUTPUT"
           echo "steward=$steward" >> "$GITHUB_OUTPUT"
-          echo "Routing: site=$site steward=$steward"
+          echo "browser=$browser" >> "$GITHUB_OUTPUT"
+          echo "Routing: site=$site steward=$steward browser=$browser"
 
   site:
     name: Site tests & astro check
@@ -193,5 +217,10 @@ jobs:
       - name: Typecheck (tsc --noEmit)
         run: npm run --silent check:steward
 
+      # `browser` from the routing job: `1` turns on the real-Chrome test in
+      # `agent-audit-deep-chrome.test.ts`, on the runner's preinstalled Chrome;
+      # empty leaves it skipped. The header table says which changes set it.
       - name: Run Steward tests
+        env:
+          STEWARD_CHROME_TESTS: ${{ needs.changes.outputs.browser == 'true' && '1' || '' }}
         run: npm run --silent test:steward
