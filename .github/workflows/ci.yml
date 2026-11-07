@@ -15,6 +15,7 @@ name: CI (tests & typecheck)
 # The sorting is `scripts/route-changes.sh`, which `a11y.yml` calls too, so its
 # `axe` job follows the `site` rule below. A change to a row is an edit to that
 # script plus this table.
+# A fourth output, `steward_tests`, picks the glob the Steward job runs.
 # Each suite then runs only when its output is true. A push to `master` skips
 # the diff and runs `steward` and `site`, so master timings and the drift checks
 # that read master runs stay comparable. It leaves `browser` false: the pull
@@ -39,11 +40,23 @@ name: CI (tests & typecheck)
 #   src/content/**, src/data/**, package.json            yes      yes   no
 #   anything else outside agents/steward/                no       yes   no
 #
+#   Steward files changed                               steward_tests runs
+#   only under src/console/ or tests/console/            tests/console/**
+#   anything else, and every push to master              tests/**
+#
 # Why those rows. Steward tests the published content and the scorecard data,
 # so those paths and the shared lockfile and workflow file run it. The site
 # imports Steward's two export entries (tests/steward-*-packaging.test.mjs), so
 # a change to either entry's graph is a site change. Markdown under src/content/
 # is content, not documentation.
+#
+# The `steward_tests` rows. The findings console is an island: nothing outside
+# it imports it except the `steward console` verb in `src/cli.ts`, which loads
+# it on demand, and its own imports are covered by the typecheck, which runs in
+# either case. So a change confined to the console is proved by the console
+# tests and `tsc`, not the three-minute suite. Any other
+# change that sets `steward`, a content or data path included, keeps the full
+# glob. Other folders need an import graph before they can be islands too.
 #
 # A change to the routing scripts runs every suite, so a routing mistake is
 # caught by the suites it would have skipped.
@@ -91,11 +104,12 @@ jobs:
       site: ${{ steps.route.outputs.site }}
       steward: ${{ steps.route.outputs.steward }}
       browser: ${{ steps.route.outputs.browser }}
+      steward_tests: ${{ steps.route.outputs.steward_tests }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Sort changed files into site, steward and browser
+      - name: Sort changed files into site, steward, browser and the Steward test glob
         id: route
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -192,7 +206,16 @@ jobs:
       # `browser` from the routing job: `1` turns on the real-Chrome test in
       # `agent-audit-deep-chrome.test.ts`, on the runner's preinstalled Chrome;
       # empty leaves it skipped. The header table says which changes set it.
-      - name: Run Steward tests
+      #
+      # `steward_tests` is the glob to run, so the step name says which run this
+      # is. The flags are those of the `test` script in
+      # `agents/steward/package.json`; keep the two in step. The credential guard
+      # stays: without it two tests in `tests/lib` fail.
+      - name: Run Steward tests (${{ needs.changes.outputs.steward_tests }})
+        working-directory: agents/steward
         env:
           STEWARD_CHROME_TESTS: ${{ needs.changes.outputs.browser == 'true' && '1' || '' }}
-        run: npm run --silent test:steward
+          STEWARD_TESTS: ${{ needs.changes.outputs.steward_tests }}
+        run: |
+          echo "Steward test glob: $STEWARD_TESTS"
+          node --import tsx --import ./tests/helpers/no-real-credentials.ts --test --test-concurrency=4 --test-timeout=60000 "$STEWARD_TESTS"

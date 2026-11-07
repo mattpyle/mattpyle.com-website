@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Sorts a pull request's changed files into the three routing outputs and
-# writes them to $GITHUB_OUTPUT: `site`, `steward` and `browser`.
+# Sorts a pull request's changed files into the routing outputs and writes
+# them to $GITHUB_OUTPUT: `site`, `steward` and `browser`, plus `steward_tests`,
+# the glob the Steward job runs.
 #
 #   scripts/route-changes.sh <event-name> <base-sha>
 #
@@ -13,6 +14,17 @@
 # Any event other than `pull_request` skips the diff and sets `site` and
 # `steward` true, so master timings and the drift checks that read master runs
 # stay comparable. It leaves `browser` false: the pull request already ran it.
+#
+# `steward_tests` is `tests/console/**/*.test.ts` when Steward's tests run only
+# because of a change under `agents/steward/src/console/` or
+# `agents/steward/tests/console/`, and `tests/**/*.test.ts` in every other case,
+# a push included. The console is an island: nothing outside it imports it
+# except the `steward console` verb in `src/cli.ts`, which loads it on demand,
+# and its own imports of `lib/`, `activities/` and `workflows/` are covered by
+# the typecheck, which still runs. Other folders stay on the full glob: proving
+# one of them an island needs an import graph. A change that sets `steward` for
+# any other reason (content, data, the lockfile, this script) is not
+# console-only, even when it also touches the console.
 set -euo pipefail
 
 event_name="${1:?usage: route-changes.sh <event-name> <base-sha>}"
@@ -23,9 +35,12 @@ scratch="${RUNNER_TEMP:-$(mktemp -d)}"
 site=false
 steward=false
 browser=false
+# Set by any change that is not under the console; it keeps the full glob.
+steward_wide=false
 if [ "$event_name" != "pull_request" ]; then
   site=true
   steward=true
+  steward_wide=true
 else
   git fetch --no-tags --depth=1 origin "$base_sha"
   git diff --name-only --no-renames "$base_sha" HEAD > "$scratch/changed.txt"
@@ -40,6 +55,10 @@ else
       agents/steward/*)
         steward=true
         case "$file" in
+          agents/steward/src/console/*|agents/steward/tests/console/*) ;;
+          *) steward_wide=true ;;
+        esac
+        case "$file" in
           agents/steward/src/lib/agent-audit/*|agents/steward/package.json) site=true; browser=true ;;
           agents/steward/src/lib/audit-engine.ts|agents/steward/src/lib/chrome-probe.ts|agents/steward/Dockerfile) browser=true ;;
         esac
@@ -47,7 +66,7 @@ else
       *)
         site=true
         case "$file" in
-          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) steward=true ;;
+          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
         esac
         case "$file" in
           package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) browser=true ;;
@@ -57,7 +76,12 @@ else
   done < "$scratch/changed.txt"
   echo "Changed files: $(wc -l < "$scratch/changed.txt")"
 fi
+steward_tests='tests/**/*.test.ts'
+if [ "$steward" = true ] && [ "$steward_wide" = false ]; then
+  steward_tests='tests/console/**/*.test.ts'
+fi
 echo "site=$site" >> "$output"
 echo "steward=$steward" >> "$output"
 echo "browser=$browser" >> "$output"
-echo "Routing: site=$site steward=$steward browser=$browser"
+echo "steward_tests=$steward_tests" >> "$output"
+echo "Routing: site=$site steward=$steward browser=$browser steward_tests=$steward_tests"
