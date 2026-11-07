@@ -960,3 +960,5 @@ async function lifecycle(
     }
   }
 }
+
+// proof: selection
