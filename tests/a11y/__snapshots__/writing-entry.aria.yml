@@ -28,19 +28,20 @@
       - time: /\d+ [A-Z][a-z]{2} \d+/
       - text: 8 min read updated
       - time: /\d+ [A-Z][a-z]{2} \d+/
-      - navigation "·":
-        - link "·":
-          - /url: "#"
-        - link "·":
-          - /url: "#"
-        - link "·":
-          - /url: "#"
-        - link "·":
-          - /url: "#"
-        - link "·":
-          - /url: "#"
-        - link "·":
-          - /url: "#"
+      - group:
+        - navigation "·":
+          - link "·":
+            - /url: "#"
+          - link "·":
+            - /url: "#"
+          - link "·":
+            - /url: "#"
+          - link "·":
+            - /url: "#"
+          - link "·":
+            - /url: "#"
+          - link "·":
+            - /url: "#"
       - link "view markdown":
         - /url: /writing/accessibility-and-ai.md
       - button "copy markdown"
@@ -51,6 +52,8 @@
       - link "rss feed":
         - /url: /rss.xml
       - status
+    - link "· ·":
+      - /url: "#"
 - contentinfo:
   - text: Matt Pyle
   - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.

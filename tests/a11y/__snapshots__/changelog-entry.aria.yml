@@ -22,8 +22,11 @@
     - heading "·" [level=1]
     - paragraph: ·
     - paragraph:
+      - link "·":
+        - /url: "#"
       - time: ·
-      - text: · ·
+      - text: · · ·
+      - time: ·
     - navigation "·":
       - link "· ·":
         - /url: "#"
