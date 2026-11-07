@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Sorts a pull request's changed files into the routing outputs and writes
 # them to $GITHUB_OUTPUT: `site`, `steward` and `browser`, plus `steward_tests`,
-# the glob the Steward job runs.
+# the test files the Steward job runs, and `steward_tests_label`, a short name
+# for the step.
 #
 #   scripts/route-changes.sh <event-name> <base-sha>
 #
@@ -15,16 +16,22 @@
 # `steward` true, so master timings and the drift checks that read master runs
 # stay comparable. It leaves `browser` false: the pull request already ran it.
 #
-# `steward_tests` is `tests/console/**/*.test.ts` when Steward's tests run only
-# because of a change under `agents/steward/src/console/` or
-# `agents/steward/tests/console/`, and `tests/**/*.test.ts` in every other case,
-# a push included. The console is an island: nothing outside it imports it
-# except the `steward console` verb in `src/cli.ts`, which loads it on demand,
-# and its own imports of `lib/`, `activities/` and `workflows/` are covered by
-# the typecheck, which still runs. Other folders stay on the full glob: proving
-# one of them an island needs an import graph. A change that sets `steward` for
-# any other reason (content, data, the lockfile, this script) is not
-# console-only, even when it also touches the console.
+# `steward_tests` is one of three things:
+#   1. `tests/**/*.test.ts`, the full suite, for a push and for any change that
+#      sets `steward` from outside `agents/steward/` (content, data, the
+#      lockfile, a workflow or routing script). `steward_wide` marks them.
+#   2. A space-separated list of test files, for a change confined to
+#      `agents/steward/`. `scripts/select-steward-tests.mjs` builds it from the
+#      import graph, and its header lists the exceptions that widen it to the
+#      full suite and the one that adds the replay suite.
+#   3. Empty, when no test reaches the change. The Steward job then runs the
+#      typecheck only and says so.
+# That script needs the `typescript` package. The `changes` job of `ci.yml`
+# installs it; `a11y.yml`'s job does not, and does not read `steward_tests`, so
+# there the script exits 3 and the glob stands. Any other failure also keeps the
+# glob, with a warning: a selector that breaks must not skip tests. A change that
+# sets `browser` always keeps the real-Chrome test in the list, since a change
+# to the Dockerfile reaches it through no import.
 set -euo pipefail
 
 event_name="${1:?usage: route-changes.sh <event-name> <base-sha>}"
@@ -35,7 +42,8 @@ scratch="${RUNNER_TEMP:-$(mktemp -d)}"
 site=false
 steward=false
 browser=false
-# Set by any change that is not under the console; it keeps the full glob.
+# Set by any change that sets `steward` from outside `agents/steward/`, and by any
+# event but a pull request; it keeps the full glob.
 steward_wide=false
 if [ "$event_name" != "pull_request" ]; then
   site=true
@@ -55,10 +63,6 @@ else
       agents/steward/*)
         steward=true
         case "$file" in
-          agents/steward/src/console/*|agents/steward/tests/console/*) ;;
-          *) steward_wide=true ;;
-        esac
-        case "$file" in
           agents/steward/src/lib/agent-audit/*|agents/steward/package.json) site=true; browser=true ;;
           agents/steward/src/lib/audit-engine.ts|agents/steward/src/lib/chrome-probe.ts|agents/steward/Dockerfile) browser=true ;;
         esac
@@ -66,22 +70,46 @@ else
       *)
         site=true
         case "$file" in
-          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
+          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
         esac
         case "$file" in
-          package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) browser=true ;;
+          package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) browser=true ;;
         esac
         ;;
     esac
   done < "$scratch/changed.txt"
   echo "Changed files: $(wc -l < "$scratch/changed.txt")"
 fi
-steward_tests='tests/**/*.test.ts'
+full_glob='tests/**/*.test.ts'
+steward_tests="$full_glob"
 if [ "$steward" = true ] && [ "$steward_wide" = false ]; then
-  steward_tests='tests/console/**/*.test.ts'
+  select_status=0
+  steward_tests="$(node scripts/select-steward-tests.mjs < "$scratch/changed.txt" 2> "$scratch/select.log")" || select_status=$?
+  cat "$scratch/select.log"
+  if [ "$select_status" -eq 3 ]; then
+    echo "typescript is not installed here; the Steward tests keep the full glob"
+    steward_tests="$full_glob"
+  elif [ "$select_status" -ne 0 ]; then
+    echo "::warning::select-steward-tests.mjs failed (exit $select_status); the Steward tests keep the full glob"
+    steward_tests="$full_glob"
+  elif [ "$browser" = true ] && [ "$steward_tests" != "$full_glob" ]; then
+    chrome=tests/lib/agent-audit-deep-chrome.test.ts
+    case " $steward_tests " in
+      *" $chrome "*) ;;
+      *) steward_tests="${steward_tests:+$steward_tests }$chrome" ;;
+    esac
+  fi
+fi
+if [ "$steward_tests" = "$full_glob" ]; then
+  steward_tests_label="$full_glob"
+elif [ -z "$steward_tests" ]; then
+  steward_tests_label="none, typecheck only"
+else
+  steward_tests_label="$(wc -w <<< "$steward_tests" | tr -d ' ') selected files"
 fi
 echo "site=$site" >> "$output"
 echo "steward=$steward" >> "$output"
 echo "browser=$browser" >> "$output"
 echo "steward_tests=$steward_tests" >> "$output"
-echo "Routing: site=$site steward=$steward browser=$browser steward_tests=$steward_tests"
+echo "steward_tests_label=$steward_tests_label" >> "$output"
+echo "Routing: site=$site steward=$steward browser=$browser steward_tests=$steward_tests_label"
