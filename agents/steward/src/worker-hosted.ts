@@ -1,62 +1,16 @@
 import { fileURLToPath } from 'node:url';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import {
-  assembleDeepAudit,
-  auditRenderedPage,
-  auditSiteFast,
-  auditSiteFetchChecks,
-} from './activities/agent-audit.js';
-import { checkActionUsage, checkCredentialExpiry, reportRunHealth } from './activities/health.js';
-import {
-  awaitFixPr,
-  awaitFixPrMerge,
-  awaitPrPreview,
-  awaitProductionDeploy,
-  closeConflictingFixPr,
-  readProductionDeploy,
-  listFixableFindings,
-  listOpenFindingWorkflows,
-  listSites,
-  openFixIssue,
-  readFinding,
-  readFindingsIndex,
-  readFixPr,
-  readSiteAutoFix,
-  readVerifyBlock,
-  reportPreviewChecks,
-  requestFixSlot,
-  runningWorkflowIds,
-  startFindingWorkflow,
-  writeFindingFix,
-  writeFindingReturned,
-  writeFindingVerdict,
-  writeFindingVerification,
-} from './activities/findings.js';
-import { runFindingChecks } from './activities/verify-finding.js';
-import {
-  archiveScorecardRun,
-  auditLiveUrl,
-  publishScorecardRun,
-  readPublishedScorecard,
-  resolveAuditUrls,
-  resolveRunStamp,
-} from './activities/scorecard.js';
-import {
   HEALTHCHECK_BASE,
-  HOSTED_ACTIVITY_CONCURRENCY,
   METRICS_API_KEY,
   IS_TEMPORAL_CLOUD,
-  HOSTED_FAST_ACTIVITY_CONCURRENCY,
-  HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
   NAMESPACE,
-  QUEUE_AUDIT,
-  QUEUE_AUDIT_FAST,
-  QUEUE_FINDINGS,
   REPO_ROOT,
   TEMPORAL_ADDRESS,
   WORKER_READY_LOG,
   temporalConnectionOptions,
 } from './config.js';
+import { hostedRegistry, type HostedQueue } from './hosted-registry.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { log } from './lib/logger.js';
 import {
@@ -101,10 +55,11 @@ import {
  * them: the failures burn the activity's retries and the review dies rather
  * than waiting for the local machine.
  *
- * So the activity map below is written out by hand. It is exactly what
+ * So the activity maps are written out by hand, in `hosted-registry.ts`, which
+ * this file builds its workers from. The audit map is exactly what
  * `workflows/audit-site.ts` and `workflows/scorecard-audit.ts` name, and adding
- * anything to it is a claim that the new activity needs nothing local. The
- * queue is the enforcement (`config.ts`'s `QUEUE_AUDIT`); this list is the
+ * anything to a map is a claim that the new activity needs nothing local. The
+ * queue is the enforcement (`config.ts`'s `QUEUE_AUDIT`); the map is the
  * second lock on the same door.
  *
  * ## Host-agnostic on purpose
@@ -118,90 +73,6 @@ import {
  */
 
 const workflowsPath = fileURLToPath(new URL('./workflows/index.ts', import.meta.url));
-
-/**
- * Exactly the activities the two hosted workflows schedule, and nothing else.
- *
- * `auditSiteWorkflow` → the first four. `scorecardAuditWorkflow` → the rest.
- * Every one of them reaches the site over the network and the repository over
- * the GitHub API; none of them opens a file in the repo. That property is what
- * the whole leg rests on, so it is worth re-checking rather than assuming when
- * this list grows.
- */
-const activities = {
-  auditSiteFast,
-  auditSiteFetchChecks,
-  auditRenderedPage,
-  assembleDeepAudit,
-  resolveAuditUrls,
-  resolveRunStamp,
-  auditLiveUrl,
-  readPublishedScorecard,
-  publishScorecardRun,
-  archiveScorecardRun,
-  // The scorecard's alerting leg. All three are HTTPS calls that read their
-  // configuration from the host's environment — `STEWARD_HEALTHCHECK_BASE` for
-  // the ping, and `TEMPORAL_METRICS_API_KEY` for the usage sample's second call,
-  // out to Temporal Cloud's metrics endpoint — so they satisfy the "nothing
-  // local" rule this list enforces.
-  reportRunHealth,
-  checkCredentialExpiry,
-  checkActionUsage,
-};
-
-/**
- * The fast queue's whole registry: one activity, and it is the same function the
- * audit workflow schedules on the other queue.
- *
- * Written as its own object rather than as a slice of the map above because the
- * list *is* the contract with the queue. Anything added here becomes work the
- * public MCP endpoint can dispatch straight onto this container with no workflow
- * in between, so growing it is a decision rather than a refactor.
- */
-const fastActivities = { auditSiteFast };
-
-/**
- * The findings queue's registry (findings-loop design, decisions 18, 26, 29
- * and 30, fix-dispatch-by-surface and fix-pr-runs-the-verify-block): the
- * twenty-three findings activities,
- * plus `reportRunHealth` because the reconciler pings its check from this
- * queue. GitHub API calls against the findings repository, the fix issue, the
- * fix PR, the lifecycle's three waits, the conflicting PR's close, the fix
- * PR's preview wait and its comment and draft write, and the blockless
- * verify's one production read against the site repository; a
- * visibility list, a workflow start, a dispatcher signal and a status sweep
- * through the worker's own client; and the verifier's checks: fetch against
- * production and this image's Chromium for `selector` and `js`, as the deep
- * audit uses it. None opens a local file in the repository, so the "nothing
- * local" rule above holds for this map too.
- */
-const findingsActivities = {
-  listSites,
-  readFindingsIndex,
-  readFinding,
-  writeFindingVerdict,
-  writeFindingReturned,
-  readSiteAutoFix,
-  openFixIssue,
-  awaitFixPr,
-  writeFindingFix,
-  awaitFixPrMerge,
-  awaitPrPreview,
-  awaitProductionDeploy,
-  readProductionDeploy,
-  listOpenFindingWorkflows,
-  listFixableFindings,
-  startFindingWorkflow,
-  readFixPr,
-  readVerifyBlock,
-  runFindingChecks,
-  writeFindingVerification,
-  reportPreviewChecks,
-  requestFixSlot,
-  runningWorkflowIds,
-  closeConflictingFixPr,
-  reportRunHealth,
-};
 
 /**
  * The same `unhandledRejection` guard `worker.ts` carries, and for the same
@@ -340,113 +211,86 @@ async function main() {
 
   const tracker = new ActivityTracker();
 
-  const worker = await Worker.create({
-    connection,
-    namespace: NAMESPACE,
-    workflowsPath,
-    activities,
-    taskQueue: QUEUE_AUDIT,
-    // One activity at a time, and never more. The SDK's default is 100, which is
-    // how two strangers' deep audits came to render simultaneously and corrupt
-    // each other's Lighthouse timing marks. `config.ts`'s docblock carries the
-    // evidence and the cost this accepts; the short version is that serialising
-    // the cheap activities behind a page render is the price of the render
-    // activities working at all.
-    //
-    // Workflow tasks are a separate budget (`maxConcurrentWorkflowTaskExecutions`,
-    // untouched), so a queued run's workflow still progresses and still answers
-    // the progress query while somebody else's render holds the activity slot.
-    maxConcurrentActivityTaskExecutions: HOSTED_ACTIVITY_CONCURRENCY,
-    // Stop polling on SIGTERM, then give in-flight work 20 seconds before
-    // cancelling it. **No `process.on('SIGTERM')` handler here on purpose**: the
-    // SDK Runtime already installs one for SIGINT/SIGTERM/SIGQUIT/SIGUSR2, and a
-    // hand-rolled handler that calls `process.exit()` pre-empts the drain it was
-    // meant to perform.
-    //
-    // 20 seconds is sized against the host, not against the work. A page render
-    // can take 90s, so this is never long enough to finish one — and it does not
-    // need to be. A cancelled `auditRenderedPage` is retried by the server and
-    // the pages already done are in workflow history, which is exactly the
-    // per-page durability leg 2 bought. What the grace period buys is the
-    // cheaper case: an activity seconds from returning gets to return.
-    shutdownGraceTime: '20 seconds',
-    // The guarantee that a redeploy actually completes. Without it a wedged
-    // Chrome could hold the process past the platform's own kill deadline, and
-    // the restart reads as a crash rather than a deploy.
-    shutdownForceTime: '40 seconds',
-    // The only reason this worker has interceptors: the recycle policy needs to
-    // know when a browser activity ran and when the last activity finished, and
-    // the activities themselves are shared with the local worker, which must
-    // never recycle. Observing from out here keeps them ignorant of hosting.
-    interceptors: { activity: [trackActivityExecution(tracker)] },
-  });
+  const [audit, fast, findings] = hostedRegistry();
+  const queues = () => [audit.taskQueue, fast.taskQueue, findings.taskQueue];
 
   /**
-   * The public MCP endpoint's queue. No workflows, no browser, and its own
-   * dispatch budget.
+   * One `Worker` per registry entry: the queue, its activity map, the workflow
+   * bundle if the entry carries it, and its cap. Everything below is what the
+   * registry leaves to the entry point because it is about this process, not
+   * about a queue.
    *
-   * `maxConcurrentActivityTaskExecutions` is four rather than one because
-   * nothing here launches Chrome, so the `marky` constraint that makes the other
-   * queue serial does not apply: a fast audit is a dozen HTTP round trips and is
-   * mostly waiting on somebody else's origin. Four is sized against the endpoint
-   * being public and synchronous — a caller's tool call must not queue behind
-   * three other callers' — and it is bounded rather than the SDK's default of
-   * 100 because this container also has to hold a Lighthouse run's memory.
+   * Stop polling on SIGTERM, then give in-flight work 20 seconds before
+   * cancelling it. **No `process.on('SIGTERM')` handler here on purpose**: the
+   * SDK Runtime already installs one for SIGINT/SIGTERM/SIGQUIT/SIGUSR2, and a
+   * hand-rolled handler that calls `process.exit()` pre-empts the drain it was
+   * meant to perform.
    *
-   * The same shutdown timings and the same interceptor as the other worker: one
-   * process exits once, and the recycle policy's in-flight count has to see both
-   * queues or it would exit while a fast audit was mid-flight.
+   * 20 seconds is sized against the host, not against the work. A page render
+   * can take 90s, so this is never long enough to finish one — and it does not
+   * need to be. A cancelled `auditRenderedPage` is retried by the server and
+   * the pages already done are in workflow history, which is exactly the
+   * per-page durability leg 2 bought. What the grace period buys is the
+   * cheaper case: an activity seconds from returning gets to return.
+   *
+   * The 40-second force time is the guarantee that a redeploy actually
+   * completes. Without it a wedged Chrome could hold the process past the
+   * platform's own kill deadline, and the restart reads as a crash rather than
+   * a deploy.
+   *
+   * The interceptor is the only reason these workers have one: the recycle
+   * policy needs to know when a browser activity ran and when the last activity
+   * finished, and the activities themselves are shared with the local worker,
+   * which must never recycle. Observing from out here keeps them ignorant of
+   * hosting. All three share one tracker because one process exits once, and the
+   * in-flight count has to see every queue or it would exit mid-activity.
    */
-  const fastWorker = await Worker.create({
-    connection,
-    namespace: NAMESPACE,
-    activities: fastActivities,
-    taskQueue: QUEUE_AUDIT_FAST,
-    maxConcurrentActivityTaskExecutions: HOSTED_FAST_ACTIVITY_CONCURRENCY,
-    shutdownGraceTime: '20 seconds',
-    shutdownForceTime: '40 seconds',
-    interceptors: { activity: [trackActivityExecution(tracker)] },
-  });
+  const createWorker = (entry: HostedQueue) =>
+    Worker.create({
+      connection,
+      namespace: NAMESPACE,
+      ...(entry.carriesWorkflows ? { workflowsPath } : {}),
+      activities: entry.activities,
+      taskQueue: entry.taskQueue,
+      // The SDK's default is 100, which is how two strangers' deep audits came to
+      // render simultaneously and corrupt each other's Lighthouse timing marks.
+      // `config.ts`'s docblocks carry the evidence and the cost of each cap.
+      // Workflow tasks are a separate budget (`maxConcurrentWorkflowTaskExecutions`,
+      // untouched), so a queued run's workflow still progresses and still answers
+      // the progress query while somebody else's render holds the activity slot.
+      maxConcurrentActivityTaskExecutions: entry.maxConcurrentActivityTaskExecutions,
+      shutdownGraceTime: '20 seconds',
+      shutdownForceTime: '40 seconds',
+      interceptors: { activity: [trackActivityExecution(tracker)] },
+    });
 
-  /**
-   * The findings gate's queue: `findingWorkflow`, `reconcileFindingsWorkflow`
-   * and their activities. Its own `Worker` for the fast queue's reason: a verdict
-   * write must not wait behind a 90-second page render on the audit queue, whose
-   * cap is one. It carries the workflow bundle because both its workflows run
-   * here.
-   *
-   * The same shutdown timings and interceptor as the other two, for the same
-   * reason: one process, one exit, one in-flight count.
-   */
-  const findingsWorker = await Worker.create({
-    connection,
-    namespace: NAMESPACE,
-    workflowsPath,
-    activities: findingsActivities,
-    taskQueue: QUEUE_FINDINGS,
-    maxConcurrentActivityTaskExecutions: HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
-    shutdownGraceTime: '20 seconds',
-    shutdownForceTime: '40 seconds',
-    interceptors: { activity: [trackActivityExecution(tracker)] },
-  });
+  // The audit queue: the serial one, and the workflow bundle for the audit and
+  // scorecard workflows.
+  const worker = await createWorker(audit);
+  // The public MCP endpoint's queue: no workflows, no browser, its own budget.
+  const fastWorker = await createWorker(fast);
+  // The findings gate's queue: `findingWorkflow`, `reconcileFindingsWorkflow` and
+  // their activities, with its own `Worker` so a verdict write never waits
+  // behind a page render.
+  const findingsWorker = await createWorker(findings);
 
   log.info(
     {
-      queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS],
+      queues: queues(),
       lighthouse,
       namespace: NAMESPACE,
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
-      activities: Object.keys(activities),
-      fastActivities: Object.keys(fastActivities),
-      findingsActivities: Object.keys(findingsActivities),
+      activities: Object.keys(audit.activities),
+      fastActivities: Object.keys(fast.activities),
+      findingsActivities: Object.keys(findings.activities),
       hosted: true,
       // In the ready line for the same reason `alerting` is: it is a fact a
       // deploy can change, and the operator reading this line after a deploy is
       // the person who would otherwise find out from a corrupted report.
-      activityConcurrency: HOSTED_ACTIVITY_CONCURRENCY,
-      fastActivityConcurrency: HOSTED_FAST_ACTIVITY_CONCURRENCY,
-      findingsActivityConcurrency: HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
+      activityConcurrency: audit.maxConcurrentActivityTaskExecutions,
+      fastActivityConcurrency: fast.maxConcurrentActivityTaskExecutions,
+      findingsActivityConcurrency: findings.maxConcurrentActivityTaskExecutions,
       // Named in the ready line because the operator reads this line after every
       // deploy, and "alerting is off" is precisely the fact a deploy can change
       // by accident (a variable dropped from the Variables tab) and that nothing
@@ -478,7 +322,7 @@ async function main() {
   stopAll();
   await running;
   log.info(
-    { queues: [QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS] },
+    { queues: queues() },
     'steward hosted worker drained and stopped',
   );
   // Exit 0 and not 1. `main().catch` below exits 1, so the code is what tells a
