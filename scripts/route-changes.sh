@@ -15,6 +15,14 @@
 # `steward` true, so master timings and the drift checks that read master runs
 # stay comparable. It leaves `browser` false: the pull request already ran it.
 #
+# On a pull request the diff runs from the merge commit's first parent to the
+# merge commit. The first parent is master as it stands now. The recorded base,
+# `base-sha`, is master as it stood when the pull request opened. Once master
+# moves on, a diff against that base also lists every change merged since. Those
+# changes then route the pull request to jobs it did not touch. The recorded base
+# is used only when HEAD is not a merge commit. The checkout is shallow, so the
+# script fetches HEAD's parents before it checks for a merge commit.
+#
 # `steward_tests` is `tests/console/**/*.test.ts` when Steward's tests run only
 # because of a change under `agents/steward/src/console/` or
 # `agents/steward/tests/console/`, and `tests/**/*.test.ts` in every other case,
@@ -42,8 +50,16 @@ if [ "$event_name" != "pull_request" ]; then
   steward=true
   steward_wide=true
 else
-  git fetch --no-tags --depth=1 origin "$base_sha"
-  git diff --name-only --no-renames "$base_sha" HEAD > "$scratch/changed.txt"
+  # The checkout is shallow: fetch HEAD's parents before reading them.
+  git fetch --no-tags --depth=2 origin "$(git rev-parse HEAD)"
+  if git rev-parse -q --verify HEAD^2 > /dev/null; then
+    # A merge commit: its first parent is current master.
+    git diff --name-only --no-renames HEAD^1 HEAD > "$scratch/changed.txt"
+  else
+    # Not a merge commit: fall back to the base GitHub recorded.
+    git fetch --no-tags --depth=1 origin "$base_sha"
+    git diff --name-only --no-renames "$base_sha" HEAD > "$scratch/changed.txt"
+  fi
   while IFS= read -r file; do
     [ -n "$file" ] || continue
     # Markdown is documentation unless it is published content.
