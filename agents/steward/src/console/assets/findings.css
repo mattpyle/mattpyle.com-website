@@ -585,3 +585,5 @@ body[data-sort="priority"] .c-pri { display: none; }
 .message a { color: inherit; text-underline-offset: 3px; }
 .drift-lines .btn { margin-left: 12px; }
 .drift-run { margin-left: 12px; color: var(--ink-2); }
+
+/* routing proof, close unmerged */
