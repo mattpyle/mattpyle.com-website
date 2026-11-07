@@ -80,11 +80,12 @@ export class SyncError extends Error {
 }
 
 export function totalCounts(sites: ReconcileFindingsResult): SiteReconcileCounts {
-  const total = { started: 0, signalled: 0, fixed: 0, unchanged: 0 };
+  const total = { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 0 };
   for (const counts of Object.values(sites)) {
     total.started += counts.started ?? 0;
     total.signalled += counts.signalled ?? 0;
     total.fixed += counts.fixed ?? 0;
+    total.restarted += counts.restarted ?? 0;
     total.unchanged += counts.unchanged ?? 0;
   }
   return total;
@@ -139,7 +140,7 @@ export function syncSummary(result: SyncResult): string {
   if (!result.triggered) return 'A reconcile is already running, so none was started.';
   if (!result.total) return 'The reconcile is running and has not finished. Refresh in a minute.';
   const t = result.total;
-  return `Started ${t.started}, signalled ${t.signalled}, fixed ${t.fixed}, unchanged ${t.unchanged}.`;
+  return `Started ${t.started}, signalled ${t.signalled}, fixed ${t.fixed}, restarted ${t.restarted ?? 0}, unchanged ${t.unchanged}.`;
 }
 
 // ---------------------------------------------------------------------------

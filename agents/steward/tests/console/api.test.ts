@@ -200,14 +200,15 @@ test('a heading inside a code fence does not start a section', () => {
   assert.deepEqual(sections.map((s) => s.heading), ['One', 'Two']);
 });
 
-test('drift: temporal-io stops at the verdict, an opportunity is quiet, a lost defect still drifts', async () => {
+test('drift: temporal-io stops at the verdict, an approved opportunity with no run drifts and says what holds it, a lost defect still drifts', async () => {
   const data = await api();
   const ti = row(data, TI, 'ti-approved--home');
   assert.deepEqual(ti.drift, []);
   assert.equal(ti.quietReason, 'no fixer for this site');
   const opp = row(data, MP, 'ux-opp--about');
-  assert.deepEqual(opp.drift, []);
-  assert.equal(opp.quietReason, 'opportunity, yours to take');
+  assert.deepEqual(opp.drift, ['approved with no open run']);
+  assert.equal(opp.quietReason, null);
+  assert.match(opp.holdLine ?? '', /^The fixer's gate refuses it/, 'the fixture file has no measure, so the gate says why');
   const lost = row(data, MP, 'ux-lost--about');
   assert.deepEqual(lost.drift, ['approved with no open run']);
   assert.equal(lost.quietReason, null);
@@ -217,7 +218,7 @@ test('drift: temporal-io stops at the verdict, an opportunity is quiet, a lost d
 test('driftFor without a context keeps the old answer', () => {
   const run: FindingRunView = { open: false, since: null, step: null, queried: false, queryError: null, prUrl: null, issueUrl: null, previewResult: null, lastFixError: null, slotLine: null };
   assert.deepEqual(driftFor('approved', 'approved', run), ['approved with no open run']);
-  assert.deepEqual(driftFor('fixing', 'fixing', run, { stopAfter: 'verdict', kind: 'opportunity' }), ['fixing with no open run']);
+  assert.deepEqual(driftFor('fixing', 'fixing', run, { stopAfter: 'verdict' }), ['fixing with no open run']);
 });
 
 test('POST /api/verdict answers JSON for a JSON body, under the guards', async () => {

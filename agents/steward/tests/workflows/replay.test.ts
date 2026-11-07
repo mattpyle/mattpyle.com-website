@@ -666,3 +666,40 @@ test('a reconcile run recorded before the kind-blind fix rule replays down the d
     'reconcile-fixture-3',
   );
 });
+
+/**
+ * A reconcile run as `reconcileFindingsWorkflow` ran it before the restart of an
+ * approved line with no open run: one site, an approved opportunity with no
+ * run (left alone, with no flag read) and a new proposed defect (one
+ * `startFindingWorkflow`). 37 events. New code reads the flag for an approved
+ * line with no run, then asks `listFixableFindings`, before it starts anything,
+ * so this replays only because the `reconcile-restart-approved` patch sends a
+ * history without the marker down the old candidates: `fixCandidates` alone.
+ *
+ * Recorded from the pre-change `reconcile-findings.ts` (origin/master at
+ * 7ea21e5, the worktree before its first edit) against the time-skipping server
+ * with mocked activities, so it holds no real finding text.
+ *
+ * Probe (2026-11-06): replacing `wf.patched(RECONCILE_RESTART_APPROVED_PATCH)` with
+ * `true`, so every run takes the restart path, made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'startFindingWorkflow' does not match activity type of activity command
+ * 'readSiteAutoFix'
+ * ```
+ *
+ * The other 18 replays stayed green. The guard was restored and all 19 replays re-ran green.
+ */
+const reconcileRestartApprovedPath = fileURLToPath(
+  new URL('../fixtures/histories/reconcile-restart-approved-pre.bin', import.meta.url),
+);
+
+test('a reconcile run recorded before the restart rule replays without a restart', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileRestartApprovedPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'reconcile-fixture-4',
+  );
+});

@@ -9,6 +9,7 @@ import {
   parseFindingsIndex,
   pendingActivityLine,
   planReconcile,
+  restartCandidates,
   type FindingsIndexLine,
   setFrontmatterVerdict,
   setIndexVerdict,
@@ -171,6 +172,39 @@ test('planReconcile with the gate sends fix to any approved parked line the gate
   // A list recorded before issueUrl existed has none, so such a run counts as having no issue.
   const old = open.map(({ workflowId, step, fixAttempts }) => ({ workflowId, step, fixAttempts }));
   assert.ok(fixCandidates('s', index, old).some((l) => l.key === 'has-issue'));
+});
+
+test('planReconcile restarts an approved line with no run when the site has auto_fix and the gate accepts it, and no other line', () => {
+  const index = parseFindingsIndex(
+    [
+      'One line per finding: `key | status | kind | scenario | title | verdict reason`.',
+      'idle | approved | opportunity | s | t | Yes.',
+      'idle-defect | approved | defect | s | t | Yes.',
+      'refused | approved | opportunity | s | t | Yes.',
+      'fixing | fixing | defect | s | t | Yes.',
+      'rejected | rejected | defect | s | t | No.',
+      'proposed | proposed | defect | s | t | ',
+      'resolved | resolved | defect | s | t | Yes.',
+      'parked | approved | defect | s | t | Yes.',
+    ].join('\n'),
+  );
+  const open = [{ workflowId: findingWorkflowId('s', 'parked'), step: 'waiting-fix', fixAttempts: 0, issueUrl: null }];
+  assert.deepEqual(
+    restartCandidates('s', index, open).map((l) => l.key),
+    ['idle', 'idle-defect', 'refused'],
+    'approved with no run, and nothing else',
+  );
+
+  const accepted = new Set(['idle', 'idle-defect', 'fixing', 'rejected', 'resolved', 'parked']);
+  const plan = planReconcile('s', index, open, true, accepted);
+  assert.deepEqual(plan.restart.map((l) => l.key), ['idle', 'idle-defect']);
+  assert.deepEqual(plan.fix.map((l) => l.key), ['parked'], 'a parked run still takes fix, not a restart');
+  assert.deepEqual(plan.start.map((l) => l.key), ['proposed']);
+  assert.equal(plan.unchanged, 4, 'refused, fixing, rejected and resolved');
+
+  assert.deepEqual(planReconcile('s', index, open, false, accepted).restart, [], 'a site without auto_fix');
+  assert.deepEqual(planReconcile('s', index, open, true, new Set()).restart, [], 'the gate accepts none');
+  assert.deepEqual(planReconcile('s', index, open, true).restart, [], 'no gate read, no restart');
 });
 
 test('planReconcile starts a reopened line with no workflow, as it does a proposed one, and leaves one with a workflow', () => {

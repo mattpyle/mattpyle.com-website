@@ -7,6 +7,7 @@ import {
   fixCandidates,
   hasParkedDefect,
   planReconcile,
+  restartCandidates,
   startsParked,
   type FindingVerdict,
 } from '../lib/findings.js';
@@ -38,6 +39,16 @@ import { fixSignal, verdictSignal } from './finding.js';
  *   flag is read once per site, and only for a site with such a run. The gate
  *   runs first, in `listFixableFindings`, so a refused finding is never
  *   signalled hourly;
+ * - an `approved` line with no open workflow, on a site whose `config.yaml` says
+ *   `auto_fix: true` and whose finding file the gate accepts, gets a new
+ *   lifecycle run: `startFindingWorkflow` with `stopAfter: 'resolved'` and no
+ *   `waitsForPerson`, then the `verdict` signal with status `approved`, the
+ *   line's reason, source `file` and the workflow clock. The run attempts the
+ *   fix at that verdict, as a run started `proposed` does. An approval whose
+ *   run stopped at the verdict, or was cancelled, would otherwise wait for a
+ *   person to press Fix. A start that finds the ID taken counts as unchanged and
+ *   sends no signal. The gate read covers these lines with the parked ones, and
+ *   the flag is read when either list is not empty;
  * - everything else is unchanged.
  *
  * A start for a direction carries `waitsForPerson`, so the run parks at
@@ -76,6 +87,13 @@ import { fixSignal, verdictSignal } from './finding.js';
  * in `tests/workflows/replay.test.ts` is such a history, recorded from
  * `e983b03`, and its docblock holds the probe.
  *
+ * **`reconcile-restart-approved`** (2026-11-06). The restart adds a flag read, a
+ * gate read, a start and a signal for an approved line with no run, so a run in
+ * flight when this shipped would replay a different command sequence. A history
+ * without the marker never restarts: it reads the candidates it did before.
+ * `reconcile-restart-approved-pre.bin` in `tests/workflows/replay.test.ts` is
+ * such a history, recorded from `7ea21e5`, and its docblock holds the probe.
+ *
  * **Visibility lags.** The open-workflow list comes from the visibility store,
  * which is eventually consistent, so a workflow started a moment ago may not be
  * listed yet. A start that finds the workflow already running and a signal to a
@@ -98,6 +116,11 @@ export interface SiteReconcileCounts {
   signalled: number;
   /** Parked approved findings sent the `fix` signal. */
   fixed: number;
+  /**
+   * Approved findings with no open run that got a new run and the `verdict` signal.
+   * Absent from a result recorded before the restart existed.
+   */
+  restarted?: number;
   unchanged: number;
 }
 
@@ -105,6 +128,9 @@ export type ReconcileFindingsResult = Record<string, SiteReconcileCounts>;
 
 /** A reconcile run recorded without this marker keeps the defect-only `fix` rule. */
 export const RECONCILE_FIX_ANY_KIND_PATCH = 'reconcile-fix-any-kind';
+
+/** A reconcile run recorded without this marker never restarts an approved line that has no open run. */
+export const RECONCILE_RESTART_APPROVED_PATCH = 'reconcile-restart-approved';
 
 const reading = wf.proxyActivities<
   Pick<
@@ -145,13 +171,14 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
   const open = await reading.listOpenFindingWorkflows();
   const result: ReconcileFindingsResult = {};
   const anyKind = wf.patched(RECONCILE_FIX_ANY_KIND_PATCH);
+  const restartApproved = anyKind && wf.patched(RECONCILE_RESTART_APPROVED_PATCH);
 
   for (const site of sites) {
     const index = await reading.readFindingsIndex(input.repo, site);
     let autoFix = false;
     let fixable: ReadonlySet<string> | undefined;
     if (anyKind) {
-      const candidates = fixCandidates(site, index, open);
+      const candidates = [...fixCandidates(site, index, open), ...(restartApproved ? restartCandidates(site, index, open) : [])];
       if (candidates.length > 0) autoFix = await reading.readSiteAutoFix({ repo: input.repo, site });
       fixable = new Set(
         autoFix
@@ -162,7 +189,7 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
       autoFix = await reading.readSiteAutoFix({ repo: input.repo, site });
     }
     const plan = planReconcile(site, index, open, autoFix, fixable);
-    const counts: SiteReconcileCounts = { started: 0, signalled: 0, fixed: 0, unchanged: plan.unchanged };
+    const counts: Required<SiteReconcileCounts> = { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: plan.unchanged };
 
     for (const line of plan.start) {
       const outcome = await reading.startFindingWorkflow({
@@ -207,6 +234,35 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
       }
     }
 
+    for (const line of plan.restart) {
+      const outcome = await reading.startFindingWorkflow({
+        site,
+        key: line.key,
+        repo: input.repo,
+        findingPath: findingPath(site, line.key),
+        indexPath: findingsIndexPath(site),
+        stopAfter: 'resolved',
+        indexStatus: 'approved',
+      });
+      if (outcome !== 'started') {
+        counts.unchanged++;
+        continue;
+      }
+      const verdict: FindingVerdict = {
+        status: 'approved',
+        reason: line.reason,
+        source: 'file',
+        at: new Date(Date.now()).toISOString(),
+      };
+      try {
+        await wf.getExternalWorkflowHandle(findingWorkflowId(site, line.key)).signal(verdictSignal, verdict);
+        counts.restarted++;
+      } catch (err) {
+        if (!isGone(err)) throw err;
+        counts.unchanged++;
+      }
+    }
+
     result[site] = counts;
   }
   return result;
@@ -216,7 +272,7 @@ function summarise(result: ReconcileFindingsResult): string {
   const sites = Object.entries(result);
   if (sites.length === 0) return 'Findings reconcile: no site folders.';
   const parts = sites.map(
-    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, fixed ${c.fixed}, unchanged ${c.unchanged}`,
+    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, fixed ${c.fixed}, restarted ${c.restarted ?? 0}, unchanged ${c.unchanged}`,
   );
   return `Findings reconcile: ${parts.join('; ')}.`;
 }

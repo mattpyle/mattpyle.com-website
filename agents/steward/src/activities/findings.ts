@@ -1221,8 +1221,11 @@ export interface StartFindingWorkflowInput {
   findingPath: string;
   indexPath: string;
   stopAfter: FindingStopAfter;
-  /** The index line's status. Absent from inputs recorded before `reopened` was started; read it as `proposed`. */
-  indexStatus?: 'proposed' | 'reopened';
+  /**
+   * The index line's status. Absent from inputs recorded before `reopened` was started; read it as `proposed`.
+   * `approved` is the reconciler's restart: the line's last run is closed, and the new run starts from the file's verdict.
+   */
+  indexStatus?: 'proposed' | 'reopened' | 'approved';
   /** The index line's kind is not `defect`. Passed on to the workflow's input as it is. */
   waitsForPerson?: boolean;
 }
@@ -1258,6 +1261,13 @@ function productionOrigin(site: string): string | undefined {
  * retry after a start that landed returns `already-started`, so the activity
  * is safe to retry.
  *
+ * `ALLOW_DUPLICATE` for an `approved` line too (the reconciler's restart): its last run completed
+ * at its verdict (the 2026-10-13 approvals), and the file's verdict is what the
+ * new run starts from. An `approved` line on a site with no production origin returns
+ * `already-started` without starting anything. A lifecycle run that closes
+ * leaves its file `fixing`, `resolved` or `reopened`, never `approved`, so a
+ * restart does not repeat hourly.
+ *
  * The line's status rides in the memo, so `steward finding list` names a
  * reopened finding without a query per workflow.
  */
@@ -1271,6 +1281,9 @@ export async function startFindingWorkflow(
     const origin = productionOrigin(input.site);
     if (origin) {
       args = { ...args, handoffPath: findingHandoffPath(input.site, input.key), branch: fixBranch(input.key), origin };
+    } else if (indexStatus === 'approved') {
+      log.warn({ activity: 'startFindingWorkflow', site: input.site }, 'no production origin for this site; not restarting an approved line');
+      return 'already-started';
     } else {
       log.warn({ activity: 'startFindingWorkflow', site: input.site }, 'no production origin for this site; starting at verdict');
       args = { ...args, stopAfter: 'verdict' };
@@ -1281,7 +1294,7 @@ export async function startFindingWorkflow(
       workflowId: findingWorkflowId(input.site, input.key),
       taskQueue: QUEUE_FINDINGS,
       args: [args],
-      workflowIdReusePolicy: indexStatus === 'reopened' ? 'ALLOW_DUPLICATE' : 'ALLOW_DUPLICATE_FAILED_ONLY',
+      workflowIdReusePolicy: indexStatus === 'reopened' || indexStatus === 'approved' ? 'ALLOW_DUPLICATE' : 'ALLOW_DUPLICATE_FAILED_ONLY',
       memo: { indexStatus },
     });
     return 'started';
