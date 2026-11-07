@@ -120,3 +120,4 @@ interface PendingActivityLike {
   attempt?: number | null;
   lastFailure?: unknown;
 }
+
