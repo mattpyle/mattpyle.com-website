@@ -21,7 +21,8 @@ name: Built-site checks (axe-core, HTML validity, llms.txt)
 # second `npm ci` ahead of the slowest audit. Two more cuts: the guard runs in two shards, because
 # its 212 specs took 33 to 41 seconds on one runner and made it the slowest job, and the server
 # writes to a file because the step took 5 seconds with the server attached to its output.
-# After, on a site-only pull request: axe-playwright 66 seconds, axe-cli 65, guard 58 and 46.
+# After, on site-only pull requests: the longest job took 61, 74 and 81 seconds over three runs, and
+# the shortest 42.
 #
 # Which jobs gate: `axe-cli` and `axe-playwright`, the axe runs and the audit-url report scan. The
 # guard, the HTML validity run and the llms.txt assertion are advisory — red on the PR, deploys
