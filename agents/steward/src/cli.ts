@@ -2616,3 +2616,5 @@ program.parseAsync(process.argv).catch((err) => {
   console.error(`\n  ${describeCliError(err)}\n`);
   process.exit(1);
 });
+
+// routing proof
