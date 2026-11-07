@@ -8,6 +8,39 @@ name: CI (tests & typecheck)
 #
 # Deliberately separate from a11y.yml: this job needs no browser and no built
 # site, so it finishes in a fraction of the time and reports on its own.
+#
+# Routing. On a pull request, the `changes` job lists the files the PR changes
+# (`git diff --name-only` against the base commit, the same fetch the "Show
+# generated data diff" step uses) and sorts them into the two outputs below.
+# Each suite then runs only when its output is true. A push to `master` skips
+# the diff and runs both, so master timings and the drift checks that read
+# master runs stay comparable.
+#
+#   Changed file                                         steward  site
+#   Markdown outside src/content/                        no       no
+#   agents/steward/** (not Markdown)                     yes      no
+#   agents/steward/src/lib/agent-audit/**, and
+#     agents/steward/package.json                        yes      yes
+#   src/content/**, src/data/**, package.json,
+#     package-lock.json, .github/workflows/ci.yml        yes      yes
+#   anything else outside agents/steward/                no       yes
+#
+# Why those rows. Steward tests the published content and the scorecard data,
+# so those paths and the shared lockfile and workflow file run it. The site
+# imports Steward's two export entries (tests/steward-*-packaging.test.mjs), so
+# a change to either entry's graph is a site change. Markdown under src/content/
+# is content, not documentation.
+#
+# Open decision on scorecard and fixer PRs (card STW-510): the paths answer it.
+# A scorecard PR changes src/data/ and runs both suites. A fixer PR that changes
+# only pages, components or styles under src/ runs the site suite and skips
+# Steward; one that also changes src/content/ or src/data/ runs both.
+#
+# A skipped job is skipped by a job-level `if`, not by `on.paths`, so it shows
+# as skipped on the PR instead of vanishing. The only required check on
+# `master` is "Private paths not tracked" (ruleset `protect-master`), so a
+# skipped job blocks no merge. Whoever makes `site` or `steward` required must
+# first give the PR an always-reporting check that sits beneath this routing.
 
 on:
   push:
@@ -20,8 +53,63 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Route by changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      site: ${{ steps.route.outputs.site }}
+      steward: ${{ steps.route.outputs.steward }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Sort changed files into site and steward
+        id: route
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          site=false
+          steward=false
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            site=true
+            steward=true
+          else
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            git diff --name-only --no-renames "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed.txt"
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              # Markdown is documentation unless it is published content.
+              case "$file" in
+                src/content/*) ;;
+                *.md) continue ;;
+              esac
+              case "$file" in
+                agents/steward/*)
+                  steward=true
+                  case "$file" in
+                    agents/steward/src/lib/agent-audit/*|agents/steward/package.json) site=true ;;
+                  esac
+                  ;;
+                *)
+                  site=true
+                  case "$file" in
+                    src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml) steward=true ;;
+                  esac
+                  ;;
+              esac
+            done < "$RUNNER_TEMP/changed.txt"
+            echo "Changed files: $(wc -l < "$RUNNER_TEMP/changed.txt")"
+          fi
+          echo "site=$site" >> "$GITHUB_OUTPUT"
+          echo "steward=$steward" >> "$GITHUB_OUTPUT"
+          echo "Routing: site=$site steward=$steward"
+
   site:
     name: Site tests & astro check
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -70,6 +158,8 @@ jobs:
 
   steward:
     name: Steward tests & tsc
+    needs: changes
+    if: needs.changes.outputs.steward == 'true'
     runs-on: ubuntu-latest
     # The suite takes 3 to 4 minutes. A hung test fails in one under the test
     # script's --test-timeout; this bounds a hang outside a test, such as the
