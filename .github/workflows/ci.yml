@@ -233,8 +233,7 @@ jobs:
           if [ "$STEWARD_TESTS" = select ]; then
             flags=()
             [ "$BROWSER" = true ] && flags+=(--browser)
-            if ! tests="$(printf '%s
-' "$STEWARD_CHANGED" | node scripts/select-steward-tests.mjs "${flags[@]}")"; then
+            if ! tests="$(printf '%s\n' "$STEWARD_CHANGED" | node scripts/select-steward-tests.mjs "${flags[@]}")"; then
               echo "::warning::select-steward-tests.mjs failed; running the full Steward suite"
               tests='tests/**/*.test.ts'
             fi
