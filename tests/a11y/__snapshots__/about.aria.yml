@@ -43,7 +43,9 @@
   - region "Everything here is built in the open":
     - heading "Everything here is built in the open" [level=2]
     - paragraph:
-      - text: The code is public, the
+      - link "The code is public":
+        - /url: https://github.com/mattpyle/mattpyle.com-website
+      - text: ", the"
       - link "changelog":
         - /url: /changelog/
       - text: explains every change in plain English, and the posts include the parts I got wrong. I write the words; the agents I build with help me ship them, and the site says so.
