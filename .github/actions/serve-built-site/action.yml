@@ -102,12 +102,16 @@ runs:
     # nor a Temporal namespace to read a result from. Without it the /audit report URL
     # would serve the empty form and the larger half of that page would ship
     # never having been scanned.
+    #
+    # The server writes to a file, not to the step's output. A background process that holds the
+    # step's stdout open makes the runner wait out a 5 second drain before it ends the step; the
+    # redirect takes that wait away.
     - name: Serve built site
       shell: bash
       env:
         AGENT_TRAFFIC_FIXTURE: '1'
         AUDIT_REPORT_FIXTURE: '1'
-      run: node scripts/serve-built-site.mjs --port 4321 &
+      run: node scripts/serve-built-site.mjs --port 4321 >"$RUNNER_TEMP/serve-built-site.log" 2>&1 &
 
     - name: Wait for local server
       shell: bash
