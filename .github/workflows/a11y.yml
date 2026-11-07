@@ -8,6 +8,17 @@ name: Built-site checks (axe-core, HTML validity, llms.txt)
 # Which steps gate: the two axe runs and the audit-url report scan. The Playwright guard, the
 # HTML validity run and the llms.txt assertion are advisory — red on the PR, deploys proceed —
 # in the same spirit as spellcheck.
+#
+# Routing. On a pull request, `axe` runs only when the change can reach the built site. The
+# `changes` job asks `scripts/route-changes.sh`, the script `ci.yml` calls for its own suites,
+# and `axe` runs when the `site` output is true. `ci.yml`'s header holds the table of which
+# paths set it. A Markdown-only or Steward-only pull request skips the build and the audits.
+# A push to `master` always runs `axe`: `golden-drift` and the golden-drift issue read the push
+# run. Both workflows share the one script because two copies of the table drifted apart once.
+#
+# `axe` is skipped by a job-level `if`, not by `on.paths`, so it shows as skipped on the pull
+# request instead of vanishing. The only required check on `master` is "Private paths not
+# tracked" (ruleset `protect-master`), so a skipped `axe` blocks no merge.
 
 on:
   push:
@@ -22,7 +33,26 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Route by changed paths (built site)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      site: ${{ steps.route.outputs.site }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Sort changed files into site, steward and browser
+        id: route
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/route-changes.sh "$EVENT_NAME" "$BASE_SHA"
+
   axe:
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     outputs:
       golden: ${{ steps.golden.outcome }}
