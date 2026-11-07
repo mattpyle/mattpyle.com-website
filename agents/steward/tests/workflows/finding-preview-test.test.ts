@@ -1,10 +1,10 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { DEFECT_FINDING, DEFECT_KEY, ORIGIN } from '../helpers/finding-fixtures.js';
 import {
@@ -41,7 +41,6 @@ import { VERCEL_BYPASS_HEADER } from '../../src/lib/verify-checks.js';
  * here has a timer, so none needs time skipping.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const FINDINGS = 'steward-findings';
 const SITE = 'mattpyle-com';
 const SITE_REPO = 'mattpyle/mattpyle.com-website';
@@ -185,10 +184,9 @@ async function untilParked(handle: WorkflowHandle): Promise<FindingState> {
 async function runAttempt(id: string): Promise<FindingState> {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
     taskQueue: FINDINGS,
-    bundlerOptions: {},
   });
   return await worker.runUntil(
     bounded(

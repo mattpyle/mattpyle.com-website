@@ -1,11 +1,11 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { bounded, createTestEnv, untilBetweenAttempts } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -59,7 +59,6 @@ import { FIXING_FINDING, ORIGIN } from '../helpers/finding-fixtures.js';
  * second await then waits on.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const FINDINGS = 'steward-findings';
 const SITE_REPO = 'mattpyle/mattpyle.com-website';
 
@@ -177,10 +176,9 @@ function mocks(script: Script) {
 async function withWorker<T>(activities: object, fn: () => Promise<T>): Promise<T> {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
     taskQueue: FINDINGS,
-    bundlerOptions: {},
   });
   return await worker.runUntil(bounded(fn()));
 }

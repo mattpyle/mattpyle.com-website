@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { Worker } from '@temporalio/worker';
 import proto from '@temporalio/proto';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 
 /**
  * Replay regression test (temporal-developer skill, testing.md § Replay Testing).
@@ -76,7 +77,6 @@ import proto from '@temporalio/proto';
  * otherwise guard the fan-out shape Steward now takes by default.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const historyPath = fileURLToPath(
   new URL('../fixtures/histories/phase1b-smoke-test.json', import.meta.url),
 );
@@ -97,7 +97,7 @@ test(
     const history = JSON.parse(await fs.readFile(historyPath, 'utf8'));
 
     await Worker.runReplayHistory(
-      { workflowsPath, bundlerOptions: {} },
+      { workflowBundle: await workflowBundle() },
       history,
       'steward-review-phase1b-live-fixture',
     );
@@ -114,7 +114,7 @@ test(
     const history = JSON.parse(await fs.readFile(buildAuditHistoryPath, 'utf8'));
 
     await Worker.runReplayHistory(
-      { workflowsPath, bundlerOptions: {} },
+      { workflowBundle: await workflowBundle() },
       history,
       'steward-review-hello-world',
     );
@@ -173,7 +173,7 @@ test(
     const history = JSON.parse(await fs.readFile(auditSiteHistoryPath, 'utf8'));
 
     await Worker.runReplayHistory(
-      { workflowsPath, bundlerOptions: {} },
+      { workflowBundle: await workflowBundle() },
       history,
       'steward-audit-www.mattpyle.com-deep-fanout1',
     );
@@ -242,7 +242,7 @@ test(
     const history = JSON.parse(await fs.readFile(scorecardHistoryPath, 'utf8'));
 
     await Worker.runReplayHistory(
-      { workflowsPath, bundlerOptions: {} },
+      { workflowBundle: await workflowBundle() },
       history,
       'steward-scorecard-2026-08-20T04-31-04-076Z',
     );
@@ -274,7 +274,7 @@ const findingFileHistoryPath = fileURLToPath(new URL('../fixtures/histories/find
 test('a verdict-only finding history with a CLI approve replays against current workflow code', { timeout: 120_000 }, async () => {
   const history = JSON.parse(await fs.readFile(findingCliHistoryPath, 'utf8'));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
@@ -283,7 +283,7 @@ test('a verdict-only finding history with a CLI approve replays against current 
 test('a verdict-only finding history with a file reject replays against current workflow code', { timeout: 120_000 }, async () => {
   const history = JSON.parse(await fs.readFile(findingFileHistoryPath, 'utf8'));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/direction-no-dark-mode--sitewide',
   );
@@ -306,7 +306,7 @@ const fixFindingHistoryPath = fileURLToPath(new URL('../fixtures/histories/fix-f
 test('a fix child recorded before the preview test replays down its five steps', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(fixFindingHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'fix/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
@@ -326,7 +326,7 @@ const fixFindingPreviewHistoryPath = fileURLToPath(new URL('../fixtures/historie
 test('a fix child recorded before the diff review replays without it', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(fixFindingPreviewHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'fix/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
@@ -349,7 +349,7 @@ const findingChildHistoryPath = fileURLToPath(new URL('../fixtures/histories/fin
 test('a lifecycle run whose first fix was a child replays that attempt as a child', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingChildHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
@@ -386,7 +386,7 @@ const findingVerifyHeavyHistoryPath = fileURLToPath(
 test('a lifecycle run that started its verify child on steward-heavy replays that start', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingVerifyHeavyHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
@@ -426,7 +426,7 @@ const findingUnverifiableHistoryPath = fileURLToPath(
 test('a blockless verify recorded before decision 30 replays to its unverifiable ending', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(verifyBlocklessHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'verify/mattpyle-com/content-perfect-score-labelled-fail--scorecard/2026-10-13T041233Z',
   );
@@ -435,7 +435,7 @@ test('a blockless verify recorded before decision 30 replays to its unverifiable
 test('a lifecycle run whose child ended unverifiable still replays to that ending', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingUnverifiableHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
@@ -474,7 +474,7 @@ const findingOpportunityAttemptHistoryPath = fileURLToPath(
 test('an opportunity that made its automatic fix attempt before waitsForPerson replays that attempt', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingOpportunityAttemptHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/opportunity-park-example--steward',
   );
@@ -535,7 +535,7 @@ const scorecardMixedHistoryPath = fileURLToPath(
 test('a scorecard run recorded before the Performance re-check replays without it', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardPerformanceHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'steward-scorecard-fixture-perf',
   );
@@ -544,7 +544,7 @@ test('a scorecard run recorded before the Performance re-check replays without i
 test('a scorecard run recorded before the mixed-Lighthouse refusal replays down its publish leg', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardMixedHistoryPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'steward-scorecard-fixture-mixed',
   );
@@ -583,7 +583,7 @@ const findingPrClosedBeforeDispatchPath = fileURLToPath(
 test('a lifecycle run whose PR closed before the dispatcher replays that attempt without a slot', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingPrClosedBeforeDispatchPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
   );
@@ -622,7 +622,7 @@ const findingPrClosedBeforePreviewTestPath = fileURLToPath(
 test('a lifecycle run whose PR closed before the preview test replays that attempt without it', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingPrClosedBeforePreviewTestPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-post-describes-removed-filter-pills--writing-accessibility-and-ai',
   );
@@ -661,7 +661,7 @@ const reconcileParkedDefectPath = fileURLToPath(
 test('a reconcile run recorded before the kind-blind fix rule replays down the defect rule', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileParkedDefectPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'reconcile-fixture-3',
   );
@@ -698,7 +698,7 @@ const reconcileRestartApprovedPath = fileURLToPath(
 test('a reconcile run recorded before the restart rule replays without a restart', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileRestartApprovedPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'reconcile-fixture-4',
   );
@@ -735,7 +735,7 @@ const reconcileCloseParkedPath = fileURLToPath(
 test('a reconcile run recorded before the close rule replays without a cancel', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileCloseParkedPath));
   await Worker.runReplayHistory(
-    { workflowsPath, bundlerOptions: {} },
+    { workflowBundle: await workflowBundle() },
     history,
     'reconcile-fixture-5',
   );

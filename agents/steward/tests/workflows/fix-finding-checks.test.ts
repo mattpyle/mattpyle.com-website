@@ -1,10 +1,10 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { fixFindingWorkflow, type FixFindingInput } from '../../src/workflows/fix-finding.js';
 import type { AwaitPreviewDeployInput, PreviewDeploy, WriteFindingFixInput } from '../../src/activities/findings.js';
 import {
@@ -30,7 +30,6 @@ import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, ORIGIN } from '../helpers/f
  * Each branch of the handoff's Tasks 2 and 3 is one test here.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const QUEUE = 'steward-heavy';
 const PR = 'https://github.com/mattpyle/mattpyle.com-website/pull/340';
 const PREVIEW = 'https://mattpyle-com-website-abc123-mattpyles-projects.vercel.app';
@@ -215,10 +214,9 @@ let runs = 0;
 async function execute(activities: Record<string, unknown>) {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
     taskQueue: QUEUE,
-    bundlerOptions: {},
   });
   return worker.runUntil(
     bounded(

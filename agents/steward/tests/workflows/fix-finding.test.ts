@@ -1,12 +1,12 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { WorkflowFailedError } from '@temporalio/client';
 import { CancelledFailure } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { fixFindingStateQuery, fixFindingWorkflow, type FixFindingInput } from '../../src/workflows/fix-finding.js';
 import type { WriteFindingFixInput } from '../../src/activities/findings.js';
 import {
@@ -28,7 +28,6 @@ import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, OPPORTUNITY_FINDING } from 
  * failures `runFixer` turns them into.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const QUEUE = 'steward-heavy';
 const PR = 'https://github.com/mattpyle/mattpyle.com-website/pull/312';
 
@@ -124,10 +123,9 @@ function mockActivities(mocks: Mocks = {}) {
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
     taskQueue: QUEUE,
-    bundlerOptions: {},
     // A cancellation reaches an activity on a heartbeat's reply, and the worker
     // throttles heartbeats to 80% of the 30-second timeout by default.
     maxHeartbeatThrottleInterval: '100 milliseconds',

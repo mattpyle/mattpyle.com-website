@@ -1,11 +1,11 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -76,7 +76,6 @@ import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../h
  * two time-separated states scripts the run with no timers.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const FINDINGS = 'steward-findings';
 const SITE_REPO = 'mattpyle/mattpyle.com-website';
 const PR_1 = `https://github.com/${SITE_REPO}/pull/401`;
@@ -312,10 +311,9 @@ function lifecycle(script: Script) {
 async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Promise<T>): Promise<T> {
   const findingsWorker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities: mocks.findings,
     taskQueue: FINDINGS,
-    bundlerOptions: {},
   });
   return await findingsWorker.runUntil(bounded(fn()));
 }

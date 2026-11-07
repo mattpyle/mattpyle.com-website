@@ -1,11 +1,11 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
 import { Client, WorkflowFailedError } from '@temporalio/client';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import {
   verifyFindingStateQuery,
   verifyFindingWorkflow,
@@ -47,7 +47,6 @@ import { DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-f
  * other run schedules no timer, so the plain `client` finishes it in real time.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const QUEUE = 'steward-findings';
 const AT = '2026-10-13T04:12:33.527Z';
 const PAGE = '<p>Accessibility: 100/100, 1 axe violation (Fail)</p>';
@@ -152,10 +151,9 @@ function mockActivities(mocks: Mocks = {}) {
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
     taskQueue: QUEUE,
-    bundlerOptions: {},
   });
   return await worker.runUntil(bounded(fn()));
 }

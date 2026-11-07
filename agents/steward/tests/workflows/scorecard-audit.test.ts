@@ -1,8 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { Worker } from '@temporalio/worker';
 import { buildCommentary, scorecardAuditWorkflow, type ScorecardAuditInput } from '../../src/workflows/scorecard-audit.js';
 import type { PageAuditOutcome, PublishableRun } from '../../src/lib/scorecard-aggregate.js';
@@ -15,7 +15,6 @@ import type { PublishedScorecard } from '../../src/activities/scorecard.js';
  * job.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 /**
  * One queue, since 2026-08-14. Every activity this workflow schedules moved to
  * `steward-audit` when `activities/scorecard.ts` stopped touching the
@@ -127,7 +126,7 @@ function mockActivities(overrides: MockOverrides = {}) {
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
-  const common = { connection: env.nativeConnection, workflowsPath, activities, bundlerOptions: {} };
+  const common = { connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities };
   const worker = await Worker.create({ ...common, taskQueue: QUEUE });
   return await worker.runUntil(bounded(fn()));
 }
