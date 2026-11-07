@@ -106,14 +106,23 @@
   }
 
   const inSite = (state) => (r) => state.site === 'all' || r.site === state.site;
-  // A query searches every status and the controls read All while the box holds text; clearing it returns to the tab.
-  const shownStatus = (state) => (state.q.trim() ? 'all' : state.status);
+  // The chosen tab applies whether or not the box holds text: a query searches within the status, and the All tab searches everything.
+  const shownStatus = (state) => state.status;
   const inStatus = (state) => (r) => shownStatus(state) === 'all' || r.status === shownStatus(state);
   const inPri = (state) => (r) => state.pri === 'all' || r.priority === state.pri;
+  const matchesQuery = (state) => {
+    const q = state.q.trim().toLowerCase();
+    return (r) => !q || `${refOf(r)} ${shortTitle(r)} ${r.title} ${r.key} ${siteName(r.site)}`.toLowerCase().includes(q);
+  };
+  // The Clear filters button shows while a query, a tab other than All, the drift chip, a site or a priority narrows the list.
+  const filtering = (state) => !!state.q.trim() || state.status !== 'all' || state.drift || state.site !== 'all' || state.pri !== 'all';
+  // What Clear filters sets: every control back to All, the query empty, and the drift chip's remembered tab forgotten so a later toggle cannot restore it.
+  const clearedFilters = () => ({ site: 'all', pri: 'all', drift: false, statusBeforeDrift: null, status: 'all', q: '', menu: null });
 
   // A count moves with a verdict sent from this page; the list keeps the row where it was until the next load.
-  function count(rows, state, { site = inSite(state), status = (s) => shownStatus(state) === 'all' || s === shownStatus(state), pri = inPri(state) } = {}) {
-    return rows.filter((r) => site(r) && status(statusOf(r, state)) && pri(r)).length;
+  // A tab's count reads how many rows it will show, so it follows the query as well as the site and priority.
+  function count(rows, state, { site = inSite(state), status = (s) => shownStatus(state) === 'all' || s === shownStatus(state), pri = inPri(state), query = matchesQuery(state) } = {}) {
+    return rows.filter((r) => site(r) && status(statusOf(r, state)) && pri(r) && query(r)).length;
   }
 
   const openedKey = (r) => `${r.opened || ''}|${String(r.index ?? 0).padStart(6, '0')}`;
@@ -121,9 +130,7 @@
   const priOrder = (r) => (r.priority in PO ? PO[r.priority] : 3);
 
   function visible(rows, state) {
-    const q = state.q.trim().toLowerCase();
-    const out = rows.filter((r) => inSite(state)(r) && inStatus(state)(r) && inPri(state)(r) && (!state.drift || r.drift.length > 0) &&
-      (!q || `${refOf(r)} ${shortTitle(r)} ${r.title} ${r.key} ${siteName(r.site)}`.toLowerCase().includes(q)));
+    const out = rows.filter((r) => inSite(state)(r) && inStatus(state)(r) && inPri(state)(r) && (!state.drift || r.drift.length > 0) && matchesQuery(state)(r));
     const newest = (a, b) => (openedKey(b) > openedKey(a) ? 1 : openedKey(b) < openedKey(a) ? -1 : 0);
     if (state.sort === 'oldest') out.sort((a, b) => -newest(a, b));
     else if (state.sort === 'newest') out.sort(newest);
@@ -234,7 +241,9 @@
     const statusOpts = [...knownStatuses(rows), 'all'].map((x) => [x, x === 'all' ? 'All' : esc(WORD[x] || x), count(rows, state, { status: (y) => x === 'all' || y === x })]);
     const drifting = rows.filter((r) => r.drift.length > 0 && inSite(state)(r)).length + signalCount(model, state);
     const siteWord = (v) => siteHTML(v, { alwaysShowLabel: true });
-    return facetHTML(state, 'status', 'All', statusOpts, shownStatus(state), (v) => `${esc(WORD[v] || v)}<span class="count">${count(rows, state, { status: (y) => y === v })}</span>`)
+    // First in the row: the open search box covers the right-hand end, and the row is anchored right, so a button added here grows leftward and moves nothing.
+    const clear = filtering(state) ? '<button class="linkish clear-filters" type="button" data-act="clear">Clear filters</button>' : '';
+    return clear + facetHTML(state, 'status', 'All', statusOpts, shownStatus(state), (v) => `${esc(WORD[v] || v)}<span class="count">${count(rows, state, { status: (y) => y === v })}</span>`)
       + (drifting ? `<button class="drift-chip" type="button" data-act="drift" aria-pressed="${state.drift}" title="Findings whose index, file and run disagree, and runs no finding accounts for">${DRIFT_ICON}Drift<span class="count">${drifting}</span></button>` : '')
       + facetHTML(state, 'site', 'Site', siteOpts, state.site, siteWord)
       + facetHTML(state, 'pri', 'Priority', priOpts, state.pri, priHTML)
@@ -453,7 +462,7 @@
     return { open: false, doc: '', foot: '' };
   }
 
-  const api = { STATUSES, SITES, rowsOf, createState, visible, view, nextProposed, loadFailed, clock, esc, menuHtml };
+  const api = { STATUSES, SITES, rowsOf, createState, visible, clearedFilters, view, nextProposed, loadFailed, clock, esc, menuHtml };
   globalThis.StewardFindings = api;
 
   if (typeof document === 'undefined' || !document.querySelector('.app')) return;
@@ -610,13 +619,14 @@
 
   // ---------- Events ----------
 
+  // Empties the box and returns every control to All.
+  function clearFilters() {
+    Object.assign(state, clearedFilters());
+    el.input.value = '';
+    render();
+  }
   el.groups.addEventListener('click', (e) => {
-    if (e.target.closest('[data-act="clear"]')) {
-      Object.assign(state, { site: 'all', pri: 'all', drift: false, status: 'all', q: '' });
-      el.input.value = '';
-      render();
-      return;
-    }
+    if (e.target.closest('[data-act="clear"]')) { clearFilters(); return; }
     if (e.target.closest('[data-act="reload"]')) { load(); return; }
     const b = e.target.closest('.row');
     if (b) open(b.dataset.id);
@@ -628,6 +638,7 @@
     render();
   });
   el.facets.addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="clear"]')) { clearFilters(); return; }
     const item = e.target.closest('.menu-item');
     if (item) {
       const d = item.dataset;
