@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Sorts a pull request's changed files into the routing outputs and writes
 # them to $GITHUB_OUTPUT: `site`, `steward` and `browser`, plus `steward_tests`,
-# the glob the Steward job runs.
+# which says how the Steward job picks its tests, and `steward_changed`, the
+# changed files it picks from.
 #
 #   scripts/route-changes.sh <event-name> <base-sha>
 #
@@ -23,16 +24,23 @@
 # is used only when HEAD is not a merge commit. The checkout is shallow, so the
 # script fetches HEAD's parents before it checks for a merge commit.
 #
-# `steward_tests` is `tests/console/**/*.test.ts` when Steward's tests run only
-# because of a change under `agents/steward/src/console/` or
-# `agents/steward/tests/console/`, and `tests/**/*.test.ts` in every other case,
-# a push included. The console is an island: nothing outside it imports it
-# except the `steward console` verb in `src/cli.ts`, which loads it on demand,
-# and its own imports of `lib/`, `activities/` and `workflows/` are covered by
-# the typecheck, which still runs. Other folders stay on the full glob: proving
-# one of them an island needs an import graph. A change that sets `steward` for
-# any other reason (content, data, the lockfile, this script) is not
-# console-only, even when it also touches the console.
+# `steward_tests` is one of three things:
+#   1. `tests/**/*.test.ts`, the full suite, for a push and for any change that
+#      sets `steward` from outside `agents/steward/` (content, data, the
+#      lockfile, a workflow or routing script). `steward_wide` marks them.
+#   2. `tests/console/**/*.test.ts`, when every Steward file changed sits under
+#      `src/console/` or `tests/console/`, assets included. The findings console
+#      is an island: nothing outside it imports it except the `steward console`
+#      verb in `src/cli.ts`, which loads it on demand, and the console tests read
+#      its assets by path. This rule comes first because the graph would add the
+#      CLI tests that reach the console. `steward_nonconsole` marks the changes
+#      that are not console-only.
+#   3. `select`, for any other change confined to `agents/steward/`. The Steward
+#      job then runs `scripts/select-steward-tests.mjs` on `steward_changed`, the
+#      changed files written here, after its `npm ci`, because the script needs
+#      the installed `typescript`. This script stays free of node so that
+#      `a11y.yml`'s job and `vercel-ignore.sh` run it with nothing installed.
+# `steward_changed` is written only for `select`.
 set -euo pipefail
 
 event_name="${1:?usage: route-changes.sh <event-name> <base-sha>}"
@@ -43,8 +51,11 @@ scratch="${RUNNER_TEMP:-$(mktemp -d)}"
 site=false
 steward=false
 browser=false
-# Set by any change that is not under the console; it keeps the full glob.
+# Set by any change that sets `steward` from outside `agents/steward/`, and by any
+# event but a pull request; it keeps the full glob.
 steward_wide=false
+# Set by any Steward file outside the console; it hands the choice to the graph.
+steward_nonconsole=false
 if [ "$event_name" != "pull_request" ]; then
   site=true
   steward=true
@@ -72,7 +83,7 @@ else
         steward=true
         case "$file" in
           agents/steward/src/console/*|agents/steward/tests/console/*) ;;
-          *) steward_wide=true ;;
+          *) steward_nonconsole=true ;;
         esac
         case "$file" in
           agents/steward/src/lib/agent-audit/*|agents/steward/package.json) site=true; browser=true ;;
@@ -82,10 +93,10 @@ else
       *)
         site=true
         case "$file" in
-          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
+          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
         esac
         case "$file" in
-          package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) browser=true ;;
+          package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) browser=true ;;
         esac
         ;;
     esac
@@ -94,10 +105,21 @@ else
 fi
 steward_tests='tests/**/*.test.ts'
 if [ "$steward" = true ] && [ "$steward_wide" = false ]; then
-  steward_tests='tests/console/**/*.test.ts'
+  if [ "$steward_nonconsole" = true ]; then
+    steward_tests=select
+  else
+    steward_tests='tests/console/**/*.test.ts'
+  fi
 fi
 echo "site=$site" >> "$output"
 echo "steward=$steward" >> "$output"
 echo "browser=$browser" >> "$output"
 echo "steward_tests=$steward_tests" >> "$output"
+if [ "$steward_tests" = select ]; then
+  {
+    echo "steward_changed<<CHANGED_FILES_EOF"
+    cat "$scratch/changed.txt"
+    echo "CHANGED_FILES_EOF"
+  } >> "$output"
+fi
 echo "Routing: site=$site steward=$steward browser=$browser steward_tests=$steward_tests"
