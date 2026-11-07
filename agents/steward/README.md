@@ -177,7 +177,7 @@ steward inbox                    # every review waiting on you, across every slu
 steward audit-url example.com    # agent-readiness checks against any site
 steward mcp-serve                # serve the audit over MCP, backed by local Temporal
 steward finding list             # open finding workflows, one per line; a run waiting for a fix slot is tagged
-steward finding status <key>     # the verdict, and the lifecycle step for a 'resolved' run
+steward finding status <key>     # opens with `run: open`, or how and when a closed run ended (and its outcome); a closed run's step, gate and verdict follow under `last state:`
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"
 steward finding fix <key>        # signal the finding's lifecycle, or start the fixer alone for an older finding

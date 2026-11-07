@@ -5,8 +5,10 @@ import path from 'node:path';
 import {
   Client,
   Connection,
+  WorkflowFailedError,
   WorkflowNotFoundError,
   type ScheduleOptions,
+  type WorkflowHandle,
   type WorkflowExecutionInfo,
 } from '@temporalio/client';
 import { Command } from 'commander';
@@ -116,9 +118,11 @@ import {
   isFindingSlug,
   parsePrUrl,
   pendingActivityLine,
+  runStateLines,
   verifySourceLabel,
   waitingReasonLine,
   type FindingVerdict,
+  type RunEnd,
 } from './lib/findings.js';
 import {
   readFinding,
@@ -135,7 +139,7 @@ import {
   isFindingsScheduleAction,
   runFindingsScheduleAction,
 } from './lib/findings-schedule.js';
-import { findingStateQuery, type FindingState } from './workflows/finding.js';
+import { findingStateQuery, type FindingState, type FindingWorkflowResult } from './workflows/finding.js';
 import { dispatchStateQuery } from './workflows/fix-dispatch.js';
 import { dispatchWorkflowId, slotBlocker, waitingSlotLine, type DispatchState } from './lib/fix-dispatch.js';
 
@@ -1932,6 +1936,26 @@ async function readDispatchState(c: Client, site: string): Promise<DispatchState
   }
 }
 
+/**
+ * How a finding run's execution stands, from the server and not the state
+ * query: the query answers for a closed run too, so the gate's `done` never
+ * said whether the run was still waiting. A closed run's result (completed) or
+ * failure message (cancelled, failed, terminated, timed out) comes from
+ * `result()`, which returns at once for a closed run.
+ */
+async function readRunEnd(handle: WorkflowHandle): Promise<{ end: RunEnd; description: Awaited<ReturnType<WorkflowHandle['describe']>> }> {
+  const description = await handle.describe();
+  const end: RunEnd = { status: description.status.name, closeTime: description.closeTime };
+  if (!runStateLines(end).closed) return { end, description };
+  try {
+    end.result = (await handle.result()) as FindingWorkflowResult;
+  } catch (err) {
+    if (!(err instanceof WorkflowFailedError)) throw err;
+    end.failure = describeCliError(err);
+  }
+  return { end, description };
+}
+
 const finding = program
   .command('finding')
   .description('The findings gate: list, inspect and decide Argus findings (steward/docs/record-a-finding-verdict.md)');
@@ -1985,7 +2009,7 @@ finding
   .command('status')
   .argument('<key>', 'finding key', parseFindingSlug('key'))
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
-  .description("A finding workflow's state: waiting, writing or done, and the verdict")
+  .description("A finding workflow's state: whether the run is open or how it ended, then the gate, the step and the verdict")
   .action(async (key: string, opts: { site: string }) => {
     const c = await client();
     try {
@@ -1998,37 +2022,45 @@ finding
         if (err instanceof WorkflowNotFoundError) fail(`No workflow ${id}. \`steward finding list\` shows the open ones.`);
         throw err;
       }
+      // The execution's own status leads: the gate's `done` says the verdict is
+      // recorded, not that the run has ended.
+      const { end, description } = await readRunEnd(handle);
+      const run = runStateLines(end);
       // A wait that is retrying (a PR still open, a token being rotated) is
       // visible only to the server: the query state knows the step, not the
       // attempt or what the last one said.
-      const pending = (await handle.describe()).raw.pendingActivities ?? [];
+      const pending = description.raw.pendingActivities ?? [];
       console.log('');
       console.log(`  ${id}`);
-      console.log(`  status: ${state.status}`);
-      if (state.step) console.log(`  step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`);
+      for (const line of run.lines) console.log(`  ${line}`);
+      // A closed run's state is history, not a wait.
+      if (run.closed) console.log('  last state:');
+      const at = run.closed ? '    ' : '  ';
+      if (state.step) console.log(`${at}step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`);
+      console.log(`${at}gate: ${state.status}`);
       for (const activity of pending) {
         const line = pendingActivityLine(activity);
-        if (line) console.log(`  retrying: ${line}`);
+        if (line) console.log(`${at}retrying: ${line}`);
       }
       if (state.step === 'fixing' && state.issueUrl) {
-        console.log(`  issue: ${state.issueUrl}  (waiting for the PR)`);
-        if (state.prUrl) console.log(`  last PR: ${state.prUrl}`);
+        console.log(`${at}issue: ${state.issueUrl}  (waiting for the PR)`);
+        if (state.prUrl) console.log(`${at}last PR: ${state.prUrl}`);
       } else {
-        if (state.prUrl) console.log(`  PR: ${state.prUrl}`);
-        if (state.issueUrl) console.log(`  issue: ${state.issueUrl}`);
+        if (state.prUrl) console.log(`${at}PR: ${state.prUrl}`);
+        if (state.issueUrl) console.log(`${at}issue: ${state.issueUrl}`);
       }
-      if (state.previewResult) console.log(`  preview: ${state.previewResult}`);
+      if (state.previewResult) console.log(`${at}preview: ${state.previewResult}`);
       const waiting = waitingReasonLine(state);
-      if (waiting) console.log(`  ${waiting}`);
+      if (waiting) console.log(`${at}${waiting}`);
       if (state.step === 'waiting-slot') {
-        console.log(`  ${waitingSlotLine(await readDispatchState(c, opts.site), id, state.slotPaths)}`);
+        console.log(`${at}${waitingSlotLine(await readDispatchState(c, opts.site), id, state.slotPaths)}`);
       }
-      if (state.lastFixError) console.log(`  last fix failed: ${state.lastFixError}`);
+      if (state.lastFixError) console.log(`${at}last fix failed: ${state.lastFixError}`);
       if (state.verdict) {
-        console.log(`  verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
-        if (state.verdict.reason) console.log(`  reason: ${state.verdict.reason}`);
+        console.log(`${at}verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
+        if (state.verdict.reason) console.log(`${at}reason: ${state.verdict.reason}`);
       }
-      if (state.commitSha) console.log(`  commit: ${state.commitSha}`);
+      if (state.commitSha) console.log(`${at}commit: ${state.commitSha}`);
       console.log('');
     } finally {
       await c.connection.close();

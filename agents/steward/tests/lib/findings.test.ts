@@ -10,6 +10,7 @@ import {
   pendingActivityLine,
   planReconcile,
   restartCandidates,
+  runStateLines,
   type FindingsIndexLine,
   setFrontmatterVerdict,
   setIndexVerdict,
@@ -281,3 +282,29 @@ test('a started run parks without the automatic attempt when its line names a ki
   assert.equal(startsParked(line('defect')), false);
   assert.equal(startsParked(line('')), false, 'an index with no kind column starts as it always did');
 });
+
+test('a running run reads as open, and any status the server has not closed reads the same', () => {
+  assert.deepEqual(runStateLines({ status: 'RUNNING' }), { closed: false, lines: ['run: open'] });
+  assert.deepEqual(runStateLines({ status: 'UNKNOWN' }), { closed: false, lines: ['run: open'] });
+});
+
+test('a closed run says how and when it ended, and a failure is one line', () => {
+  const closeTime = new Date('2026-10-15T17:30:00.000Z');
+  assert.deepEqual(runStateLines({ status: 'CANCELLED', closeTime, failure: 'Workflow' + String.fromCharCode(10) + 'canceled  by the reconciler' }), {
+    closed: true,
+    lines: ['run: cancelled at 2026-10-15T17:30:00.000Z', 'failure: Workflow canceled by the reconciler'],
+  });
+  for (const [status, label] of [['FAILED', 'failed'], ['TERMINATED', 'terminated'], ['TIMED_OUT', 'timed out']] as const) {
+    assert.equal(runStateLines({ status, closeTime }).lines[0], `run: ${label} at 2026-10-15T17:30:00.000Z`, status);
+  }
+});
+
+test('a completed run prints its outcome, the verify workflow where there is one, and verdict for an older result', () => {
+  const closeTime = new Date('2026-11-01T00:00:00.000Z');
+  const resolved = runStateLines({ status: 'COMPLETED', closeTime, result: { outcome: 'resolved', verifyWorkflowId: 'verify/mattpyle-com/k' } });
+  assert.deepEqual(resolved.lines, ['run: completed at 2026-11-01T00:00:00.000Z', 'outcome: resolved (verify verify/mattpyle-com/k)']);
+  assert.equal(runStateLines({ status: 'COMPLETED', closeTime, result: { outcome: 'rejected' } }).lines[1], 'outcome: rejected');
+  assert.equal(runStateLines({ status: 'COMPLETED', closeTime, result: {} }).lines[1], 'outcome: verdict');
+  assert.equal(runStateLines({ status: 'COMPLETED', closeTime }).lines.length, 1, 'no result read, no outcome line');
+});
+

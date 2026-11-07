@@ -1162,6 +1162,53 @@ export function pendingActivityLine(info: PendingActivitySummary): string | null
   return `${name} attempt ${attempt}${failure ? `: ${failure}` : ''}`;
 }
 
+/**
+ * What the server says about a finding run's execution, the slice
+ * `steward finding status` prints. `status` is `describe().status.name`;
+ * `result` is the workflow's return value when the run completed, and
+ * `failure` is the message of the failure that closed it otherwise.
+ */
+export interface RunEnd {
+  status: string;
+  closeTime?: Date | null;
+  result?: { outcome?: string; verifyWorkflowId?: string | null } | null;
+  failure?: string | null;
+}
+
+const CLOSED_RUN_LABELS: Record<string, string> = {
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+  FAILED: 'failed',
+  TERMINATED: 'terminated',
+  TIMED_OUT: 'timed out',
+  CONTINUED_AS_NEW: 'continued as new',
+};
+
+/**
+ * The lines that open `steward finding status`: whether the workflow run is
+ * open, and for a closed run how and when it ended with its outcome or failure.
+ * The state query answers for a closed run too, so the run's own status
+ * is the only reliable sign. A run with no known status reads as open: the
+ * label is for runs the server has closed.
+ *
+ * A completed run whose result predates `outcome` ended at the verdict gate.
+ */
+export function runStateLines(end: RunEnd): { closed: boolean; lines: string[] } {
+  const label = CLOSED_RUN_LABELS[end.status];
+  if (!label) return { closed: false, lines: ['run: open'] };
+  const at = end.closeTime ? ` at ${end.closeTime.toISOString()}` : '';
+  const lines = [`run: ${label}${at}`];
+  if (end.status === 'COMPLETED') {
+    if (end.result) {
+      const verify = end.result.verifyWorkflowId ? ` (verify ${end.result.verifyWorkflowId})` : '';
+      lines.push(`outcome: ${end.result.outcome ?? 'verdict'}${verify}`);
+    }
+  } else if (end.failure) {
+    lines.push(`failure: ${end.failure.replace(/\s+/g, ' ').trim()}`);
+  }
+  return { closed: true, lines };
+}
+
 // ---------------------------------------------------------------------------
 // The fix PR's preview test (fix-pr-runs-the-verify-block)
 // ---------------------------------------------------------------------------
