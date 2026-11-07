@@ -10,13 +10,12 @@ import { DEFAULT_POLICY } from '../../src/lib/agent-audit/safe-fetch.js';
  *
  * Opt-in (`STEWARD_CHROME_TESTS=1`), because it launches Chrome four times and
  * takes 16 to 36 seconds, which is still not something the suite should pay on
- * every run. The
- * proxy's own behaviour is covered without a browser in
+ * every run. The proxy's own behaviour is covered without a browser in
  * `agent-audit-vetting-proxy.test.ts`; what only a real Chrome can show is the
- * part in between — that `defaultRunners` actually hands the proxy flags to both
- * Lighthouse and axe, that Chrome honours them, and that removing the loopback
- * bypass is enough to stop it going around the proxy. Those are the pieces a
- * unit test asserts about a value rather than about a browser.
+ * part in between — that `defaultRunners` actually hands the proxy flags to
+ * both Lighthouse and axe, that Chrome honours them, and that removing the
+ * loopback bypass is enough to stop it going around the proxy. Those are the
+ * pieces a unit test asserts about a value rather than about a browser.
  *
  * Run it after any change to the launch flags:
  *
