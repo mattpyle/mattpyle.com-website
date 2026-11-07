@@ -9,6 +9,7 @@ import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 // cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
 // absent rather than null. The portrait rail links the same value for the same reason.
 const markdownUrl = markdownSiblingFor('/about/') ?? undefined;
+// proof: a comment only
 ---
 
 <Layout
