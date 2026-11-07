@@ -461,3 +461,13 @@ test('dates render the same everywhere, regardless of the region the function wa
   assert.equal(formatDate('2026-01-02T23:59:59.000Z'), '2 Jan 2026');
   assert.equal(formatDate('not a date'), 'not a date');
 });
+
+test('page URLs in the answers carry the trailing slash', async () => {
+  for (const q of ['What are your projects?', 'What changed on the site recently?']) {
+    const text = said(await ask(q));
+    for (const [url] of text.matchAll(/https:\/\/www\.mattpyle\.com\/[^\s)<>]*/g)) {
+      const path = url.replace(/[.,;:]+$/, '');
+      assert.ok(path.endsWith('/') || /\.[a-z]+$/i.test(path), `${q}: ${path} lacks a trailing slash`);
+    }
+  }
+});
