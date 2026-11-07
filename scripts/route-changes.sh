@@ -47,10 +47,10 @@ else
       *)
         site=true
         case "$file" in
-          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml) steward=true ;;
+          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) steward=true ;;
         esac
         case "$file" in
-          package-lock.json|.github/workflows/ci.yml) browser=true ;;
+          package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/vercel-ignore.sh) browser=true ;;
         esac
         ;;
     esac

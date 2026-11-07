@@ -33,7 +33,9 @@ name: CI (tests & typecheck)
 #   agents/steward/src/lib/audit-engine.ts,
 #     agents/steward/src/lib/chrome-probe.ts,
 #     agents/steward/Dockerfile                          yes      no    yes
-#   package-lock.json, .github/workflows/ci.yml          yes      yes   yes
+#   package-lock.json, .github/workflows/ci.yml,
+#     scripts/route-changes.sh,
+#     scripts/vercel-ignore.sh                           yes      yes   yes
 #   src/content/**, src/data/**, package.json            yes      yes   no
 #   anything else outside agents/steward/                no       yes   no
 #
@@ -42,6 +44,9 @@ name: CI (tests & typecheck)
 # imports Steward's two export entries (tests/steward-*-packaging.test.mjs), so
 # a change to either entry's graph is a site change. Markdown under src/content/
 # is content, not documentation.
+#
+# A change to the routing scripts runs every suite, so a routing mistake is
+# caught by the suites it would have skipped.
 #
 # The `browser` row. `browser` makes the Steward job's test step set
 # `STEWARD_CHROME_TESTS=1`, which turns on the one test that launches a real
