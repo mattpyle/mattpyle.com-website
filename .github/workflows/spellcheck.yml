@@ -21,10 +21,56 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      # No `npm ci`: it installed the whole repository (about 15 s) to run a
+      # 2 s check. This step prunes package-lock.json to cspell's dependency
+      # closure (108 packages) and runs `npm ci` on that, so every package
+      # keeps its locked version and integrity hash. The dictionaries are
+      # @cspell/dict-* packages inside that closure, so findings do not move.
+      # A plain `npm install cspell@<version>` is as fast but resolved 30 of
+      # the 108 packages above the lockfile, dictionaries included.
+      # Measured on the runner, cold / warm: `npm ci` 25 / 24 s job time,
+      # cached node_modules 36 / 16 s, tool install without a cache 12 / 10 s.
+      # A cache step adds a restore and a save to a 2 s install, so there is none.
+      - name: Install cspell from the pruned lockfile
+        env:
+          TOOL_DIR: ${{ runner.temp }}/cspell-tool
+        run: |
+          node --input-type=module <<'EOF'
+          import fs from "node:fs";
+          const dir = process.env.TOOL_DIR;
+          const range = JSON.parse(fs.readFileSync("package.json", "utf8")).devDependencies.cspell;
+          const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+          const find = (from, name) => {
+            for (let base = from; ; ) {
+              const key = `${base ? base + "/" : ""}node_modules/${name}`;
+              if (lock.packages[key]) return key;
+              if (!base) return null;
+              const i = base.lastIndexOf("/node_modules/");
+              base = i === -1 ? "" : base.slice(0, i);
+            }
+          };
+          const keep = new Set();
+          const visit = (key) => {
+            if (!key || keep.has(key)) return;
+            keep.add(key);
+            const p = lock.packages[key];
+            for (const dep of Object.keys({ ...p.dependencies, ...p.optionalDependencies })) {
+              visit(find(key, dep));
+            }
+          };
+          visit(find("", "cspell"));
+          const packages = { "": { name: "cspell-tool", dependencies: { cspell: range } } };
+          for (const key of [...keep].sort()) {
+            const { dev, devOptional, peer, ...entry } = lock.packages[key];
+            packages[key] = entry;
+          }
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(`${dir}/package.json`, JSON.stringify({ name: "cspell-tool", private: true, dependencies: { cspell: range } }));
+          fs.writeFileSync(`${dir}/package-lock.json`, JSON.stringify({ name: "cspell-tool", lockfileVersion: 3, requires: true, packages }));
+          EOF
+          npm ci --prefix "$TOOL_DIR" --ignore-scripts --no-audit --no-fund
+          echo "$TOOL_DIR/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Deliberately no `astro build` and no browser here, unlike a11y.yml:
       # this check reads the source markdown in src/content/ directly. That is
