@@ -505,29 +505,48 @@ export function findingPages(data: Record<string, unknown>, parsed: ParsedFindin
   return [...pages];
 }
 
+/** A value as JSON with object keys sorted, so two equal values read as one string whatever their key order. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
 /**
- * Whether a finding's `verify` block measures one set of pages: it has at least
- * one check, and every check's `url`, read as a set of page paths (the same
- * normalisation as {@link findingPages}), is the same set. One URL is a set of
- * one, so a block of single-page checks on one page counts. A check whose `url`
- * is missing, not a string or a list of strings, or holds an unreadable URL
- * breaks the set. Order and repeats do not matter.
+ * Whether a finding's `verify` block is one measure taken on several pages: it
+ * has at least one check, and every check is the same check apart from its
+ * `url`. That is the same `kind`, a deep-equal `expect`, and the same
+ * `viewport` and `status` (both absent counts as the same). Every check's
+ * `url` must be readable, one URL or a list. The checks' URLs, read as page
+ * paths, then make up the finding's pages ({@link findingPages}), so they
+ * cover them by construction.
+ *
+ * A `text` check with a URL list passes, and so do three `js` checks that
+ * differ only in `url`: `validateVerifyBlock` refuses a list on `selector` and
+ * `js`, so a fact measured by one of those on several pages is several checks.
+ * Order, trailing slashes and repeats do not matter. One check is the same as
+ * itself, so a single-page block passes.
  */
-export function verifyChecksShareOnePageSet(data: Record<string, unknown>): boolean {
+export function verifyChecksAreOneChange(data: Record<string, unknown>): boolean {
   if (!Array.isArray(data.verify) || data.verify.length === 0) return false;
-  let first: Set<string> | null = null;
+  let first: string | null = null;
   for (const check of data.verify) {
-    const url = check && typeof check === 'object' ? (check as { url?: unknown }).url : undefined;
-    const raw = Array.isArray(url) ? url : [url];
-    const set = new Set<string>();
-    for (const one of raw) {
-      const path = typeof one === 'string' ? pagePath(one) : null;
-      if (path === null) return false;
-      set.add(path);
+    if (!check || typeof check !== 'object') return false;
+    const { url, ...rest } = check as Record<string, unknown>;
+    for (const one of Array.isArray(url) ? url : [url]) {
+      if (typeof one !== 'string' || pagePath(one) === null) return false;
     }
-    if (set.size === 0) return false;
-    if (first === null) first = set;
-    else if (set.size !== first.size || [...set].some((path) => !first!.has(path))) return false;
+    if (Array.isArray(url) && url.length === 0) return false;
+    const shape = canonical(rest);
+    if (first === null) first = shape;
+    else if (shape !== first) return false;
   }
   return true;
 }
@@ -538,15 +557,19 @@ export function verifyChecksShareOnePageSet(data: Record<string, unknown>): bool
  *
  * 1. a defect that names its cause in the source, or
  * 2. an opportunity whose fix is one change. That is one page, told by
- *    {@link findingPages}, or several pages when the `verify` block has at
- *    least one check and every check lists the same set of pages
- *    ({@link verifyChecksShareOnePageSet}): one fact measured the same way on
- *    each page is one change. A second check on a different page, or on a
- *    different set, is a second change and stays refused. A cause is not asked
- *    of an opportunity: it has none.
+ *    {@link findingPages}, or several pages when the `verify` block is one
+ *    check repeated ({@link verifyChecksAreOneChange}): every check has the
+ *    same `kind`, the same `expect` (deep equal) and the same `viewport` and
+ *    `status`, and differs only in its `url`, so together their URLs cover the
+ *    finding's pages. One fact measured the same way on each page is one
+ *    change. A `text` check with a URL list satisfies this, and so do three
+ *    `js` checks that differ only in `url` (a list is refused on `selector`
+ *    and `js`). Checks that differ in kind or expect are several changes and
+ *    stay refused, as do pages told only from the prose, which have no check.
+ *    A cause is not asked of an opportunity: it has none.
  *
  * Directions, and opportunities that name no page or several pages that are
- * not one measured set, stay a person's.
+ * not one repeated check, stay a person's.
  */
 export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding): string | null {
   if (data.kind !== 'opportunity') {
@@ -562,7 +585,7 @@ export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding)
   if (pages.length === 0) {
     return 'it names no page: its verify block has no URL and "What would serve them" gives no page path';
   }
-  if (pages.length > 1 && !verifyChecksShareOnePageSet(data)) {
+  if (pages.length > 1 && !verifyChecksAreOneChange(data)) {
     return `it names more than one page (${pages.join(', ')}), so its fix is not one change`;
   }
   return null;

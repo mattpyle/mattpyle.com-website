@@ -10,7 +10,7 @@ import {
   parseFindingBody,
   setFrontmatterFix,
   setIndexStatus,
-  verifyChecksShareOnePageSet,
+  verifyChecksAreOneChange,
 } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { DEFECT_FINDING, DEFECT_KEY, OPPORTUNITY_FINDING } from '../helpers/finding-fixtures.js';
@@ -141,28 +141,41 @@ test('an opportunity that names several pages, or none, is refused with the reas
   assert.match(fixRefusal(data(OPPORTUNITY_FINDING), parseFindingBody(OPPORTUNITY_FINDING)) ?? '', /names no page/);
 });
 
-/** A finding file whose verify block is the given checks, each a `url` (one string or a list) of kind `text`. */
-function withChecks(...urls: (string | string[])[]): string {
+interface TestCheck {
+  url: string | string[];
+  /** Default `text`, expecting `contains: "og:image"`. */
+  kind?: string;
+  /** The `expect` lines under the check, already indented by six spaces. Default the `og:image` needle. */
+  expect?: string[];
+  extra?: string[];
+}
+
+/** A finding file whose verify block is the given checks. */
+function withChecks(...checks: (string | string[] | TestCheck)[]): string {
   const lines: string[] = ['---', 'key: share-card--steward', 'status: approved', 'kind: opportunity', 'verdict_reason: "approve"', 'verify:'];
-  for (const url of urls) {
-    if (Array.isArray(url)) {
-      lines.push('  - url:', ...url.map((u) => `      - "${u}"`));
-    } else {
-      lines.push(`  - url: "${url}"`);
-    }
-    lines.push('    kind: text', '    expect:', '      contains: "og:image"');
+  for (const raw of checks) {
+    const check: TestCheck = typeof raw === 'string' || Array.isArray(raw) ? { url: raw } : raw;
+    if (Array.isArray(check.url)) lines.push('  - url:', ...check.url.map((u) => `      - "${u}"`));
+    else lines.push(`  - url: "${check.url}"`);
+    lines.push(`    kind: ${check.kind ?? 'text'}`, '    expect:', ...(check.expect ?? ['      contains: "og:image"']), ...(check.extra ?? []));
   }
   lines.push('---', '', '# Three pages share one generic card', '', '## How to measure', '', 'Each page names its own card.', '');
   return lines.join('\n');
 }
 
 const O = 'https://www.mattpyle.com';
+const jsCheck = (path: string, expression = 'document.title.length > 0'): TestCheck => ({
+  url: `${O}${path}`,
+  kind: 'js',
+  expect: [`      expression: "${expression}"`, '      equals: true'],
+});
+const refused = (text: string) => fixRefusal(data(text), parseFindingBody(text)) ?? '';
 
 test('one list check over three pages is one change: the gate accepts it', () => {
   const list = withChecks([`${O}/a/`, `${O}/b`, `${O}/c`]);
   const parsed = parseFindingBody(list);
   assert.deepEqual(findingPages(data(list), parsed), ['/a', '/b', '/c'], 'findingPages still lists every page, in order');
-  assert.equal(verifyChecksShareOnePageSet(data(list)), true);
+  assert.equal(verifyChecksAreOneChange(data(list)), true);
   assert.equal(fixRefusal(data(list), parsed), null);
 });
 
@@ -171,32 +184,72 @@ test('several list checks over the same set are one change, whatever the order, 
   assert.equal(fixRefusal(data(same), parseFindingBody(same)), null);
 });
 
-test('two checks on different single pages stay refused', () => {
-  const two = withChecks(`${O}/a`, `${O}/b`);
-  assert.equal(verifyChecksShareOnePageSet(data(two)), false);
-  assert.match(fixRefusal(data(two), parseFindingBody(two)) ?? '', /names more than one page \(\/a, \/b\), so its fix is not one change/);
-});
-
-test('a list check plus a single-page check stays refused', () => {
+test('a list check plus a single-page check of the same kind and expect is still one repeated check', () => {
   const mixed = withChecks([`${O}/a`, `${O}/b`, `${O}/c`], `${O}/a`);
-  assert.match(fixRefusal(data(mixed), parseFindingBody(mixed)) ?? '', /names more than one page \(\/a, \/b, \/c\)/);
+  assert.equal(fixRefusal(data(mixed), parseFindingBody(mixed)), null);
+  const two = withChecks(`${O}/a`, `${O}/b`);
+  assert.equal(verifyChecksAreOneChange(data(two)), true);
+  assert.equal(fixRefusal(data(two), parseFindingBody(two)), null);
 });
 
-test('list checks over overlapping but different sets stay refused', () => {
-  const overlap = withChecks([`${O}/a`, `${O}/b`], [`${O}/a`, `${O}/b`, `${O}/c`]);
-  assert.match(fixRefusal(data(overlap), parseFindingBody(overlap)) ?? '', /names more than one page/);
+test('three js checks identical apart from url pass: a list is refused on js, so the pages are three checks', () => {
+  const js = withChecks(jsCheck('/a'), jsCheck('/b'), jsCheck('/c'));
+  const parsed = parseFindingBody(js);
+  assert.deepEqual(findingPages(data(js), parsed), ['/a', '/b', '/c']);
+  assert.equal(fixRefusal(data(js), parsed), null);
 });
 
-test('pages told from the prose, with no verify check, are never a measured set', () => {
+test('two js checks with different expressions are refused', () => {
+  const js = withChecks(jsCheck('/a', 'document.title.length > 0'), jsCheck('/b', 'document.body.scrollWidth <= innerWidth'));
+  assert.match(refused(js), /names more than one page \(\/a, \/b\), so its fix is not one change/);
+});
+
+test('checks that differ in kind, expect, viewport or status are several changes and stay refused', () => {
+  const kind = withChecks(
+    { url: `${O}/a`, kind: 'markdown', expect: ['      contains: "og:image"'] },
+    { url: `${O}/b`, kind: 'text', expect: ['      contains: "og:image"'] },
+  );
+  assert.match(refused(kind), /names more than one page/);
+  const expect = withChecks([`${O}/a`, `${O}/b`], { url: `${O}/c`, expect: ['      contains: "og:title"'] });
+  assert.match(refused(expect), /names more than one page \(\/a, \/b, \/c\)/);
+  const viewport = withChecks(
+    { ...jsCheck('/a'), extra: ['    viewport: "390x844"'] },
+    { ...jsCheck('/b'), extra: ['    viewport: "1280x800"'] },
+  );
+  assert.match(refused(viewport), /names more than one page/);
+  const noViewport = withChecks({ ...jsCheck('/a'), extra: ['    viewport: "390x844"'] }, jsCheck('/b'));
+  assert.match(refused(noViewport), /names more than one page/);
+  const status = withChecks(
+    { url: `${O}/a`, extra: ['    status: 404'] },
+    { url: `${O}/b`, extra: ['    status: 200'] },
+  );
+  assert.match(refused(status), /names more than one page/);
+  const sameViewport = withChecks(
+    { ...jsCheck('/a'), extra: ['    viewport: "390x844"'] },
+    { ...jsCheck('/b'), extra: ['    viewport: "390x844"'] },
+  );
+  assert.equal(fixRefusal(data(sameViewport), parseFindingBody(sameViewport)), null);
+});
+
+test('a deep-equal expect passes whatever its key order', () => {
+  const a = withChecks(
+    { url: `${O}/a`, kind: 'header', expect: ['      name: "link"', '      contains: "rel"'] },
+    { url: `${O}/b`, kind: 'header', expect: ['      contains: "rel"', '      name: "link"'] },
+  );
+  assert.equal(fixRefusal(data(a), parseFindingBody(a)), null);
+});
+
+test('pages told from the prose, with no verify check, are never one repeated check', () => {
   const prose = withoutVerify('Link it from `/about/` and from `/writing/`.');
-  assert.equal(verifyChecksShareOnePageSet(data(prose)), false);
-  assert.equal(verifyChecksShareOnePageSet({ verify: [] }), false);
-  assert.equal(verifyChecksShareOnePageSet({ verify: [{ url: 42 }] }), false);
-  assert.match(fixRefusal(data(prose), parseFindingBody(prose)) ?? '', /names more than one page/);
+  assert.equal(verifyChecksAreOneChange(data(prose)), false);
+  assert.equal(verifyChecksAreOneChange({ verify: [] }), false);
+  assert.equal(verifyChecksAreOneChange({ verify: [{ url: 42, kind: 'text', expect: {} }] }), false);
+  assert.equal(verifyChecksAreOneChange({ verify: [{ url: [], kind: 'text', expect: {} }] }), false);
+  assert.match(refused(prose), /names more than one page/);
 });
 
 test('a single-page opportunity passes as before', () => {
-  assert.equal(verifyChecksShareOnePageSet(data(ONE_PAGE)), true);
+  assert.equal(verifyChecksAreOneChange(data(ONE_PAGE)), true);
   assert.equal(fixRefusal(data(ONE_PAGE), parseFindingBody(ONE_PAGE)), null);
 });
 
