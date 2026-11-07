@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "bash scripts/vercel-ignore.sh",
   "rewrites": [
     { "source": "/.well-known/ai-catalog.json", "destination": "/.well-known/ard.json" },
     { "source": "/.well-known/mcp/server-card.json", "destination": "/mcp/server-card" }

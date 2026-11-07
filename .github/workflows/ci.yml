@@ -19,8 +19,13 @@ name: CI (tests & typecheck)
 # the diff and runs `steward` and `site`, so master timings and the drift checks
 # that read master runs stay comparable. It leaves `browser` false: the pull
 # request already ran it, and it takes minutes.
+# The Vercel preview build follows the `site` column too: `ignoreCommand` in
+# `vercel.json` runs `scripts/vercel-ignore.sh`, which skips a preview when
+# `site` is false and builds in every other case, errors included. JSON has no
+# comments, so the reason lives here: a preview that cannot change the site
+# costs a build and adds nothing to review.
 #
-#   Changed file                                         steward  site  browser
+#   Changed file                                        steward  site  browser
 #   Markdown outside src/content/                        no       no    no
 #   agents/steward/** (not Markdown)                     yes      no    no
 #   agents/steward/src/lib/agent-audit/**, and
