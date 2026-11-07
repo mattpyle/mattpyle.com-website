@@ -192,6 +192,15 @@ function rasterise(svg) {
   return new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng();
 }
 
+/** The experiment pages: `slug` is the card's file name, passed as `image` by the page. */
+const EXPERIMENT_PAGES = [
+  { slug: 'steward', title: 'Steward: the editorial agent behind this site' },
+  { slug: 'webmcp', title: 'WebMCP: tools this site offers to browser agents' },
+  { slug: 'scorecard', title: 'Scorecard: accessibility, performance, and SEO' },
+  { slug: 'audit', title: 'Audit: how agent-ready is your site?' },
+  { slug: 'activity', title: 'Activity: agent traffic to mattpyle.com' },
+];
+
 async function main() {
   const { display, mono } = await loadBrandFonts();
 
@@ -226,6 +235,14 @@ async function main() {
       writeFileSync(join(outDir, `${slug}.png`), rasterise(svg));
       console.log(`generate-og-images: wrote og/${out}/${slug}.png`);
     }
+  }
+
+  const pagesDir = join(root, 'public', 'og', 'pages');
+  mkdirSync(pagesDir, { recursive: true });
+  for (const { slug, title } of EXPERIMENT_PAGES) {
+    const svg = renderWritingCard({ title, eyebrow: 'Experiment', accent: ACCENTS.agents, display, mono });
+    writeFileSync(join(pagesDir, `${slug}.png`), rasterise(svg));
+    console.log(`generate-og-images: wrote og/pages/${slug}.png`);
   }
 }
 
