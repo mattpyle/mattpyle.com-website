@@ -15,6 +15,12 @@
 # branch's last deployment, so a second push would see only its own commit.
 [ "${VERCEL_ENV:-}" = "preview" ] || exit 1
 
+# Vercel's clone has no `origin` remote (PR 596's build log: "'origin' does not
+# appear to be a git repository"), here or in `route-changes.sh`. The repository
+# is public, so an anonymous fetch by URL works.
+git remote get-url origin > /dev/null 2>&1 \
+  || git remote add origin https://github.com/mattpyle/mattpyle.com-website.git || exit 1
+
 # Vercel clones shallow. Deepen only a shallow clone: `--depth` on a full one
 # would make it shallow.
 depth=
