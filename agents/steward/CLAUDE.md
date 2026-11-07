@@ -79,3 +79,4 @@ The `steward finding` verbs reach Temporal through the client and need no local 
 ## Secrets
 
 Never read `agents/steward/.env`, not even masked: a masked read still leaks comment lines and multi-line values. To learn whether a value is set, ask code for a boolean, such as `IS_TEMPORAL_CLOUD` from `src/config.ts`, or ask Matt. The variable names are in `.env.example`.
+
