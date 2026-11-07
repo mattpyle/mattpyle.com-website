@@ -137,6 +137,7 @@ export type AuditEngine = Pick<typeof import('../audit-engine.js'), 'runLighthou
  * `audit-engine.ts` and assert on what these runners hand it. The default is
  * the real, lazily imported module, so production behaviour does not change.
  */
+// CI routing proof: a comment only, never merged.
 export function defaultRunners(
   loadEngine: () => Promise<AuditEngine> = () => import('../audit-engine.js'),
 ): DeepRunners {
