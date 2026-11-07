@@ -93,6 +93,7 @@ export function createTools(getIndex) {
   return [
     {
       name: 'describe_site',
+      annotations: { readOnlyHint: true },
       description:
         "Describe mattpyle.com: who the author is, what the site is, and which sections it has. Call this first for context about the site you're on.",
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -104,6 +105,7 @@ export function createTools(getIndex) {
 
     {
       name: 'get_recent_writing',
+      annotations: { readOnlyHint: true },
       description:
         'List the most recent published articles on mattpyle.com, newest first, optionally filtered to a single tag.',
       inputSchema: {
@@ -167,6 +169,7 @@ export function createTools(getIndex) {
 
     {
       name: 'search_content',
+      annotations: { readOnlyHint: true },
       description:
         'Search the titles, descriptions, and tags of every published article, project, and changelog entry on mattpyle.com.',
       inputSchema: {
@@ -348,6 +351,7 @@ export function createTools(getIndex) {
 
     {
       name: 'list_related_sites',
+      annotations: { readOnlyHint: true },
       description:
         'List the sites in the web ring on mattpyle.com: a hand-picked, one-directional ring of sites experimenting with the agentic web. Read-only. The ring is still being filled, so some entries are open slots with no URL.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },

@@ -50,6 +50,8 @@ export function buildToolsPayload(base: string) {
         description: tool.description,
         kind: notes.kind,
         inputSchema: tool.inputSchema,
+        // Only the read tools carry annotations; omitted means not read-only per the spec.
+        ...('annotations' in tool ? { annotations: tool.annotations } : {}),
         returns: notes.returns,
         example: notes.example,
         // `in` rather than a truthiness check: only the write tool carries this field, so a
