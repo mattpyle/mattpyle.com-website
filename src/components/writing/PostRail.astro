@@ -71,11 +71,19 @@ const contents = headings.filter(heading => heading.depth === 2);
   </div>
 
   {contents.length > 0 && (
-    <nav class="rail-block rail-contents" aria-label="On this page">
-      {contents.map(heading => (
-        <a href={`#${heading.slug}`}>{heading.text}</a>
-      ))}
-    </nav>
+    <details class="rail-block rail-details" open data-rail-details>
+      {/*
+        Open in the markup so the desktop rail and a no-JS phone both show the list.
+        The script below closes it on a phone; the summary is hidden above 900px,
+        where there is nothing to toggle.
+      */}
+      <summary>On this page ({contents.length})</summary>
+      <nav class="rail-contents" aria-label="On this page">
+        {contents.map(heading => (
+          <a href={`#${heading.slug}`}>{heading.text}</a>
+        ))}
+      </nav>
+    </details>
   )}
 
   <div class="rail-block rail-actions">
@@ -176,6 +184,12 @@ const contents = headings.filter(heading => heading.depth === 2);
     document.querySelectorAll<HTMLElement>('.post-rail').forEach(rail => rails.add(rail));
     updateRailPin();
 
+    document.querySelectorAll<HTMLDetailsElement>('[data-rail-details]').forEach(details => {
+      if (details.dataset.railDetailsReady === 'true') return;
+      details.dataset.railDetailsReady = 'true';
+      if (window.matchMedia('(max-width: 900px)').matches) details.open = false;
+    });
+
     document.querySelectorAll<HTMLButtonElement>('[data-rail-copy]').forEach(button => {
       if (button.dataset.railCopyReady === 'true') return;
 
@@ -274,7 +288,13 @@ const contents = headings.filter(heading => heading.depth === 2);
 
   .rail-author:hover { color: var(--writing); }
 
-  .rail-contents { gap: 10px; }
+  .rail-details > summary { display: none; }
+
+  .rail-contents {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
   .rail-contents a {
     font-size: 17px;
@@ -333,6 +353,31 @@ const contents = headings.filter(heading => heading.depth === 2);
     .post-rail {
       position: static;
       gap: 20px;
+    }
+
+    .rail-meta {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0 20px;
+    }
+
+    .rail-details > summary {
+      display: flex;
+      align-items: center;
+      min-height: 44px;
+      font-family: var(--font-mono-plex);
+      font-size: 16px;
+      color: var(--ink-5);
+      cursor: pointer;
+    }
+
+    .rail-details[open] > summary { margin-bottom: 4px; }
+
+    .rail-actions {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 0 24px;
     }
 
     .rail-contents {
