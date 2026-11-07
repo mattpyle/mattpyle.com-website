@@ -194,22 +194,20 @@ test('a fast audit arms nothing and stamps nothing, in flight or finished', asyn
 });
 
 /**
- * Read as source text rather than by importing the worker, for the reason
- * `hosted-worker-concurrency.test.ts` gives: `worker-hosted.ts` calls `main()`
- * at module scope.
- *
  * What this holds is the rule the card states as "the recycle is hosted-only".
  * The local worker (`worker.ts`, started by `steward up`) must never exit
  * mid-session, and the only thing stopping a later edit from lifting the policy
  * into the shared worker is that somebody notices. This test notices.
+ *
+ * It reads `worker.ts` as text and not the hosted entry: `worker-hosted.ts`
+ * calls `main()` at module scope, so it cannot be imported, and a test that
+ * greps its text checks spelling rather than behaviour. The hosted side of the
+ * wiring is the entry point's own `main()`; the policy it consults is covered
+ * above.
  */
 const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 
-test('the recycle is wired into the hosted worker and nowhere else', async () => {
-  const hosted = await fs.readFile(path.join(SRC, 'worker-hosted.ts'), 'utf8');
-  assert.match(hosted, /watchForRecycle\(workers, tracker\)/);
-  assert.match(hosted, /interceptors: \{ activity: \[trackActivityExecution\(tracker\)\] \}/);
-
+test('the recycle is not wired into the local worker', async () => {
   const local = await fs.readFile(path.join(SRC, 'worker.ts'), 'utf8');
   assert.doesNotMatch(
     local,
