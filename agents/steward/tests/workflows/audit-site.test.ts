@@ -1,8 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { ApplicationFailure } from '@temporalio/common';
 import { Worker } from '@temporalio/worker';
 import {
@@ -32,7 +32,6 @@ import type {
  * re-tested here.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const QUEUE_AUDIT = 'steward-audit';
 
 let env: TestWorkflowEnvironment;
@@ -145,9 +144,8 @@ function mockActivities(overrides: MockOverrides = {}) {
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
-    bundlerOptions: {},
     taskQueue: QUEUE_AUDIT,
   });
   return await worker.runUntil(bounded(fn()));

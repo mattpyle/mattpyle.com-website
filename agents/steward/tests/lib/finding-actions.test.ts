@@ -1,5 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { ScheduleOverlapPolicy } from '@temporalio/client';
 import {
   SyncError,
@@ -17,6 +21,11 @@ import {
  */
 
 const PR = 'https://github.com/mattpyle/mattpyle.com-website/pull/533';
+
+const exec = promisify(execFile);
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const CHILD = './tests/fixtures/sync-exit-child.ts';
+const GUARD = './tests/helpers/no-real-credentials.ts'; // relative to PACKAGE_ROOT: an absolute Windows path is not a valid --import URL
 
 function fakeClient(opts: { skipped?: boolean; never?: boolean; result?: unknown; resultNever?: boolean }) {
   let taken = 4;
@@ -83,6 +92,16 @@ test('sync that outlasts the wait for the result answers a running reconcile wit
   assert.equal(result.triggered, true);
   assert.equal(result.total, null);
   assert.match(syncSummary(result), /has not finished/);
+});
+
+test('a successful sync leaves no timer behind: its process exits within seconds, not at the 90 s result wait', async () => {
+  // A fresh process with the default `resultMs`. Shortening `resultMs` in-process would
+  // hide the defect, which is the CLI holding its exit for the timer that lost the race.
+  const started = Date.now();
+  const { stdout } = await exec(process.execPath, ['--import', 'tsx', '--import', GUARD, CHILD], { cwd: PACKAGE_ROOT, timeout: 40_000, killSignal: 'SIGKILL' });
+  const elapsed = Date.now() - started;
+  assert.deepEqual(JSON.parse(stdout), { triggered: true, total: { started: 1, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 2 } });
+  assert.ok(elapsed < 20_000, `the process took ${elapsed} ms to exit; a timer is holding it`);
 });
 
 test('totalCounts sums every site', () => {

@@ -129,10 +129,18 @@ export async function syncFindings(
   if (!started) throw new SyncError('The schedule started a run but did not name it.');
 
   const handle = client.workflow.getHandle(started.workflowId, started.runId);
-  const sites = await Promise.race([
-    handle.result() as Promise<ReconcileFindingsResult>,
-    sleep(resultMs).then(() => null),
-  ]);
+  // The losing timer is cleared on both outcomes: a referenced timer left to run
+  // holds the CLI process open for the whole wait after the counts have arrived.
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), resultMs);
+  });
+  let sites: ReconcileFindingsResult | null;
+  try {
+    sites = await Promise.race([handle.result() as Promise<ReconcileFindingsResult>, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
   return { triggered: true, workflowId: started.workflowId, sites, total: sites ? totalCounts(sites) : null };
 }
 

@@ -1,9 +1,9 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { Worker } from '@temporalio/worker';
 import type { DraftSnapshot, PassResult, ReviewReport } from '../../src/lib/report.js';
 import {
@@ -26,7 +26,6 @@ import {
  * cache somewhere durable; see `tests/helpers/test-env.ts`.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const QUEUE = 'steward-light';
 const QUEUE_HEAVY = 'steward-heavy';
 
@@ -244,9 +243,8 @@ async function withWorker<T>(
 ): Promise<T> {
   const common = {
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
-    bundlerOptions: {},
   };
   const light = await Worker.create({ ...common, taskQueue: QUEUE });
   const heavy = await Worker.create({ ...common, taskQueue: QUEUE_HEAVY });

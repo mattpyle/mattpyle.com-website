@@ -1,11 +1,11 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { Client, WorkflowNotFoundError } from '@temporalio/client';
 import { ApplicationFailure } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { reconcileFindingsWorkflow } from '../../src/workflows/reconcile-findings.js';
 import { findingStateQuery, type FindingState, type FindingWorkflowResult } from '../../src/workflows/finding.js';
 import { startFindingWorkflow } from '../../src/activities/findings.js';
@@ -30,7 +30,6 @@ import {
  * workflow read back `TIMED_OUT`. Nothing here needs time to move.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const QUEUE = 'steward-findings';
 
 let env: TestWorkflowEnvironment;
@@ -112,10 +111,9 @@ function store(initial: Record<string, string>) {
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
   const worker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
     taskQueue: QUEUE,
-    bundlerOptions: {},
   });
   return await worker.runUntil(bounded(fn()));
 }

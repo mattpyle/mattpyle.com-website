@@ -7,6 +7,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, WorkflowNotFoundError } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { DEFECT_FINDING } from '../helpers/finding-fixtures.js';
 import { FixRefused, followFix, requestFix, type FindingFixDeps } from '../../src/lib/finding-fix.js';
 import { findingPath, findingWorkflowId } from '../../src/lib/findings.js';
@@ -24,7 +25,6 @@ import type { FixIssue, FixPrOutcome, OpenFixIssueInput, WriteFindingReturnedInp
  * are in-memory maps behind `requestFix`'s deps.
  */
 
-const workflowsPath = fileURLToPath(new URL('../../src/workflows/index.ts', import.meta.url));
 const SRC = fileURLToPath(new URL('../../src/', import.meta.url));
 const FINDINGS = 'steward-findings';
 const SITE = 'mattpyle-com';
@@ -143,10 +143,9 @@ function harness(
 async function withWorkers<T>(activities: object, fn: () => Promise<T>): Promise<T> {
   const findingsWorker = await Worker.create({
     connection: env.nativeConnection,
-    workflowsPath,
+    workflowBundle: await workflowBundle(),
     activities,
     taskQueue: FINDINGS,
-    bundlerOptions: {},
   });
   return await findingsWorker.runUntil(bounded(fn()));
 }
