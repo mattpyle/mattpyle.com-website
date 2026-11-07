@@ -67,6 +67,7 @@ Run it with `npm test -w @mattpyle/steward`. Typecheck Steward with `npx tsc --n
 6. `tests/helpers/no-real-credentials.ts` blanks `GITHUB_TOKEN`, `ANTHROPIC_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET` in every test process. A test that needs GitHub installs `tests/helpers/fake-github.ts`.
 7. Build a fake secret at run time, never as a literal: the gitleaks job in `.github/workflows/security-scan.yml` scans full history. See the stand-in secret in `tests/lib/fixer.test.ts`.
 8. `npm ci` leaves `agents/steward/scripts/steward.mjs` modified with a line-ending-only diff. Leave it out of the commit.
+9. A targeted run while you work: from `agents/steward`, `node --import tsx --import ./tests/helpers/no-real-credentials.ts --test --test-concurrency=4 --test-timeout=60000 "tests/<folder>/**/*.test.ts"`, or a single file in place of the glob. Keep the credential-guard import: without it two tests in `tests/lib` fail. Run the full suite once before the push; CI runs it again on the PR. Measured 2026-11-06 on matt-pc: the full suite 136 s, `lib` 98 s, `workflows` 92 s, the replay file alone 9 s.
 
 ## Running the CLI
 
