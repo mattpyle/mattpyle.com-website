@@ -147,25 +147,26 @@ export interface FindingsModel {
   cost: { treeCalls: number; blobReads: number; stateQueries: number; dispatcherQueries: number };
 }
 
-/** What a site's `config.yaml` and the row's kind change about a row with no open run. */
+/** What a site's `config.yaml` changes about a row with no open run. */
 export interface DriftContext {
   /** The site's `stop_after`; `verdict` means no fixer runs, so an approved row ends with no run. */
   stopAfter?: string | null;
-  kind?: string;
 }
 
 export const QUIET_NO_FIXER = 'no fixer for this site';
-export const QUIET_OPPORTUNITY = 'opportunity, yours to take';
 
 /**
- * What holds an approved row whose run waits at `waiting-fix`, in one line:
- * the gate's refusal as the file stands now, else the run's last failure,
- * else the wait itself. Null for any other row.
+ * What holds an approved row, in one line: the gate's refusal as the file
+ * stands now, else (for a run at `waiting-fix`) the run's last failure, else the
+ * wait itself. An approved row with no open run waits for the hourly reconcile
+ * to start one, or for a person on a site with no `auto_fix`. Null for any other row.
  */
 export function holdLineFor(input: { status: string; run: FindingRunView; refusal: string | null; autoFix: boolean }): string | null {
   const { run } = input;
-  if (input.status !== 'approved' || !run.open || run.step !== 'waiting-fix') return null;
+  if (input.status !== 'approved') return null;
+  if (run.open && run.step !== 'waiting-fix') return null;
   if (input.refusal) return `The fixer's gate refuses it: ${input.refusal}.`;
+  if (!run.open) return input.autoFix ? 'Waits for the hourly reconcile to start it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
   if (run.lastFixError) return `The last fix attempt failed: ${run.lastFixError}`;
   if (run.issueUrl) return 'Its fix issue ended without a merged PR; Fix retries it.';
   return input.autoFix ? 'Waits for the fixer; the next hourly reconcile sends it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
@@ -186,8 +187,8 @@ export function driftFor(
 
 /**
  * Drift plus the quiet reason. An approved row with no run is designed, not
- * drift, on a site that stops at the verdict and for an opportunity, which the
- * fixer gate refuses and which stays Matt's. The site's rule comes first.
+ * drift, on a site that stops at the verdict. Elsewhere the reconciler starts
+ * its run, and the hold line says what waits.
  */
 export function assessRow(
   status: string,
@@ -207,7 +208,6 @@ export function assessRow(
     case 'flight':
       if (!run.open) {
         if (status === 'approved' && context.stopAfter === 'verdict') quietReason = QUIET_NO_FIXER;
-        else if (status === 'approved' && context.kind === 'opportunity') quietReason = QUIET_OPPORTUNITY;
         else drift.push(`${status} with no open run`);
       } else if (run.step === 'waiting-verdict') drift.push(`${status}, but the run still waits for a verdict`);
       else if (status === 'fixing' && run.step === 'waiting-fix') drift.push('fixing, but the run waits for a fix');
@@ -466,7 +466,7 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
         }
 
         for (const row of rows) {
-          const assessed = assessRow(row.status, row.fileStatus, row.run, { stopAfter, kind: row.kind });
+          const assessed = assessRow(row.status, row.fileStatus, row.run, { stopAfter });
           row.drift = assessed.drift;
           row.quietReason = assessed.quietReason;
           const gate = gates.get(row.key);
@@ -481,7 +481,7 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
               data: gate.data,
               text: gate.text,
             });
-            row.holdLine = holdLineFor({ status: row.status, run: row.run, refusal: gate.refusal, autoFix });
+            row.holdLine = row.quietReason ? null : holdLineFor({ status: row.status, run: row.run, refusal: gate.refusal, autoFix });
           }
           if (row.fileMissing) row.drift.unshift('no finding file');
         }

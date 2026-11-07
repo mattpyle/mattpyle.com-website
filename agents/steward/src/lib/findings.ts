@@ -230,6 +230,13 @@ export interface ReconcilePlan {
    * without one, defects with no attempt (the rule before the gate joined the plan).
    */
   fix: FindingsIndexLine[];
+  /**
+   * Approved lines with no open run, on an `auto_fix` site, whose file the gate
+   * accepts: each gets a new lifecycle run carrying the file's verdict. Empty
+   * without a `fixable` set, and a key only reaches the set through
+   * {@link restartCandidates}.
+   */
+  restart: FindingsIndexLine[];
   /** Everything else. */
   unchanged: number;
 }
@@ -282,6 +289,18 @@ export function fixCandidates(site: string, index: FindingsIndexLine[], open: (O
 }
 
 /**
+ * The approved lines with no open run: the ones the reconciler might start a
+ * run for. A line's run stopped at its verdict, or was cancelled, and nothing
+ * else will start another. The reconciler reads the site's `auto_fix` flag when
+ * this list or {@link fixCandidates} is not empty, and asks the gate about these
+ * keys with theirs.
+ */
+export function restartCandidates(site: string, index: FindingsIndexLine[], open: (OpenFindingWorkflow | string)[]): FindingsIndexLine[] {
+  const runs = openById(open);
+  return index.filter((line) => line.status === 'approved' && !runs.has(findingWorkflowId(site, line.key)));
+}
+
+/**
  * What one site's index asks for, given the open finding workflows and the
  * site's `auto_fix` flag. Pure so the reconciler's whole decision is a unit
  * test; the workflow only carries it out.
@@ -301,7 +320,9 @@ export function fixCandidates(site: string, index: FindingsIndexLine[], open: (O
  * the finding files. With it, `fix` holds every {@link fixCandidates} line in
  * the set, of any kind, on an `auto_fix` site: "no issue" replaces "no
  * attempt", so a gate refusal is retried once the gate accepts and a run
- * whose Action failed keeps its issue and stays a person's retry. Without it
+ * whose Action failed keeps its issue and stays a person's retry. `restart`
+ * holds the {@link restartCandidates} the set accepts, on an `auto_fix` site:
+ * a set built from {@link fixCandidates} alone leaves it empty. Without it
  * (a history recorded before the marker), `fix` holds approved defects with no
  * attempt, as it did.
  */
@@ -313,8 +334,9 @@ export function planReconcile(
   fixable?: ReadonlySet<string>,
 ): ReconcilePlan {
   const runs = openById(open);
-  const plan: ReconcilePlan = { start: [], signal: [], fix: [], unchanged: 0 };
+  const plan: ReconcilePlan = { start: [], signal: [], fix: [], restart: [], unchanged: 0 };
   const candidates = new Set(fixable ? fixCandidates(site, index, open).map((line) => line.key) : []);
+  const restarts = new Set(fixable ? restartCandidates(site, index, open).map((line) => line.key) : []);
   for (const line of index) {
     const run = runs.get(findingWorkflowId(site, line.key));
     const awaitingVerdict = run !== undefined && (run.step === null || run.step === 'waiting-verdict');
@@ -322,6 +344,7 @@ export function planReconcile(
     if ((line.status === 'proposed' || line.status === 'reopened') && !run) plan.start.push(line);
     else if ((line.status === 'approved' || line.status === 'rejected') && awaitingVerdict) plan.signal.push(line);
     else if (autoFix && takesFix) plan.fix.push(line);
+    else if (autoFix && fixable && restarts.has(line.key) && fixable.has(line.key)) plan.restart.push(line);
     else plan.unchanged++;
   }
   return plan;

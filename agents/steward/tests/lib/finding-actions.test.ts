@@ -60,8 +60,8 @@ test('sync triggers with overlap SKIP and answers the counts of the run the trig
   assert.deepEqual(triggers, [ScheduleOverlapPolicy.SKIP]);
   assert.equal(result.triggered, true);
   assert.equal(result.workflowId, 'reconcile-run');
-  assert.deepEqual(result.total, { started: 1, signalled: 3, fixed: 0, unchanged: 10 });
-  assert.equal(syncSummary(result), 'Started 1, signalled 3, fixed 0, unchanged 10.');
+  assert.deepEqual(result.total, { started: 1, signalled: 3, fixed: 0, restarted: 0, unchanged: 10 });
+  assert.equal(syncSummary(result), 'Started 1, signalled 3, fixed 0, restarted 0, unchanged 10.');
 });
 
 test('sync with a reconcile already running starts none and says so', async () => {
@@ -86,7 +86,7 @@ test('sync that outlasts the wait for the result answers a running reconcile wit
 });
 
 test('totalCounts sums every site', () => {
-  assert.deepEqual(totalCounts(COUNTS), { started: 1, signalled: 3, fixed: 0, unchanged: 10 });
+  assert.deepEqual(totalCounts(COUNTS), { started: 1, signalled: 3, fixed: 0, restarted: 0, unchanged: 10 });
 });
 
 const defect = { status: 'approved', kind: 'defect' };
