@@ -23,8 +23,6 @@ Steward is the editorial agent and audit runner for mattpyle.com, a TypeScript a
 4. `steward-findings` has the hosted worker alone. `tests/lib/hosted-worker-registry.test.ts` builds the real registry and pins the hosted queue list and each queue's activities; its local-worker test pins the local list.
 5. The fixer is `claude-code-action`, run by `.github/workflows/claude.yml` on an issue that `openFixIssue` opens. The custom fixer (`fixFindingWorkflow`, `src/activities/fixer.ts`, `src/lib/fixer.ts`) is frozen: it exists so that older lifecycle runs replay.
 
-Some docblocks predate the current split and still say the local worker serves every queue: the top of `src/worker-hosted.ts` and the `Dockerfile` header. The README's queue table and the queue test are current.
-
 ## Determinism rules
 
 A workflow can sit parked on a signal for weeks, and every code change replays against its history. Each rule below names the file that enforces or demonstrates it.

@@ -1,8 +1,10 @@
 # Steward's hosted audit worker (always-on-audit-worker card, leg 2b).
 #
-# One process polling `steward-audit`, with a browser and no checkout of the
-# site. Runs `src/worker-hosted.ts`; `src/worker.ts` — the all-three-queues
-# local worker `steward up` starts — is deliberately not what this runs.
+# One process polling `steward-audit`, `steward-audit-fast` and
+# `steward-findings`, with a browser and no checkout of the site. Runs
+# `src/worker-hosted.ts`; `src/worker.ts` — the local worker `steward up`
+# starts, which serves `steward-light` and `steward-heavy`, and the audit queues
+# only against the local dev server — is deliberately not what this runs.
 #
 # THE BUILD CONTEXT IS THE REPO ROOT, NOT THIS DIRECTORY.
 # `agents/steward` is an npm workspace, so its dependency tree is resolved from
