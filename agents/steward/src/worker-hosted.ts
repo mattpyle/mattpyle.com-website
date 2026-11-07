@@ -28,9 +28,10 @@ import {
  *
  * This is the entry the Railway container runs (always-on-audit-worker card,
  * leg 2b). `worker.ts` is unchanged in shape and is still what `steward up`
- * starts on Matt's machine — that one registers every queue, so the local machine can
- * serve everything when it happens to be on, and the two processes do not
- * compete because they claim different queues.
+ * starts on Matt's machine — that one registers `steward-light` and `steward-heavy`, plus the
+ * two audit queues only against the local dev server, and never
+ * `steward-findings`. The two processes do not compete because they claim
+ * different queues.
  *
  * ## Why two `Worker`s in one process
  *

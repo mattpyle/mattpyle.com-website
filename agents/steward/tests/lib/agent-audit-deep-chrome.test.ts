@@ -9,7 +9,8 @@ import { DEFAULT_POLICY } from '../../src/lib/agent-audit/safe-fetch.js';
  * The Chrome-side SSRF closures, with a real browser.
  *
  * Opt-in (`STEWARD_CHROME_TESTS=1`), because it launches Chrome four times and
- * takes minutes, which is not something the suite should pay on every run. The
+ * takes 16 to 36 seconds, which is still not something the suite should pay on
+ * every run. The
  * proxy's own behaviour is covered without a browser in
  * `agent-audit-vetting-proxy.test.ts`; what only a real Chrome can show is the
  * part in between — that `defaultRunners` actually hands the proxy flags to both
@@ -20,6 +21,9 @@ import { DEFAULT_POLICY } from '../../src/lib/agent-audit/safe-fetch.js';
  * Run it after any change to the launch flags:
  *
  *   STEWARD_CHROME_TESTS=1 node --import tsx --test tests/lib/agent-audit-deep-chrome.test.ts
+ *
+ * CI sets the flag on a pull request that touches the browser paths listed in
+ * the header table of `.github/workflows/ci.yml`.
  */
 
 const ENABLED = process.env.STEWARD_CHROME_TESTS === '1';
