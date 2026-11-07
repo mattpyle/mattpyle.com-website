@@ -434,3 +434,5 @@ export async function cleanupPublishedTwin(input: CleanupInput): Promise<Cleanup
     to: await headSha(repoDir),
   };
 }
+
+// proof: routing check
