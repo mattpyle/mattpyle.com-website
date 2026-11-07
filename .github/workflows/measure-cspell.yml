@@ -1,0 +1,76 @@
+name: Measure cspell routes
+on:
+  pull_request:
+permissions:
+  contents: read
+env:
+  CSPELL_ARGS: --no-progress
+jobs:
+  base-npm-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent spellcheck
+  nm-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: measure-nm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - run: npm run --silent spellcheck
+  tool-nocache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: |
+          V=$(node -p "require('./package-lock.json').packages['node_modules/cspell'].version")
+          npm install --prefix "$RUNNER_TEMP/tool" --no-audit --no-fund --ignore-scripts "cspell@$V"
+      - run: PATH="$RUNNER_TEMP/tool/node_modules/.bin:$PATH" npm run --silent spellcheck
+  tool-npmcache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: v
+        run: echo "v=$(node -p "require('./package-lock.json').packages['node_modules/cspell'].version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: measure-npm-${{ runner.os }}-${{ steps.v.outputs.v }}
+      - run: npm install --prefix "$RUNNER_TEMP/tool" --no-audit --no-fund --ignore-scripts "cspell@${{ steps.v.outputs.v }}"
+      - run: PATH="$RUNNER_TEMP/tool/node_modules/.bin:$PATH" npm run --silent spellcheck
+  tool-dircache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: v
+        run: echo "v=$(node -p "require('./package-lock.json').packages['node_modules/cspell'].version")" >> "$GITHUB_OUTPUT"
+      - id: tool
+        uses: actions/cache@v4
+        with:
+          path: ~/cspell-tool
+          key: measure-tool-${{ runner.os }}-${{ steps.v.outputs.v }}
+      - if: steps.tool.outputs.cache-hit != 'true'
+        run: npm install --prefix ~/cspell-tool --no-audit --no-fund --ignore-scripts "cspell@${{ steps.v.outputs.v }}"
+      - run: PATH="$HOME/cspell-tool/node_modules/.bin:$PATH" npm run --silent spellcheck
