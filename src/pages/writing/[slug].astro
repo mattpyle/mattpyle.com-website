@@ -12,17 +12,21 @@ export async function getStaticPaths() {
   const articles = (await getCollection('writing', ({ data }) => showDrafts || !data.draft))
     .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
 
-  // The redesigned template ends on a "next" row, which is the next post DOWN
-  // the same reverse-chronological list the index shows — the one you would read
-  // after this one. The oldest post has none, and then the row is not rendered
-  // rather than being rendered empty.
+  // The template ends on a newer/older pair along the same reverse-chronological
+  // list the index shows. `nextArticle` is the next post DOWN the list (older),
+  // `newerArticle` the one above it. The newest post has no newer and the oldest
+  // no older; a missing side is not rendered rather than being rendered empty.
   return articles.map((article, index) => ({
     params: { slug: article.id },
-    props: { article, nextArticle: articles[index + 1] ?? null },
+    props: {
+      article,
+      nextArticle: articles[index + 1] ?? null,
+      newerArticle: index > 0 ? articles[index - 1] : null,
+    },
   }));
 }
 
-const { article, nextArticle } = Astro.props;
+const { article, nextArticle, newerArticle } = Astro.props;
 const { Content, headings } = await render(article);
 
 const { title, date, updated, description, image, seoTitle, seoDescription, hero, heroAlt } = article.data;
@@ -109,12 +113,20 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
       </div>
     </div>
 
-    {nextArticle && (
+    {(newerArticle || nextArticle) && (
       <div class="post-next-wrap rd-section">
-        <a href={`/writing/${nextArticle.id}/`} class="post-next">
-          <span class="post-next-label">older &middot;{formatSiteDate(nextArticle.data.date)}</span>
-          <span class="post-next-title">{nextArticle.data.title}</span>
-        </a>
+        {newerArticle && (
+          <a href={`/writing/${newerArticle.id}/`} class="post-next">
+            <span class="post-next-label">newer &middot;{formatSiteDate(newerArticle.data.date)}</span>
+            <span class="post-next-title">{newerArticle.data.title}</span>
+          </a>
+        )}
+        {nextArticle && (
+          <a href={`/writing/${nextArticle.id}/`} class="post-next">
+            <span class="post-next-label">older &middot;{formatSiteDate(nextArticle.data.date)}</span>
+            <span class="post-next-title">{nextArticle.data.title}</span>
+          </a>
+        )}
       </div>
     )}
 
