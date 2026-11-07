@@ -15,7 +15,7 @@ import {
   type FindingWorkflowInput,
   type FindingWorkflowResult,
 } from '../../src/workflows/finding.js';
-import { dispatchStateQuery } from '../../src/workflows/fix-dispatch.js';
+import { dispatchStateQuery, releaseSlotSignal } from '../../src/workflows/fix-dispatch.js';
 import {
   awaitFixPrMerge,
   closeConflictingFixPr,
@@ -57,6 +57,12 @@ import { FIXING_FINDING, ORIGIN } from '../helpers/finding-fixtures.js';
  * For the same reason each test awaits at most one result through the
  * time-skipping client: the gap after a first await could strand a task the
  * second await then waits on.
+ *
+ * **The rollover test needs no test-only cap.** The server does not suggest a
+ * continue-as-new in a test, and the workflow's own cap is `HISTORY_CAP`, 2,000
+ * events. Every signal is one history event, so the test sends 2,100 releases
+ * for a ticket nobody holds. The workflow is unchanged. With 1,000 signals the
+ * same test fails at "the dispatcher continued as new" (2026-11-07).
  */
 
 const FINDINGS = 'steward-findings';
@@ -426,4 +432,60 @@ test('a grant to a run that is not running is dropped, so it never blocks a path
     }
     assert.deepEqual(state, { site, holders: [], waiters: [] });
   });
+});
+
+test('a dispatcher past its history cap continues as new with its holder and waiter, and still grants the waiter when the holder releases', async () => {
+  const site = 'roll-site';
+  const [a, b] = ['content-holder--page', 'content-waiter--page'];
+  const m = mocks({ paths: { [a]: ['src/shared.ts'], [b]: ['src/shared.ts'] }, openPolls: { 401: 2 } });
+
+  await withWorker(m.activities, async () => {
+    const first = await startApproved(site, a);
+    await until(first, (s) => s.step === 'waiting-merge');
+    const second = await startApproved(site, b);
+    await until(second, (s) => s.step === 'waiting-slot' && (s.slotPaths?.length ?? 0) > 0);
+    const dispatcher = client.workflow.getHandle(dispatchWorkflowId(site));
+    const before = await dispatcher.describe();
+    assert.deepEqual(
+      (await dispatchState(site)).holders.map((e) => e.key),
+      [a],
+    );
+
+    // Each signal is one history event, so 2,100 of them take the run past
+    // HISTORY_CAP (2,000) with no change to the workflow. They release a
+    // ticket nobody holds: the dispatcher changes nothing and wakes for each.
+    for (let from = 0; from < 2_100; from += 100) {
+      await Promise.all(
+        Array.from({ length: 100 }, (_, i) =>
+          dispatcher.signal(releaseSlotSignal, { workflowId: `finding/${site}/nobody-${from + i}`, ticket: 1, reason: 'ended' }),
+        ),
+      );
+    }
+
+    // The new run is the one the ID now names. The old run closed by continuing as new.
+    const deadline = Date.now() + 30_000;
+    let after = await dispatcher.describe();
+    while (after.runId === before.runId && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+      after = await dispatcher.describe();
+    }
+    assert.notEqual(after.runId, before.runId, 'the dispatcher continued as new');
+    const old = await client.workflow.getHandle(dispatchWorkflowId(site), before.runId).describe();
+    assert.equal(old.status.name, 'CONTINUED_AS_NEW');
+    assert.ok(old.historyLength > 2_000, `the old run held ${old.historyLength} events`);
+
+    // Both entries came across, in order, and the holder still blocks the waiter.
+    const state = await dispatchState(site);
+    assert.deepEqual(state.holders.map((e) => e.key), [a]);
+    assert.deepEqual(state.waiters.map((e) => e.key), [b]);
+    assert.deepEqual(slotBlocker(state, second.workflowId), { key: a, path: 'src/shared.ts', held: true });
+
+    // One await through the time-skipping client, as in the first test. The
+    // holder's merge and release then reach the new run, which grants the waiter.
+    const result = (await env.client.workflow.getHandle(second.workflowId).result()) as FindingWorkflowResult;
+    assert.equal(result.outcome, 'resolved');
+    assert.equal(((await first.result()) as FindingWorkflowResult).outcome, 'resolved');
+  });
+
+  assert.deepEqual(m.log, [`issue:${a}`, `pr:${a}`, `live:${a}`, `issue:${b}`, `pr:${b}`, `live:${b}`]);
 });

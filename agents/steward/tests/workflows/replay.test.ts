@@ -77,6 +77,31 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * otherwise guard the fan-out shape Steward now takes by default.
  */
 
+/**
+ * ## Coverage matrix: what each workflow's fixtures replay, and what none does
+ *
+ * One row per workflow in `src/workflows/`. A fixture guards only the commands
+ * it holds, so a change to a branch in the last column replays green against
+ * every fixture here and strands an open run that took it. Measured on
+ * 2026-11-07 by listing the commands each history records. A change to one of
+ * those branches needs its own fixture, recorded before the change
+ * (`agents/steward/CLAUDE.md`, "Before changing workflow code").
+ *
+ * | Workflow | Fixtures | Branches no fixture covers |
+ * | --- | --- | --- |
+ * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
+ * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
+ * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin` | The scheduled path: `checkCredentialExpiry` and the `nightly-scorecard` health signal. It needs a run started by the schedule, and none is recorded. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin` | A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. The preview test (`testOnPreview`). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
+ * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
+ * | `verifyFindingWorkflow` | `verify-finding-blockless.bin` | The checks path (`runFindingChecks`, then `writeFindingVerification`, resolved or reopened). The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
+ * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin` | All three markers on current code: `listFixableFindings`, the restart start and signal, the close cancel. A reconcile that throws (`reportRunHealth` before the rethrow). |
+ * | `fixDispatchWorkflow` | `fix-dispatch-grant-after-release.bin` | The hourly sweep (`runningWorkflowIds`). A grant whose signal fails. A re-sent request for a held ticket. The idle close. The continue-as-new rollover is a test in `fix-dispatch.test.ts`, not a replay. |
+ *
+ * `tests/lib/finding-report.test.ts` also reads `finding-resolved-action.bin`.
+ * It reports on that history and does not replay it.
+ */
+
 const historyPath = fileURLToPath(
   new URL('../fixtures/histories/phase1b-smoke-test.json', import.meta.url),
 );
@@ -738,5 +763,84 @@ test('a reconcile run recorded before the close rule replays without a cancel', 
     { workflowBundle: await workflowBundle() },
     history,
     'reconcile-fixture-5',
+  );
+});
+
+/**
+ * A dispatcher run as `fixDispatchWorkflow` ran it on `master` at 4d4d4ee: two
+ * findings that name `src/shared.ts`. The first request is granted at once. The
+ * second waits behind it. The holder releases, the dispatcher grants the
+ * waiter, and the waiter releases. 39 events, ending on the open idle timer.
+ * `fixDispatchWorkflow` has no `patched` marker, so this is the guard for the
+ * next change to its loop: any command added before, between or after the
+ * request, grant and release steps strands a dispatcher that is open now.
+ *
+ * Recorded from current `master` (4d4d4ee), not a pre-change commit, because no
+ * command changes here. It is the first fixture to hold the dispatcher at all.
+ * The recording is the first test of `fix-dispatch.test.ts`, two real
+ * `findingWorkflow` runs and the real dispatcher on one time-skipping server
+ * with that file's mocked activities, read with `fetchHistory()` on
+ * `dispatch/seq-site`. Stored as protobuf binary for the reason the fix-child
+ * fixtures give. The finding keys are the test's, so it holds no real finding
+ * text.
+ *
+ * Probe (2026-11-07): a `wf.sleep('1 second')` injected in `grant`, before the
+ * `slot-grant` signal to the asking run, made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 6, SignalExternalWorkflowExecutionInitiated)
+ * ```
+ *
+ * The other 21 replays stayed green. The sleep was removed and all 22 re-ran green.
+ */
+const dispatchGrantAfterReleasePath = fileURLToPath(
+  new URL('../fixtures/histories/fix-dispatch-grant-after-release.bin', import.meta.url),
+);
+
+test('a dispatcher that granted a waiter after the holder released replays that grant', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(dispatchGrantAfterReleasePath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'dispatch/seq-site',
+  );
+});
+
+/**
+ * A review run as `reviewPost` ran it on `master` at 4d4d4ee, through the
+ * publish leg: the five-way fan-out, `awaiting_verdict`, then `approve` with
+ * `publish: true`, `publishPost`, a first `verifyDeploy` that fails, the PR
+ * check read (`checkPrChecks`, pending), a 90-second timer, a second
+ * `verifyDeploy` that passes, the final archive and completion. 95 events. The
+ * `publish` flag rides on the signal (determinism rule 2), so the other review
+ * fixtures, whose `approve` carries none, never reach `publishPost`.
+ *
+ * Recorded from current `master` (4d4d4ee) against the time-skipping server
+ * with the mocked activities of `review-post.test.ts`, `verifyDeploy` failing
+ * once, read with `fetchHistory()`. It holds no real post: the draft is that
+ * suite's `fixture-post`. Stored as protobuf binary for the reason the fix-child
+ * fixtures give.
+ *
+ * Probe (2026-11-07): a `wf.sleep('1 second')` injected before the
+ * `publishPost` call made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 54, ActivityTaskScheduled)
+ * ```
+ *
+ * The other 21 replays stayed green. The sleep was removed and all 22 re-ran green.
+ */
+const reviewPublishVerifyPath = fileURLToPath(
+  new URL('../fixtures/histories/review-post-publish-verify.bin', import.meta.url),
+);
+
+test('a review approved with publish replays publishPost and the deploy verification', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reviewPublishVerifyPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'wf-publish-fixture',
   );
 });
