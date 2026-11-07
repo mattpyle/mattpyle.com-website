@@ -498,7 +498,10 @@
   }
   const render = () => paint(['controls', 'list']);
 
+  // With a finding open the frame is pinned and the window cannot scroll, so closing returns the list to where it was.
+  let listScroll = 0;
   function open(id) {
+    if (!state.current) listScroll = window.scrollY;
     state.current = id;
     state.foot = { error: null, sending: false, reasonError: false };
     paint(['controls', 'list', 'doc', 'foot']);
@@ -506,6 +509,7 @@
   function close() {
     state.current = null;
     paint(['list']);
+    window.scrollTo(0, listScroll);
   }
 
   async function load() {
