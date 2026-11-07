@@ -148,3 +148,36 @@ test('holdLineFor says nothing for a row that is not approved, or whose run is p
   assert.equal(holdLineFor({ status: 'approved', run: { ...run, open: false }, refusal: null, autoFix: true }), 'Waits for the hourly reconcile to start it.');
   assert.equal(holdLineFor({ status: 'proposed', run: { ...run, open: false }, refusal: null, autoFix: true }), null);
 });
+
+test('a resolved or rejected row whose run is still open says the run is closing, not drift, when the reconciler will cancel it', async () => {
+  const closed: Record<string, [string, string]> = {
+    'done-parked': ['resolved', 'waiting-fix'],
+    'no-go-parked': ['rejected', 'waiting-fix'],
+    'no-go-verdict': ['rejected', 'waiting-verdict'],
+    'done-fixing': ['resolved', 'waiting-merge'],
+    'done-idle': ['resolved', ''],
+  };
+  const store: Record<string, string> = {
+    [`sites/${SITE}/config.yaml`]: 'site:' + String.fromCharCode(10) + '  name: mattpyle.com',
+    [`sites/${SITE}/findings/INDEX.md`]: Object.entries(closed)
+      .map(([key, [status]]) => `${key} | ${status} | defect | recruiter | Title | Done.`)
+      .join(String.fromCharCode(10)),
+  };
+  for (const [key, [status]] of Object.entries(closed)) {
+    store[`sites/${SITE}/findings/${key}.md`] = finding(key, 'defect', 'Change the lede on /about.').replace('status: approved', `status: ${status}`);
+  }
+  const states: Record<string, Partial<FindingState>> = {};
+  for (const [key, [, step]] of Object.entries(closed)) if (step) states[key] = { step: step as never, fixAttempts: 0, issueUrl: null, lastFixError: null };
+  const loader = createFindingsLoader({ repo: REPO, ghJson: fakeGitHub(store), client: fakeClient(states), now: () => new Date('2026-11-07T12:00:00Z') });
+  const rows = Object.fromEntries((await loader.load()).sites[0].rows.map((row) => [row.key, row]));
+
+  for (const key of ['done-parked', 'no-go-parked', 'no-go-verdict']) {
+    assert.deepEqual(rows[key].drift, [], `${key} is not drift`);
+    assert.equal(rows[key].quietReason, 'Run closing on the next reconcile.');
+    assert.equal(rows[key].holdLine, 'Run closing on the next reconcile.', 'the page renders the hold line');
+  }
+  assert.deepEqual(rows['done-fixing'].drift, ['resolved with an open run'], 'a run the reconciler will not close is still drift');
+  assert.equal(rows['done-fixing'].quietReason, null);
+  assert.deepEqual(rows['done-idle'].drift, []);
+  assert.equal(rows['done-idle'].holdLine, null);
+});

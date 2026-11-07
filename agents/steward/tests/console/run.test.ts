@@ -107,7 +107,7 @@ test('sync answers the reconcile counts and a one-line summary', async () => {
   const body = JSON.parse(res.body);
   assert.deepEqual(body.total, { started: 1, signalled: 2, fixed: 0, unchanged: 7 });
   assert.equal(body.sites['mattpyle-com'].signalled, 2);
-  assert.equal(body.summary, 'Started 1, signalled 2, fixed 0, restarted 0, unchanged 7.');
+  assert.equal(body.summary, 'Started 1, signalled 2, fixed 0, restarted 0, closed 0, unchanged 7.');
   assert.deepEqual(calls, ['sync']);
 });
 

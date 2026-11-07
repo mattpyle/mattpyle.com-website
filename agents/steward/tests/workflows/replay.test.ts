@@ -703,3 +703,40 @@ test('a reconcile run recorded before the restart rule replays without a restart
     'reconcile-fixture-4',
   );
 });
+
+/**
+ * A reconcile run as `reconcileFindingsWorkflow` ran it before the close of a
+ * parked run: one site, a `resolved` direction line whose run waits at
+ * `waiting-fix` (left alone) and a new proposed defect (one
+ * `startFindingWorkflow`). 39 events. New code cancels the parked run of a
+ * resolved or rejected line, so this replays only because the
+ * `reconcile-close-parked` patch sends a history without the marker down the old
+ * plan: such a line counts as unchanged and no cancel is issued.
+ *
+ * Recorded from the pre-change `reconcile-findings.ts` (origin/master at
+ * de5f9cd, the worktree before its first edit) against the time-skipping server
+ * with mocked activities and real finding runs, so it holds no real finding
+ * text.
+ *
+ * Probe (2026-11-07): replacing `wf.patched(RECONCILE_CLOSE_PARKED_PATCH)` with
+ * `true`, so every run takes the close path, made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Cancel external WF machine does not handle this event:
+ * HistoryEvent(id: 33, ActivityTaskScheduled)
+ * ```
+ *
+ * The other 19 replays stayed green. The guard was restored and all 20 replays re-ran green.
+ */
+const reconcileCloseParkedPath = fileURLToPath(
+  new URL('../fixtures/histories/reconcile-close-parked-pre.bin', import.meta.url),
+);
+
+test('a reconcile run recorded before the close rule replays without a cancel', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileCloseParkedPath));
+  await Worker.runReplayHistory(
+    { workflowsPath, bundlerOptions: {} },
+    history,
+    'reconcile-fixture-5',
+  );
+});

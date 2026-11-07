@@ -29,8 +29,9 @@ import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
  * is free. So only rows whose file says `approved` or `fixing` and that have an
  * open run are queried, about 15, plus one dispatcher query for a site with a
  * run at `waiting-slot`. A `proposed` or `reopened` row with an open run is at
- * `waiting-verdict` by construction, and a `resolved` or `rejected` row has no
- * run to ask. At 20 refreshes a day that is about 9,000 actions a month, or
+ * `waiting-verdict` by construction. A `resolved` or `rejected` row has no run
+ * to ask unless one is still open, which the reconciler is about to close, and
+ * then the step says whether it will. At 20 refreshes a day that is about 9,000 actions a month, or
  * $0.45 (findings-dashboard design, 2026-10-31).
  *
  * GitHub costs one tree call per refresh. Blob text is cached in this process
@@ -39,7 +40,7 @@ import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
  * the token's 5,000 an hour.
  */
 
-export const STATE_QUERIED_STATUSES = ['approved', 'fixing'] as const;
+export const STATE_QUERIED_STATUSES = ['approved', 'fixing', 'resolved', 'rejected'] as const;
 
 /** How the page groups a row, by its file status. */
 export type RowGroup = 'verdict' | 'flight' | 'done' | 'other';
@@ -155,6 +156,9 @@ export interface DriftContext {
 
 export const QUIET_NO_FIXER = 'no fixer for this site';
 
+/** What a `resolved` or `rejected` row says while its open run waits for the reconciler to cancel it. */
+export const QUIET_RUN_CLOSING = 'Run closing on the next reconcile.';
+
 /**
  * What holds an approved row, in one line: the gate's refusal as the file
  * stands now, else (for a run at `waiting-fix`) the run's last failure, else the
@@ -214,7 +218,12 @@ export function assessRow(
       else if (run.step === 'done') drift.push(`${status}, but the run is done`);
       break;
     case 'done':
-      if (run.open) drift.push(`${status} with an open run`);
+      // The reconciler cancels a run parked at `waiting-fix` behind a decided line (a `rejected` line's run at
+      // `waiting-verdict` takes the verdict instead and ends too). Any other open run is still drift.
+      if (run.open) {
+        if (run.step === 'waiting-fix' || (status === 'rejected' && run.step === 'waiting-verdict')) quietReason = QUIET_RUN_CLOSING;
+        else drift.push(`${status} with an open run`);
+      }
       break;
     case 'other':
       drift.push(`unknown status "${status}"`);
@@ -483,6 +492,8 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             });
             row.holdLine = row.quietReason ? null : holdLineFor({ status: row.status, run: row.run, refusal: gate.refusal, autoFix });
           }
+          // The page renders the hold line, not the quiet reason, so a row about to lose its run says so there.
+          if (assessed.quietReason === QUIET_RUN_CLOSING) row.holdLine = QUIET_RUN_CLOSING;
           if (row.fileMissing) row.drift.unshift('no finding file');
         }
 

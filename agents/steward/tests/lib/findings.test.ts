@@ -207,6 +207,43 @@ test('planReconcile restarts an approved line with no run when the site has auto
   assert.deepEqual(planReconcile('s', index, open, true).restart, [], 'no gate read, no restart');
 });
 
+test('planReconcile closes a resolved or rejected line whose run waits at waiting-fix, and only with closeParked', () => {
+  const index = parseFindingsIndex(
+    [
+      'One line per finding: `key | status | kind | scenario | title | verdict reason`.',
+      'done-parked | resolved | defect | s | t | Verified.',
+      'no-go-parked | rejected | direction | s | t | No.',
+      'no-go-verdict | rejected | defect | s | t | No.',
+      'done-fixing | resolved | defect | s | t | Verified.',
+      'done-unknown | resolved | defect | s | t | Verified.',
+      'done-no-run | resolved | defect | s | t | Verified.',
+      'yes-parked | approved | defect | s | t | Yes.',
+      'fixing-parked | fixing | defect | s | t | Yes.',
+    ].join('\n'),
+  );
+  const run = (key: string, step: string | null) => ({ workflowId: findingWorkflowId('s', key), step, fixAttempts: 0, issueUrl: null });
+  const open = [
+    run('done-parked', 'waiting-fix'),
+    run('no-go-parked', 'waiting-fix'),
+    run('no-go-verdict', 'waiting-verdict'),
+    run('done-fixing', 'waiting-merge'),
+    run('done-unknown', null),
+    run('yes-parked', 'waiting-fix'),
+    run('fixing-parked', 'waiting-fix'),
+  ];
+
+  const plan = planReconcile('s', index, open, false, undefined, true);
+  assert.deepEqual(plan.close.map((l) => l.key), ['done-parked', 'no-go-parked']);
+  assert.deepEqual(plan.signal.map((l) => l.key), ['no-go-verdict'], 'a rejected line at waiting-verdict keeps its signal and is not closed twice');
+  assert.deepEqual(plan.fix, []);
+  assert.equal(plan.unchanged, 5, 'a run past its fix, an unknown step, no run, an approved parked run, a fixing line');
+
+  const without = planReconcile('s', index, open, false);
+  assert.deepEqual(without.close, [], 'a history without the marker closes nothing');
+  assert.equal(without.unchanged, 7, 'the parked lines count as unchanged, as they did');
+  assert.deepEqual(without.signal.map((l) => l.key), ['no-go-verdict']);
+});
+
 test('planReconcile starts a reopened line with no workflow, as it does a proposed one, and leaves one with a workflow', () => {
   const index = parseFindingsIndex(
     ['back | reopened | t | ', 'back-open | reopened | t | ', 'fixing-one | fixing | t | Yes.'].join('\n'),

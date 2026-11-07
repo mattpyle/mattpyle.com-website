@@ -144,16 +144,16 @@ test('starts the missing, signals the decided, and does nothing on a second run'
   await withWorker(s.activities, async () => {
     const first = await reconcileOnce();
     assert.deepEqual(first, {
-      'site-a': { started: 2, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 },
-      'site-b': { started: 1, signalled: 0, fixed: 0, restarted: 0, unchanged: 0 },
-      'site-empty': { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 0 },
+      'site-a': { started: 2, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 },
+      'site-b': { started: 1, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 },
+      'site-empty': { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 },
     });
     const a1 = client.workflow.getHandle(findingWorkflowId('site-a', 'a-one'));
     assert.equal((await a1.query(findingStateQuery)).status, 'waiting');
 
     const second = await reconcileOnce();
-    assert.deepEqual(second['site-a'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 3 });
-    assert.deepEqual(second['site-b'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual(second['site-a'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 3 });
+    assert.deepEqual(second['site-b'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
 
     // Argus records a Discord verdict in the index; the next run carries it.
     s.indexes['site-a'] = header([
@@ -162,7 +162,7 @@ test('starts the missing, signals the decided, and does nothing on a second run'
       'a-old | resolved | Title | Done.',
     ]);
     const third = await reconcileOnce();
-    assert.deepEqual(third['site-a'], { started: 0, signalled: 1, fixed: 0, restarted: 0, unchanged: 2 });
+    assert.deepEqual(third['site-a'], { started: 0, signalled: 1, fixed: 0, restarted: 0, closed: 0, unchanged: 2 });
 
     const result = (await a1.result()) as FindingWorkflowResult;
     assert.equal(result.verdict.status, 'rejected');
@@ -172,19 +172,19 @@ test('starts the missing, signals the decided, and does nothing on a second run'
 
     // The closed workflow is not reopened, and the decided line is not re-signalled.
     const fourth = await reconcileOnce();
-    assert.deepEqual(fourth['site-a'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 3 });
+    assert.deepEqual(fourth['site-a'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 3 });
   });
 
   assert.equal(s.writes.length, 0, 'a file verdict never writes');
   assert.equal(s.pings.length, 4, 'every run pings');
   assert.ok(s.pings.every((p) => p.signal === 'findings-reconcile' && p.ok));
-  assert.match(s.pings[0].summary, /site-a started 2, signalled 0, fixed 0, restarted 0, unchanged 1/);
+  assert.match(s.pings[0].summary, /site-a started 2, signalled 0, fixed 0, restarted 0, closed 0, unchanged 1/);
 });
 
 test('a reopened line whose last run completed gets a new run, waiting at the verdict and named reopened in its memo', async () => {
   const s = store({ 'mattpyle-com': header(['r-one | proposed | Title | ']) });
   await withWorker(s.activities, async () => {
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, fixed: 0, restarted: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 });
     const id = findingWorkflowId('mattpyle-com', 'r-one');
     const first = await client.workflow.getHandle(id).describe();
     assert.equal(first.memo?.indexStatus, 'proposed');
@@ -195,7 +195,7 @@ test('a reopened line whose last run completed gets a new run, waiting at the ve
     await client.workflow.getHandle(id, first.runId).result();
     s.indexes['mattpyle-com'] = header(['r-one | reopened | Title | ']);
 
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, fixed: 0, restarted: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 1, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 });
     const latest = client.workflow.getHandle(id);
     const described = await latest.describe();
     assert.equal(described.status.name, 'RUNNING');
@@ -211,7 +211,7 @@ test('a reopened line whose last run completed gets a new run, waiting at the ve
     assert.ok(!('indexStatus' in started), 'the index status rides in the memo, not the workflow input');
 
     // Open now, so the next run leaves it.
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
     await latest.terminate('test over');
   });
 });
@@ -247,7 +247,7 @@ test('an approved parked line of any kind gets one fix when the gate accepts it;
     await reconcileOnce();
     // All approved while the site had no flag: each run reads false at its verdict and parks.
     s.indexes['mattpyle-com'] = kinded(lines('approved'));
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 4, fixed: 0, restarted: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 4, fixed: 0, restarted: 0, closed: 0, unchanged: 0 });
     for (const key of keys) {
       const parked = await stateWhen(id(key), (st) => st.step === 'waiting-fix');
       assert.equal(parked.fixAttempts, 0);
@@ -257,7 +257,7 @@ test('an approved parked line of any kind gets one fix when the gate accepts it;
     s.flags.autoFix = true;
     s.fixable.add('p-defect');
     s.fixable.add('p-opportunity');
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 2, restarted: 0, unchanged: 2 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 2, restarted: 0, closed: 0, unchanged: 2 });
     for (const key of ['p-defect', 'p-opportunity']) {
       const tried = await stateWhen(id(key), (st) => st.fixAttempts === 1 && st.step === 'waiting-fix' && Boolean(st.lastFixError));
       assert.equal(tried.issueUrl, 'https://github.com/o/r/issues/1');
@@ -265,7 +265,7 @@ test('an approved parked line of any kind gets one fix when the gate accepts it;
     assert.deepEqual([...s.fixIssues].sort(), ['p-defect', 'p-opportunity']);
 
     // Each opened an issue, so the next pass sends nothing: a failed Action is a person's retry.
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 4 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 4 });
     for (const key of ['p-refused', 'p-direction']) {
       const left = await client.workflow.getHandle(id(key)).query(findingStateQuery);
       assert.equal(left.step, 'waiting-fix');
@@ -276,13 +276,13 @@ test('an approved parked line of any kind gets one fix when the gate accepts it;
     // The refused finding is edited and now passes the gate: the next pass sends it, once.
     s.fixable.add('p-refused');
     s.opens.add('p-refused');
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, restarted: 0, unchanged: 3 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, restarted: 0, closed: 0, unchanged: 3 });
     await stateWhen(id('p-refused'), (st) => st.fixAttempts === 1 && st.step === 'waiting-fix' && Boolean(st.issueUrl));
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 4 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 4 });
 
     for (const key of keys) await client.workflow.getHandle(id(key)).terminate('test over');
   });
-  assert.match(s.pings[2].summary, /mattpyle-com started 0, signalled 0, fixed 2, restarted 0, unchanged 2/);
+  assert.match(s.pings[2].summary, /mattpyle-com started 0, signalled 0, fixed 2, restarted 0, closed 0, unchanged 2/);
 });
 
 test('a gate refusal at the attempt parks the run with lastFixError, and the reconciler retries it once the gate accepts', async () => {
@@ -295,7 +295,7 @@ test('a gate refusal at the attempt parks the run with lastFixError, and the rec
   await withWorker(s.activities, async () => {
     await reconcileOnce();
     s.indexes['mattpyle-com'] = kinded(['g-opportunity | approved | opportunity | Title | Yes.']);
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 1, fixed: 0, restarted: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 1, fixed: 0, restarted: 0, closed: 0, unchanged: 0 });
 
     // The attempt at the verdict reaches the gate, which refuses it: parked, with the reason.
     const refused = await stateWhen(id, (st) => st.fixAttempts === 1 && st.step === 'waiting-fix');
@@ -304,13 +304,13 @@ test('a gate refusal at the attempt parks the run with lastFixError, and the rec
     assert.deepEqual(s.fixIssues, ['g-opportunity']);
 
     // The gate still refuses, so nothing is sent. Once it accepts, one fix goes.
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
     s.fixable.add('g-opportunity');
     s.opens.add('g-opportunity');
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, restarted: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 1, restarted: 0, closed: 0, unchanged: 0 });
     const opened = await stateWhen(id, (st) => st.fixAttempts === 2 && st.step === 'waiting-fix' && Boolean(st.issueUrl));
     assert.equal(opened.issueUrl, 'https://github.com/o/r/issues/1');
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
 
     await client.workflow.getHandle(id).terminate('test over');
   });
@@ -335,7 +335,7 @@ test('an opportunity attempts the fix at its verdict with no signal; a direction
   };
 
   await withWorker(s.activities, async () => {
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 3, signalled: 0, fixed: 0, restarted: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 3, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 });
     assert.ok(!('waitsForPerson' in (await startedInput('w-defect'))), 'a defect starts without the field');
     assert.ok(!('waitsForPerson' in (await startedInput('w-opportunity'))), 'an opportunity attempts at the verdict');
     assert.equal((await startedInput('w-direction')).waitsForPerson, true);
@@ -345,7 +345,7 @@ test('an opportunity attempts the fix at its verdict with no signal; a direction
       'w-opportunity | approved | opportunity | Title | Yes.',
       'w-direction | approved | direction | Title | Yes.',
     ]);
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 3, fixed: 0, restarted: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 3, fixed: 0, restarted: 0, closed: 0, unchanged: 0 });
 
     const tried = await stateWhen(findingWorkflowId('mattpyle-com', 'w-defect'), (st) => st.fixAttempts === 1 && st.step === 'waiting-fix');
     assert.match(tried.lastFixError ?? '', /opens no issue/);
@@ -364,6 +364,40 @@ test('an opportunity attempts the fix at its verdict with no signal; a direction
       await client.workflow.getHandle(findingWorkflowId('mattpyle-com', key)).terminate('test over');
     }
   });
+});
+
+test('a resolved or rejected line whose run waits at waiting-fix gets the run cancelled once; an approved parked run is left', async () => {
+  const kinded = (lines: string[]) =>
+    ['# Findings index', '', 'Format: `key | status | kind | title | verdict reason`.', '', ...lines].join('\n');
+  const keys = ['k-resolved', 'k-rejected', 'k-approved'];
+  const lines = (statuses: string[]) => keys.map((key, i) => `${key} | ${statuses[i]} | direction | Title | Yes.`);
+  const s = store({ 'mattpyle-com': kinded(lines(['proposed', 'proposed', 'proposed'])) });
+  const id = (key: string) => findingWorkflowId('mattpyle-com', key);
+
+  await withWorker(s.activities, async () => {
+    await reconcileOnce();
+    // A direction parks at waiting-fix without an attempt, so each run waits there.
+    s.indexes['mattpyle-com'] = kinded(lines(['approved', 'approved', 'approved']));
+    await reconcileOnce();
+    for (const key of keys) await stateWhen(id(key), (st) => st.step === 'waiting-fix');
+
+    // Verify and a later verdict decide the files from outside the fixer's path.
+    s.indexes['mattpyle-com'] = kinded(lines(['resolved', 'rejected', 'approved']));
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 2, unchanged: 1 });
+    for (const key of ['k-resolved', 'k-rejected']) {
+      const handle = client.workflow.getHandle(id(key));
+      for (let i = 0; i < 100 && (await handle.describe()).status.name === 'RUNNING'; i++) await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal((await handle.describe()).status.name, 'CANCELLED', `${key} ended through a cancel`);
+    }
+    const parked = client.workflow.getHandle(id('k-approved'));
+    assert.equal((await parked.describe()).status.name, 'RUNNING');
+    assert.equal((await parked.query(findingStateQuery)).step, 'waiting-fix');
+
+    // The closed runs are gone from the list, so the next pass counts the decided lines unchanged.
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 3 });
+    await parked.terminate('test over');
+  });
+  assert.match(s.pings[2].summary, /mattpyle-com started 0, signalled 0, fixed 0, restarted 0, closed 2, unchanged 1/);
 });
 
 /**
@@ -412,8 +446,8 @@ test('an approved line with no open run gets one run carrying the file verdict; 
     await completedAtVerdict('site-off', 'o-ok');
 
     const first = await reconcileOnce();
-    assert.deepEqual(first['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 2, unchanged: 2 });
-    assert.deepEqual(first['site-off'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual(first['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 2, closed: 0, unchanged: 2 });
+    assert.deepEqual(first['site-off'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
 
     const id = findingWorkflowId('mattpyle-com', 's-ok');
     const input = await startedInput(id);
@@ -432,17 +466,17 @@ test('an approved line with no open run gets one run carrying the file verdict; 
 
     // Both runs are open now, so the next pass leaves them; the refused line is still refused.
     const second = await reconcileOnce();
-    assert.deepEqual(second['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 4 });
-    assert.deepEqual(second['site-off'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual(second['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 4 });
+    assert.deepEqual(second['site-off'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
 
     // The refused file is edited and passes: the next pass restarts it.
     s.fixable.add('s-refused');
     s.opens.add('s-refused');
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 1, unchanged: 3 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 1, closed: 0, unchanged: 3 });
 
     for (const key of ['s-ok', 's-defect', 's-refused']) await client.workflow.getHandle(findingWorkflowId('mattpyle-com', key)).terminate('test over');
   });
-  assert.match(s.pings[0].summary, /mattpyle-com started 0, signalled 0, fixed 0, restarted 2, unchanged 2/);
+  assert.match(s.pings[0].summary, /mattpyle-com started 0, signalled 0, fixed 0, restarted 2, closed 0, unchanged 2/);
 });
 
 test('a restart that finds the ID already taken counts as unchanged and sends no signal', async () => {
@@ -459,7 +493,7 @@ test('a restart that finds the ID already taken counts as unchanged and sends no
       taskQueue: QUEUE,
       args: [{ site: 'mattpyle-com', key: 'v-one', repo: 'mattpyle/argus', findingPath: 'f', indexPath: 'i', stopAfter: 'verdict' }],
     });
-    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['mattpyle-com'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
     const state = await client.workflow.getHandle(findingWorkflowId('mattpyle-com', 'v-one')).query(findingStateQuery);
     assert.equal(state.verdict, null, 'the open run was sent nothing');
     await client.workflow.getHandle(findingWorkflowId('mattpyle-com', 'v-one')).terminate('test over');
@@ -475,8 +509,8 @@ test('a site with no production origin is not restarted', async () => {
   await withWorker(s.activities, async () => {
     await completedAtVerdict('site-x', 'x-one');
     // A run that would stop at the verdict would end at once and be restarted every hour.
-    assert.deepEqual((await reconcileOnce())['site-x'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
-    assert.deepEqual((await reconcileOnce())['site-x'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['site-x'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['site-x'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
   });
 });
 
@@ -489,7 +523,7 @@ test('a proposed line whose last run completed is not started again', async () =
     await client.workflow.getHandle(findingWorkflowId('site-f', 'f-one')).result();
     // A stale line: the index still says proposed after the run completed.
     s.indexes['site-f'] = header(['f-one | proposed | Title | ']);
-    assert.deepEqual((await reconcileOnce())['site-f'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['site-f'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
   });
 });
 
@@ -498,8 +532,8 @@ test('a start that collides with a workflow visibility has not listed yet counts
   // Visibility lags: the list never shows anything open.
   s.activities.listOpenFindingWorkflows = async () => [];
   await withWorker(s.activities, async () => {
-    assert.deepEqual((await reconcileOnce())['site-c'], { started: 1, signalled: 0, fixed: 0, restarted: 0, unchanged: 0 });
-    assert.deepEqual((await reconcileOnce())['site-c'], { started: 0, signalled: 0, fixed: 0, restarted: 0, unchanged: 1 });
+    assert.deepEqual((await reconcileOnce())['site-c'], { started: 1, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 });
+    assert.deepEqual((await reconcileOnce())['site-c'], { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 1 });
   });
 });
 

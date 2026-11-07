@@ -237,6 +237,12 @@ export interface ReconcilePlan {
    * {@link restartCandidates}.
    */
   restart: FindingsIndexLine[];
+  /**
+   * `resolved` and `rejected` lines whose run is still open at `waiting-fix`: the
+   * file is decided and nothing will unpark the run. Empty unless the caller asks
+   * for it; see {@link planReconcile}.
+   */
+  close: FindingsIndexLine[];
   /** Everything else. */
   unchanged: number;
 }
@@ -325,6 +331,13 @@ export function restartCandidates(site: string, index: FindingsIndexLine[], open
  * a set built from {@link fixCandidates} alone leaves it empty. Without it
  * (a history recorded before the marker), `fix` holds approved defects with no
  * attempt, as it did.
+ *
+ * `close` holds a `resolved` or `rejected` line whose run waits at `waiting-fix`:
+ * verify, or a verdict given outside the fixer's path, decided the file and left
+ * the run parked. It needs `closeParked`, which the caller passes when its
+ * history carries the close marker; without it such a line is unchanged, as it
+ * was. A `rejected` line at `waiting-verdict` stays in `signal`, and an
+ * `approved` line's parked run is the fixer's business, so neither is in `close`.
  */
 export function planReconcile(
   site: string,
@@ -332,9 +345,10 @@ export function planReconcile(
   open: (OpenFindingWorkflow | string)[],
   autoFix = false,
   fixable?: ReadonlySet<string>,
+  closeParked = false,
 ): ReconcilePlan {
   const runs = openById(open);
-  const plan: ReconcilePlan = { start: [], signal: [], fix: [], restart: [], unchanged: 0 };
+  const plan: ReconcilePlan = { start: [], signal: [], fix: [], restart: [], close: [], unchanged: 0 };
   const candidates = new Set(fixable ? fixCandidates(site, index, open).map((line) => line.key) : []);
   const restarts = new Set(fixable ? restartCandidates(site, index, open).map((line) => line.key) : []);
   for (const line of index) {
@@ -345,6 +359,7 @@ export function planReconcile(
     else if ((line.status === 'approved' || line.status === 'rejected') && awaitingVerdict) plan.signal.push(line);
     else if (autoFix && takesFix) plan.fix.push(line);
     else if (autoFix && fixable && restarts.has(line.key) && fixable.has(line.key)) plan.restart.push(line);
+    else if (closeParked && (line.status === 'resolved' || line.status === 'rejected') && run?.step === 'waiting-fix') plan.close.push(line);
     else plan.unchanged++;
   }
   return plan;
