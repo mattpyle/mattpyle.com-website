@@ -13,13 +13,15 @@ name: Built-site checks (axe-core, HTML validity, llms.txt)
 #                   aria goldens on master
 #   guard           the Playwright guard checks, in two shards on two runners
 #
-# They were one job running the three audits in sequence (127 seconds on master, 63 of them the
-# audits). Starting the three as concurrent processes in that one job was tried first and measured:
-# on one runner the audits took 35, 35 and 52 seconds together against 17, 16 and 30 apart, so the
-# step saved 11 seconds and the job still took 113. The audits compete for the runner's cores.
-# Three runners do not. A build is 9 seconds, so each job builds for itself; handing one build to
-# the others as an artifact would put a second `npm ci` ahead of the slowest audit. After:
-# AFTER-TIMINGS.
+# They were one job running the three audits in sequence: 127 seconds on master, 63 of them the
+# audits (17, 16 and 30). Starting the three as concurrent processes in that one job was tried first
+# and measured: together they took 35, 35 and 52 seconds, so the step saved 11 seconds and the job
+# still took 113. The audits compete for the one runner. Three runners do not, so each job builds
+# for itself (a build is 9 seconds); handing one build to the others as an artifact would put a
+# second `npm ci` ahead of the slowest audit. Two more cuts: the guard runs in two shards, because
+# its 212 specs took 33 to 41 seconds on one runner and made it the slowest job, and the server
+# writes to a file because the step took 5 seconds with the server attached to its output.
+# After, on a site-only pull request: axe-playwright 66 seconds, axe-cli 65, guard 58 and 46.
 #
 # Which jobs gate: `axe-cli` and `axe-playwright`, the axe runs and the audit-url report scan. The
 # guard, the HTML validity run and the llms.txt assertion are advisory — red on the PR, deploys
