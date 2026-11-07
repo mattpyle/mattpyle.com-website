@@ -591,7 +591,7 @@ async function findOpenIssue(repo: string, marker: string): Promise<{ number: nu
  *
  * **The gate first.** {@link fixRefusal}: an approved defect with a cause and a
  * measure, or an approved opportunity with a measure whose fix is one change
- * on one page. A finding that fails it is `FindingNotFixable` and no issue
+ * (one page, or one check repeated over the pages). A finding that fails it is `FindingNotFixable` and no issue
  * opens. The verdict reason becomes the body's `Verdict:` line, the scope the
  * Action is told to keep to.
  *
