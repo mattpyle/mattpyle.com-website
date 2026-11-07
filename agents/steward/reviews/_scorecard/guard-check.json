@@ -1,0 +1,13 @@
+{
+  "id": "guard-check",
+  "iso": "2026-08-14",
+  "scope": "1 live page",
+  "tools": [],
+  "entry": "Manual · intentional",
+  "commentary": "Held.",
+  "metrics": [],
+  "perPage": [],
+  "decision": "no-op",
+  "reason": "guard check",
+  "archiveId": "guard-check"
+}
