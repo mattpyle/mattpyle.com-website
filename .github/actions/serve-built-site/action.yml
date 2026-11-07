@@ -1,0 +1,134 @@
+name: Build and serve the site
+description: Installs dependencies, builds the site and serves dist/client on port 4321, with the fixture environment the audits need.
+
+# Shared by the three jobs in a11y.yml. Each job builds for itself: a build is 9 seconds, and an
+# artifact hand-off from a fourth job would put a second `npm ci` on the critical path.
+
+inputs:
+  java:
+    description: 'true to install the JRE the Nu HTML Checker needs'
+    default: 'false'
+  playwright:
+    description: 'true to install the Playwright Chromium system dependencies'
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v5
+      with:
+        node-version: 24
+        cache: npm
+
+    # The Nu HTML Checker is a Java program. `vnu-jar` pins the jar itself as a devDependency,
+    # but not the runtime it needs — ubuntu-latest ships one preinstalled and the version it
+    # ships is not ours to depend on, so it is declared here like every other tool version in
+    # this workflow. Temurin 21 because Nu needs 8 or newer and 21 is the current LTS.
+    - name: Setup Java (for the Nu HTML Checker)
+      if: inputs.java == 'true'
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: '21'
+
+    # ubuntu-latest ships a preinstalled google-chrome-stable specifically for
+    # browser-automation workflows like this one (see actions/runner-images).
+    # DETECT_CHROMEDRIVER_VERSION makes the `chromedriver` npm package (a
+    # transitive dependency of @axe-core/cli) look up that exact binary and
+    # download a matching driver, instead of installing whatever chromedriver
+    # happens to be tagged "latest" on npm — which can silently drift out of
+    # sync with the runner's actual Chrome version.
+    - name: Install dependencies
+      shell: bash
+      env:
+        DETECT_CHROMEDRIVER_VERSION: 'true'
+      run: npm ci
+
+    # Playwright downloads a pinned Chromium build per release, so the cache
+    # key has to be the resolved @playwright/test version, not the range in
+    # package.json. A bump to a release with a newer Chromium must miss the
+    # cache, or the guard runs against a browser the runner's Playwright does
+    # not support and fails for a reason that has nothing to do with the PR.
+    - name: Resolve Playwright version
+      if: inputs.playwright == 'true'
+      id: playwright-version
+      shell: bash
+      run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Playwright browsers
+      if: inputs.playwright == 'true'
+      id: playwright-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+    # The browser binary is cached; the system libraries it links against are
+    # not, because they land in /usr/lib and are not ours to cache. On a hit,
+    # install-deps alone; on a miss, both.
+    #
+    # The Playwright install is an apt run that takes about 10 seconds and the build is CPU work
+    # that takes about 11, and neither needs the other, so they share one step and run together.
+    # The step waits for both and fails if either failed.
+    - name: Build site (and install Playwright system dependencies beside it)
+      shell: bash
+      env:
+        PLAYWRIGHT: ${{ inputs.playwright }}
+        BROWSER_CACHED: ${{ steps.playwright-cache.outputs.cache-hit }}
+      run: |
+        deps_pid=
+        if [ "$PLAYWRIGHT" = 'true' ]; then
+          if [ "$BROWSER_CACHED" = 'true' ]; then
+            npx playwright install-deps chromium >"$RUNNER_TEMP/playwright-deps.log" 2>&1 &
+          else
+            npx playwright install --with-deps chromium >"$RUNNER_TEMP/playwright-deps.log" 2>&1 &
+          fi
+          deps_pid=$!
+        fi
+
+        status=0
+        npm run build || status=$?
+
+        if [ -n "$deps_pid" ]; then
+          wait "$deps_pid" || { echo "::error::Playwright dependency install failed"; status=1; }
+          echo "::group::Playwright dependency install"
+          cat "$RUNNER_TEMP/playwright-deps.log"
+          echo "::endgroup::"
+        fi
+        exit "$status"
+
+    # The Vercel adapter (added for the on-demand /writing/<slug>.md route)
+    # puts astro build into hybrid "server" mode, which nests prerendered
+    # static output under dist/client/ instead of writing straight into
+    # dist/ — serve dist/client, not dist, or every route here 404s.
+    #
+    # Not a static file server: /activity renders on demand (it reads the hit
+    # store per request), so a static server 404s one of the nine routes
+    # audited. serve-built-site.mjs serves the same directory and falls
+    # back to the adapter's render function, which is the ordering Vercel
+    # itself uses. /scorecard was the on-demand route until 2026-08-22, when
+    # the store read moved to /activity and it went back to prerendering.
+    #
+    # AGENT_TRAFFIC_FIXTURE makes /activity render its tables rather than its
+    # store-unavailable state, so axe actually scans the markup that ships. No
+    # store exists on a runner, and never should.
+    #
+    # AUDIT_REPORT_FIXTURE is the same device for /audit: its report shape needs a
+    # finished run behind it, and a runner has neither a store to read a pointer from
+    # nor a Temporal namespace to read a result from. Without it the /audit report URL
+    # would serve the empty form and the larger half of that page would ship
+    # never having been scanned.
+    #
+    # The server writes to a file, not to the step's output. With the server attached to the
+    # step's output the step took 5 seconds; redirected it takes none.
+    - name: Serve built site
+      shell: bash
+      env:
+        AGENT_TRAFFIC_FIXTURE: '1'
+        AUDIT_REPORT_FIXTURE: '1'
+      run: node scripts/serve-built-site.mjs --port 4321 >"$RUNNER_TEMP/serve-built-site.log" 2>&1 &
+
+    - name: Wait for local server
+      shell: bash
+      run: npx wait-on http://localhost:4321 --timeout 30000

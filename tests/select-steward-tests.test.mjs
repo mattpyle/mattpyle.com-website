@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { DIRECTORY_READERS, FULL_GLOB, selectTests } from '../scripts/select-steward-tests.mjs';
@@ -125,6 +125,13 @@ test('a file under agents/steward that is not TypeScript runs the full suite, un
   }
 });
 
+test('a change that sets browser keeps the real-Chrome test, and the full suite already has it', () => {
+  const chrome = 'tests/lib/agent-audit-deep-chrome.test.ts';
+  assert.deepEqual(selectTests({ root, changed: [`${S}/Dockerfile`], ts, browser: true }).files, [chrome]);
+  assert.ok(selectTests({ root, changed: [`${S}/src/lib/a.ts`], ts, browser: true }).files.includes(chrome));
+  assert.equal(selectTests({ root, changed: [`${S}/package.json`], ts, browser: true }).mode, 'all');
+});
+
 test('the command line prints the glob, a list or an empty line, and reads standard input', () => {
   const run = (input, ...args) =>
     execFileSync('node', ['scripts/select-steward-tests.mjs', '--root', root, ...args], { cwd: repo, input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
@@ -132,12 +139,7 @@ test('the command line prints the glob, a list or an empty line, and reads stand
   assert.equal(run('', `${S}/src/lib/a.ts`), 'tests/lib/a.test.ts tests/lib/b.test.ts tests/lib/steward-update.test.ts tests/workflows/flow.test.ts\n');
   assert.equal(run(`${S}/src/lib/lonely.ts\r\n${S}/README.md\r\n`), '\n');
   assert.equal(run('', '--event', 'push', `${S}/src/lib/a.ts`), `${FULL_GLOB}\n`);
-  const missing = spawnSync('node', ['scripts/select-steward-tests.mjs', `${S}/src/lib/a.ts`], {
-    cwd: repo,
-    encoding: 'utf8',
-    env: { ...process.env, SELECT_TS_FROM: path.join(root, 'nowhere') },
-  });
-  assert.equal(missing.status, 0, 'a root that has TypeScript still answers');
+  assert.equal(run('', '--browser', `${S}/Dockerfile`), 'tests/lib/agent-audit-deep-chrome.test.ts' + String.fromCharCode(10));
 });
 
 // The real tree. Each assertion names an edge the import graph alone cannot see.

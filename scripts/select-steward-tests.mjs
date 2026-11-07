@@ -6,6 +6,8 @@
 //   node scripts/select-steward-tests.mjs agents/steward/src/lib/findings.ts
 //
 // `--event <name>` names a non-pull-request event (the answer is the full suite).
+// `--browser` adds the real-Chrome test to a list, for a change that sets the
+// routing `browser` output.
 // `--root <dir>` points at another repository root, which the script's test uses.
 //
 // Changed files are repository-relative paths, as arguments or one per line on
@@ -16,9 +18,10 @@
 //   tests/lib/a.test.ts tests/... a space-separated list of test files
 //   (empty)                       no test reaches the change: the typecheck is the check
 //
-// The reason for the answer goes to standard error. Exit codes: 0 answered,
-// 3 TypeScript is not installed here, 1 any other failure. `route-changes.sh`
-// treats both failures as "run the full suite".
+// The reason for the answer goes to standard error. A nonzero exit is a failure
+// (TypeScript not installed, an unreadable tree); the Steward job treats it as
+// "run the full suite". The script needs the `typescript` package, so it runs in
+// the Steward job after `npm ci`.
 //
 // The graph. TypeScript's own `createProgram` builds the program `tsc` builds from
 // `agents/steward/tsconfig.json`, and each import specifier resolves with
@@ -58,6 +61,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const FULL_GLOB = 'tests/**/*.test.ts';
 const REPLAY = 'tests/workflows/replay.test.ts';
+const CHROME = 'tests/lib/agent-audit-deep-chrome.test.ts';
 const STEWARD = 'agents/steward';
 
 // Exact paths whose change touches every test: the install, the compiler
@@ -86,7 +90,7 @@ const posix = (p) => p.split(path.sep).join('/');
 
 function loadTypeScript(root) {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const paths = [process.env.SELECT_TS_FROM, root, path.join(root, STEWARD), here].filter(Boolean);
+  const paths = [root, path.join(root, STEWARD), here];
   const require = createRequire(import.meta.url);
   try {
     return require(require.resolve('typescript', { paths }));
@@ -205,10 +209,20 @@ function ownerModules(stewardDir, inner) {
  * @param {string} input.root          Repository root (holds `agents/steward/`).
  * @param {string[]} input.changed     Repository-relative changed paths.
  * @param {string} [input.event]       `pull_request` (default) or any other event.
+ * @param {boolean} [input.browser]    The change sets the routing `browser` output.
  * @param {object} input.ts            The TypeScript module.
  * @returns {{ mode: 'all' | 'list' | 'none', files: string[], reasons: string[] }}
  */
-export function selectTests({ root, changed, event = 'pull_request', ts }) {
+export function selectTests(input) {
+  const result = selectByGraph(input);
+  if (!input.browser || result.mode === 'all') return result;
+  // The real-Chrome test guards the browser runners, the proxy and the Dockerfile;
+  // a Dockerfile change reaches it through no import.
+  const files = result.files.includes(CHROME) ? result.files : [...result.files, CHROME].sort();
+  return { mode: 'list', files, reasons: [...result.reasons, `${CHROME} runs for a change that sets browser`] };
+}
+
+function selectByGraph({ root, changed, event = 'pull_request', ts }) {
   const all = (reason) => ({ mode: 'all', files: [], reasons: [reason] });
   if (event !== 'pull_request') return all(`the event is ${event}, not a pull request`);
 
@@ -293,19 +307,18 @@ async function main() {
   let root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const args = process.argv.slice(2);
   let event = 'pull_request';
+  let browser = false;
   const changed = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--event') event = args[++i];
     else if (args[i] === '--root') root = path.resolve(args[++i]);
+    else if (args[i] === '--browser') browser = true;
     else changed.push(args[i]);
   }
   if (changed.length === 0 && !process.stdin.isTTY) changed.push(...fs.readFileSync(0, 'utf8').split(/\r?\n/));
   const ts = loadTypeScript(root);
-  if (!ts) {
-    console.error('select-steward-tests: the typescript package is not installed here');
-    process.exit(3);
-  }
-  const result = selectTests({ root, changed, event, ts });
+  if (!ts) throw new Error('the typescript package is not installed here; run npm ci');
+  const result = selectTests({ root, changed, event, ts, browser });
   for (const reason of result.reasons) console.error(`select-steward-tests: ${reason}`);
   console.log(result.mode === 'all' ? FULL_GLOB : result.files.join(' '));
 }

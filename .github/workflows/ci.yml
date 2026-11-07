@@ -15,7 +15,7 @@ name: CI (tests & typecheck)
 # The sorting is `scripts/route-changes.sh`, which `a11y.yml` calls too, so its
 # `axe` job follows the `site` rule below. A change to a row is an edit to that
 # script plus this table.
-# A fourth output, `steward_tests`, picks the test files the Steward job runs.
+# A fourth output, `steward_tests`, says how the Steward job picks its tests.
 # Each suite then runs only when its output is true. A push to `master` skips
 # the diff and runs `steward` and `site`, so master timings and the drift checks
 # that read master runs stay comparable. It leaves `browser` false: the pull
@@ -48,7 +48,9 @@ name: CI (tests & typecheck)
 #     agents/steward/package.json, any tsconfig,
 #     a non-TypeScript file nothing in a TypeScript
 #     folder owns (a rubric, a Vale style, a script)     tests/**
-#   a .ts file under agents/steward/                     the test files whose imports reach it
+#   only under agents/steward/src/console/ or
+#     agents/steward/tests/console/, assets included     tests/console/**
+#   any other file under agents/steward/                 the test files whose imports reach it
 #   a change under agents/steward/src/workflows/         the same, plus tests/workflows/replay.test.ts
 #   a change no test reaches                             nothing; the typecheck is the check
 #   a change that sets `browser`                         the same, plus the real-Chrome test
@@ -59,7 +61,11 @@ name: CI (tests & typecheck)
 # a change to either entry's graph is a site change. Markdown under src/content/
 # is content, not documentation.
 #
-# The `steward_tests` rows. `scripts/select-steward-tests.mjs` builds the import
+# The `steward_tests` rows. A change confined to the findings console runs
+# `tests/console/**` and the typecheck: the console is an island that the CLI
+# loads on demand and whose assets its tests read by path, so the graph would
+# only add the CLI tests. Every other change under `agents/steward/` goes to
+# `scripts/select-steward-tests.mjs`, which builds the import
 # graph of `agents/steward/` with TypeScript's own program, so an import resolves
 # as `tsc` resolves it, and selects every test whose runtime imports reach a
 # changed file. Type-only imports do not count: `tsx` erases them and the
@@ -73,9 +79,11 @@ name: CI (tests & typecheck)
 # Run the same selection locally: the header of the script and "The test suite" in
 # `agents/steward/CLAUDE.md`.
 #
-# The `changes` job installs `typescript` alone to run the script. `a11y.yml`'s
-# job calls the same routing script without it, and does not read `steward_tests`;
-# the script exits 3 there and the full glob stands.
+# The script runs in the Steward job, after its `npm ci`, because it needs the
+# installed `typescript`. The routing job only writes `steward_tests=select` and
+# the changed files, so it installs nothing and a docs-only pull request pays
+# nothing for the selection. If the script fails, the job warns and runs the
+# full suite.
 #
 # A change to the routing scripts runs every suite, so a routing mistake is
 # caught by the suites it would have skipped.
@@ -124,27 +132,16 @@ jobs:
       steward: ${{ steps.route.outputs.steward }}
       browser: ${{ steps.route.outputs.browser }}
       steward_tests: ${{ steps.route.outputs.steward_tests }}
-      steward_tests_label: ${{ steps.route.outputs.steward_tests_label }}
+      steward_changed: ${{ steps.route.outputs.steward_changed }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # The test selector needs `typescript` and nothing else, so it installs the
-      # one pinned version from Steward's manifest into a scratch folder: a full
-      # `npm ci` would cost more than the selection saves. The package has no
-      # dependencies.
-      - name: Install TypeScript for the Steward test selector
-        if: github.event_name == 'pull_request'
-        run: |
-          version="$(node -p "require('./agents/steward/package.json').devDependencies.typescript")"
-          npm install --prefix "$RUNNER_TEMP/select-tool" --ignore-scripts --no-audit --no-fund --no-package-lock "typescript@$version"
-
-      - name: Sort changed files into site, steward, browser and the Steward tests
+      - name: Sort changed files into site, steward, browser and the Steward test rule
         id: route
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SELECT_TS_FROM: ${{ runner.temp }}/select-tool
         run: bash scripts/route-changes.sh "$EVENT_NAME" "$BASE_SHA"
 
   site:
@@ -219,6 +216,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `steward_tests` from the routing job is the full glob, the console glob, or
+      # `select`. For `select` this runs the graph script on the changed files; its
+      # reasons print above the answer. The output `tests` is then the glob, a
+      # space-separated list, or empty. Browser changes add the real-Chrome test,
+      # which a Dockerfile change reaches through no import. A failure of the script
+      # runs the full suite: a selector that breaks must not skip tests.
+      - name: Select Steward tests
+        id: select
+        env:
+          STEWARD_TESTS: ${{ needs.changes.outputs.steward_tests }}
+          STEWARD_CHANGED: ${{ needs.changes.outputs.steward_changed }}
+          BROWSER: ${{ needs.changes.outputs.browser }}
+        run: |
+          tests="$STEWARD_TESTS"
+          if [ "$STEWARD_TESTS" = select ]; then
+            flags=()
+            [ "$BROWSER" = true ] && flags+=(--browser)
+            if ! tests="$(printf '%s
+' "$STEWARD_CHANGED" | node scripts/select-steward-tests.mjs "${flags[@]}")"; then
+              echo "::warning::select-steward-tests.mjs failed; running the full Steward suite"
+              tests='tests/**/*.test.ts'
+            fi
+          fi
+          if [ -z "$tests" ]; then
+            label='none, typecheck only'
+          elif [[ "$tests" == *'*'* ]]; then
+            label="$tests"
+          else
+            label="$(wc -w <<< "$tests" | tr -d ' ') selected files"
+          fi
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+          echo "Steward tests: $label"
+
       # The workflow suites start a time-skipping Temporal server, whose binary
       # is NOT bundled in @temporalio/testing — it is downloaded on first use.
       # Left at the SDK default (system temp, 1-day TTL) that download happens on
@@ -226,7 +257,7 @@ jobs:
       # `tests/helpers/test-env.ts` pins the cache here so this step can restore
       # it; the key carries the lockfile hash so an SDK bump re-downloads.
       - name: Restore Temporal test server binary
-        if: needs.changes.outputs.steward_tests != ''
+        if: steps.select.outputs.tests != ''
         uses: actions/cache@v4
         with:
           path: ~/.cache/steward/temporal-test-server
@@ -239,23 +270,23 @@ jobs:
       # `agent-audit-deep-chrome.test.ts`, on the runner's preinstalled Chrome;
       # empty leaves it skipped. The header table says which changes set it.
       #
-      # `steward_tests` is the list of test files to run, or the glob for the full
-      # suite; the step name says which. The flags are those of the `test` script
+      # The `select` step's `tests` is the list of test files to run, or a glob;
+      # the step name says which. The flags are those of the `test` script
       # in `agents/steward/package.json`; keep the two in step. The credential
       # guard stays: without it two tests in `tests/lib` fail. The value is split
       # on spaces into an array, so each file or the glob reaches node as one
       # argument and node, not the shell, expands the glob.
-      - name: Run Steward tests (${{ needs.changes.outputs.steward_tests_label }})
-        if: needs.changes.outputs.steward_tests != ''
+      - name: Run Steward tests (${{ steps.select.outputs.label }})
+        if: steps.select.outputs.tests != ''
         working-directory: agents/steward
         env:
           STEWARD_CHROME_TESTS: ${{ needs.changes.outputs.browser == 'true' && '1' || '' }}
-          STEWARD_TESTS: ${{ needs.changes.outputs.steward_tests }}
+          STEWARD_TESTS: ${{ steps.select.outputs.tests }}
         run: |
           read -ra tests <<< "$STEWARD_TESTS"
           echo "Steward tests (${#tests[@]}): $STEWARD_TESTS"
           node --import tsx --import ./tests/helpers/no-real-credentials.ts --test --test-concurrency=4 --test-timeout=60000 "${tests[@]}"
 
       - name: No Steward test reaches this change
-        if: needs.changes.outputs.steward_tests == ''
+        if: steps.select.outputs.tests == ''
         run: echo "No Steward test imports a file this change touches, so the typecheck above is the whole Steward check."

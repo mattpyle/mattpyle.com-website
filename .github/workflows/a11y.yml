@@ -1,31 +1,50 @@
 name: Built-site checks (axe-core, HTML validity, llms.txt)
 
-# Everything that needs a real production build served over HTTP, sharing one build and one
-# server. The accessibility audits came first and are still the bulk of it; the HTML validity run
-# and the llms.txt conformance assertion joined on 2026-08-17 because they need exactly the same
-# two things and a second job would pay for a second build to get them.
+# Everything that needs a real production build served over HTTP. The accessibility audits came
+# first and are still the bulk of it; the HTML validity run and the llms.txt conformance assertion
+# joined on 2026-08-17 because they need exactly the same two things, a build and a server.
 #
-# Which steps gate: the two axe runs and the audit-url report scan. The Playwright guard, the
-# HTML validity run and the llms.txt assertion are advisory — red on the PR, deploys proceed —
-# in the same spirit as spellcheck.
+# Three jobs run at the same time, one per audit, and each builds and serves the site for itself
+# through `.github/actions/serve-built-site`:
 #
-# Routing. On a pull request, `axe` runs only when the change can reach the built site. The
+#   axe-cli         the axe-core CLI audit, then the audit-url report scan, the HTML validity run
+#                   and the llms.txt assertion
+#   axe-playwright  the Playwright axe audit (retro appearance, 320px scroll regions), then the
+#                   aria goldens on master
+#   guard           the Playwright guard checks, in two shards on two runners
+#
+# They were one job running the three audits in sequence: 127 seconds on master, 63 of them the
+# audits (17, 16 and 30). Starting the three as concurrent processes in that one job was tried first
+# and measured: together they took 35, 35 and 52 seconds, so the step saved 11 seconds and the job
+# still took 113. The audits compete for the one runner. Three runners do not, so each job builds
+# for itself (a build is 9 seconds); handing one build to the others as an artifact would put a
+# second `npm ci` ahead of the slowest audit. Two more cuts: the guard runs in two shards, because
+# its 212 specs took 33 to 41 seconds on one runner and made it the slowest job, and the server
+# writes to a file because the step took 5 seconds with the server attached to its output.
+# After, on site-only pull requests: the longest job took 61, 74 and 81 seconds over three runs, and
+# the shortest 42.
+#
+# Which jobs gate: `axe-cli` and `axe-playwright`, the axe runs and the audit-url report scan. The
+# guard, the HTML validity run and the llms.txt assertion are advisory — red on the PR, deploys
+# proceed — in the same spirit as spellcheck.
+#
+# Routing. On a pull request, the three jobs run only when the change can reach the built site. The
 # `changes` job asks `scripts/route-changes.sh`, the script `ci.yml` calls for its own suites,
-# and `axe` runs when the `site` output is true. `ci.yml`'s header holds the table of which
+# and they run when the `site` output is true. `ci.yml`'s header holds the table of which
 # paths set it. A Markdown-only or Steward-only pull request skips the build and the audits.
-# A push to `master` always runs `axe`: `golden-drift` and the golden-drift issue read the push
+# A push to `master` always runs them: `golden-drift` and the golden-drift issue read the push
 # run. Both workflows share the one script because two copies of the table drifted apart once.
 #
-# `axe` is skipped by a job-level `if`, not by `on.paths`, so it shows as skipped on the pull
+# The jobs are skipped by a job-level `if`, not by `on.paths`, so they show as skipped on the pull
 # request instead of vanishing. The only required check on `master` is "Private paths not
-# tracked" (ruleset `protect-master`), so a skipped `axe` blocks no merge.
+# tracked" (ruleset `protect-master`), so a skipped job blocks no merge.
 
 on:
   push:
     branches: [master]
   pull_request:
 
-# The job builds the site, serves it locally and audits it; nothing writes
+# The jobs build the site, serve it locally and audit it; nothing writes
 # through the token. Stated explicitly rather than inherited, matching
 # security-scan.yml. The gating @axe step reports as a check run, which needs no
 # token permission of its own.
@@ -50,108 +69,26 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash scripts/route-changes.sh "$EVENT_NAME" "$BASE_SHA"
 
-  axe:
+  axe-cli:
+    name: axe-core CLI audit and validators
     needs: changes
     if: github.event_name == 'push' || needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      golden: ${{ steps.golden.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      # Java for the Nu HTML Checker below. No Playwright: this job drives Chrome through
+      # @axe-core/cli and chromedriver.
+      - name: Build and serve the site
+        uses: ./.github/actions/serve-built-site
         with:
-          node-version: 24
-          cache: npm
-
-      # The Nu HTML Checker is a Java program. `vnu-jar` pins the jar itself as a devDependency,
-      # but not the runtime it needs — ubuntu-latest ships one preinstalled and the version it
-      # ships is not ours to depend on, so it is declared here like every other tool version in
-      # this workflow. Temurin 21 because Nu needs 8 or newer and 21 is the current LTS.
-      - name: Setup Java (for the Nu HTML Checker)
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      # ubuntu-latest ships a preinstalled google-chrome-stable specifically for
-      # browser-automation workflows like this one (see actions/runner-images).
-      # DETECT_CHROMEDRIVER_VERSION makes the `chromedriver` npm package (a
-      # transitive dependency of @axe-core/cli) look up that exact binary and
-      # download a matching driver, instead of installing whatever chromedriver
-      # happens to be tagged "latest" on npm — which can silently drift out of
-      # sync with the runner's actual Chrome version.
-      - name: Install dependencies
-        env:
-          DETECT_CHROMEDRIVER_VERSION: 'true'
-        run: npm ci
+          java: 'true'
 
       - name: Print Chrome & chromedriver versions
         run: |
           google-chrome-stable --version
           npx chromedriver --version
-
-      # Playwright downloads a pinned Chromium build per release, so the cache
-      # key has to be the resolved @playwright/test version, not the range in
-      # package.json. A bump to a release with a newer Chromium must miss the
-      # cache, or the guard runs against a browser the runner's Playwright does
-      # not support and fails for a reason that has nothing to do with the PR.
-      - name: Resolve Playwright version
-        id: playwright-version
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
-
-      # The browser binary is cached; the system libraries it links against are
-      # not, because they land in /usr/lib and are not ours to cache. On a hit,
-      # install-deps alone; on a miss, both.
-      - name: Install Playwright Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-
-      - name: Build site
-        run: npm run build
-
-      # The Vercel adapter (added for the on-demand /writing/<slug>.md route)
-      # puts astro build into hybrid "server" mode, which nests prerendered
-      # static output under dist/client/ instead of writing straight into
-      # dist/ — serve dist/client, not dist, or every route here 404s.
-      #
-      # Not a static file server: /activity renders on demand (it reads the hit
-      # store per request), so a static server 404s one of the nine routes
-      # audited below. serve-built-site.mjs serves the same directory and falls
-      # back to the adapter's render function, which is the ordering Vercel
-      # itself uses. /scorecard was the on-demand route until 2026-08-22, when
-      # the store read moved to /activity and it went back to prerendering.
-      #
-      # AGENT_TRAFFIC_FIXTURE makes /activity render its tables rather than its
-      # store-unavailable state, so axe actually scans the markup that ships. No
-      # store exists on a runner, and never should.
-      #
-      # AUDIT_REPORT_FIXTURE is the same device for /audit: its report shape needs a
-      # finished run behind it, and a runner has neither a store to read a pointer from
-      # nor a Temporal namespace to read a result from. Without it the /audit report URL
-      # below would serve the empty form and the larger half of that page would ship
-      # never having been scanned.
-      - name: Serve built site
-        env:
-          AGENT_TRAFFIC_FIXTURE: '1'
-          AUDIT_REPORT_FIXTURE: '1'
-        run: node scripts/serve-built-site.mjs --port 4321 &
-
-      - name: Wait for local server
-        run: npx wait-on http://localhost:4321 --timeout 30000
 
       # No --browser flag: omitting it is how @axe-core/cli selects headless
       # Chrome (the only mode that launches on a display-less runner). Passing
@@ -159,6 +96,10 @@ jobs:
       # parseBrowser() only accepts chrome/firefox/ie/safari/edge and throws
       # "Unknown browser" on anything else; "chrome-headless" is purely the
       # internal default it falls back to when the flag is absent.
+      #
+      # This audits what the server sends, which is always modern: retro is a persisted
+      # client-side preference, and @axe-core/cli has no hook to run a script before it scans.
+      # The `axe-playwright` job audits the second appearance.
       - name: Run axe-core accessibility audit
         run: |
           npm run --silent a11y:axe -- \
@@ -178,75 +119,15 @@ jobs:
             'http://localhost:4321/audit?url=file:///etc/hosts' \
             http://localhost:4321/writing/accessibility-and-ai/             http://localhost:4321/404
 
-      # The CLI step above audits what the server sends, which is always modern: retro is a
-      # persisted client-side preference, and @axe-core/cli has no hook to run a script before it
-      # scans. So the site's second appearance — the one carrying the guest book, the webmaster note
-      # and the web ring, all `display: none` in modern — is audited here instead, by
-      # @axe-core/playwright, same axe-core 4.12.1, against this job's
-      # build on this job's server. Gating, not advisory: this is a real axe run, it is just driven
-      # by a browser that can set localStorage before the first paint.
-      #
-      # @axe selects two specs, not one. tests/a11y/scrollable-region.spec.ts joined the tag on
-      # 2026-09-03: it asserts axe's `scrollable-region-focusable` (serious) at 320px, the width
-      # the CLI step never audits, by measuring scrollWidth against clientWidth rather than by
-      # injecting axe. Same class of finding, same gate. Both are dropped from the advisory guard
-      # step below by its --grep-invert, so each scan runs once per workflow.
-      #
-      # if: always() for the same reason the guard step below has it.
-      - name: Run axe-core accessibility audit (retro appearance, and 320px scroll regions)
-        if: always()
-        env:
-          A11Y_REUSE_SERVER: '1'
-        run: npm run --silent a11y:run -- --grep @axe
-
-      # The deterministic WCAG checks axe and Lighthouse defer to manual review:
-      # keyboard order, focus visibility, ClientRouter focus, 320px reflow,
-      # reduced motion, and self-animation on load (the one that made the axe
-      # step above flake). The specs are in tests/a11y/, one file per check, and
-      # each carries what it asserts and why in its own docblock.
-      #
-      # if: always() because the axe step runs with --exit. Without it a red axe
-      # ends the job here and the PR never learns whether the guard also broke;
-      # splitting them into two jobs would cost a second build instead.
-      #
-      # a11y:run, not a11y: the build above is this commit's build, already
-      # served on 4321. A11Y_REUSE_SERVER tells playwright.config.ts to use that
-      # server rather than start a second one on the same port and fail.
-      #
-      # --grep-invert drops two families. @golden is the aria snapshots: they match their golden as
-      # a subset, so they are blind to additions and belong on the scorecard with a human reading
-      # the diff, not on a per-PR gate. @axe is the retro scan and the 320px scroll-region check,
-      # which already ran as their own gating step above; leaving them in would scan every retro
-      # route twice and report a real axe violation as an advisory one.
-      - name: Run accessibility guard checks (Playwright)
-        if: always()
-        env:
-          A11Y_REUSE_SERVER: '1'
-        run: npm run --silent a11y:run -- --grep-invert "@golden|@axe"
-
-      # The @golden snapshots the guard step drops, run on master only. A content or component
-      # change that moves a golden is usually intended, so it stays off the PR gate for the reason
-      # above; but nothing else runs them in CI, and a drifted golden turns every local
-      # `npm run a11y` red until someone regenerates it. On a push to master the drift surfaces
-      # once, against the merge that caused it, and the golden-drift job below files it as an
-      # issue. continue-on-error keeps master's check green; the outcome travels as a job output.
-      - name: Run aria goldens (master only)
-        id: golden
-        if: always() && github.event_name == 'push'
-        continue-on-error: true
-        env:
-          A11Y_REUSE_SERVER: '1'
-        run: npm run --silent a11y:run -- --grep @golden
-
       # Steward's `audit-url` HTML report is a page this repo ships too, and an
       # agent-readiness report that fails an accessibility scan argues against
       # its own tool. The script renders a fixture carrying every status, every
       # severity, all three tile states and evidence of every shape, then runs it
-      # through the same @axe-core/cli the steps above use.
+      # through the same @axe-core/cli the step above uses.
       #
       # No server and no build: the report is a self-contained file, scanned over
-      # file://. Gating, like the other real axe runs here. if: always() for the
-      # same reason they have it — a red step above must not hide this one.
+      # file://. Gating, like the other real axe runs here. if: always() because a red
+      # step above must not hide this one.
       - name: Run axe over the audit-url HTML report
         if: always()
         run: npm run --silent check:html-report -w @mattpyle/steward
@@ -258,7 +139,7 @@ jobs:
       # `--transport jar` is explicit rather than inferred. The script falls back to POSTing each
       # document to validator.w3.org when no JRE is on PATH, which is right on a laptop and wrong
       # here: a step whose result depends on a public service's rate limiter is not a check. If
-      # the Java setup above ever breaks, this must fail rather than quietly go remote.
+      # the Java setup ever breaks, this must fail rather than quietly go remote.
       - name: Validate HTML (Nu HTML Checker)
         if: always()
         run: npm run --silent validate:html -- --transport jar
@@ -271,12 +152,100 @@ jobs:
         if: always()
         run: npm run --silent validate:llms-txt
 
+  axe-playwright:
+    name: axe-core Playwright audit and goldens
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      golden: ${{ steps.golden.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build and serve the site
+        uses: ./.github/actions/serve-built-site
+        with:
+          playwright: 'true'
+
+      # The CLI job audits what the server sends, which is always modern. The site's second
+      # appearance — the one carrying the guest book, the webmaster note and the web ring, all
+      # `display: none` in modern — is audited here instead, by @axe-core/playwright, same
+      # axe-core 4.12.1, against this job's build on this job's server. Gating, not advisory: this
+      # is a real axe run, it is just driven by a browser that can set localStorage before the
+      # first paint.
+      #
+      # @axe selects two specs, not one. tests/a11y/scrollable-region.spec.ts joined the tag on
+      # 2026-09-03: it asserts axe's `scrollable-region-focusable` (serious) at 320px, the width
+      # the CLI never audits, by measuring scrollWidth against clientWidth rather than by
+      # injecting axe. Same class of finding, same gate. Both are dropped from the `guard` job by
+      # its --grep-invert, so each scan runs once per workflow.
+      #
+      # a11y:run, not a11y: the build above is this commit's build, already served on 4321.
+      # A11Y_REUSE_SERVER tells playwright.config.ts to use that server rather than start a second
+      # one on the same port and fail.
+      - name: Run axe-core accessibility audit (retro appearance, and 320px scroll regions)
+        env:
+          A11Y_REUSE_SERVER: '1'
+        run: npm run --silent a11y:run -- --grep @axe
+
+      # The @golden snapshots the `guard` job drops, run on master only. A content or component
+      # change that moves a golden is usually intended, so it stays off the PR gate; but nothing
+      # else runs them in CI, and a drifted golden turns every local `npm run a11y` red until
+      # someone regenerates it. On a push to master the drift surfaces once, against the merge
+      # that caused it, and the golden-drift job below files it as an issue. continue-on-error
+      # keeps master's check green; the outcome travels as a job output.
+      - name: Run aria goldens (master only)
+        id: golden
+        if: always() && github.event_name == 'push'
+        continue-on-error: true
+        env:
+          A11Y_REUSE_SERVER: '1'
+        run: npm run --silent a11y:run -- --grep @golden
+
+  guard:
+    name: Playwright accessibility guard (${{ matrix.shard }}/2)
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    # Two shards, each on its own runner: the 212 specs take 33 to 41 seconds on one, which made
+    # this the slowest of the three jobs. Playwright splits the tests between the shards, and no
+    # spec depends on another.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build and serve the site
+        uses: ./.github/actions/serve-built-site
+        with:
+          playwright: 'true'
+
+      # The deterministic WCAG checks axe and Lighthouse defer to manual review:
+      # keyboard order, focus visibility, ClientRouter focus, 320px reflow,
+      # reduced motion, and self-animation on load (the one that made the axe
+      # step flake). The specs are in tests/a11y/, one file per check, and
+      # each carries what it asserts and why in its own docblock.
+      #
+      # --grep-invert drops two families. @golden is the aria snapshots: they match their golden as
+      # a subset, so they are blind to additions and belong on the master run with a human reading
+      # the diff, not on a per-PR gate. @axe is the retro scan and the 320px scroll-region check,
+      # which run as their own gating job; leaving them in would scan every retro route twice and
+      # report a real axe violation as an advisory one.
+      - name: Run accessibility guard checks (Playwright)
+        env:
+          A11Y_REUSE_SERVER: '1'
+        run: npm run --silent a11y:run -- --grep-invert "@golden|@axe" --shard=${{ matrix.shard }}/2
+
   # Files a failed master golden run as one open issue, and comments on it at most once per 20
   # hours while later merges keep failing, so a drift is a single thread rather than one issue per merge. A job of its own so
   # that `issues: write` never reaches the job that builds and runs this repo's code.
   golden-drift:
-    needs: axe
-    if: always() && github.event_name == 'push' && needs.axe.outputs.golden == 'failure'
+    needs: axe-playwright
+    if: always() && github.event_name == 'push' && needs.axe-playwright.outputs.golden == 'failure'
     runs-on: ubuntu-latest
     # One run at a time: two master pushes seconds apart both searched for an open issue, found none, and each filed one.
     concurrency:
