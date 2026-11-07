@@ -159,6 +159,9 @@ for (const width of [1440, 1024, 390]) {
 
         await page.click('.close');
         await page.waitForSelector('body:not(.is-open)', { state: 'attached' });
+        // Wait past the old 240 ms track transition: a late layout change moves the offset through scroll anchoring,
+        // and a read taken before it lands passes on a fast machine and fails on a slow one.
+        await page.waitForTimeout(500);
         assert.equal(await page.evaluate<number>('window.scrollY'), listScroll, 'closing the finding returns the list to its scroll position');
       }
     } finally {
