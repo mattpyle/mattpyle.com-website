@@ -191,7 +191,7 @@ function projectsAnswer(digest) {
     );
   }
   lines.push('');
-  lines.push(`They share one page: ${site.url}projects.`);
+  lines.push(`They share one page: ${site.url}projects/.`);
   lines.push('');
   lines.push(PROVENANCE);
   return lines.join('\n');
@@ -218,7 +218,7 @@ function changelog(digest) {
   }
   lines.push('');
   lines.push(
-    `The full log, including anything not listed above, is at ${site.url}changelog. Each entry has a ` +
+    `The full log, including anything not listed above, is at ${site.url}changelog/. Each entry has a ` +
       'raw-markdown sibling on the same terms as the writing.'
   );
   lines.push('');
