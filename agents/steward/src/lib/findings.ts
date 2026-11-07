@@ -506,15 +506,47 @@ export function findingPages(data: Record<string, unknown>, parsed: ParsedFindin
 }
 
 /**
+ * Whether a finding's `verify` block measures one set of pages: it has at least
+ * one check, and every check's `url`, read as a set of page paths (the same
+ * normalisation as {@link findingPages}), is the same set. One URL is a set of
+ * one, so a block of single-page checks on one page counts. A check whose `url`
+ * is missing, not a string or a list of strings, or holds an unreadable URL
+ * breaks the set. Order and repeats do not matter.
+ */
+export function verifyChecksShareOnePageSet(data: Record<string, unknown>): boolean {
+  if (!Array.isArray(data.verify) || data.verify.length === 0) return false;
+  let first: Set<string> | null = null;
+  for (const check of data.verify) {
+    const url = check && typeof check === 'object' ? (check as { url?: unknown }).url : undefined;
+    const raw = Array.isArray(url) ? url : [url];
+    const set = new Set<string>();
+    for (const one of raw) {
+      const path = typeof one === 'string' ? pagePath(one) : null;
+      if (path === null) return false;
+      set.add(path);
+    }
+    if (set.size === 0) return false;
+    if (first === null) first = set;
+    else if (set.size !== first.size || [...set].some((path) => !first!.has(path))) return false;
+  }
+  return true;
+}
+
+/**
  * Why a finding cannot go to the fixer, or null when it can: approved, with a
  * title and a measure to verify against, and either
  *
  * 1. a defect that names its cause in the source, or
- * 2. an opportunity whose fix is one change on one page, told by
- *    {@link findingPages}. A cause is not asked of it: an opportunity has none.
+ * 2. an opportunity whose fix is one change. That is one page, told by
+ *    {@link findingPages}, or several pages when the `verify` block has at
+ *    least one check and every check lists the same set of pages
+ *    ({@link verifyChecksShareOnePageSet}): one fact measured the same way on
+ *    each page is one change. A second check on a different page, or on a
+ *    different set, is a second change and stays refused. A cause is not asked
+ *    of an opportunity: it has none.
  *
- * Directions, and opportunities that name several pages or none, stay a
- * person's.
+ * Directions, and opportunities that name no page or several pages that are
+ * not one measured set, stay a person's.
  */
 export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding): string | null {
   if (data.kind !== 'opportunity') {
@@ -530,7 +562,9 @@ export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding)
   if (pages.length === 0) {
     return 'it names no page: its verify block has no URL and "What would serve them" gives no page path';
   }
-  if (pages.length > 1) return `it names more than one page (${pages.join(', ')}), so its fix is not one change`;
+  if (pages.length > 1 && !verifyChecksShareOnePageSet(data)) {
+    return `it names more than one page (${pages.join(', ')}), so its fix is not one change`;
+  }
   return null;
 }
 

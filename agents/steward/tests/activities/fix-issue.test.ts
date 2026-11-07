@@ -123,6 +123,44 @@ test('openFixIssue opens an issue for an approved one-page opportunity, with its
   assert.ok(body.trimEnd().endsWith(fixIssueMarker(SITE, key)));
 });
 
+test('openFixIssue opens one issue for a list check over three pages, and the body names every page', async () => {
+  const key = 'seo-share-card-generic--three-pages';
+  const pages = ['/a', '/b', '/c'];
+  const finding = [
+    '---',
+    `key: ${key}`,
+    'status: approved',
+    'kind: opportunity',
+    'verdict_reason: "approve"',
+    'verify:',
+    '  - url:',
+    ...pages.map((p) => `      - "https://www.mattpyle.com${p}/"`),
+    '    kind: text',
+    '    expect:',
+    '      contains: "og:image"',
+    '---',
+    '',
+    '# Three pages share one generic card',
+    '',
+    '## How to measure',
+    '',
+    'Each page names its own card.',
+    '',
+  ].join('\n');
+  const path = `sites/${SITE}/findings/${key}.md`;
+  const gh = seed(finding, { [path]: finding });
+  const issue = await openFixIssue({ repo: REPO, site: SITE, key, findingPath: path, supersedes: null });
+  assert.equal(issue.reused, false);
+  assert.equal(gh.issues.length, 1);
+  const body = gh.issues[0].body;
+  let from = 0;
+  for (const p of pages) {
+    const at = body.indexOf(`https://www.mattpyle.com${p}/`, from);
+    assert.ok(at >= 0, `the issue body names ${p}, in list order`);
+    from = at;
+  }
+});
+
 test('a direction opens no issue', async () => {
   const gh = seed(DEFECT_FINDING.replace('kind: defect', 'kind: direction'));
   await assert.rejects(open(), (err: unknown) => err instanceof ApplicationFailure && err.type === 'FindingNotFixable');
