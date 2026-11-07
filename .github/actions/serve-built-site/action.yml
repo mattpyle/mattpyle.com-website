@@ -67,19 +67,36 @@ runs:
     # The browser binary is cached; the system libraries it links against are
     # not, because they land in /usr/lib and are not ours to cache. On a hit,
     # install-deps alone; on a miss, both.
-    - name: Install Playwright Chromium
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+    #
+    # The Playwright install is an apt run that takes about 10 seconds and the build is CPU work
+    # that takes about 11, and neither needs the other, so they share one step and run together.
+    # The step waits for both and fails if either failed.
+    - name: Build site (and install Playwright system dependencies beside it)
       shell: bash
-      run: npx playwright install --with-deps chromium
+      env:
+        PLAYWRIGHT: ${{ inputs.playwright }}
+        BROWSER_CACHED: ${{ steps.playwright-cache.outputs.cache-hit }}
+      run: |
+        deps_pid=
+        if [ "$PLAYWRIGHT" = 'true' ]; then
+          if [ "$BROWSER_CACHED" = 'true' ]; then
+            npx playwright install-deps chromium >"$RUNNER_TEMP/playwright-deps.log" 2>&1 &
+          else
+            npx playwright install --with-deps chromium >"$RUNNER_TEMP/playwright-deps.log" 2>&1 &
+          fi
+          deps_pid=$!
+        fi
 
-    - name: Install Playwright system dependencies
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: npx playwright install-deps chromium
+        status=0
+        npm run build || status=$?
 
-    - name: Build site
-      shell: bash
-      run: npm run build
+        if [ -n "$deps_pid" ]; then
+          wait "$deps_pid" || { echo "::error::Playwright dependency install failed"; status=1; }
+          echo "::group::Playwright dependency install"
+          cat "$RUNNER_TEMP/playwright-deps.log"
+          echo "::endgroup::"
+        fi
+        exit "$status"
 
     # The Vercel adapter (added for the on-demand /writing/<slug>.md route)
     # puts astro build into hybrid "server" mode, which nests prerendered
@@ -103,9 +120,8 @@ runs:
     # would serve the empty form and the larger half of that page would ship
     # never having been scanned.
     #
-    # The server writes to a file, not to the step's output. A background process that holds the
-    # step's stdout open makes the runner wait out a 5 second drain before it ends the step; the
-    # redirect takes that wait away.
+    # The server writes to a file, not to the step's output. With the server attached to the
+    # step's output the step took 5 seconds; redirected it takes none.
     - name: Serve built site
       shell: bash
       env:

@@ -11,7 +11,7 @@ name: Built-site checks (axe-core, HTML validity, llms.txt)
 #                   and the llms.txt assertion
 #   axe-playwright  the Playwright axe audit (retro appearance, 320px scroll regions), then the
 #                   aria goldens on master
-#   guard           the Playwright guard checks
+#   guard           the Playwright guard checks, in two shards on two runners
 #
 # They were one job running the three audits in sequence (127 seconds on master, 63 of them the
 # audits). Starting the three as concurrent processes in that one job was tried first and measured:
@@ -201,10 +201,17 @@ jobs:
         run: npm run --silent a11y:run -- --grep @golden
 
   guard:
-    name: Playwright accessibility guard
+    name: Playwright accessibility guard (${{ matrix.shard }}/2)
     needs: changes
     if: github.event_name == 'push' || needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
+    # Two shards, each on its own runner: the 212 specs take 33 to 41 seconds on one, which made
+    # this the slowest of the three jobs. Playwright splits the tests between the shards, and no
+    # spec depends on another.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -228,7 +235,7 @@ jobs:
       - name: Run accessibility guard checks (Playwright)
         env:
           A11Y_REUSE_SERVER: '1'
-        run: npm run --silent a11y:run -- --grep-invert "@golden|@axe"
+        run: npm run --silent a11y:run -- --grep-invert "@golden|@axe" --shard=${{ matrix.shard }}/2
 
   # Files a failed master golden run as one open issue, and comments on it at most once per 20
   # hours while later merges keep failing, so a drift is a single thread rather than one issue per merge. A job of its own so
