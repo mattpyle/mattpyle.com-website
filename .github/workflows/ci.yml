@@ -27,8 +27,10 @@ name: CI (tests & typecheck)
 # costs a build and adds nothing to review.
 #
 #   Changed file                                        steward  site  browser
-#   Markdown outside src/content/                        no       no    no
-#   agents/steward/** (not Markdown)                     yes      no    no
+#   Markdown outside src/content/ and
+#     agents/steward/src/                               no       no    no
+#   agents/steward/** (not Markdown outside
+#     agents/steward/src/)                              yes      no    no
 #   agents/steward/src/lib/agent-audit/**, and
 #     agents/steward/package.json                        yes      yes   yes
 #   agents/steward/src/lib/audit-engine.ts,
