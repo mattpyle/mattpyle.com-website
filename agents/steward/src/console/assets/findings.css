@@ -524,6 +524,8 @@ body[data-sort="priority"] .c-pri { display: none; }
 /* ---------- Open: the list becomes a rail and the finding gets the page ---------- */
 
 @media (min-width: 1041px) {
+  /* The open and closed track lists do not interpolate, so the transition only held the rail layout for the first half on close. */
+  .app { transition: none; }
   .is-open .app { grid-template-columns: var(--rail-w) minmax(0, 1fr); transition: none; }
   .is-open .page { padding: 28px 16px 64px 24px; }
   .is-open .head h1 { font-size: var(--t-mid); }
@@ -537,9 +539,11 @@ body[data-sort="priority"] .c-pri { display: none; }
   .is-open .group + .group { margin-top: 16px; }
   .is-open .panel { animation: focus-in 260ms var(--ease); }
 
-  /* One scrollbar each: with a finding open, the window does not scroll; the rail and the finding scroll themselves, thinly. */
+  /* One scrollbar each: with a finding open, the window does not scroll; the rail and the finding scroll themselves, thinly.
+     The frame is pinned to the viewport. In the flow, a window already scrolled down the list keeps its offset under
+     overflow: hidden, and the 100vh frame slides up by it, leaving only the foot of the panel on screen. */
   html:has(.is-open) { overflow: hidden; }
-  .is-open .app { height: 100vh; }
+  .is-open .app { position: fixed; inset: 0; }
   .is-open .page { height: 100vh; overflow-y: auto; }
   .is-open .page, .doc { scrollbar-width: thin; scrollbar-color: transparent transparent; }
   .is-open .page:hover, .doc:hover { scrollbar-color: var(--line-strong) transparent; }
