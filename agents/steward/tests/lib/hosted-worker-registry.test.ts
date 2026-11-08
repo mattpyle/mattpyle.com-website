@@ -77,6 +77,9 @@ const FINDINGS_ACTIVITIES = [
   'runningWorkflowIds',
   'closeConflictingFixPr',
   'reportRunHealth',
+  'readSiteHosts',
+  'readRecheckBlock',
+  'writeFindingRecheck',
 ];
 
 /** The registry entry for a queue, found by name so a test names the queue it is about. */
@@ -154,7 +157,7 @@ test('each queue registers exactly its own activities, by name', () => {
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
   assert.equal(names(QUEUE_AUDIT).length, 13);
-  assert.equal(names(QUEUE_FINDINGS).length, 25);
+  assert.equal(names(QUEUE_FINDINGS).length, 28);
 });
 
 test('every registered activity is a function', () => {
@@ -194,4 +197,23 @@ test('every activity the verifier schedules is on steward-findings and registere
   for (const name of proxied) assert.ok(registered.includes(name), `${name} is not registered on ${QUEUE_FINDINGS}`);
   assert.deepEqual([...verifier.matchAll(/taskQueue: (\w+)/g)].map((m) => m[1]), Array(3).fill('QUEUE_FINDINGS'));
   assert.match(verifier, /const QUEUE_FINDINGS = 'steward-findings';/);
+});
+
+test('every activity the recheck schedules is on steward-findings and registered by the hosted worker', async () => {
+  const recheck = await fs.readFile(path.join(SRC, 'workflows', 'recheck-findings.ts'), 'utf8');
+  const proxied = [...recheck.matchAll(/Pick<typeof activities,\s*([^>]*)>/g)].flatMap((m) =>
+    [...m[1].matchAll(/'(\w+)'/g)].map((name) => name[1]),
+  );
+  assert.deepEqual(proxied.sort(), [
+    'listOpenFindingWorkflows',
+    'readFindingsIndex',
+    'readRecheckBlock',
+    'readSiteHosts',
+    'runFindingChecks',
+    'writeFindingRecheck',
+  ]);
+  const registered = names(QUEUE_FINDINGS);
+  for (const name of proxied) assert.ok(registered.includes(name), `${name} is not registered on ${QUEUE_FINDINGS}`);
+  assert.deepEqual([...recheck.matchAll(/taskQueue: (\w+)/g)].map((m) => m[1]), Array(3).fill('QUEUE_FINDINGS'));
+  assert.match(recheck, /const QUEUE_FINDINGS = 'steward-findings';/);
 });

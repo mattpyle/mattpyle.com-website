@@ -77,3 +77,6 @@ export { generateHandoff, generateVerifyBlock, readFixChecks, runFixer, reviewFi
 // The verifier's checks, on `steward-heavy` beside the block generator: fetches
 // against production and the worker's Chromium.
 export { runFindingChecks } from './verify-finding.js';
+// The recheck (STW-543), on `steward-findings`: a site's hosts, one block read
+// against them, and one commit per changed finding.
+export { readSiteHosts, readRecheckBlock, writeFindingRecheck } from './findings-recheck.js';
