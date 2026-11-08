@@ -92,6 +92,18 @@ export function parseViewport(value: unknown): Viewport | null {
 const STRING_MAX = 2_000;
 
 /**
+ * The origins a check may name: the site's own, then `https://<host>` for each
+ * other host the site declares (`site.hosts` in its Argus `config.yaml`). A
+ * declared host is https on the default port, so a block cannot reach a plain
+ * http service or an odd port on it.
+ */
+export function checkOrigins(origin: string, hosts: readonly string[] = []): string[] {
+  const own = new URL(origin).origin;
+  const others = hosts.map((host) => `https://${host.toLowerCase()}`).filter((other) => other !== own);
+  return [own, ...new Set(others)];
+}
+
+/**
  * What a generator is told about the block. One text for both prompts, so a
  * handoff written whole and a block written alone follow the same rules.
  *
@@ -99,9 +111,9 @@ const STRING_MAX = 2_000;
  * checks come from, and Argus's `argus-inspect` skill carries a copy of this
  * text under its own source rule.
  */
-export function verifyBlockGuide(origin: string): string[] {
+export function verifyBlockGuide(origin: string, hosts: readonly string[] = []): string[] {
   return [
-    `Each check is \`{url, kind, expect}\`. \`url\` is a full URL on ${origin} and nowhere else. \`kind\` is one of ${VERIFY_KINDS.map((k) => `\`${k}\``).join(', ')}.`,
+    `Each check is \`{url, kind, expect}\`. \`url\` is a full URL on ${checkOrigins(origin, hosts).join(', ')} and nowhere else. \`kind\` is one of ${VERIFY_KINDS.map((k) => `\`${k}\``).join(', ')}.`,
     '',
     '- `status`: the HTTP status of a GET that follows no redirect. `expect: 200`.',
     '- `header`: one response header. `expect: {name: link, contains: "text/markdown"}`, or `equals` for the whole value, or `absent: true`.',
@@ -289,16 +301,24 @@ function expectProblem(kind: VerifyKind, expect: unknown): string | null {
  * A block with a problem is never run: `checks` is empty whenever `problems`
  * is not.
  *
- * `origin` is the production origin. A URL on any other origin is refused, so
- * a block can make Steward fetch the site it verifies and nothing else. A list
+ * `origin` is the production origin. `hosts` is the other hostnames the site
+ * declares, checked over https on the default port (see {@link checkOrigins}).
+ * A URL on any other origin is refused, so a block can make Steward fetch the
+ * site it verifies and nothing else. A caller with no `hosts` admits the
+ * production origin alone, as before hosts existed. A list
  * of URLs is refused when it is empty, longer than {@link VERIFY_URLS_MAX},
  * names any other origin, or sits on a browser kind.
  */
-export function validateVerifyBlock(raw: unknown, origin: string): { checks: VerifyCheck[]; problems: string[] } {
+export function validateVerifyBlock(
+  raw: unknown,
+  origin: string,
+  hosts: readonly string[] = [],
+): { checks: VerifyCheck[]; problems: string[] } {
   const problems: string[] = [];
   if (!Array.isArray(raw)) return { checks: [], problems: ['verify is not a list'] };
   if (raw.length > VERIFY_CHECKS_MAX) problems.push(`verify has ${raw.length} checks, over ${VERIFY_CHECKS_MAX}`);
-  const production = new URL(origin).origin;
+  const allowed = checkOrigins(origin, hosts);
+  const production = allowed[0];
 
   const checks: VerifyCheck[] = [];
   raw.forEach((item, i) => {
@@ -329,7 +349,13 @@ export function validateVerifyBlock(raw: unknown, origin: string): { checks: Ver
           /* reported below */
         }
         if (typeof value !== 'string' || !url) problems.push(list ? `${which} is not a full URL` : `${at} has no full URL`);
-        else if (url.origin !== production) problems.push(`${which} names ${url.origin}, not the production origin ${production}`);
+        else if (!allowed.includes(url.origin)) {
+          problems.push(
+            allowed.length === 1
+              ? `${which} names ${url.origin}, not the production origin ${production}`
+              : `${which} names ${url.origin}, which is none of the site's origins (${allowed.join(', ')})`,
+          );
+        }
       }
     }
     const wrong = expectProblem(kind, item.expect);

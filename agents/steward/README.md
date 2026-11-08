@@ -32,6 +32,13 @@ that's the property being dogfooded here, on a low-stakes, real target.
   local MCP server (`steward mcp-serve`) and by the site's public `/mcp` endpoint's `deep_audit` tool;
   both hand back a workflow ID immediately and serve the report by polling. `steward audit-url` runs
   the same engine in-process with no worker and no Temporal.
+- **`recheckFindingsWorkflow`** — a site's approved findings, measured again on production. A
+  daily Schedule per site (`steward finding recheck-schedule create --site <site>`) starts it on
+  `steward-findings`, and `steward finding recheck --site <site>` runs it once. A check may name
+  any host the site declares in `site.hosts` of its `config.yaml`, over https. Each approved finding
+  with no open finding workflow gets one outcome: no checks, could not measure, still present (its
+  `live_on` is set to the America/Vancouver day) or resolved (its Verification section is written
+  and its index line reads `resolved`, in one commit). It opens no fix.
 - **`findingWorkflow`** and **`reconcileFindingsWorkflow`** — the gate for findings filed into a
   separate findings repository by an inspector agent. One `findingWorkflow` per finding
   (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict came from `steward finding
@@ -94,7 +101,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-heavy` | `buildAndAuditDraft`, and the frozen custom fixer: `fixFindingWorkflow` with its activities, which only a lifecycle run that started that child before the issue path replays, and a `verifyFindingWorkflow` child started before the verifier moved to `steward-findings` | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
-| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow`, `verifyFindingWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
+| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow`, `verifyFindingWorkflow`, `recheckFindingsWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **local worker** (`steward up`, `src/worker.ts`)
 polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
@@ -185,6 +192,8 @@ steward finding verify <key>     # fixing or reopened finding to resolved or reo
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
+steward finding recheck --site temporal-io                  # recheck a site's approved findings now and print each outcome
+steward finding recheck-schedule create --site temporal-io  # create | describe | pause | unpause | trigger its daily recheck
 steward console                  # findings page on 127.0.0.1: a static page over GET /api/findings that filters and sorts every finding, opens one beside the list, and approves or rejects through POST /api/verdict (JSON only; the page has no form). A header menu shows the running commit and restarts the console onto the checkout's current code (POST /api/restart); `GET /api/commit` answers the commit and token without loading the model; the restart does not pull, `steward update` does. The menu's Sync findings and the panel's Fix and Verify post to `POST /api/run/sync`, `/api/run/fix` and `/api/run/verify`, the functions the `finding sync|fix|verify` verbs call (`src/lib/finding-actions.ts`)
 steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
 steward update                   # after a merge: pull master in the main checkout, restart the worker

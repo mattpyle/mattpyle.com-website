@@ -31,6 +31,7 @@ import {
   writeFindingVerification,
 } from './activities/findings.js';
 import { runFindingChecks } from './activities/verify-finding.js';
+import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from './activities/findings-recheck.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -118,7 +119,7 @@ const fastActivities = { auditSiteFast };
 /**
  * The findings queue's registry (findings-loop design, decisions 18, 26, 29
  * and 30, fix-dispatch-by-surface and fix-pr-runs-the-verify-block): the
- * twenty-three findings activities,
+ * twenty-three findings activities and the recheck's three,
  * plus `reportRunHealth` because the reconciler pings its check from this
  * queue. GitHub API calls against the findings repository, the fix issue, the
  * fix PR, the lifecycle's three waits, the conflicting PR's close, the fix
@@ -156,6 +157,10 @@ const findingsActivities = {
   runningWorkflowIds,
   closeConflictingFixPr,
   reportRunHealth,
+  // The recheck (STW-543): GitHub reads and one commit per changed finding.
+  readSiteHosts,
+  readRecheckBlock,
+  writeFindingRecheck,
 };
 
 /**

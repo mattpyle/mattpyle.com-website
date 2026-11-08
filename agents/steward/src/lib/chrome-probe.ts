@@ -29,6 +29,49 @@ import { CheckBroken, CheckUnavailable, VERCEL_BYPASS_HEADER, type PageProbe, ty
 
 const LOAD_TIMEOUT_MS = 30_000;
 
+/**
+ * **The settle rule.** The load event is not the page a visitor sees: a
+ * consent banner or a hydrated widget can arrive seconds later. On 2026-11-08
+ * a check passed on temporal.io while a cookie banner that appears about two
+ * seconds after load still covered the button it measured. So after the load
+ * event the probe waits until the DOM has gone {@link SETTLE_QUIET_MS} without
+ * a mutation, and never less than {@link SETTLE_MIN_MS} nor more than
+ * {@link SETTLE_MAX_MS} after load. A page that never stops mutating (a ticker,
+ * an animation driven by attributes) is measured at the cap.
+ */
+export interface SettleRule {
+  minMs: number;
+  quietMs: number;
+  maxMs: number;
+}
+
+export const SETTLE_MIN_MS = 3_000;
+export const SETTLE_QUIET_MS = 1_000;
+export const SETTLE_MAX_MS = 10_000;
+export const DEFAULT_SETTLE: SettleRule = { minMs: SETTLE_MIN_MS, quietMs: SETTLE_QUIET_MS, maxMs: SETTLE_MAX_MS };
+
+/**
+ * The expression that holds the probe until the page has settled. It runs in
+ * the page and resolves to the milliseconds it waited. It reads nothing from
+ * the page and changes nothing in it.
+ */
+export function settleExpression(rule: SettleRule): string {
+  return `new Promise((resolve) => {
+  const start = performance.now();
+  let last = start;
+  const observer = new MutationObserver(() => { last = performance.now(); });
+  observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  const tick = () => {
+    const now = performance.now();
+    if ((now - start >= ${rule.minMs} && now - last >= ${rule.quietMs}) || now - start >= ${rule.maxMs}) {
+      observer.disconnect();
+      resolve(Math.round(now - start));
+    } else setTimeout(tick, 100);
+  };
+  tick();
+})`;
+}
+
 interface Pending {
   resolve: (value: any) => void;
   reject: (err: Error) => void;
@@ -43,6 +86,8 @@ export interface ProbeBypass {
 export async function openChromeProbe(options: {
   userAgent: string;
   bypass?: ProbeBypass;
+  /** How long to wait after load before measuring. Absent means {@link DEFAULT_SETTLE}. */
+  settle?: SettleRule;
 }): Promise<PageProbe & { close(): Promise<void> }> {
   const { launch } = await import('chrome-launcher');
   const userDataDir = path.join(STEWARD_DIR, '.cache', tempRunName('chrome-verify'));
@@ -157,6 +202,11 @@ export async function openChromeProbe(options: {
         const navigated = await send('Page.navigate', { url }, sessionId);
         if (navigated.errorText) throw new CheckUnavailable(`${url} did not load: ${navigated.errorText}`);
         await loaded;
+        await send(
+          'Runtime.evaluate',
+          { expression: settleExpression(options.settle ?? DEFAULT_SETTLE), awaitPromise: true, returnByValue: true },
+          sessionId,
+        );
         const outcome = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
         if (outcome.exceptionDetails) {
           const thrown = outcome.exceptionDetails.exception?.description ?? outcome.exceptionDetails.text;

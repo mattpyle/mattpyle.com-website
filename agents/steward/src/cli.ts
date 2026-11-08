@@ -120,6 +120,7 @@ import {
   pendingActivityLine,
   runStateLines,
   verifySourceLabel,
+  verifyStamp,
   waitingReasonLine,
   type FindingVerdict,
   type RunEnd,
@@ -139,6 +140,14 @@ import {
   isFindingsScheduleAction,
   runFindingsScheduleAction,
 } from './lib/findings-schedule.js';
+import {
+  RECHECK_SCHEDULE_ACTIONS,
+  buildRecheckScheduleOptions,
+  isRecheckScheduleAction,
+  runRecheckScheduleAction,
+} from './lib/recheck-schedule.js';
+import { recheckWorkflowId, summariseRecheck } from './lib/findings-recheck.js';
+import { recheckFindingsWorkflow } from './workflows/recheck-findings.js';
 import { findingStateQuery, type FindingState, type FindingWorkflowResult } from './workflows/finding.js';
 import { dispatchStateQuery } from './workflows/fix-dispatch.js';
 import { dispatchWorkflowId, slotBlocker, waitingSlotLine, type DispatchState } from './lib/fix-dispatch.js';
@@ -2201,6 +2210,75 @@ finding
         console.log(`  ${site}: started ${counts.started}, signalled ${counts.signalled}, fixed ${counts.fixed}, restarted ${counts.restarted ?? 0}, closed ${counts.closed ?? 0}, unchanged ${counts.unchanged}`);
       }
       console.log(`  ${syncSummary(result)}`);
+      console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('recheck')
+  .requiredOption('--site <site>', 'site slug', parseFindingSlug('site'))
+  .description(
+    "Recheck every approved finding of a site on production, on every host its config.yaml declares, and print each outcome. A failing check sets live_on to today; all passing resolves the finding. Runs on the hosted worker",
+  )
+  .action(async (opts: { site: string }) => {
+    const c = await client();
+    try {
+      const workflowId = recheckWorkflowId(opts.site, verifyStamp(new Date().toISOString()));
+      console.log(`
+  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}`);
+      console.log(`  rechecking ${opts.site}; browser checks take up to a minute each
+`);
+      const result = await c.workflow.execute(recheckFindingsWorkflow, {
+        workflowId,
+        taskQueue: QUEUE_FINDINGS,
+        args: [{ repo: ARGUS_REPO, site: opts.site }],
+        workflowExecutionTimeout: '1 hour',
+      });
+      for (const row of result.rows) {
+        const name = row.keyShort ? `${row.keyShort} ${row.key}` : row.key;
+        const commit = row.commitSha ? `  (commit ${row.commitSha.slice(0, 7)})` : '';
+        console.log(`  ${name}
+    ${row.outcome}${row.detail ? `: ${row.detail}` : ''}${commit}`);
+      }
+      console.log(`
+  ${summariseRecheck(result)}
+`);
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('recheck-schedule')
+  .argument('<action>', `one of: ${RECHECK_SCHEDULE_ACTIONS.join(' | ')}`)
+  .requiredOption('--site <site>', 'site slug', parseFindingSlug('site'))
+  .option('--note <text>', 'pause/unpause only: note recorded on the schedule')
+  .description("Manage a site's daily findings recheck Schedule")
+  .action(async (action: string, opts: { site: string; note?: string }) => {
+    if (!isRecheckScheduleAction(action)) {
+      fail(`Unknown action "${action}". Expected one of: ${RECHECK_SCHEDULE_ACTIONS.join(', ')}.`);
+    }
+    if (opts.note !== undefined && action !== 'pause' && action !== 'unpause') {
+      fail('--note applies to `pause` and `unpause` only.');
+    }
+    const options =
+      action === 'create'
+        ? buildRecheckScheduleOptions({ taskQueue: QUEUE_FINDINGS, input: { repo: ARGUS_REPO, site: opts.site } })
+        : undefined;
+    const c = await client();
+    try {
+      const outcome = await runRecheckScheduleAction(action, {
+        site: opts.site,
+        schedule: c.schedule,
+        options,
+        note: opts.note,
+        timeZone: STEWARD_TIMEZONE,
+      });
+      console.log('');
+      console.log(`  ${outcome.scheduleId}`);
+      for (const line of outcome.lines) console.log(`  ${line}`);
       console.log('');
     } finally {
       await c.connection.close();

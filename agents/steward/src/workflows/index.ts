@@ -6,3 +6,4 @@ export * from './reconcile-findings.js';
 export * from './fix-finding.js';
 export * from './verify-finding.js';
 export * from './fix-dispatch.js';
+export * from './recheck-findings.js';

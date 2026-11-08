@@ -13,6 +13,7 @@ import {
   validateGeneratedBlock,
   validateVerifyBlock,
   validateVerifyCoverage,
+  checkOrigins,
   verifyBlockGuide,
   withVerifyBlock,
   type CheckRunner,
@@ -661,4 +662,46 @@ test('a check that cannot be measured throws, and is never a failed row', async 
   });
   await assert.rejects(run([check('/', 'js', { expression: 'nope(', equals: 1 })], probe.runner), CheckBroken);
   assert.deepEqual(probe.counts(), { opened: 1, closed: 1 }, 'the browser is closed on a throw too');
+});
+
+// The hosts a site declares (STW-543): `site.hosts` in its Argus config.yaml.
+
+const SITE = 'https://temporal.io';
+const HOSTS = ['temporal.io', 'docs.temporal.io', 'learn.temporal.io', 'trust.temporal.io'];
+
+test('a check on any declared host is admitted over https', () => {
+  const raw = [
+    { url: 'https://temporal.io/llms.txt', kind: 'text', expect: { contains: 'x' } },
+    { url: 'https://docs.temporal.io/develop', kind: 'status', expect: 200 },
+    { url: ['https://learn.temporal.io/a', 'https://trust.temporal.io/b'], kind: 'header', expect: { name: 'link', absent: true } },
+    { url: 'https://docs.temporal.io/setup', kind: 'selector', expect: { selector: 'h1', count: 1 } },
+  ];
+  assert.deepEqual(validateVerifyBlock(raw, SITE, HOSTS), { checks: raw, problems: [] });
+});
+
+test('a check on an undeclared host, over http, or on another port is refused', () => {
+  for (const url of [
+    'https://evil.example/x',
+    'https://api.temporal.io/x',
+    'http://docs.temporal.io/x',
+    'https://docs.temporal.io:8443/x',
+  ]) {
+    const { checks, problems } = validateVerifyBlock([{ url, kind: 'status', expect: 200 }], SITE, HOSTS);
+    assert.deepEqual(checks, [], url);
+    assert.equal(problems.length, 1, url);
+    assert.match(problems[0], /none of the site's origins/, url);
+  }
+});
+
+test('without declared hosts only the site origin is admitted, as before', () => {
+  const docs = validateVerifyBlock([{ url: 'https://docs.temporal.io/x', kind: 'status', expect: 200 }], SITE);
+  assert.match(docs.problems[0], /not the production origin https:\/\/temporal\.io/);
+  const own = [{ url: `${ORIGIN}/`, kind: 'status', expect: 200 }];
+  assert.deepEqual(validateVerifyBlock(own, ORIGIN, []), { checks: own, problems: [] });
+});
+
+test('the guide names every origin a check may use', () => {
+  assert.deepEqual(checkOrigins(SITE, HOSTS), [SITE, 'https://docs.temporal.io', 'https://learn.temporal.io', 'https://trust.temporal.io']);
+  assert.match(verifyBlockGuide(SITE, HOSTS)[0], /on https:\/\/temporal\.io, https:\/\/docs\.temporal\.io, https:\/\/learn\.temporal\.io, https:\/\/trust\.temporal\.io and nowhere else/);
+  assert.match(verifyBlockGuide(ORIGIN)[0], /on https:\/\/www\.mattpyle\.com and nowhere else/);
 });
