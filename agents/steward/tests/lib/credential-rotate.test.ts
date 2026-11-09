@@ -199,6 +199,7 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
           if (w.dropBookkeeping && f.id !== 'credential') continue;
           const target = w.item.fields.find((x) => x.id === f.id || (f.label && x.label === f.label));
           const value = w.corruptEdit && f.id === 'credential' ? 'something else' : (f.value as string);
+          if (target && f.type === 'CONCEALED') target.type = 'CONCEALED';
           if (target) target.value = value;
           else w.item.fields.push({ id: `new-${f.label}`, label: String(f.label), type: String(f.type), value });
         }
@@ -456,6 +457,35 @@ test('the item layout 1Password really holds: built-in expires by id with no lab
   const byId = Object.fromEntries(w.edits[0].fields.map((f) => [String(f.id), f.value]));
   assert.equal(byId.expires, String(Math.floor(Date.parse('2027-02-07T12:00:00Z') / 1000)), 'epoch seconds, as the item stores it');
   assert.equal(byId.wuxmu2a3okectjag2eu5fyid5u, 'newkey456');
+});
+
+test('the store step writes the value field as CONCEALED and converts a plain STRING credential', async () => {
+  const w = world();
+  w.item.fields[0] = { id: 'credential', label: '', type: 'STRING', value: w.oldSecret };
+  const result = await run(w);
+  const valueEdit = w.edits[0].fields.find((f) => f.id === 'credential')!;
+  assert.equal(valueEdit.type, 'CONCEALED');
+  assert.equal(valueEdit.value, w.secret);
+  assert.equal(w.item.fields[0].type, 'CONCEALED', 'the item now masks the key');
+  assert.deepEqual(result.warnings, []);
+});
+
+test('an item that stays plain text after the write is a warning, not a stop', async () => {
+  const w = world();
+  w.item.fields[0] = { id: 'credential', label: '', type: 'STRING', value: w.oldSecret };
+  const edit = w.deps.op.editItem;
+  w.deps.op.editItem = async (item, template) => {
+    // This vault refuses the type change but takes the value.
+    await edit(item, { fields: template.fields.map((f) => ({ ...f, type: f.id === 'credential' ? 'STRING' : f.type })) });
+  };
+  const result = await run(w);
+  assert.equal(result.completed, true);
+  assert.ok(result.warnings.some((x) => x.includes('plain text')));
+});
+
+test('pickValueField still reads a value field typed STRING', () => {
+  const item: OpItem = { fields: [{ id: 'credential', label: '', type: 'STRING', value: 'v' }] };
+  assert.equal(pickValueField(item)?.value, 'v');
 });
 
 test('the credential field is masked from logs and stop messages whatever its type', async () => {
@@ -834,7 +864,7 @@ test('buildTemplate creates the expires and key_id fields by label when the item
   const item: OpItem = { fields: [{ id: 'credential', label: 'credential', type: 'CONCEALED', value: 'x' }] };
   const t = buildTemplate({ item, valueField: item.fields[0], value: 'v', keyId: 'k', expires: '2027-02-01' });
   assert.deepEqual(t.fields, [
-    { id: 'credential', value: 'v' },
+    { id: 'credential', type: 'CONCEALED', value: 'v' },
     { label: 'expires', type: 'STRING', value: '2027-02-01' },
     { label: 'key_id', type: 'STRING', value: 'k' },
   ]);

@@ -358,7 +358,9 @@ export function buildTemplate(args: {
   keyId?: string;
   expires?: string;
 }): { fields: Array<Record<string, unknown>> } {
-  const fields: Array<Record<string, unknown>> = [{ id: args.valueField.id, value: args.value }];
+  // CONCEALED, so the value is masked in the app and in `op item get`. An item made before this
+  // rotation may hold the key in a plain STRING field; the write converts it.
+  const fields: Array<Record<string, unknown>> = [{ id: args.valueField.id, type: 'CONCEALED', value: args.value }];
   if (args.expires) {
     const existing = fieldByLabel(args.item, 'expires');
     const value = expiresValueFor(existing, args.expires);
@@ -566,6 +568,7 @@ export async function rotateCredential(
       say('store', 'skipped (--from-op)');
     } else {
       let back: OpItem | undefined;
+      let concealedAfter = true;
       try {
         const item = await deps.op.readItem(spec.opItem);
         secrets.push(...secretValues(item));
@@ -581,6 +584,7 @@ export async function rotateCredential(
         back = await deps.op.readItem(spec.opItem);
         const backField = pickValueField(back);
         if (backField?.value !== value) throw new Error(`The 1Password item "${spec.opItem}" does not hold the new value after the edit.`);
+        concealedAfter = backField.type === 'CONCEALED';
       } catch (err) {
         stop('store', err);
       }
@@ -592,6 +596,9 @@ export async function rotateCredential(
       await finish('issue');
       await finish('store');
       say('store', `wrote ${spec.opItem} in the ${target.opVault} vault and read it back${st.oldKeyId ? `; old key id ${st.oldKeyId}` : ''}`);
+      if (!concealedAfter) {
+        warn(`the item's ${pickValueField(back!)?.id} field is still plain text, not concealed. Set its type to Password in the 1Password app.`);
+      }
       if (expires) {
         const readBack = expiresAsIso(fieldByLabel(back!, 'expires')?.value);
         if (readBack !== expires) {
