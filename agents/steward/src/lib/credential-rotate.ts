@@ -186,7 +186,8 @@ export interface RotateDeps {
     resolveServiceAccount(name: string): Promise<string>;
     createKey(args: { serviceAccountId: string; name: string; description: string; duration: string }): Promise<TcldKey>;
     listKeys(serviceAccountId: string): Promise<TcldListedKey[]>;
-    deleteKey(keyId: string): Promise<void>;
+    /** Asks the issuer to delete the key. Returns the request state it answered, for example `Pending`. */
+    deleteKey(keyId: string): Promise<string | undefined>;
   };
   op: {
     readItem(item: string): Promise<OpItem>;
@@ -230,6 +231,9 @@ export interface RotateTimings {
   verifyTimeoutMs: number;
   verifyFirstDelayMs: number;
   verifyMaxDelayMs: number;
+  /** How long retire watches for the deleted key to leave the issuer's list, and how often it looks. */
+  deleteTimeoutMs: number;
+  deletePollMs: number;
 }
 export const DEFAULT_TIMINGS: RotateTimings = {
   deployPollMs: 10_000,
@@ -238,6 +242,8 @@ export const DEFAULT_TIMINGS: RotateTimings = {
   verifyTimeoutMs: 2 * 60_000,
   verifyFirstDelayMs: 5_000,
   verifyMaxDelayMs: 20_000,
+  deleteTimeoutMs: 60_000,
+  deletePollMs: 5_000,
 };
 
 /** Thrown at the first failure. The CLI prints it and exits 1. */
@@ -714,10 +720,33 @@ export async function rotateCredential(
         if (oldId) {
           if (oldId === st.newKeyId) throw new Error('The old key id equals the new key id; refusing to delete it.');
           if (await deps.prompt.confirm(`Delete the old key ${oldId} at Temporal Cloud?`)) {
-            await deps.tcld.deleteKey(oldId);
+            const requested = await deps.tcld.deleteKey(oldId);
             retire = 'deleted';
-            say('retire', `deleted old key ${oldId}`);
+            // The issuer answers at once with a pending request and finishes within seconds. The
+            // delete is asked for and cannot be undone, so retire is done from here; the poll only reports.
+            say('retire', `delete requested for old key ${oldId}${requested ? ` (issuer state: ${requested})` : ''}`);
             await finish('retire');
+            try {
+              const saId = options.serviceAccountId ?? (await deps.tcld.resolveServiceAccount(spec.serviceAccount!));
+              const t0 = Date.now();
+              let gone = false;
+              for (;;) {
+                if (!(await deps.tcld.listKeys(saId)).some((k) => k.id === oldId)) {
+                  gone = true;
+                  break;
+                }
+                if (Date.now() - t0 + timings.deletePollMs > timings.deleteTimeoutMs) break;
+                await deps.sleep(timings.deletePollMs);
+              }
+              say(
+                'retire',
+                gone
+                  ? `old key ${oldId} no longer appears in the service account key list`
+                  : `old key ${oldId} is still listed after ${Math.round(timings.deleteTimeoutMs / 1000)}s; the issuer finishes the delete on its own, so check the list later`,
+              );
+            } catch (err) {
+              say('retire', `could not confirm the delete (${err instanceof Error ? err.message : String(err)}); the request was sent`);
+            }
           } else {
             retire = 'declined';
             say('retire', `left old key ${oldId} in place; rerun this command to be asked again`);

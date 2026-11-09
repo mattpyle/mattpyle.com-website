@@ -98,6 +98,20 @@ export function tcldDeleteInvocation(keyId: string): { args: string[]; env: Node
   return { args: ['apikey', 'delete', '--id', keyId], env: { AUTO_CONFIRM: 'true' } };
 }
 
+/**
+ * The request state tcld prints for an asynchronous call such as `apikey delete`:
+ * `{"requestStatus": {"requestId", "state": "Pending", "checkDuration": "10s"}}`.
+ * Undefined when the output has no such state.
+ */
+export function parseRequestState(stdout: string): string | undefined {
+  try {
+    const json = parseJsonOutput(stdout) as { requestStatus?: { state?: unknown } };
+    return str(json?.requestStatus?.state);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Keys from `tcld apikey list`. */
 export function parseTcldKeyList(stdout: string): TcldListedKey[] {
   const json = parseJsonOutput(stdout);
@@ -433,7 +447,7 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
         const bin = need(tcldBinary(), 'tcld', 'Install it, then run `tcld login`.');
         // The command asked Matt already; tcld's own prompt would wait on a closed stdin.
         const call = tcldDeleteInvocation(keyId);
-        await runChecked(bin, call.args, undefined, undefined, call.env);
+        return parseRequestState(await runChecked(bin, call.args, undefined, undefined, call.env));
       },
     },
     op: {

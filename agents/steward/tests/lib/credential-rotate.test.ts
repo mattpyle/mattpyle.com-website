@@ -45,6 +45,8 @@ const FAST: RotateTimings = {
   verifyTimeoutMs: 100,
   verifyFirstDelayMs: 1,
   verifyMaxDelayMs: 2,
+  deleteTimeoutMs: 20,
+  deletePollMs: 1,
 };
 
 const OPTIONS: RotateOptions = { duration: '90d', dryRun: false, fromOp: false, restart: false };
@@ -74,6 +76,7 @@ interface World {
   editFails: boolean;
   corruptEdit: boolean;
   keyList: Array<{ id: string; name?: string; created?: string }>;
+  keyListLingers: number;
   newDeploymentOnPush: boolean;
 }
 
@@ -112,6 +115,7 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
     editFails: false,
     corruptEdit: false,
     keyList: [],
+    keyListLingers: 0,
     newDeploymentOnPush: true,
     deps: undefined as unknown as RotateDeps,
     ...overrides,
@@ -163,11 +167,18 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
       },
       listKeys: async () => {
         call('tcld.list');
-        return w.keyList;
+        if (w.keyListLingers > 0) {
+          w.keyListLingers--;
+          return [...w.keyList, ...w.deleted.map((id) => ({ id }))];
+        }
+        return w.keyList.filter((k) => !w.deleted.includes(k.id));
       },
       deleteKey: async (id) => {
         call(`tcld.delete:${id}`);
         w.deleted.push(id);
+        // The issuer answers at once with Pending and drops the key from its list a moment later.
+        w.keyListLingers = 2;
+        return 'Pending';
       },
     },
     op: {
@@ -310,6 +321,44 @@ test('no log line carries a secret, new or old', async () => {
     assert.ok(!line.includes(ok.secret), `log leaks the new value: ${line}`);
     assert.ok(!line.includes(ok.oldSecret), `log leaks the old value: ${line}`);
   }
+});
+
+test('retire says the delete was requested, then reports when the key leaves the list', async () => {
+  const w = world();
+  await run(w);
+  const lines = w.logs.filter((l) => l.includes('retire'));
+  assert.ok(lines.some((l) => l.includes('delete requested for old key oldkey123') && l.includes('Pending')));
+  assert.ok(lines.some((l) => l.includes('no longer appears')));
+  assert.ok(w.calls.filter((c) => c === 'tcld.list').length >= 3, 'it looked more than once while the key lingered');
+  assert.ok(!lines.some((l) => l.includes('deleted old key')), 'it does not claim the delete finished before it did');
+});
+
+test('retire still ends done when the key stays listed past the window, and says so', async () => {
+  const w = world();
+  const del = w.deps.tcld.deleteKey;
+  w.deps.tcld.deleteKey = async (id) => {
+    const state = await del(id);
+    w.keyListLingers = 1000;
+    return state;
+  };
+  const result = await run(w);
+  assert.equal(result.completed, true);
+  assert.ok(w.logs.some((l) => l.includes('still listed after')));
+});
+
+test('retire reports a list that fails after the delete was requested, without undoing the retire', async () => {
+  const w = world();
+  const del = w.deps.tcld.deleteKey;
+  w.deps.tcld.deleteKey = async (id) => {
+    const state = await del(id);
+    w.deps.tcld.listKeys = async () => {
+      throw new Error('tcld: network down');
+    };
+    return state;
+  };
+  const result = await run(w);
+  assert.equal(result.completed, true);
+  assert.ok(w.logs.some((l) => l.includes('could not confirm the delete') && l.includes('the request was sent')));
 });
 
 test('the old key is kept when Matt declines, and a rerun asks again without repeating any step', async () => {

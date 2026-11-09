@@ -8,6 +8,7 @@ import {
   findServiceAccountId,
   parseJsonOutput,
   parseRailwayStatus,
+  parseRequestState,
   parseTcldKey,
   parseTcldKeyList,
   replaceEnvLine,
@@ -98,6 +99,13 @@ test('parseRailwayStatus finds the worker service and the production environment
   });
   assert.deepEqual(parseRailwayStatus(out, 'steward-audit-worker', 'production'), { project: 'mattpyle.com-website', serviceId: 'svc-1', environmentId: 'env-1' });
   assert.throws(() => parseRailwayStatus(JSON.stringify({ name: 'x', environments: { edges: [] }, services: { edges: [] } }), 'steward-audit-worker', 'production'), /no steward-audit-worker/);
+});
+
+test('parseRequestState reads the state tcld answers an apikey delete with', () => {
+  const real = JSON.stringify({ requestStatus: { requestId: `req-${fresh()}`, state: 'Pending', checkDuration: '10s' } });
+  assert.equal(parseRequestState(real), 'Pending');
+  assert.equal(parseRequestState('{}'), undefined);
+  assert.equal(parseRequestState('not json'), undefined);
 });
 
 test('parseJsonOutput tolerates text before and after the JSON', () => {
