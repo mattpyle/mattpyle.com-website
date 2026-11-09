@@ -198,6 +198,7 @@ steward finding recheck --site temporal-io                  # recheck a site's a
 steward finding recheck-schedule create --site temporal-io  # create | describe | pause | unpause | trigger its daily recheck
 steward console                  # findings page on 127.0.0.1: a static page over GET /api/findings that filters and sorts every finding, opens one beside the list, and approves or rejects through POST /api/verdict (JSON only; the page has no form). A header menu shows the running commit and restarts the console onto the checkout's current code (POST /api/restart); `GET /api/commit` answers the commit and token without loading the model; the restart does not pull, `steward update` does. The menu's Sync findings and the panel's Fix and Verify post to `POST /api/run/sync`, `/api/run/fix` and `/api/run/verify`, the functions the `finding sync|fix|verify` verbs call (`src/lib/finding-actions.ts`)
 steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
+steward credential rotate temporal-metrics   # issue, store in 1Password, set on Railway, rewrite its .env line, wait for the redeploy, verify, then delete the old key after you confirm; also healthcheck-base; --dry-run prints the plan, --duration sets the lifetime (90d)
 steward update                   # after a merge: pull master in the main checkout, restart the worker
 ```
 

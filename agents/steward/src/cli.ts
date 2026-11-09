@@ -2348,6 +2348,78 @@ keys
     runKeysGenerate(opts);
   });
 
+const credential = program
+  .command('credential')
+  .description('Rotate a credential through issue, store, push, verify and retire (src/lib/credential-rotate.ts)');
+
+credential
+  .command('rotate <name>')
+  .option('--duration <duration>', 'lifetime of the new key, for example 90d or 4d12h', '90d')
+  .option('--dry-run', 'print the plan and make no call')
+  .option('--from-op', 'the new value is already in its 1Password item: skip issue and store')
+  .option('--restart', 'discard the stored progress of an earlier run and start again')
+  .option('--service-account-id <id>', 'the Temporal Cloud service account id, when the lookup by name fails')
+  .option('--checkout <dir>', 'the main checkout, which holds agents/steward/.env and the Railway link (default: the main checkout of this repository)')
+  .description(
+    'Issue a new key, store it in 1Password, set it on Railway, rewrite its .env line, wait for the redeploy, verify it and retire the old key',
+  )
+  .action(
+    async (
+      name: string,
+      opts: { duration: string; dryRun?: boolean; fromOp?: boolean; restart?: boolean; serviceAccountId?: string; checkout?: string },
+    ) => {
+      const { RotateStopped, rotateCredential } = await import('./lib/credential-rotate.js');
+      const { CREDENTIALS, STEWARD_TARGET, STEWARD_VERIFIERS, credentialNames } = await import('./lib/credentials.js');
+      const { createRealDeps, mainCheckout } = await import('./lib/credential-rotate-deps.js');
+      const spec = CREDENTIALS[name];
+      if (!spec) fail(`${name} is not a credential this command rotates. Choose one of: ${credentialNames().join(', ')}.`);
+      const { deps } = createRealDeps({
+        checkout: opts.checkout ? path.resolve(opts.checkout) : await mainCheckout(REPO_ROOT),
+        envFile: 'agents/steward/.env',
+        target: STEWARD_TARGET,
+        verifiers: STEWARD_VERIFIERS,
+        timeZone: STEWARD_TIMEZONE,
+        log: (line) => console.log(line),
+      });
+      console.log('');
+      try {
+        const result = await rotateCredential(
+          spec,
+          STEWARD_TARGET,
+          {
+            duration: opts.duration,
+            dryRun: opts.dryRun === true,
+            fromOp: opts.fromOp === true,
+            restart: opts.restart === true,
+            serviceAccountId: opts.serviceAccountId,
+          },
+          deps,
+        );
+        if (opts.dryRun) {
+          console.log('');
+          return;
+        }
+        console.log('');
+        for (const warning of result.warnings) console.log(`  Fix by hand: ${warning}`);
+        if (result.completed) {
+          console.log(`  ${paint(`${name} rotated.`, GREEN)} Deployment ${result.deploymentId ?? 'unknown'}.`);
+        } else {
+          console.log(`  ${name} is rotated and verified. Left: ${result.remaining.join(', ')}. Rerun the same command to finish.`);
+        }
+        console.log('');
+      } catch (err) {
+        if (err instanceof RotateStopped) {
+          console.error(`\n  Stopped at ${err.step}: ${err.message}`);
+          if (err.step !== 'preflight') {
+            console.error(`  Left to do: ${err.remaining.join(', ')}. Rerun the same command to resume.\n`);
+          }
+          process.exit(1);
+        }
+        throw err;
+      }
+    },
+  );
+
 /** Opens a URL in the default browser, detached, without waiting for it. */
 async function openInBrowser(url: string): Promise<void> {
   const { spawn } = await import('node:child_process');

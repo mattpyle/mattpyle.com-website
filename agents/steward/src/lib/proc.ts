@@ -22,20 +22,31 @@ export interface RunResult {
  *
  * `shell` is never enabled. Binary paths are absolute. `windowsHide` keeps
  * console windows from flashing on Windows.
+ *
+ * `input` is written to the child's standard input, then the stream is closed.
+ * It is the way a secret reaches a child: argv is visible to every process on
+ * the machine, a pipe is not.
  */
 export async function run(
   binary: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; maxBuffer?: number } = {},
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; maxBuffer?: number; input?: string } = {},
 ): Promise<RunResult> {
   try {
-    const { stdout, stderr } = await execFileAsync(binary, args, {
+    const pending = execFileAsync(binary, args, {
       cwd: options.cwd,
       env: options.env ? { ...process.env, ...options.env } : process.env,
       windowsHide: true,
       // Vale's JSON over a long post comfortably exceeds the 1 MB default.
       maxBuffer: options.maxBuffer ?? 32 * 1024 * 1024,
     });
+    // A child that exits before it reads its input closes the pipe; the exit
+    // code is the answer then, so a write error is not worth a throw.
+    if (options.input !== undefined) {
+      pending.child.stdin?.on('error', () => {});
+      pending.child.stdin?.end(options.input);
+    }
+    const { stdout, stderr } = await pending;
     return { stdout, stderr, exitCode: 0 };
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string; code?: number | string };
