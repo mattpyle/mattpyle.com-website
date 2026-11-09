@@ -54,13 +54,13 @@ test('findServiceAccountId matches by name in either list shape', () => {
 test('parseTcldKeyList returns keys only, not the objects nested inside them', () => {
   const out = JSON.stringify({
     apiKeys: [
-      { id: 'k1', spec: { displayName: 'steward-metrics', expiryTime: '2026-12-01T00:00:00Z', access: { owner: { id: 'sa-2' } } } },
+      { id: 'k1', spec: { displayName: 'steward-metrics', expiryTime: '2026-12-01T00:00:00Z', disabled: true, access: { owner: { id: 'sa-2' } } } },
       { id: 'k2', displayName: 'older' },
     ],
   });
   assert.deepEqual(parseTcldKeyList(out), [
-    { id: 'k1', name: 'steward-metrics', expires: '2026-12-01' },
-    { id: 'k2', name: 'older', expires: undefined },
+    { id: 'k1', name: 'steward-metrics', expires: '2026-12-01', disabled: true },
+    { id: 'k2', name: 'older', expires: undefined, disabled: undefined },
   ]);
 });
 

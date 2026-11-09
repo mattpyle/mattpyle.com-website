@@ -107,6 +107,7 @@ export function parseTcldKeyList(stdout: string): TcldListedKey[] {
       id,
       name: str(spec.displayName) ?? str(o.displayName) ?? str(o.name),
       expires: expiry?.slice(0, 10),
+      disabled: spec.disabled === true ? true : undefined,
     });
   });
   return keys;

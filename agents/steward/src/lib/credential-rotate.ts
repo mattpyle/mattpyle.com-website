@@ -151,6 +151,7 @@ export interface TcldListedKey {
   id: string;
   name?: string;
   expires?: string;
+  disabled?: boolean;
 }
 
 export interface RailwayDeployment {
@@ -684,7 +685,7 @@ export async function rotateCredential(
             retire = 'not-applicable';
           } else {
             say('retire', 'the item has no key_id for the old key. The service account holds:');
-            others.forEach((k, i) => deps.log(`           ${i + 1}. ${k.id}${k.name ? ` (${k.name})` : ''}${k.expires ? ` expires ${k.expires}` : ''}`));
+            others.forEach((k, i) => deps.log(`           ${i + 1}. ${k.id}${k.name ? ` (${k.name})` : ''}${k.expires ? ` expires ${k.expires}` : ''}${k.disabled ? ' (disabled)' : ''}`));
             const pick = (await deps.prompt.line('Number of the old key to delete (Enter to skip)', '')).trim();
             const chosen = /^\d+$/.test(pick) ? others[Number(pick) - 1] : undefined;
             oldId = chosen?.id;
