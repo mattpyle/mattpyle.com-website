@@ -54,19 +54,22 @@ export type FixedHealthSignal =
   | 'run-shape'
   | 'findings-reconcile';
 
+/** The family key in `HEALTH_CHECK_SLUGS` for the per-site recheck checks. */
+const RECHECK_FAMILY = 'findings-recheck';
+
 /**
  * The recheck's signal for one site: `findings-recheck:temporal-io`. A Schedule
  * is per site, so each site gets its own check, and a second site's silence
  * names that site in the email.
  */
-export type FindingsRecheckSignal = `findings-recheck:${string}`;
+export type FindingsRecheckSignal = `${typeof RECHECK_FAMILY}:${string}`;
 
 /** One check at the alerting service. */
 export type HealthSignal = FixedHealthSignal | FindingsRecheckSignal;
 
 /** The signal a site's recheck pings. */
 export function findingsRecheckSignal(site: string): FindingsRecheckSignal {
-  return `findings-recheck:${site}`;
+  return `${RECHECK_FAMILY}:${site}`;
 }
 
 /**
@@ -78,10 +81,10 @@ export function findingsRecheckSignal(site: string): FindingsRecheckSignal {
  * be created in the service under the same slug, though — the code never creates
  * one on the fly (`lib/health-ping.ts`), so a new row here is half a change.
  *
- * The recheck is not a row: its slug depends on the site, so `healthCheckSlug`
- * builds it.
+ * The recheck's row is a prefix, not a slug: its check is per site, so
+ * `healthCheckSlug` appends `-<site>`.
  */
-export const HEALTH_CHECK_SLUGS: Record<FixedHealthSignal, string> = {
+export const HEALTH_CHECK_SLUGS: Record<FixedHealthSignal | typeof RECHECK_FAMILY, string> = {
   'nightly-scorecard': 'steward-nightly-scorecard',
   'credential-expiry': 'steward-credential-expiry',
   'action-usage': 'steward-action-usage',
@@ -89,12 +92,15 @@ export const HEALTH_CHECK_SLUGS: Record<FixedHealthSignal, string> = {
   // Hourly, from `reconcileFindingsWorkflow`: success and failure both, so a
   // reconciler that stops running goes late at the service (period 1h, grace 30m).
   'findings-reconcile': 'steward-findings-reconcile',
+  // Daily, from `recheckFindingsWorkflow`, one check per site (period 1 day,
+  // grace 1 hour). The site is appended: `steward-findings-recheck-temporal-io`.
+  [RECHECK_FAMILY]: 'steward-findings-recheck',
 };
 
 /** The slug a signal pings: a fixed row, or `steward-findings-recheck-<site>`. */
 export function healthCheckSlug(signal: HealthSignal): string {
-  const prefix = 'findings-recheck:';
-  if (signal.startsWith(prefix)) return `steward-findings-recheck-${signal.slice(prefix.length)}`;
+  const prefix = `${RECHECK_FAMILY}:`;
+  if (signal.startsWith(prefix)) return `${HEALTH_CHECK_SLUGS[RECHECK_FAMILY]}-${signal.slice(prefix.length)}`;
   return HEALTH_CHECK_SLUGS[signal as FixedHealthSignal];
 }
 
