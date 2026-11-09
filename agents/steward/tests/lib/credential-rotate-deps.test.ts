@@ -38,6 +38,21 @@ test('parseTcldKey finds a nested token and keeps an expiry date when tcld print
   assert.deepEqual(parseTcldKey(out), { keyId: 'k1', token, expires: '2027-02-01' });
 });
 
+test('parseTcldKey reads the two shapes tcld prints: apiKeyId for a service account, id for a user', () => {
+  const secretKey = fresh();
+  const requestStatus = { requestId: `req-${fresh()}`, state: 'REQUEST_STATE_FULFILLED', id: 'not-a-key' };
+  const serviceAccount = JSON.stringify({ apiKeyId: 'sakey1', secretKey, requestStatus });
+  assert.deepEqual(parseTcldKey(serviceAccount), { keyId: 'sakey1', token: secretKey, expires: undefined });
+  const user = JSON.stringify({ id: 'userkey2', secretKey, requestStatus });
+  assert.deepEqual(parseTcldKey(user), { keyId: 'userkey2', token: secretKey, expires: undefined });
+});
+
+test('parseTcldKey never reads a key id from inside requestStatus', () => {
+  const secretKey = fresh();
+  const out = JSON.stringify({ secretKey, requestStatus: { requestId: 'r1', state: 'REQUEST_STATE_FULFILLED', id: 'wrong' } });
+  assert.throws(() => parseTcldKey(out), /no key id and token/);
+});
+
 test('parseTcldKey refuses output with no token, and never echoes the output', () => {
   assert.throws(() => parseTcldKey('{"keyId":"abc"}'), /no key id and token/);
   assert.throws(() => parseTcldKey('login required'), /no JSON/);
@@ -54,13 +69,13 @@ test('findServiceAccountId matches by name in either list shape', () => {
 test('parseTcldKeyList returns keys only, not the objects nested inside them', () => {
   const out = JSON.stringify({
     apiKeys: [
-      { id: 'k1', spec: { displayName: 'steward-metrics', expiryTime: '2026-12-01T00:00:00Z', disabled: true, access: { owner: { id: 'sa-2' } } } },
+      { id: 'k1', createdTime: '2026-11-09T05:29:01.340811998Z', spec: { displayName: 'steward-metrics', expiryTime: '2026-12-01T00:00:00Z', disabled: true, access: { owner: { id: 'sa-2' } } } },
       { id: 'k2', displayName: 'older' },
     ],
   });
   assert.deepEqual(parseTcldKeyList(out), [
-    { id: 'k1', name: 'steward-metrics', expires: '2026-12-01', disabled: true },
-    { id: 'k2', name: 'older', expires: undefined, disabled: undefined },
+    { id: 'k1', name: 'steward-metrics', expires: '2026-12-01', disabled: true, created: '2026-11-09T05:29:01.340811998Z' },
+    { id: 'k2', name: 'older', expires: undefined, disabled: undefined, created: undefined },
   ]);
 });
 

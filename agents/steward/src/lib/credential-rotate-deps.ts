@@ -56,13 +56,19 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== 
  * API docs say `keyId`, so all three are accepted.
  */
 export function parseTcldKey(stdout: string): TcldKey {
-  const json = parseJsonOutput(stdout);
+  const parsed = parseJsonOutput(stdout);
+  // The response carries a `requestStatus` object (a request id, a state). It describes the
+  // operation, not the key, so nothing inside it may be read as the key id.
+  const json = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? Object.fromEntries(Object.entries(parsed as Record<string, unknown>).filter(([k]) => k !== 'requestStatus'))
+    : parsed;
   let keyId: string | undefined;
   let token: string | undefined;
   let expires: string | undefined;
   walk(json, (o) => {
-    keyId ??= str(o.keyId) ?? str(o.apiKeyId) ?? str(o.id);
-    token ??= str(o.token) ?? str(o.secret);
+    keyId ??= str(o.apiKeyId) ?? str(o.keyId) ?? str(o.id);
+    // `secretKey` is what tcld prints today; `token` is the cloudservice spelling.
+    token ??= str(o.secretKey) ?? str(o.token) ?? str(o.secret);
     expires ??= str(o.expiryTime) ?? str(o.expiry) ?? str(o.expiresAt);
   });
   if (!keyId || !token) throw new Error('tcld printed no key id and token in the shape this command expects');
@@ -108,6 +114,7 @@ export function parseTcldKeyList(stdout: string): TcldListedKey[] {
       name: str(spec.displayName) ?? str(o.displayName) ?? str(o.name),
       expires: expiry?.slice(0, 10),
       disabled: spec.disabled === true ? true : undefined,
+      created: str(o.createdTime),
     });
   });
   return keys;

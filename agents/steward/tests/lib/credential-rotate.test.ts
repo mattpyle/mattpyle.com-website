@@ -73,7 +73,7 @@ interface World {
   pingFailures: number;
   editFails: boolean;
   corruptEdit: boolean;
-  keyList: Array<{ id: string; name?: string }>;
+  keyList: Array<{ id: string; name?: string; created?: string }>;
   newDeploymentOnPush: boolean;
 }
 
@@ -455,6 +455,44 @@ test('a refused 1Password edit leaves the issued key as an orphan, and a rerun o
   assert.ok(w.deleted.includes('newkey456'), 'the orphan is deleted after the yes');
   assert.equal(w.calls.filter((c) => c === 'tcld.create').length, 2, 'a fresh key is issued after the orphan goes');
   assert.equal(result.completed, false, 'the confirm list ran out, so the old key stays');
+});
+
+test('a create whose output cannot be read still records the key tcld made, and the rerun offers to delete it', async () => {
+  const w = world({
+    keyList: [
+      { id: 'earlier-key', created: '2026-11-09T05:29:01Z' },
+      { id: 'newkey456', created: '2026-10-21T23:02:02Z' },
+    ],
+    confirms: [true],
+  });
+  // tcld creates the key, then its output fails to parse: the run never sees a key id or a secret.
+  w.deps.tcld.createKey = async () => {
+    w.calls.push('tcld.create');
+    w.keyList.push({ id: 'orphan789', created: PUSHED });
+    throw new Error('tcld printed no key id and token in the shape this command expects');
+  };
+  const err = await stoppedAt(run(w));
+  assert.equal(err.step, 'issue');
+  assert.match(err.message, /no key id and token/);
+  assert.equal(w.states.get(metrics.name)?.orphanKeyId, 'orphan789', 'only the key made during the step is recorded');
+  assert.ok(w.logs.some((l) => l.includes('orphan789') && l.includes('not captured')));
+
+  // The rerun asks, deletes the orphan after the yes, and issues a fresh key.
+  w.deps.tcld.createKey = async () => ({ keyId: 'fresh111', token: w.secret });
+  w.confirms = [true, true];
+  const result = await run(w);
+  assert.ok(w.deleted.includes('orphan789'));
+  assert.equal(result.newKeyId, 'fresh111');
+});
+
+test('a failed create that made no key records no orphan', async () => {
+  const w = world({ keyList: [{ id: 'earlier-key', created: '2026-11-09T05:29:01Z' }] });
+  w.deps.tcld.createKey = async () => {
+    throw new Error('tcld: not logged in');
+  };
+  const err = await stoppedAt(run(w));
+  assert.equal(err.step, 'issue');
+  assert.equal(w.states.get(metrics.name)?.orphanKeyId, undefined);
 });
 
 test('a rerun with an orphan and a no stops without issuing', async () => {

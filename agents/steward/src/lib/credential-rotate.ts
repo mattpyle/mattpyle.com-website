@@ -152,6 +152,8 @@ export interface TcldListedKey {
   name?: string;
   expires?: string;
   disabled?: boolean;
+  /** When the issuer created it, RFC 3339. */
+  created?: string;
 }
 
 export interface RailwayDeployment {
@@ -467,8 +469,10 @@ export async function rotateCredential(
     if (options.fromOp) {
       say('issue', `skipped: the new value is already in the 1Password item "${spec.opItem}" (--from-op)`);
     } else if (spec.issuer === 'tcld' && hasTcld) {
+      const issueStartedAt = deps.now().getTime();
+      let saId: string | undefined;
       try {
-        const saId = options.serviceAccountId ?? (await deps.tcld.resolveServiceAccount(spec.serviceAccount!));
+        saId = options.serviceAccountId ?? (await deps.tcld.resolveServiceAccount(spec.serviceAccount!));
         say('issue', `creating a ${options.duration} key for service account ${saId}`);
         const made = await deps.tcld.createKey({
           serviceAccountId: saId,
@@ -484,6 +488,22 @@ export async function rotateCredential(
         await deps.state.save(spec.name, st);
         say('issue', `issued key ${keyId}, expires ${expires}`);
       } catch (err) {
+        // tcld may have created a key whose secret this run never saw (an output it could not read).
+        // Record any key made since this step began, so the rerun offers to delete it.
+        if (saId) {
+          try {
+            const made = (await deps.tcld.listKeys(saId))
+              .filter((k) => k.created !== undefined && Date.parse(k.created) >= issueStartedAt - 60_000)
+              .sort((a, b) => Date.parse(b.created!) - Date.parse(a.created!));
+            if (made.length > 0 && made[0].id !== st.newKeyId) {
+              st.orphanKeyId = made[0].id;
+              await deps.state.save(spec.name, st);
+              say('issue', `key ${made[0].id} was created and its value was not captured; the rerun offers to delete it`);
+            }
+          } catch {
+            /* The original error is the one to report. */
+          }
+        }
         stop('issue', err);
       }
     } else {
