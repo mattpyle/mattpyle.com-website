@@ -145,27 +145,27 @@ export class GitHubAppTokenProvider {
 
   /**
    * The installation to act as. With `STEWARD_GITHUB_APP_INSTALLATION_ID` set,
-   * that one. Otherwise the app's only installation: Matt installs it once, on
-   * the account that owns both repositories. More than one with no override is
-   * a setup error worth stopping on rather than guessing between, and the error
-   * lists them so the fix is a copy and paste.
+   * that one, without listing installations: only the app's slug is read, from
+   * `GET /app`, and a wrong id surfaces as a 404 at the token exchange.
+   * Otherwise the app's only installation: Matt installs it once, on the account
+   * that owns both repositories. More than one with no override is a setup error
+   * worth stopping on rather than guessing between, and the error lists them so
+   * the fix is a copy and paste.
    */
   async resolve(): Promise<GitHubAppIdentity> {
     if (this.identity) return this.identity;
+    if (this.installationOverride) {
+      const app = await this.appCall('/app', 'GET');
+      this.identity = { slug: String(app.slug ?? this.appId), installationId: Number(this.installationOverride) };
+      return this.identity;
+    }
     const installations = await this.appCall('/app/installations?per_page=100', 'GET');
     if (!Array.isArray(installations)) {
       throw authError(`GitHub answered the installation list for app ${this.appId} in a shape Steward cannot read.`);
     }
     const listed = installations.length === 0 ? 'none' : installations.map(describeInstallation).join(', ');
     let installation: any;
-    if (this.installationOverride) {
-      installation = installations.find((each) => String(each.id) === this.installationOverride);
-      if (!installation) {
-        throw authError(
-          `${INSTALLATION_ID_ENV} is ${this.installationOverride}, but app ${this.appId} has no such installation. Installations: ${listed}.`,
-        );
-      }
-    } else if (installations.length === 1) {
+    if (installations.length === 1) {
       installation = installations[0];
     } else if (installations.length === 0) {
       throw authError(
@@ -255,6 +255,41 @@ export function dropInstallationToken(): void {
  */
 export async function resolveGitHubApp(): Promise<GitHubAppIdentity> {
   return appProvider().resolve();
+}
+
+/** What the hosted worker's boot learned about its GitHub credential. */
+export interface GitHubBoot {
+  appId: string;
+  /** Null when GitHub could not be reached or answered 5xx; the first call resolves it. */
+  identity: GitHubAppIdentity | null;
+  /** Why `identity` is null. Never a credential. */
+  unresolvedReason?: string;
+}
+
+/**
+ * {@link resolveGitHubApp} for a worker's boot, with the one tolerance a boot
+ * needs. A credential GitHub rejects (an `AuthError`: 401, 403, 404, an unusable
+ * key, missing values, the wrong installation count) throws, so the deploy stops
+ * where someone sees it. A transport error or a 5xx does not: the worker
+ * recycles itself after heavy work, and a GitHub blip at that moment must not
+ * leave the audit tier down until the platform restarts it. The worker starts,
+ * says so, and the first `gh` call resolves the installation.
+ */
+export async function resolveGitHubAppForBoot(): Promise<GitHubBoot> {
+  const appId = process.env[APP_ID_ENV] ?? '';
+  try {
+    return { appId, identity: await resolveGitHubApp() };
+  } catch (err) {
+    if (err instanceof ApplicationFailure && err.type === 'AuthError') throw err;
+    return { appId, identity: null, unresolvedReason: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** The ready line's `github` value. */
+export function describeGitHubBoot(boot: GitHubBoot): string {
+  return boot.identity
+    ? `app ${boot.identity.slug} installation ${boot.identity.installationId}`
+    : `app ${boot.appId} installation unresolved`;
 }
 
 /**

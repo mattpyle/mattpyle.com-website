@@ -6,10 +6,12 @@ import {
   GitHubAppTokenProvider,
   TOKEN_REFRESH_MARGIN_MS,
   authRetryable,
+  describeGitHubBoot,
   gh,
   ghText,
   installationToken,
   resolveGitHubApp,
+  resolveGitHubAppForBoot,
 } from '../../src/lib/github.js';
 import {
   FAKE_APP_SLUG,
@@ -190,25 +192,32 @@ test('two installations and no override stop with an AuthError that lists them a
   assert.match(err.message, /Set STEWARD_GITHUB_APP_INSTALLATION_ID to the one that owns both repositories/);
 });
 
-test('STEWARD_GITHUB_APP_INSTALLATION_ID picks one of several installations', async () => {
-  withInstallations(TWO_INSTALLATIONS);
-  process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = '22';
+/** Runs `body` with the installation override set, and unsets it after. */
+async function withOverride(value: string, body: () => Promise<void>): Promise<void> {
+  process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = value;
   try {
-    assert.deepEqual(await resolveGitHubApp(), { slug: 'steward-test', installationId: 22 });
+    await body();
   } finally {
     delete process.env.STEWARD_GITHUB_APP_INSTALLATION_ID;
   }
+}
+
+test('STEWARD_GITHUB_APP_INSTALLATION_ID is used without listing installations', async () => {
+  const fake = withApp();
+  await withOverride(String(FAKE_INSTALLATION_ID), async () => {
+    assert.deepEqual(await resolveGitHubApp(), { slug: FAKE_APP_SLUG, installationId: FAKE_INSTALLATION_ID });
+    assert.equal(await installationToken(), FAKE_INSTALLATION_TOKEN);
+  });
+  assert.ok(!fake.appCalls.includes('GET /app/installations'), 'the list call was skipped');
+  assert.deepEqual(fake.appCalls, ['GET /app', `POST /app/installations/${FAKE_INSTALLATION_ID}/access_tokens`]);
 });
 
-test('an override that matches no installation lists the ones the app has', async () => {
-  withInstallations(TWO_INSTALLATIONS);
-  process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = '99';
-  try {
-    const err = await rejectsAuth(resolveGitHubApp());
-    assert.match(err.message, /STEWARD_GITHUB_APP_INSTALLATION_ID is 99, but app \d+ has no such installation\. Installations: mattpyle \(id 11\), other-org \(id 22\)/);
-  } finally {
-    delete process.env.STEWARD_GITHUB_APP_INSTALLATION_ID;
-  }
+test('an override that is not an installation of the app fails at the token exchange with an AuthError', async () => {
+  withApp();
+  await withOverride('99', async () => {
+    const err = await rejectsAuth(installationToken());
+    assert.match(err.message, /GitHub rejected the app credential \(404\)/);
+  });
 });
 
 test('an override that is not a number is refused before any request', async () => {
@@ -257,4 +266,54 @@ test('one missing variable is named, and the message does not include the other 
   const err = await rejectsAuth(installationToken());
   assert.match(err.message, /^STEWARD_GITHUB_APP_ID is not set/);
   assert.ok(!err.message.includes(testPrivateKeyBase64()));
+});
+
+// ---------------------------------------------------------------------------
+// The hosted worker's boot
+// ---------------------------------------------------------------------------
+
+test('boot resolves the installation and the ready line names the app and installation', async () => {
+  withApp();
+  const boot = await resolveGitHubAppForBoot();
+  assert.equal(describeGitHubBoot(boot), `app ${FAKE_APP_SLUG} installation ${FAKE_INSTALLATION_ID}`);
+});
+
+test('boot tolerates a 5xx: the worker starts, the line says unresolved, and the next call resolves it', async () => {
+  app = installFakeAppCredentials();
+  globalThis.fetch = (async () => json(502, { message: 'Bad Gateway' })) as typeof fetch;
+  const boot = await resolveGitHubAppForBoot();
+  assert.equal(boot.identity, null);
+  assert.match(boot.unresolvedReason ?? '', /GitHub 502/);
+  assert.equal(describeGitHubBoot(boot), `app ${app.appId} installation unresolved`);
+
+  globalThis.fetch = app.wrap((async () => json(200, {})) as typeof fetch);
+  assert.deepEqual(await resolveGitHubApp(), { slug: FAKE_APP_SLUG, installationId: FAKE_INSTALLATION_ID }, 'the failure was not cached');
+});
+
+test('boot tolerates a transport error the same way', async () => {
+  app = installFakeAppCredentials();
+  globalThis.fetch = (async () => {
+    throw new TypeError('fetch failed');
+  }) as typeof fetch;
+  const boot = await resolveGitHubAppForBoot();
+  assert.equal(boot.identity, null);
+  assert.equal(describeGitHubBoot(boot), `app ${app.appId} installation unresolved`);
+});
+
+test('boot refuses on every credential failure: 401, 403, 404, an unusable key, missing values', async () => {
+  for (const status of [401, 403, 404]) {
+    app = installFakeAppCredentials();
+    globalThis.fetch = (async () => json(status, { message: 'no' })) as typeof fetch;
+    await rejectsAuth(resolveGitHubAppForBoot());
+    app.restore();
+  }
+
+  app = installFakeAppCredentials();
+  process.env.STEWARD_GITHUB_APP_PRIVATE_KEY = Buffer.from('not a key').toString('base64');
+  await rejectsAuth(resolveGitHubAppForBoot());
+  app.restore();
+
+  app = installFakeAppCredentials();
+  process.env.STEWARD_GITHUB_APP_ID = '';
+  await rejectsAuth(resolveGitHubAppForBoot());
 });

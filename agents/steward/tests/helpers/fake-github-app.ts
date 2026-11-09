@@ -96,7 +96,7 @@ export function installFakeAppCredentials(): FakeAppCredentials {
     minted: 0,
     handle(input, init) {
       const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-      if (url.host !== 'api.github.com' || !url.pathname.startsWith('/app/')) return undefined;
+      if (url.host !== 'api.github.com' || !(url.pathname === '/app' || url.pathname.startsWith('/app/'))) return undefined;
       const method = (init?.method ?? 'GET').toUpperCase();
       state.appCalls.push(`${method} ${url.pathname}`);
       const bearer = /^Bearer (.+)$/.exec(authorization(init));
@@ -109,6 +109,7 @@ export function installFakeAppCredentials(): FakeAppCredentials {
       }
       if (claims.iss !== appId) return json(401, { message: 'Issuer does not match the app' });
       if (claims.exp * 1000 <= Date.now()) return json(401, { message: 'Expiration time is in the past' });
+      if (method === 'GET' && url.pathname === '/app') return json(200, { id: Number(appId), slug: FAKE_APP_SLUG });
       if (method === 'GET' && url.pathname === '/app/installations') {
         return json(200, [{ id: FAKE_INSTALLATION_ID, app_slug: FAKE_APP_SLUG }]);
       }

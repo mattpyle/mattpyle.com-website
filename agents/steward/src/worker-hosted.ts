@@ -12,7 +12,7 @@ import {
 } from './config.js';
 import { hostedRegistry, type HostedQueue } from './hosted-registry.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
-import { APP_ID_ENV, APP_KEY_ENV, resolveGitHubApp, type GitHubAppIdentity } from './lib/github.js';
+import { APP_ID_ENV, APP_KEY_ENV, describeGitHubBoot, resolveGitHubAppForBoot } from './lib/github.js';
 import { log } from './lib/logger.js';
 import { installTemporalRuntime } from './lib/temporal-logger.js';
 import {
@@ -102,10 +102,14 @@ process.on('unhandledRejection', (reason) => {
  *
  * The credential is a GitHub App: its id and private key. This resolves the
  * app's installation, which also proves the pair belongs together, and returns
- * the identity the ready line names. The key is never read here, only handed to
- * the token provider — see `config.ts` on secrets.
+ * the `github` value the ready line carries. GitHub rejecting the credential
+ * stops the boot. GitHub being unreachable, or answering 5xx, does not: the
+ * worker recycles itself after heavy work, and a blip at that moment must not
+ * leave the audit tier down. It warns, starts, and the ready line says
+ * `installation unresolved`; the first GitHub call resolves it. The key is never
+ * read here, only handed to the token provider — see `config.ts` on secrets.
  */
-async function assertPublishCredentials(): Promise<GitHubAppIdentity> {
+async function assertPublishCredentials(): Promise<string> {
   if (!process.env[APP_ID_ENV] || !process.env[APP_KEY_ENV]) {
     throw new Error(
       `${APP_ID_ENV} and ${APP_KEY_ENV} are not both set. The hosted worker serves the scorecard, whose publish and ` +
@@ -113,7 +117,14 @@ async function assertPublishCredentials(): Promise<GitHubAppIdentity> {
         'environment (on Railway: the service\'s Variables tab) and redeploy.',
     );
   }
-  return resolveGitHubApp();
+  const boot = await resolveGitHubAppForBoot();
+  if (!boot.identity) {
+    log.warn(
+      { appId: boot.appId, reason: boot.unresolvedReason },
+      'GitHub did not answer the installation lookup — starting anyway; the first GitHub call resolves it',
+    );
+  }
+  return describeGitHubBoot(boot);
 }
 
 /**
@@ -299,7 +310,7 @@ async function main() {
       // Which app and installation the credential resolved to: the line a
       // deploy is checked against after the app's values change. The bot login
       // is `<slug>[bot]`.
-      github: `app ${githubApp.slug} installation ${githubApp.installationId}`,
+      github: githubApp,
       // In the ready line for the same reason `alerting` is: it is a fact a
       // deploy can change, and the operator reading this line after a deploy is
       // the person who would otherwise find out from a corrupted report.
