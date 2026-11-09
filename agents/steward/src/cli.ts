@@ -2368,15 +2368,24 @@ credential
       name: string,
       opts: { duration: string; dryRun?: boolean; fromOp?: boolean; restart?: boolean; serviceAccountId?: string; checkout?: string },
     ) => {
-      const { CREDENTIALS, RotateStopped, credentialNames, rotateCredential } = await import('./lib/credential-rotate.js');
+      const { RotateStopped, rotateCredential } = await import('./lib/credential-rotate.js');
+      const { CREDENTIALS, STEWARD_TARGET, STEWARD_VERIFIERS, credentialNames } = await import('./lib/credentials.js');
       const { createRealDeps, mainCheckout } = await import('./lib/credential-rotate-deps.js');
       const spec = CREDENTIALS[name];
       if (!spec) fail(`${name} is not a credential this command rotates. Choose one of: ${credentialNames().join(', ')}.`);
-      const { deps } = createRealDeps({ checkout: opts.checkout ? path.resolve(opts.checkout) : await mainCheckout(REPO_ROOT), log: (line) => console.log(line) });
+      const { deps } = createRealDeps({
+        checkout: opts.checkout ? path.resolve(opts.checkout) : await mainCheckout(REPO_ROOT),
+        envFile: 'agents/steward/.env',
+        target: STEWARD_TARGET,
+        verifiers: STEWARD_VERIFIERS,
+        timeZone: STEWARD_TIMEZONE,
+        log: (line) => console.log(line),
+      });
       console.log('');
       try {
         const result = await rotateCredential(
           spec,
+          STEWARD_TARGET,
           {
             duration: opts.duration,
             dryRun: opts.dryRun === true,

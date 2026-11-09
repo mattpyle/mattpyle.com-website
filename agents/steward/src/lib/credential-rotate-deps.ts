@@ -3,15 +3,13 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import { NAMESPACE, STEWARD_TIMEZONE } from '../config.js';
-import { sampleActionUsage } from './action-usage.js';
 import { run } from './proc.js';
-import { healthCheckSlug } from './run-health.js';
 import type {
   OpItem,
   RailwayDeployment,
   RotateDeps,
   RotateState,
+  RotateTarget,
   TcldKey,
   TcldListedKey,
 } from './credential-rotate.js';
@@ -26,11 +24,7 @@ import type {
  * {@link resolveBinary} finds the real `railway.exe` the shim points at.
  */
 
-const RAILWAY_SERVICE = 'steward-audit-worker';
-const RAILWAY_ENVIRONMENT = 'production';
-const RAILWAY_PROJECT = 'mattpyle.com-website';
 const RAILWAY_GRAPHQL = 'https://backboard.railway.com/graphql/v2';
-const OP_VAULT = 'Steward';
 
 /* ------------------------------------------------------------------ */
 /* Pure parsers, exported for the tests                                 */
@@ -115,20 +109,20 @@ export interface RailwayTarget {
 }
 
 /** The project, service id and environment id from `railway status --json`. */
-export function parseRailwayStatus(stdout: string): RailwayTarget {
+export function parseRailwayStatus(stdout: string, service: string, environment: string): RailwayTarget {
   const json = parseJsonOutput(stdout) as Record<string, unknown>;
   const project = str(json.name) ?? '';
   let serviceId: string | undefined;
   let environmentId: string | undefined;
   walk(json, (o) => {
-    if (str(o.serviceName) === RAILWAY_SERVICE) serviceId ??= str(o.serviceId);
-    if (str(o.name) === RAILWAY_SERVICE) serviceId ??= str(o.id);
+    if (str(o.serviceName) === service) serviceId ??= str(o.serviceId);
+    if (str(o.name) === service) serviceId ??= str(o.id);
   });
   walk(json.environments, (o) => {
-    if (str(o.name) === RAILWAY_ENVIRONMENT) environmentId ??= str(o.id);
+    if (str(o.name) === environment) environmentId ??= str(o.id);
   });
   if (!serviceId || !environmentId) {
-    throw new Error(`railway status lists no ${RAILWAY_SERVICE} service in ${RAILWAY_ENVIRONMENT} for project ${project || '(unknown)'}`);
+    throw new Error(`railway status lists no ${service} service in ${environment} for project ${project || '(unknown)'}`);
   }
   return { project, serviceId, environmentId };
 }
@@ -240,8 +234,18 @@ async function promptSecret(label: string): Promise<string> {
 /* ------------------------------------------------------------------ */
 
 export interface RealDepsOptions {
-  /** The main checkout: it holds `agents/steward/.env` and the Railway link. */
+  /**
+   * The main checkout: it holds the `.env` file and the Railway link. The env
+   * file is `<checkout>/<envFile>`, and the state file sits in a `.cache` folder beside it.
+   */
   checkout: string;
+  /** The `.env` path relative to the checkout, for example `agents/steward/.env`. */
+  envFile: string;
+  target: RotateTarget;
+  /** The verify functions the credential rows name. */
+  verifiers: RotateDeps['verifiers'];
+  /** An IANA zone for expiry dates, for example `America/Vancouver`. */
+  timeZone: string;
   log(line: string): void;
 }
 
@@ -269,9 +273,9 @@ function railwayToken(): string {
 }
 
 export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; secretsToMask: () => string[] } {
-  const stewardDir = path.join(options.checkout, 'agents', 'steward');
-  const envPath = path.join(stewardDir, '.env');
-  const cacheDir = path.join(stewardDir, '.cache');
+  const { target: where } = options;
+  const envPath = path.join(options.checkout, ...options.envFile.split('/'));
+  const cacheDir = path.join(path.dirname(envPath), '.cache');
   const statePath = (name: string) => path.join(cacheDir, `credential-rotate-${name}.json`);
   const masked: string[] = [];
 
@@ -296,9 +300,9 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
   const railwayTarget = async (): Promise<RailwayTarget> => {
     if (target) return target;
     const out = await runChecked(railwayBinary(), ['status', '--json'], undefined, options.checkout);
-    const parsed = parseRailwayStatus(out);
-    if (parsed.project !== RAILWAY_PROJECT) {
-      throw new Error(`The Railway CLI in ${options.checkout} links project ${parsed.project || '(none)'}, not ${RAILWAY_PROJECT}.`);
+    const parsed = parseRailwayStatus(out, where.railwayService, where.railwayEnvironment);
+    if (parsed.project !== where.railwayProject) {
+      throw new Error(`The Railway CLI in ${options.checkout} links project ${parsed.project || '(none)'}, not ${where.railwayProject}.`);
     }
     target = parsed;
     return parsed;
@@ -340,7 +344,7 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: options.log,
     isoDatePlus: (from, days) =>
-      new Intl.DateTimeFormat('en-CA', { timeZone: STEWARD_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+      new Intl.DateTimeFormat('en-CA', { timeZone: options.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
         new Date(from.getTime() + days * 86_400_000),
       ),
     prompt: {
@@ -411,12 +415,12 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
     },
     op: {
       readItem: async (item) => {
-        const out = await runChecked(opBinary(), ['item', 'get', item, '--vault', OP_VAULT, '--format', 'json']);
+        const out = await runChecked(opBinary(), ['item', 'get', item, '--vault', where.opVault, '--format', 'json']);
         const parsed = JSON.parse(out) as { fields?: OpItem['fields'] };
         return { fields: (parsed.fields ?? []).map((f) => ({ ...f, label: f.label ?? '' })) };
       },
       editItem: async (item, template) => {
-        await runChecked(opBinary(), ['item', 'edit', item, '--vault', OP_VAULT], JSON.stringify(template));
+        await runChecked(opBinary(), ['item', 'edit', item, '--vault', where.opVault], JSON.stringify(template));
       },
     },
     railway: {
@@ -429,7 +433,7 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
         await railwayTarget();
         await runChecked(
           railwayBinary(),
-          ['variable', 'set', name, '--stdin', '-s', RAILWAY_SERVICE, '-e', RAILWAY_ENVIRONMENT],
+          ['variable', 'set', name, '--stdin', '-s', where.railwayService, '-e', where.railwayEnvironment],
           value,
           options.checkout,
         );
@@ -454,14 +458,7 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
         await fsp.rename(temp, envPath);
       },
     },
-    sampleMetrics: async (key) => {
-      await sampleActionUsage(NAMESPACE, key);
-    },
-    pingBase: async (base) => {
-      const url = `${base.replace(/\/+$/, '')}/${healthCheckSlug('run-shape')}/log`;
-      const res = await fetch(url, { method: 'POST', body: 'steward credential rotate: new ping base verified', signal: AbortSignal.timeout(10_000) });
-      if (!res.ok) throw new Error(`the alerting service answered ${res.status}`);
-    },
+    verifiers: options.verifiers,
   };
   return { deps, secretsToMask: () => masked };
 }

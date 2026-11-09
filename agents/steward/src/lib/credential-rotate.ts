@@ -1,22 +1,27 @@
 /**
- * `steward credential rotate <name>`: take one credential through issue, store,
- * push, env, wait, verify and retire.
+ * The generic credential-rotation runner behind `steward credential rotate
+ * <name>`: it takes one credential through issue, store, push, env, wait, verify
+ * and retire. It names nothing of Steward's: a credential is a row
+ * ({@link CredentialSpec}) and the place it lives is a {@link RotateTarget}, both
+ * supplied by `credentials.ts`, so the same runner can rotate another repository's
+ * keys later.
  *
  * ## Why one command
  *
  * A rotation copies one new value into several systems by hand, and the copy
- * most likely to be missed (the second one, on Railway) is the one that stops
- * the hosted worker. The command does every copy, reads the worker's ready line
- * after the redeploy, proves the new value works, and only then offers to delete
- * the old key.
+ * most likely to be missed (the second one, on the host) is the one that stops
+ * the service. The command does every copy, reads the service's ready line after
+ * the redeploy, proves the new value works, and only then offers to delete the
+ * old key.
  *
  * ## Where it runs
  *
  * On Matt's machine only. `tcld login` and the 1Password approval are
  * interactive, and no hosted path exists. This file decides; every call that
  * leaves the process (`tcld`, `op`, `railway`, the GraphQL endpoint, fetch, the
- * file system, the prompt) goes through {@link RotateDeps}, so the tests run each
- * step against fakes. `credential-rotate-deps.ts` wires the real calls.
+ * file system, the prompt, the verify function) goes through {@link RotateDeps},
+ * so the tests run each step against fakes. `credential-rotate-deps.ts` wires the
+ * real calls.
  *
  * ## The steps
  *
@@ -27,41 +32,50 @@
  *    credential's 1Password item, and the command reads the item back.
  * 3. `push`: `railway variable set` over stdin. The redeploy is the point, so
  *    the call does not skip it.
- * 4. `env`: one line of `agents/steward/.env` is rewritten in place.
+ * 4. `env`: one line of the credential's `.env` file is rewritten in place.
  * 5. `wait`: the new Railway deployment, then its log for the ready line.
- * 6. `verify`: the thing the ready line cannot say, that the value works.
+ * 6. `verify`: the thing the ready line cannot say, that the value works. The
+ *    row names a verify function; the caller supplies it.
  * 7. `retire`: the old key is deleted at the issuer, after Matt confirms.
  *
  * ## Secrets
  *
- * A secret never appears in argv or a log line (`config.ts`). It reaches `op`
- * and `railway` over stdin, and every message the command prints passes through
+ * A secret never appears in argv or a log line. It reaches `op` and `railway`
+ * over stdin, and every message the command prints passes through
  * {@link redactSecrets}. After `store` the command holds the value only for the
  * length of one step and reads it back from 1Password the next time it needs it.
  *
  * ## Resume
  *
- * Each completed step is written to a state file in `agents/steward/.cache/`
- * (gitignored). It holds key ids, a deployment id and dates, and no secret. The
- * command stops at the first failure, says what remains, and a rerun skips the
- * completed steps. One gap cannot resume: a key issued but not yet stored. The
- * state records that key's id as an orphan, and the rerun offers to delete it.
+ * Each completed step is written to a state file in the `.cache/` folder beside
+ * the `.env` file (gitignored). The file holds key ids, a deployment id and
+ * dates, and never a secret value. The command stops at the first failure, says
+ * what remains, and a rerun skips the completed steps. One gap cannot resume: a
+ * key issued but not yet stored. The state records that key's id as an orphan,
+ * and the rerun offers to delete it.
  */
-
-import { WORKER_READY_LOG } from '../config.js';
 
 export const ROTATE_STEPS = ['issue', 'store', 'push', 'env', 'wait', 'verify', 'retire'] as const;
 export type RotateStep = (typeof ROTATE_STEPS)[number];
 
-/** How a credential's value is verified once the worker runs on it. */
-export type VerifyMethod = 'action-usage' | 'ping-base';
+/** Where a credential lives: the host service that reads it and the vault that holds it. */
+export interface RotateTarget {
+  /** The Railway project the CLI must be linked to. A different link stops the run. */
+  railwayProject: string;
+  railwayService: string;
+  railwayEnvironment: string;
+  /** The 1Password vault that holds one item per variable. */
+  opVault: string;
+  /** The text of the service's ready log line, which carries the facts the row checks. */
+  readyMarker: string;
+}
 
 export interface CredentialSpec {
   /** The name on the command line. */
   name: string;
-  /** The variable in `agents/steward/.env`. */
+  /** The variable in the `.env` file. */
   envVar: string;
-  /** The 1Password item title, one item per variable, in the `Steward` vault. */
+  /** The 1Password item title. */
   opItem: string;
   /** The variable on the Railway service. */
   railwayVariable: string;
@@ -77,60 +91,17 @@ export interface CredentialSpec {
   manualSteps: string[];
   /** Whether the credential has an expiry date that 1Password tracks. */
   dated: boolean;
-  verify: VerifyMethod;
-  /** The ready-line field and value that say the worker holds the variable. */
+  /** The key of the verify function the caller supplies in {@link RotateDeps.verifiers}. */
+  verify: string;
+  /** The plan line for the verify step, after "verify: ". */
+  verifyPlan: string;
+  /** The log line when verify passes. */
+  verifyDone: string;
+  /** The ready-line field and value that say the service holds the variable. */
   readyField: string;
   readyValue: string;
   /** A shape check on a pasted value. Returns a complaint, or null when it is fine. */
   checkValue(value: string): string | null;
-}
-
-const RAILWAY_SERVICE = 'steward-audit-worker';
-const RAILWAY_ENVIRONMENT = 'production';
-const OP_VAULT = 'Steward';
-
-export const CREDENTIALS: Record<string, CredentialSpec> = {
-  'temporal-metrics': {
-    name: 'temporal-metrics',
-    envVar: 'TEMPORAL_METRICS_API_KEY',
-    opItem: 'TEMPORAL_METRICS_API_KEY',
-    railwayVariable: 'TEMPORAL_METRICS_API_KEY',
-    issuer: 'tcld',
-    serviceAccount: 'steward-metrics',
-    keyDisplayName: 'steward-metrics',
-    pasteLabel: 'the new metrics API key',
-    manualSteps: [
-      'Open Temporal Cloud, Settings, API keys, and choose Create API key.',
-      'Owner: the steward-metrics service account. Set the expiry to match the duration above.',
-      'Copy the key once. Cloud shows it only on creation. The key id sits beside it in the list.',
-    ],
-    dated: true,
-    verify: 'action-usage',
-    readyField: 'actionUsage',
-    readyValue: 'configured',
-    checkValue: (v) => (/\s/.test(v) ? 'the key contains whitespace' : v.length < 20 ? 'the key is too short to be an API key' : null),
-  },
-  'healthcheck-base': {
-    name: 'healthcheck-base',
-    envVar: 'STEWARD_HEALTHCHECK_BASE',
-    opItem: 'STEWARD_HEALTHCHECK_BASE',
-    railwayVariable: 'STEWARD_HEALTHCHECK_BASE',
-    issuer: 'manual',
-    pasteLabel: 'the new ping base (https://hc-ping.com/<ping-key>)',
-    manualSteps: [
-      'Open healthchecks.io, the project Settings page, and regenerate the ping key.',
-      'Copy the project ping URL. It reads https://hc-ping.com/<ping-key>, with no trailing slash.',
-    ],
-    dated: false,
-    verify: 'ping-base',
-    readyField: 'alerting',
-    readyValue: 'configured',
-    checkValue: (v) => (/^https:\/\/hc-ping\.com\/[A-Za-z0-9_-]+$/.test(v) ? null : 'expected https://hc-ping.com/<ping-key>, with no trailing slash'),
-  },
-};
-
-export function credentialNames(): string[] {
-  return Object.keys(CREDENTIALS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -230,10 +201,11 @@ export interface RotateDeps {
     path: string;
     setLine(key: string, value: string): Promise<void>;
   };
-  /** Calls the metrics endpoint with the key. Throws with the status on failure. */
-  sampleMetrics(key: string): Promise<void>;
-  /** Sends one `/log` ping to the base. Throws on failure. */
-  pingBase(base: string): Promise<void>;
+  /**
+   * The verify functions, by the key a row names in `verify`. One takes the new
+   * value, returns when it works and throws when it does not.
+   */
+  verifiers: Record<string, (value: string) => Promise<void>>;
 }
 
 export interface RotateOptions {
@@ -381,7 +353,13 @@ const FAILED_DEPLOYMENT = new Set(['FAILED', 'CRASHED', 'REMOVED', 'SKIPPED']);
 /* ------------------------------------------------------------------ */
 
 /** The plan, one line per step, for `--dry-run`. Makes no call. */
-export function describePlan(spec: CredentialSpec, options: RotateOptions, hasTcld: boolean, envPath: string): string[] {
+export function describePlan(
+  spec: CredentialSpec,
+  target: RotateTarget,
+  options: RotateOptions,
+  hasTcld: boolean,
+  envPath: string,
+): string[] {
   const viaTcld = spec.issuer === 'tcld' && hasTcld && !options.fromOp;
   const lines: string[] = [];
   if (options.fromOp) {
@@ -397,26 +375,23 @@ export function describePlan(spec: CredentialSpec, options: RotateOptions, hasTc
     lines.push(`1. issue: print the console steps (${why}) and take ${spec.pasteLabel} from a hidden prompt.`);
     lines.push(`2. store: write the value${spec.dated ? ', expires and key_id' : ''} into the 1Password item "${spec.opItem}" and read it back.`);
   }
-  lines.push(`3. push: railway variable set ${spec.railwayVariable} --stdin on ${RAILWAY_SERVICE}/${RAILWAY_ENVIRONMENT}, which redeploys.`);
+  lines.push(`3. push: railway variable set ${spec.railwayVariable} --stdin on ${target.railwayService}/${target.railwayEnvironment}, which redeploys.`);
   lines.push(`4. env: rewrite the ${spec.envVar} line in ${envPath}.`);
   lines.push(`5. wait: the new deployment, then its log for the ready line with ${spec.readyField}: ${spec.readyValue}.`);
-  lines.push(
-    spec.verify === 'action-usage'
-      ? '6. verify: call the metrics endpoint with the new key, retrying up to two minutes.'
-      : '6. verify: send one /log ping to the new base. It changes no check\'s state.',
-  );
+  lines.push(`6. verify: ${spec.verifyPlan}`);
   lines.push(
     spec.issuer === 'tcld'
       ? viaTcld
         ? '7. retire: delete the old key with tcld apikey delete, after you confirm.'
         : '7. retire: print the Cloud steps to delete the old key. tcld is absent, so you delete it.'
-      : '7. retire: nothing to delete. The old ping key is gone once you regenerate it.',
+      : '7. retire: nothing to delete. Regenerating the value at the issuer already ended the old one.',
   );
   return lines;
 }
 
 export async function rotateCredential(
   spec: CredentialSpec,
+  target: RotateTarget,
   options: RotateOptions,
   deps: RotateDeps,
   timings: RotateTimings = DEFAULT_TIMINGS,
@@ -428,7 +403,7 @@ export async function rotateCredential(
 
   if (options.dryRun) {
     deps.log(`Plan for ${spec.name} (dry run, no call is made):`);
-    for (const line of describePlan(spec, options, deps.hasTcld(), deps.env.path)) deps.log(`  ${line}`);
+    for (const line of describePlan(spec, target, options, deps.hasTcld(), deps.env.path)) deps.log(`  ${line}`);
     return { completed: false, retire: 'pending', remaining: [...ROTATE_STEPS] };
   }
 
@@ -497,7 +472,7 @@ export async function rotateCredential(
         const made = await deps.tcld.createKey({
           serviceAccountId: saId,
           name: spec.keyDisplayName ?? spec.name,
-          description: `Rotated by steward credential rotate on ${deps.isoDatePlus(deps.now(), 0)}`,
+          description: `Rotated by credential rotate on ${deps.isoDatePlus(deps.now(), 0)}`,
           duration: options.duration,
         });
         secrets.push(made.token);
@@ -563,7 +538,7 @@ export async function rotateCredential(
       st.newKeyId = keyId;
       st.expires = expires;
       st.orphanKeyId = undefined;
-      say('store', `wrote ${spec.opItem} in the ${OP_VAULT} vault and read it back${st.oldKeyId ? `; old key id ${st.oldKeyId}` : ''}`);
+      say('store', `wrote ${spec.opItem} in the ${target.opVault} vault and read it back${st.oldKeyId ? `; old key id ${st.oldKeyId}` : ''}`);
     }
     value = null;
     await finish('issue');
@@ -595,7 +570,7 @@ export async function rotateCredential(
     } catch (err) {
       stop('push', err);
     }
-    say('push', `set ${spec.railwayVariable} on ${RAILWAY_SERVICE}/${RAILWAY_ENVIRONMENT}; the service redeploys`);
+    say('push', `set ${spec.railwayVariable} on ${target.railwayService}/${target.railwayEnvironment}; the service redeploys`);
     await finish('push');
   } else {
     say('push', 'already done');
@@ -631,7 +606,7 @@ export async function rotateCredential(
           throw new Error(`Deployment ${deployment.id} ended ${deployment.status}.`);
         }
         if (deployment) {
-          readyLine = (await deps.railway.logs(deployment.id)).find((l) => l.includes(WORKER_READY_LOG));
+          readyLine = (await deps.railway.logs(deployment.id)).find((l) => l.includes(target.readyMarker));
         }
         if (readyLine) break;
         const limit = deployment ? timings.deployTimeoutMs + timings.readyTimeoutMs : timings.deployTimeoutMs;
@@ -665,8 +640,9 @@ export async function rotateCredential(
       let delay = timings.verifyFirstDelayMs;
       for (;;) {
         try {
-          if (spec.verify === 'action-usage') await deps.sampleMetrics(value);
-          else await deps.pingBase(value);
+          const verifier = deps.verifiers[spec.verify];
+          if (!verifier) throw new Error(`No verify function named ${spec.verify} was supplied.`);
+          await verifier(value);
           break;
         } catch (err) {
           // A new key answers Access Denied for its first seconds.
@@ -679,7 +655,7 @@ export async function rotateCredential(
     } catch (err) {
       stop('verify', err);
     }
-    say('verify', spec.verify === 'action-usage' ? 'the metrics endpoint answered 200 on the new key' : 'a /log ping to the new base was accepted');
+    say('verify', spec.verifyDone);
     await finish('verify');
   } else {
     say('verify', 'already done');

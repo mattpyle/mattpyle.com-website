@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { CREDENTIALS, STEWARD_TARGET } from '../../src/lib/credentials.js';
 import {
-  CREDENTIALS,
   RotateStopped,
   buildTemplate,
   describePlan,
@@ -217,21 +217,23 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
         w.envWrites.push({ key, value });
       },
     },
-    sampleMetrics: async (key) => {
-      call('sample');
-      assert.equal(key, w.secret);
-      if (w.samplerFailures-- > 0) throw new Error('the metrics endpoint answered 403: Access Denied');
-    },
-    pingBase: async () => {
-      call('ping');
-      if (w.pingFailures-- > 0) throw new Error('the alerting service answered 502');
+    verifiers: {
+      'action-usage': async (key) => {
+        call('sample');
+        assert.equal(key, w.secret);
+        if (w.samplerFailures-- > 0) throw new Error('the metrics endpoint answered 403: Access Denied');
+      },
+      'ping-base': async () => {
+        call('ping');
+        if (w.pingFailures-- > 0) throw new Error('the alerting service answered 502');
+      },
     },
   };
   return w;
 }
 
 const run = (w: World, spec = metrics, options: Partial<RotateOptions> = {}) =>
-  rotateCredential(spec, { ...OPTIONS, ...options }, w.deps, FAST);
+  rotateCredential(spec, STEWARD_TARGET, { ...OPTIONS, ...options }, w.deps, FAST);
 
 async function stoppedAt(promise: Promise<unknown>): Promise<RotateStopped> {
   try {
@@ -254,10 +256,10 @@ test('a dry run prints the plan and makes no call at all', async () => {
 });
 
 test('the dry run names the pasted path when tcld is absent', () => {
-  const plan = describePlan(metrics, OPTIONS, false, 'x/.env').join('\n');
+  const plan = describePlan(metrics, STEWARD_TARGET, OPTIONS, false, 'x/.env').join('\n');
   assert.match(plan, /tcld is not on PATH/);
   assert.match(plan, /tcld is absent, so you delete it/);
-  const withTcld = describePlan(metrics, OPTIONS, true, 'x/.env').join('\n');
+  const withTcld = describePlan(metrics, STEWARD_TARGET, OPTIONS, true, 'x/.env').join('\n');
   assert.match(withTcld, /service account/);
   assert.match(withTcld, /after you confirm/);
 });
@@ -397,7 +399,7 @@ test('healthcheck-base is pasted, verified with one /log ping, and has no retire
   const base = `https://hc-ping.com/${fresh('')}`;
   const w = world({ secrets: [base] });
   w.item = { fields: [{ id: 'password', label: 'password', type: 'CONCEALED', value: 'old' }] };
-  w.deps.sampleMetrics = async () => assert.fail('the sampler is not this credential\'s check');
+  w.deps.verifiers['action-usage'] = async () => assert.fail('the sampler is not this credential check');
   w.logsByDeployment.set('dep-new-1', ['steward worker polling alerting: "configured"']);
   const result = await run(w, healthcheck);
   assert.equal(result.completed, true);

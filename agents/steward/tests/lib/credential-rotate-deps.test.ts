@@ -80,8 +80,8 @@ test('parseRailwayStatus finds the worker service and the production environment
     },
     services: { edges: [{ node: { id: 'svc-1', name: 'steward-audit-worker' } }] },
   });
-  assert.deepEqual(parseRailwayStatus(out), { project: 'mattpyle.com-website', serviceId: 'svc-1', environmentId: 'env-1' });
-  assert.throws(() => parseRailwayStatus(JSON.stringify({ name: 'x', environments: { edges: [] }, services: { edges: [] } })), /no steward-audit-worker/);
+  assert.deepEqual(parseRailwayStatus(out, 'steward-audit-worker', 'production'), { project: 'mattpyle.com-website', serviceId: 'svc-1', environmentId: 'env-1' });
+  assert.throws(() => parseRailwayStatus(JSON.stringify({ name: 'x', environments: { edges: [] }, services: { edges: [] } }), 'steward-audit-worker', 'production'), /no steward-audit-worker/);
 });
 
 test('parseJsonOutput tolerates text before and after the JSON', () => {
