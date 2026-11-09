@@ -95,12 +95,12 @@ const FILES: Record<string, string> = {
   'already-live': finding('already-live', 'TI-8', status('https://temporal.io/broken'), ['live_on: 2026-11-08']),
 };
 
-function seed(): Record<string, string> {
-  const lines = Object.keys(FILES).map((key) => `${key} | approved | defect | s | title | reason`);
+function seed(keys: string[] = Object.keys(FILES)): Record<string, string> {
+  const lines = keys.map((key) => `${key} | approved | defect | s | title | reason`);
   lines.push('still-proposed | proposed | defect | s | title |');
   const index = ['# Findings index', '', 'One line per finding: `key | status | kind | scenario | title | verdict reason`.', '', ...lines, ''].join('\n');
   const files: Record<string, string> = { [`sites/${SITE}/config.yaml`]: CONFIG, [`${DIR}/INDEX.md`]: index };
-  for (const [key, text] of Object.entries(FILES)) files[`${DIR}/${key}.md`] = text;
+  for (const key of keys) files[`${DIR}/${key}.md`] = FILES[key]!;
   return files;
 }
 
@@ -203,14 +203,55 @@ test('each approved finding gets one outcome, and only a still-present or fixed 
   assert.equal(github.refUpdates.length, 2);
   assert.ok(github.refUpdates.every((update) => update.branch === 'main' && !update.force));
 
-  // One healthy ping on the site's own check, carrying the run's one-line summary.
+  // The fixture holds two findings production could not be asked about, so the
+  // run pings /fail on the site's own check: the summary first, then the rows.
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.signal, 'findings-recheck:temporal-io');
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.ok(pings[0]!.shape.summary.startsWith(summariseRecheck(result)));
+  assert.match(pings[0]!.shape.summary, /2 of 8 finding\(s\) were not rechecked cleanly: TI-5 could not measure .*; TI-6 could not measure \(.*answered 503/);
+});
+
+test('a run whose rows are all resolved, still present, no checks or open pings healthy with the summary', async () => {
+  const keys = ['fixed-on-site', 'live-on-docs', 'no-block', 'empty-block', 'has-run'];
+  github = installFakeGitHub({ seed: seed(keys), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities([findingWorkflowId(SITE, 'has-run')]);
+  const result = await run(acts);
+
+  assert.equal(result.rows.length, 5);
   assert.deepEqual(pings, [
     {
       signal: 'findings-recheck:temporal-io',
       shape: { ok: true, summary: summariseRecheck(result) },
     },
   ]);
-  assert.match(pings[0]!.shape.summary, /^Findings recheck of temporal-io: 8 approved, /);
+  assert.match(pings[0]!.shape.summary, /^Findings recheck of temporal-io: 5 approved, /);
+});
+
+test('a check that could not be measured pings /fail and names the finding', async () => {
+  github = installFakeGitHub({ seed: seed(['fixed-on-site', 'site-down']), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities();
+  const result = await run(acts);
+
+  assert.deepEqual(result.rows.map((row) => row.outcome), ['resolved', 'could not measure']);
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.match(pings[0]!.shape.summary, /^Findings recheck of temporal-io: 2 approved, resolved 1, could not measure 1\. 1 of 2 finding\(s\) were not rechecked cleanly: TI-6 could not measure \(.*answered 503\)/);
+});
+
+test('a write that failed pings /fail and names the finding', async () => {
+  github = installFakeGitHub({ seed: seed(['fixed-on-site']), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities([], {
+    writeFindingRecheck: async () => {
+      throw ApplicationFailure.nonRetryable('the branch moved', 'FindingMoved');
+    },
+  });
+  const result = await run(acts);
+
+  assert.deepEqual(result.rows.map((row) => row.outcome), ['write failed']);
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.match(pings[0]!.shape.summary, /1 of 1 finding\(s\) were not rechecked cleanly: TI-1 write failed \(the branch moved\)/);
 });
 
 test('a run that fails pings the failure endpoint with the reason, and still fails', async () => {

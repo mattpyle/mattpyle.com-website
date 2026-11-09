@@ -45,6 +45,7 @@
 import type { ActionUsageSample } from './action-usage.js';
 import { lighthouseVersionCounts } from './scorecard-aggregate.js';
 import { renderedNothing } from './agent-audit/report-shape.js';
+import { summariseRecheck, type RecheckFindingsResult } from './findings-recheck.js';
 
 /** The signals with one check each, fixed in code. */
 export type FixedHealthSignal =
@@ -202,6 +203,36 @@ function pagesShape(input: ScorecardShapeInput): RunShape {
       `could not be audited: ${named.join('; ')}${rest}. The run finished, so nothing else will ` +
       'report this. Check the hosted worker\'s logs before trusting the numbers, and expect the ' +
       'run-log PR (if one opened) to record a measurement of the auditor rather than of the site.',
+  };
+}
+
+/**
+ * The recheck's rule: **a completed run with any `write failed` or
+ * `could not measure` row is a bad shape.**
+ *
+ * Both are success-shaped failures, the kind this file exists to catch. A write
+ * that failed is Steward's GitHub path failing, and a check that could not be
+ * measured is production, the browser or the block failing to answer; each
+ * leaves the finding's file as it was, so `live_on` goes stale while the run
+ * reports success. `no checks`, `has an open run` and `skipped` are not
+ * failures: nothing was owed on those rows.
+ *
+ * The body starts with the run's one-line summary and then names the rows, up to
+ * five, so the email reads without opening Temporal.
+ */
+export function recheckShape(result: RecheckFindingsResult): RunShape {
+  const base = summariseRecheck(result);
+  const bad = result.rows.filter((row) => row.outcome === 'write failed' || row.outcome === 'could not measure');
+  if (bad.length === 0) return { ok: true, summary: base };
+  const named = bad.slice(0, 5).map((row) => `${row.keyShort ?? row.key} ${row.outcome}${row.detail ? ` (${row.detail})` : ''}`);
+  const rest = bad.length > named.length ? `, and ${bad.length - named.length} more` : '';
+  return {
+    ok: false,
+    summary:
+      `${base} ${bad.length} of ${result.rows.length} finding(s) were not rechecked cleanly: ` +
+      `${named.join('; ')}${rest}. The run finished, so nothing else will report this. ` +
+      "Each of these left the finding's file as it was, so its live_on may be stale. " +
+      "Check the hosted worker's logs for the GitHub write or the browser check that failed.",
   };
 }
 

@@ -1,7 +1,7 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 import { findingWorkflowId, type Verification } from '../lib/findings.js';
-import { findingsRecheckSignal } from '../lib/run-health.js';
+import { findingsRecheckSignal, recheckShape } from '../lib/run-health.js';
 import {
   summariseRecheck,
   vancouverDay,
@@ -42,9 +42,12 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * **Replay.** A new workflow type: no run recorded before it exists, so it
  * carries no `patched` marker.
  *
- * **Health (STW-549).** Every run pings `findings-recheck:<site>`, success and
- * failure both, with the run's one-line summary as the body, so a recheck that
- * stops running goes late at the alerting service (period 1 day, grace 1 hour).
+ * **Health (STW-549).** Every run pings `findings-recheck:<site>`, so a recheck
+ * that stops running goes late at the alerting service (period 1 day, grace 1
+ * hour). A run that throws pings `/fail` with the reason. A run that completes
+ * pings what `recheckShape` decides: `/fail` when any row is `write failed` or
+ * `could not measure`, success otherwise, the run's one-line summary as the
+ * body either way.
  * The check for a site is created by hand at the service under the slug
  * `steward-findings-recheck-<site>`.
  *
@@ -120,9 +123,8 @@ export async function recheckFindingsWorkflow(input: RecheckFindingsInput): Prom
     throw err;
   }
 
-  const summary = summariseRecheck(result);
-  wf.log.info(summary);
-  await alerting.reportRunHealth({ signal: findingsRecheckSignal(input.site), shape: { ok: true, summary } });
+  wf.log.info(summariseRecheck(result));
+  await alerting.reportRunHealth({ signal: findingsRecheckSignal(input.site), shape: recheckShape(result) });
   return result;
 }
 
