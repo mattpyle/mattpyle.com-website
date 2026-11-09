@@ -164,8 +164,9 @@ sitemap, the OG image) on `www.mattpyle.com` itself before it calls anything don
 
 **Prerequisites:** Node 24, the [Temporal CLI](https://docs.temporal.io/cli) on PATH, Chrome, the
 Vale binary (`npm run setup:vale`), and an `.env` with `ANTHROPIC_API_KEY` (for the editorial pass)
-and `GITHUB_TOKEN` (for the publish leg — a `gh auth token` won't do, since the worker reads
-`process.env` directly).
+and `STEWARD_GITHUB_APP_ID` plus `STEWARD_GITHUB_APP_PRIVATE_KEY` (for the publish leg — the
+credential of a GitHub App installed on the repositories, with the PEM as one line of base64; a
+`gh auth token` won't do, since the worker reads `process.env` directly).
 
 ```bash
 npm install                  # from the repo root — this is an npm workspace

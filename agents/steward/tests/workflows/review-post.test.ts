@@ -976,7 +976,7 @@ async function waitForStaleReason(
 test('a publish failure parks the review instead of destroying it', async () => {
   // Design rule 12 (spec §303-324): an operator-fixable failure must park, not
   // fail the workflow. `publishPost` runs with `maximumAttempts: 1`, so before
-  // this an expired GITHUB_TOKEN threw straight out and took the entire durable
+  // this a rejected GitHub credential threw straight out and took the entire durable
   // review with it — every finding, and the approve the human had just sent.
   const { activities } = mockActivities({
     publishPost: async () => {

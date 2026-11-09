@@ -56,6 +56,12 @@ jobs:
           additional_permissions: |
             actions: read
 
+          # The fix issue Steward opens is authored by its GitHub App, and the Action
+          # refuses a bot actor unless the login is named here. The app is
+          # `steward-mattpyle`, so its login is `steward-mattpyle[bot]`; the Action
+          # accepts the name with or without the suffix. Nothing else is allowed.
+          allowed_bots: steward-mattpyle
+
           # Claude may run the repository's own checks and open the PR itself. Nothing else
           # on the shell: the allowlist is the fence, as it is for the Steward fixer.
           claude_args: |

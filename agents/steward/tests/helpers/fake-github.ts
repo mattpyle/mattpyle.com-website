@@ -24,6 +24,8 @@
  * frames away.
  */
 
+import { FAKE_INSTALLATION_TOKEN, installFakeAppCredentials } from './fake-github-app.js';
+
 export interface FakeRepoFile {
   text: string;
   sha: string;
@@ -114,15 +116,16 @@ export interface FakeGitHubOptions {
  * Installs the fake over `globalThis.fetch` and returns a handle. Call
  * `restore()` in an `after` hook.
  *
- * Sets `GITHUB_TOKEN` too: `githubToken()` throws a non-retryable `AuthError`
- * without one, which would fail every test here for a reason unrelated to what
- * they assert.
+ * Sets the GitHub App variables too (`helpers/fake-github-app.ts`): the token
+ * provider throws a non-retryable `AuthError` without them, which would fail
+ * every test here for a reason unrelated to what they assert. The fake serves the
+ * app routes, which are not recorded in `calls`, and answers 401 to a repository
+ * call that lacks the installation token.
  */
 export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const DEFAULT_BRANCH = options.defaultBranch ?? MASTER;
   const realFetch = globalThis.fetch;
-  const previousToken = process.env.GITHUB_TOKEN;
-  process.env.GITHUB_TOKEN = 'fake-token-for-tests';
+  const appAuth = installFakeAppCredentials();
 
   const branches = new Map<string, Map<string, FakeRepoFile>>();
   const base = new Map<string, FakeRepoFile>();
@@ -159,6 +162,11 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     const url = new URL(typeof input === 'string' ? input : input.url);
     if (url.host !== 'api.github.com') {
       throw new Error(`fake GitHub received a request to ${url.host}; only api.github.com is modelled`);
+    }
+    const served = appAuth.handle(url, init);
+    if (served) return served;
+    if (((init?.headers ?? {}) as Record<string, string>).Authorization !== `Bearer ${FAKE_INSTALLATION_TOKEN}`) {
+      return response(401, { message: 'Bad credentials' });
     }
     const method = (init?.method ?? 'GET').toUpperCase();
     // The repo prefix is constant for every call this codebase makes.
@@ -446,8 +454,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     },
     restore() {
       globalThis.fetch = realFetch;
-      if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
-      else process.env.GITHUB_TOKEN = previousToken;
+      appAuth.restore();
     },
   };
 }

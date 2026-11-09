@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { archiveScorecardRun } from '../../src/activities/scorecard.js';
-import { githubToken } from '../../src/lib/github.js';
+import { installationToken } from '../../src/lib/github.js';
 
 /**
  * The regression test for the 2026-08-14 incident: a suite run between
@@ -17,16 +17,16 @@ import { githubToken } from '../../src/lib/github.js';
  * it by name.
  *
  * Deliberately asserting on the *observable behaviour* an un-faked activity
- * gets, not on `process.env.GITHUB_TOKEN` directly. What matters is not that a
+ * gets, not on the two `STEWARD_GITHUB_APP_*` variables directly. What matters is not that a
  * variable is empty; it is that a network-backed activity called without its
  * fake fails loudly before it can reach GitHub.
  */
 
-test('the suite runs with no real GitHub credential', () => {
-  assert.throws(
-    () => githubToken(),
-    /GITHUB_TOKEN is not set/,
-    'a real GITHUB_TOKEN is visible to the test suite — helpers/no-real-credentials.ts is not loaded',
+test('the suite runs with no real GitHub credential', async () => {
+  await assert.rejects(
+    () => installationToken(),
+    /STEWARD_GITHUB_APP_ID and STEWARD_GITHUB_APP_PRIVATE_KEY are not set/,
+    'a real GitHub App credential is visible to the test suite — helpers/no-real-credentials.ts is not loaded',
   );
 });
 
@@ -47,7 +47,7 @@ test('a GitHub-backed activity called without its fake fails instead of reaching
         decision: 'no-op',
         reason: 'guard check',
       }),
-    /GITHUB_TOKEN is not set/,
+    /STEWARD_GITHUB_APP_ID and STEWARD_GITHUB_APP_PRIVATE_KEY are not set/,
     'archiveScorecardRun reached the network without a fake installed',
   );
 });

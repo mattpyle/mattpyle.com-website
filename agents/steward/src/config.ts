@@ -114,8 +114,8 @@ export const GITHUB_REPO = process.env.STEWARD_GITHUB_REPO ?? 'mattpyle/mattpyle
 
 /**
  * The findings store: the private repository Argus files into, one site per
- * folder (`sites/<site>/findings/`). The same `GITHUB_TOKEN` reaches it, which
- * is why the hosted worker's token is scoped to both repositories.
+ * folder (`sites/<site>/findings/`). The same GitHub App installation reaches it, which
+ * is why the app is installed on both repositories.
  *
  * Read by the CLI and frozen into the reconcile Schedule's input, never read by
  * workflow code (design rule 10): the repository rides in each finding

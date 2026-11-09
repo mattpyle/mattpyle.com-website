@@ -9,6 +9,7 @@ import { parseFindingBody } from '../../src/lib/findings.js';
 import { verifyBlockRetryPrompt } from '../../src/lib/handoff-generator.js';
 import { VERCEL_BYPASS_HEADER, bypassFetch, onOrigin, type VerifyCheck } from '../../src/lib/verify-checks.js';
 import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, ORIGIN } from '../helpers/finding-fixtures.js';
+import { installFakeAppCredentials, type FakeAppCredentials } from '../helpers/fake-github-app.js';
 
 /**
  * The pieces of the fixer's two tests: the origin swap and the bypass secret's
@@ -21,7 +22,7 @@ const SECRET = 'test-bypass-secret';
 const SITE_REPO = 'mattpyle/mattpyle.com-website';
 
 const realFetch = globalThis.fetch;
-const previousToken = process.env.GITHUB_TOKEN;
+let appAuth: FakeAppCredentials | undefined;
 const previousSecret = process.env[BYPASS_SECRET_ENV];
 
 function restore(name: string, value: string | undefined): void {
@@ -31,7 +32,8 @@ function restore(name: string, value: string | undefined): void {
 
 afterEach(() => {
   globalThis.fetch = realFetch;
-  restore('GITHUB_TOKEN', previousToken);
+  appAuth?.restore();
+  appAuth = undefined;
   restore(BYPASS_SECRET_ENV, previousSecret);
 });
 
@@ -140,14 +142,15 @@ const status = (id: number) => `/repos/${SITE_REPO}/deployments/${id}/statuses?p
 
 function scriptGitHub(routes: Record<string, unknown>): string[] {
   const calls: string[] = [];
-  process.env.GITHUB_TOKEN = 'fake-token-for-tests';
-  globalThis.fetch = (async (url: string | URL) => {
+  appAuth?.restore();
+  appAuth = installFakeAppCredentials();
+  globalThis.fetch = appAuth.wrap((async (url: string | URL) => {
     const u = new URL(String(url));
     const path = `${u.pathname}${u.search}`;
     calls.push(path);
     if (!(path in routes)) throw new Error(`no scripted route for ${path}`);
     return new Response(JSON.stringify(routes[path]), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }) as typeof fetch;
+  }) as typeof fetch);
   return calls;
 }
 
@@ -373,8 +376,9 @@ test("a regenerated handoff block says so, and a failed regeneration says why th
 test('a PR the preview test fails is turned into a draft by GraphQL, and a draft is left alone', async () => {
   const calls: string[] = [];
   let draft = false;
-  process.env.GITHUB_TOKEN = 'fake-token-for-tests';
-  globalThis.fetch = (async (url: string | URL, init: RequestInit = {}) => {
+  appAuth?.restore();
+  appAuth = installFakeAppCredentials();
+  globalThis.fetch = appAuth.wrap((async (url: string | URL, init: RequestInit = {}) => {
     const u = new URL(String(url));
     const method = init.method ?? 'GET';
     calls.push(`${method} ${u.pathname}${u.search}`);
@@ -391,7 +395,7 @@ test('a PR the preview test fails is turned into a draft by GraphQL, and a draft
       return json({ data: { convertPullRequestToDraft: { pullRequest: { isDraft: true } } } });
     }
     throw new Error(`unscripted ${method} ${u.pathname}`);
-  }) as typeof fetch;
+  }) as typeof fetch);
 
   const prInput = {
     key: DEFECT_KEY,

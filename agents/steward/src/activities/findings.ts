@@ -600,8 +600,10 @@ async function findOpenIssue(repo: string, marker: string): Promise<{ number: nu
  * second one. Only open issues count (the card's rule 2), so after
  * `supersedes` closes the last attempt's issue a new one opens.
  *
- * Created with the worker's `GITHUB_TOKEN`, a person's token, so the Action's
- * write-access and human-actor checks pass (the card's rule 1).
+ * Created with the worker's installation token, so the issue's author is the
+ * GitHub App's bot login. The Action's write-access check passes a `[bot]`
+ * actor, and its human-actor check passes it only when `allowed_bots` in
+ * `.github/workflows/claude.yml` names the app (the card's rule 1).
  */
 export async function openFixIssue(input: OpenFixIssueInput): Promise<FixIssue> {
   const siteRepo = siteRepository(input.site);

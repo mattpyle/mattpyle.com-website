@@ -44,8 +44,8 @@ import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRec
  * activities *mean* is unchanged: same run-log entry, same PR, same archive
  * record, same never-merges-its-own-PR rule.
  *
- * The cost is that this file now needs `GITHUB_TOKEN` for reads as well as
- * writes, where before only the publish leg did. A run whose token is missing
+ * The cost is that this file now needs the GitHub App credential for reads as well as
+ * writes, where before only the publish leg did. A run whose credential is missing
  * fails at step 0.5 rather than twelve minutes in at the publish step, which is
  * the better of the two.
  */

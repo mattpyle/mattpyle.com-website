@@ -22,7 +22,7 @@ import { hostedRegistry } from '../../src/hosted-registry.js';
  * queue fails here by queue name.
  *
  * The entry point itself cannot be imported: it calls `main()` at module scope,
- * which connects to Temporal and refuses to start without `GITHUB_TOKEN`. That
+ * which connects to Temporal and refuses to start without a GitHub App credential. That
  * is why the registry is its own module. Nothing here reads `worker-hosted.ts`
  * as text, so nothing here cares how an object is spelled or in what order it
  * is declared.
