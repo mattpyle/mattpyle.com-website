@@ -51,4 +51,8 @@ CI runs the build, axe, the a11y guard and the validators on every PR. Vercel bu
 
 ## Stack
 
-Astro 7, TypeScript, content collections, Node 24. No framework components or client-side state unless an experiment needs them. Vercel hosts; merging to `master` deploys. `middleware.ts` and `vercel.json` handle markdown content negotiation at the edge; keep their registrations in sync. GitHub: work on a branch and open a PR; the repository owner merges.
+Astro 7, TypeScript, content collections, Node 24. Node 24 is pinned by `.nvmrc`, `.node-version` and `engines`. No framework components or client-side state unless an experiment needs them. Vercel hosts; merging to `master` deploys. `middleware.ts` and `vercel.json` handle markdown content negotiation at the edge; keep their registrations in sync. GitHub: work on a branch and open a PR; the repository owner merges.
+
+`allowScripts` in `package.json` names the packages whose install scripts may run. A new package with an install script is added there deliberately. npm 11.20 and later list any unapproved one.
+
+`.npmrc` sets `detect_chromedriver_version` for the chromedriver package. npm 11 warns that it is not an npm setting, and the warning is expected.

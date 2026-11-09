@@ -38,7 +38,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
   any host the site declares in `site.hosts` of its `config.yaml`, over https. Each approved finding
   with no open finding workflow gets one outcome: no checks, could not measure, still present (its
   `live_on` is set to the America/Vancouver day) or resolved (its Verification section is written
-  and its index line reads `resolved`, in one commit). It opens no fix.
+  and its index line reads `resolved`, in one commit). It opens no fix. A completed run with a `write failed` or `could not measure` row pings the site's `steward-findings-recheck-<site>` check at healthchecks.io, at `/fail`.
 - **`findingWorkflow`** and **`reconcileFindingsWorkflow`** — the gate for findings filed into a
   separate findings repository by an inspector agent. One `findingWorkflow` per finding
   (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict came from `steward finding
@@ -112,6 +112,8 @@ matt-pc, an old-code local worker could take a hosted run's workflow task after 
 as non-deterministic. The `steward finding` commands reach Temporal through the client and need no
 local worker.
 
+Both workers log through pino. A Temporal Runtime logger passes the SDK's workflow, activity and worker entries to pino, one JSON line each. Core logs at WARN.
+
 ### The publish leg
 
 Approving a gate review doesn't publish anything by itself — it starts a sequence that opens a PR,
@@ -160,7 +162,7 @@ sitemap, the OG image) on `www.mattpyle.com` itself before it calls anything don
 
 ## Quickstart
 
-**Prerequisites:** Node 22+, the [Temporal CLI](https://docs.temporal.io/cli) on PATH, Chrome, the
+**Prerequisites:** Node 24, the [Temporal CLI](https://docs.temporal.io/cli) on PATH, Chrome, the
 Vale binary (`npm run setup:vale`), and an `.env` with `ANTHROPIC_API_KEY` (for the editorial pass)
 and `GITHUB_TOKEN` (for the publish leg — a `gh auth token` won't do, since the worker reads
 `process.env` directly).
