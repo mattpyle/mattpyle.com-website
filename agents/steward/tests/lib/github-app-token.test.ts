@@ -165,13 +165,75 @@ test('authRetryable makes the failure retryable and drops the cached token for t
   assert.equal(fake.minted, mintedBefore + 1, 'the next call mints instead of reusing the rejected token');
 });
 
-test('an app with no installation, or with two, stops with an AuthError that counts them', async () => {
-  for (const installations of [[], [{ id: 1, app_slug: 'a' }, { id: 2, app_slug: 'a' }]]) {
-    app = installFakeAppCredentials();
-    globalThis.fetch = (async () => json(200, installations)) as typeof fetch;
+const TWO_INSTALLATIONS = [
+  { id: 11, app_slug: 'steward-test', account: { login: 'mattpyle' } },
+  { id: 22, app_slug: 'steward-test', account: { login: 'other-org' } },
+];
+
+/** A fake app whose installation list is `installations`, with every other call served as usual. */
+function withInstallations(installations: unknown[]): void {
+  app = installFakeAppCredentials();
+  globalThis.fetch = (async () => json(200, installations)) as typeof fetch;
+}
+
+test('an app with no installation stops with an AuthError that says to install it', async () => {
+  withInstallations([]);
+  const err = await rejectsAuth(resolveGitHubApp());
+  assert.match(err.message, /has no installations\. Install it on the account that owns both repositories/);
+});
+
+test('two installations and no override stop with an AuthError that lists them and names the override', async () => {
+  withInstallations(TWO_INSTALLATIONS);
+  const err = await rejectsAuth(resolveGitHubApp());
+  assert.equal(err.nonRetryable, true);
+  assert.match(err.message, /has 2 installations \(mattpyle \(id 11\), other-org \(id 22\)\)/);
+  assert.match(err.message, /Set STEWARD_GITHUB_APP_INSTALLATION_ID to the one that owns both repositories/);
+});
+
+test('STEWARD_GITHUB_APP_INSTALLATION_ID picks one of several installations', async () => {
+  withInstallations(TWO_INSTALLATIONS);
+  process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = '22';
+  try {
+    assert.deepEqual(await resolveGitHubApp(), { slug: 'steward-test', installationId: 22 });
+  } finally {
+    delete process.env.STEWARD_GITHUB_APP_INSTALLATION_ID;
+  }
+});
+
+test('an override that matches no installation lists the ones the app has', async () => {
+  withInstallations(TWO_INSTALLATIONS);
+  process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = '99';
+  try {
     const err = await rejectsAuth(resolveGitHubApp());
-    assert.match(err.message, new RegExp(`has ${installations.length} installations; Steward expects exactly one`));
-    app.restore();
+    assert.match(err.message, /STEWARD_GITHUB_APP_INSTALLATION_ID is 99, but app \d+ has no such installation\. Installations: mattpyle \(id 11\), other-org \(id 22\)/);
+  } finally {
+    delete process.env.STEWARD_GITHUB_APP_INSTALLATION_ID;
+  }
+});
+
+test('an override that is not a number is refused before any request', async () => {
+  const fake = withApp();
+  process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = 'mattpyle';
+  try {
+    const err = await rejectsAuth(resolveGitHubApp());
+    assert.match(err.message, /must be the installation's numeric id/);
+    assert.deepEqual(fake.appCalls, []);
+  } finally {
+    delete process.env.STEWARD_GITHUB_APP_INSTALLATION_ID;
+  }
+});
+
+test('no error or log line from the provider carries the key, its base64 or a JWT', async () => {
+  const fake = withApp((async () => json(401, { message: 'Bad credentials' })) as typeof fetch);
+  const secrets = [testPrivateKeyBase64(), Buffer.from(testPrivateKeyBase64(), 'base64').toString('utf8').split('\n')[1]];
+  const messages: string[] = [];
+  for (const attempt of [gh('/repos/o/r'), (async () => new GitHubAppTokenProvider(fake.appId, 'bm9wZQ==').jwt())()]) {
+    await attempt.catch((err: Error) => messages.push(err.message));
+  }
+  assert.equal(messages.length, 2);
+  for (const message of messages) {
+    for (const secret of secrets) assert.ok(!message.includes(secret));
+    assert.ok(!/eyJ[A-Za-z0-9_-]{10,}\./.test(message), 'a JWT-shaped string is in the message');
   }
 });
 

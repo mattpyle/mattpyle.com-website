@@ -57,9 +57,10 @@ jobs:
             actions: read
 
           # The fix issue Steward opens is authored by its GitHub App, and the Action
-          # refuses a bot actor unless the login is named here. The app is
-          # `steward-mattpyle`, so its login is `steward-mattpyle[bot]`; the Action
-          # accepts the name with or without the suffix. Nothing else is allowed.
+          # refuses a bot actor unless it is named here. Use the app's slug, the one
+          # in the hosted worker's ready line (`github: app <slug> installation <id>`).
+          # The Action accepts it with or without the `[bot]` suffix. Nothing else
+          # is allowed.
           allowed_bots: steward-mattpyle
 
           # Claude may run the repository's own checks and open the PR itself. Nothing else

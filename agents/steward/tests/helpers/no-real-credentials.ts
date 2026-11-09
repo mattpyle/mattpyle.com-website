@@ -46,6 +46,7 @@
 
 process.env.STEWARD_GITHUB_APP_ID = '';
 process.env.STEWARD_GITHUB_APP_PRIVATE_KEY = '';
+process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = '';
 process.env.ANTHROPIC_API_KEY = '';
 // The preview bypass secret: a test that wants one sets its own.
 process.env.VERCEL_AUTOMATION_BYPASS_SECRET = '';

@@ -19,12 +19,17 @@ import { ApplicationFailure } from '@temporalio/activity';
  * credential: `STEWARD_GITHUB_APP_ID` and `STEWARD_GITHUB_APP_PRIVATE_KEY`, the
  * app's PEM as one line of base64 so the same representation works in `.env`,
  * on Railway and in a password manager. The installation id is resolved once
- * from `GET /app/installations` and kept.
+ * from `GET /app/installations` and kept. When the app is installed on more
+ * than one account, `STEWARD_GITHUB_APP_INSTALLATION_ID` names the one to use.
  *
  * {@link GitHubAppTokenProvider} signs a ten-minute JWT with Node's `crypto`
  * and exchanges it for an installation token, which lives one hour and is
  * cached until five minutes before it expires. Nothing is written to disk, and
  * neither the key nor a token appears in a log or an error message.
+ *
+ * **Never log the private key, its base64, or the JWT**, in this file or in a
+ * caller. The app id, the slug and the installation id are public identifiers
+ * and are the only values that may appear in a log line or an error.
  *
  * The app needs Contents, Pull requests and Issues read and write, and
  * Deployments, Checks and Actions read. Commits, pull requests and issues the
@@ -39,6 +44,8 @@ const API_VERSION = '2022-11-28';
 
 export const APP_ID_ENV = 'STEWARD_GITHUB_APP_ID';
 export const APP_KEY_ENV = 'STEWARD_GITHUB_APP_PRIVATE_KEY';
+/** Optional: which installation to use when the app has more than one. */
+export const INSTALLATION_ID_ENV = 'STEWARD_GITHUB_APP_INSTALLATION_ID';
 
 /** The JWT is backdated a minute for clock drift, and lives ten minutes from there. */
 const JWT_BACKDATE_SECONDS = 60;
@@ -59,6 +66,10 @@ function base64Url(input: Buffer | string): string {
 
 function authError(message: string): ApplicationFailure {
   return ApplicationFailure.nonRetryable(message, 'AuthError');
+}
+
+function describeInstallation(installation: any): string {
+  return `${installation?.account?.login ?? 'unknown account'} (id ${installation?.id})`;
 }
 
 function parseJson(text: string): any {
@@ -87,6 +98,7 @@ export class GitHubAppTokenProvider {
     private readonly appId: string,
     privateKeyBase64: string,
     private readonly now: () => number = Date.now,
+    private readonly installationOverride?: string,
   ) {
     this.pem = Buffer.from(privateKeyBase64, 'base64').toString('utf8');
     if (!this.pem.includes('-----BEGIN')) {
@@ -132,20 +144,38 @@ export class GitHubAppTokenProvider {
   }
 
   /**
-   * The app's one installation. Matt installs the app once, on his account, for
-   * both repositories, so anything but one is a setup error worth stopping on
-   * rather than guessing between.
+   * The installation to act as. With `STEWARD_GITHUB_APP_INSTALLATION_ID` set,
+   * that one. Otherwise the app's only installation: Matt installs it once, on
+   * the account that owns both repositories. More than one with no override is
+   * a setup error worth stopping on rather than guessing between, and the error
+   * lists them so the fix is a copy and paste.
    */
   async resolve(): Promise<GitHubAppIdentity> {
     if (this.identity) return this.identity;
     const installations = await this.appCall('/app/installations?per_page=100', 'GET');
-    if (!Array.isArray(installations) || installations.length !== 1) {
-      const count = Array.isArray(installations) ? installations.length : 'an unreadable list of';
+    if (!Array.isArray(installations)) {
+      throw authError(`GitHub answered the installation list for app ${this.appId} in a shape Steward cannot read.`);
+    }
+    const listed = installations.length === 0 ? 'none' : installations.map(describeInstallation).join(', ');
+    let installation: any;
+    if (this.installationOverride) {
+      installation = installations.find((each) => String(each.id) === this.installationOverride);
+      if (!installation) {
+        throw authError(
+          `${INSTALLATION_ID_ENV} is ${this.installationOverride}, but app ${this.appId} has no such installation. Installations: ${listed}.`,
+        );
+      }
+    } else if (installations.length === 1) {
+      installation = installations[0];
+    } else if (installations.length === 0) {
       throw authError(
-        `GitHub app ${this.appId} has ${count} installations; Steward expects exactly one, on the account that owns both repositories.`,
+        `GitHub app ${this.appId} has no installations. Install it on the account that owns both repositories.`,
+      );
+    } else {
+      throw authError(
+        `GitHub app ${this.appId} has ${installations.length} installations (${listed}). Set ${INSTALLATION_ID_ENV} to the one that owns both repositories.`,
       );
     }
-    const [installation] = installations;
     this.identity = { slug: String(installation.app_slug ?? this.appId), installationId: Number(installation.id) };
     return this.identity;
   }
@@ -193,8 +223,14 @@ function appProvider(): GitHubAppTokenProvider {
         `and the publish leg cannot open a PR without it.`,
     );
   }
-  const key = `${appId}\n${privateKey}`;
-  if (current?.key !== key) current = { key, provider: new GitHubAppTokenProvider(appId, privateKey) };
+  const installationOverride = process.env[INSTALLATION_ID_ENV]?.trim() || undefined;
+  if (installationOverride && !/^\d+$/.test(installationOverride)) {
+    throw authError(`${INSTALLATION_ID_ENV} must be the installation's numeric id.`);
+  }
+  const key = `${appId}\n${privateKey}\n${installationOverride ?? ''}`;
+  if (current?.key !== key) {
+    current = { key, provider: new GitHubAppTokenProvider(appId, privateKey, Date.now, installationOverride) };
+  }
   return current.provider;
 }
 
