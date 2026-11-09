@@ -485,6 +485,47 @@ test('an item that stays plain text after the write is a warning, not a stop', a
   assert.ok(result.warnings.some((x) => x.includes('plain text')));
 });
 
+test('an empty built-in credential slot beside a filled custom field does not win', () => {
+  // The layout Matt rebuilt by hand: custom Password, Date and text fields, and the built-in slot left empty.
+  const item: OpItem = {
+    fields: [
+      { id: 'credential', label: '', type: 'STRING', value: undefined },
+      { id: 'zk3m9q', label: 'Credential', type: 'CONCEALED', value: 'real' },
+      { id: 'pj7x1c', label: 'expires', type: 'DATE', value: '1802000000' },
+      { id: 'hs4w8d', label: 'key_id', type: 'STRING', value: 'abc' },
+    ],
+  };
+  assert.equal(pickValueField(item)?.id, 'zk3m9q');
+  assert.equal(pickValueField(item)?.value, 'real');
+  assert.deepEqual(secretValues(item), ['real']);
+  // The empty slot is still the answer when nothing else has a value.
+  const empty: OpItem = { fields: [item.fields[0], { ...item.fields[1], value: undefined }] };
+  assert.equal(pickValueField(empty)?.id, 'credential');
+});
+
+test('a custom field labelled password is found by label, in any case', () => {
+  const item: OpItem = { fields: [{ id: 'k1', label: 'PASSWORD', type: 'CONCEALED', value: 'v' }, { id: 'k2', label: 'other', type: 'CONCEALED', value: 'w' }] };
+  assert.equal(pickValueField(item)?.id, 'k1');
+});
+
+test('a rotation on the rebuilt layout reads and writes the custom field, not the empty slot', async () => {
+  const w = world();
+  w.item = {
+    fields: [
+      { id: 'credential', label: '', type: 'STRING', value: undefined },
+      { id: 'zk3m9q', label: 'credential', type: 'CONCEALED', value: w.oldSecret },
+      { id: 'pj7x1c', label: 'expires', type: 'STRING', value: '2026-12-01' },
+      { id: 'hs4w8d', label: 'key_id', type: 'STRING', value: 'oldkey123' },
+    ],
+  };
+  const result = await run(w);
+  assert.equal(result.completed, true);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(w.item.fields[1].value, w.secret, 'the custom field holds the new value');
+  assert.equal(w.item.fields[0].value, undefined, 'the empty slot stays empty');
+  assert.deepEqual(w.railwaySets, [{ name: 'TEMPORAL_METRICS_API_KEY', value: w.secret }]);
+});
+
 test('pickValueField still reads a value field typed STRING', () => {
   const item: OpItem = { fields: [{ id: 'credential', label: '', type: 'STRING', value: 'v' }] };
   assert.equal(pickValueField(item)?.value, 'v');

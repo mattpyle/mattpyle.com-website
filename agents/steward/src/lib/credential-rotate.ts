@@ -298,10 +298,22 @@ export function redactSecrets(text: string, secrets: readonly string[]): string 
   return out;
 }
 
-/** The 1Password field that holds the value: the credential field, the password, or the one concealed field. */
+const isValueName = (name: string): boolean => name.toLowerCase() === 'credential' || name.toLowerCase() === 'password';
+
+/** A field named `credential` or `password` by id (the built-in slot) or by label (a custom field). */
+function isValueField(f: OpField): boolean {
+  return isValueName(f.id) || isValueName(f.label);
+}
+
+/**
+ * The 1Password field that holds the value: a field named `credential` or `password`
+ * by id or by label, or else the one concealed field. When an empty built-in slot sits
+ * beside a filled custom field, the field with a value wins, so the empty slot is never
+ * the one read or written.
+ */
 export function pickValueField(item: OpItem): OpField | null {
-  const byId = item.fields.find((f) => f.id === 'credential' || f.id === 'password');
-  if (byId) return byId;
+  const named = item.fields.filter(isValueField);
+  if (named.length > 0) return named.find((f) => f.value) ?? named[0];
   const concealed = item.fields.filter((f) => f.type === 'CONCEALED');
   return concealed.length === 1 ? concealed[0] : null;
 }
@@ -323,7 +335,7 @@ export function fieldByLabel(item: OpItem, name: string): OpField | undefined {
  */
 export function secretValues(item: OpItem): string[] {
   return item.fields
-    .filter((f) => f.value && (f.type === 'CONCEALED' || f.id === 'credential' || f.id === 'password'))
+    .filter((f) => f.value && (f.type === 'CONCEALED' || isValueField(f)))
     .map((f) => f.value!);
 }
 
