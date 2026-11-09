@@ -4,7 +4,7 @@ import {
   auditSiteFast,
   auditSiteFetchChecks,
 } from './activities/agent-audit.js';
-import { checkActionUsage, checkCredentialExpiry, reportRunHealth } from './activities/health.js';
+import { checkActionUsage, reportRunHealth } from './activities/health.js';
 import {
   awaitFixPr,
   awaitFixPrMerge,
@@ -95,13 +95,12 @@ const activities = {
   readPublishedScorecard,
   publishScorecardRun,
   archiveScorecardRun,
-  // The scorecard's alerting leg. All three are HTTPS calls that read their
+  // The scorecard's alerting leg. Both are HTTPS calls that read their
   // configuration from the host's environment — `STEWARD_HEALTHCHECK_BASE` for
   // the ping, and `TEMPORAL_METRICS_API_KEY` for the usage sample's second call,
   // out to Temporal Cloud's metrics endpoint — so they satisfy the "nothing
   // local" rule this list enforces.
   reportRunHealth,
-  checkCredentialExpiry,
   checkActionUsage,
 };
 

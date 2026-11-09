@@ -17,7 +17,7 @@
  * result. So the signal is read off the run's own record, which already knows
  * both facts and costs nothing to consult.
  *
- * ## Five fixed signals, one per-site family, one transport
+ * ## Four fixed signals, one per-site family, one transport
  *
  * The transport is an external dead-man's-switch service (healthchecks.io),
  * authorised on the card 2026-08-15, because nothing else in this stack can send
@@ -26,13 +26,12 @@
  * | Signal | Means | Pinged by |
  * |---|---|---|
  * | `nightly-scorecard` | a good nightly scorecard run happened | the scheduled run, success and failure both |
- * | `credential-expiry` | no tracked credential is near its expiry | the scheduled run |
- * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
+ *  * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
  * | `run-shape` | a completed run's record is right (success) or wrong (fail); no period | a manual scorecard run, and any deep audit, healthy or bad |
  * | `findings-reconcile` | the hourly findings reconciler ran | `reconcileFindingsWorkflow`, success and failure both |
  * | `findings-recheck:<site>` | the daily recheck of that site's approved findings ran | `recheckFindingsWorkflow`, success and failure both |
  *
- * The first three, `findings-reconcile` and each `findings-recheck:<site>` carry the dead-man's half: a worker that never runs sends
+ * The first two, `findings-reconcile` and each `findings-recheck:<site>` carry the dead-man's half: a worker that never runs sends
  * nothing, the check's own period lapses, and the service emails about the
  * silence. That is the failure a liveness ping cannot detect from inside a dead
  * container. `run-shape` has no period — a deep audit is ad hoc, so "no deep
@@ -50,7 +49,6 @@ import { summariseRecheck, type RecheckFindingsResult } from './findings-recheck
 /** The signals with one check each, fixed in code. */
 export type FixedHealthSignal =
   | 'nightly-scorecard'
-  | 'credential-expiry'
   | 'action-usage'
   | 'run-shape'
   | 'findings-reconcile';
@@ -87,7 +85,6 @@ export function findingsRecheckSignal(site: string): FindingsRecheckSignal {
  */
 export const HEALTH_CHECK_SLUGS: Record<FixedHealthSignal | typeof RECHECK_FAMILY, string> = {
   'nightly-scorecard': 'steward-nightly-scorecard',
-  'credential-expiry': 'steward-credential-expiry',
   'action-usage': 'steward-action-usage',
   'run-shape': 'steward-run-shape',
   // Hourly, from `reconcileFindingsWorkflow`: success and failure both, so a
@@ -278,179 +275,14 @@ export function deepAuditShape(input: DeepAuditShapeInput): RunShape {
   };
 }
 
-/**
- * A credential with a fixed lifetime, tracked so its expiry is never a surprise.
- *
- * **Deliberately not a field: where the credential's copies live.** This file is
- * public, and a list of every place a token is stored is a map worth more to
- * somebody else than to the operator, who does not need to be told in an email
- * where his own secrets are. The boundary rule, on the secret-management card:
- * credential metadata defaults private, and public code carries only what an
- * alert body needs. What an alert body needs is which credential, when it goes,
- * and what breaks — the rotation locations live in the private operator docs,
- * in `steward/docs/rotate-a-credential.md`, and the alert points there by name.
- */
-export interface TrackedCredential {
-  /** What it is, in the words the operator would use. */
-  name: string;
-  /** Expiry date, `YYYY-MM-DD`, read as end of that day UTC. */
-  expires: string;
-  /** What breaks, and how it looks, on the day it lapses. */
-  failure: string;
-}
-
-/**
- * **The one place a dated credential's expiry is recorded.** Adding a credential
- * with a fixed lifetime anywhere in this stack means adding a row here in the
- * same change; that is the whole mechanism, and it is deliberately a code
- * constant rather than a note in a document, because a constant is what the
- * nightly run can read.
- *
- * The rows carry `failure` because the cost of a lapsed credential here is not
- * the outage, it is the diagnosis: the Temporal Cloud key's expiry surfaces as a
- * bare `Request unauthorized` naming nothing, two years after anybody thought
- * about it. They carry no locations, for the reason above.
- */
-export const TRACKED_CREDENTIALS: TrackedCredential[] = [
-  {
-    name: 'Temporal Cloud API key',
-    expires: '2028-10-20',
-    failure:
-      'every client and both workers fail to connect with a bare "Request unauthorized" that ' +
-      'names no cause; the nightly scorecard stops producing runs.',
-  },
-  {
-    // Reissued 2026-10-21 with a 30-day lifetime; the row first recorded
-    // 2026-11-06 and was corrected against the issuer on 2026-10-23.
-    // Account-level Metrics Read-Only, a narrower role than the workers' key.
-    name: 'Temporal Cloud metrics API key',
-    expires: '2026-11-20',
-    failure:
-      'the nightly action-usage check fails with a 401 body naming the endpoint, and nothing ' +
-      'else breaks: the scorecard still runs, still measures the site, and still publishes.',
-  },
-  {
-    // Created 2026-09-06 with a 90-day lifetime. A session credential rather than a
-    // production one, which is why its failure line says so plainly — the
-    // temptation on the day it lapses is to assume production is down.
-    name: 'Temporal Cloud read API key',
-    expires: '2026-12-06',
-    // No storage location here, per `TrackedCredential`: this row would be the
-    // natural place to name the file it sits in, and that is exactly the
-    // sentence the boundary rule (and the test guarding it) exists to refuse.
-    failure:
-      'a working session loses its read access to Temporal Cloud, so listing workflows and ' +
-      'reading histories stops working from this machine. Nothing in production breaks: the ' +
-      'hosted worker connects with a different key.',
-  },
-  {
-    name: 'GitHub fine-grained PAT',
-    expires: '2026-11-20',
-    failure:
-      'the scorecard measures the site for twelve minutes and then dies on its publish and ' +
-      'archive legs with an AuthError, so the run happens and persists nothing.',
-  },
-];
-
-/**
- * How far ahead a warning starts. Four weeks and a couple of days: long enough
- * that a busy fortnight cannot swallow it, short enough that the warning is
- * about something the operator can act on rather than a standing red light.
- */
-export const CREDENTIAL_WARNING_DAYS = 30;
-
-/** Whole days from `nowMs` to the end of `expires` (UTC). Negative once lapsed. */
-export function daysUntilExpiry(expires: string, nowMs: number): number {
-  // End of the expiry day rather than its start: a token stamped 2026-11-11 is
-  // usable on 2026-11-11, and warning "0 days left" on a working morning reads
-  // as already-broken.
-  const endOfDay = Date.parse(`${expires}T23:59:59.999Z`);
-  if (Number.isNaN(endOfDay)) {
-    throw new Error(`Credential expiry "${expires}" is not a YYYY-MM-DD date.`);
-  }
-  return Math.floor((endOfDay - nowMs) / 86_400_000);
-}
-
-/** Each credential with its days remaining, soonest first. */
-function datedCredentials(
-  credentials: TrackedCredential[],
-  nowMs: number,
-): Array<{ credential: TrackedCredential; days: number }> {
-  return credentials
-    .map((c) => ({ credential: c, days: daysUntilExpiry(c.expires, nowMs) }))
-    .sort((a, b) => a.days - b.days);
-}
-
-/**
- * The credentials inside the warning window, soonest first — expired ones
- * included, since a lapsed credential is the loudest case of the same signal.
- * Exported so a caller can count them without parsing the summary prose.
- */
-export function credentialsDueWithin(
-  credentials: TrackedCredential[],
-  nowMs: number,
-  warningDays = CREDENTIAL_WARNING_DAYS,
-): Array<{ credential: TrackedCredential; days: number }> {
-  return datedCredentials(credentials, nowMs).filter((d) => d.days <= warningDays);
-}
-
-/**
- * The expiry verdict for the whole list.
- *
- * One signal for all credentials rather than one per credential: the operator
- * action is the same — go and re-issue the thing — and a check per credential
- * would be a dashboard whose green rows outnumber its useful ones. The summary
- * names every credential inside the window, so the email is still specific.
- */
-export function credentialExpiryShape(
-  credentials: TrackedCredential[],
-  nowMs: number,
-  warningDays = CREDENTIAL_WARNING_DAYS,
-): RunShape {
-  const dated = datedCredentials(credentials, nowMs);
-  const due = credentialsDueWithin(credentials, nowMs, warningDays);
-
-  if (due.length === 0) {
-    const next = dated[0];
-    return {
-      ok: true,
-      summary: next
-        ? `${dated.length} tracked credential(s); the nearest is ${next.credential.name}, ` +
-          `${next.days} days out (${next.credential.expires}).`
-        : 'No credentials are tracked.',
-    };
-  }
-
-  const lines = due.map((d) => {
-    const when =
-      d.days < 0
-        ? `EXPIRED ${-d.days} day(s) ago on ${d.credential.expires}`
-        : `expires in ${d.days} day(s), on ${d.credential.expires}`;
-    return `- ${d.credential.name} ${when}.\n  On the day it lapses: ${d.credential.failure}`;
-  });
-
-  return {
-    ok: false,
-    summary:
-      `${due.length} tracked credential(s) inside the ${warningDays}-day warning window:\n` +
-      `${lines.join('\n')}\n` +
-      // Named rather than listed. The alert is an email leaving this system, and
-      // where each copy of a credential lives is not something it needs to
-      // carry — see `TrackedCredential`.
-      'Every copy that has to be replaced is listed in steward/docs/rotate-a-credential.md, ' +
-      'in the private operator docs. Re-issue each one, update every copy listed there, then update ' +
-      'TRACKED_CREDENTIALS in agents/steward/src/lib/run-health.ts with the new date.',
-  };
-}
-
 // --- Temporal Cloud action usage --------------------------------------------
 
 /**
  * The foreground action rate above which the nightly check raises an alert.
  *
- * A code constant, like `CREDENTIAL_WARNING_DAYS` and for the same reason: it is
- * a rule about what counts as wrong, so it is unit-tested and it changes by pull
- * request rather than by somebody editing a variable in a dashboard at speed.
+ * A code constant, because it is a rule about what counts as wrong: it is
+ * unit-tested and it changes by pull request rather than by somebody editing a
+ * variable in a dashboard at speed.
  *
  * Five per second, sustained across a whole sampled minute (card decision 2).
  * The scorecard's twelve-minute run stays under one action per second even at

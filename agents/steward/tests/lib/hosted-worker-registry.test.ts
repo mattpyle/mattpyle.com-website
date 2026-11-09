@@ -47,7 +47,6 @@ const AUDIT_ACTIVITIES = [
   'publishScorecardRun',
   'archiveScorecardRun',
   'reportRunHealth',
-  'checkCredentialExpiry',
   'checkActionUsage',
 ];
 
@@ -156,7 +155,7 @@ test('each queue registers exactly its own activities, by name', () => {
     [...FINDINGS_ACTIVITIES].sort(),
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
-  assert.equal(names(QUEUE_AUDIT).length, 13);
+  assert.equal(names(QUEUE_AUDIT).length, 12);
   assert.equal(names(QUEUE_FINDINGS).length, 28);
 });
 
