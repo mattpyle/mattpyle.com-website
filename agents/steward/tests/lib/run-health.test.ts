@@ -4,6 +4,8 @@ import {
   ACTION_RATE_ALERT_PER_SECOND,
   CREDENTIAL_WARNING_DAYS,
   HEALTH_CHECK_SLUGS,
+  findingsRecheckSignal,
+  healthCheckSlug,
   TRACKED_CREDENTIALS,
   actionUsageShape,
   actionUsageUnavailableShape,
@@ -12,6 +14,7 @@ import {
   daysUntilExpiry,
   deepAuditShape,
   healthPingUrl,
+  recheckShape,
   scorecardRunShape,
   type TrackedCredential,
 } from '../../src/lib/run-health.js';
@@ -246,6 +249,53 @@ test('no tracked credential names where its copies live — this file is public'
   }
 });
 
+// --- the recheck rule ---------------------------------------------------------
+
+type RecheckRows = Parameters<typeof recheckShape>[0]['rows'];
+const recheck = (rows: RecheckRows) => ({ site: 'temporal-io', at: '2026-11-09T03:30:00.000Z', rows });
+
+test('a recheck with no approved finding is healthy and says so', () => {
+  const shape = recheckShape(recheck([]));
+  assert.equal(shape.ok, true);
+  assert.equal(shape.summary, 'Findings recheck of temporal-io: no approved finding to recheck.');
+});
+
+test('resolved, still present, no checks, open run and skipped rows are all healthy', () => {
+  const shape = recheckShape(
+    recheck([
+      { key: 'a', outcome: 'resolved' },
+      { key: 'b', outcome: 'still present' },
+      { key: 'c', outcome: 'no checks' },
+      { key: 'd', outcome: 'has an open run' },
+      { key: 'e', outcome: 'skipped' },
+    ]),
+  );
+  assert.equal(shape.ok, true);
+  assert.match(shape.summary, /^Findings recheck of temporal-io: 5 approved, /);
+});
+
+for (const outcome of ['write failed', 'could not measure'] as const) {
+  test(`one ${outcome} row makes the run a bad shape and the body names the finding`, () => {
+    const shape = recheckShape(
+      recheck([
+        { key: 'fine', outcome: 'resolved' },
+        { key: 'broken', keyShort: 'TI-9', outcome, detail: 'the reason' },
+      ]),
+    );
+    assert.equal(shape.ok, false);
+    assert.ok(shape.summary.startsWith('Findings recheck of temporal-io: 2 approved, '));
+    assert.ok(shape.summary.includes(`1 of 2 finding(s) were not rechecked cleanly: TI-9 ${outcome} (the reason).`));
+    assert.match(shape.summary, /live_on may be stale/);
+  });
+}
+
+test('a bad recheck names five findings and counts the rest', () => {
+  const rows: RecheckRows = Array.from({ length: 7 }, (_, i) => ({ key: `k${i}`, outcome: 'write failed' as const }));
+  const shape = recheckShape(recheck(rows));
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /k0 write failed; k1 write failed; k2 write failed; k3 write failed; k4 write failed, and 2 more\./);
+});
+
 // --- the ping URL -----------------------------------------------------------
 
 test('a healthy signal pings the slug and a failed one pings /fail under it', () => {
@@ -264,6 +314,25 @@ test('a trailing slash on the configured base does not double up', () => {
 test('every signal has a distinct slug', () => {
   const slugs = Object.values(HEALTH_CHECK_SLUGS);
   assert.equal(new Set(slugs).size, slugs.length);
+});
+
+test('the recheck signal is per site and its slug names the site', () => {
+  assert.equal(findingsRecheckSignal('temporal-io'), 'findings-recheck:temporal-io');
+  assert.equal(healthCheckSlug(findingsRecheckSignal('temporal-io')), 'steward-findings-recheck-temporal-io');
+  assert.equal(healthCheckSlug('findings-reconcile'), 'steward-findings-reconcile');
+  const base = 'https://hc-ping.com/KEY';
+  assert.equal(
+    healthPingUrl(base, findingsRecheckSignal('temporal-io'), true),
+    `${base}/steward-findings-recheck-temporal-io`,
+  );
+  assert.equal(
+    healthPingUrl(base, findingsRecheckSignal('temporal-io'), false),
+    `${base}/steward-findings-recheck-temporal-io/fail`,
+  );
+  assert.notEqual(
+    healthCheckSlug(findingsRecheckSignal('mattpyle-com')),
+    healthCheckSlug(findingsRecheckSignal('temporal-io')),
+  );
 });
 
 // --- the action-usage rule --------------------------------------------------

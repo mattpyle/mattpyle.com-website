@@ -13,6 +13,7 @@ import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from '../../src/
 import type { RunFindingChecksInput, RunFindingChecksResult } from '../../src/activities/verify-finding.js';
 import { findingWorkflowId, parseFindingsIndex, type OpenFindingWorkflow } from '../../src/lib/findings.js';
 import { checkUrls } from '../../src/lib/verify-checks.js';
+import { summariseRecheck } from '../../src/lib/findings-recheck.js';
 
 /**
  * `recheckFindingsWorkflow` against the real test server, on a fixture store:
@@ -94,20 +95,26 @@ const FILES: Record<string, string> = {
   'already-live': finding('already-live', 'TI-8', status('https://temporal.io/broken'), ['live_on: 2026-11-08']),
 };
 
-function seed(): Record<string, string> {
-  const lines = Object.keys(FILES).map((key) => `${key} | approved | defect | s | title | reason`);
+function seed(keys: string[] = Object.keys(FILES)): Record<string, string> {
+  const lines = keys.map((key) => `${key} | approved | defect | s | title | reason`);
   lines.push('still-proposed | proposed | defect | s | title |');
   const index = ['# Findings index', '', 'One line per finding: `key | status | kind | scenario | title | verdict reason`.', '', ...lines, ''].join('\n');
   const files: Record<string, string> = { [`sites/${SITE}/config.yaml`]: CONFIG, [`${DIR}/INDEX.md`]: index };
-  for (const [key, text] of Object.entries(FILES)) files[`${DIR}/${key}.md`] = text;
+  for (const key of keys) files[`${DIR}/${key}.md`] = FILES[key]!;
   return files;
 }
 
-function activities(open: string[] = []) {
+function activities(open: string[] = [], overrides: Record<string, unknown> = {}) {
   const ran: string[] = [];
+  const pings: Array<{ signal: string; shape: { ok: boolean; summary: string } }> = [];
   return {
     ran,
+    pings,
     activities: {
+      reportRunHealth: async (input: { signal: string; shape: { ok: boolean; summary: string } }) => {
+        pings.push(input);
+        return { signal: input.signal, ok: input.shape.ok, sent: true };
+      },
       readSiteHosts,
       readFindingsIndex,
       readRecheckBlock,
@@ -126,6 +133,7 @@ function activities(open: string[] = []) {
         });
         return { ranAt: RAN_AT, passed: results.every((row) => row.pass), results };
       },
+      ...overrides,
     },
   };
 }
@@ -152,7 +160,7 @@ const file = (key: string) => github!.branches.get('main')!.get(`${DIR}/${key}.m
 
 test('each approved finding gets one outcome, and only a still-present or fixed one is written', async () => {
   github = installFakeGitHub({ seed: seed(), defaultBranch: 'main' });
-  const { activities: acts, ran } = activities([findingWorkflowId(SITE, 'has-run')]);
+  const { activities: acts, ran, pings } = activities([findingWorkflowId(SITE, 'has-run')]);
   const result = await run(acts);
 
   const outcomes = Object.fromEntries(result.rows.map((row) => [row.key, row.outcome]));
@@ -194,6 +202,71 @@ test('each approved finding gets one outcome, and only a still-present or fixed 
   // One commit per changed finding: the resolve and the live_on.
   assert.equal(github.refUpdates.length, 2);
   assert.ok(github.refUpdates.every((update) => update.branch === 'main' && !update.force));
+
+  // The fixture holds two findings production could not be asked about, so the
+  // run pings /fail on the site's own check: the summary first, then the rows.
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.signal, 'findings-recheck:temporal-io');
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.ok(pings[0]!.shape.summary.startsWith(summariseRecheck(result)));
+  assert.match(pings[0]!.shape.summary, /2 of 8 finding\(s\) were not rechecked cleanly: TI-5 could not measure .*; TI-6 could not measure \(.*answered 503/);
+});
+
+test('a run whose rows are all resolved, still present, no checks or open pings healthy with the summary', async () => {
+  const keys = ['fixed-on-site', 'live-on-docs', 'no-block', 'empty-block', 'has-run'];
+  github = installFakeGitHub({ seed: seed(keys), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities([findingWorkflowId(SITE, 'has-run')]);
+  const result = await run(acts);
+
+  assert.equal(result.rows.length, 5);
+  assert.deepEqual(pings, [
+    {
+      signal: 'findings-recheck:temporal-io',
+      shape: { ok: true, summary: summariseRecheck(result) },
+    },
+  ]);
+  assert.match(pings[0]!.shape.summary, /^Findings recheck of temporal-io: 5 approved, /);
+});
+
+test('a check that could not be measured pings /fail and names the finding', async () => {
+  github = installFakeGitHub({ seed: seed(['fixed-on-site', 'site-down']), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities();
+  const result = await run(acts);
+
+  assert.deepEqual(result.rows.map((row) => row.outcome), ['resolved', 'could not measure']);
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.match(pings[0]!.shape.summary, /^Findings recheck of temporal-io: 2 approved, resolved 1, could not measure 1\. 1 of 2 finding\(s\) were not rechecked cleanly: TI-6 could not measure \(.*answered 503\)/);
+});
+
+test('a write that failed pings /fail and names the finding', async () => {
+  github = installFakeGitHub({ seed: seed(['fixed-on-site']), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities([], {
+    writeFindingRecheck: async () => {
+      throw ApplicationFailure.nonRetryable('the branch moved', 'FindingMoved');
+    },
+  });
+  const result = await run(acts);
+
+  assert.deepEqual(result.rows.map((row) => row.outcome), ['write failed']);
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.match(pings[0]!.shape.summary, /1 of 1 finding\(s\) were not rechecked cleanly: TI-1 write failed \(the branch moved\)/);
+});
+
+test('a run that fails pings the failure endpoint with the reason, and still fails', async () => {
+  github = installFakeGitHub({ seed: seed(), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities([], {
+    readFindingsIndex: async () => {
+      throw ApplicationFailure.nonRetryable('INDEX.md is unreadable', 'StoreLayout');
+    },
+  });
+  await assert.rejects(run(acts), (err: Error) => err.name === 'WorkflowFailedError');
+
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.signal, 'findings-recheck:temporal-io');
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.match(pings[0]!.shape.summary, /Findings recheck of temporal-io against mattpyle\/argus failed: INDEX\.md is unreadable/);
 });
 
 test('a finding with an open finding workflow is reported and left alone, even when its checks would pass', async () => {

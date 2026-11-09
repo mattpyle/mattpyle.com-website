@@ -1,6 +1,7 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 import { findingWorkflowId, type Verification } from '../lib/findings.js';
+import { findingsRecheckSignal, recheckShape } from '../lib/run-health.js';
 import {
   summariseRecheck,
   vancouverDay,
@@ -41,8 +42,25 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * **Replay.** A new workflow type: no run recorded before it exists, so it
  * carries no `patched` marker.
  *
- * **No health ping yet.** Its healthchecks.io check does not exist; adding the
- * ping is a follow-up.
+ * **Health (STW-549).** Every run pings `findings-recheck:<site>`, so a recheck
+ * that stops running goes late at the alerting service (period 1 day, grace 1
+ * hour). A run that throws pings `/fail` with the reason. A run that completes
+ * pings what `recheckShape` decides: `/fail` when any row is `write failed` or
+ * `could not measure`, success otherwise, the run's one-line summary as the
+ * body either way.
+ * The check for a site is created by hand at the service under the slug
+ * `steward-findings-recheck-<site>`.
+ *
+ * **Quiet completion log.** The run ends with its one-line summary at info
+ * level and nothing else. The rows stay in the workflow result, which the CLI
+ * prints, so the log carries no result object.
+ *
+ * **Replay of runs open before STW-549.** Only an open run replays, and it has
+ * not yet issued its last command. The ping is one activity call after the
+ * last command such a history holds, so the history ends before it and the new
+ * call is simply the next command. The log line is not a command. An open
+ * scheduled run therefore replays without a `patched` marker. No replay
+ * fixture exists for this workflow.
  */
 
 const QUEUE_FINDINGS = 'steward-findings';
@@ -69,6 +87,14 @@ const writing = wf.proxyActivities<Pick<typeof activities, 'writeFindingRecheck'
   retry: { maximumAttempts: 5, nonRetryableErrorTypes: ['AuthError', 'FindingMoved', 'FindingMissing', 'FindingMalformed', 'BadInput'] },
 });
 
+// Same shape as the reconciler's alerting proxy: the activity retries the HTTP
+// call itself and never throws.
+const alerting = wf.proxyActivities<Pick<typeof activities, 'reportRunHealth'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: { maximumAttempts: 1 },
+});
+
 function describeError(err: unknown): string {
   let current: unknown = err;
   let best = '';
@@ -80,6 +106,29 @@ function describeError(err: unknown): string {
 }
 
 export async function recheckFindingsWorkflow(input: RecheckFindingsInput): Promise<RecheckFindingsResult> {
+  let result: RecheckFindingsResult;
+  try {
+    result = await recheck(input);
+  } catch (err) {
+    await alerting.reportRunHealth({
+      signal: findingsRecheckSignal(input.site),
+      shape: {
+        ok: false,
+        summary:
+          `Findings recheck of ${input.site} against ${input.repo} failed: ${describeError(err)}. ` +
+          'Findings after the failure point were not rechecked, and the next daily run starts again. ' +
+          'The workflow history in Temporal Cloud names the failing step.',
+      },
+    });
+    throw err;
+  }
+
+  wf.log.info(summariseRecheck(result));
+  await alerting.reportRunHealth({ signal: findingsRecheckSignal(input.site), shape: recheckShape(result) });
+  return result;
+}
+
+async function recheck(input: RecheckFindingsInput): Promise<RecheckFindingsResult> {
   const at = new Date(Date.now()).toISOString();
   const { workflowId } = wf.workflowInfo();
   const { origin, hosts } = await reading.readSiteHosts({ repo: input.repo, site: input.site });
@@ -138,7 +187,5 @@ export async function recheckFindingsWorkflow(input: RecheckFindingsInput): Prom
     }
   }
 
-  const result: RecheckFindingsResult = { site: input.site, at, rows };
-  wf.log.info(summariseRecheck(result), { rows });
-  return result;
+  return { site: input.site, at, rows };
 }

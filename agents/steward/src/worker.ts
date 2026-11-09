@@ -13,6 +13,7 @@ import {
 } from './config.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { log } from './lib/logger.js';
+import { installTemporalRuntime } from './lib/temporal-logger.js';
 
 const workflowsPath = fileURLToPath(new URL('./workflows/index.ts', import.meta.url));
 
@@ -66,6 +67,8 @@ async function main() {
   // Before the first poll: a worker on a different Lighthouse than the lockfile
   // would score pages differently from the hosted worker on the same queue.
   const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);
+  // Before the first `NativeConnection` or `Worker`: SDK logs go to pino, not stderr.
+  installTemporalRuntime();
   const connection = await NativeConnection.connect(temporalConnectionOptions());
 
   const common = { connection, namespace: NAMESPACE, workflowsPath, activities };

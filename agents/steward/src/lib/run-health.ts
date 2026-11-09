@@ -17,7 +17,7 @@
  * result. So the signal is read off the run's own record, which already knows
  * both facts and costs nothing to consult.
  *
- * ## Five signals, one transport
+ * ## Five fixed signals, one per-site family, one transport
  *
  * The transport is an external dead-man's-switch service (healthchecks.io),
  * authorised on the card 2026-08-15, because nothing else in this stack can send
@@ -30,8 +30,9 @@
  * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
  * | `run-shape` | a completed run's record is right (success) or wrong (fail); no period | a manual scorecard run, and any deep audit, healthy or bad |
  * | `findings-reconcile` | the hourly findings reconciler ran | `reconcileFindingsWorkflow`, success and failure both |
+ * | `findings-recheck:<site>` | the daily recheck of that site's approved findings ran | `recheckFindingsWorkflow`, success and failure both |
  *
- * The first three, and `findings-reconcile`, carry the dead-man's half: a worker that never runs sends
+ * The first three, `findings-reconcile` and each `findings-recheck:<site>` carry the dead-man's half: a worker that never runs sends
  * nothing, the check's own period lapses, and the service emails about the
  * silence. That is the failure a liveness ping cannot detect from inside a dead
  * container. `run-shape` has no period — a deep audit is ad hoc, so "no deep
@@ -44,25 +45,47 @@
 import type { ActionUsageSample } from './action-usage.js';
 import { lighthouseVersionCounts } from './scorecard-aggregate.js';
 import { renderedNothing } from './agent-audit/report-shape.js';
+import { summariseRecheck, type RecheckFindingsResult } from './findings-recheck.js';
 
-/** One check at the alerting service. */
-export type HealthSignal =
+/** The signals with one check each, fixed in code. */
+export type FixedHealthSignal =
   | 'nightly-scorecard'
   | 'credential-expiry'
   | 'action-usage'
   | 'run-shape'
   | 'findings-reconcile';
 
+/** The family key in `HEALTH_CHECK_SLUGS` for the per-site recheck checks. */
+const RECHECK_FAMILY = 'findings-recheck';
+
 /**
- * The slug each signal pings, which is also the check's name in the service's
+ * The recheck's signal for one site: `findings-recheck:temporal-io`. A Schedule
+ * is per site, so each site gets its own check, and a second site's silence
+ * names that site in the email.
+ */
+export type FindingsRecheckSignal = `${typeof RECHECK_FAMILY}:${string}`;
+
+/** One check at the alerting service. */
+export type HealthSignal = FixedHealthSignal | FindingsRecheckSignal;
+
+/** The signal a site's recheck pings. */
+export function findingsRecheckSignal(site: string): FindingsRecheckSignal {
+  return `${RECHECK_FAMILY}:${site}`;
+}
+
+/**
+ * The slug each fixed signal pings, which is also the check's name in the service's
  * dashboard. Slugs rather than per-check UUIDs so the whole transport is **one**
  * configuration value (`STEWARD_HEALTHCHECK_BASE`, a project ping key) in the
  * two places it has to be set. `action-usage`, added 2026-09-06, is the proof:
  * it cost a row here and no new transport configuration at all. The check has to
  * be created in the service under the same slug, though — the code never creates
  * one on the fly (`lib/health-ping.ts`), so a new row here is half a change.
+ *
+ * The recheck's row is a prefix, not a slug: its check is per site, so
+ * `healthCheckSlug` appends `-<site>`.
  */
-export const HEALTH_CHECK_SLUGS: Record<HealthSignal, string> = {
+export const HEALTH_CHECK_SLUGS: Record<FixedHealthSignal | typeof RECHECK_FAMILY, string> = {
   'nightly-scorecard': 'steward-nightly-scorecard',
   'credential-expiry': 'steward-credential-expiry',
   'action-usage': 'steward-action-usage',
@@ -70,7 +93,17 @@ export const HEALTH_CHECK_SLUGS: Record<HealthSignal, string> = {
   // Hourly, from `reconcileFindingsWorkflow`: success and failure both, so a
   // reconciler that stops running goes late at the service (period 1h, grace 30m).
   'findings-reconcile': 'steward-findings-reconcile',
+  // Daily, from `recheckFindingsWorkflow`, one check per site (period 1 day,
+  // grace 1 hour). The site is appended: `steward-findings-recheck-temporal-io`.
+  [RECHECK_FAMILY]: 'steward-findings-recheck',
 };
+
+/** The slug a signal pings: a fixed row, or `steward-findings-recheck-<site>`. */
+export function healthCheckSlug(signal: HealthSignal): string {
+  const prefix = `${RECHECK_FAMILY}:`;
+  if (signal.startsWith(prefix)) return `${HEALTH_CHECK_SLUGS[RECHECK_FAMILY]}-${signal.slice(prefix.length)}`;
+  return HEALTH_CHECK_SLUGS[signal as FixedHealthSignal];
+}
 
 /**
  * `<base>/<slug>` for a healthy run, `<base>/<slug>/fail` for a bad one.
@@ -82,7 +115,7 @@ export const HEALTH_CHECK_SLUGS: Record<HealthSignal, string> = {
  */
 export function healthPingUrl(base: string, signal: HealthSignal, ok: boolean): string {
   const trimmed = base.replace(/\/+$/, '');
-  const slug = HEALTH_CHECK_SLUGS[signal];
+  const slug = healthCheckSlug(signal);
   return ok ? `${trimmed}/${slug}` : `${trimmed}/${slug}/fail`;
 }
 
@@ -170,6 +203,36 @@ function pagesShape(input: ScorecardShapeInput): RunShape {
       `could not be audited: ${named.join('; ')}${rest}. The run finished, so nothing else will ` +
       'report this. Check the hosted worker\'s logs before trusting the numbers, and expect the ' +
       'run-log PR (if one opened) to record a measurement of the auditor rather than of the site.',
+  };
+}
+
+/**
+ * The recheck's rule: **a completed run with any `write failed` or
+ * `could not measure` row is a bad shape.**
+ *
+ * Both are success-shaped failures, the kind this file exists to catch. A write
+ * that failed is Steward's GitHub path failing, and a check that could not be
+ * measured is production, the browser or the block failing to answer; each
+ * leaves the finding's file as it was, so `live_on` goes stale while the run
+ * reports success. `no checks`, `has an open run` and `skipped` are not
+ * failures: nothing was owed on those rows.
+ *
+ * The body starts with the run's one-line summary and then names the rows, up to
+ * five, so the email reads without opening Temporal.
+ */
+export function recheckShape(result: RecheckFindingsResult): RunShape {
+  const base = summariseRecheck(result);
+  const bad = result.rows.filter((row) => row.outcome === 'write failed' || row.outcome === 'could not measure');
+  if (bad.length === 0) return { ok: true, summary: base };
+  const named = bad.slice(0, 5).map((row) => `${row.keyShort ?? row.key} ${row.outcome}${row.detail ? ` (${row.detail})` : ''}`);
+  const rest = bad.length > named.length ? `, and ${bad.length - named.length} more` : '';
+  return {
+    ok: false,
+    summary:
+      `${base} ${bad.length} of ${result.rows.length} finding(s) were not rechecked cleanly: ` +
+      `${named.join('; ')}${rest}. The run finished, so nothing else will report this. ` +
+      "Each of these left the finding's file as it was, so its live_on may be stale. " +
+      "Check the hosted worker's logs for the GitHub write or the browser check that failed.",
   };
 }
 

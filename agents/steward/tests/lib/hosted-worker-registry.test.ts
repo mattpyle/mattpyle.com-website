@@ -209,11 +209,12 @@ test('every activity the recheck schedules is on steward-findings and registered
     'readFindingsIndex',
     'readRecheckBlock',
     'readSiteHosts',
+    'reportRunHealth',
     'runFindingChecks',
     'writeFindingRecheck',
   ]);
   const registered = names(QUEUE_FINDINGS);
   for (const name of proxied) assert.ok(registered.includes(name), `${name} is not registered on ${QUEUE_FINDINGS}`);
-  assert.deepEqual([...recheck.matchAll(/taskQueue: (\w+)/g)].map((m) => m[1]), Array(3).fill('QUEUE_FINDINGS'));
+  assert.deepEqual([...recheck.matchAll(/taskQueue: (\w+)/g)].map((m) => m[1]), Array(4).fill('QUEUE_FINDINGS'));
   assert.match(recheck, /const QUEUE_FINDINGS = 'steward-findings';/);
 });

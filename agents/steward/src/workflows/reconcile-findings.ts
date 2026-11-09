@@ -343,7 +343,9 @@ export async function reconcileFindingsWorkflow(input: ReconcileFindingsInput): 
   }
 
   const summary = summarise(result);
-  wf.log.info('findings reconciled', { result });
+  // The one-line plan counts, not the result object: this runs hourly, and the
+  // result stays in the return value. A log line is not a command, so no marker.
+  wf.log.info(summary);
   await alerting.reportRunHealth({ signal: 'findings-reconcile', shape: { ok: true, summary } });
   return result;
 }

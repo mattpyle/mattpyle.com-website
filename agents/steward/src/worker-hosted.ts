@@ -13,6 +13,7 @@ import {
 import { hostedRegistry, type HostedQueue } from './hosted-registry.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { log } from './lib/logger.js';
+import { installTemporalRuntime } from './lib/temporal-logger.js';
 import {
   ActivityTracker,
   RECYCLE_IDLE_MS,
@@ -206,6 +207,9 @@ async function main() {
   // Before the first poll; see the same guard in `worker.ts`.
   const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);
   assertPublishCredentials();
+  // Before the first `NativeConnection` or `Worker`. Without it the SDK writes
+  // to stderr, which Railway tags as `error` (STW-549, `lib/temporal-logger.ts`).
+  installTemporalRuntime();
   warnIfUnmonitored();
 
   const connection = await NativeConnection.connect(temporalConnectionOptions());
