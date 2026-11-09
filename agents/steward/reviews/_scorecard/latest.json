@@ -1,20 +1,20 @@
 {
   "iso": "2026-11-09",
-  "timestamp": "2026-11-09T01:02:58-07:00",
+  "timestamp": "2026-11-09T03:34:04-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
     "axe-core 4.12"
   ],
-  "entry": "Manual · intentional",
-  "commentary": "Accessibility moved from Pass to Fail; Accessibility: 100/100, 3 axe violations across 28 tested pages (Fail); Agentic Browsing: 5/6 (Partial).",
+  "entry": "Nightly · automated",
+  "commentary": "Agentic Browsing moved from Pass to Partial; Agentic Browsing: 5/6 (Partial).",
   "metrics": [
     {
       "name": "Accessibility",
       "value": "100",
       "maximum": "100",
-      "status": "Fail",
-      "description": "3 axe violations across 28 tested pages."
+      "status": "Pass",
+      "description": "The lowest Lighthouse accessibility score across 28 tested pages. No automated WCAG violations."
     },
     {
       "name": "Performance",
@@ -270,7 +270,7 @@
         "seo": 100,
         "agentic-browsing": 100
       },
-      "axeViolations": 3,
+      "axeViolations": 0,
       "readingBudget": {
         "text": {
           "share": 59,
@@ -641,8 +641,8 @@
     }
   ],
   "decision": "open-pr",
-  "reason": "Accessibility Pass→Fail",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/637",
+  "reason": "Agentic Browsing Pass→Partial",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/638",
   "dryRun": false,
-  "archiveId": "2026-11-09"
+  "archiveId": "2026-11-09-2"
 }
