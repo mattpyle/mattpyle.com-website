@@ -200,6 +200,8 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
           const target = w.item.fields.find((x) => x.id === f.id || (f.label && x.label === f.label));
           const value = w.corruptEdit && f.id === 'credential' ? 'something else' : (f.value as string);
           if (target && f.type === 'CONCEALED') target.type = 'CONCEALED';
+          // A template entry replaces the field it names by id: a label it omits is cleared, as the real vault did.
+          if (target && f.id === target.id) target.label = typeof f.label === 'string' ? f.label : '';
           if (target) target.value = value;
           else w.item.fields.push({ id: `new-${f.label}`, label: String(f.label), type: String(f.type), value });
         }
@@ -486,6 +488,26 @@ test('an item that stays plain text after the write is a warning, not a stop', a
 test('pickValueField still reads a value field typed STRING', () => {
   const item: OpItem = { fields: [{ id: 'credential', label: '', type: 'STRING', value: 'v' }] };
   assert.equal(pickValueField(item)?.value, 'v');
+});
+
+test('a labelled key_id field with a random id keeps its label through the edit', async () => {
+  const w = world();
+  w.item = {
+    fields: [
+      { id: 'credential', label: '', type: 'STRING', value: w.oldSecret },
+      { id: 'expires', label: '', type: 'STRING', value: '1790000000' },
+      { id: 'wuxmu2a3okectjag2eu5fyid5u', label: 'key_id', type: 'STRING', value: 'oldkey123' },
+    ],
+  };
+  const result = await run(w);
+  assert.deepEqual(result.warnings, [], 'key_id reads back by its label');
+  const entry = w.edits[0].fields.find((f) => f.id === 'wuxmu2a3okectjag2eu5fyid5u')!;
+  assert.equal(entry.label, 'key_id', 'the template restates the label');
+  assert.equal(entry.type, 'STRING');
+  assert.equal(w.item.fields[2].label, 'key_id');
+  assert.equal(w.item.fields[2].value, 'newkey456');
+  const credential = w.edits[0].fields.find((f) => f.id === 'credential')!;
+  assert.ok(!('label' in credential), 'a field with no label gets none added');
 });
 
 test('the credential field is masked from logs and stop messages whatever its type', async () => {
@@ -864,11 +886,12 @@ test('buildTemplate creates the expires and key_id fields by label when the item
   const item: OpItem = { fields: [{ id: 'credential', label: 'credential', type: 'CONCEALED', value: 'x' }] };
   const t = buildTemplate({ item, valueField: item.fields[0], value: 'v', keyId: 'k', expires: '2027-02-01' });
   assert.deepEqual(t.fields, [
-    { id: 'credential', type: 'CONCEALED', value: 'v' },
+    { id: 'credential', label: 'credential', type: 'CONCEALED', value: 'v' },
     { label: 'expires', type: 'STRING', value: '2027-02-01' },
     { label: 'key_id', type: 'STRING', value: 'k' },
   ]);
 });
+
 
 test('readyLineSays reads the worker\'s JSON line and a terminal line alike', () => {
   assert.ok(readyLineSays('{"actionUsage":"configured","alerting":"OFF"}', 'actionUsage', 'configured'));

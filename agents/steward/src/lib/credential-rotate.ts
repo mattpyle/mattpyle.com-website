@@ -358,17 +358,26 @@ export function buildTemplate(args: {
   keyId?: string;
   expires?: string;
 }): { fields: Array<Record<string, unknown>> } {
+  // A template entry for an existing field replaces that field, so it restates the label and the
+  // type. An entry with only an id and a value would clear the label (the 2026-11-09 live run lost
+  // the label of `key_id` that way, and the next lookup by label found nothing).
+  const keep = (existing: OpField, type: string, value: string): Record<string, unknown> => ({
+    id: existing.id,
+    ...(existing.label ? { label: existing.label } : {}),
+    type,
+    value,
+  });
   // CONCEALED, so the value is masked in the app and in `op item get`. An item made before this
   // rotation may hold the key in a plain STRING field; the write converts it.
-  const fields: Array<Record<string, unknown>> = [{ id: args.valueField.id, type: 'CONCEALED', value: args.value }];
+  const fields: Array<Record<string, unknown>> = [keep(args.valueField, 'CONCEALED', args.value)];
   if (args.expires) {
     const existing = fieldByLabel(args.item, 'expires');
     const value = expiresValueFor(existing, args.expires);
-    fields.push(existing ? { id: existing.id, value } : { label: 'expires', type: 'STRING', value });
+    fields.push(existing ? keep(existing, existing.type, value) : { label: 'expires', type: 'STRING', value });
   }
   if (args.keyId) {
     const existing = fieldByLabel(args.item, 'key_id');
-    fields.push(existing ? { id: existing.id, value: args.keyId } : { label: 'key_id', type: 'STRING', value: args.keyId });
+    fields.push(existing ? keep(existing, existing.type, args.keyId) : { label: 'key_id', type: 'STRING', value: args.keyId });
   }
   return { fields };
 }
