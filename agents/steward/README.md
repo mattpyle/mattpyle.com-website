@@ -38,7 +38,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
   any host the site declares in `site.hosts` of its `config.yaml`, over https. Each approved finding
   with no open finding workflow gets one outcome: no checks, could not measure, still present (its
   `live_on` is set to the America/Vancouver day) or resolved (its Verification section is written
-  and its index line reads `resolved`, in one commit). It opens no fix. A completed run with a `write failed` or `could not measure` row pings the site's `steward-findings-recheck-<site>` check at healthchecks.io, at `/fail`.
+  and its index line reads `resolved`, in one commit). It opens no fix. Every run pings the site's `steward-findings-recheck-<site>` check at healthchecks.io; a completed run with a `write failed` or `could not measure` row, or a run that throws, pings `/fail`.
 - **`findingWorkflow`** and **`reconcileFindingsWorkflow`** — the gate for findings filed into a
   separate findings repository by an inspector agent. One `findingWorkflow` per finding
   (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict came from `steward finding
