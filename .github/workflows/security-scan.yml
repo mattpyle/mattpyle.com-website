@@ -52,11 +52,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The download retries on any error, a 5xx from GitHub's release host
+      # included (a 504 turned the check red on two pull requests, 2026-11-08,
+      # before anything was scanned). The retries are bounded: 4 retries, 5 s
+      # apart, and no new retry after 40 s, so a wrong version number or a
+      # removed release still fails in under a minute. The checksum line below
+      # is not part of the retry: a wrong file fails at once.
       - name: Install gitleaks
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}"
-          curl -fsSL -o gitleaks.tar.gz \
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --retry-max-time 40 \
+            --connect-timeout 10 --max-time 15 -o gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
           mkdir -p gitleaks-bin
