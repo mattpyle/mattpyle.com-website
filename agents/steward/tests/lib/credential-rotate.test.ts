@@ -75,6 +75,7 @@ interface World {
   pingFailures: number;
   editFails: boolean;
   corruptEdit: boolean;
+  dropBookkeeping: boolean;
   keyList: Array<{ id: string; name?: string; created?: string }>;
   keyListLingers: number;
   newDeploymentOnPush: boolean;
@@ -114,6 +115,7 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
     pingFailures: 0,
     editFails: false,
     corruptEdit: false,
+    dropBookkeeping: false,
     keyList: [],
     keyListLingers: 0,
     newDeploymentOnPush: true,
@@ -191,6 +193,8 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
         if (w.editFails) throw new Error('1Password approval was refused');
         w.edits.push(template);
         for (const f of template.fields) {
+          // A field the vault does not accept lands empty, as the 2026-11-09 live run saw for expires.
+          if (w.dropBookkeeping && f.id !== 'credential') continue;
           const target = w.item.fields.find((x) => x.id === f.id || (f.label && x.label === f.label));
           const value = w.corruptEdit && f.id === 'credential' ? 'something else' : (f.value as string);
           if (target) target.value = value;
@@ -428,6 +432,37 @@ test('with tcld absent the value is pasted, and retire prints the Cloud steps in
   assert.deepEqual(w.railwaySets, [{ name: 'TEMPORAL_METRICS_API_KEY', value: pasted }]);
   const expires = w.item.fields.find((f) => f.label === 'expires')!.value!;
   assert.equal(expiresAsIso(expires), '2027-02-01');
+});
+
+test('a value that is stored but whose expires and key_id did not land warns, clears the orphan, and carries on', async () => {
+  const w = world({ dropBookkeeping: true });
+  const result = await run(w);
+  assert.equal(result.completed, true, 'the rotation goes on to push, verify and retire');
+  assert.equal(result.warnings.length, 2);
+  assert.match(result.warnings[0], /reads expires as 2026-.*not 2027-/);
+  assert.match(result.warnings[1], /key_id/);
+  assert.deepEqual(w.railwaySets, [{ name: 'TEMPORAL_METRICS_API_KEY', value: w.secret }]);
+  assert.ok(w.logs.some((l) => l.includes('WARNING')));
+});
+
+test('once the value reads back, the key is no longer an orphan, even if a later step fails', async () => {
+  const w = world({ dropBookkeeping: true });
+  const realSet = w.deps.railway.setVariable;
+  w.deps.railway.setVariable = async () => {
+    throw new Error('railway variable set exited 1');
+  };
+  const err = await stoppedAt(run(w));
+  assert.equal(err.step, 'push');
+  const saved = w.states.get(metrics.name)!;
+  assert.equal(saved.orphanKeyId, undefined, 'the saved state no longer calls the key an orphan');
+  assert.ok(saved.done.includes('store'));
+  assert.equal(saved.newKeyId, 'newkey456');
+  // A rerun does not offer to delete the key whose value sits in the item.
+  w.deps.railway.setVariable = realSet;
+  w.confirms = [true];
+  await run(w);
+  assert.ok(!w.deleted.includes('newkey456'));
+  assert.equal(w.calls.filter((c) => c === 'tcld.create').length, 1);
 });
 
 test('a pasted value that fails its shape check stops the run before anything is stored', async () => {

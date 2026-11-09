@@ -263,6 +263,8 @@ export interface RotateResult {
   deploymentId?: string;
   newKeyId?: string;
   expires?: string;
+  /** Bookkeeping that did not land, for Matt to fix by hand. The value itself is stored. */
+  warnings: string[];
   /** What retire did: deleted, left to Matt, declined, or not applicable. */
   retire: 'deleted' | 'manual' | 'declined' | 'not-applicable' | 'pending';
   remaining: RotateStep[];
@@ -413,7 +415,7 @@ export async function rotateCredential(
   if (options.dryRun) {
     deps.log(`Plan for ${spec.name} (dry run, no call is made):`);
     for (const line of describePlan(spec, target, options, deps.hasTcld(), deps.env.path)) deps.log(`  ${line}`);
-    return { completed: false, retire: 'pending', remaining: [...ROTATE_STEPS] };
+    return { completed: false, retire: 'pending', remaining: [...ROTATE_STEPS], warnings: [] };
   }
 
   const secrets: string[] = [];
@@ -445,6 +447,11 @@ export async function rotateCredential(
   };
   const hasTcld = deps.hasTcld();
   let retire: RotateResult['retire'] = 'pending';
+  const warnings: string[] = [];
+  const warn = (text: string) => {
+    warnings.push(text);
+    say('store', `WARNING: ${text}`);
+  };
 
   // An earlier run issued a key and died before it stored the value.
   if (st.orphanKeyId && !isDone('store')) {
@@ -538,6 +545,7 @@ export async function rotateCredential(
     if (options.fromOp) {
       say('store', 'skipped (--from-op)');
     } else {
+      let back: OpItem | undefined;
       try {
         const item = await deps.op.readItem(spec.opItem);
         for (const f of item.fields) if (f.value && f.type === 'CONCEALED') secrets.push(f.value);
@@ -550,22 +558,32 @@ export async function rotateCredential(
           if (old && old !== keyId) st.oldKeyId = old;
         }
         await deps.op.editItem(spec.opItem, buildTemplate({ item, valueField, value: value!, keyId, expires }));
-        const back = await deps.op.readItem(spec.opItem);
+        back = await deps.op.readItem(spec.opItem);
         const backField = pickValueField(back);
         if (backField?.value !== value) throw new Error(`The 1Password item "${spec.opItem}" does not hold the new value after the edit.`);
-        if (expires) {
-          const stored = expiresAsIso(fieldByLabel(back, 'expires')?.value);
-          if (stored !== expires) {
-            throw new Error(`The 1Password item "${spec.opItem}" reads expires as ${stored ?? 'empty'} after the edit, not ${expires}.`);
-          }
-        }
       } catch (err) {
         stop('store', err);
       }
+      // The value is safe in 1Password from here. The key is no longer an orphan, and the step is done
+      // before the bookkeeping fields are checked: a wrong date is a warning for Matt, not a reason to stop.
       st.newKeyId = keyId;
       st.expires = expires;
       st.orphanKeyId = undefined;
+      await finish('issue');
+      await finish('store');
       say('store', `wrote ${spec.opItem} in the ${target.opVault} vault and read it back${st.oldKeyId ? `; old key id ${st.oldKeyId}` : ''}`);
+      if (expires) {
+        const readBack = expiresAsIso(fieldByLabel(back!, 'expires')?.value);
+        if (readBack !== expires) {
+          warn(`the item reads expires as ${readBack ?? 'empty'}, not ${expires}. Set it in the 1Password app.`);
+        }
+      }
+      if (keyId) {
+        const readBack = fieldByLabel(back!, 'key_id')?.value?.trim();
+        if (readBack !== keyId) {
+          warn(`the item reads key_id as ${readBack ?? 'empty'}, not ${keyId}. Set it in the 1Password app, or the next rotation asks which key to retire.`);
+        }
+      }
     }
     value = null;
     await finish('issue');
@@ -774,5 +792,6 @@ export async function rotateCredential(
     expires: st.expires,
     retire: retire === 'pending' ? 'not-applicable' : retire,
     remaining: remaining(),
+    warnings,
   };
 }

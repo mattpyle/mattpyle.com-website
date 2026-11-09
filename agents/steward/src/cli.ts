@@ -2400,6 +2400,7 @@ credential
           return;
         }
         console.log('');
+        for (const warning of result.warnings) console.log(`  Fix by hand: ${warning}`);
         if (result.completed) {
           console.log(`  ${paint(`${name} rotated.`, GREEN)} Deployment ${result.deploymentId ?? 'unknown'}.`);
         } else {
