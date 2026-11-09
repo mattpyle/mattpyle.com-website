@@ -4,6 +4,8 @@ import { randomBytes } from 'node:crypto';
 import { CREDENTIALS, STEWARD_TARGET } from '../../src/lib/credentials.js';
 import {
   RotateStopped,
+  fieldByLabel,
+  secretValues,
   buildTemplate,
   describePlan,
   durationDays,
@@ -116,7 +118,7 @@ function world(overrides: Partial<World> = {}, oldKeyId: string | null = 'oldkey
     editFails: false,
     corruptEdit: false,
     dropBookkeeping: false,
-    keyList: [],
+    keyList: oldKeyId ? [{ id: oldKeyId }] : [],
     keyListLingers: 0,
     newDeploymentOnPush: true,
     deps: undefined as unknown as RotateDeps,
@@ -410,11 +412,13 @@ test('without a key_id and no other key on the account, there is nothing to dele
 });
 
 test('retire refuses to delete a key whose id equals the new key\'s', async () => {
-  const w = world();
+  const w = world({ lines: ['1'], keyList: [{ id: 'newkey456' }, { id: 'oldkey123' }] });
   w.item.fields.find((f) => f.label === 'key_id')!.value = 'newkey456';
-  // The old key id equals the new one only if the item already carried it; the store step then ignores it.
+  // The old key id equals the new one only if the item already carried it; the store step then ignores
+  // it, retire lists the account's other keys, and the new key is not among them.
   const result = await run(w);
-  assert.deepEqual(w.deleted, w.deleted.filter((id) => id !== 'newkey456'));
+  assert.ok(!w.deleted.includes('newkey456'));
+  assert.deepEqual(w.deleted, ['oldkey123']);
   assert.equal(result.completed, true);
 });
 
@@ -432,6 +436,81 @@ test('with tcld absent the value is pasted, and retire prints the Cloud steps in
   assert.deepEqual(w.railwaySets, [{ name: 'TEMPORAL_METRICS_API_KEY', value: pasted }]);
   const expires = w.item.fields.find((f) => f.label === 'expires')!.value!;
   assert.equal(expiresAsIso(expires), '2027-02-01');
+});
+
+test('the item layout 1Password really holds: built-in expires by id with no label, credential as a STRING', async () => {
+  const w = world();
+  const oldSecret = w.oldSecret;
+  w.item = {
+    fields: [
+      { id: 'notesPlain', label: 'notesPlain', type: 'STRING', purpose: 'NOTES', value: '' },
+      { id: 'credential', label: '', type: 'STRING', value: oldSecret },
+      { id: 'expires', label: '', type: 'STRING', value: String(Math.floor(Date.parse('2026-11-09T12:00:00Z') / 1000)) },
+      { id: 'wuxmu2a3okectjag2eu5fyid5u', label: 'key_id', type: 'STRING', value: 'oldkey123' },
+    ],
+  };
+  // The fake edit matches a template field to the item's field by id or label.
+  const result = await run(w);
+  assert.deepEqual(result.warnings, [], 'expires and key_id read back by id and by label');
+  assert.equal(result.completed, true);
+  const byId = Object.fromEntries(w.edits[0].fields.map((f) => [String(f.id), f.value]));
+  assert.equal(byId.expires, String(Math.floor(Date.parse('2027-02-07T12:00:00Z') / 1000)), 'epoch seconds, as the item stores it');
+  assert.equal(byId.wuxmu2a3okectjag2eu5fyid5u, 'newkey456');
+});
+
+test('the credential field is masked from logs and stop messages whatever its type', async () => {
+  const w = world();
+  w.item.fields[0] = { id: 'credential', label: '', type: 'STRING', value: w.oldSecret };
+  w.deps.op.editItem = async () => {
+    throw new Error(`op echoed the item: ${w.oldSecret}`);
+  };
+  const err = await stoppedAt(run(w));
+  assert.ok(!err.message.includes(w.oldSecret), 'the old value, held in a STRING field, is redacted');
+  assert.deepEqual(secretValues(w.item), [w.oldSecret]);
+});
+
+test('fieldByLabel matches a label or an id, in either case', () => {
+  const item: OpItem = {
+    fields: [
+      { id: 'expires', label: '', type: 'STRING', value: '1' },
+      { id: 'abc', label: 'Key_ID', type: 'STRING', value: '2' },
+    ],
+  };
+  assert.equal(fieldByLabel(item, 'expires')?.value, '1');
+  assert.equal(fieldByLabel(item, 'EXPIRES')?.value, '1');
+  assert.equal(fieldByLabel(item, 'key_id')?.value, '2');
+  assert.equal(fieldByLabel(item, 'missing'), undefined);
+});
+
+test('an orphan deleted on a rerun is not taken for the old key, and retire asks which key to delete', async () => {
+  const w = world({
+    editFails: true,
+    confirms: [true],
+    keyList: [{ id: 'bRku-old' }, { id: 'Qupf-disabled' }, { id: 'newkey456' }],
+    lines: ['1'],
+  });
+  w.item.fields.find((f) => f.label === 'key_id')!.value = 'newkey456';
+  const first = await stoppedAt(run(w));
+  assert.equal(first.step, 'store');
+  assert.equal(w.states.get(metrics.name)?.orphanKeyId, 'newkey456');
+
+  // The rerun deletes the orphan, issues a fresh key, and the item still names the orphan as key_id.
+  w.editFails = false;
+  w.confirms = [true, true];
+  w.deps.tcld.createKey = async () => ({ keyId: 'fresh111', token: w.secret });
+  const result = await run(w);
+  assert.ok(w.deleted.includes('newkey456'), 'the orphan went');
+  assert.equal(result.newKeyId, 'fresh111');
+  assert.ok(w.deleted.includes('bRku-old'), 'Matt picked the real old key from the list');
+  assert.equal(w.deleted.filter((id) => id === 'newkey456').length, 1, 'the orphan is not deleted a second time as the old key');
+});
+
+test('a recorded old key that has already left the list is not a failure', async () => {
+  const w = world({ keyList: [] });
+  const result = await run(w);
+  assert.equal(result.completed, true);
+  assert.deepEqual(w.deleted, []);
+  assert.ok(w.logs.some((l) => l.includes('no longer in the service account key list')));
 });
 
 test('a value that is stored but whose expires and key_id did not land warns, clears the orphan, and carries on', async () => {

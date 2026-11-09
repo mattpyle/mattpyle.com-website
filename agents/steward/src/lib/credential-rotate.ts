@@ -121,6 +121,8 @@ export interface RotateState {
   oldKeyId?: string;
   /** A key issued but not yet stored. The rerun offers to delete it. */
   orphanKeyId?: string;
+  /** Orphans this command deleted. The item may still name one as its `key_id`, and it is not the old key. */
+  deletedKeyIds?: string[];
   /** YYYY-MM-DD. */
   expires?: string;
   /** The latest Railway deployment before the push. */
@@ -304,8 +306,25 @@ export function pickValueField(item: OpItem): OpField | null {
   return concealed.length === 1 ? concealed[0] : null;
 }
 
-function fieldByLabel(item: OpItem, label: string): OpField | undefined {
-  return item.fields.find((f) => f.label.toLowerCase() === label);
+/**
+ * A field by its label or its id, case-insensitive. 1Password's built-in fields
+ * (`expires` on an API credential) have an id and no label, and a field Matt added
+ * has a label and a random id, so either may name the one wanted.
+ */
+export function fieldByLabel(item: OpItem, name: string): OpField | undefined {
+  const wanted = name.toLowerCase();
+  return item.fields.find((f) => f.label.toLowerCase() === wanted || f.id.toLowerCase() === wanted);
+}
+
+/**
+ * Every value in the item that must never reach a log: concealed fields, and the
+ * `credential` or `password` field whatever its type (an API credential item holds
+ * its key in a plain STRING field).
+ */
+export function secretValues(item: OpItem): string[] {
+  return item.fields
+    .filter((f) => f.value && (f.type === 'CONCEALED' || f.id === 'credential' || f.id === 'password'))
+    .map((f) => f.value!);
 }
 
 /**
@@ -463,6 +482,7 @@ export async function rotateCredential(
         } catch (err) {
           stop('issue', err);
         }
+        st.deletedKeyIds = [...(st.deletedKeyIds ?? []), st.orphanKeyId];
         st.orphanKeyId = undefined;
         await deps.state.save(spec.name, st);
       } else {
@@ -548,14 +568,14 @@ export async function rotateCredential(
       let back: OpItem | undefined;
       try {
         const item = await deps.op.readItem(spec.opItem);
-        for (const f of item.fields) if (f.value && f.type === 'CONCEALED') secrets.push(f.value);
+        secrets.push(...secretValues(item));
         const valueField = pickValueField(item);
         if (!valueField) {
           throw new Error(`The 1Password item "${spec.opItem}" has no credential or password field, and not exactly one concealed field.`);
         }
         if (!st.oldKeyId) {
           const old = fieldByLabel(item, 'key_id')?.value?.trim();
-          if (old && old !== keyId) st.oldKeyId = old;
+          if (old && old !== keyId && !st.deletedKeyIds?.includes(old)) st.oldKeyId = old;
         }
         await deps.op.editItem(spec.opItem, buildTemplate({ item, valueField, value: value!, keyId, expires }));
         back = await deps.op.readItem(spec.opItem);
@@ -721,7 +741,14 @@ export async function rotateCredential(
     } else {
       try {
         let oldId = st.oldKeyId;
-        if (!oldId) {
+        if (oldId) {
+          const saId = options.serviceAccountId ?? (await deps.tcld.resolveServiceAccount(spec.serviceAccount!));
+          if (!(await deps.tcld.listKeys(saId)).some((k) => k.id === oldId)) {
+            say('retire', `the recorded old key ${oldId} is no longer in the service account key list; nothing to delete`);
+            oldId = undefined;
+            retire = 'not-applicable';
+          }
+        } else {
           const saId = options.serviceAccountId ?? (await deps.tcld.resolveServiceAccount(spec.serviceAccount!));
           const others = (await deps.tcld.listKeys(saId)).filter((k) => k.id !== st.newKeyId);
           if (others.length === 0) {
