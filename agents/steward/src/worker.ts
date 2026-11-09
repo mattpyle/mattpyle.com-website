@@ -11,6 +11,7 @@ import {
   WORKER_READY_LOG,
   temporalConnectionOptions,
 } from './config.js';
+import { APP_ID_ENV, APP_KEY_ENV } from './lib/github.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { log } from './lib/logger.js';
 import { installTemporalRuntime } from './lib/temporal-logger.js';
@@ -42,6 +43,25 @@ process.on('unhandledRejection', (reason) => {
 });
 
 /**
+ * Warn, never refuse.
+ *
+ * The hosted worker refuses to start without the GitHub App credential. This
+ * one does not: an operator can run a review, a local audit or the dev server
+ * with no GitHub at all, and a dev run that cannot publish is still a useful run.
+ * The warning says why the publish leg and the findings writes would fail when
+ * they get there. Only the variable names are logged, never a value.
+ */
+function warnIfNoGitHubApp(): void {
+  const missing = [APP_ID_ENV, APP_KEY_ENV].filter((name) => !process.env[name]);
+  if (missing.length === 0) return;
+  log.warn(
+    `${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} unset — any step that writes to GitHub ` +
+      '(the publish leg, the scorecard archive, the findings store) will fail with an AuthError. ' +
+      'Set both in agents/steward/.env to publish from this machine.',
+  );
+}
+
+/**
  * One process, every queue but one (spec §3).
  *
  * The local worker polls every queue except `steward-findings`, which keeps
@@ -67,6 +87,7 @@ async function main() {
   // Before the first poll: a worker on a different Lighthouse than the lockfile
   // would score pages differently from the hosted worker on the same queue.
   const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);
+  warnIfNoGitHubApp();
   // Before the first `NativeConnection` or `Worker`: SDK logs go to pino, not stderr.
   installTemporalRuntime();
   const connection = await NativeConnection.connect(temporalConnectionOptions());

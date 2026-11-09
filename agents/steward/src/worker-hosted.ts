@@ -12,6 +12,7 @@ import {
 } from './config.js';
 import { hostedRegistry, type HostedQueue } from './hosted-registry.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
+import { APP_ID_ENV, APP_KEY_ENV, describeGitHubBoot, resolveGitHubAppForBoot } from './lib/github.js';
 import { log } from './lib/logger.js';
 import { installTemporalRuntime } from './lib/temporal-logger.js';
 import {
@@ -93,27 +94,43 @@ process.on('unhandledRejection', (reason) => {
  * Fail at boot rather than at 03:30.
  *
  * This worker owns the scorecard's publish and archive legs, which are GitHub
- * API calls now, so a container with no token is a container that runs a
- * twelve-minute audit every night and then throws it away. `gh()` would raise
- * `AuthError` at that point, hours after the deploy that caused it and with
- * nobody reading the logs. A refusal to start is loud, immediate, and visible
- * in Railway's own deploy status.
+ * API calls now, so a container with no GitHub credential is a container that
+ * runs a twelve-minute audit every night and then throws it away. `gh()` would
+ * raise `AuthError` at that point, hours after the deploy that caused it and
+ * with nobody reading the logs. A refusal to start is loud, immediate, and
+ * visible in Railway's own deploy status.
  *
- * The value is never read here, only its presence — see `config.ts` on secrets.
+ * The credential is a GitHub App: its id and private key. This resolves the
+ * app's installation, which also proves the pair belongs together, and returns
+ * the `github` value the ready line carries. GitHub rejecting the credential
+ * stops the boot. GitHub being unreachable, or answering 5xx, does not: the
+ * worker recycles itself after heavy work, and a blip at that moment must not
+ * leave the audit tier down. It warns, starts, and the ready line says
+ * `installation unresolved`; the first GitHub call resolves it. The key is never
+ * read here, only handed to the token provider — see `config.ts` on secrets.
  */
-function assertPublishCredentials(): void {
-  if (process.env.GITHUB_TOKEN) return;
-  throw new Error(
-    'GITHUB_TOKEN is not set. The hosted worker serves the scorecard, whose publish and ' +
-      'archive legs write to the repository through the GitHub API. Set it in the host\'s ' +
-      'environment (on Railway: the service\'s Variables tab) and redeploy.',
-  );
+async function assertPublishCredentials(): Promise<string> {
+  if (!process.env[APP_ID_ENV] || !process.env[APP_KEY_ENV]) {
+    throw new Error(
+      `${APP_ID_ENV} and ${APP_KEY_ENV} are not both set. The hosted worker serves the scorecard, whose publish and ` +
+        'archive legs write to the repository through the GitHub API as an installed GitHub App. Set both in the host\'s ' +
+        'environment (on Railway: the service\'s Variables tab) and redeploy.',
+    );
+  }
+  const boot = await resolveGitHubAppForBoot();
+  if (!boot.identity) {
+    log.warn(
+      { appId: boot.appId, reason: boot.unresolvedReason },
+      'GitHub did not answer the installation lookup — starting anyway; the first GitHub call resolves it',
+    );
+  }
+  return describeGitHubBoot(boot);
 }
 
 /**
  * Warn, never refuse.
  *
- * A missing `GITHUB_TOKEN` means the nightly run throws its work away, so the
+ * A missing GitHub App credential means the nightly run throws its work away, so the
  * worker refuses to start. A missing ping base means the nightly run still works
  * and nobody hears about it if it stops — bad, but strictly better than a
  * monitoring variable being able to take the whole audit tier down. The
@@ -206,7 +223,7 @@ function watchForRecycle(
 async function main() {
   // Before the first poll; see the same guard in `worker.ts`.
   const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);
-  assertPublishCredentials();
+  const githubApp = await assertPublishCredentials();
   // Before the first `NativeConnection` or `Worker`. Without it the SDK writes
   // to stderr, which Railway tags as `error` (STW-549, `lib/temporal-logger.ts`).
   installTemporalRuntime();
@@ -290,6 +307,10 @@ async function main() {
       fastActivities: Object.keys(fast.activities),
       findingsActivities: Object.keys(findings.activities),
       hosted: true,
+      // Which app and installation the credential resolved to: the line a
+      // deploy is checked against after the app's values change. The bot login
+      // is `<slug>[bot]`.
+      github: githubApp,
       // In the ready line for the same reason `alerting` is: it is a fact a
       // deploy can change, and the operator reading this line after a deploy is
       // the person who would otherwise find out from a corrupted report.

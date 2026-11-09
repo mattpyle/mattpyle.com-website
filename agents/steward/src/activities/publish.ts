@@ -186,7 +186,7 @@ export function buildPrBody(report: ReviewReport, reportPath: string, dryRun: bo
 }
 
 // ---------------------------------------------------------------------------
-// GitHub REST — `gh()` and `githubToken()` moved to `lib/github.ts` (Scorecard
+// GitHub REST — `gh()` and its token provider moved to `lib/github.ts` (Scorecard
 // Phase 1) so `activities/scorecard.ts`'s `publishScorecardRun` shares the
 // identical client instead of duplicating it.
 // ---------------------------------------------------------------------------

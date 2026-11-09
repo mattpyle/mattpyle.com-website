@@ -11,7 +11,7 @@
  * test pointed `STEWARD_REVIEWS_DIR` at a temp directory and that was the whole
  * of its sandboxing. Running the suite in between those two edits pointed the
  * new network-backed activity at the real repository with the real
- * `GITHUB_TOKEN` out of `agents/steward/.env`, and it did exactly what it was
+ * GitHub credential out of `agents/steward/.env`, and it did exactly what it was
  * told: created `steward/scorecard-archive` on the live repo, committed
  * fourteen fixture records to it (`first-day`, `twice-2`, `racy`, …) and opened
  * a pull request.
@@ -23,17 +23,18 @@
  *
  * ## How it works
  *
- * `githubToken()` throws a non-retryable `AuthError` when `GITHUB_TOKEN` is
- * absent, so removing the credential converts an accidental live call into a
- * loud, immediate test failure that names the cause. Setting it to the empty
+ * The token provider in `lib/github.ts` throws a non-retryable `AuthError` when
+ * `STEWARD_GITHUB_APP_ID` or `STEWARD_GITHUB_APP_PRIVATE_KEY` is absent, so
+ * removing the credential converts an accidental live call into a loud,
+ * immediate test failure that names the cause. Setting it to the empty
  * string rather than deleting it is deliberate: `config.ts`'s `loadDotEnv`
  * skips any key that is already **defined**, so an empty value is what stops
- * `.env` from putting the real token back a moment later. `delete` would leave
+ * `.env` from putting the real values back a moment later. `delete` would leave
  * it undefined and `.env` would win.
  *
  * A test that genuinely exercises the GitHub path opts back in by installing
- * the fake (`helpers/fake-github.ts`), which sets its own token and replaces
- * `fetch`. Opt-in is the right direction for this: the failure mode of
+ * the fake (`helpers/fake-github.ts`), which sets its own app credential and
+ * replaces `fetch`. Opt-in is the right direction for this: the failure mode of
  * forgetting to fake is now a failed test rather than a commit on the real
  * repository.
  *
@@ -43,7 +44,9 @@
  * opening a real PR, and that failure is quieter.
  */
 
-process.env.GITHUB_TOKEN = '';
+process.env.STEWARD_GITHUB_APP_ID = '';
+process.env.STEWARD_GITHUB_APP_PRIVATE_KEY = '';
+process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = '';
 process.env.ANTHROPIC_API_KEY = '';
 // The preview bypass secret: a test that wants one sets its own.
 process.env.VERCEL_AUTOMATION_BYPASS_SECRET = '';

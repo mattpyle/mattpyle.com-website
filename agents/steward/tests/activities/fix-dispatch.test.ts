@@ -2,6 +2,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
+import { installFakeAppCredentials, type FakeAppCredentials } from '../helpers/fake-github-app.js';
 import {
   awaitFixPrMerge,
   closeConflictingFixPr,
@@ -23,13 +24,13 @@ const SIBLING = `https://github.com/${SITE_REPO}/pull/401`;
 const OLDER = `https://github.com/${SITE_REPO}/pull/399`;
 
 const realFetch = globalThis.fetch;
-const previousToken = process.env.GITHUB_TOKEN;
 let fake: FakeGitHub | undefined;
+let appAuth: FakeAppCredentials | undefined;
 
 afterEach(() => {
   globalThis.fetch = realFetch;
-  if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
-  else process.env.GITHUB_TOKEN = previousToken;
+  appAuth?.restore();
+  appAuth = undefined;
   fake?.restore();
   fake = undefined;
 });
@@ -43,8 +44,9 @@ interface Call {
 /** Answers `METHOD /path` keys from a map, a function answer may read the body; anything else fails loudly. */
 function scriptGitHub(routes: Record<string, unknown | ((body: any) => unknown)>): Call[] {
   const calls: Call[] = [];
-  process.env.GITHUB_TOKEN = 'fake-token-for-tests';
-  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+  appAuth?.restore();
+  appAuth = installFakeAppCredentials();
+  globalThis.fetch = appAuth.wrap((async (url: string | URL, init?: RequestInit) => {
     const u = new URL(String(url));
     const method = init?.method ?? 'GET';
     const path = `${u.pathname}${u.search}`;
@@ -55,7 +57,7 @@ function scriptGitHub(routes: Record<string, unknown | ((body: any) => unknown)>
     const answer = routes[key];
     const json = typeof answer === 'function' ? (answer as (b: any) => unknown)(body) : answer;
     return new Response(JSON.stringify(json), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }) as typeof fetch;
+  }) as typeof fetch);
   return calls;
 }
 

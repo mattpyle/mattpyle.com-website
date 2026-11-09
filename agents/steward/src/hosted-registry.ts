@@ -58,7 +58,7 @@ import {
  * declares no map of its own, and `tests/lib/hosted-worker-registry.test.ts`
  * builds the same list. That is the point of the module: the entry point calls
  * `main()` at module scope, so a test cannot import it without connecting to
- * Temporal and demanding `GITHUB_TOKEN`, and a test that reads its text proves
+ * Temporal and demanding a GitHub App credential, and a test that reads its text proves
  * only that a name was spelled. This module has no side effects at import, so a
  * wrong map wired to a queue fails a test.
  *

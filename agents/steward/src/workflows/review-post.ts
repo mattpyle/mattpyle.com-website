@@ -728,7 +728,7 @@ export async function reviewPost(input: ReviewPostInput): Promise<ReviewReport> 
       published = await light.publishing.publishPost({ report: report! });
     } catch (err) {
       // Park, don't die. `publishPost` runs with `maximumAttempts: 1`, so an
-      // expired GITHUB_TOKEN, a misconfigured remote, or one transient 5xx threw
+      // rejected GitHub credential, a misconfigured remote, or one transient 5xx threw
       // straight out of the workflow — taking the whole durable review with it,
       // including every finding and the human's decision. That is the incident
       // design rule 12 exists to prevent (spec §303-324), and every neighbouring

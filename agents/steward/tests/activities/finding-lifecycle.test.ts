@@ -2,6 +2,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
+import { installFakeAppCredentials, type FakeAppCredentials } from '../helpers/fake-github-app.js';
 import {
   awaitFixPr,
   awaitFixPrMerge,
@@ -26,13 +27,13 @@ const INDEX = 'sites/mattpyle-com/findings/INDEX.md';
 const AT = '2026-10-13T19:00:00.000Z';
 
 const realFetch = globalThis.fetch;
-const previousToken = process.env.GITHUB_TOKEN;
 let fake: FakeGitHub | undefined;
+let appAuth: FakeAppCredentials | undefined;
 
 afterEach(() => {
   globalThis.fetch = realFetch;
-  if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
-  else process.env.GITHUB_TOKEN = previousToken;
+  appAuth?.restore();
+  appAuth = undefined;
   fake?.restore();
   fake = undefined;
 });
@@ -40,14 +41,15 @@ afterEach(() => {
 /** Answers GitHub paths from a map; anything else is a loud failure. */
 function scriptGitHub(routes: Record<string, unknown>): string[] {
   const calls: string[] = [];
-  process.env.GITHUB_TOKEN = 'fake-token-for-tests';
-  globalThis.fetch = (async (url: string | URL) => {
+  appAuth?.restore();
+  appAuth = installFakeAppCredentials();
+  globalThis.fetch = appAuth.wrap((async (url: string | URL) => {
     const u = new URL(String(url));
     const path = `${u.pathname}${u.search}`;
     calls.push(path);
     if (!(path in routes)) throw new Error(`no scripted route for ${path}`);
     return new Response(JSON.stringify(routes[path]), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }) as typeof fetch;
+  }) as typeof fetch);
   return calls;
 }
 
@@ -164,9 +166,10 @@ test('a live commit that predates the merge, or none at all, is a retryable Depl
 
 /** Every GitHub call answers with one status: a token GitHub no longer accepts. */
 function rejectGitHub(status: number): void {
-  process.env.GITHUB_TOKEN = ['fake', 'token', 'for', 'tests'].join('-');
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ message: 'Bad credentials' }), { status, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  appAuth?.restore();
+  appAuth = installFakeAppCredentials();
+  globalThis.fetch = appAuth.wrap((async () =>
+    new Response(JSON.stringify({ message: 'Bad credentials' }), { status, headers: { 'Content-Type': 'application/json' } })) as typeof fetch);
 }
 
 test('a 401 during the merge wait is a retryable AuthError, so the wait outlives a token rotation', async () => {

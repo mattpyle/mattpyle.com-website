@@ -31,6 +31,7 @@ import { dispatchWorkflowId, slotBlocker, type DispatchState } from '../../src/l
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import type { FindingVerdict } from '../../src/lib/findings.js';
 import { FIXING_FINDING, ORIGIN } from '../helpers/finding-fixtures.js';
+import { installFakeAppCredentials } from '../helpers/fake-github-app.js';
 
 /**
  * Fix dispatch by surface on the time-skipping server: real `findingWorkflow`
@@ -309,10 +310,9 @@ test('a PR GitHub answers as conflicting is closed naming the sibling, its slot 
   const site = 'conflict-site';
   const key = 'agent-readiness-descriptor-read-only--mcp';
   const realFetch = globalThis.fetch;
-  const previousToken = process.env.GITHUB_TOKEN;
   const posted: string[] = [];
   const pr401 = { closed: false };
-  process.env.GITHUB_TOKEN = 'fake-token-for-tests';
+  const appAuth = installFakeAppCredentials();
   const routes: Record<string, () => unknown> = {
     // Issue 101's PR, 401, conflicts after a sibling merged; issue 102's PR, 402, merges.
     [`GET /repos/${SITE_REPO}/pulls/401`]: () =>
@@ -332,13 +332,13 @@ test('a PR GitHub answers as conflicting is closed naming the sibling, its slot 
     },
     [`GET /repos/${SITE_REPO}/pulls/402`]: () => ({ state: 'closed', merged: true, merge_commit_sha: 'm402', merged_at: '2026-10-30T09:00:00Z' }),
   };
-  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+  globalThis.fetch = appAuth.wrap((async (url: string | URL, init?: RequestInit) => {
     const u = new URL(String(url));
     const key = `${init?.method ?? 'GET'} ${u.pathname}${u.search}`;
     if (!(key in routes)) throw new Error(`no scripted route for ${key}`);
     if (init?.method === 'POST') posted.push(JSON.parse(String(init.body)).body);
     return new Response(JSON.stringify(routes[key]()), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }) as typeof fetch;
+  }) as typeof fetch);
 
   const m = mocks({ paths: { [key]: ['public/.well-known/mcp-server'] }, realMerge: true });
   let result: FindingWorkflowResult;
@@ -349,8 +349,7 @@ test('a PR GitHub answers as conflicting is closed naming the sibling, its slot 
     })) as FindingWorkflowResult;
   } finally {
     globalThis.fetch = realFetch;
-    if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
-    else process.env.GITHUB_TOKEN = previousToken;
+    appAuth.restore();
   }
 
   assert.equal(pr401.closed, true);

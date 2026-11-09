@@ -82,7 +82,7 @@ export async function pathState(repoDir: string, relPath: string): Promise<PathS
  * The default branch, read from `origin/HEAD`.
  *
  * Deliberately git-local rather than the GitHub API: this is consumed by an
- * operator command that must work without `GITHUB_TOKEN` and without a network
+ * operator command that must work without a GitHub credential and without a network
  * round-trip, and a clone sets `origin/HEAD` for free. Returns `null` when the
  * ref is missing (some older clones), so the caller can say so rather than
  * guessing a branch name and acting on the guess.
