@@ -26,7 +26,7 @@
  * | Signal | Means | Pinged by |
  * |---|---|---|
  * | `nightly-scorecard` | a good nightly scorecard run happened | the scheduled run, success and failure both |
- *  * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
+ * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
  * | `run-shape` | a completed run's record is right (success) or wrong (fail); no period | a manual scorecard run, and any deep audit, healthy or bad |
  * | `findings-reconcile` | the hourly findings reconciler ran | `reconcileFindingsWorkflow`, success and failure both |
  * | `findings-recheck:<site>` | the daily recheck of that site's approved findings ran | `recheckFindingsWorkflow`, success and failure both |
