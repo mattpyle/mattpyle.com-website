@@ -12,6 +12,7 @@ import {
   parseTcldKeyList,
   replaceEnvLine,
   resolveBinary,
+  tcldDeleteInvocation,
 } from '../../src/lib/credential-rotate-deps.js';
 import { run } from '../../src/lib/proc.js';
 
@@ -104,9 +105,19 @@ test('replaceEnvLine keeps CRLF line endings, appends a missing variable, and do
   assert.equal(replaceEnvLine('', 'B', '2'), 'B=2\n');
 });
 
-test('replaceEnvLine quotes a value dotenv would misread, and does not read $ as a group reference', () => {
-  assert.equal(replaceEnvLine('K=old\n', 'K', 'a b#c'), 'K="a b#c"\n');
+test('replaceEnvLine writes the value raw, because loadDotEnv decodes no escapes, and reads $ literally', () => {
+  assert.equal(replaceEnvLine('K=old\n', 'K', 'a b#c'), 'K=a b#c\n');
   assert.equal(replaceEnvLine('K=old\n', 'K', 'x$&y'), 'K=x$&y\n');
+  assert.equal(replaceEnvLine('K=old\n', 'K', 'back\\slash"quote'), 'K=back\\slash"quote\n');
+  assert.equal(replaceEnvLine('K=old\n', 'K', ' padded '), 'K=" padded "\n');
+  assert.throws(() => replaceEnvLine('K=old\n', 'K', 'two\nlines'), /line break/);
+});
+
+test('tcld apikey delete confirms through the AUTO_CONFIRM variable, not a flag', () => {
+  const call = tcldDeleteInvocation('key-123');
+  assert.deepEqual(call.args, ['apikey', 'delete', '--id', 'key-123']);
+  assert.equal(call.env.AUTO_CONFIRM, 'true');
+  assert.ok(!call.args.some((a) => a.includes('confirm')), 'no spelling of the flag is passed');
 });
 
 test('resolveBinary finds a command on PATH and returns null for an absent one', () => {

@@ -82,6 +82,16 @@ export function findServiceAccountId(stdout: string, name: string): string {
   return found;
 }
 
+/**
+ * The arguments and environment for `tcld apikey delete`. tcld's global
+ * confirmation switch is spelled `--auto_confirm` in its docs and `--auto-confirm`
+ * in Temporal's newer CLI, and it also reads the `AUTO_CONFIRM` environment
+ * variable. The variable works under either spelling, so the flag stays out.
+ */
+export function tcldDeleteInvocation(keyId: string): { args: string[]; env: NodeJS.ProcessEnv } {
+  return { args: ['apikey', 'delete', '--id', keyId], env: { AUTO_CONFIRM: 'true' } };
+}
+
 /** Keys from `tcld apikey list`. */
 export function parseTcldKeyList(stdout: string): TcldListedKey[] {
   const json = parseJsonOutput(stdout);
@@ -134,7 +144,11 @@ export function parseRailwayStatus(stdout: string, service: string, environment:
  */
 export function replaceEnvLine(text: string, key: string, value: string): string {
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  const quoted = /[\s#"'\\]/.test(value) ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value;
+  if (/[\r\n]/.test(value)) throw new Error(`The value for ${key} contains a line break, which a .env line cannot hold.`);
+  // loadDotEnv (config.ts) takes everything after the first "=", trims it and strips one pair of
+  // outer quotes. It decodes no escapes, so the value goes in raw; quotes are only needed to keep
+  // leading or trailing spaces, which the trim would drop.
+  const quoted = value !== value.trim() ? `"${value}"` : value;
   const line = `${key}=${quoted}`;
   const pattern = new RegExp(`^(?:export\\s+)?${key}\\s*=.*$`, 'm');
   if (pattern.test(text)) {
@@ -287,8 +301,8 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
   const opBinary = () => need(resolveBinary('op'), 'op', 'Install the 1Password CLI.');
   const railwayBinary = () => need(resolveBinary('railway', [RAILWAY_SIBLING]), 'railway', 'Install the Railway CLI.');
 
-  async function runChecked(bin: string, args: string[], input?: string, cwd?: string): Promise<string> {
-    const result = await run(bin, args, { input, cwd });
+  async function runChecked(bin: string, args: string[], input?: string, cwd?: string, env?: NodeJS.ProcessEnv): Promise<string> {
+    const result = await run(bin, args, { input, cwd, env });
     if (result.exitCode !== 0) {
       const name = path.basename(bin).replace(/\.exe$/, '');
       throw new Error(`${name} ${args.slice(0, 2).join(' ')} exited ${result.exitCode}: ${(result.stderr || result.stdout).trim().slice(0, 300)}`);
@@ -410,7 +424,8 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
       deleteKey: async (keyId) => {
         const bin = need(tcldBinary(), 'tcld', 'Install it, then run `tcld login`.');
         // The command asked Matt already; tcld's own prompt would wait on a closed stdin.
-        await runChecked(bin, ['--auto-confirm', 'apikey', 'delete', '--id', keyId]);
+        const call = tcldDeleteInvocation(keyId);
+        await runChecked(bin, call.args, undefined, undefined, call.env);
       },
     },
     op: {
