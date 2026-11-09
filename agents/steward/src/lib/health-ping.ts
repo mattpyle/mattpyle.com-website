@@ -1,7 +1,7 @@
 import { HEALTHCHECK_BASE } from '../config.js';
 import { log } from './logger.js';
 import {
-  HEALTH_CHECK_SLUGS,
+  healthCheckSlug,
   healthPingUrl,
   type HealthSignal,
   type RunShape,
@@ -109,7 +109,7 @@ export async function sendHealthPing(
       // not retrying past the loop, because it will 404 every time.
       lastReason = `the alerting service answered ${response.status}`;
       if (response.status === 404) {
-        lastReason += ` — there is no check with the slug "${HEALTH_CHECK_SLUGS[signal]}" under that ping key`;
+        lastReason += ` — there is no check with the slug "${healthCheckSlug(signal)}" under that ping key`;
         break;
       }
     } catch (err) {

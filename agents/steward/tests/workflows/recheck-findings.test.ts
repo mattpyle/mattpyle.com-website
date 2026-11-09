@@ -13,6 +13,7 @@ import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from '../../src/
 import type { RunFindingChecksInput, RunFindingChecksResult } from '../../src/activities/verify-finding.js';
 import { findingWorkflowId, parseFindingsIndex, type OpenFindingWorkflow } from '../../src/lib/findings.js';
 import { checkUrls } from '../../src/lib/verify-checks.js';
+import { summariseRecheck } from '../../src/lib/findings-recheck.js';
 
 /**
  * `recheckFindingsWorkflow` against the real test server, on a fixture store:
@@ -103,11 +104,17 @@ function seed(): Record<string, string> {
   return files;
 }
 
-function activities(open: string[] = []) {
+function activities(open: string[] = [], overrides: Record<string, unknown> = {}) {
   const ran: string[] = [];
+  const pings: Array<{ signal: string; shape: { ok: boolean; summary: string } }> = [];
   return {
     ran,
+    pings,
     activities: {
+      reportRunHealth: async (input: { signal: string; shape: { ok: boolean; summary: string } }) => {
+        pings.push(input);
+        return { signal: input.signal, ok: input.shape.ok, sent: true };
+      },
       readSiteHosts,
       readFindingsIndex,
       readRecheckBlock,
@@ -126,6 +133,7 @@ function activities(open: string[] = []) {
         });
         return { ranAt: RAN_AT, passed: results.every((row) => row.pass), results };
       },
+      ...overrides,
     },
   };
 }
@@ -152,7 +160,7 @@ const file = (key: string) => github!.branches.get('main')!.get(`${DIR}/${key}.m
 
 test('each approved finding gets one outcome, and only a still-present or fixed one is written', async () => {
   github = installFakeGitHub({ seed: seed(), defaultBranch: 'main' });
-  const { activities: acts, ran } = activities([findingWorkflowId(SITE, 'has-run')]);
+  const { activities: acts, ran, pings } = activities([findingWorkflowId(SITE, 'has-run')]);
   const result = await run(acts);
 
   const outcomes = Object.fromEntries(result.rows.map((row) => [row.key, row.outcome]));
@@ -194,6 +202,30 @@ test('each approved finding gets one outcome, and only a still-present or fixed 
   // One commit per changed finding: the resolve and the live_on.
   assert.equal(github.refUpdates.length, 2);
   assert.ok(github.refUpdates.every((update) => update.branch === 'main' && !update.force));
+
+  // One healthy ping on the site's own check, carrying the run's one-line summary.
+  assert.deepEqual(pings, [
+    {
+      signal: 'findings-recheck:temporal-io',
+      shape: { ok: true, summary: summariseRecheck(result) },
+    },
+  ]);
+  assert.match(pings[0]!.shape.summary, /^Findings recheck of temporal-io: 8 approved, /);
+});
+
+test('a run that fails pings the failure endpoint with the reason, and still fails', async () => {
+  github = installFakeGitHub({ seed: seed(), defaultBranch: 'main' });
+  const { activities: acts, pings } = activities([], {
+    readFindingsIndex: async () => {
+      throw ApplicationFailure.nonRetryable('INDEX.md is unreadable', 'StoreLayout');
+    },
+  });
+  await assert.rejects(run(acts), (err: Error) => err.name === 'WorkflowFailedError');
+
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.signal, 'findings-recheck:temporal-io');
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.match(pings[0]!.shape.summary, /Findings recheck of temporal-io against mattpyle\/argus failed: INDEX\.md is unreadable/);
 });
 
 test('a finding with an open finding workflow is reported and left alone, even when its checks would pass', async () => {

@@ -4,6 +4,8 @@ import {
   ACTION_RATE_ALERT_PER_SECOND,
   CREDENTIAL_WARNING_DAYS,
   HEALTH_CHECK_SLUGS,
+  findingsRecheckSignal,
+  healthCheckSlug,
   TRACKED_CREDENTIALS,
   actionUsageShape,
   actionUsageUnavailableShape,
@@ -264,6 +266,25 @@ test('a trailing slash on the configured base does not double up', () => {
 test('every signal has a distinct slug', () => {
   const slugs = Object.values(HEALTH_CHECK_SLUGS);
   assert.equal(new Set(slugs).size, slugs.length);
+});
+
+test('the recheck signal is per site and its slug names the site', () => {
+  assert.equal(findingsRecheckSignal('temporal-io'), 'findings-recheck:temporal-io');
+  assert.equal(healthCheckSlug(findingsRecheckSignal('temporal-io')), 'steward-findings-recheck-temporal-io');
+  assert.equal(healthCheckSlug('findings-reconcile'), 'steward-findings-reconcile');
+  const base = 'https://hc-ping.com/KEY';
+  assert.equal(
+    healthPingUrl(base, findingsRecheckSignal('temporal-io'), true),
+    `${base}/steward-findings-recheck-temporal-io`,
+  );
+  assert.equal(
+    healthPingUrl(base, findingsRecheckSignal('temporal-io'), false),
+    `${base}/steward-findings-recheck-temporal-io/fail`,
+  );
+  assert.notEqual(
+    healthCheckSlug(findingsRecheckSignal('mattpyle-com')),
+    healthCheckSlug(findingsRecheckSignal('temporal-io')),
+  );
 });
 
 // --- the action-usage rule --------------------------------------------------
