@@ -197,9 +197,7 @@ const light = {
   // HTTP call itself and never throws — a second *activity* attempt would only
   // repeat a decision that already gave up, and a long deadline would let a
   // hanging monitoring service hold a finished run open.
-  alerting: wf.proxyActivities<
-    Pick<typeof activities, 'reportRunHealth' | 'checkCredentialExpiry' | 'checkActionUsage'>
-  >({
+  alerting: wf.proxyActivities<Pick<typeof activities, 'reportRunHealth' | 'checkActionUsage'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '1 minute',
     retry: { maximumAttempts: 1 },
@@ -338,19 +336,15 @@ async function recheckLowPerformance(
  *    run reports itself exactly as it always did — the alert reads the record,
  *    it does not change it.
  *
- * The credential check rides on the scheduled run (task 4): a daily job that
- * already exists, for a warning window measured in weeks. It runs **first**, so
- * a run that later dies on an expired token has already said so.
- *
  * The action-usage check (temporal-cloud-usage-alerting card, 2026-09-06) rides
- * on the same run and runs **before even that**, for a reason particular to what
- * it measures: it samples one minute of the namespace's own action rate, and by
+ * on the scheduled run and runs **first**, for a reason particular to what it
+ * measures: it samples one minute of the namespace's own action rate, and by
  * the time the fan-out is running, the busiest thing in that minute is this
  * workflow. Sampling at the head reads the namespace at rest, which is the
  * baseline a runaway loop has to stand out against.
  *
- * Both are scheduled-only. Each has a one-day period at the alerting service, so
- * a manual run that pinged them would reset a window it is not evidence for —
+ * It is scheduled-only. Its check has a one-day period at the alerting service,
+ * so a manual run that pinged it would reset a window it is not evidence for —
  * the same argument the `nightly-scorecard` check rests on.
  *
  * ## Replay: the healthy manual `run-shape` ping
@@ -364,6 +358,17 @@ async function recheckLowPerformance(
  * archive leg, and replaying it against the unguarded call fails with TMPRL1100
  * (`Activity machine does not handle this event: WorkflowExecutionCompleted`).
  * With the marker the old history reads `patched` as false and ends where it did.
+ *
+ * ## Replay: the removed credential check (2026-11-08)
+ *
+ * The scheduled branch used to call a credential-date activity after
+ * `checkActionUsage`. It no longer does, and the removal carries no `patched`
+ * marker. Determinism rule 5 applies: a scorecard run finishes within minutes and
+ * never parks at a wait, so no open run replays across a deploy. The
+ * committed fixtures are all manual runs, whose history never reaches the
+ * scheduled branch, so none of them records the call. A scheduled history recorded
+ * before this change would replay with an extra activity event the
+ * code no longer issues; none is committed.
  */
 export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promise<ScorecardAuditResult> {
   const scheduled = input.triggeredBy === 'schedule';
@@ -375,13 +380,6 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
       sent: usage.sent,
       foregroundPerSecond: usage.foregroundPerSecond,
       summary: usage.summary,
-    });
-
-    const expiry = await light.alerting.checkCredentialExpiry();
-    wf.log.info('credential expiry checked', {
-      due: expiry.dueCount,
-      sent: expiry.sent,
-      summary: expiry.summary,
     });
   }
 

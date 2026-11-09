@@ -2,21 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ACTION_RATE_ALERT_PER_SECOND,
-  CREDENTIAL_WARNING_DAYS,
   HEALTH_CHECK_SLUGS,
   findingsRecheckSignal,
   healthCheckSlug,
-  TRACKED_CREDENTIALS,
   actionUsageShape,
   actionUsageUnavailableShape,
-  credentialExpiryShape,
-  credentialsDueWithin,
-  daysUntilExpiry,
   deepAuditShape,
   healthPingUrl,
   recheckShape,
   scorecardRunShape,
-  type TrackedCredential,
 } from '../../src/lib/run-health.js';
 
 /**
@@ -28,9 +22,6 @@ import {
  * tests are written against those two incidents rather than against the general
  * idea of a bad run.
  */
-
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
 
 // --- the scorecard's rule ---------------------------------------------------
 
@@ -154,99 +145,6 @@ test('a sample of zero is a good shape', () => {
   // fire on the target's choices rather than on this stack's health.
   const shape = deepAuditShape({ origin: 'https://example.test', sampled: 0, rendered: 0 });
   assert.equal(shape.ok, true);
-});
-
-// --- credential expiry ------------------------------------------------------
-
-const NOW = Date.parse('2026-08-15T12:00:00Z');
-
-function credential(name: string, expires: string): TrackedCredential {
-  return { name, expires, failure: 'something breaks' };
-}
-
-test('a credential is usable through the whole of its expiry day', () => {
-  // Not the start of the day: warning "0 days left" on a morning the token
-  // still works reads as already-broken.
-  assert.equal(daysUntilExpiry('2026-08-15', NOW), 0);
-  assert.equal(daysUntilExpiry('2026-08-16', NOW), 1);
-  assert.equal(daysUntilExpiry('2026-08-14', NOW), -1);
-});
-
-test('nothing inside the window is silence, and the summary still names the nearest', () => {
-  const shape = credentialExpiryShape([credential('a key', '2027-01-01')], NOW);
-  assert.equal(shape.ok, true);
-  assert.match(shape.summary, /the nearest is a key, 139 days out/);
-});
-
-test('a credential inside the window fails the check and says what breaks', () => {
-  const soon = new Date(NOW + 10 * DAY).toISOString().slice(0, 10);
-  const shape = credentialExpiryShape([credential('a key', soon)], NOW);
-  assert.equal(shape.ok, false);
-  assert.match(shape.summary, /a key expires in 10 day\(s\)/);
-  assert.match(shape.summary, /something breaks/);
-  // Points at the private operator docs rather than reproducing them.
-  assert.match(shape.summary, /steward\/docs\/rotate-a-credential\.md/);
-});
-
-test('the boundary is inclusive, and a day outside it is silent', () => {
-  const inside = new Date(NOW + CREDENTIAL_WARNING_DAYS * DAY).toISOString().slice(0, 10);
-  const outside = new Date(NOW + (CREDENTIAL_WARNING_DAYS + 2) * DAY).toISOString().slice(0, 10);
-  assert.equal(credentialExpiryShape([credential('k', inside)], NOW).ok, false);
-  assert.equal(credentialExpiryShape([credential('k', outside)], NOW).ok, true);
-});
-
-test('an already-expired credential says so rather than counting down past zero', () => {
-  const shape = credentialExpiryShape([credential('a key', '2026-08-01')], NOW);
-  assert.equal(shape.ok, false);
-  assert.match(shape.summary, /EXPIRED 14 day\(s\) ago on 2026-08-01/);
-});
-
-test('the soonest credential is listed first', () => {
-  const shape = credentialExpiryShape(
-    [credential('later', '2026-09-10'), credential('sooner', '2026-08-20')],
-    NOW,
-    60,
-  );
-  assert.ok(shape.summary.indexOf('sooner') < shape.summary.indexOf('later'));
-});
-
-test('the tracked list is real, dated, and matches what the summary counts', () => {
-  // The list is the feature (card, task 4): a credential with a fixed lifetime
-  // that is not in here is one nothing will warn about.
-  assert.ok(TRACKED_CREDENTIALS.length >= 2);
-  for (const c of TRACKED_CREDENTIALS) {
-    assert.match(c.expires, /^\d{4}-\d{2}-\d{2}$/, `${c.name} needs a YYYY-MM-DD expiry`);
-    assert.ok(c.failure.length > 0, `${c.name} needs failure prose`);
-  }
-  const due = credentialsDueWithin(TRACKED_CREDENTIALS, NOW);
-  assert.equal(credentialExpiryShape(TRACKED_CREDENTIALS, NOW).ok, due.length === 0);
-});
-
-test('no tracked credential names where its copies live — this file is public', () => {
-  // The boundary rule, from the secret-management card: credential metadata
-  // defaults private, and public code carries only what an alert body needs.
-  // `agents/steward/` is public, and a list of every place a token is stored is
-  // a map worth more to a stranger than to the operator, who owns the secrets
-  // and does not need an email telling him where they are. The locations live
-  // in the private operator docs, in `steward/docs/rotate-a-credential.md`, and
-  // the alert points at it by name.
-  //
-  // Asserted over the serialised rows *and* the rendered summary, because the
-  // leak this guards against is a helpful sentence added to either one.
-  const soon = new Date(NOW + 5 * DAY).toISOString().slice(0, 10);
-  const surfaces = [
-    JSON.stringify(TRACKED_CREDENTIALS),
-    credentialExpiryShape(TRACKED_CREDENTIALS, NOW).summary,
-    credentialExpiryShape([credential('a key', soon)], NOW).summary,
-  ];
-  for (const surface of surfaces) {
-    for (const marker of ['.env', 'Variables', 'Railway', 'agents/steward/.env', 'TEMPORAL_API_KEY', 'GITHUB_TOKEN']) {
-      assert.ok(
-        !surface.includes(marker),
-        `"${marker}" names a credential's storage location and must stay in the private guide`,
-      );
-    }
-  }
 });
 
 // --- the recheck rule ---------------------------------------------------------
