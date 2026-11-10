@@ -47,9 +47,17 @@ export async function markTabbables(page: Page): Promise<Tabbable[]> {
       // here to put a tab stop inside a disclosure — the focusable evidence scroll regions
       // on its report — and without this line every one of them read as a tab stop the
       // browser then skipped, which is a defect in the expectation rather than in the page.
-      // The <summary> itself is the disclosure's own control and stays.
+      // The <summary> itself is the disclosure's own control and stays. A closed details
+      // whose `::details-content` is forced visible (the post rail's contents list above
+      // 900px) shows its content, so those links are tab stops.
       const details = el.closest('details:not([open])');
-      if (details && el.closest('summary')?.parentElement !== details) return false;
+      if (
+        details &&
+        el.closest('summary')?.parentElement !== details &&
+        getComputedStyle(details, '::details-content').contentVisibility !== 'visible'
+      ) {
+        return false;
+      }
       if (el.getClientRects().length === 0) return false;
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || cs.display === 'none' || cs.contentVisibility === 'hidden') {
