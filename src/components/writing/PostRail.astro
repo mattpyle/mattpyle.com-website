@@ -298,10 +298,14 @@ const contents = headings.filter(heading => heading.depth === 2);
 
   .rail-author:hover { color: var(--writing); }
 
-  /* Above 900px the list is always shown and there is nothing to toggle. Both
-     rules sit behind @supports: a browser without `::details-content` cannot show
-     a closed details' content, so it keeps the summary and the script opens it. */
+  /* Above 900px the list is always shown and there is nothing to toggle. Two routes
+     hide the summary. Once the script has opened the details, `[open]` hides it in
+     every browser. Before the script, and with no JavaScript, the @supports block
+     does it where `::details-content` can show a closed details' content; a browser
+     without it keeps the summary until the script runs. */
   @media (min-width: 901px) {
+    .rail-details[open] > summary { display: none; }
+
     @supports selector(::details-content) {
       .rail-details > summary { display: none; }
 
