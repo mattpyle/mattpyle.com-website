@@ -8,6 +8,7 @@ import {
   launchPlan,
   nextShimStep,
   opMissingMessage,
+  referenceEntries,
 } from '../../scripts/shim-decision.mjs';
 
 test('the reinstall exit code is a code no ordinary failure uses', () => {
@@ -43,21 +44,41 @@ test('envFileHasReference finds a reference value and ignores comments, plain va
   assert.equal(envFileHasReference(''), false);
 });
 
-test('launchPlan wraps when references are present and op exists', () => {
-  assert.deepEqual(launchPlan({ envFileText: `B=${REF}\n`, opPath: 'op-path' }), { kind: 'wrap' });
+test('launchPlan wraps and injects a reference line whose key the shell has not set', () => {
+  const plan = launchPlan({ envFileText: `A=plain\nB=${REF}\nC = "${REF}"\n`, opPath: 'op-path', env: {} });
+  assert.deepEqual(plan, { kind: 'wrap', inject: { B: REF, C: REF } });
+});
+
+test('a variable already set in the shell wins over a reference line for the same key', () => {
+  assert.deepEqual(launchPlan({ envFileText: `B=${REF}\n`, opPath: 'op-path', env: { B: 'from-shell' } }), { kind: 'plain' });
+  assert.deepEqual(launchPlan({ envFileText: `B=${REF}\n`, opPath: null, env: { B: '' } }), { kind: 'plain' });
+  const plan = launchPlan({ envFileText: `B=${REF}\nC=${REF}\n`, opPath: 'op-path', env: { B: 'from-shell' } });
+  assert.deepEqual(plan, { kind: 'wrap', inject: { C: REF } });
+});
+
+test('plain lines are never passed on', () => {
+  const plan = launchPlan({ envFileText: 'A=plain\nB=also-plain\n', opPath: 'op-path', env: {} });
+  assert.deepEqual(plan, { kind: 'plain' });
+  const mixed = launchPlan({ envFileText: `A=plain\nB=${REF}\n`, opPath: 'op-path', env: {} });
+  assert.deepEqual(Object.keys(mixed.kind === 'wrap' ? mixed.inject : {}), ['B']);
+});
+
+test('the first line for a key wins, as in loadDotEnv', () => {
+  assert.deepEqual(referenceEntries(`B=plain\nB=${REF}\n`), []);
+  assert.deepEqual(referenceEntries(`B=${REF}\nB=plain\n`), [{ key: 'B', value: REF }]);
 });
 
 test('launchPlan runs plain when the file has no references', () => {
-  assert.deepEqual(launchPlan({ envFileText: 'A=1\n', opPath: 'op-path' }), { kind: 'plain' });
-  assert.deepEqual(launchPlan({ envFileText: 'A=1\n', opPath: null }), { kind: 'plain' });
+  assert.deepEqual(launchPlan({ envFileText: 'A=1\n', opPath: 'op-path', env: {} }), { kind: 'plain' });
+  assert.deepEqual(launchPlan({ envFileText: 'A=1\n', opPath: null, env: {} }), { kind: 'plain' });
 });
 
 test('launchPlan runs plain when there is no file', () => {
-  assert.deepEqual(launchPlan({ envFileText: null, opPath: null }), { kind: 'plain' });
+  assert.deepEqual(launchPlan({ envFileText: null, opPath: null, env: {} }), { kind: 'plain' });
 });
 
 test('launchPlan gives a clear message, not a spawn error, when op is missing', () => {
-  const plan = launchPlan({ envFileText: `B=${REF}\n`, opPath: null });
+  const plan = launchPlan({ envFileText: `B=${REF}\n`, opPath: null, env: {} });
   assert.equal(plan.kind, 'error');
   assert.equal(plan.kind === 'error' && plan.message, opMissingMessage());
   assert.match(opMissingMessage(), /1Password CLI \(`op`\) is not on PATH/);

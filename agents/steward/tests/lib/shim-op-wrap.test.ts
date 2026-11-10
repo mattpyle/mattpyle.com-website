@@ -10,13 +10,14 @@ import { fileURLToPath } from 'node:url';
  * The `steward` launcher under `op run`, end to end, with a STAND-IN for `op`.
  *
  * What this exercises: the real `scripts/steward.mjs` and `shim-decision.mjs`, copied into
- * a scratch tree with a stub CLI, read that tree's `.env`, find `op` on PATH, run the
- * stub CLI as `op run --env-file <file> -- <node> <tsx> <cli> <args>`, pass the exit code
- * through, and print a clear message when `op` is missing.
+ * a scratch tree with a stub CLI, read that tree's `.env`, find `op` on PATH, put only the
+ * reference lines whose key the shell has not set into the child's environment, run the
+ * stub CLI as `op run -- <node> <tsx> <cli> <args>` (no `--env-file`, so a shell value wins),
+ * pass the exit code through, and print a clear message when `op` is missing.
  *
  * What it does NOT exercise: the real 1Password CLI. The stand-in is node itself, renamed
- * `op` (or a shell script off Windows), that resolves the one dummy reference from a
- * table. Real `op` approval prompts, masking, Ctrl+C and TTY handling stay unproven here;
+ * `op` (or a shell script off Windows), that swaps any environment variable holding
+ * the dummy reference for a dummy value, as `op run` does for references in the environment. Real `op` approval prompts, masking, Ctrl+C and TTY handling stay unproven here;
  * those are the live proof after the merge.
  *
  * The reference text and its value are built at run time (gitleaks scans full history).
@@ -45,6 +46,7 @@ function scratchTree(envText: string | null, withOp: boolean) {
     [
       "console.log('cli-args=' + JSON.stringify(process.argv.slice(3)));",
       "console.log('cli-dummy=' + (process.env.DUMMY_SECRET ?? 'unset'));",
+      "console.log('cli-plain=' + (process.env.DUMMY_PLAIN ?? 'unset'));",
       "process.exit(Number(process.env.DUMMY_EXIT ?? 0));",
     ].join('\n'),
   );
@@ -60,13 +62,12 @@ function scratchTree(envText: string | null, withOp: boolean) {
         "const { spawnSync } = require('node:child_process');",
         "const fs = require('node:fs');",
         "const argv = process.argv.slice(1);",
-        "const file = argv[argv.indexOf('--env-file') + 1];",
         "const cmd = argv.slice(argv.indexOf('--') + 1);",
         "const env = { ...process.env };",
         "delete env.NODE_OPTIONS;",
-        "for (const line of fs.readFileSync(file, 'utf8').split(/\\r?\\n/)) {",
-        "  const i = line.indexOf('=');",
-        "  if (i > 0 && line.slice(i + 1).startsWith(process.env.FAKE_OP_REF)) env[line.slice(0, i)] = process.env.FAKE_OP_VALUE;",
+        "// op run resolves references found in environment variables.",
+        "for (const [k, v] of Object.entries(env)) {",
+        "  if (typeof v === 'string' && v.startsWith(process.env.FAKE_OP_REF)) env[k] = process.env.FAKE_OP_VALUE;",
         "}",
         "fs.writeFileSync(process.env.FAKE_OP_LOG, JSON.stringify(argv.slice(0, argv.indexOf('--') + 1)));",
         "const r = spawnSync(cmd[0], cmd.slice(1), { stdio: 'inherit', env });",
@@ -102,16 +103,41 @@ function runShim(tree: ReturnType<typeof scratchTree>, args: string[], extra: No
   return { ...result, opArgs: fs.existsSync(log) ? (JSON.parse(fs.readFileSync(log, 'utf8')) as string[]) : null };
 }
 
-test('references present and op on PATH: the CLI runs under op run with the resolved value', () => {
+test('a reference line with no shell value reaches op run and the CLI sees the resolved value', () => {
   const tree = scratchTree(`DUMMY_SECRET=${REF}\n`, true);
   try {
     const r = runShim(tree, ['inbox', '--flag']);
     assert.equal(r.status, 0, r.stderr);
     // node resolves the first operand of the renamed binary to a path; its basename is op's `run`.
-    assert.deepEqual(r.opArgs?.map((a, i) => (i === 0 ? path.basename(a) : a)), ['run', '--env-file', path.join(tree.pkg, '.env'), '--']);
+    // There is no --env-file: that would give the file precedence over the shell.
+    assert.deepEqual(r.opArgs?.map((a, i) => (i === 0 ? path.basename(a) : a)), ['run', '--']);
     assert.match(r.stdout, /cli-args=\["inbox","--flag"\]/);
     assert.ok(r.stdout.includes(`cli-dummy=${VALUE}`), 'the CLI saw the resolved value');
     assert.ok(!r.stdout.includes(REF));
+  } finally {
+    fs.rmSync(tree.root, { recursive: true, force: true });
+  }
+});
+
+test('a variable set in the shell wins over a reference line for the same key', () => {
+  const tree = scratchTree(`DUMMY_SECRET=${REF}\n`, true);
+  try {
+    const r = runShim(tree, ['inbox'], { DUMMY_SECRET: 'from-shell' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.opArgs, null, 'nothing to resolve, so op does not run');
+    assert.match(r.stdout, /cli-dummy=from-shell/);
+  } finally {
+    fs.rmSync(tree.root, { recursive: true, force: true });
+  }
+});
+
+test('plain lines are not passed to the child by the shim', () => {
+  const tree = scratchTree(`DUMMY_PLAIN=plain-value\nDUMMY_SECRET=${REF}\n`, true);
+  try {
+    const r = runShim(tree, ['inbox']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /cli-plain=unset/, 'loadDotEnv reads plain lines, not the shim');
+    assert.ok(r.stdout.includes(`cli-dummy=${VALUE}`));
   } finally {
     fs.rmSync(tree.root, { recursive: true, force: true });
   }

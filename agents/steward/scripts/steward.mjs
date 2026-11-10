@@ -44,9 +44,11 @@ function findOnPath(name) {
   return null;
 }
 
-// The shim reads .env for one fact: does any value start with `op://`. When one
-// does, the CLI runs under `op run`, which resolves every reference into the
-// child's environment. Nothing else from the file is kept or printed.
+// The shim reads .env for reference lines only (`KEY=op://...`). For each one whose
+// key the shell has not set, it adds the reference string to the child's environment
+// and runs the CLI under `op run --`, which resolves references in environment
+// variables. A shell value wins over the file, as in loadDotEnv, so no `--env-file`.
+// Plain values stay with loadDotEnv. The shim keeps key names and reference strings only.
 function readEnvFile() {
   try {
     return fs.readFileSync(envFile, 'utf8');
@@ -57,6 +59,7 @@ function readEnvFile() {
 const plan = launchPlan({
   envFileText: readEnvFile(),
   opPath: findOnPath('op'),
+  env: process.env,
 });
 if (plan.kind === 'error') {
   console.error(`
@@ -82,7 +85,7 @@ function runCli(env) {
     const cliCommand = [process.execPath, tsxCli, cliEntry, ...process.argv.slice(2)];
     const [binary, ...args] =
       plan.kind === 'wrap'
-        ? [findOnPath('op'), 'run', '--env-file', envFile, '--', ...cliCommand]
+        ? [findOnPath('op'), 'run', '--', ...cliCommand]
         : cliCommand;
     const child = spawn(binary, args, {
       cwd: packageRoot,
@@ -113,7 +116,8 @@ function runNpmCi() {
 
 let installedByShim = false;
 for (;;) {
-  const env = installedByShim ? { ...process.env, [INSTALLED_BY_SHIM_ENV]: '1' } : process.env;
+  const base = installedByShim ? { ...process.env, [INSTALLED_BY_SHIM_ENV]: '1' } : process.env;
+  const env = plan.kind === 'wrap' ? { ...base, ...plan.inject } : base;
   const { code, signal } = await runCli(env);
   if (signal) process.kill(process.pid, signal);
   if (nextShimStep({ exitCode: code, installedByShim }) === 'exit') {

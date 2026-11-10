@@ -177,9 +177,10 @@ steward up                   # starts the worker, and the dev server if that's t
 ```
 
 **Secrets from 1Password.** A secret line in `.env` can hold a reference (`op://Steward/<ITEM>/<field>`)
-instead of a value; `.env.example` lists which variables are secrets. When any value starts with
-`op://`, `steward` runs the CLI under `op run --env-file .env --`, which needs the 1Password CLI on
-PATH. A reference that reaches Steward unresolved (a run through `npx tsx` or `node --env-file`) stops
+instead of a value; `.env.example` lists which variables are secrets. For each such line whose variable
+the shell has not set, `steward` passes the reference to the CLI under `op run --`, which resolves
+references in environment variables and needs the 1Password CLI on PATH. A variable already set in
+the shell wins over the file, as for plain values. A reference that reaches Steward unresolved (a run through `npx tsx` or `node --env-file`) stops
 the process with a message naming the variable. `steward credential rotate` leaves a reference line
 alone: the 1Password item is the local copy. The hosted worker has no `op` and holds real values.
 

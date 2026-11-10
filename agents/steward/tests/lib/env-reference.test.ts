@@ -45,6 +45,24 @@ test('envLineIsReference reads one line and ignores comments and other keys', ()
   assert.equal(envLineIsReference(text, 'KEY_C'), false);
 });
 
+test('envLineIsReference accepts spaces around the equals sign, as loadDotEnv does', () => {
+  assert.equal(envLineIsReference(`KEY = ${ref('A')}\n`, 'KEY'), true);
+  assert.equal(envLineIsReference(`  KEY\t=\t"${ref('A')}"\n`, 'KEY'), true);
+});
+
+test('envLineIsReference compares keys exactly, so a prefix key does not match', () => {
+  const text = `KEY_LONG=${ref('A')}\nKEY=plain\n`;
+  assert.equal(envLineIsReference(text, 'KEY'), false);
+  assert.equal(envLineIsReference(text, 'KEY_LONG'), true);
+  assert.equal(envLineIsReference(`KEY=${ref('A')}\n`, 'KEY_LONG'), false);
+  assert.equal(envLineIsReference(`KEY_LONG=plain\nKEY=${ref('A')}\n`, 'KEY'), true);
+});
+
+test('envLineIsReference reads a key with a regex metacharacter as a literal', () => {
+  assert.equal(envLineIsReference(`A.B=${ref('A')}\n`, 'AXB'), false);
+  assert.equal(envLineIsReference(`A.B=${ref('A')}\n`, 'A.B'), true);
+});
+
 test('the rotate .env write keeps a reference line and writes a plain line', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'steward-envref-'));
   try {

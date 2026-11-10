@@ -37,11 +37,22 @@ export function unresolvedReferenceRefusal(env: NodeJS.ProcessEnv = process.env)
 }
 
 /**
- * True when the `KEY=` line of a dotenv text holds a reference. The rotate command
- * skips its `.env` write for such a line: the 1Password item is the local copy.
+ * True when the line `loadDotEnv` would read for `key` holds a reference. The rotate
+ * command skips its `.env` write for such a line: the 1Password item is the local copy.
+ *
+ * Parses as `loadDotEnv` does (trim the line, skip blanks and `#` comments, split at
+ * the first `=`, trim the key) and compares keys exactly, so `KEY = op://...` counts and
+ * a key that is a prefix of another does not. The first line for a key wins, as there.
+ * No RegExp is built from the key.
  */
 export function envLineIsReference(text: string, key: string): boolean {
-  const pattern = new RegExp(`^(?:export\s+)?${key}\s*=(.*)$`, 'm');
-  const match = pattern.exec(text);
-  return match !== null && isOpReference(match[1]);
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    if (trimmed.slice(0, eq).trim() !== key) continue;
+    return isOpReference(trimmed.slice(eq + 1));
+  }
+  return false;
 }
