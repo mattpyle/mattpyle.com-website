@@ -52,7 +52,17 @@ interface MockOverrides {
   resolveRunStamp?: () => Promise<{ iso: string; timestamp: string }>;
   auditLiveUrl?: (url: string) => Promise<PageAuditOutcome>;
   readPublishedScorecard?: () => Promise<PublishedScorecard | undefined>;
-  publishScorecardRun?: (input: unknown) => Promise<{ branch: string; prUrl: string; id: string }>;
+  publishScorecardRun?: (input: unknown) => Promise<{
+    branch: string;
+    prUrl: string;
+    id: string;
+    prNumber?: number;
+    headSha?: string;
+    committed?: boolean;
+  }>;
+  /** One answer per read, the last repeated. Defaults to passing every time. */
+  readScorecardPrChecks?: (headSha: string) => Promise<{ state: string; failing: string[]; pending: string[]; requiredPassed: boolean }>;
+  mergeScorecardPr?: (input: unknown) => Promise<unknown>;
   archiveScorecardRun?: (record: unknown) => Promise<{ archivePath: string }>;
 }
 
@@ -67,6 +77,8 @@ function mockActivities(overrides: MockOverrides = {}) {
   const calls: string[] = [];
   const archived: unknown[] = [];
   const signals: SentSignal[] = [];
+  const checkReads: string[] = [];
+  const merges: unknown[] = [];
   const activities = {
     resolveAuditUrls: overrides.resolveAuditUrls ?? (async () => ['https://www.mattpyle.com/']),
     resolveRunStamp:
@@ -83,7 +95,26 @@ function mockActivities(overrides: MockOverrides = {}) {
       overrides.publishScorecardRun ??
       (async () => {
         calls.push('publishScorecardRun');
-        return { branch: 'steward/scorecard-2026-07-22', prUrl: 'https://github.com/o/r/pull/9', id: '2026-07-22' };
+        return {
+          branch: 'steward/scorecard-2026-07-22',
+          prUrl: 'https://github.com/o/r/pull/9',
+          id: '2026-07-22',
+          prNumber: 9,
+          headSha: 'sha-run',
+          committed: true,
+        };
+      }),
+    readScorecardPrChecks:
+      overrides.readScorecardPrChecks ??
+      (async (headSha: string) => {
+        checkReads.push(headSha);
+        return { state: 'passing', failing: [], pending: [], requiredPassed: true };
+      }),
+    mergeScorecardPr:
+      overrides.mergeScorecardPr ??
+      (async (input: unknown) => {
+        merges.push(input);
+        return { merged: true, mergeSha: 'merge-sha' };
       }),
     archiveScorecardRun:
       overrides.archiveScorecardRun ??
@@ -112,7 +143,7 @@ function mockActivities(overrides: MockOverrides = {}) {
       };
     },
   };
-  return { activities, calls, archived, signals };
+  return { activities, calls, archived, signals, checkReads, merges };
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
@@ -1020,4 +1051,157 @@ test('a run with no flagged page issues no extra audit calls', async () => {
   assert.equal(served[a], 1);
   assert.equal(served[b], 1);
   assert.ok(result.perPage.every((p) => !('performanceSamples' in p)));
+});
+
+/**
+ * The merge leg: after the publish and the archive, the run waits for the
+ * pull request's checks and merges it. The activities are mocked, so these pin
+ * what the workflow decides: when to read, when to stop, and what a refusal
+ * does to the run's health.
+ */
+function checkSequence(states: Array<'passing' | 'pending' | 'failing'>, reads: string[]) {
+  let i = 0;
+  return async (headSha: string) => {
+    reads.push(headSha);
+    const state = states[Math.min(i++, states.length - 1)];
+    return {
+      state,
+      failing: state === 'failing' ? ['axe'] : [],
+      pending: state === 'pending' ? ['Vercel'] : [],
+      requiredPassed: state === 'passing',
+    };
+  };
+}
+
+async function runMerge(id: string, overrides: MockOverrides, input: Partial<ScorecardAuditInput> = {}) {
+  const mocks = mockActivities(overrides);
+  const result = await withWorker(mocks.activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, { workflowId: id, taskQueue: QUEUE, args: [baseInput(input)] }),
+  );
+  return { ...mocks, result };
+}
+
+test('merge leg: two passing reads, then one merge of the run commit', async () => {
+  const { result, checkReads, merges, signals } = await runMerge('sc-merge-ok', {});
+  assert.equal(result.mergeSha, 'merge-sha');
+  assert.equal(result.mergeRefusal, undefined);
+  assert.deepEqual(checkReads, ['sha-run', 'sha-run'], 'two consecutive passing reads');
+  assert.deepEqual(merges, [{ prNumber: 9, branch: 'steward/scorecard-2026-07-22', expectedHeadSha: 'sha-run' }]);
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['run-shape', true]], 'a merged run sends only its ordinary ping');
+});
+
+test('merge leg: a pending read between passes restarts the count', async () => {
+  const reads: string[] = [];
+  const { result } = await runMerge('sc-merge-flap', {
+    readScorecardPrChecks: checkSequence(['pending', 'passing', 'pending', 'passing', 'passing'], reads),
+  });
+  assert.equal(result.mergeSha, 'merge-sha');
+  assert.equal(reads.length, 5);
+});
+
+test('merge leg: a failing check ends the wait at once and leaves the PR open, unhealthy', async () => {
+  const reads: string[] = [];
+  const { result, merges, signals } = await runMerge('sc-merge-failed', {
+    readScorecardPrChecks: checkSequence(['pending', 'failing'], reads),
+  });
+  assert.equal(merges.length, 0);
+  assert.equal(reads.length, 2);
+  assert.match(result.mergeRefusal ?? '', /^checks-failed: failing: axe/);
+  assert.equal(result.decision, 'open-pr', 'the run itself still completed');
+  assert.deepEqual(signals.map((s) => s.ok), [true, false], 'the ordinary ping, then a failing one');
+  assert.match(signals[1].summary, /\(checks-failed\)/);
+  assert.match(signals[1].summary, /pull\/9/);
+});
+
+test('merge leg: checks still pending at the limit leave the PR open, unhealthy', async () => {
+  const reads: string[] = [];
+  const { result, merges, signals } = await runMerge('sc-merge-pending', {
+    readScorecardPrChecks: checkSequence(['pending'], reads),
+  });
+  assert.equal(reads.length, 30);
+  assert.equal(merges.length, 0);
+  assert.match(result.mergeRefusal ?? '', /^checks-pending:/);
+  assert.equal(signals.at(-1)?.ok, false);
+});
+
+test('merge leg: a refusal from the merge activity is reported with its condition', async () => {
+  for (const [condition, detail] of [
+    ['extra-files', 'the diff is a.ts, expected only the run-log'],
+    ['head-moved', 'head is x'],
+    ['github-refused', 'GitHub 405: Repository rule violations found'],
+  ]) {
+    const { result, signals } = await runMerge(`sc-merge-refused-${condition}`, {
+      mergeScorecardPr: async () => ({ merged: false, condition, detail }),
+    });
+    assert.equal(result.mergeSha, undefined);
+    assert.equal(result.mergeRefusal, `${condition}: ${detail}`);
+    assert.equal(signals.at(-1)?.ok, false);
+    assert.ok(signals.at(-1)?.summary.includes(`(${condition})`));
+  }
+});
+
+test('merge leg: an activity that throws after its retries makes the run unhealthy and does not fail it', async () => {
+  const { result, signals } = await runMerge('sc-merge-throws', {
+    mergeScorecardPr: async () => {
+      throw new Error('GitHub 502 for /pulls/9/merge: bad gateway');
+    },
+  });
+  assert.equal(result.decision, 'open-pr');
+  assert.match(result.mergeRefusal ?? '', /^error: .*502/);
+  assert.equal(signals.at(-1)?.ok, false);
+  assert.match(signals.at(-1)?.summary ?? '', /\(error\)/);
+});
+
+test('merge leg: a check read that throws is the same, not a failed workflow', async () => {
+  const { result } = await runMerge('sc-merge-read-throws', {
+    readScorecardPrChecks: async () => {
+      throw new Error('GitHub 502');
+    },
+  });
+  assert.match(result.mergeRefusal ?? '', /^error:/);
+});
+
+test('merge leg: the nightly run reports a refusal on the nightly check', async () => {
+  const { signals } = await runMerge(
+    'sc-merge-nightly',
+    { mergeScorecardPr: async () => ({ merged: false, condition: 'checks-failed', detail: 'failing: axe' }) },
+    { triggeredBy: 'schedule' },
+  );
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', true], ['nightly-scorecard', false]]);
+});
+
+test('merge leg: a dry run never reads checks or merges', async () => {
+  const { checkReads, merges, result, signals } = await runMerge('sc-merge-dry', {}, { publishMode: 'dry-run' });
+  assert.deepEqual(signals.map((x) => x.ok), [true], 'one ping, no second');
+  assert.equal(checkReads.length, 0);
+  assert.equal(merges.length, 0);
+  assert.equal(result.mergeSha, undefined);
+});
+
+test('merge leg: a publish that committed nothing is not a refusal and is not waited on', async () => {
+  const { checkReads, merges, signals, result } = await runMerge('sc-merge-nocommit', {
+    publishScorecardRun: async () => ({
+      branch: 'steward/scorecard-2026-07-22',
+      prUrl: 'https://github.com/o/r/pull/9',
+      id: '2026-07-22',
+      prNumber: 9,
+      committed: false,
+    }),
+  });
+  assert.equal(checkReads.length, 0);
+  assert.equal(merges.length, 0);
+  assert.equal(result.mergeRefusal, undefined);
+  assert.deepEqual(signals.map((s) => s.ok), [true]);
+});
+
+test('merge leg: a publish result without the new fields (an older worker) is not waited on', async () => {
+  const { checkReads, merges } = await runMerge('sc-merge-oldresult', {
+    publishScorecardRun: async () => ({
+      branch: 'steward/scorecard-2026-07-22',
+      prUrl: 'https://github.com/o/r/pull/9',
+      id: '2026-07-22',
+    }),
+  });
+  assert.equal(checkReads.length, 0);
+  assert.equal(merges.length, 0);
 });

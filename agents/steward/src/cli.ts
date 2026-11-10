@@ -1629,15 +1629,23 @@ program
   .description('Re-render the operator docs viewer at steward/docs.html and print its path')
   .action(async () => {
     // Lazy: the markdown parser is only ever needed by this verb.
-    const { generateDocsViewer, DocsUnitError } = await import('./lib/docs-viewer.js');
+    const { generateDocsViewer, DocsUnitError, docsExitCode } = await import('./lib/docs-viewer.js');
     try {
-      const { outPath, units, groups, warnings } = await generateDocsViewer();
+      const result = await generateDocsViewer();
+      const { outPath, units, groups, warnings, unlisted } = result;
       console.log('');
       console.log(`  ${BOLD}${units.length} units${RESET} in ${groups.length} groups`);
       for (const warning of warnings) console.log(`  ${paint(warning, DIM)}`);
       console.log(`  ${outPath}`);
       console.log(`  ${paint('Open it in a browser; it needs no server and no connection.', DIM)}`);
       console.log('');
+      // The viewer is written and the names are printed above. The exit code tells a caller (a
+      // hook, a session) that the index is out of date, which a warning line alone does not.
+      if (unlisted.length > 0) {
+        console.error(`  Not in the README index: ${unlisted.join(', ')}. Add each page to steward/docs/README.md.`);
+        console.error('');
+      }
+      process.exitCode = docsExitCode(result);
     } catch (err) {
       // A unit that will not parse is the operator's own typo, and the exit code
       // is what a caller (or a future pre-commit hook) reads.
@@ -1728,6 +1736,8 @@ program
     console.log(`  decision: ${result.decision}`);
     console.log(`  reason:   ${result.reason}`);
     if (result.prUrl) console.log(`  PR:       ${result.prUrl}`);
+    if (result.mergeSha) console.log(`  merged:   ${result.mergeSha}`);
+    if (result.mergeRefusal) console.log(`  not merged: ${result.mergeRefusal}`);
     console.log(`  pages audited: ${result.perPage.length}\n`);
     for (const m of result.record.metrics) {
       console.log(`  ${m.name.padEnd(20)} ${`${m.value}/${m.maximum}`.padEnd(10)} ${m.status}`);

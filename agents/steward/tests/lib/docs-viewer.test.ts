@@ -7,6 +7,7 @@ import {
   buildHtml,
   collectUnits,
   DocsUnitError,
+  docsExitCode,
   generateDocsViewer,
   parseIndex,
 } from '../../src/lib/docs-viewer.js';
@@ -201,6 +202,23 @@ test('a unit the index does not list still renders, with a warning', async () =>
   assert.equal(groups.at(-1)?.name, 'Not in the index');
   assert.equal(warnings.length, 1);
   assert.match(warnings[0] ?? '', /delta\.md/);
+});
+
+test('a page missing from the README index still writes the viewer, names the page, and exits non-zero', async () => {
+  const stray = (title: string) => ['---', `title: ${title}`, 'task: reference', 'commands: []', 'updated: 2026-08-17', '---', '', `# ${title}`, '', 'Text.', ''].join(String.fromCharCode(10));
+  const dir = await fixture({ 'delta.md': stray('Stray'), 'epsilon.md': stray('Also stray') });
+  const out = path.join(dir, 'out.html');
+  const result = await generateDocsViewer({ docsDir: dir, outPath: out });
+  assert.deepEqual(result.unlisted, ['delta', 'epsilon']);
+  assert.equal(docsExitCode(result), 1);
+  assert.match(await fs.readFile(out, 'utf8'), /Stray/, 'the viewer is still written');
+});
+
+test('an index that lists every page exits zero', async () => {
+  const dir = await fixture();
+  const result = await generateDocsViewer({ docsDir: dir, outPath: path.join(dir, 'out.html') });
+  assert.deepEqual(result.unlisted, []);
+  assert.equal(docsExitCode(result), 0);
 });
 
 test('a unit missing required frontmatter fails, naming the file', async () => {

@@ -19,7 +19,7 @@ import type { ReadingBudget } from '../lib/agent-audit/reading-budget.js';
 // Pure, and imported into the sandbox on purpose: it has no imports of its own,
 // reads no clock and touches no environment, so the rule that defines a bad run
 // is the same object the workflow and its tests both hold.
-import { scorecardRunShape, type RunShape } from '../lib/run-health.js';
+import { scorecardRunShape, type RunShape, type ScorecardMergeShape, type ScorecardShapeInput } from '../lib/run-health.js';
 
 /**
  * `scorecardAuditWorkflow` (scorecard-audit-spec.md §4.2) — audits the live
@@ -29,8 +29,26 @@ import { scorecardRunShape, type RunShape } from '../lib/run-health.js';
  * gate is the PR merge, not a workflow wait (spec §4.2, end).
  *
  * A sibling of `reviewPost`, not a variant — see spec §2. It never reads
- * `buildAndAuditDraft`'s numbers, never reuses its thresholds, and never
- * self-merges (design rule 2).
+ * `buildAndAuditDraft`'s numbers and never reuses its thresholds. It merges
+ * only its own run-log pull request, under the conditions of the merge leg
+ * below (design rule 2, as amended by STW-571).
+ *
+ * ## The merge leg (STW-571)
+ *
+ * Design rule 2 changed: after the run is published and archived, Steward waits
+ * for the run-log pull request's checks and merges it. The leg sits behind
+ * {@link SCORECARD_AUTO_MERGE_PATCH}, after the health ping, so the nightly
+ * dead-man's switch never waits on CI. `mergeScorecardPr` re-checks every
+ * condition against GitHub at merge time; the workflow only waits. A refusal, a
+ * timeout or a thrown error leaves the pull request open and sends a second,
+ * failing ping. It never fails the workflow: the run and its archive are good.
+ *
+ * **Replay.** The leg runs only after the publish activity returned a pull
+ * request number, a head commit and `committed: true`. A result recorded before
+ * the merge leg existed carries none of them, so an old history reads
+ * {@link SCORECARD_AUTO_MERGE_PATCH} as unset and issues nothing after its
+ * archive. `tests/fixtures/histories/scorecard-publish-pre-merge.bin` is such a
+ * history, recorded from `origin/master` at 3289ca4 before this change.
  */
 
 // Queue name duplicated here rather than imported from config.ts — the same
@@ -88,6 +106,23 @@ export const MIXED_LIGHTHOUSE_PATCH = 'scorecard-mixed-lighthouse-refusal';
  */
 export const PERFORMANCE_RECHECK_PATCH = 'scorecard-performance-recheck';
 
+/**
+ * The `patched` marker of the merge leg: after the archive and the health ping,
+ * a run that committed a run-log change waits for the pull request's checks and
+ * merges it. A history recorded before it ends at the archive and ping. See the
+ * workflow docblock for why the publish result's new fields already keep such a
+ * history from reaching it.
+ */
+export const SCORECARD_AUTO_MERGE_PATCH = 'scorecard-auto-merge';
+
+/**
+ * How long the merge leg waits for the checks: 30 polls, a minute apart. CI and
+ * the Vercel preview take about ten to fifteen minutes, so the limit is twice
+ * that. Two consecutive passing reads are needed, one poll apart.
+ */
+export const MERGE_POLL_LIMIT = 30;
+export const MERGE_POLL_INTERVAL = '60 seconds';
+
 export interface ScorecardAuditInput {
   /** Manual `--urls` override. Omitted -> resolved from the live sitemap (spec §4.2 step 0). */
   urls?: string[];
@@ -137,6 +172,10 @@ export interface ScorecardAuditResult {
   decision: 'open-pr' | 'no-op';
   reason: string;
   prUrl?: string;
+  /** The merge commit, when the merge leg merged the run-log pull request. */
+  mergeSha?: string;
+  /** Why the merge leg left the pull request open: the condition, then GitHub's or the workflow's detail. */
+  mergeRefusal?: string;
   record: ScorecardRunRecord;
   perPage: Array<{
     url: string;
@@ -196,6 +235,20 @@ const light = {
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 3 },
+  }),
+  // The merge leg. The check read is a plain GET, so it keeps three attempts. The
+  // merge keeps three too, and that is safe only because `mergeScorecardPr` is
+  // idempotent: a retry after a lost reply finds the pull request merged from the
+  // run's own commit and returns it as merged.
+  checking: wf.proxyActivities<Pick<typeof activities, 'readScorecardPrChecks'>>({
+    taskQueue: QUEUE_AUDIT,
+    startToCloseTimeout: '1 minute',
+    retry: { maximumAttempts: 3 },
+  }),
+  merging: wf.proxyActivities<Pick<typeof activities, 'mergeScorecardPr'>>({
+    taskQueue: QUEUE_AUDIT,
+    startToCloseTimeout: '2 minutes',
+    retry: { maximumAttempts: 3, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'] },
   }),
   // Alerting. One attempt and a short deadline, because the activity retries the
   // HTTP call itself and never throws — a second *activity* attempt would only
@@ -387,7 +440,7 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
     });
   }
 
-  let ran: { result: ScorecardAuditResult; shape: RunShape };
+  let ran: RanScorecard;
   try {
     ran = await runScorecardAudit(input);
   } catch (err) {
@@ -423,7 +476,80 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
     });
   }
 
+  // The merge leg. `pendingMerge` exists only for a real publish that committed,
+  // so a dry run, a no-op and a run that found nothing to commit never evaluate
+  // the marker. A history without the marker issues nothing from here.
+  if (ran.pendingMerge && wf.patched(SCORECARD_AUTO_MERGE_PATCH)) {
+    const merge = await mergeRunLogPr(ran.pendingMerge);
+    if (merge.merged) {
+      ran.result.mergeSha = merge.mergeSha;
+    } else {
+      ran.result.mergeRefusal = `${merge.condition}: ${merge.detail}`;
+      // The ordinary ping went out before the wait. A refusal sends a second one
+      // that fails the check, so the run reads unhealthy with the reason.
+      await light.alerting.reportRunHealth({
+        signal: scheduled ? 'nightly-scorecard' : 'run-shape',
+        shape: scorecardRunShape({ ...ran.shapeInput, merge }),
+      });
+    }
+  }
+
   return ran.result;
+}
+
+interface PendingMerge {
+  prUrl: string;
+  prNumber: number;
+  branch: string;
+  headSha: string;
+}
+
+interface RanScorecard {
+  result: ScorecardAuditResult;
+  shape: RunShape;
+  /** What the shape was computed from, so the merge leg can compute it again with the merge outcome. */
+  shapeInput: ScorecardShapeInput;
+  pendingMerge?: PendingMerge;
+}
+
+/**
+ * Waits for the run-log pull request's checks, then merges it. Never throws for
+ * a refusal or an activity error: both come back as an unmerged outcome, because
+ * the run and its archive are already good. A cancellation still propagates.
+ *
+ * The checks count as passing after two reads in a row say so, one poll apart.
+ * A failing read ends the wait at once, since waiting cannot clear it.
+ */
+async function mergeRunLogPr(pending: PendingMerge): Promise<ScorecardMergeShape> {
+  const refuse = (condition: string, detail: string): ScorecardMergeShape => ({
+    merged: false,
+    condition,
+    detail,
+    prUrl: pending.prUrl,
+  });
+  try {
+    let passingReads = 0;
+    for (let poll = 1; poll <= MERGE_POLL_LIMIT && passingReads < 2; poll++) {
+      const checks = await light.checking.readScorecardPrChecks(pending.headSha);
+      if (checks.state === 'failing') return refuse('checks-failed', `failing: ${checks.failing.join(', ')}`);
+      passingReads = checks.state === 'passing' ? passingReads + 1 : 0;
+      if (passingReads < 2 && poll < MERGE_POLL_LIMIT) await wf.sleep(MERGE_POLL_INTERVAL);
+    }
+    if (passingReads < 2) {
+      return refuse('checks-pending', `the checks did not pass twice in a row within ${MERGE_POLL_LIMIT} polls`);
+    }
+    const outcome = await light.merging.mergeScorecardPr({
+      prNumber: pending.prNumber,
+      branch: pending.branch,
+      expectedHeadSha: pending.headSha,
+    });
+    return outcome.merged
+      ? { merged: true, mergeSha: outcome.mergeSha, prUrl: pending.prUrl }
+      : refuse(outcome.condition, outcome.detail);
+  } catch (err) {
+    if (wf.isCancellation(err)) throw err;
+    return refuse('error', describeActivityError(err));
+  }
 }
 
 /**
@@ -435,9 +561,7 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
  * from a page that genuinely scored zero. `PageAuditOutcome` still knows, and it
  * only exists in here.
  */
-async function runScorecardAudit(
-  input: ScorecardAuditInput,
-): Promise<{ result: ScorecardAuditResult; shape: RunShape }> {
+async function runScorecardAudit(input: ScorecardAuditInput): Promise<RanScorecard> {
   // --- Step 0: resolve the audit set --------------------------------------
   const overridden = Boolean(input.urls && input.urls.length > 0);
   const resolved = overridden
@@ -579,6 +703,7 @@ async function runScorecardAudit(
   // can validate the live audit numbers themselves (spec §9.6's smoke test)
   // without ever touching GitHub, not to open a throwaway PR.
   let prUrl: string | undefined;
+  let pendingMerge: PendingMerge | undefined;
   let record: ScorecardRunRecord = { ...candidate, id: iso };
   if (decision.decision === 'open-pr' && input.publishMode === 'pr') {
     const opened = await light.publishing.publishScorecardRun({
@@ -587,6 +712,11 @@ async function runScorecardAudit(
     });
     prUrl = opened.prUrl;
     record = { ...candidate, id: opened.id };
+    // Nothing to merge when the run committed nothing, or when the result predates
+    // the fields (a history recorded before the merge leg).
+    if (opened.committed === true && opened.prNumber !== undefined && opened.headSha !== undefined) {
+      pendingMerge = { prUrl: opened.prUrl, prNumber: opened.prNumber, branch: opened.branch, headSha: opened.headSha };
+    }
   }
 
   // --- Step 5: always archive ----------------------------------------------
@@ -602,20 +732,23 @@ async function runScorecardAudit(
     dryRun: input.publishMode === 'dry-run',
   });
 
+  // Read off `perPage`, which still carries each page's `ok`, before the
+  // summary above flattens it.
+  const shapeInput: ScorecardShapeInput = {
+    pages: perPage.map((p) => ({
+      url: p.url,
+      ok: p.ok,
+      error: p.ok ? undefined : p.error,
+      lighthouseVersion: mixedVersions && p.ok ? p.lighthouseVersion : undefined,
+    })),
+    decision: decision.decision,
+    iso,
+  };
   return {
     result: { decision: decision.decision, reason: decision.reason, prUrl, record, perPage: perPageSummary },
-    // Read off `perPage`, which still carries each page's `ok`, before the
-    // summary above flattens it.
-    shape: scorecardRunShape({
-      pages: perPage.map((p) => ({
-        url: p.url,
-        ok: p.ok,
-        error: p.ok ? undefined : p.error,
-        lighthouseVersion: mixedVersions && p.ok ? p.lighthouseVersion : undefined,
-      })),
-      decision: decision.decision,
-      iso,
-    }),
+    shape: scorecardRunShape(shapeInput),
+    shapeInput,
+    pendingMerge,
   };
 }
 

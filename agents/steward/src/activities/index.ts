@@ -39,6 +39,8 @@ export {
   auditLiveUrl,
   readPublishedScorecard,
   publishScorecardRun,
+  readScorecardPrChecks,
+  mergeScorecardPr,
   archiveScorecardRun,
 } from './scorecard.js';
 // The findings gate, on `steward-findings`: GitHub API calls against the

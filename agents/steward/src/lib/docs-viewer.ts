@@ -67,6 +67,13 @@ export interface DocsViewerResult {
   groups: DocGroup[];
   /** Non-fatal notes: a unit the index does not list, and the like. */
   warnings: string[];
+  /** Pages in the directory that README.md does not list. They still render, under "Not in the index". */
+  unlisted: string[];
+}
+
+/** The exit code `steward docs` returns: non-zero when a page is missing from the README index. */
+export function docsExitCode(result: Pick<DocsViewerResult, 'unlisted'>): number {
+  return result.unlisted.length > 0 ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +298,7 @@ export async function collectUnits(docsDir: string = DOCS_DIR): Promise<{
   groups: DocGroup[];
   intro: string;
   warnings: string[];
+  unlisted: string[];
 }> {
   const indexRaw = await fs.readFile(path.join(docsDir, 'README.md'), 'utf8');
   const indexParsed = matter(indexRaw);
@@ -355,6 +363,7 @@ export async function collectUnits(docsDir: string = DOCS_DIR): Promise<{
     groups: ordered,
     intro: renderMarkdown(intro, 'index', unitSlugs),
     warnings,
+    unlisted,
   };
 }
 
@@ -727,8 +736,8 @@ export async function generateDocsViewer(
 ): Promise<DocsViewerResult> {
   const docsDir = options.docsDir ?? DOCS_DIR;
   const outPath = options.outPath ?? DOCS_HTML_PATH;
-  const { units, groups, intro, warnings } = await collectUnits(docsDir);
+  const { units, groups, intro, warnings, unlisted } = await collectUnits(docsDir);
   const html = buildHtml({ units, groups, intro });
   await fs.writeFile(outPath, html, 'utf8');
-  return { outPath, html, units, groups, warnings };
+  return { outPath, html, units, groups, warnings, unlisted };
 }

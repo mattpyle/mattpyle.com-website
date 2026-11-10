@@ -63,6 +63,41 @@ test('one Lighthouse version, or none, across the pages is a good shape', () => 
   assert.equal(same.ok, true);
 });
 
+const MERGE_PAGES = { pages: [{ url: 'https://www.mattpyle.com/', ok: true }], decision: 'open-pr', iso: '2026-11-10' };
+const PR = 'https://github.com/o/r/pull/9';
+
+test('a merged run-log PR keeps the run healthy and names the merge commit', () => {
+  const shape = scorecardRunShape({ ...MERGE_PAGES, merge: { merged: true, mergeSha: 'abc123', prUrl: PR } });
+  assert.equal(shape.ok, true);
+  assert.match(shape.summary, /merged as abc123/);
+});
+
+for (const condition of ['wrong-pr', 'extra-files', 'head-moved', 'checks-failed', 'checks-pending', 'github-refused', 'error']) {
+  test(`a run-log PR left open for ${condition} is a bad shape that names the condition and the PR`, () => {
+    const shape = scorecardRunShape({ ...MERGE_PAGES, merge: { merged: false, condition, detail: 'the reason', prUrl: PR } });
+    assert.equal(shape.ok, false);
+    assert.ok(shape.summary.includes(`(${condition})`), shape.summary);
+    assert.ok(shape.summary.includes('the reason'));
+    assert.match(shape.summary, /the reason\. PR: https:\/\/github\.com\/o\/r\/pull\/9\. The run and/);
+    assert.match(shape.summary, /run and its archive are good/);
+  });
+}
+
+test('a refused merge on a run with a failed page reports both problems', () => {
+  const shape = scorecardRunShape({
+    pages: [
+      { url: 'https://www.mattpyle.com/', ok: true },
+      { url: 'https://www.mattpyle.com/x/', ok: false, error: 'timeout' },
+    ],
+    decision: 'open-pr',
+    iso: '2026-11-10',
+    merge: { merged: false, condition: 'checks-failed', detail: 'failing: axe', prUrl: PR },
+  });
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /checks-failed/);
+  assert.match(shape.summary, /1 of 2 page\(s\) could not be audited/);
+});
+
 test('one failed page out of many is a bad shape — the rule is a count, not a ratio', () => {
   // The 2026-08-15 incident in miniature: the run completed, the numbers were
   // published-shaped, and every axe run had failed. A ratio rule would have

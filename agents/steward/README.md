@@ -321,8 +321,12 @@ tunnels, and a proxy cannot add a header inside TLS it does not terminate.
 - **The live origin is the only source of truth for "published."** A merged PR or a green build is
   not the finish line — the workflow doesn't call a piece published until it's verified the actual
   checks against `www.mattpyle.com`.
-- **It never merges its own PR.** Both workflows open pull requests; neither ever merges one. That
-  stays a human act, on purpose.
+- **It merges only the Scorecard run-log PR, and only under four conditions.** The review workflow
+  never merges its pull request; that stays a human act, on purpose. After a Scorecard run is
+  published and archived, `scorecardAuditWorkflow` waits for the checks and merges the run-log PR
+  when it is the one this run opened, its diff is exactly `src/data/scorecard-runs.json`, its head
+  is the run's own commit, and the checks are complete with none failed. Any miss leaves the PR open
+  and the run unhealthy. A dry run and the archive PR are never merged.
 - **It's a sidecar.** Delete `agents/steward/` and the site builds, deploys and serves identically,
   with the one exception above: the `/mcp` route's build depends on those two exports entries.
 

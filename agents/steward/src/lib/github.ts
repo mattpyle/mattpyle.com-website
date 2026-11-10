@@ -356,6 +356,37 @@ export async function gh(pathname: string, init?: RequestInit): Promise<any> {
 }
 
 /**
+ * A request whose refusal the caller wants to read, not have thrown: the status
+ * and GitHub's own message come back as they were. The merge of a Scorecard
+ * run-log pull request uses it, because a ruleset refusal arrives as 403, 405 or
+ * 409 and {@link gh} would turn each into an error that hides which. It shares
+ * {@link authedFetch}, so the installation token and its one 401 refresh are the
+ * same. A second 401 and any 5xx still throw, as `gh` throws them: neither is a
+ * refusal the caller can act on.
+ */
+export async function ghResponse(
+  pathname: string,
+  init?: RequestInit,
+): Promise<{ status: number; ok: boolean; body: any }> {
+  const res = await authedFetch(pathname, init ?? {}, { 'Content-Type': 'application/json' });
+  const text = await res.text();
+  let body: any = {};
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    body = { message: text };
+  }
+  if (res.status === 401) {
+    throw ApplicationFailure.nonRetryable(
+      `GitHub rejected the credential (401): ${body.message ?? text}. Check the GitHub App's permissions and installation.`,
+      'AuthError',
+    );
+  }
+  if (res.status >= 500) throw new Error(`GitHub ${res.status} for ${pathname}: ${body.message ?? text}`);
+  return { status: res.status, ok: res.ok, body };
+}
+
+/**
  * Runs a GitHub call for a polling wait, where a rejected credential is a
  * retry at the wait's own interval rather than the end of the wait.
  *
