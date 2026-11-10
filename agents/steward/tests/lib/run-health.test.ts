@@ -78,7 +78,7 @@ for (const condition of ['wrong-pr', 'extra-files', 'head-moved', 'checks-failed
     assert.equal(shape.ok, false);
     assert.ok(shape.summary.includes(`(${condition})`), shape.summary);
     assert.ok(shape.summary.includes('the reason'));
-    assert.ok(shape.summary.includes(PR));
+    assert.match(shape.summary, /the reason\. PR: https:\/\/github\.com\/o\/r\/pull\/9\. The run and/);
     assert.match(shape.summary, /run and its archive are good/);
   });
 }
