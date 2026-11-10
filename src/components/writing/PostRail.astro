@@ -71,11 +71,16 @@ const contents = headings.filter(heading => heading.depth === 2);
   </div>
 
   {contents.length > 0 && (
-    <details class="rail-block rail-details" open data-rail-details>
+    <details class="rail-block rail-details" data-rail-details>
       {/*
-        Open in the markup so the desktop rail and a no-JS phone both show the list.
-        The script below closes it on a phone; the summary is hidden above 900px,
-        where there is nothing to toggle.
+        Closed in the markup, which is the phone state, so nothing moves when the
+        script runs late (a 20x CPU slowdown measured 0.11 to 0.15 CLS when the
+        script closed an open list after first paint). Above 900px the rule
+        `details::details-content` in the style block shows the list anyway, with
+        no script. A browser without that selector keeps the summary visible. On a
+        wide screen the script then opens the details in every browser, so its
+        state matches what is shown. A phone without JS sees the list behind
+        its summary.
       */}
       <summary>On this page ({contents.length})</summary>
       <nav class="rail-contents" aria-label="On this page">
@@ -187,7 +192,12 @@ const contents = headings.filter(heading => heading.depth === 2);
     document.querySelectorAll<HTMLDetailsElement>('[data-rail-details]').forEach(details => {
       if (details.dataset.railDetailsReady === 'true') return;
       details.dataset.railDetailsReady = 'true';
-      if (window.matchMedia('(max-width: 900px)').matches) details.open = false;
+      // On a wide screen, open the element so its state matches what is shown:
+      // find-in-page, anchor jumps and assistive technology see an open details.
+      // Where `::details-content` works the list is already visible, so this
+      // moves nothing; elsewhere it is what shows the list. A phone keeps the
+      // markup's state.
+      if (window.matchMedia('(min-width: 901px)').matches) details.open = true;
     });
 
     document.querySelectorAll<HTMLButtonElement>('[data-rail-copy]').forEach(button => {
@@ -288,7 +298,23 @@ const contents = headings.filter(heading => heading.depth === 2);
 
   .rail-author:hover { color: var(--writing); }
 
-  .rail-details > summary { display: none; }
+  /* Above 900px the list is always shown and there is nothing to toggle. Two routes
+     hide the summary. Once the script has opened the details, `[open]` hides it in
+     every browser. Before the script, and with no JavaScript, the @supports block
+     does it where `::details-content` can show a closed details' content; a browser
+     without it keeps the summary until the script runs. */
+  @media (min-width: 901px) {
+    .rail-details[open] > summary { display: none; }
+
+    @supports selector(::details-content) {
+      .rail-details > summary { display: none; }
+
+      .rail-details::details-content {
+        content-visibility: visible;
+        display: block;
+      }
+    }
+  }
 
   .rail-contents {
     display: flex;
