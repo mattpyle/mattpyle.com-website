@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Writable } from 'node:stream';
 import pino from 'pino';
-import { bridgeLogEntry, temporalLogger } from '../../src/lib/temporal-logger.js';
+import { bridgeLogEntry, sdkMetricsOptions, sdkMetricsState, temporalLogger } from '../../src/lib/temporal-logger.js';
 
 /**
  * The bridge from the Temporal Runtime logger to pino (STW-549). Tested on the
@@ -78,4 +78,66 @@ test('the Runtime logger passes INFO and above and drops DEBUG', () => {
   const parsed = lines.map((line) => JSON.parse(line));
   assert.deepEqual(parsed.map((line) => line.msg), ['Worker state changed', 'boom']);
   assert.equal(parsed[0].state, 'RUNNING');
+});
+
+// SDK metrics options (STW-575). Stand-in secrets are built at run time so no
+// literal reaches the gitleaks scan.
+const USER = ['u', String(Date.now())].join('-');
+const TOKEN = ['t', Math.random().toString(36).slice(2), 'x'].join('-');
+const URL_OK = 'https://otlp-gateway-prod-test.grafana.net/otlp/v1/metrics';
+const ON = { STEWARD_METRICS_OTLP_URL: URL_OK, STEWARD_METRICS_OTLP_USER: USER, STEWARD_METRICS_OTLP_TOKEN: TOKEN };
+
+test('all three variables set: OTLP over HTTP with the basic-auth header and the worker tag', () => {
+  const m = sdkMetricsOptions(ON, 'hosted');
+  assert.ok(m && 'otel' in m);
+  assert.equal(m.otel.url, URL_OK);
+  assert.equal(m.otel.http, true);
+  assert.equal(m.otel.headers?.authorization, `Basic ${Buffer.from(`${USER}:${TOKEN}`).toString('base64')}`);
+  assert.equal(m.otel.metricsExportInterval, '60s');
+  assert.equal(m.otel.temporality, 'cumulative');
+  assert.equal(m.otel.useSecondsForDurations, true);
+  assert.deepEqual(m.globalTags, { worker: 'hosted' });
+  assert.deepEqual(sdkMetricsOptions(ON, 'local')?.globalTags, { worker: 'local' });
+});
+
+test('any variable unset: no metrics options', () => {
+  for (const key of Object.keys(ON)) {
+    assert.equal(sdkMetricsOptions({ ...ON, [key]: undefined }, 'hosted'), undefined, key);
+    assert.equal(sdkMetricsOptions({ ...ON, [key]: '' }, 'hosted'), undefined, key);
+  }
+  assert.equal(sdkMetricsOptions({}, 'local'), undefined);
+});
+
+test('a URL that does not parse, lacks /v1/metrics, or is http stops the worker, naming the variable', () => {
+  const bad = ['not a url', 'https://otlp-gateway-prod-test.grafana.net/otlp', 'http://otlp-gateway-prod-test.grafana.net/otlp/v1/metrics'];
+  for (const url of bad) {
+    assert.throws(
+      () => sdkMetricsOptions({ ...ON, STEWARD_METRICS_OTLP_URL: url }, 'hosted'),
+      (err: Error) => {
+        assert.match(err.message, /STEWARD_METRICS_OTLP_URL/);
+        assert.match(err.message, /\/v1\/metrics/);
+        const secrets = [USER, TOKEN, Buffer.from(`${USER}:${TOKEN}`).toString('base64')];
+        for (const s of secrets) assert.ok(!err.message.includes(s), 'secret in error');
+        return true;
+      },
+      url,
+    );
+  }
+});
+
+test('the header value never appears in a log line', () => {
+  const { lines, sink } = capture();
+  const m = sdkMetricsOptions(ON, 'hosted');
+  bridgeLogEntry({ level: 'ERROR', message: 'Metrics exporter otlp failed', timestampNanos: 1n, meta: { sdkComponent: 'core' } }, sink);
+  const header = m && 'otel' in m ? m.otel.headers?.authorization : undefined;
+  assert.ok(header);
+  assert.ok(!lines.join(' ').includes(header));
+  assert.ok(!sdkMetricsState(ON).includes(TOKEN));
+});
+
+test('the ready line says when OTEL_EXPORTER_OTLP_ENDPOINT overrides the URL', () => {
+  assert.equal(sdkMetricsState({}), 'OFF');
+  assert.equal(sdkMetricsState(ON), 'configured');
+  assert.match(sdkMetricsState({ ...ON, OTEL_EXPORTER_OTLP_ENDPOINT: 'http://x:4318' }), /OTEL_EXPORTER_OTLP_ENDPOINT overrides the URL/);
+  assert.equal(sdkMetricsState({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://x:4318' }), 'OFF');
 });

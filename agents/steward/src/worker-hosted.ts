@@ -14,7 +14,7 @@ import { hostedRegistry, type HostedQueue } from './hosted-registry.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { APP_ID_ENV, APP_KEY_ENV, describeGitHubBoot, resolveGitHubAppForBoot } from './lib/github.js';
 import { log } from './lib/logger.js';
-import { installTemporalRuntime } from './lib/temporal-logger.js';
+import { installTemporalRuntime, sdkMetricsState } from './lib/temporal-logger.js';
 import {
   ActivityTracker,
   RECYCLE_IDLE_MS,
@@ -226,7 +226,7 @@ async function main() {
   const githubApp = await assertPublishCredentials();
   // Before the first `NativeConnection` or `Worker`. Without it the SDK writes
   // to stderr, which Railway tags as `error` (STW-549, `lib/temporal-logger.ts`).
-  installTemporalRuntime();
+  installTemporalRuntime('hosted');
   warnIfUnmonitored();
 
   const connection = await NativeConnection.connect(temporalConnectionOptions());
@@ -326,6 +326,8 @@ async function main() {
       // Variables tab switches this check off silently, and the ready line after
       // a deploy is the only place that fact ever surfaces.
       actionUsage: METRICS_API_KEY ? 'configured' : 'OFF',
+      // The Temporal SDK's own metrics, pushed to Grafana Cloud (STW-552).
+      sdkMetrics: sdkMetricsState(process.env),
     },
     WORKER_READY_LOG,
   );

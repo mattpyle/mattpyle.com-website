@@ -14,7 +14,7 @@ import {
 import { APP_ID_ENV, APP_KEY_ENV } from './lib/github.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { log } from './lib/logger.js';
-import { installTemporalRuntime } from './lib/temporal-logger.js';
+import { installTemporalRuntime, sdkMetricsState } from './lib/temporal-logger.js';
 
 const workflowsPath = fileURLToPath(new URL('./workflows/index.ts', import.meta.url));
 
@@ -89,7 +89,7 @@ async function main() {
   const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);
   warnIfNoGitHubApp();
   // Before the first `NativeConnection` or `Worker`: SDK logs go to pino, not stderr.
-  installTemporalRuntime();
+  installTemporalRuntime('local');
   const connection = await NativeConnection.connect(temporalConnectionOptions());
 
   const common = { connection, namespace: NAMESPACE, workflowsPath, activities };
@@ -104,6 +104,7 @@ async function main() {
       address: TEMPORAL_ADDRESS,
       service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
       siteDir: SITE_DIR,
+      sdkMetrics: sdkMetricsState(process.env),
     },
     WORKER_READY_LOG,
   );
