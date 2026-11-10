@@ -1,13 +1,13 @@
 {
-  "iso": "2026-11-09",
-  "timestamp": "2026-11-09T21:42:44-07:00",
+  "iso": "2026-11-10",
+  "timestamp": "2026-11-10T03:35:32-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
     "axe-core 4.12"
   ],
-  "entry": "Manual · intentional",
-  "commentary": "Agentic Browsing moved from Partial to Pass; all 28 pages passed all four public metrics.",
+  "entry": "Nightly · automated",
+  "commentary": "All 28 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "99",
+      "value": "98",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 28 tested pages."
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-11-09-2",
+  "id": "2026-11-10",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -198,7 +198,7 @@
     {
       "url": "https://www.mattpyle.com/audit/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 100,
         "seo": 100,
@@ -299,7 +299,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/activity-agent-identity/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -491,7 +491,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -827,7 +827,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/self-hosted-fonts/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -1104,11 +1104,11 @@
       "readingBudget": {
         "text": {
           "share": 81,
-          "measured": 4795
+          "measured": 4905
         },
         "markdown": {
           "share": 93,
-          "measured": 4331
+          "measured": 4445
         }
       }
     },
@@ -1163,7 +1163,7 @@
     {
       "url": "https://www.mattpyle.com/webmcp/",
       "scores": {
-        "performance": 100,
+        "performance": 98,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -1355,7 +1355,7 @@
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -1401,9 +1401,8 @@
       }
     }
   ],
-  "decision": "open-pr",
-  "reason": "Agentic Browsing Partial→Pass",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/643",
+  "decision": "no-op",
+  "reason": "unchanged, published 1d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-11-09-2-2"
+  "archiveId": "2026-11-10"
 }
