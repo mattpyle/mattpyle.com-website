@@ -1,13 +1,13 @@
 {
   "iso": "2026-11-09",
-  "timestamp": "2026-11-09T03:34:04-07:00",
+  "timestamp": "2026-11-09T21:42:44-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
     "axe-core 4.12"
   ],
-  "entry": "Nightly · automated",
-  "commentary": "Agentic Browsing moved from Pass to Partial; Agentic Browsing: 5/6 (Partial).",
+  "entry": "Manual · intentional",
+  "commentary": "Agentic Browsing moved from Partial to Pass; all 28 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "97",
+      "value": "99",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 28 tested pages."
@@ -32,10 +32,10 @@
     },
     {
       "name": "Agentic Browsing",
-      "value": "5",
+      "value": "6",
       "maximum": "6",
-      "status": "Partial",
-      "description": "5 of 6 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt, AI catalog, WebMCP form coverage."
+      "status": "Pass",
+      "description": "6 of 6 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt, AI catalog, WebMCP form coverage."
     }
   ],
   "readingBudget": {
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-11-09",
+  "id": "2026-11-09-2",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -61,6 +61,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 84,
@@ -82,6 +109,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 76,
@@ -103,6 +157,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 95,
@@ -124,6 +205,38 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-form-coverage",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 76,
@@ -145,6 +258,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 83,
@@ -166,6 +306,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 83,
@@ -187,6 +354,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 76,
@@ -208,6 +402,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 73,
@@ -229,6 +450,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 76,
@@ -250,6 +498,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 61,
@@ -271,6 +546,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 59,
@@ -292,6 +594,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 62,
@@ -313,6 +642,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 70,
@@ -334,6 +690,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 64,
@@ -355,6 +738,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 55,
@@ -376,6 +786,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 70,
@@ -397,6 +834,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 61,
@@ -418,6 +882,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 62,
@@ -439,6 +930,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 76,
@@ -460,6 +978,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 66,
@@ -481,6 +1026,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 54,
@@ -502,14 +1074,41 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
-          "share": 80,
-          "measured": 4614
+          "share": 81,
+          "measured": 4795
         },
         "markdown": {
-          "share": 92,
-          "measured": 4142
+          "share": 93,
+          "measured": 4331
         }
       }
     },
@@ -523,6 +1122,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 95,
@@ -544,6 +1170,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 95,
@@ -565,6 +1218,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 50,
@@ -586,6 +1266,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 95,
@@ -607,6 +1314,33 @@
         "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 95,
@@ -621,13 +1355,40 @@
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "scores": {
-        "performance": 97,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
-        "agentic-browsing": 98
+        "agentic-browsing": 100
       },
       "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
       "readingBudget": {
         "text": {
           "share": 95,
@@ -641,8 +1402,8 @@
     }
   ],
   "decision": "open-pr",
-  "reason": "Agentic Browsing Pass→Partial",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/638",
+  "reason": "Agentic Browsing Partial→Pass",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/643",
   "dryRun": false,
-  "archiveId": "2026-11-09-2"
+  "archiveId": "2026-11-09-2-2"
 }
