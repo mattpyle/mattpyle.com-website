@@ -1,13 +1,13 @@
 {
-  "iso": "2026-11-06",
-  "timestamp": "2026-11-06T03:37:27-07:00",
+  "iso": "2026-11-09",
+  "timestamp": "2026-11-09T03:34:04-07:00",
   "scope": "28 live pages",
   "tools": [
     "Lighthouse 13.5",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Performance fell from 99 to 95; all 28 pages passed all four public metrics.",
+  "commentary": "Agentic Browsing moved from Pass to Partial; Agentic Browsing: 5/6 (Partial).",
   "metrics": [
     {
       "name": "Accessibility",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Performance",
-      "value": "95",
+      "value": "97",
       "maximum": "100",
       "status": "Pass",
       "description": "The lowest Lighthouse performance score across 28 tested pages."
@@ -32,10 +32,10 @@
     },
     {
       "name": "Agentic Browsing",
-      "value": "6",
+      "value": "5",
       "maximum": "6",
-      "status": "Pass",
-      "description": "6 of 6 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt, AI catalog, WebMCP form coverage."
+      "status": "Partial",
+      "description": "5 of 6 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt, AI catalog, WebMCP form coverage."
     }
   ],
   "readingBudget": {
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-11-06",
+  "id": "2026-11-09",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -70,17 +70,12 @@
           "share": 90,
           "measured": 3102
         }
-      },
-      "performanceSamples": [
-        92,
-        100,
-        100
-      ]
+      }
     },
     {
       "url": "https://www.mattpyle.com/about/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -90,18 +85,18 @@
       "readingBudget": {
         "text": {
           "share": 76,
-          "measured": 3818
+          "measured": 3871
         },
         "markdown": {
           "share": 90,
-          "measured": 3170
+          "measured": 3222
         }
       }
     },
     {
       "url": "https://www.mattpyle.com/activity/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 100,
         "seo": 100,
@@ -122,7 +117,7 @@
     {
       "url": "https://www.mattpyle.com/audit/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 100,
         "seo": 100,
@@ -143,7 +138,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -164,7 +159,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/activity-agent-identity/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -174,7 +169,7 @@
       "readingBudget": {
         "text": {
           "share": 83,
-          "measured": 5344
+          "measured": 5365
         },
         "markdown": {
           "share": 88,
@@ -195,7 +190,7 @@
       "readingBudget": {
         "text": {
           "share": 76,
-          "measured": 3747
+          "measured": 3768
         },
         "markdown": {
           "share": 80,
@@ -206,7 +201,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-reading-budget/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -215,8 +210,8 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 72,
-          "measured": 3323
+          "share": 73,
+          "measured": 3344
         },
         "markdown": {
           "share": 76,
@@ -227,7 +222,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
       "scores": {
-        "performance": 98,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -237,7 +232,7 @@
       "readingBudget": {
         "text": {
           "share": 76,
-          "measured": 3854
+          "measured": 3875
         },
         "markdown": {
           "share": 80,
@@ -248,7 +243,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -258,7 +253,7 @@
       "readingBudget": {
         "text": {
           "share": 61,
-          "measured": 2332
+          "measured": 2353
         },
         "markdown": {
           "share": 63,
@@ -279,7 +274,7 @@
       "readingBudget": {
         "text": {
           "share": 59,
-          "measured": 2223
+          "measured": 2244
         },
         "markdown": {
           "share": 63,
@@ -290,7 +285,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
       "scores": {
-        "performance": 96,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -300,7 +295,7 @@
       "readingBudget": {
         "text": {
           "share": 62,
-          "measured": 2415
+          "measured": 2436
         },
         "markdown": {
           "share": 60,
@@ -311,7 +306,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/markdown-post-variants/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -321,7 +316,7 @@
       "readingBudget": {
         "text": {
           "share": 70,
-          "measured": 3048
+          "measured": 3069
         },
         "markdown": {
           "share": 75,
@@ -332,7 +327,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/public-changelog/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -341,8 +336,8 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 63,
-          "measured": 2504
+          "share": 64,
+          "measured": 2525
         },
         "markdown": {
           "share": 72,
@@ -353,7 +348,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/public-scorecard/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -362,8 +357,8 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 54,
-          "measured": 2000
+          "share": 55,
+          "measured": 2021
         },
         "markdown": {
           "share": 52,
@@ -374,7 +369,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/scorecard-run-history/",
       "scores": {
-        "performance": 95,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -384,7 +379,7 @@
       "readingBudget": {
         "text": {
           "share": 70,
-          "measured": 3087
+          "measured": 3108
         },
         "markdown": {
           "share": 75,
@@ -395,7 +390,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/self-hosted-fonts/",
       "scores": {
-        "performance": 97,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -405,7 +400,7 @@
       "readingBudget": {
         "text": {
           "share": 61,
-          "measured": 2333
+          "measured": 2354
         },
         "markdown": {
           "share": 66,
@@ -425,8 +420,8 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 61,
-          "measured": 2378
+          "share": 62,
+          "measured": 2399
         },
         "markdown": {
           "share": 66,
@@ -447,7 +442,7 @@
       "readingBudget": {
         "text": {
           "share": 76,
-          "measured": 3786
+          "measured": 3807
         },
         "markdown": {
           "share": 82,
@@ -458,7 +453,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/webmcp-tools/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -468,7 +463,7 @@
       "readingBudget": {
         "text": {
           "share": 66,
-          "measured": 2668
+          "measured": 2689
         },
         "markdown": {
           "share": 72,
@@ -479,7 +474,7 @@
     {
       "url": "https://www.mattpyle.com/projects/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -500,7 +495,7 @@
     {
       "url": "https://www.mattpyle.com/scorecard/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -509,19 +504,19 @@
       "axeViolations": 0,
       "readingBudget": {
         "text": {
-          "share": 79,
-          "measured": 4422
+          "share": 80,
+          "measured": 4614
         },
         "markdown": {
           "share": 92,
-          "measured": 3942
+          "measured": 4142
         }
       }
     },
     {
       "url": "https://www.mattpyle.com/steward/",
       "scores": {
-        "performance": 97,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -542,7 +537,7 @@
     {
       "url": "https://www.mattpyle.com/webmcp/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -563,7 +558,7 @@
     {
       "url": "https://www.mattpyle.com/writing/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -584,7 +579,7 @@
     {
       "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -605,7 +600,7 @@
     {
       "url": "https://www.mattpyle.com/writing/hello-world/",
       "scores": {
-        "performance": 98,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -626,11 +621,11 @@
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "scores": {
-        "performance": 100,
+        "performance": 97,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
-        "agentic-browsing": 100
+        "agentic-browsing": 98
       },
       "axeViolations": 0,
       "readingBudget": {
@@ -646,8 +641,8 @@
     }
   ],
   "decision": "open-pr",
-  "reason": "Performance 99→95",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/558",
+  "reason": "Agentic Browsing Pass→Partial",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/638",
   "dryRun": false,
-  "archiveId": "2026-11-06"
+  "archiveId": "2026-11-09-2"
 }
