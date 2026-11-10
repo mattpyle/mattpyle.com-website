@@ -34,7 +34,7 @@ export type PageAuditOutcome =
       url: string;
       ok: true;
       scores: Record<string, number>;
-      /** The four real Agentic Browsing checks for this page (audit-map.ts's `agenticChecks`) — accessibility tree, layout stability, llms.txt, WebMCP schema validity. */
+      /** The graded Agentic Browsing checks for this page (audit-map.ts's `agenticChecks`), each with its Lighthouse score. Which ones apply varies by page. */
       agenticChecks: AgenticCheck[];
       axeViolations: number;
       /**
@@ -243,6 +243,33 @@ const AGENTIC_CHECK_LABELS: Record<string, string> = {
   'webmcp-schema-validity': 'WebMCP',
 };
 
+/** The label for one check: the short name, else the Lighthouse title, else the id. */
+export function agenticCheckLabel(id: string, title?: string): string {
+  return AGENTIC_CHECK_LABELS[id] ?? title ?? id;
+}
+
+/**
+ * One check as a per-page record keeps it: the id, the Lighthouse score and
+ * whether it passed. `score` is `null` for a check recorded before scores were
+ * kept. No URL, no title: the id is enough to find the label.
+ */
+export interface PageCheckResult {
+  id: string;
+  score: number | null;
+  passed: boolean;
+}
+
+/**
+ * The checks that ran on one page, in the shape the PR body and the archive
+ * keep. A check that did not apply to the page is left out: it did not run, so
+ * it has neither a score nor a verdict. Pure, so the workflow may call it.
+ */
+export function pageCheckResults(checks: AgenticCheck[]): PageCheckResult[] {
+  return checks
+    .filter((c) => c.applicable)
+    .map((c) => ({ id: c.id, score: typeof c.score === 'number' ? c.score : null, passed: c.passed }));
+}
+
 /**
  * Agentic Browsing as "K of J checks pass" (spec §5.3), aggregated
  * worst-across-pages (design rule 5) over the real per-page checks
@@ -267,17 +294,33 @@ function aggregateAgentic(perPage: PageAuditOutcome[]): ScorecardMetric {
   const anyPageFailed = perPage.some((p) => !p.ok);
   const okPages = perPage.filter((p): p is Extract<PageAuditOutcome, { ok: true }> => p.ok);
 
-  const byId = new Map<string, { title: string; applicableOnAnyPage: boolean; passedEverywhereApplicable: boolean }>();
+  const byId = new Map<
+    string,
+    {
+      title: string;
+      applicableOnAnyPage: boolean;
+      passedEverywhereApplicable: boolean;
+      /** Pages where the check applied, and pages where it applied and did not pass. */
+      applicablePages: number;
+      failedPages: number;
+    }
+  >();
   for (const page of okPages) {
     for (const check of page.agenticChecks) {
       const entry = byId.get(check.id) ?? {
-        title: AGENTIC_CHECK_LABELS[check.id] ?? check.title ?? check.id,
+        title: agenticCheckLabel(check.id, check.title),
         applicableOnAnyPage: false,
         passedEverywhereApplicable: true,
+        applicablePages: 0,
+        failedPages: 0,
       };
       if (check.applicable) {
         entry.applicableOnAnyPage = true;
-        if (!check.passed) entry.passedEverywhereApplicable = false;
+        entry.applicablePages += 1;
+        if (!check.passed) {
+          entry.passedEverywhereApplicable = false;
+          entry.failedPages += 1;
+        }
       }
       byId.set(check.id, entry);
     }
@@ -290,12 +333,22 @@ function aggregateAgentic(perPage: PageAuditOutcome[]): ScorecardMetric {
 
   const status: ScorecardStatus = anyPageFailed || K === 0 ? 'Fail' : K === J ? 'Pass' : 'Partial';
   const names = applicable.map((v) => v.title);
+  // Names each check that did not pass and on how many pages. No URL: this
+  // sentence is public on /scorecard. Left out when a page failed to audit,
+  // because that fails every check by design and says nothing about any one.
+  const notPassing = applicable.filter((v) => v.failedPages > 0);
+  const failedDetail =
+    anyPageFailed || notPassing.length === 0
+      ? ''
+      : ` Not passing: ${notPassing
+          .map((v) => `${v.title} on ${v.failedPages} of ${v.applicablePages} page${v.applicablePages === 1 ? '' : 's'}`)
+          .join('; ')}.`;
   const description =
     J === 0
       ? 'No Agentic Browsing checks were applicable on any successfully audited page.'
       : anyPageFailed
         ? `${K} of ${J} agent checks pass: ${names.join(', ')} — at least one page failed to audit, which fails every check by design.`
-        : `${K} of ${J} agent checks pass: ${names.join(', ')}.`;
+        : `${K} of ${J} agent checks pass: ${names.join(', ')}.${failedDetail}`;
 
   return {
     name: 'Agentic Browsing',

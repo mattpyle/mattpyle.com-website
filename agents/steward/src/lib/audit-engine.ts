@@ -175,7 +175,7 @@ export interface RawAudit {
   /** The full raw Lighthouse result. Callers needing a specific audit id (e.g. `is-crawlable`) read it directly rather than this module growing a new accessor per caller. Never leaves the activity (large-data rule) — see `agenticChecks` below for the compact summary that does. */
   lhr: LighthouseLike;
   scores: Record<string, number>;
-  /** The four real Agentic Browsing checks (audit-map.ts's `agenticChecks`), compact enough to flow through the workflow — unlike `lhr`, this does. */
+  /** The graded Agentic Browsing checks (audit-map.ts's `agenticChecks`), each with its score, compact enough to flow through the workflow — unlike `lhr`, this does. */
   agenticChecks: AgenticCheck[];
   failedAudits: string[];
   /** Already filtered (`isExpectedDraftNonFinding` removed). */
