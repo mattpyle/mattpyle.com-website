@@ -126,30 +126,33 @@ export function lighthouseMetrics(lhr: LighthouseLike, url: string): Omit<AuditM
  * convention: a check that did not run for this page (e.g. WebMCP schema
  * validity where the page registers no tools) is `applicable: false`, never a
  * silent pass or fail. `passed` is only meaningful when `applicable` is true.
+ *
+ * `score` is the audit's own Lighthouse score (0 to 1), or `null` when the
+ * audit has none. It is optional because a workflow history recorded before the
+ * field existed replays activity results without it.
  */
 export interface AgenticCheck {
   id: string;
   title: string;
   applicable: boolean;
   passed: boolean;
+  score?: number | null;
 }
 
 /**
- * The real, scored Agentic Browsing checks for one page — replaces the old
- * `AGENTIC_AUDITS` guess, which named ids (`agentic-cls`,
- * `agentic-content-visibility`, ...) that this pinned Lighthouse version has
- * never actually returned. The real ids and shape were captured from a live
- * run against production (`lhr.categories['agentic-browsing'].auditRefs`):
- * `agent-accessibility-tree`, `webmcp-schema-validity`,
- * `cumulative-layout-shift`, and `llms-txt`, each `weight: 1` with
- * `scoreDisplayMode: 'binary'` or `'numeric'`.
+ * The scored Agentic Browsing checks for one page. This replaces the old
+ * `AGENTIC_AUDITS` guess, which named ids that Lighthouse has never returned.
  *
- * The category also lists `webmcp-form-coverage` and `webmcp-registered-tools`
- * — both permanently `weight: 0` in the category definition, and
- * `scoreDisplayMode: 'informative'`/`'notApplicable'` rather than a pass/fail
- * grade (the latter lists the registered tools; it is not a check anyone can
- * fail). Filtering to `weight > 0` is what keeps those two out of the checks
- * set — they are real Lighthouse output, just not gradeable ones.
+ * Lighthouse 13.5.0 (`core/config/default-config.js`) lists seven audits in the
+ * `agentic-browsing` category, each with `weight: 1`: `agent-accessibility-tree`,
+ * `webmcp-form-coverage`, `webmcp-registered-tools`, `webmcp-schema-validity`,
+ * `cumulative-layout-shift`, `llms-txt` and `ard-schema`. The config gives no
+ * audit weight 0. Which of them count on a page therefore depends on the audit's
+ * own result: an audit with no numeric `score` (informative or not applicable on
+ * that page) is `applicable: false` and drops out of the count.
+ *
+ * Each check carries its `score`, so a run that misses a check can say by how
+ * much. A check passes only at a score of exactly 1.
  */
 export function agenticChecks(lhr: LighthouseLike): AgenticCheck[] {
   const refs = lhr.categories?.['agentic-browsing']?.auditRefs ?? [];
@@ -165,6 +168,7 @@ export function agenticChecks(lhr: LighthouseLike): AgenticCheck[] {
         title: audit?.title ?? ref.id,
         applicable,
         passed: applicable && score === 1,
+        score: applicable ? score : null,
       };
     });
 }

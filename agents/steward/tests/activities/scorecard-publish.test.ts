@@ -173,3 +173,26 @@ test('re-publishing a run the base already carries opens the PR without committi
   assert.equal(result.id, '2026-08-14-2');
   assert.ok(hub.pulls.length === 1);
 });
+
+test('the PR body row shows the pass count and the check that did not pass, with its score', async () => {
+  await publishScorecardRun({
+    record: run(),
+    perPage: [
+      {
+        url: 'https://www.mattpyle.com/a/',
+        scores: { performance: 99 },
+        axeViolations: 0,
+        agenticChecks: [
+          { id: 'cumulative-layout-shift', score: 0.93, passed: false },
+          { id: 'llms-txt', score: 1, passed: true },
+        ],
+      },
+      { url: 'https://www.mattpyle.com/b/', scores: { performance: 100 }, axeViolations: 0, agenticChecks: [{ id: 'llms-txt', score: 1, passed: true }] },
+      { url: 'https://www.mattpyle.com/old/', scores: { performance: 100 }, axeViolations: 0 },
+    ],
+  });
+  const body = hub.pulls[0].body;
+  assert.match(body, /\| https:\/\/www\.mattpyle\.com\/a\/ \| 0 \| .* \| 1\/2 \(not passing: layout stability 0\.93\) \|/);
+  assert.match(body, /\| https:\/\/www\.mattpyle\.com\/b\/ \| 0 \| .* \| 1\/1 \|/);
+  assert.match(body, /\| https:\/\/www\.mattpyle\.com\/old\/ \| 0 \| .* \| not recorded \|/);
+});

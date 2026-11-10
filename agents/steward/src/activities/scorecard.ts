@@ -20,8 +20,8 @@ import { measureReadingBudget, type ReadingBudget } from '../lib/agent-audit/rea
 import { auditUrl } from '../lib/audit-engine.js';
 import type { AuditRunners } from '../lib/audit-engine.js';
 import { log } from '../lib/logger.js';
-import { parsePageCount, validateCommentary } from '../lib/scorecard-aggregate.js';
-import type { PageAuditOutcome, PublishableRun, ScorecardMetric, ScorecardRunRecord } from '../lib/scorecard-aggregate.js';
+import { agenticCheckLabel, parsePageCount, validateCommentary } from '../lib/scorecard-aggregate.js';
+import type { PageAuditOutcome, PageCheckResult, PublishableRun, ScorecardMetric, ScorecardRunRecord } from '../lib/scorecard-aggregate.js';
 
 /**
  * The Scorecard system's activities (scorecard-audit-spec.md §4.3). A sibling
@@ -310,6 +310,23 @@ export interface PerPageDetail {
   readingBudget?: ReadingBudget;
   /** Performance samples, first audit first, on a page that was re-measured. Absent on every other page. */
   performanceSamples?: number[];
+  /**
+   * The Agentic Browsing checks that ran on this page, each with its score and
+   * pass flag. Optional: a record or workflow history from before the field
+   * existed has none, and a page that failed to audit has none either.
+   */
+  agenticChecks?: PageCheckResult[];
+}
+
+/** "5/6", or what is missing. Counts only the checks that ran on the page. */
+function agenticCell(checks: PageCheckResult[] | undefined): string {
+  if (!checks) return 'not recorded';
+  if (checks.length === 0) return 'none ran';
+  const passed = checks.filter((c) => c.passed).length;
+  const failing = checks
+    .filter((c) => !c.passed)
+    .map((c) => `${agenticCheckLabel(c.id)} ${c.score === null ? 'no score' : c.score}`);
+  return failing.length === 0 ? `${passed}/${checks.length}` : `${passed}/${checks.length} (not passing: ${failing.join(', ')})`;
 }
 
 /** One page's reading budget as the PR body prints it: "61% / 94%", or what is missing. */
@@ -347,7 +364,7 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
   const pageRows = perPage
     .map(
       (p) =>
-        `| ${p.url} | ${p.axeViolations} | ${readingBudgetCell(p.readingBudget)} | ${Object.entries(p.scores)
+        `| ${p.url} | ${p.axeViolations} | ${readingBudgetCell(p.readingBudget)} | ${agenticCell(p.agenticChecks)} | ${Object.entries(p.scores)
           .map(([k, v]) => `${k}: ${v}`)
           .join(', ')} |`,
     )
@@ -382,8 +399,8 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
     '',
     '<details><summary>Per-page detail</summary>',
     '',
-    '| URL | Axe violations | First read, text / markdown | Scores |',
-    '|---|---|---|---|',
+    '| URL | Axe violations | First read, text / markdown | Agent checks | Scores |',
+    '|---|---|---|---|---|',
     pageRows,
     '',
     '</details>',

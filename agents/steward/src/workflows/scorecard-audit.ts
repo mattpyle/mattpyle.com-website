@@ -7,9 +7,11 @@ import {
   PERFORMANCE_PASS_THRESHOLD,
   performanceFromSamples,
   lighthouseVersionCounts,
+  pageCheckResults,
   summariseLighthouseTool,
   summariseReadingBudget,
   type PageAuditOutcome,
+  type PageCheckResult,
   type PublishDecision,
   type ScorecardRunRecord,
 } from '../lib/scorecard-aggregate.js';
@@ -143,6 +145,8 @@ export interface ScorecardAuditResult {
     readingBudget?: ReadingBudget;
     /** First audit first. Present only on a page that was re-measured. */
     performanceSamples?: number[];
+    /** The Agentic Browsing checks that ran on the page, with scores. */
+    agenticChecks?: PageCheckResult[];
   }>;
 }
 
@@ -489,6 +493,7 @@ async function runScorecardAudit(
           url: p.url,
           scores: p.scores,
           axeViolations: p.axeViolations,
+          ...(p.agenticChecks ? { agenticChecks: pageCheckResults(p.agenticChecks) } : {}),
           ...(p.readingBudget ? { readingBudget: p.readingBudget } : {}),
           ...(samples.has(p.url) ? { performanceSamples: samples.get(p.url) } : {}),
         }

@@ -8,6 +8,7 @@ import {
   aggregate,
   checkAuditSet,
   decidePublish,
+  pageCheckResults,
   parsePageCount,
   summariseLighthouseTool,
   summariseReadingBudget,
@@ -568,4 +569,76 @@ perfTest('performanceFromSamples: median of three, lower of two, one kept', () =
   perfAssert.equal(performanceFromSamples([87, 99, 98]), 98);
   perfAssert.equal(performanceFromSamples([99, 87]), 87);
   perfAssert.equal(performanceFromSamples([91]), 91);
+});
+
+// --- naming the check that did not pass (STW-563) ------------------------
+
+const check = (id: string, passed: boolean, score: number) => ({ id, title: id, applicable: true, passed, score });
+
+function sixChecks(overrides: Record<string, number> = {}) {
+  return [
+    'agent-accessibility-tree',
+    'webmcp-schema-validity',
+    'cumulative-layout-shift',
+    'llms-txt',
+    'ard-schema',
+    'webmcp-form-coverage',
+  ].map((id) => check(id, (overrides[id] ?? 1) === 1, overrides[id] ?? 1));
+}
+
+function agenticOf(pages: PageAuditOutcome[]) {
+  return aggregate(pages).find((m) => m.name === 'Agentic Browsing')!;
+}
+
+test('at K equal to J the Agentic Browsing sentence names no failing check', () => {
+  const m = agenticOf([page({ agenticChecks: sixChecks() })]);
+  assert.equal(m.value, '6');
+  assert.doesNotMatch(m.description, /Not passing/);
+  assert.match(m.description, /^6 of 6 agent checks pass: .*\.$/);
+});
+
+test('one check below 1 on one page is named with "1 of N pages"', () => {
+  const m = agenticOf([
+    page({ agenticChecks: sixChecks({ 'cumulative-layout-shift': 0.93 }) }),
+    page({ url: 'b', agenticChecks: sixChecks() }),
+    page({ url: 'c', agenticChecks: sixChecks() }),
+  ]);
+  assert.equal(m.value, '5');
+  assert.equal(m.status, 'Partial');
+  assert.match(m.description, /5 of 6 agent checks pass: /);
+  assert.match(m.description, /Not passing: layout stability on 1 of 3 pages\.$/);
+});
+
+test('two failing checks are both named, with their own page counts', () => {
+  const m = agenticOf([
+    page({ agenticChecks: sixChecks({ 'cumulative-layout-shift': 0.93, 'llms-txt': 0 }) }),
+    page({ url: 'b', agenticChecks: sixChecks({ 'cumulative-layout-shift': 0.8 }) }),
+  ]);
+  assert.equal(m.value, '4');
+  assert.match(m.description, /Not passing: layout stability on 2 of 2 pages; llms\.txt on 1 of 2 pages\.$/);
+});
+
+test('the failing-check sentence carries no URL', () => {
+  const m = agenticOf([page({ url: 'https://www.mattpyle.com/secret/', agenticChecks: sixChecks({ 'llms-txt': 0 }) })]);
+  assert.doesNotMatch(m.description, /https?:|mattpyle\.com/);
+});
+
+test('a page that failed to audit keeps the by-design sentence and names no single check', () => {
+  const failed: PageAuditOutcome = { url: 'https://www.mattpyle.com/broken/', ok: false, error: 'timed out' };
+  const m = agenticOf([page({ agenticChecks: sixChecks({ 'llms-txt': 0 }) }), failed]);
+  assert.equal(m.value, '0');
+  assert.match(m.description, /at least one page failed to audit/);
+  assert.doesNotMatch(m.description, /Not passing/);
+});
+
+test('pageCheckResults keeps id, score and pass flag, drops checks that did not apply, and reads old checks without a score', () => {
+  const rows = pageCheckResults([
+    check('llms-txt', false, 0.5),
+    { id: 'webmcp-schema-validity', title: 'x', applicable: false, passed: false, score: null },
+    { id: 'ard-schema', title: 'y', applicable: true, passed: true },
+  ]);
+  assert.deepEqual(rows, [
+    { id: 'llms-txt', score: 0.5, passed: false },
+    { id: 'ard-schema', score: null, passed: true },
+  ]);
 });

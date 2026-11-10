@@ -262,3 +262,19 @@ test('overall verdict: flags alone flag, nothing passes', () => {
   assert.equal(overallVerdict(lighthouseFindings({ performance: 40 }, FILE, URL)), 'flag');
   assert.equal(overallVerdict([]), 'pass');
 });
+
+test('agenticChecks carries each audit\'s score, and null where the audit has none', () => {
+  const lhr = {
+    ...agenticLhr,
+    audits: {
+      ...agenticLhr.audits,
+      'cumulative-layout-shift': { title: 'Cumulative Layout Shift', score: 0.93, scoreDisplayMode: 'numeric' },
+      'webmcp-schema-validity': { title: 'WebMCP schemas are valid', score: null, scoreDisplayMode: 'notApplicable' },
+    },
+  };
+  const byId = Object.fromEntries(agenticChecks(lhr).map((c) => [c.id, c]));
+  assert.equal(byId['cumulative-layout-shift'].score, 0.93);
+  assert.equal(byId['cumulative-layout-shift'].passed, false);
+  assert.equal(byId['llms-txt'].score, 0);
+  assert.equal(byId['webmcp-schema-validity'].score, null);
+});

@@ -244,3 +244,20 @@ test('the activity gives up when the branch keeps moving', async () => {
   assert.equal(hub.refUpdates.length, 4);
   assert.equal(hub.refUpdates.filter((u) => u.force).length, 0);
 });
+
+test('a written archive record reads back each page\'s check ids, scores and pass flags', async () => {
+  const checks = [
+    { id: 'cumulative-layout-shift', score: 0.93, passed: false },
+    { id: 'llms-txt', score: 1, passed: true },
+  ];
+  await archiveScorecardRun(
+    record({ id: 'checks', perPage: [{ url: 'https://www.mattpyle.com/', scores: {}, axeViolations: 0, agenticChecks: checks }] }),
+  );
+  assert.deepEqual(readArchive('checks').perPage[0].agenticChecks, checks);
+});
+
+test('an archive record without check results still writes', async () => {
+  const result = await archiveScorecardRun(record({ id: 'old-shape' }));
+  assert.equal(result.committed, true);
+  assert.equal(readArchive('old-shape').perPage[0].agenticChecks, undefined);
+});
