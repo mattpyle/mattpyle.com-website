@@ -77,8 +77,9 @@ const contents = headings.filter(heading => heading.depth === 2);
         script runs late (a 20x CPU slowdown measured 0.11 to 0.15 CLS when the
         script closed an open list after first paint). Above 900px the rule
         `details::details-content` in the style block shows the list anyway, with
-        no script. A browser without that selector keeps the summary visible, and
-        the script opens the list there. A phone without JS sees the list behind
+        no script. A browser without that selector keeps the summary visible. On a
+        wide screen the script then opens the details in every browser, so its
+        state matches what is shown. A phone without JS sees the list behind
         its summary.
       */}
       <summary>On this page ({contents.length})</summary>
@@ -191,11 +192,12 @@ const contents = headings.filter(heading => heading.depth === 2);
     document.querySelectorAll<HTMLDetailsElement>('[data-rail-details]').forEach(details => {
       if (details.dataset.railDetailsReady === 'true') return;
       details.dataset.railDetailsReady = 'true';
-      // Only a browser without `::details-content` needs this; it shows the
-      // list on a wide screen by opening it. A phone keeps the markup's state.
-      if (!CSS.supports('selector(::details-content)') && window.matchMedia('(min-width: 901px)').matches) {
-        details.open = true;
-      }
+      // On a wide screen, open the element so its state matches what is shown:
+      // find-in-page, anchor jumps and assistive technology see an open details.
+      // Where `::details-content` works the list is already visible, so this
+      // moves nothing; elsewhere it is what shows the list. A phone keeps the
+      // markup's state.
+      if (window.matchMedia('(min-width: 901px)').matches) details.open = true;
     });
 
     document.querySelectorAll<HTMLButtonElement>('[data-rail-copy]').forEach(button => {
