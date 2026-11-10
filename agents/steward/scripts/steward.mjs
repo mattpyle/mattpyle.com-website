@@ -13,16 +13,60 @@
 // rather than imported, because this shim runs under plain `node`, before
 // tsx (or any TS loader) exists in the process.
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { INSTALLED_BY_SHIM_ENV, installFailureMessage, nextShimStep } from './shim-decision.mjs';
+import {
+  INSTALLED_BY_SHIM_ENV,
+  installFailureMessage,
+  launchPlan,
+  nextShimStep,
+} from './shim-decision.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, '..');
 const repoRoot = path.resolve(packageRoot, '..', '..');
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const cliEntry = path.join(packageRoot, 'src', 'cli.ts');
+const envFile = path.join(packageRoot, '.env');
+
+// `op` as an absolute path, or null. Only `.exe` and `.com` count on Windows,
+// because spawn without a shell cannot start a `.cmd`.
+function findOnPath(name) {
+  const exts = process.platform === 'win32' ? ['.exe', '.com'] : [''];
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)) {
+    for (const ext of exts) {
+      const candidate = path.join(dir, `${name}${ext}`);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+// The shim reads .env for reference lines only (`KEY=op://...`). For each one whose
+// key the shell has not set, it adds the reference string to the child's environment
+// and runs the CLI under `op run --`, which resolves references in environment
+// variables. A shell value wins over the file, as in loadDotEnv, so no `--env-file`.
+// Plain values stay with loadDotEnv. The shim keeps key names and reference strings only.
+function readEnvFile() {
+  try {
+    return fs.readFileSync(envFile, 'utf8');
+  } catch {
+    return null;
+  }
+}
+const plan = launchPlan({
+  envFileText: readEnvFile(),
+  opPath: findOnPath('op'),
+  env: process.env,
+});
+if (plan.kind === 'error') {
+  console.error(`
+  steward: ${plan.message}
+`);
+  process.exit(1);
+}
 
 // `npm ci` runs here, never inside the CLI. tsx keeps `esbuild.exe` from
 // node_modules running as its child, and `npm ci` deletes node_modules first, so
@@ -38,7 +82,12 @@ function npmCommand(args) {
 
 function runCli(env) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [tsxCli, cliEntry, ...process.argv.slice(2)], {
+    const cliCommand = [process.execPath, tsxCli, cliEntry, ...process.argv.slice(2)];
+    const [binary, ...args] =
+      plan.kind === 'wrap'
+        ? [findOnPath('op'), 'run', '--', ...cliCommand]
+        : cliCommand;
+    const child = spawn(binary, args, {
       cwd: packageRoot,
       stdio: 'inherit',
       windowsHide: true,
@@ -67,7 +116,8 @@ function runNpmCi() {
 
 let installedByShim = false;
 for (;;) {
-  const env = installedByShim ? { ...process.env, [INSTALLED_BY_SHIM_ENV]: '1' } : process.env;
+  const base = installedByShim ? { ...process.env, [INSTALLED_BY_SHIM_ENV]: '1' } : process.env;
+  const env = plan.kind === 'wrap' ? { ...base, ...plan.inject } : base;
   const { code, signal } = await runCli(env);
   if (signal) process.kill(process.pid, signal);
   if (nextShimStep({ exitCode: code, installedByShim }) === 'exit') {

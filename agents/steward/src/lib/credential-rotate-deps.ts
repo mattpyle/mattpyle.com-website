@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { envLineIsReference } from './env-reference.js';
 import { run } from './proc.js';
 import type {
   OpItem,
@@ -489,6 +490,7 @@ export function createRealDeps(options: RealDepsOptions): { deps: RotateDeps; se
       path: envPath,
       setLine: async (key, value) => {
         const before = await fsp.readFile(envPath, 'utf8');
+        if (envLineIsReference(before, key)) return 'kept-reference';
         const after = replaceEnvLine(before, key, value);
         const temp = `${envPath}.rotate-${process.pid}`;
         await fsp.writeFile(temp, after, { mode: 0o600 });

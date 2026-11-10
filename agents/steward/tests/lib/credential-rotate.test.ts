@@ -812,6 +812,15 @@ test('the env step failing leaves the push done, and the rerun does the env step
   assert.deepEqual(w.envWrites.length, 1);
 });
 
+test('a reference line in .env is kept, and the step says the 1Password item is the local copy', async () => {
+  const w = world();
+  w.deps.env.setLine = async () => 'kept-reference';
+  const result = await run(w);
+  assert.equal(result.completed, true);
+  assert.ok(w.logs.some((l) => /is a 1Password reference/.test(l) && /nothing was written/.test(l)));
+  assert.ok(!w.logs.some((l) => /rewrote the .* line/.test(l)));
+});
+
 test('wait stops when no new deployment appears', async () => {
   const w = world({ newDeploymentOnPush: false });
   const err = await stoppedAt(run(w));
