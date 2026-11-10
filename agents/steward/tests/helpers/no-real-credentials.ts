@@ -56,3 +56,10 @@ process.env.STEWARD_WEB_BOT_AUTH_KEY = '';
 // The alerting base URL: every run-health signal posts to it, healthy or not, so a suite
 // run beside a real `.env` must not reach the live checks. A test that wants one sets its own.
 process.env.STEWARD_HEALTHCHECK_BASE = '';
+// The Temporal API keys. Since PR 640 a `.env` line may hold a 1Password reference, and a
+// reference that reaches `config.ts` stops every test that loads it ("Refusing to start").
+// An empty value is defined, so `.env` cannot put the reference back. The suite never connects
+// to Temporal Cloud: the workflow suites use the time-skipping server.
+process.env.TEMPORAL_API_KEY = '';
+process.env.TEMPORAL_METRICS_API_KEY = '';
+process.env.TEMPORAL_READ_ONLY_API_KEY = '';
