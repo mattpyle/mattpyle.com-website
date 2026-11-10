@@ -1736,6 +1736,8 @@ program
     console.log(`  decision: ${result.decision}`);
     console.log(`  reason:   ${result.reason}`);
     if (result.prUrl) console.log(`  PR:       ${result.prUrl}`);
+    if (result.mergeSha) console.log(`  merged:   ${result.mergeSha}`);
+    if (result.mergeRefusal) console.log(`  not merged: ${result.mergeRefusal}`);
     console.log(`  pages audited: ${result.perPage.length}\n`);
     for (const m of result.record.metrics) {
       console.log(`  ${m.name.padEnd(20)} ${`${m.value}/${m.maximum}`.padEnd(10)} ${m.status}`);

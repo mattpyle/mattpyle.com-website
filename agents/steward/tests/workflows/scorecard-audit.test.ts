@@ -1171,7 +1171,8 @@ test('merge leg: the nightly run reports a refusal on the nightly check', async 
 });
 
 test('merge leg: a dry run never reads checks or merges', async () => {
-  const { checkReads, merges, result } = await runMerge('sc-merge-dry', {}, { publishMode: 'dry-run' });
+  const { checkReads, merges, result, signals } = await runMerge('sc-merge-dry', {}, { publishMode: 'dry-run' });
+  assert.deepEqual(signals.map((x) => x.ok), [true], 'one ping, no second');
   assert.equal(checkReads.length, 0);
   assert.equal(merges.length, 0);
   assert.equal(result.mergeSha, undefined);
