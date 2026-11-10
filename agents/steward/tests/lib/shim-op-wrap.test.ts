@@ -58,10 +58,16 @@ function scratchTree(envText: string | null, withOp: boolean) {
     fs.writeFileSync(
       resolver,
       [
-        "if (require('node:path').basename(process.execPath).toLowerCase().replace('.exe', '') !== 'op') return;",
+        "// Two ways in, one behaviour. Off Windows the `op` shell script runs this file as a script",
+        "// (argv[1] is this file). On Windows node.exe is renamed op.exe and NODE_OPTIONS preloads this",
+        "// file, so it must ignore every other node process.",
+        "const asScript = process.argv[1] === __filename;",
+        "const asOpExe = require('node:path').basename(process.execPath).toLowerCase().replace('.exe', '') === 'op';",
+        "if (!asScript && !asOpExe) return;",
         "const { spawnSync } = require('node:child_process');",
         "const fs = require('node:fs');",
-        "const argv = process.argv.slice(1);",
+        "// Both routes give argv as ['run', '--', ...command].",
+        "const argv = asScript ? process.argv.slice(2) : ['run', ...process.argv.slice(2)];",
         "const cmd = argv.slice(argv.indexOf('--') + 1);",
         "const env = { ...process.env };",
         "delete env.NODE_OPTIONS;",
@@ -108,9 +114,8 @@ test('a reference line with no shell value reaches op run and the CLI sees the r
   try {
     const r = runShim(tree, ['inbox', '--flag']);
     assert.equal(r.status, 0, r.stderr);
-    // node resolves the first operand of the renamed binary to a path; its basename is op's `run`.
     // There is no --env-file: that would give the file precedence over the shell.
-    assert.deepEqual(r.opArgs?.map((a, i) => (i === 0 ? path.basename(a) : a)), ['run', '--']);
+    assert.deepEqual(r.opArgs, ['run', '--']);
     assert.match(r.stdout, /cli-args=\["inbox","--flag"\]/);
     assert.ok(r.stdout.includes(`cli-dummy=${VALUE}`), 'the CLI saw the resolved value');
     assert.ok(!r.stdout.includes(REF));
