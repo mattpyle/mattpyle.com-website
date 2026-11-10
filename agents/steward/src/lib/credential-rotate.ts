@@ -205,7 +205,11 @@ export interface RotateDeps {
   };
   env: {
     path: string;
-    setLine(key: string, value: string): Promise<void>;
+    /**
+     * Writes the line, or returns 'kept-reference' without writing when the line is a
+     * 1Password reference: the item is the local copy then, and the push step already updated it.
+     */
+    setLine(key: string, value: string): Promise<void | 'kept-reference'>;
   };
   /**
    * The verify functions, by the key a row names in `verify`. One takes the new
@@ -429,7 +433,7 @@ export function describePlan(
     lines.push(`2. store: write the value${spec.dated ? ', expires and key_id' : ''} into the 1Password item "${spec.opItem}" and read it back.`);
   }
   lines.push(`3. push: railway variable set ${spec.railwayVariable} --stdin on ${target.railwayService}/${target.railwayEnvironment}, which redeploys.`);
-  lines.push(`4. env: rewrite the ${spec.envVar} line in ${envPath}.`);
+  lines.push(`4. env: rewrite the ${spec.envVar} line in ${envPath}, unless it is an op:// reference (the 1Password item is then the local copy).`);
   lines.push(`5. wait: the new deployment, then its log for the ready line with ${spec.readyField}: ${spec.readyValue}.`);
   lines.push(`6. verify: ${spec.verifyPlan}`);
   lines.push(
@@ -672,12 +676,18 @@ export async function rotateCredential(
   // 4: env
   if (!isDone('env')) {
     const value = await stored('env');
+    let kept = false;
     try {
-      await deps.env.setLine(spec.envVar, value);
+      kept = (await deps.env.setLine(spec.envVar, value)) === 'kept-reference';
     } catch (err) {
       stop('env', err);
     }
-    say('env', `rewrote the ${spec.envVar} line in ${deps.env.path}`);
+    say(
+      'env',
+      kept
+        ? `${spec.envVar} in ${deps.env.path} is a 1Password reference; the item "${spec.opItem}" is the local copy, so nothing was written`
+        : `rewrote the ${spec.envVar} line in ${deps.env.path}`,
+    );
     await finish('env');
   } else {
     say('env', 'already done');

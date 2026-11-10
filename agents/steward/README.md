@@ -176,6 +176,13 @@ npm link                     # optional: makes `steward` a real command on PATH
 steward up                   # starts the worker, and the dev server if that's the target
 ```
 
+**Secrets from 1Password.** A secret line in `.env` can hold a reference (`op://Steward/<ITEM>/<field>`)
+instead of a value; `.env.example` lists which variables are secrets. When any value starts with
+`op://`, `steward` runs the CLI under `op run --env-file .env --`, which needs the 1Password CLI on
+PATH. A reference that reaches Steward unresolved (a run through `npx tsx` or `node --env-file`) stops
+the process with a message naming the variable. `steward credential rotate` leaves a reference line
+alone: the 1Password item is the local copy. The hosted worker has no `op` and holds real values.
+
 Then, in another terminal:
 
 ```bash

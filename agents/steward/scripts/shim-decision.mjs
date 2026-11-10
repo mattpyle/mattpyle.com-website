@@ -29,3 +29,55 @@ export function installFailureMessage(npmExitCode) {
     'Run `npm ci` at the repository root, then `steward up`.'
   );
 }
+
+/** The prefix of a 1Password secret reference. */
+export const OP_REFERENCE_PREFIX = 'op://';
+
+/**
+ * True when at least one line of a dotenv file holds a value that starts with
+ * `op://`. It tests the prefix and keeps nothing else from the text, so a plain
+ * value never leaves this function. Comment lines and blank lines do not count.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function envFileHasReference(text) {
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const value = trimmed.slice(eq + 1).trim().replace(/^["']/, '');
+    if (value.startsWith(OP_REFERENCE_PREFIX)) return true;
+  }
+  return false;
+}
+
+/** The message when the env file holds references and `op` is not installed. */
+export function opMissingMessage() {
+  return (
+    'agents/steward/.env holds op:// references, but the 1Password CLI (`op`) is not on PATH. ' +
+    'Install it (https://developer.1password.com/docs/cli/get-started/), ' +
+    'or replace the references with plain values, then run the command again.'
+  );
+}
+
+/**
+ * How the shim starts the CLI.
+ *
+ * - `plain`: no env file, or one without references. The CLI starts as before.
+ * - `wrap`: the file holds a reference and `op` exists. The CLI runs under
+ *   `op run --env-file <file> --`.
+ * - `error`: the file holds a reference and `op` is missing. The shim prints
+ *   the message and exits, so the user sees the fix and not a spawn error.
+ *
+ * @param {{ envFileText: string | null, opPath: string | null }} input
+ *   `envFileText` is null when the file does not exist. `opPath` is null when
+ *   `op` is not on PATH.
+ * @returns {{ kind: 'plain' } | { kind: 'wrap' } | { kind: 'error', message: string }}
+ */
+export function launchPlan({ envFileText, opPath }) {
+  if (envFileText === null || !envFileHasReference(envFileText)) return { kind: 'plain' };
+  if (!opPath) return { kind: 'error', message: opMissingMessage() };
+  return { kind: 'wrap' };
+}

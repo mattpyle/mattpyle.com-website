@@ -13,16 +13,57 @@
 // rather than imported, because this shim runs under plain `node`, before
 // tsx (or any TS loader) exists in the process.
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { INSTALLED_BY_SHIM_ENV, installFailureMessage, nextShimStep } from './shim-decision.mjs';
+import {
+  INSTALLED_BY_SHIM_ENV,
+  installFailureMessage,
+  launchPlan,
+  nextShimStep,
+} from './shim-decision.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, '..');
 const repoRoot = path.resolve(packageRoot, '..', '..');
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const cliEntry = path.join(packageRoot, 'src', 'cli.ts');
+const envFile = path.join(packageRoot, '.env');
+
+// `op` as an absolute path, or null. Only `.exe` and `.com` count on Windows,
+// because spawn without a shell cannot start a `.cmd`.
+function findOnPath(name) {
+  const exts = process.platform === 'win32' ? ['.exe', '.com'] : [''];
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)) {
+    for (const ext of exts) {
+      const candidate = path.join(dir, `${name}${ext}`);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+// The shim reads .env for one fact: does any value start with `op://`. When one
+// does, the CLI runs under `op run`, which resolves every reference into the
+// child's environment. Nothing else from the file is kept or printed.
+function readEnvFile() {
+  try {
+    return fs.readFileSync(envFile, 'utf8');
+  } catch {
+    return null;
+  }
+}
+const plan = launchPlan({
+  envFileText: readEnvFile(),
+  opPath: findOnPath('op'),
+});
+if (plan.kind === 'error') {
+  console.error(`
+  steward: ${plan.message}
+`);
+  process.exit(1);
+}
 
 // `npm ci` runs here, never inside the CLI. tsx keeps `esbuild.exe` from
 // node_modules running as its child, and `npm ci` deletes node_modules first, so
@@ -38,7 +79,12 @@ function npmCommand(args) {
 
 function runCli(env) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [tsxCli, cliEntry, ...process.argv.slice(2)], {
+    const cliCommand = [process.execPath, tsxCli, cliEntry, ...process.argv.slice(2)];
+    const [binary, ...args] =
+      plan.kind === 'wrap'
+        ? [findOnPath('op'), 'run', '--env-file', envFile, '--', ...cliCommand]
+        : cliCommand;
+    const child = spawn(binary, args, {
       cwd: packageRoot,
       stdio: 'inherit',
       windowsHide: true,

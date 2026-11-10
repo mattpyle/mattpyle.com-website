@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { unresolvedReferenceRefusal } from './lib/env-reference.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -16,6 +17,9 @@ export const STEWARD_DIR = path.resolve(here, '..');
  * **Already-set variables always win.** An explicit `ANTHROPIC_API_KEY=... npm
  * run …` or a CI secret must not be silently overridden by a stale local file —
  * that failure mode is invisible and sends requests under the wrong credential.
+ *
+ * A line may hold a 1Password reference (`op://...`); the `steward` launcher resolves it with
+ * `op run`, and the guard below stops the process when one is left (`lib/env-reference.ts`).
  *
  * Values are never logged. The file is gitignored (`.gitignore`), and nothing in
  * Steward puts a secret into a workflow input or result, where Temporal
@@ -48,6 +52,16 @@ function loadDotEnv(): void {
 }
 
 loadDotEnv();
+
+// A 1Password reference that `op run` did not resolve would go out as a credential.
+// Stop here, before anything reads a variable. The message names the variable, never a value.
+const unresolved = unresolvedReferenceRefusal();
+if (unresolved !== null) {
+  console.error(`
+${unresolved}
+`);
+  process.exit(1);
+}
 
 /**
  * The real checkout containing `agents/steward`, derived from this file's own
