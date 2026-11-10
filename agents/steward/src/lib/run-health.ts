@@ -133,7 +133,18 @@ export interface ScorecardShapeInput {
   decision: string;
   /** The run's calendar day. */
   iso: string;
+  /** What the merge leg did with the run-log pull request. Absent when the run never reached it. */
+  merge?: ScorecardMergeShape;
 }
+
+/**
+ * The merge leg's outcome as the shape rule reads it: merged, refused for a named
+ * condition, or an activity that threw after its retries. `condition` is a
+ * `MergeRefusalCondition` or `'error'`.
+ */
+export type ScorecardMergeShape =
+  | { merged: true; mergeSha: string; prUrl: string }
+  | { merged: false; condition: string; detail: string; prUrl: string };
 
 /**
  * The scorecard's rule, from the card: **a completed run with a failed-page
@@ -154,6 +165,25 @@ export interface ScorecardShapeInput {
  * A partial failure keeps its wording, because that run may still open a PR.
  */
 export function scorecardRunShape(input: ScorecardShapeInput): RunShape {
+  const base = scorecardPagesAndVersionsShape(input);
+  const merge = input.merge;
+  if (!merge) return base;
+  if (merge.merged) {
+    return { ok: base.ok, summary: `${base.summary} Run-log PR ${merge.prUrl} merged as ${merge.mergeSha}.` };
+  }
+  // The run and its archive are good, so the reason says what to do with the PR.
+  // A refusal makes the run unhealthy whatever the pages did.
+  return {
+    ok: false,
+    summary:
+      `Scorecard ${input.iso} completed but Steward did not merge its run-log PR (${merge.condition}): ` +
+      `${merge.detail}. PR: ${merge.prUrl}. The run and its archive are good; the PR stays open, so ` +
+      'check it and merge it by hand.' +
+      (base.ok ? '' : ` ${base.summary}`),
+  };
+}
+
+function scorecardPagesAndVersionsShape(input: ScorecardShapeInput): RunShape {
   const versions = lighthouseVersionCounts(input.pages);
   if (versions.length > 1) {
     const named = versions.map((v) => `Lighthouse ${v.version} on ${v.pages} page(s)`).join(', ');

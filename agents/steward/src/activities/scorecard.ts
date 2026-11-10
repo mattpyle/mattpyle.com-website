@@ -1,9 +1,21 @@
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import {
+  GITHUB_REPO,
   SCORECARD_ARCHIVE_BRANCH,
   SCORECARD_ARCHIVE_REL,
   SCORECARD_RUNS_PATH,
 } from '../config.js';
+import { gh, ghResponse } from '../lib/github.js';
+import {
+  checkChangedFiles,
+  checkPullIdentity,
+  checksRefusal,
+  evaluateScorecardChecks,
+  pullNumberFromUrl,
+  type CheckRunLike,
+  type ScorecardChecksResult,
+  type ScorecardMergeOutcome,
+} from '../lib/scorecard-merge.js';
 import {
   branchSha,
   commitFiles,
@@ -347,6 +359,15 @@ export interface PublishScorecardRunResult {
   branch: string;
   prUrl: string;
   id: string;
+  /**
+   * What the merge leg needs. Optional: a result recorded before the merge leg
+   * existed carries none of them, and the workflow then has nothing to merge.
+   */
+  prNumber?: number;
+  /** The commit this run made on the branch. Absent when it made none. */
+  headSha?: string;
+  /** False when the base already carried this run: no commit, so nothing to merge. */
+  committed?: boolean;
 }
 
 /** `<iso>`, or `<iso>-2`, `<iso>-3`, … on a same-day collision (spec §5.1). */
@@ -407,7 +428,9 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
     '',
     '---',
     '',
-    '*Opened by the Scorecard workflow. It never merges — that is deliberately a human act (design rule 2).*',
+    dryRun
+      ? '*Opened by the Scorecard workflow. A dry run is never merged.*'
+      : '*Opened by the Scorecard workflow. Steward merges it after the checks pass.*',
   );
   return lines.join('\n');
 }
@@ -486,14 +509,16 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
   // --porcelain`: base already carries this exact run, so a commit would be
   // empty and the API would answer 409 rather than no-op.
   let committed = false;
+  let headSha: string | undefined;
   if (updated !== runsFile.text) {
-    await writeRepoFile({
+    const written = await writeRepoFile({
       path: SCORECARD_RUNS_PATH,
       text: updated,
       message: `chore(scorecard): publish ${id} run`,
       branch,
       sha: runsFile.sha,
     });
+    headSha = written.commitSha;
     committed = true;
   } else {
     log.info({ activity: 'publishScorecardRun', id, branch }, 'nothing to commit — base already carries this run');
@@ -508,7 +533,110 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
   });
   log.info({ activity: 'publishScorecardRun', id, prUrl, branch, committed }, 'scorecard PR open');
 
-  return { branch, prUrl, id };
+  return { branch, prUrl, id, prNumber: pullNumberFromUrl(prUrl), headSha, committed };
+}
+
+// ---------------------------------------------------------------------------
+// The merge leg: readScorecardPrChecks and mergeScorecardPr
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads the check runs on one exact commit, the one `publishScorecardRun` made.
+ * Not the branch: a branch that moved would answer for a different commit.
+ *
+ * Throws on a GitHub error, unlike `checkPrChecks`: the workflow's retry policy
+ * decides, and "could not read" must not look like "still pending" for thirty
+ * polls.
+ */
+export async function readScorecardPrChecks(headSha: string): Promise<ScorecardChecksResult> {
+  const runs = await gh(`/repos/${GITHUB_REPO}/commits/${headSha}/check-runs?per_page=100`);
+  const list: CheckRunLike[] = (runs?.check_runs ?? []).map((r: CheckRunLike) => ({
+    name: r.name,
+    status: r.status,
+    conclusion: r.conclusion,
+  }));
+  return evaluateScorecardChecks(list);
+}
+
+export interface MergeScorecardPrInput {
+  /** The pull request this run opened. */
+  prNumber: number;
+  /** The run's exact branch name. A glob would match the archive branch too. */
+  branch: string;
+  /** The commit `publishScorecardRun` made. GitHub refuses the merge if the head moved off it. */
+  expectedHeadSha: string;
+}
+
+/**
+ * Merges the run-log pull request this run opened, and only that one.
+ *
+ * It decides from GitHub at merge time, never from the workflow's memory of
+ * earlier polls: the pull request is this run's (number, exact branch, default
+ * base, this repository), its head is the commit the run made, the diff is
+ * exactly `src/data/scorecard-runs.json`, and the head's checks are complete,
+ * with the required one successful. Any miss is a returned refusal naming the
+ * condition. The pull request stays open and the workflow marks the run
+ * unhealthy.
+ *
+ * **Idempotent.** A pull request already merged with the expected head returns
+ * its merge commit. A merge GitHub accepted whose reply was lost therefore reads
+ * as merged on the retry, not as a failure.
+ *
+ * The merge is a merge commit and carries the expected head `sha`, so GitHub
+ * refuses a head that moved after the checks above. GitHub's own message is
+ * kept when it refuses (a ruleset, a missing permission).
+ */
+export async function mergeScorecardPr(input: MergeScorecardPrInput): Promise<ScorecardMergeOutcome> {
+  const repo = GITHUB_REPO;
+  const data = await gh(`/repos/${repo}/pulls/${input.prNumber}`);
+  const pull = {
+    state: String(data.state),
+    merged: data.merged === true,
+    draft: data.draft === true,
+    mergeCommitSha: (data.merge_commit_sha as string | null) ?? null,
+    headRef: String(data.head?.ref),
+    headSha: String(data.head?.sha),
+    headRepo: (data.head?.repo?.full_name as string | undefined) ?? null,
+    baseRef: String(data.base?.ref),
+  };
+  const base = await defaultBranch();
+  const expectation = { branch: input.branch, expectedHeadSha: input.expectedHeadSha, defaultBranch: base, repo };
+
+  if (pull.merged && pull.mergeCommitSha) {
+    // Already merged. Merged from this run's commit is the success a lost reply hides.
+    if (pull.headSha === input.expectedHeadSha && pull.headRef === input.branch) {
+      log.info({ activity: 'mergeScorecardPr', pr: input.prNumber, mergeSha: pull.mergeCommitSha }, 'already merged');
+      return { merged: true, mergeSha: pull.mergeCommitSha };
+    }
+    return { merged: false, condition: 'head-moved', detail: `the pull request merged from ${pull.headSha}, not the run's ${input.expectedHeadSha}` };
+  }
+
+  const identity = checkPullIdentity(pull, expectation);
+  if (identity) return identity;
+
+  const files = await gh(`/repos/${repo}/pulls/${input.prNumber}/files?per_page=100`);
+  const changed = (Array.isArray(files) ? files : []).map((f: { filename: string }) => f.filename);
+  const diff = checkChangedFiles(changed, SCORECARD_RUNS_PATH);
+  if (diff) return diff;
+
+  const checks = await readScorecardPrChecks(input.expectedHeadSha);
+  const unready = checksRefusal(checks);
+  if (unready) return unready;
+
+  const res = await ghResponse(`/repos/${repo}/pulls/${input.prNumber}/merge`, {
+    method: 'PUT',
+    body: JSON.stringify({ merge_method: 'merge', sha: input.expectedHeadSha }),
+  });
+  if (res.ok) {
+    log.info({ activity: 'mergeScorecardPr', pr: input.prNumber, mergeSha: res.body.sha }, 'scorecard PR merged');
+    return { merged: true, mergeSha: String(res.body.sha) };
+  }
+  const message = String(res.body?.message ?? `HTTP ${res.status}`);
+  // 409 with this message is GitHub saying the head moved between our read and the merge.
+  if (res.status === 409 && /head branch was modified/i.test(message)) {
+    return { merged: false, condition: 'head-moved', detail: message };
+  }
+  return { merged: false, condition: 'github-refused', detail: `GitHub ${res.status}: ${message}` };
 }
 
 // ---------------------------------------------------------------------------

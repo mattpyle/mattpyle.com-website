@@ -576,6 +576,47 @@ test('a scorecard run recorded before the mixed-Lighthouse refusal replays down 
 });
 
 /**
+ * ## `scorecard-publish-pre-merge.bin`: a publishing run from before the merge leg
+ *
+ * A manual run that decided `open-pr`, called `publishScorecardRun` (a result of
+ * branch, URL and id, with no pull request number, head commit or `committed`),
+ * archived, sent the healthy `run-shape` ping and completed. 49 events.
+ *
+ * Recorded 2026-11-09 from `origin/master` at 3289ca4, the code before the merge
+ * leg, against the time-skipping server with mocked activities, so it holds no
+ * real run. It is the history an in-flight publishing run would carry across the
+ * deploy. New code must replay it to the same end: no merge command after the
+ * ping.
+ *
+ * **Probes.** A `wf.sleep('1 second')` injected after the archive,
+ * standing in for an unguarded wait, failed it with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 35, ActivityTaskScheduled)
+ * ```
+ *
+ * Deleting the `wf.patched(SCORECARD_AUTO_MERGE_PATCH)` guard did not fail it,
+ * and this fixture cannot prove that marker. Its publish result lacks the pull
+ * request number and head commit, so the leg has nothing to start from whether or
+ * not the marker is read. The new result fields keep an old history out of the
+ * leg; the marker records the change for histories recorded after it. Both
+ * probes were reverted and the replay re-run green.
+ */
+const scorecardPublishHistoryPath = fileURLToPath(
+  new URL('../fixtures/histories/scorecard-publish-pre-merge.bin', import.meta.url),
+);
+
+test('a scorecard run that published before the merge leg replays with no merge after it', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardPublishHistoryPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'steward-scorecard-fixture-publish',
+  );
+});
+
+/**
  * A lifecycle run as `findingWorkflow` ran it before the fix dispatcher: CLI
  * approve, one `fix`, the issue, the PR, the PR closed unmerged, the return
  * written, and the run parked back at `waiting-fix` with `fixAttempts` 1. 55

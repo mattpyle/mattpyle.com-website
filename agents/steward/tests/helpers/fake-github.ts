@@ -48,7 +48,20 @@ export interface FakeGitHub {
     state?: 'open' | 'closed';
     /** Comments on the PR, oldest first. */
     comments?: string[];
+    /** The files the PR changes, as `GET /pulls/{n}/files` lists them. Defaults to none. */
+    files?: string[];
+    /** `owner/name` of the head repository. Defaults to the site repository. */
+    headRepo?: string;
+    /** Set once merged, by the fake's merge route or by a test. */
+    merged?: boolean;
+    mergeSha?: string;
+    /** When set, the merge route refuses with this status and message. */
+    refuseMerge?: { status: number; message: string };
   }>;
+  /** Check runs per commit, as `GET /commits/{sha}/check-runs` lists them. */
+  checkRuns: Map<string, Array<{ name: string; status: string; conclusion: string | null }>>;
+  /** Every merge request, in order. */
+  merges: Array<{ number: number; body: Record<string, unknown> }>;
   /**
    * Every deployment GitHub lists, newest first as the API lists them. Push one
    * to script a preview: `statuses` newest first, `environment_url` on the
@@ -135,6 +148,8 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   branches.set(DEFAULT_BRANCH, base);
 
   const pulls: FakeGitHub['pulls'] = [];
+  const checkRuns: FakeGitHub['checkRuns'] = new Map();
+  const merges: FakeGitHub['merges'] = [];
   const deployments: FakeGitHub['deployments'] = [];
   const issues: FakeGitHub['issues'] = [];
   const calls: string[] = [];
@@ -405,6 +420,37 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       return response(200, { number, html_url: prUrl(number) });
     }
 
+    // GET /commits/{sha}/check-runs
+    const checkRunsRoute = /^\/commits\/([^/]+)\/check-runs$/.exec(route);
+    if (method === 'GET' && checkRunsRoute) {
+      return response(200, { check_runs: checkRuns.get(decodeURIComponent(checkRunsRoute[1])) ?? [] });
+    }
+
+    // GET /pulls/{n}/files
+    const filesRoute = /^\/pulls\/(\d+)\/files$/.exec(route);
+    if (method === 'GET' && filesRoute) {
+      const pull = pulls.find((p) => p.number === Number(filesRoute[1]));
+      if (!pull) return response(404, { message: 'Not Found' });
+      return response(200, (pull.files ?? []).map((filename) => ({ filename })));
+    }
+
+    // PUT /pulls/{n}/merge. Models the head-sha guard and a scripted refusal.
+    const mergeRoute = /^\/pulls\/(\d+)\/merge$/.exec(route);
+    if (method === 'PUT' && mergeRoute) {
+      const number = Number(mergeRoute[1]);
+      merges.push({ number, body });
+      const pull = pulls.find((p) => p.number === number);
+      if (!pull) return response(404, { message: 'Not Found' });
+      if (pull.refuseMerge) return response(pull.refuseMerge.status, { message: pull.refuseMerge.message });
+      if (body.sha && body.sha !== (pull.sha ?? `head-${number}`)) {
+        return response(409, { message: 'Head branch was modified. Review and try the merge again.' });
+      }
+      pull.merged = true;
+      pull.state = 'closed';
+      pull.mergeSha = `merge-${number}`;
+      return response(200, { sha: pull.mergeSha, merged: true });
+    }
+
     // GET /pulls/{n}: what the draft flip reads first.
     if (method === 'GET' && patchPull) {
       const number = Number(patchPull[1]);
@@ -415,7 +461,14 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         html_url: prUrl(number),
         draft: pull.draft,
         state: pull.state ?? 'open',
-        head: { ref: pull.head, sha: pull.sha ?? `head-${number}` },
+        merged: pull.merged === true,
+        merge_commit_sha: pull.mergeSha ?? null,
+        head: {
+          ref: pull.head,
+          sha: pull.sha ?? `head-${number}`,
+          repo: { full_name: pull.headRepo ?? 'mattpyle/mattpyle.com-website' },
+        },
+        base: { ref: pull.base },
         node_id: `PR_${number}`,
       });
     }
@@ -436,6 +489,8 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   return {
     branches,
     pulls,
+    checkRuns,
+    merges,
     deployments,
     issues,
     calls,

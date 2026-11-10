@@ -196,3 +196,12 @@ test('the PR body row shows the pass count and the check that did not pass, with
   assert.match(body, /\| https:\/\/www\.mattpyle\.com\/b\/ \| 0 \| .* \| 1\/1 \|/);
   assert.match(body, /\| https:\/\/www\.mattpyle\.com\/old\/ \| 0 \| .* \| not recorded \|/);
 });
+
+test('the PR body says Steward merges after the checks pass; a dry run says it is never merged', async () => {
+  await publishScorecardRun({ record: run(), perPage: [] });
+  assert.match(hub.pulls[0].body, /Steward merges it after the checks pass/);
+  assert.doesNotMatch(hub.pulls[0].body, /never merges/);
+
+  await publishScorecardRun({ record: run({ iso: '2026-08-15' }), perPage: [], dryRun: true });
+  assert.match(hub.pulls[1].body, /A dry run is never merged/);
+});

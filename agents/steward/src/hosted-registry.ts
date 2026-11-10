@@ -35,8 +35,10 @@ import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from './activiti
 import {
   archiveScorecardRun,
   auditLiveUrl,
+  mergeScorecardPr,
   publishScorecardRun,
   readPublishedScorecard,
+  readScorecardPrChecks,
   resolveAuditUrls,
   resolveRunStamp,
 } from './activities/scorecard.js';
@@ -94,6 +96,8 @@ const activities = {
   auditLiveUrl,
   readPublishedScorecard,
   publishScorecardRun,
+  readScorecardPrChecks,
+  mergeScorecardPr,
   archiveScorecardRun,
   // The scorecard's alerting leg. Both are HTTPS calls that read their
   // configuration from the host's environment — `STEWARD_HEALTHCHECK_BASE` for
