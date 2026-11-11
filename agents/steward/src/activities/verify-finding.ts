@@ -41,7 +41,7 @@ import {
  * activity as `PreviewBypassMissing`.
  *
  * **No workflow change, no `wf.patched` marker.** The workflow issues the same
- * commands with the same inputs; only what the activity compares differs, and
+ * commands with the same inputs; only what the activity compares differs.
  * `tests/workflows/replay.test.ts` replays unchanged (determinism rule 5).
  */
 
