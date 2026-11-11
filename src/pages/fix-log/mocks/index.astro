@@ -1,308 +1,164 @@
 ---
 /**
- * Fix log, design mock round three (MPW-543). One page, edited down from the round-one
- * Front page (commit 0829dab), which Matt called the leader.
+ * Fix log index, design mock round four (MPW-543). Taken from what the site has:
+ * the /changelog hero (ChangelogHero.astro) and its year-grouped rows
+ * (ChangelogLog.astro). Each row is a date, a title and its one-sentence lead, and
+ * the fix's kind at the end, where the changelog puts an entry's type. Each row opens
+ * the fix's own page.
  *
- * What changed from Front page, and why:
- * 1. The lead's title is about half the size, so the first entry starts on the first
- *    screen.
- * 2. The rail holds only before-and-after pairs in numbers, and the change. Before
- *    sits left and after right; the names above them tell them apart, not colour.
- * 3. The screenshots left the rail. They sit full width under the story, phone-shaped
- *    for a phone fix, at the size a real capture would take.
- * 4. Text styles are distinct: titles and the before/after names in the display face,
- *    the story in the body face, dates small and grey in the body face, file names
- *    in mono on a grey chip, numbers large in the display face.
- * 5. Only the lead is told at length. Every other fix is a smaller form of the same
- *    shape: two or three sentences of story on the left, the changed thing as it was
- *    and as it is on the right. Between Specimen and Front page.
- *
- * Prose is welcome; annotation is not. No durations, no "verified after" lines, no
- * note on which system saw what, no identifiers, no types.
- *
- * The site's own colours only. Links are ink, underlined: a fix-log colour is a
- * decision for when the page ships.
- *
- * noindex, out of the sitemap, llms.txt and the nav.
+ * Built in the site's own colours; the H1 fill is ink until the page ships with a
+ * section colour. noindex, out of the sitemap, llms.txt and the nav.
  */
 import Layout from '../../../layouts/Layout.astro';
 import MockBar from '../../../components/fix-log-mocks/MockBar.astro';
-import ShotSlot from '../../../components/fix-log-mocks/ShotSlot.astro';
-import Thing from '../../../components/fix-log-mocks/Thing.astro';
-import { ENTRIES_NEWEST, FIX_ENTRIES, HOW_MADE, fixDate, prUrl } from '../../../data/fix-log-sample';
+import { ENTRIES_NEWEST, TYPE_LABEL, fixDate } from '../../../data/fix-log-sample';
 
-const lead = FIX_ENTRIES.find((e) => e.key === 'MP-48')!;
-const rest = ENTRIES_NEWEST.filter((e) => e.key !== lead.key);
+const groups: { year: string; items: typeof ENTRIES_NEWEST }[] = [];
+for (const e of ENTRIES_NEWEST) {
+  const year = fixDate(e.times.verified).slice(-4);
+  const g = groups.at(-1);
+  if (g && g.year === year) g.items.push(e);
+  else groups.push({ year, items: [e] });
+}
+const latest = fixDate(ENTRIES_NEWEST[0].times.verified);
 ---
 
-<Layout title="Fix log: design mock" description="Design mock: a public log of the fixes this site's loop makes." noindex>
+<Layout title="Fix log: design mock" description="Design mock: problems on this site that its agents found, and the fixes they made." noindex>
   <MockBar />
 
-  <header class="rd-section mast">
-    <h1 class="mast-title">Fix log</h1>
-    <p class="mast-how">{HOW_MADE}</p>
-  </header>
-
-  <article class="rd-section lead" aria-labelledby="lead-title">
-    <h2 class="lead-title" id="lead-title">The fix that helped one post in three, and made the page jump</h2>
-    <p class="lead-deck">An automated fix for phone readers half worked, and broke something nobody had measured.</p>
-    <time class="date" datetime={lead.times.verified}>{fixDate(lead.times.verified)}</time>
-
-    <div class="lead-grid">
-      <div class="story story--lead">
-        <p>On a phone, a post opened with nearly two screens of links and buttons before its first sentence. On the WebMCP post, that sentence started 1,594px down.</p>
-        <p>The fixer’s change collapsed the “On this page” list on phones and laid the action buttons in a row.</p>
-        <p>Once it merged, the same check ran on the live site. One post of three now started on the first screen. Two still did not, so the finding went back to open.</p>
-        <p>The change also did something nobody had checked for. The list was drawn open and a script closed it. On a slow phone the script ran after the page had drawn, so the page jumped under the reader’s thumb. The nightly Scorecard caught it on three posts.</p>
-        <p>A second change, made by hand, serves the list already closed. The page now holds still.</p>
-        <p>The phone layout of a post is now being designed properly, not patched.</p>
+  <div class="rd-section rd-hero fixlog-hero">
+    <h1><span class="rd-fill rd-fill--ink">Fix log</span></h1>
+    <div class="hero-row">
+      <p class="hero-statement">Problems on this site that its agents found, and the fixes they made.</p>
+      <div class="hero-aside facts">
+        <span>{ENTRIES_NEWEST.length} fixes, latest {latest}.</span>
       </div>
-
-      <aside class="rail" aria-label="The fix in numbers">
-        <section class="measure">
-          <h3 class="measure-name">Posts that start on the first phone screen</h3>
-          <div class="measure-pair">
-            <p><span class="side">Before</span><span class="value">0 of 3</span></p>
-            <p><span class="side">After</span><span class="value">1 of 3</span></p>
-          </div>
-        </section>
-        <section class="measure">
-          <h3 class="measure-name">Worst layout shift on a slow phone</h3>
-          <div class="measure-pair">
-            <p><span class="side">After the fix</span><span class="value">0.147</span></p>
-            <p><span class="side">After the repair</span><span class="value">0.0083</span></p>
-          </div>
-        </section>
-        <section class="measure">
-          <h3 class="measure-name">The change</h3>
-          <p class="change-links">
-            <a href={prUrl(lead.pr.number)}>{lead.pr.title}</a>
-            <a href={prUrl(lead.followUp!.number)}>{lead.followUp!.title}</a>
-          </p>
-        </section>
-      </aside>
     </div>
+  </div>
 
-    <div class="lead-shots"><ShotSlot shape="tall" /></div>
-  </article>
-
-  <section class="rd-section more" aria-labelledby="more-title">
-    <h2 class="more-title" id="more-title">More fixes</h2>
-    {rest.map((e) => (
-      <article class="entry" aria-labelledby={`e-${e.key}`}>
-        <div class:list={['entry-grid', e.visual && 'entry-grid--solo']}>
-          <div class="entry-text">
-            <time class="date" datetime={e.times.verified}>{fixDate(e.times.verified)}</time>
-            <h3 class="entry-title" id={`e-${e.key}`}>{e.title}</h3>
-            <p class="story">{e.story}</p>
-          </div>
-          <p class="entry-change"><span class="change-name">The change</span> <a href={prUrl(e.pr.number)}>{e.pr.title}</a></p>
-          {!e.visual && (
-            <div class="entry-pair">
-              <Thing specimen={e.before.specimen} name="Before" />
-              <Thing specimen={e.after.specimen} name="After" />
-            </div>
-          )}
-        </div>
-        {e.visual && <div class="entry-shots"><ShotSlot shape={e.screen === 'phone' ? 'tall' : 'wide'} /></div>}
-      </article>
+  <section class="rd-section log" aria-labelledby="log-title">
+    <h2 id="log-title" class="sr-only">All fixes</h2>
+    {groups.map((g) => (
+      <div class="year-group">
+        <div class="year">{g.year}</div>
+        {g.items.map((e) => (
+          <a href={`/fix-log/mocks/${e.slug}/`} class="row">
+            <time datetime={e.times.verified} class="row-date">{fixDate(e.times.verified)}</time>
+            <span class="row-body">
+              <span class="row-title">{e.title}</span>
+              <span class="row-summary">{e.dek}</span>
+            </span>
+            <span class="row-kind">
+              <span>{TYPE_LABEL[e.type]}</span>
+              {e.status === 'reopened' && <span class="row-open">still open</span>}
+            </span>
+          </a>
+        ))}
+        <div class="rows-end"></div>
+      </div>
     ))}
   </section>
 </Layout>
 
 <style>
-  /* ── The masthead: the page's name, small, over a heavy rule ── */
-  .mast { padding-top: 32px; }
+  /* ── The changelog hero ── */
+  .fixlog-hero { padding-top: 78px; }
 
-  .mast-title {
-    margin: 0;
-    padding-bottom: 10px;
-    border-bottom: 3px solid var(--ink);
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 26px;
-    letter-spacing: -.015em;
-    color: var(--ink);
-  }
+  .facts { font-size: 17px; color: var(--ink-5); }
 
-  .mast-how { margin: 12px 0 0; max-width: 70ch; font-size: 15px; line-height: 1.5; color: var(--ink-6); }
+  /* ── The changelog's rows ── */
+  .log { padding-top: 56px; padding-bottom: 96px; }
 
-  /* ── The lead ── */
-  .lead { padding-top: 40px; }
+  .year-group + .year-group { margin-top: 56px; }
 
-  .lead-title {
-    margin: 0;
-    max-width: 24ch;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 44px;
-    line-height: 1.04;
-    letter-spacing: -.03em;
-    color: var(--ink);
-    text-wrap: balance;
-  }
-
-  .lead-deck {
-    margin: 14px 0 0;
-    max-width: 52ch;
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 22px;
-    line-height: 1.3;
-    letter-spacing: -.01em;
-    color: var(--ink-4);
-  }
-
-  /* Dates: small, grey, the body face. Never mono, so a date never reads as a file. */
-  .date {
-    display: block;
-    margin-top: 12px;
-    font-family: var(--font-body);
-    font-size: 15px;
-    font-variant-numeric: tabular-nums;
+  .year {
+    padding-bottom: 8px;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
     color: var(--ink-6);
   }
 
-  .lead-grid {
+  .row {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-    gap: 56px;
-    margin-top: 28px;
-    padding-top: 28px;
-    border-top: 1px solid var(--rule);
-  }
-
-  /* The story: the body face, the one place long text lives. */
-  .story { margin: 0; font-family: var(--font-body); font-size: 18px; line-height: 1.6; color: var(--ink-3); max-width: 62ch; }
-  .story--lead p { margin: 0 0 1em; font-size: 19px; line-height: 1.65; color: var(--ink-2); }
-  .story--lead p:last-child { margin-bottom: 0; }
-
-  /* ── The rail: numbers and the change, nothing else ── */
-  .rail { display: flex; flex-direction: column; gap: 30px; }
-
-  .measure { padding-top: 14px; border-top: 1px solid var(--ink); }
-
-  .measure-name {
-    margin: 0 0 14px;
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 18px;
-    line-height: 1.25;
-    letter-spacing: -.01em;
-    color: var(--ink);
-  }
-
-  .measure-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-  .measure-pair p { display: flex; flex-direction: column; gap: 4px; margin: 0; }
-
-  .measure-pair p + p { padding-left: 16px; border-left: 1px solid var(--rule); }
-
-  .side { font-family: var(--font-body); font-weight: 600; font-size: 15px; color: var(--ink-5); }
-
-  .value {
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 48px;
-    line-height: 1;
-    letter-spacing: -.035em;
-    color: var(--ink);
-  }
-
-  .change-links { display: flex; flex-direction: column; gap: 10px; margin: 0; font-size: 17px; line-height: 1.4; }
-
-  .change-links a,
-  .entry-change a {
-    color: var(--ink);
-    text-decoration: underline;
-    text-decoration-color: var(--ink-6);
-    text-underline-offset: 3px;
-  }
-
-  .change-links a:hover,
-  .entry-change a:hover { text-decoration-color: var(--ink); }
-
-  .lead-shots { margin-top: 48px; }
-
-  /* ── The other fixes: the lead's shape, smaller ── */
-  .more { padding-top: 80px; padding-bottom: 96px; }
-
-  .more-title {
-    margin: 0;
-    padding-bottom: 10px;
-    border-bottom: 3px solid var(--ink);
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 26px;
-    letter-spacing: -.015em;
-    color: var(--ink);
-  }
-
-  .entry { padding: 40px 0 44px; border-bottom: 1px solid var(--rule); }
-
-  .entry-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-    grid-template-areas: "text pair" "change pair";
-    grid-template-rows: auto 1fr;
-    column-gap: 48px;
+    grid-template-columns: 150px minmax(0, 1fr) max-content;
+    gap: 36px;
     align-items: start;
+    padding: 28px 20px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
   }
 
-  /* Story, then the pair, then the change on a phone; the change stays under the story on a wide screen. */
-  .entry-grid--solo { grid-template-columns: minmax(0, 62ch); grid-template-areas: "text" "change"; }
+  .row:hover { background: var(--tint-writing); }
 
-  .entry-text { grid-area: text; }
-  .entry-pair { grid-area: pair; }
-  .entry-change { grid-area: change; }
+  .rows-end { border-top: 1px solid var(--rule); }
 
-  .entry-text .date { margin-top: 0; }
+  .row-date {
+    padding-top: 7px;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
 
-  .entry-title {
-    margin: 6px 0 12px;
+  .row-body { display: flex; flex-direction: column; gap: 10px; }
+
+  .row-title {
+    max-width: 26ch;
     font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 28px;
-    line-height: 1.15;
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
     letter-spacing: -.025em;
-    color: var(--ink);
   }
 
-  .entry-change { margin: 16px 0 0; font-size: 17px; line-height: 1.45; }
-
-  .change-name {
-    display: block;
-    margin-bottom: 4px;
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 18px;
-    letter-spacing: -.01em;
-    color: var(--ink);
+  .row-summary {
+    max-width: 64ch;
+    font-size: 17.5px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    text-wrap: pretty;
   }
 
-  .entry-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row-kind {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 7px;
+    text-align: right;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+    white-space: nowrap;
+  }
 
-  .entry-shots { margin-top: 28px; }
+  .row-open { color: var(--ink); }
 
-  @media (max-width: 860px) {
-    .lead-grid { grid-template-columns: 1fr; gap: 36px; }
-    .entry-grid { grid-template-columns: 1fr; grid-template-areas: "text" "pair" "change"; grid-template-rows: auto; row-gap: 22px; }
-    .entry-grid--solo { grid-template-areas: "text" "change"; }
-    .entry-change { margin-top: 0; }
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   @media (max-width: 720px) {
-    .mast { padding-top: 20px; }
-    .mast-title, .more-title { font-size: 22px; }
-    .lead { padding-top: 28px; }
-    .lead-title { font-size: 32px; }
-    .lead-deck { font-size: 19px; }
-    .story--lead p { font-size: 18px; }
-    .value { font-size: 40px; }
-    .more { padding-top: 56px; }
-    .entry { padding: 32px 0 36px; }
-    .entry-title { font-size: 24px; }
-    .entry-pair { gap: 10px; }
-    .change-links a, .entry-change a { display: inline-flex; align-items: center; min-height: 44px; }
+    .fixlog-hero { padding-top: 40px; }
+    .log { padding-top: 40px; }
+
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 22px 0;
+      margin: 0;
+    }
+
+    .row-date { padding-top: 0; font-size: 16px; }
+    .row-title { font-size: 25px; line-height: 1.2; }
+    .row-summary { font-size: 17px; }
+    .row-kind { flex-direction: row; gap: 14px; padding-top: 0; text-align: left; font-size: 16px; }
   }
 </style>

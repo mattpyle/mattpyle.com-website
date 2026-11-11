@@ -1,0 +1,286 @@
+---
+/**
+ * Fix log entry, design mock round four (MPW-543). One fix on its own URL, in the
+ * manner of a changelog entry (src/pages/changelog/[slug].astro): a back link, the
+ * title as the page's h1, a one-sentence lead, a date line, the body, and the newer
+ * and older entries at the foot.
+ *
+ * What a fix adds to a changelog entry, from round three's lead, which Matt liked:
+ * 1. A rail beside the story with the numbers, before left and after right, and the
+ *    change. Position and the names tell before from after, never colour.
+ * 2. Under the story, at full width: the screenshots where something visible
+ *    changed, or the changed text itself as it was and as it is. A fix whose whole
+ *    change is a number shows only the rail.
+ *
+ * Prose is welcome; annotation is not. No durations, no note on which system saw
+ * what, no identifiers. The site's own colours only; links are ink and underlined
+ * until the page ships with a section colour.
+ *
+ * noindex, out of the sitemap, llms.txt and the nav.
+ */
+import Layout from '../../../layouts/Layout.astro';
+import MockBar from '../../../components/fix-log-mocks/MockBar.astro';
+import ShotSlot from '../../../components/fix-log-mocks/ShotSlot.astro';
+import Thing from '../../../components/fix-log-mocks/Thing.astro';
+import { ENTRIES_NEWEST, TYPE_LABEL, fixDate, prUrl, type FixEntry } from '../../../data/fix-log-sample';
+
+export function getStaticPaths() {
+  return ENTRIES_NEWEST.map((entry, index) => ({
+    params: { slug: entry.slug },
+    props: { entry, newer: ENTRIES_NEWEST[index - 1] ?? null, older: ENTRIES_NEWEST[index + 1] ?? null },
+  }));
+}
+
+interface Props { entry: FixEntry; newer: FixEntry | null; older: FixEntry | null }
+const { entry: e, newer, older } = Astro.props;
+
+const measures = e.measures ?? [{
+  label: e.glance.label.charAt(0).toUpperCase() + e.glance.label.slice(1),
+  sides: ['Before', 'After'] as [string, string],
+  values: [e.glance.before, e.glance.after] as [string, string],
+}];
+const quoted = !e.measures && e.glance.quoted;
+const changes = [e.pr, ...(e.followUp ? [e.followUp] : [])];
+// The changed text gets its own band unless the rail already shows the whole change.
+const showText = !e.visual && e.before.specimen.kind !== 'figure';
+const url = (x: FixEntry) => `/fix-log/mocks/${x.slug}/`;
+---
+
+<Layout title={e.title} description={e.dek} type="article" noindex>
+  <MockBar />
+
+  <article data-module="fix-entry">
+    <div class="rd-section head">
+      <a href="/fix-log/mocks/" class="back">&larr; all fixes</a>
+      <h1 class="title">{e.title}</h1>
+      <p class="lead">{e.dek}</p>
+      <p class="meta">
+        <time datetime={e.times.verified}>{fixDate(e.times.verified)}</time>
+        <span>{TYPE_LABEL[e.type]}</span>
+        {e.status === 'reopened' && <span class="meta-open">still open</span>}
+      </p>
+    </div>
+
+    <div class="rd-section">
+     <div class="body">
+      <div class="story">
+        {e.body.map((p) => <p>{p}</p>)}
+      </div>
+
+      <aside class="rail" aria-label="The fix in numbers">
+        {measures.map((m) => (
+          <section class="measure">
+            <h2 class="measure-name">{m.label}</h2>
+            <div class="measure-pair">
+              {m.values.map((v, i) => (
+                <p><span class="side">{m.sides[i]}</span><span class:list={['value', quoted && 'value--quoted']}>{quoted ? `“${v}”` : v}</span></p>
+              ))}
+            </div>
+          </section>
+        ))}
+        <section class="measure">
+          <h2 class="measure-name">The change</h2>
+          <p class="change-links">
+            {changes.map((c) => <a href={prUrl(c.number)}>{c.title}</a>)}
+          </p>
+        </section>
+      </aside>
+     </div>
+    </div>
+
+    {e.visual && (
+      <div class="rd-section band"><ShotSlot shape={e.screen === 'phone' ? 'tall' : 'wide'} /></div>
+    )}
+    {showText && (
+      <div class="rd-section band band--text">
+        <Thing specimen={e.before.specimen} name="Before" />
+        <Thing specimen={e.after.specimen} name="After" />
+      </div>
+    )}
+
+    {(newer || older) && (
+      <nav class="rd-section steps" aria-label="Other fixes">
+        {newer && (
+          <a href={url(newer)} class="step">
+            <span class="step-label">newer &middot; {fixDate(newer.times.verified)}</span>
+            <span class="step-title">{newer.title}</span>
+          </a>
+        )}
+        {older && (
+          <a href={url(older)} class="step">
+            <span class="step-label">older &middot; {fixDate(older.times.verified)}</span>
+            <span class="step-title">{older.title}</span>
+          </a>
+        )}
+      </nav>
+    )}
+  </article>
+</Layout>
+
+<style>
+  [data-module="fix-entry"] { padding-bottom: 80px; }
+
+  /* ── The head: the changelog entry's, with a smaller title ── */
+  .head { padding-top: 48px; }
+
+  .back { font-family: var(--font-mono-plex); font-size: 17px; color: var(--ink-5); }
+  .back:hover { color: var(--ink); }
+
+  .title {
+    margin: 22px 0 0;
+    max-width: 22ch;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(40px, 4.6vw, 62px);
+    line-height: 1.02;
+    letter-spacing: -.035em;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+
+  .lead {
+    margin: 22px 0 0;
+    max-width: 44ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 25px;
+    line-height: 1.32;
+    letter-spacing: -.02em;
+    color: var(--ink-3);
+    text-wrap: pretty;
+  }
+
+  /* The changelog's meta line: plain mono words. */
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 22px;
+    row-gap: 6px;
+    margin: 22px 0 0;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .meta-open { color: var(--ink); }
+
+  /* ── The body: the story beside the rail ── */
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: 64px;
+    margin-top: 44px;
+    padding-top: 36px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .story p {
+    margin: 0 0 1.05em;
+    max-width: 62ch;
+    font-family: var(--font-body);
+    font-size: 19px;
+    line-height: 1.65;
+    color: var(--ink-2);
+  }
+
+  .story p:last-child { margin-bottom: 0; }
+
+  .rail { display: flex; flex-direction: column; gap: 30px; }
+
+  .measure { padding-top: 14px; border-top: 1px solid var(--ink); }
+
+  .measure-name {
+    margin: 0 0 14px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 18px;
+    line-height: 1.25;
+    letter-spacing: -.01em;
+    color: var(--ink);
+  }
+
+  .measure-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .measure-pair p { display: flex; flex-direction: column; gap: 4px; margin: 0; min-width: 0; }
+  .measure-pair p + p { padding-left: 16px; border-left: 1px solid var(--rule); }
+
+  .side { font-family: var(--font-body); font-weight: 600; font-size: 15px; color: var(--ink-5); }
+
+  .value {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 48px;
+    line-height: 1;
+    letter-spacing: -.035em;
+    color: var(--ink);
+  }
+
+  .value--quoted { font-weight: 600; font-size: 24px; line-height: 1.2; letter-spacing: -.015em; }
+
+  .change-links { display: flex; flex-direction: column; gap: 10px; margin: 0; font-size: 17px; line-height: 1.4; }
+
+  .change-links a {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--ink-6);
+    text-underline-offset: 3px;
+  }
+
+  .change-links a:hover { text-decoration-color: var(--ink); }
+
+  /* ── The band: screenshots or the changed text, full width ── */
+  .band { margin-top: 56px; }
+
+  .band--text {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  /* ── Newer and older: the changelog entry's foot ── */
+  .steps { margin-top: 76px; }
+
+  .step {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: baseline;
+    padding: 30px 20px 34px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .step:hover { background: var(--tint-writing); }
+
+  .step-label { font-family: var(--font-mono-plex); font-size: 17px; color: var(--ink-6); }
+
+  .step-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    max-width: 26ch;
+  }
+
+  @media (max-width: 860px) {
+    .body { grid-template-columns: 1fr; gap: 36px; }
+  }
+
+  @media (max-width: 720px) {
+    .head { padding-top: 28px; }
+    .title { font-size: 36px; }
+    .lead { font-size: 21px; }
+    .meta { font-size: 16px; }
+    .story p { font-size: 18px; }
+    .value { font-size: 40px; }
+    .value--quoted { font-size: 21px; }
+    .band { margin-top: 40px; }
+    .band--text { gap: 10px; }
+    .steps { margin-top: 56px; }
+    .step { grid-template-columns: 1fr; gap: 8px; padding: 22px 0; margin: 0; }
+    .step-title { font-size: 24px; }
+    .change-links a, .back { display: inline-flex; align-items: center; min-height: 44px; }
+  }
+</style>

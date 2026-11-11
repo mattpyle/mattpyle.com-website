@@ -61,6 +61,14 @@ export interface FixEntry {
    * fix has one, otherwise the shortest true quote. `label` names what is counted.
    */
   glance: { label: string; before: string; after: string; quoted?: boolean };
+  /** The entry page URL segment. */
+  slug: string;
+  /** One sentence under the title, as a changelog entry has. */
+  dek: string;
+  /** The entry page body: what was done and why, as plain paragraphs. No annotation. */
+  body: string[];
+  /** The numbers in the rail. Without it, the rail shows the glance pair. */
+  measures?: { label: string; sides: [string, string]; values: [string, string] }[];
   /** What was done and why, in two or three plain sentences. No annotation. */
   story: string;
   /** For a visual fix, the screen it is about: sets the screenshot shape. */
@@ -79,6 +87,9 @@ export const prUrl = (n: number) => `${PR_BASE}${n}`;
 export const FIX_ENTRIES: FixEntry[] = [
   {
     key: 'MP-144',
+    slug: "agent-guides-said-the-homepage-holds-a-bio",
+    dek: "The guides this site writes for AI agents described a homepage that no longer exists.",
+    body: ["They said the homepage holds a bio. It has none: the bio is on the About page.","An agent asked about Matt for a recruiter was sent to the wrong page first. The line now describes the homepage as it is."],
     story: 'The guides this site writes for AI agents said the homepage holds a bio. It has none: the bio is on the About page. An agent asked about Matt for a recruiter was sent to the wrong page first, so the line now describes the homepage as it is.',
     glance: { label: 'what llms.txt says the homepage holds', before: 'a bio', after: 'name, tagline, latest work', quoted: true },
     claim: 'llms.txt does not call the homepage a bio.',
@@ -118,6 +129,9 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-136',
+    slug: "llms-txt-listed-no-rss-feed",
+    dek: "An agent asked to follow Matt’s writing found no feed to follow.",
+    body: ["An agent starts at llms.txt, the index this site points agents to. It listed fifteen resources and neither RSS feed, though every page of the site advertises one.","Now it lists both."],
     story: 'An agent asked to follow Matt’s writing starts at llms.txt, the index this site points agents to. It listed fifteen resources and neither RSS feed. Now it lists both.',
     glance: { label: 'RSS feeds listed in llms.txt', before: '0', after: '2' },
     claim: 'llms.txt lists both RSS feeds.',
@@ -165,6 +179,9 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-46',
+    slug: "the-public-repository-had-no-licence",
+    dek: "The site invited developers to reuse its code, but nobody legally could.",
+    body: ["The repository had no licence, so the default copyright applied: nobody could copy the code.","The code is now MIT licensed. The writing stays all rights reserved."],
     story: 'The site invites developers to reuse its code, but the repository had no licence, so nobody could legally copy it. The code is now MIT licensed. The writing stays all rights reserved.',
     glance: { label: 'licence on the code', before: 'none', after: 'MIT' },
     claim: 'The repository’s code is MIT licensed.',
@@ -196,6 +213,9 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-130',
+    slug: "screen-readers-heard-slash-writing",
+    dek: "Screen readers spoke a slash before every link in the header, on every page.",
+    body: ["The slash is decoration. A screen reader heard “slash writing, slash projects” each time it reached the navigation.","The slash is still shown, and no longer spoken."],
     story: 'The slash before each link in the header is decoration, but screen readers read it aloud, on every page. It is still shown, and no longer spoken.',
     glance: { label: 'what a screen reader says', before: 'slash writing', after: 'writing', quoted: true },
     claim: 'The navigation is not read aloud as “slash writing”, on three pages.',
@@ -227,6 +247,9 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-107',
+    slug: "the-changelog-feed-carried-no-entry-type",
+    dek: "The changelog page could be filtered by type. Its feed could not.",
+    body: ["A reader who wants only launches can filter the changelog page. The feed carried no types, so a feed reader had nothing to filter on.","Every item in the feed now carries its type."],
     story: 'The changelog page filters entries by type. The feed carried no types, so a feed reader could not do the same. Every item in the feed now carries its type.',
     glance: { label: 'launch tags in the changelog feed', before: '0', after: '3' },
     claim: 'The changelog feed carries each entry’s type.',
@@ -272,6 +295,9 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-109',
+    slug: "the-webmcp-post-linked-through-a-redirect",
+    dek: "Three links in a post sent readers through a redirect. Now they go straight to the page.",
+    body: ["This site’s rule is that every internal link ends with a slash. Three links in the WebMCP post did not, so each click on them made the browser ask twice.","The fix added the three slashes."],
     story: 'Three links in the WebMCP post pointed at /webmcp without its trailing slash, so each click went through a redirect. They now point straight at the page.',
     glance: { label: 'links that go through a redirect', before: '3', after: '0' },
     claim: 'The WebMCP post has no link that goes through a redirect.',
@@ -303,12 +329,16 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-48',
+    slug: "the-fix-that-made-the-page-jump",
+    dek: "An automated fix for phone readers half worked, and broke something nobody had measured.",
+    body: ["On a phone, a post opened with nearly two screens of links and buttons before its first sentence. On the WebMCP post, that sentence started 1,594px down.","The fixer’s change collapsed the “On this page” list on phones and laid the action buttons in a row.","Once it merged, the same check ran on the live site. One post of three now started on the first screen. Two still did not, so the finding went back to open.","The change also did something nobody had checked for. The list was drawn open and a script closed it. On a slow phone the script ran after the page had drawn, so the page jumped under the reader’s thumb. The nightly Scorecard caught it on three posts.","A second change, made by hand, serves the list already closed. The page now holds still.","The phone layout of a post is now being designed properly, not patched."],
+    measures: [{"label":"Posts that start on the first phone screen","sides":["Before","After"],"values":["0 of 3","1 of 3"]},{"label":"Worst layout shift on a slow phone","sides":["After the fix","After the repair"],"values":["0.147","0.0083"]}],
     story: 'On a phone, a post opened with nearly two screens of links and buttons before its first sentence.',
     glance: { label: 'posts that start on the first phone screen', before: '0 of 3', after: '1 of 3' },
     article: true,
     screen: 'phone',
     claim: 'A post starts on the first screen of a phone.',
-    title: 'On a phone, a post started two screens down',
+    title: 'The fix that helped one post in three, and made the page jump',
     type: 'ux',
     kind: 'opportunity',
     status: 'reopened',
@@ -341,6 +371,9 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-31',
+    slug: "the-oldest-post-was-a-dead-end",
+    dek: "A reader who finished the oldest post had nowhere to go next.",
+    body: ["Posts linked only to the next older post, so the oldest one ended on its last paragraph and then the footer.","Every post now ends with a newer and an older link."],
     story: 'Posts linked only to the next older post, so the oldest one ended with nowhere to go. Every post now ends with a newer and an older link.',
     glance: { label: 'links onward from the oldest post', before: '0', after: '1' },
     screen: 'desktop',
