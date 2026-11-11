@@ -61,12 +61,13 @@ that's the property being dogfooded here, on a low-stakes, real target.
   The fix issue carries the finding's `verify:` block verbatim. Once the Action's PR is open, the run
   reads the block and, at step `testing-preview`, waits up to 30 minutes for the PR head's Vercel
   `Preview` deployment, runs the checks against it with the bypass secret, and posts the expected
-  and measured values as one PR comment. A failed check also makes the PR a draft; a person marks
-  it ready after judging it. A finding with no checks skips the step. A preview that never comes,
+  and measured values as one PR comment. A failed check also makes the PR a draft, and the comment
+  names a person's three routes: revise the PR with an `@claude` comment, test it again, or mark it
+  ready and merge. A finding with no checks skips the step. A preview that never comes,
   a build that failed, or a worker without `VERCEL_AUTOMATION_BYPASS_SECRET` is recorded as
   unmeasured, and the merge wait goes on. `steward finding status` prints the result on a `preview:`
   line.
-  The preview's own origin is read as the production origin in every measured value before it is compared; the expectations stay as the finding wrote them. The test runs once per fix attempt, when its PR opens, and cannot be run again for that PR: a new `steward finding fix` opens a new issue and a new PR.
+  The preview's own origin is read as the production origin in every measured value before it is compared; the expectations stay as the finding wrote them. The test runs when the PR opens, and again on the same PR each time its head commit changes, or when `steward finding retest <key>` asks; a run whose merge wait started before retests shipped is tested again by the verb only. A later test rewrites the one comment and keeps a line per earlier result, a pass clears a draft that Steward set, and a PR merged while its last test failed is recorded in the finding's Verification section.
 - **`fixDispatchWorkflow`**: one execution per site (`dispatch/<site>`) on `steward-findings`,
   started by the first slot request. Before each fix attempt opens its issue, the
   `findingWorkflow` sends it the repository paths its finding's cause names and parks at
@@ -200,6 +201,7 @@ steward finding status <key>     # opens with `run: open`, or how and when a clo
 steward finding approve <key>    # signal the verdict; the workflow writes it into the file
 steward finding reject <key> --reason "why"
 steward finding fix <key>        # signal the finding's lifecycle, or start the fixer alone for an older finding
+steward finding retest <key>     # test the open fix PR's head on its preview again (a Workflow Update; refused with the reason when there is no open fix PR)
 steward finding verify <key>     # fixing or reopened finding to resolved or reopened, measured on production
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now

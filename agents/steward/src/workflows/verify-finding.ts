@@ -83,6 +83,13 @@ export interface VerifyFindingInput {
   at: string;
   /** `steward finding verify --reason`: one line for the Verification section. Absent from the lifecycle's child. */
   reason?: string;
+  /**
+   * The lifecycle's last preview test, set only when its fix PR merged while
+   * that test failed (STW-587). The Verification section says so beside the
+   * production result. It changes an activity's input, not a command, so it
+   * needs no marker: a child started without it writes what it always wrote.
+   */
+  previewAtMerge?: string;
 }
 
 export interface VerifyFindingCheck {
@@ -224,6 +231,7 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
       source,
       rows: run.results,
       ...(input.reason ? { reason: input.reason } : {}),
+      ...(input.previewAtMerge ? { previewAtMerge: input.previewAtMerge } : {}),
     },
   });
 
@@ -266,6 +274,7 @@ async function confirmByDeploy(
       rows: [],
       deploy,
       ...(input.reason ? { reason: input.reason } : {}),
+      ...(input.previewAtMerge ? { previewAtMerge: input.previewAtMerge } : {}),
     },
   });
 

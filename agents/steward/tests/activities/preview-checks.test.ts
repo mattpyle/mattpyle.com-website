@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { DEFECT_FINDING, DEFECT_KEY } from '../helpers/finding-fixtures.js';
-import { awaitPrPreview, reportPreviewChecks } from '../../src/activities/findings.js';
+import { awaitFixPrMerge, awaitPrPreview, reportPreviewChecks } from '../../src/activities/findings.js';
+import { FAKE_APP_SLUG } from '../helpers/fake-github-app.js';
 import {
   FIX_ISSUE_VERIFY_HEADING,
   PREVIEW_CHECKS_MARKER,
@@ -127,7 +128,7 @@ test('the comment lists each check with its expected and measured value, and say
   const comment = previewChecksComment(report([PASS, FAIL]));
   assert.ok(comment.startsWith(`${PREVIEW_CHECKS_MARKER}\n`));
   assert.match(comment, /for commit `abcdef1`/);
-  assert.match(comment, /\*\*Check 2 fails on the preview\.\*\* Steward marks this PR a draft\./);
+  assert.match(comment, /\*\*Check 2 fails on the preview\.\*\* Steward made this PR a draft, so that it does not merge by accident\. A person decides what comes next, by one of three routes:/);
   assert.match(comment, /1\. `status` https:\/\/www\.mattpyle\.com\/a\/\n {3}- Expects: status 200\n {3}- Measured: status 200\n {3}- Pass\./);
   assert.match(comment, /2\. `text` 2 URLs \(.*\/b\/, .*\/c\/\)\n {3}- Expects: 0 occurrences of "filter widgets"\n {3}- Measured: 1 of 2 URLs failed/);
   assert.match(comment, /- Fail\.\n$/);
@@ -162,12 +163,12 @@ test('the status line is one line for each outcome', () => {
 test('a failing check posts one comment and drafts the PR; a retry posts nothing more and leaves the draft', async () => {
   const gh = stage();
   const first = await reportPreviewChecks({ ...report([PASS, FAIL]), key: DEFECT_KEY });
-  assert.deepEqual(first, { posted: true, failed: [2], draft: true });
+  assert.deepEqual(first, { posted: true, failed: [2], draft: true, readied: false });
   assert.equal(gh.pulls[0].comments?.length, 1);
   assert.equal(gh.pulls[0].draft, true);
 
   const again = await reportPreviewChecks({ ...report([PASS, FAIL]), key: DEFECT_KEY });
-  assert.deepEqual(again, { posted: false, failed: [2], draft: true });
+  assert.deepEqual(again, { posted: false, failed: [2], draft: true, readied: false });
   assert.equal(gh.pulls[0].comments?.length, 1, 'the marker stops a second comment');
   assert.equal(gh.calls.filter((c) => c === 'POST /graphql').length, 1, 'a draft is not converted twice');
 });
@@ -175,7 +176,7 @@ test('a failing check posts one comment and drafts the PR; a retry posts nothing
 test('a clean run posts its comment and leaves the PR ready', async () => {
   const gh = stage();
   const result = await reportPreviewChecks({ ...report([PASS]), key: DEFECT_KEY });
-  assert.deepEqual(result, { posted: true, failed: [], draft: false });
+  assert.deepEqual(result, { posted: true, failed: [], draft: false, readied: false });
   assert.equal(gh.pulls[0].draft, false);
   assert.ok(!gh.calls.includes('POST /graphql'));
 });
@@ -183,7 +184,7 @@ test('a clean run posts its comment and leaves the PR ready', async () => {
 test('an unmeasured preview posts the reason and drafts nothing', async () => {
   const gh = stage();
   const result = await reportPreviewChecks({ ...report(null, 'the build failed'), key: DEFECT_KEY });
-  assert.deepEqual(result, { posted: true, failed: [], draft: false });
+  assert.deepEqual(result, { posted: true, failed: [], draft: false, readied: false });
   assert.match(gh.pulls[0].comments?.[0] ?? '', /not measured\.\*\* the build failed/);
   assert.equal(gh.pulls[0].draft, false);
 });
@@ -192,7 +193,7 @@ test('a PR a person already merged or closed is commented on but not drafted', a
   const gh = stage();
   gh.pulls[0].state = 'closed';
   const result = await reportPreviewChecks({ ...report([FAIL]), key: DEFECT_KEY });
-  assert.deepEqual(result, { posted: true, failed: [2], draft: false });
+  assert.deepEqual(result, { posted: true, failed: [2], draft: false, readied: false });
   assert.ok(!gh.calls.includes('POST /graphql'), 'GitHub refuses the mutation on a closed PR');
 });
 
@@ -202,6 +203,98 @@ test('a PR already a draft is left a draft and the call still succeeds', async (
   const result = await reportPreviewChecks({ ...report([FAIL]), key: DEFECT_KEY });
   assert.equal(result.draft, true);
   assert.ok(!gh.calls.includes('POST /graphql'));
+});
+
+// ---------------------------------------------------------------------------
+// The retest (STW-587): the comment's later shapes, the draft rule, the push
+// ---------------------------------------------------------------------------
+
+test('a failure names the three routes with the finding key; a closed PR is said to be left alone', () => {
+  const comment = previewChecksComment(report([FAIL]), { key: DEFECT_KEY, draft: { kind: 'drafted' } });
+  assert.match(comment, /1\. The fix is wrong: comment `@claude` on this PR with what to change\. Steward tests the new commit by itself\./);
+  assert.ok(comment.includes(`2. The check or Steward is wrong: correct it, then run \`steward finding retest ${DEFECT_KEY}\`.`));
+  assert.match(comment, /3\. Judge it yourself: mark this PR ready and merge it\. The finding's Verification section records that it merged over a failed preview test\./);
+  const closed = previewChecksComment(report([FAIL]), { key: DEFECT_KEY, draft: { kind: 'not-open' } });
+  assert.match(closed, /\*\*Check 2 fails on the preview\.\*\* The PR is no longer open, so Steward left its draft flag alone\./);
+  assert.ok(!closed.includes('three routes'));
+});
+
+test('a later pass says what happened to the draft, and lists each earlier result with its commit', () => {
+  const earlier = [
+    { sha: '1111111aaaa', line: 'check 2 of 2 fails on the preview; PR marked draft' },
+    { sha: null, line: 'unmeasured: the build failed' },
+  ];
+  const readied = previewChecksComment(report([PASS]), { key: DEFECT_KEY, earlier, draft: { kind: 'readied' } });
+  assert.match(
+    readied,
+    /\*\*All 1 check passes on the preview\.\*\* Steward made this PR a draft after an earlier failed test, and has marked it ready for review again\./,
+  );
+  assert.ok(
+    readied.endsWith(
+      'Earlier tests of this PR, oldest first:\n\n- `1111111`: check 2 of 2 fails on the preview; PR marked draft\n- no commit: unmeasured: the build failed\n',
+    ),
+  );
+  assert.match(
+    previewChecksComment(report([PASS]), { draft: { kind: 'kept', by: 'mattpyle' } }),
+    /still a draft: mattpyle made it one, not Steward, so Steward leaves it\./,
+  );
+  assert.match(previewChecksComment(report([PASS]), { draft: { kind: 'kept', by: null } }), /still a draft, and Steward cannot tell who made it one/);
+  // An unmeasured retest keeps the history too.
+  assert.match(previewChecksComment(report(null, 'the build failed'), { earlier }), /not measured\.\*\* the build failed[\s\S]*Earlier tests of this PR/);
+});
+
+test('a retest rewrites the one comment in place, and a pass clears the draft Steward set', async () => {
+  const gh = stage();
+  await reportPreviewChecks({ ...report([PASS, FAIL]), key: DEFECT_KEY });
+  assert.equal(gh.pulls[0].draft, true);
+  const earlier = [{ sha: 'abcdef1234567', line: 'check 2 of 2 fails on the preview; PR marked draft' }];
+  const pass = await reportPreviewChecks({ ...report([PASS]), sha: '9999999bbbb', key: DEFECT_KEY, earlier });
+  assert.deepEqual(pass, { posted: false, failed: [], draft: false, readied: true });
+  assert.equal(gh.pulls[0].draft, false);
+  assert.equal(gh.pulls[0].comments?.length, 1, 'still one comment');
+  assert.match(gh.pulls[0].comments?.[0] ?? '', /for commit `9999999`[\s\S]*- `abcdef1`: check 2 of 2 fails/);
+  assert.ok(gh.calls.some((c) => /^PATCH .*\/issues\/comments\/7000$/.test(c)), 'an edit, not a post');
+});
+
+test('a pass leaves a PR opened as a draft: no timeline event names Steward', async () => {
+  const gh = stage();
+  gh.pulls[0].draft = true;
+  const result = await reportPreviewChecks({ ...report([PASS]), key: DEFECT_KEY });
+  assert.deepEqual(result, { posted: true, failed: [], draft: true, readied: false });
+  assert.equal(gh.pulls[0].draft, true);
+  assert.ok(!gh.calls.includes('POST /graphql'), 'no ready mutation');
+  assert.match(gh.pulls[0].comments?.[0] ?? '', /Steward cannot tell who made it one/);
+});
+
+test("a pass leaves a draft whose newest conversion is a person's, even after Steward's", async () => {
+  const gh = stage();
+  gh.pulls[0].draft = true;
+  gh.pulls[0].timeline = [
+    { event: 'convert_to_draft', actor: { login: `${FAKE_APP_SLUG}[bot]` } },
+    { event: 'ready_for_review', actor: { login: 'mattpyle' } },
+    { event: 'convert_to_draft', actor: { login: 'mattpyle' } },
+  ];
+  const result = await reportPreviewChecks({ ...report([PASS]), key: DEFECT_KEY });
+  assert.equal(result.readied, false);
+  assert.equal(gh.pulls[0].draft, true);
+  assert.match(gh.pulls[0].comments?.[0] ?? '', /mattpyle made it one, not Steward/);
+});
+
+test('the merge wait ends with pushed only when asked, and only for another head', async () => {
+  const gh = stage();
+  await rejectsWith(awaitFixPrMerge(PR, { retestAfter: 'abcdef1234567' }), 'PrStillOpen', false);
+  gh.pulls[0].sha = 'fedcba7654321';
+  await rejectsWith(awaitFixPrMerge(PR), 'PrStillOpen', false);
+  assert.deepEqual(await awaitFixPrMerge(PR, { retestAfter: 'abcdef1234567' }), {
+    prUrl: PR,
+    state: 'pushed',
+    mergeSha: null,
+    at: null,
+    headSha: 'fedcba7654321',
+  });
+  gh.pulls[0].merged = true;
+  gh.pulls[0].mergeSha = 'merge-7';
+  assert.equal((await awaitFixPrMerge(PR, { retestAfter: 'abcdef1234567' })).state, 'merged', 'a merge beats a new head');
 });
 
 // ---------------------------------------------------------------------------

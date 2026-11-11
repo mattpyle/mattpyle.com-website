@@ -67,6 +67,7 @@ import {
 } from './workflows/review-post.js';
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
 import { FixRefused, followFix } from './lib/finding-fix.js';
+import { RetestRefused, requestRetest } from './lib/finding-retest.js';
 import {
   FIX_NEXT_STEP,
   SyncError,
@@ -2068,7 +2069,12 @@ finding
         if (state.prUrl) console.log(`${at}PR: ${state.prUrl}`);
         if (state.issueUrl) console.log(`${at}issue: ${state.issueUrl}`);
       }
-      if (state.previewResult) console.log(`${at}preview: ${state.previewResult}`);
+      if (state.previewResult) {
+        const sha = state.previewSha ? ` at ${state.previewSha.slice(0, 7)}` : '';
+        const n = state.previewTests ? ` (test ${state.previewTests})` : '';
+        console.log(`${at}preview: ${state.previewResult}${sha}${n}`);
+      }
+      if (state.retestRequested) console.log(`${at}retest: asked for; the next preview test starts now`);
       const waiting = waitingReasonLine(state);
       if (waiting) console.log(`${at}${waiting}`);
       if (state.step === 'waiting-slot') {
@@ -2340,6 +2346,36 @@ finding
       console.log(`  ${elapsed()}  PR ${fixed.prUrl}`);
       console.log('');
       console.log(`  ${lifecycleId} now waits for the merge. \`steward finding status ${key}\` shows the step.`);
+      console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('retest')
+  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .description(
+    "Test the open fix PR's head on its preview again, after the check or Steward was corrected. A new commit on the PR is tested without this",
+  )
+  .action(async (key: string, opts: { site: string }) => {
+    const c = await client();
+    try {
+      let accepted;
+      try {
+        accepted = await requestRetest(c, opts.site, key, new Date().toISOString());
+      } catch (err) {
+        if (err instanceof RetestRefused) {
+          await c.connection.close();
+          fail(err.message);
+        }
+        throw err;
+      }
+      const sha = accepted.testedSha ? ` (last tested at ${accepted.testedSha.slice(0, 7)})` : '';
+      console.log('');
+      console.log(`  Steward tests ${accepted.prUrl}${sha} again: preview test ${accepted.test}.`);
+      console.log(`  \`steward finding status ${key}\` shows the result once the preview is measured.`);
       console.log('');
     } finally {
       await c.connection.close();
