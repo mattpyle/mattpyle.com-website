@@ -25,7 +25,7 @@ To set up WebMCP on your website, you need:
 2. A script that registers tool objects on `document.modelContext`
 3. Handlers that validate their own inputs
 
-This post walks through the six tools surfaced through [WebMCP](/webmcp) on this site, how they were implemented, and what I found while building them.
+This post walks through the six tools surfaced through [WebMCP](/webmcp/) on this site, how they were implemented, and what I found while building them.
 
 ## What is WebMCP?
 
@@ -87,7 +87,7 @@ Some things to notice about the above code sample:
 
 This site is my personal website for experimentation, learning, and writing. I have implemented WebMCP to learn for myself and share those learnings with others.
 
-This website has four read tools and two write tools, all listed on [/webmcp](/webmcp), where they can be run. The tools are:
+This website has four read tools and two write tools, all listed on [/webmcp](/webmcp/), where they can be run. The tools are:
 
 | Tool                 | Kind  | Inputs            | Returns                                               |
 | -------------------- | ----- | ----------------- | ----------------------------------------------------- |
@@ -228,4 +228,4 @@ Your tool's response is the copy the user reads. `set_appearance` returns `{"mod
 
 I had a lot of fun experimenting with WebMCP and learning about what is possible. Recent developments over the past few weeks have increased the momentum around the API and I suspect adoption will continue to ramp up.
 
-The six tools are live on [/webmcp](/webmcp), which is my living reference for what this site registers. Each tool is documented and includes a Run button, so you can call them with no setup.
+The six tools are live on [/webmcp](/webmcp/), which is my living reference for what this site registers. Each tool is documented and includes a Run button, so you can call them with no setup.
