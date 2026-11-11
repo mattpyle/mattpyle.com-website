@@ -3,7 +3,7 @@ import { WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError, type Clien
 import { FINDINGS_DEFAULT_SITE, GITHUB_REPO, PROD_ORIGIN, QUEUE_FINDINGS } from '../config.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { listRepoDirectory, readRepoFile, writeRepoFile } from '../lib/github-contents.js';
-import { authRetryable, convertPrToDraft, gh } from '../lib/github.js';
+import { authRetryable, convertPrToDraft, gh, lastDraftedBy, markPrReady, stewardBotLogin } from '../lib/github.js';
 import { log } from '../lib/logger.js';
 import {
   compareContains,
@@ -25,6 +25,8 @@ import {
   parseIssueUrl,
   parsePrUrl,
   previewChecksComment,
+  type PreviewDraftAction,
+  type PreviewEarlierResult,
   findingsIndexPath,
   PREVIEW_CHECKS_MARKER,
   setFindingReturned,
@@ -369,8 +371,13 @@ export async function readFixPr(prUrl: string): Promise<FixPrState> {
 
 export interface FixPrOutcome {
   prUrl: string;
-  /** `conflicting` only when the caller asked for it with `reportConflict`. */
-  state: 'merged' | 'closed' | 'conflicting';
+  /**
+   * `conflicting` only when the caller asked for it with `reportConflict`, and
+   * `pushed` only when it asked with `retestAfter`.
+   */
+  state: 'merged' | 'closed' | 'conflicting' | 'pushed';
+  /** `pushed` only: the PR's new head commit. */
+  headSha?: string;
   /** The merge commit on the base branch, or null for a PR closed unmerged. */
   mergeSha: string | null;
   /** ISO 8601: when it merged or closed. */
@@ -384,6 +391,13 @@ export interface AwaitFixPrMergeOptions {
    * attempt scheduled without it keeps the two outcomes its workflow code reads.
    */
   reportConflict?: boolean;
+  /**
+   * The head commit the last preview test measured (STW-587). When the open
+   * PR's head is another commit, the wait ends with `pushed` and the new head,
+   * so the workflow tests the new preview. Only the issue path passes it: an
+   * attempt scheduled without it keeps the outcomes its workflow code reads.
+   */
+  retestAfter?: string;
 }
 
 /**
@@ -416,6 +430,11 @@ export async function awaitFixPrMerge(prUrl: string, options: AwaitFixPrMergeOpt
   }
   if (data.state === 'closed') {
     return { prUrl, state: 'closed', mergeSha: null, at: (data.closed_at as string | null) ?? null };
+  }
+  const head = String(data.head?.sha ?? '');
+  if (typeof options.retestAfter === 'string' && head && head !== options.retestAfter) {
+    log.info({ activity: 'awaitFixPrMerge', pr: prUrl, tested: options.retestAfter, head }, 'the fix PR has a new head commit');
+    return { prUrl, state: 'pushed', mergeSha: null, at: null, headSha: head };
   }
   if (options.reportConflict === true && prConflicts(data)) {
     log.info({ activity: 'awaitFixPrMerge', pr: prUrl }, 'the fix PR conflicts with its base');
@@ -903,51 +922,98 @@ export async function awaitPrPreview(input: AwaitPrPreviewInput): Promise<PrPrev
 
 export interface ReportPreviewChecksInput extends PreviewChecksReport {
   key: string;
+  /**
+   * Earlier tests of the same PR, oldest first (STW-587). Absent from a first
+   * test, and from an attempt scheduled before retests existed.
+   */
+  earlier?: PreviewEarlierResult[];
 }
 
 export interface ReportPreviewChecksResult {
-  /** True when this call posted the comment; false when a retry found it already there. */
+  /** True when this call posted the comment; false when it rewrote the one already there. */
   posted: boolean;
   /** The numbers of the checks that failed. */
   failed: number[];
-  /** True when the PR is a draft after the call: a failed check turned it, or it already was. */
+  /** True when the PR is a draft after the call: a failed check turned it, or a draft Steward did not set stays. */
   draft: boolean;
+  /** True when every check passed and Steward cleared the draft it had set. */
+  readied?: boolean;
 }
 
 /**
- * The preview test's write: one comment on the fix PR with the measured values,
- * and, when a check failed, the PR turned into a draft.
+ * The preview test's write: the PR's draft flag, then Steward's one comment
+ * with the measured values.
  *
- * Safe to retry. The comment carries {@link PREVIEW_CHECKS_MARKER} and is
- * posted once. The draft conversion leaves a draft alone, and skips a PR that
- * is no longer open, since GitHub refuses the mutation there. Steward never
- * turns a draft back to ready: a person judges the failure.
+ * The draft first, because the comment says what happened to it. A failed
+ * check turns an open PR into a draft. A pass clears a draft only when
+ * Steward's own bot set it: the newest `convert_to_draft` event on the PR's
+ * timeline names the actor ({@link lastDraftedBy}). A draft a person set, a
+ * PR opened as a draft, or a bot identity that cannot be read leaves the
+ * draft alone, and the comment says who set it or that Steward cannot tell.
+ * An unmeasured preview touches nothing.
+ *
+ * Then the comment: one per PR, found by {@link PREVIEW_CHECKS_MARKER}. The
+ * first test posts it; a later test rewrites it in place, with one line per
+ * earlier result. Safe to retry: the draft calls leave a PR already in the
+ * wanted state alone, and the rewrite writes the same body. A retry after the
+ * draft was cleared reads the PR as ready and drops the "marked ready" sentence.
  */
 export async function reportPreviewChecks(input: ReportPreviewChecksInput): Promise<ReportPreviewChecksResult> {
   const pr = parsePrUrl(input.prUrl);
   if (!pr) throw ApplicationFailure.nonRetryable(`${input.prUrl} is not a pull request URL.`, 'FindingMalformed');
-  const comments = (await gh(`/repos/${pr.repo}/issues/${pr.number}/comments?per_page=100`)) as { body?: string | null }[];
-  let posted = false;
-  if (!comments.some((c) => (c.body ?? '').includes(PREVIEW_CHECKS_MARKER))) {
-    await gh(`/repos/${pr.repo}/issues/${pr.number}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({ body: previewChecksComment(input) }),
-    });
-    posted = true;
-  }
   const failed = failedChecks(input.results);
   let draft = false;
-  if (failed.length > 0) {
+  let readied = false;
+  let action: PreviewDraftAction = { kind: 'none' };
+  if (input.results && failed.length > 0) {
     const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
     if (data.state === 'open') {
       await convertPrToDraft(pr.repo, pr.number);
       draft = true;
+      action = { kind: 'drafted' };
     } else {
       draft = data.draft === true;
+      action = { kind: 'not-open' };
+    }
+  } else if (input.results) {
+    const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+    if (data.state === 'open' && data.draft === true) {
+      const by = await lastDraftedBy(pr.repo, pr.number);
+      let bot: string | null = null;
+      try {
+        bot = await stewardBotLogin();
+      } catch (err) {
+        log.warn({ activity: 'reportPreviewChecks', key: input.key, err: String(err) }, "Steward's bot login could not be read");
+      }
+      if (by !== null && bot !== null && by === bot) {
+        await markPrReady(pr.repo, pr.number);
+        readied = true;
+        action = { kind: 'readied' };
+      } else {
+        draft = true;
+        action = { kind: 'kept', by: by !== null && by !== bot ? by : null };
+      }
     }
   }
-  log.info({ activity: 'reportPreviewChecks', key: input.key, prUrl: input.prUrl, posted, failed, draft }, 'preview checks reported');
-  return { posted, failed, draft };
+
+  const body = previewChecksComment(input, { key: input.key, earlier: input.earlier ?? [], draft: action });
+  const comments = (await gh(`/repos/${pr.repo}/issues/${pr.number}/comments?per_page=100`)) as {
+    id?: number;
+    body?: string | null;
+  }[];
+  const existing = comments.find((c) => (c.body ?? '').includes(PREVIEW_CHECKS_MARKER));
+  let posted = false;
+  if (!existing) {
+    await gh(`/repos/${pr.repo}/issues/${pr.number}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+    posted = true;
+  } else if (existing.body !== body) {
+    await gh(`/repos/${pr.repo}/issues/comments/${existing.id}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+  }
+  log.info(
+    { activity: 'reportPreviewChecks', key: input.key, prUrl: input.prUrl, posted, failed, draft, readied },
+    'preview checks reported',
+  );
+  return { posted, failed, draft, readied };
 }
 
 export interface WriteFindingReturnedInput {

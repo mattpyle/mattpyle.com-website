@@ -452,3 +452,56 @@ export async function convertPrToDraft(repo: string, number: number): Promise<vo
     );
   }
 }
+
+/**
+ * Marks a draft PR ready for review: GraphQL's `markPullRequestReadyForReview`,
+ * the inverse of {@link convertPrToDraft}. A PR that is not a draft is left
+ * alone, which makes a retry a no-op. The caller decides whether Steward may
+ * clear the draft at all; see {@link lastDraftedBy}.
+ */
+export async function markPrReady(repo: string, number: number): Promise<void> {
+  const data = await gh(`/repos/${repo}/pulls/${number}`);
+  if (data.draft !== true) return;
+  const reply = await gh('/graphql', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: 'mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { isDraft } } }',
+      variables: { id: data.node_id },
+    }),
+  });
+  if (Array.isArray(reply.errors) && reply.errors.length > 0) {
+    throw new Error(
+      `GitHub refused to mark ${repo}#${number} ready: ${reply.errors.map((e: { message?: string }) => e.message).join('; ')}`,
+    );
+  }
+}
+
+/** Timeline pages read before giving up: 1,000 events is far past any fix PR. */
+const TIMELINE_PAGES = 10;
+
+/**
+ * Who last turned the PR into a draft: the actor of the newest
+ * `convert_to_draft` event on its issue timeline, or null when it has none. A
+ * PR opened as a draft has no such event, so its draft has no actor Steward
+ * can name.
+ */
+export async function lastDraftedBy(repo: string, number: number): Promise<string | null> {
+  let actor: string | null = null;
+  for (let page = 1; page <= TIMELINE_PAGES; page++) {
+    const events = (await gh(`/repos/${repo}/issues/${number}/timeline?per_page=100&page=${page}`)) as {
+      event?: string;
+      actor?: { login?: string } | null;
+    }[];
+    if (!Array.isArray(events)) break;
+    for (const e of events) {
+      if (e.event === 'convert_to_draft') actor = e.actor?.login ?? null;
+    }
+    if (events.length < 100) break;
+  }
+  return actor;
+}
+
+/** The bot login GitHub shows for Steward's own writes: `<slug>[bot]`. */
+export async function stewardBotLogin(): Promise<string> {
+  return `${(await resolveGitHubApp()).slug}[bot]`;
+}

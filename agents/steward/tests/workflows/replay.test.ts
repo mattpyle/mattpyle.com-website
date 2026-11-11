@@ -92,7 +92,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin` | The scheduled path: `checkActionUsage` and the `nightly-scorecard` health signal. It needs a run started by the schedule, and none is recorded. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin` | A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. The preview test (`testOnPreview`). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin` | A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin` | The checks path (`runFindingChecks`, then `writeFindingVerification`, resolved or reopened). The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin` | All three markers on current code: `listFixableFindings`, the restart start and signal, the close cancel. A reconcile that throws (`reportRunHealth` before the rethrow). |
@@ -691,6 +691,49 @@ test('a lifecycle run whose PR closed before the preview test replays that attem
     { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-post-describes-removed-filter-pills--writing-accessibility-and-ai',
+  );
+});
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the retest (STW-587): file
+ * approve, one `fix`, a slot the activity granted, the issue, the PR, the
+ * preview test with one check that passed, the merge wait, the PR closed
+ * unmerged, the return written, and the run parked back at `waiting-fix` with
+ * `fixAttempts` 1. 89 events. It is the shape of the one lifecycle run open
+ * when this shipped: a passed preview test, then the merge wait.
+ *
+ * New code races that merge wait against the `retest` Update in a cancellation
+ * scope and passes `retestAfter` to the poll. Neither issues a command, so this
+ * replays with no `patched` marker (determinism rule 5); the new commands start
+ * only after a `pushed` result or an accepted Update, which no earlier history
+ * holds. The docblock of `findingWorkflow`, "The retest", says why.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at 32b0410, the
+ * worktree before its first edit) against the time-skipping server with mocked
+ * activities, so it holds no real finding text.
+ *
+ * Probe (2026-11-10): injecting `await wf.sleep('1 second')` before the poll in
+ * `mergeOrRetest` made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 78, ActivityTaskScheduled)
+ * ```
+ *
+ * It was the only failure: no other fixture holds a preview test that found
+ * checks, so no other one reaches the new merge wait. The sleep was removed and
+ * all 24 replays re-ran green.
+ */
+const findingPreviewPassedBeforeRetestPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-preview-passed-before-retest.bin', import.meta.url),
+);
+
+test('a lifecycle run that passed its preview test before the retest replays its merge wait unchanged', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingPreviewPassedBeforeRetestPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/agent-readiness-retest-fixture--webmcp-index-json',
   );
 });
 

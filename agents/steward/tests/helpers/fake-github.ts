@@ -24,7 +24,7 @@
  * frames away.
  */
 
-import { FAKE_INSTALLATION_TOKEN, installFakeAppCredentials } from './fake-github-app.js';
+import { FAKE_APP_SLUG, FAKE_INSTALLATION_TOKEN, installFakeAppCredentials } from './fake-github-app.js';
 
 export interface FakeRepoFile {
   text: string;
@@ -48,6 +48,12 @@ export interface FakeGitHub {
     state?: 'open' | 'closed';
     /** Comments on the PR, oldest first. */
     comments?: string[];
+    /**
+     * The PR's timeline as `GET /issues/{n}/timeline` lists it, oldest first.
+     * The draft mutations append `convert_to_draft` and `ready_for_review` by
+     * the app's bot; a test pushes a person's event itself.
+     */
+    timeline?: Array<{ event: string; actor: { login: string } | null }>;
     /** The files the PR changes, as `GET /pulls/{n}/files` lists them. Defaults to none. */
     files?: string[];
     /** `owner/name` of the head repository. Defaults to the site repository. */
@@ -359,11 +365,35 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     const commentedPull = prComments ? pulls.find((p) => p.number === Number(prComments[1])) : undefined;
     if (commentedPull && !issues.some((i) => i.number === commentedPull.number)) {
       commentedPull.comments ??= [];
-      if (method === 'GET') return response(200, commentedPull.comments.map((text) => ({ body: text })));
+      // A comment's id is its PR number times 1000 plus its index, so the edit route finds it.
+      if (method === 'GET') {
+        return response(200, commentedPull.comments.map((text, i) => ({ id: commentedPull.number * 1000 + i, body: text })));
+      }
       if (method === 'POST') {
         commentedPull.comments.push(String(body.body));
         return response(201, {});
       }
+    }
+
+    // PATCH /issues/comments/{id}: an edit of a PR comment the GET above numbered.
+    const editComment = /^\/issues\/comments\/(\d+)$/.exec(route);
+    if (method === 'PATCH' && editComment) {
+      const id = Number(editComment[1]);
+      const pull = pulls.find((p) => p.number === Math.floor(id / 1000));
+      const index = id % 1000;
+      if (!pull?.comments || index >= pull.comments.length) return response(404, { message: 'Not Found' });
+      pull.comments[index] = String(body.body);
+      return response(200, { id, body: pull.comments[index] });
+    }
+
+    // GET /issues/{n}/timeline on a pull request, one page.
+    const timelineRoute = /^\/issues\/(\d+)\/timeline$/.exec(route);
+    if (method === 'GET' && timelineRoute) {
+      const pull = pulls.find((p) => p.number === Number(timelineRoute[1]));
+      if (!pull) return response(404, { message: 'Not Found' });
+      const page = Number(url.searchParams.get('page') ?? '1');
+      const perPage = Number(url.searchParams.get('per_page') ?? '30');
+      return response(200, (pull.timeline ?? []).slice((page - 1) * perPage, page * perPage));
     }
 
     // GET /deployments?sha=&environment=, and a deployment's statuses.
@@ -473,14 +503,23 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       });
     }
 
-    // POST /graphql: `convertPullRequestToDraft`, the one mutation this codebase sends.
+    // POST /graphql: the two draft mutations this codebase sends, each recorded
+    // on the timeline as the app's bot.
     if (method === 'POST' && url.pathname === '/graphql') {
       const pull = pulls.find((p) => `PR_${p.number}` === body.variables?.id);
-      if (!pull || !String(body.query).includes('convertPullRequestToDraft')) {
-        return response(200, { errors: [{ message: 'not modelled' }] });
+      const query = String(body.query);
+      const bot = { login: `${FAKE_APP_SLUG}[bot]` };
+      if (pull && query.includes('convertPullRequestToDraft')) {
+        pull.draft = true;
+        (pull.timeline ??= []).push({ event: 'convert_to_draft', actor: bot });
+        return response(200, { data: { convertPullRequestToDraft: { pullRequest: { isDraft: true } } } });
       }
-      pull.draft = true;
-      return response(200, { data: { convertPullRequestToDraft: { pullRequest: { isDraft: true } } } });
+      if (pull && query.includes('markPullRequestReadyForReview')) {
+        pull.draft = false;
+        (pull.timeline ??= []).push({ event: 'ready_for_review', actor: bot });
+        return response(200, { data: { markPullRequestReadyForReview: { pullRequest: { isDraft: false } } } });
+      }
+      return response(200, { errors: [{ message: 'not modelled' }] });
     }
 
     throw new Error(`fake GitHub has no route for ${method} ${route} — add it deliberately`);

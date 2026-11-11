@@ -887,6 +887,11 @@ export interface Verification {
   deploy?: VerificationDeploy;
   /** `steward finding verify --reason`: one line, attributed to the CLI. */
   reason?: string;
+  /**
+   * The lifecycle's last preview test, when the fix PR merged while it
+   * failed: its {@link previewResultLine} and the commit it measured.
+   */
+  previewAtMerge?: string;
 }
 
 /** A row's URL, or the count and every URL of a list: `urlLabel` in `verify-checks.ts`, kept here since this file takes no imports. */
@@ -926,6 +931,9 @@ export function buildVerificationSection(verification: Verification): string {
   if (verification.reason) {
     if (verification.rows.length > 0) lines.push('');
     lines.push(`From the CLI: ${verification.reason}`);
+  }
+  if (verification.previewAtMerge) {
+    lines.push('', `The fix PR merged while its last preview test failed: ${verification.previewAtMerge}.`);
   }
   while (lines[lines.length - 1] === '') lines.pop();
   return lines.join('\n');
@@ -1253,27 +1261,101 @@ function checkNumbers(numbers: number[]): string {
   return `Checks ${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`;
 }
 
+/** One earlier preview test of the same PR, for the comment's history lines. */
+export interface PreviewEarlierResult {
+  /** The commit that test measured, or null when it measured none. */
+  sha: string | null;
+  /** Its {@link previewResultLine}. */
+  line: string;
+}
+
+/**
+ * What the preview test's write did to the PR's draft flag, for the lead.
+ *
+ * - `drafted`: a check failed, and the PR is a draft that Steward set.
+ * - `not-open`: a check failed on a PR that is merged or closed; nothing to set.
+ * - `readied`: every check passed, and Steward cleared the draft it had set.
+ * - `kept`: every check passed, but the draft stays: `by` set it, or no one
+ *   Steward can name did (`by` null).
+ * - `none`: nothing to say about the draft.
+ */
+export type PreviewDraftAction =
+  | { kind: 'drafted' }
+  | { kind: 'not-open' }
+  | { kind: 'readied' }
+  | { kind: 'kept'; by: string | null }
+  | { kind: 'none' };
+
+export interface PreviewCommentContext {
+  /** The finding key, for the `retest` command the failure lead names. */
+  key?: string;
+  /** Earlier tests of this PR, oldest first. */
+  earlier?: PreviewEarlierResult[];
+  draft?: PreviewDraftAction;
+}
+
+/** The three routes a failed test leaves a person, in the order the comment gives them. */
+export function previewFailureRoutes(key: string): string[] {
+  return [
+    '1. The fix is wrong: comment `@claude` on this PR with what to change. Steward tests the new commit by itself.',
+    `2. The check or Steward is wrong: correct it, then run \`steward finding retest ${key}\`. Steward tests this PR's head again.`,
+    "3. Judge it yourself: mark this PR ready and merge it. The finding's Verification section records that it merged over a failed preview test.",
+  ];
+}
+
+/** The commit an earlier result names, or `no commit` when it measured none. */
+function earlierLine(result: PreviewEarlierResult): string {
+  return `- ${result.sha ? `\`${result.sha.slice(0, 7)}\`` : 'no commit'}: ${result.line}`;
+}
+
 /**
  * Steward's one comment on a fix PR after its preview test: each check's
- * expected and measured value, and a lead line that says whether the PR was
- * marked a draft. Pure, for the test.
+ * expected and measured value, a lead line that says what happened to the
+ * PR's draft flag and, after a failure, the three routes a person has. A
+ * later test rewrites the comment, and each earlier result keeps one line with
+ * its commit. Pure, for the test.
  */
-export function previewChecksComment(report: PreviewChecksReport): string {
+export function previewChecksComment(report: PreviewChecksReport, context: PreviewCommentContext = {}): string {
   const sha = report.sha ? ` for commit \`${report.sha.slice(0, 7)}\`` : '';
   const lines = [PREVIEW_CHECKS_MARKER, `Steward ran the finding's \`verify:\` checks on this PR's preview${sha}, before the merge.`, ''];
+  const earlier = context.earlier ?? [];
+  const history = (): void => {
+    if (earlier.length === 0) return;
+    lines.push('', `Earlier tests of this PR, oldest first:`, '', ...earlier.map(earlierLine));
+  };
   if (!report.results) {
     lines.push(
       `> **The preview was not measured.** ${report.note ?? 'No reason was recorded.'} The same checks run on production after the merge.`,
     );
+    history();
     return `${lines.join('\n')}\n`;
   }
   const failed = failedChecks(report.results);
+  const draft = context.draft ?? { kind: 'none' };
   if (failed.length > 0) {
-    lines.push(
-      `> **${checkNumbers(failed)} ${failed.length === 1 ? 'fails' : 'fail'} on the preview.** Steward marks this PR a draft. A person marks it ready after judging it.`,
-    );
+    const lead = `> **${checkNumbers(failed)} ${failed.length === 1 ? 'fails' : 'fail'} on the preview.**`;
+    if (draft.kind === 'not-open') {
+      lines.push(`${lead} The PR is no longer open, so Steward left its draft flag alone.`);
+    } else {
+      lines.push(
+        `${lead} Steward made this PR a draft, so that it does not merge by accident. A person decides what comes next, by one of three routes:`,
+        '',
+        ...previewFailureRoutes(context.key ?? '<key>'),
+      );
+    }
   } else {
-    lines.push(`> **All ${report.results.length} ${report.results.length === 1 ? 'check passes' : 'checks pass'} on the preview.**`);
+    const lead = `> **All ${report.results.length} ${report.results.length === 1 ? 'check passes' : 'checks pass'} on the preview.**`;
+    if (draft.kind === 'readied') {
+      lines.push(`${lead} Steward made this PR a draft after an earlier failed test, and has marked it ready for review again.`);
+    } else if (draft.kind === 'kept') {
+      lines.push(
+        draft.by
+          ? `${lead} This PR is still a draft: ${draft.by} made it one, not Steward, so Steward leaves it.`
+          : `${lead} This PR is still a draft, and Steward cannot tell who made it one, so Steward leaves it.`,
+      );
+    } else {
+      lines.push(lead);
+    }
   }
   lines.push('', PREVIEW_ORIGIN_NOTE, '');
   for (const row of report.results) {
@@ -1283,6 +1365,7 @@ export function previewChecksComment(report: PreviewChecksReport): string {
     lines.push(`   - Measured: ${row.measured}`);
     lines.push(`   - ${row.pass ? 'Pass.' : 'Fail.'}`);
   }
+  history();
   return `${lines.join('\n')}\n`;
 }
 

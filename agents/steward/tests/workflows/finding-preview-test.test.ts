@@ -216,7 +216,7 @@ test('one check fails on the preview: the comment carries both measured values a
   const comment = pull.comments?.[0] ?? '';
   assert.ok(comment.includes(PREVIEW_CHECKS_MARKER), 'the hidden marker');
   assert.match(comment, /commit `head-50`/);
-  assert.match(comment, /\*\*Check 2 fails on the preview\.\*\* Steward marks this PR a draft\./);
+  assert.match(comment, /\*\*Check 2 fails on the preview\.\*\* Steward made this PR a draft, so that it does not merge by accident\./);
   // The rows name the preview URL the checks ran on.
   assert.match(comment, /1\. `status` https:\/\/mattpyle-com-website-abc123-mattpyles-projects\.vercel\.app\/scorecard\/\n {3}- Expects: .*\n {3}- Measured: .*\n {3}- Pass\./);
   assert.match(comment, /2\. `text` https:\/\/mattpyle-com-website-abc123-mattpyles-projects\.vercel\.app\/scorecard\/\n {3}- Expects: .*100\/100 \(Fail\).*\n {3}- Measured: .*\n {3}- Fail\./);

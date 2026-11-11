@@ -1,6 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
-import type { FixIssue } from '../activities/findings.js';
+import type { AwaitFixPrMergeOptions, FixIssue, FixPrOutcome } from '../activities/findings.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
 // same objects the reconciler and the CLI hold.
 import {
@@ -11,6 +11,7 @@ import {
   verifyWorkflowId,
   type FindingVerdict,
   type PreviewChecksReport,
+  type PreviewEarlierResult,
   type VerifyOutcome,
 } from '../lib/findings.js';
 import { dispatchWorkflowId } from '../lib/fix-dispatch.js';
@@ -129,8 +130,8 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * `awaitFixPr` returns the PR, the run reads the finding's `verify:` block and,
  * when it has checks, waits for the PR head's Vercel preview, runs the checks
  * against it, and writes the measured values as one PR comment. A failed check
- * also turns the PR into a draft; a person marks it ready after judging it. The
- * run then waits on the merge as before. The step is `testing-preview`, and
+ * also turns the PR into a draft; "The retest" below says how it can be tested
+ * again and un-drafted. The run then waits on the merge as before. The step is `testing-preview`, and
  * `previewResult` holds how it came out in one line.
  *
  * Nothing in it fails the fix. A block that does not read, a preview that does
@@ -144,6 +145,58 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * before it has no marker and replays straight to the merge wait. The custom
  * fixer's child ran its own preview test and is untouched. The fixture is
  * `finding-pr-closed-before-preview-test.bin` in `tests/workflows/replay.test.ts`.
+ *
+ * **The retest** (STW-587, 2026-11-10). On the issue path, after a test that
+ * found the finding's checks, the merge wait can end in two more ways, and
+ * each runs `testOnPreview` again on the same PR and goes back to the wait:
+ *
+ * 1. A new head commit. The wait passes `retestAfter`, the commit the last
+ *    test measured, and `awaitFixPrMerge` returns `pushed` when the open PR's
+ *    head is another commit. A test that measured no commit (no preview in
+ *    {@link PREVIEW_WAIT}, a failed build) passes nothing, and the next route
+ *    is the one left.
+ * 2. The `retest` Update, which `steward finding retest` sends. Its validator
+ *    refuses, read-only, when the run is not in that merge wait, the finding
+ *    has no checks, a test is running or a retest is already asked for. A
+ *    refused Update never enters the history. The handler only sets a flag and
+ *    returns the PR, the commit last tested and the number the next test gets.
+ *
+ * The wait races the merge poll against `wf.condition(() => retest.requested)`
+ * inside one `CancellationScope`. The condition has no timeout, so it adds no
+ * timer command. When the Update wins, the scope cancels the poll. The poll
+ * keeps the default cancellation type, `TRY_CANCEL`: the run goes on at once
+ * and does not wait for the activity to acknowledge. `awaitFixPrMerge` does not
+ * heartbeat, so the cancellation never reaches a running attempt; an attempt
+ * in flight finishes its one read (seconds) and its result is dropped, and one
+ * waiting out its five-minute retry interval is cancelled by the server. When
+ * a merge result and a retest arrive in the same workflow task, the merge
+ * wins: the activity's result settles the race as its job is applied, and the
+ * condition is evaluated only after every job. The accepted Update then has no
+ * test behind it, and the run goes on to the deploy.
+ *
+ * Each retest schedules a fresh merge wait, so the 30-day merge timeout starts
+ * again from the retest.
+ *
+ * A pass clears the draft only when Steward set it (`reportPreviewChecks`
+ * reads who did from the PR's timeline). The comment is rewritten in place,
+ * with one line per earlier result. A PR that merges while its last test
+ * failed hands that result to the verify child as `previewAtMerge`, and the
+ * Verification section says so beside the production result.
+ *
+ * **No `patched` marker.** No history recorded before this change can reach
+ * the new commands. They start only after a merge wait that returned `pushed`
+ * or lost to a `retest` Update, and no earlier history holds either: the state
+ * did not exist and no handler accepted the Update. Up to that point the run
+ * issues the same commands as before. The new `retestAfter` option and the
+ * `earlier` and `previewAtMerge` fields change activity and child inputs,
+ * which replay does not compare. The race, the scope, the condition and the
+ * Update handler issue no command. This is determinism rule 5 in
+ * `agents/steward/CLAUDE.md`. The fixture is
+ * `finding-preview-passed-before-retest.bin` in `tests/workflows/replay.test.ts`:
+ * a run recorded before this change that passed its preview test and waited
+ * on the merge. A run whose merge wait was scheduled before this change was
+ * scheduled without `retestAfter`, so a push does not retest it; the Update
+ * does, once the worker runs this code.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -293,6 +346,12 @@ export interface FindingState {
    * `testing-preview` ends; absent from a run whose attempt predates the test.
    */
   previewResult?: string | null;
+  /** The commit the latest preview test measured, or null when it measured none. Absent before STW-587. */
+  previewSha?: string | null;
+  /** How many preview tests the current attempt has run. Absent before STW-587. */
+  previewTests?: number;
+  /** True from an accepted `retest` Update until the test it asked for starts. */
+  retestRequested?: boolean;
 }
 
 /** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
@@ -302,7 +361,24 @@ export interface FixRequest {
   at: string;
 }
 
+/** The `retest` Update's payload: who asked, and when (STW-587). */
+export interface RetestRequest {
+  source: 'cli';
+  /** ISO 8601, the sender's clock. */
+  at: string;
+}
+
+/** What an accepted `retest` Update returns, so the CLI answers from one call. */
+export interface RetestAccepted {
+  prUrl: string;
+  /** The commit the last test measured, or null when it measured none. */
+  testedSha: string | null;
+  /** The number the test it asked for will have: 2 for the first retest. */
+  test: number;
+}
+
 export const verdictSignal = wf.defineSignal<[FindingVerdict]>('verdict');
+export const retestUpdate = wf.defineUpdate<RetestAccepted, [RetestRequest]>('retest');
 export const fixSignal = wf.defineSignal<[FixRequest]>('fix');
 export const findingStateQuery = wf.defineQuery<FindingState>('state');
 
@@ -557,6 +633,24 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     if (slot.active && grant?.ticket === slot.ticket) slot.granted = true;
   });
 
+  // The retest (STW-587). `open` is set by the merge wait alone, so the
+  // validator refuses everywhere else; the handler only sets the flag.
+  const retest: Retest = { open: false, requested: false, prUrl: null, testedSha: null };
+  wf.setHandler(
+    retestUpdate,
+    (): RetestAccepted => {
+      retest.requested = true;
+      state.retestRequested = true;
+      return { prUrl: retest.prUrl as string, testedSha: retest.testedSha, test: (state.previewTests ?? 0) + 1 };
+    },
+    {
+      validator: (request: RetestRequest): void => {
+        const refusal = retestRefusal(input, state, retest, request);
+        if (refusal) throw new Error(refusal);
+      },
+    },
+  );
+
   await wf.condition(() => state.verdict !== null);
   const verdict = state.verdict as unknown as FindingVerdict;
 
@@ -587,7 +681,48 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     return { ...base, outcome: 'rejected', note: 'Rejected at the gate.' };
   }
 
-  return await lifecycle(input as Required<FindingWorkflowInput>, state, base, fix, slot);
+  return await lifecycle(input as Required<FindingWorkflowInput>, state, base, fix, slot, retest);
+}
+
+/**
+ * The retest's shared state. `open` while the merge wait can take a retest:
+ * the issue path, after a test that found checks. `prUrl` and `testedSha` are
+ * what the handler returns.
+ */
+interface Retest {
+  open: boolean;
+  requested: boolean;
+  prUrl: string | null;
+  testedSha: string | null;
+}
+
+/**
+ * Why a `retest` Update is refused, in a sentence the CLI prints, or null to
+ * accept it. Read-only: a validator issues no command and changes nothing.
+ */
+function retestRefusal(input: FindingWorkflowInput, state: FindingState, retest: Retest, request: RetestRequest): string | null {
+  if (!request || request.source !== 'cli' || typeof request.at !== 'string') return 'The retest request is malformed.';
+  if (input.stopAfter !== 'resolved') return 'This run ends at the verdict, so it has no fix PR to test.';
+  if (state.step === 'testing-preview') return `A preview test of ${state.prUrl ?? 'the fix PR'} is running now.`;
+  if (state.step !== 'waiting-merge' || !state.prUrl) {
+    return `The finding has no open fix PR: the run is at ${state.step ?? 'an unknown step'}.`;
+  }
+  if (state.previewResult === PREVIEW_SKIPPED_LINE) return 'The finding has no checks, so there is nothing to test.';
+  if (!retest.open) return `The run cannot test ${state.prUrl} again: it has no preview test on this attempt.`;
+  if (retest.requested) return `A retest of ${state.prUrl} is already asked for.`;
+  return null;
+}
+
+/** What one preview test found, as the merge wait reads it. */
+interface PreviewOutcome {
+  /** The commit measured, or null when none was. */
+  sha: string | null;
+  /** False for a finding with no checks: nothing to test, now or later. */
+  hasChecks: boolean;
+  /** True when the checks ran and at least one failed. */
+  failed: boolean;
+  /** The result line, as `previewResult` holds it before any comment error. */
+  line: string;
 }
 
 /**
@@ -613,6 +748,7 @@ async function lifecycle(
   base: Pick<FindingWorkflowResult, 'site' | 'key' | 'verdict' | 'commitSha'>,
   fix: { requested: boolean },
   slot: Slot,
+  retest: Retest,
 ): Promise<FindingWorkflowResult> {
   let fixAttempts = 0;
   const end = (outcome: FindingOutcome, note: string, extra: Partial<FindingWorkflowResult> = {}): FindingWorkflowResult => {
@@ -669,21 +805,31 @@ async function lifecycle(
   /**
    * The preview test (fix-pr-runs-the-verify-block). Never throws except for
    * cancellation: whatever stops it is recorded as an unmeasured preview, and
-   * the merge wait goes on.
+   * the merge wait goes on. `earlier` holds this PR's earlier results for the
+   * comment, empty on the first test. The result says what the merge wait
+   * needs: the commit measured, whether the finding has checks, and whether
+   * one failed.
    */
-  const testOnPreview = async (prUrl: string): Promise<void> => {
+  const testOnPreview = async (prUrl: string, earlier: PreviewEarlierResult[]): Promise<PreviewOutcome> => {
     state.step = 'testing-preview';
     state.previewResult = null;
-    const unmeasured = async (note: string, sha: string | null = null): Promise<void> => {
-      const report: PreviewChecksReport = { prUrl, sha, results: null, note };
-      state.previewResult = previewResultLine(report);
+    state.retestRequested = false;
+    state.previewTests = (state.previewTests ?? 0) + 1;
+    const report = async (result: PreviewChecksReport): Promise<PreviewOutcome> => {
+      const line = previewResultLine(result);
+      state.previewResult = line;
+      state.previewSha = result.sha;
       try {
-        await reporting.reportPreviewChecks({ ...report, key: input.key });
+        await reporting.reportPreviewChecks({ ...result, key: input.key, earlier });
       } catch (err) {
         if (wf.isCancellation(err)) throw err;
-        state.previewResult = `${state.previewResult} (the PR comment failed: ${describeError(err)})`;
+        state.previewResult = `${line} (the PR comment failed: ${describeError(err)})`;
       }
+      const failed = result.results !== null && result.results.some((row) => !row.pass);
+      return { sha: result.sha, hasChecks: true, failed, line };
     };
+    const unmeasured = (note: string, sha: string | null = null): Promise<PreviewOutcome> =>
+      report({ prUrl, sha, results: null, note });
 
     let checks;
     try {
@@ -702,7 +848,8 @@ async function lifecycle(
     }
     if (checks.length === 0) {
       state.previewResult = PREVIEW_SKIPPED_LINE;
-      return;
+      state.previewSha = null;
+      return { sha: null, hasChecks: false, failed: false, line: PREVIEW_SKIPPED_LINE };
     }
 
     let preview;
@@ -723,13 +870,31 @@ async function lifecycle(
       return await unmeasured(`The checks did not run on ${preview.origin}: ${describeError(err)}.`, preview.sha);
     }
 
-    const report: PreviewChecksReport = { prUrl, sha: preview.sha, results, note: null };
-    state.previewResult = previewResultLine(report);
+    return await report({ prUrl, sha: preview.sha, results, note: null });
+  };
+
+  /**
+   * The merge wait with a retest beside it (STW-587): the poll races the
+   * `retest` Update in one cancellation scope. The loser is cancelled: the
+   * condition silently, the poll with a `RequestCancelActivityTask` when the
+   * Update wins. Each loser's rejection is caught here, so none goes unhandled.
+   */
+  const mergeOrRetest = async (prUrl: string, options: AwaitFixPrMergeOptions): Promise<FixPrOutcome | 'retest'> => {
+    retest.open = true;
     try {
-      await reporting.reportPreviewChecks({ ...report, key: input.key });
-    } catch (err) {
-      if (wf.isCancellation(err)) throw err;
-      state.previewResult = `${state.previewResult} (the PR comment failed: ${describeError(err)})`;
+      return await wf.CancellationScope.cancellable(async () => {
+        const merge = merging.awaitFixPrMerge(prUrl, options);
+        const asked = wf.condition(() => retest.requested).then(() => 'retest' as const);
+        try {
+          return await Promise.race([merge, asked]);
+        } finally {
+          merge.catch(() => undefined);
+          asked.catch(() => undefined);
+          wf.CancellationScope.current().cancel();
+        }
+      });
+    } finally {
+      retest.open = false;
     }
   };
 
@@ -835,14 +1000,36 @@ async function lifecycle(
 
       // Per attempt, and only for the PR the Action opened: the custom fixer's
       // child ran its own preview test.
-      if (viaIssue && wf.patched(PREVIEW_TEST_PATCH)) await testOnPreview(prUrl);
+      const earlier: PreviewEarlierResult[] = [];
+      state.previewTests = 0;
+      let tested: PreviewOutcome | null = null;
+      if (viaIssue && wf.patched(PREVIEW_TEST_PATCH)) tested = await testOnPreview(prUrl, earlier);
 
       state.step = 'waiting-merge';
       let merge;
       let reportConflict = dispatched;
       try {
         for (;;) {
-          merge = reportConflict ? await merging.awaitFixPrMerge(prUrl, { reportConflict: true }) : await merging.awaitFixPrMerge(prUrl);
+          // The retest (STW-587): only after a test that found checks. No
+          // marker; the docblock's "The retest" says why.
+          if (tested?.hasChecks) {
+            retest.prUrl = prUrl;
+            retest.testedSha = tested.sha;
+            retest.requested = false;
+            const waited = await mergeOrRetest(prUrl, {
+              ...(reportConflict ? { reportConflict: true } : {}),
+              ...(tested.sha ? { retestAfter: tested.sha } : {}),
+            });
+            if (waited === 'retest' || waited.state === 'pushed') {
+              earlier.push({ sha: tested.sha, line: tested.line });
+              tested = await testOnPreview(prUrl, earlier);
+              state.step = 'waiting-merge';
+              continue;
+            }
+            merge = waited;
+          } else {
+            merge = reportConflict ? await merging.awaitFixPrMerge(prUrl, { reportConflict: true }) : await merging.awaitFixPrMerge(prUrl);
+          }
           if (merge.state !== 'conflicting') break;
           let closed;
           try {
@@ -914,6 +1101,8 @@ async function lifecycle(
       const at = nowIso();
       const verifyId = verifyWorkflowId(input.site, input.key, at);
       const verifyQueue = wf.patched(VERIFIER_HOSTED_PATCH) ? QUEUE_FINDINGS : QUEUE_HEAVY;
+      // A merge over a failed last preview test: the Verification section says so.
+      const previewAtMerge = tested?.failed ? `${tested.line}, at ${tested.sha ? tested.sha.slice(0, 7) : 'no commit'}` : null;
       try {
         const verified = await wf.executeChild(verifyFindingWorkflow, {
           workflowId: verifyId,
@@ -928,6 +1117,7 @@ async function lifecycle(
               handoffPath: input.handoffPath,
               origin: input.origin,
               at,
+              ...(previewAtMerge ? { previewAtMerge } : {}),
             },
           ],
         });

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildVerificationSection,
+  parseVerificationSection,
   parseFindingsIndex,
   parsePrUrl,
   planReconcile,
@@ -213,4 +214,15 @@ test('--reason adds one line attributed to the CLI, after the rows or the deploy
   assert.match(measured, /Measured: "Footer"\.\n\nFrom the CLI: Read the footer by hand\.$/);
   const deployed = buildVerificationSection({ ...verification('resolved', []), deploy: DEPLOY, reason: 'Fixed by PR 356 outside the run.' });
   assert.match(deployed, /which contains it\.\n\nFrom the CLI: Fixed by PR 356 outside the run\.$/);
+});
+
+test('a merge over a failed last preview test adds one line, and the section still parses', () => {
+  const line = 'check 2 of 2 fails on the preview; PR marked draft, at aaaaaaa';
+  const measured = buildVerificationSection({ ...verification('resolved', [ROWS[0]]), previewAtMerge: line });
+  assert.match(measured, /Measured: "Footer"\.\n\nThe fix PR merged while its last preview test failed: check 2 of 2 fails on the preview; PR marked draft, at aaaaaaa\.$/);
+  const parsed = parseVerificationSection(measured);
+  assert.equal(parsed?.outcome, 'resolved');
+  assert.equal(parsed?.checks.length, 1);
+  assert.deepEqual(parsed?.unparsed, [], 'the line is not read as a check');
+  assert.ok(!buildVerificationSection(verification('resolved', [ROWS[0]])).includes('preview test'), 'absent without it');
 });
