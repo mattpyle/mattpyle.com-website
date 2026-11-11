@@ -44,6 +44,8 @@ export async function GET(context: APIContext) {
       description: escapeHtml(entry.data.summary),
       pubDate: entry.data.publishedAt ?? dateOnlyToFeedInstant(entry.data.date),
       link: `/changelog/${entry.id}/`,
+      // The same `type` /changelog filters on, so a reader can filter the feed too.
+      categories: [entry.data.type],
     })),
     xmlns: { atom: 'http://www.w3.org/2005/Atom' },
     // lastBuildDate follows content (the newest `publishedAt`, `date` or `updated` of any entry),
