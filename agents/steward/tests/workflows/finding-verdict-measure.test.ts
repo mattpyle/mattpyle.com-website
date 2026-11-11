@@ -263,3 +263,30 @@ test('a write that fails for another reason does not stop the fix', async () => 
   assert.equal(out.verdictMeasure, 'check 1 of 1 fails on production (not written: Bad credentials)');
   assert.ok(called.includes('openFixIssue'));
 });
+
+test('every check passing but the resolve write failing opens no fix: the run holds at waiting-fix with the reason', async () => {
+  const { called, writes, out } = await run(
+    {
+      production: async () => [ROW(true)],
+      write: async () => {
+        throw ApplicationFailure.nonRetryable('Bad credentials', 'AuthError');
+      },
+      autoFix: true,
+    },
+    `${DEFECT_KEY}-g`,
+    async (handle) => {
+      await until(handle, (s) => s.step === 'waiting-fix', 'waiting-fix');
+      // Settled: the automatic attempt would have started by now.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const after: FindingState = await handle.query(findingStateQuery);
+      await handle.terminate('test over');
+      return after;
+    },
+  );
+  assert.equal(writes[0]?.verification?.status, 'resolved', 'it tried to resolve');
+  assert.equal(out.step, 'waiting-fix');
+  assert.equal(out.fixAttempts, 0, 'auto_fix did not start an attempt');
+  assert.equal(out.lastFixError, 'Every check passed at the verdict, but the resolve was not written: Bad credentials');
+  assert.equal(out.verdictMeasure, '1 of 1 checks pass on production (not written: Bad credentials)');
+  assert.ok(!called.includes('requestFixSlot') && !called.includes('openFixIssue'));
+});

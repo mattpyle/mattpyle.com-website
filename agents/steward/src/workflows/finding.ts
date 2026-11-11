@@ -218,13 +218,16 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *    reopens it from the dashboard.
  * 3. No checks, a block that does not read, production not answering, or a
  *    check that does not run: the section records the reason, and the fix goes
- *    on. So does a write that fails after its retries.
- * 4. The write refuses with `FindingMoved`: a person or another run moved the
- *    finding while it was measured. As when `writeFindingFix` meets a moved
- *    finding, no fix starts: the run parks at `waiting-fix` with the reason in
- *    `lastFixError`, and drops a `fix` sent while it measured. The reconciler
- *    closes it behind a `resolved` or `rejected` line, and a person's `fix`
- *    starts the attempt.
+ *    on. So does a write that fails after its retries, when a check failed or
+ *    nothing was measured.
+ * 4. The run holds, and no fix starts, in two cases. The write refuses with
+ *    `FindingMoved`: a person or another run moved the finding while it was
+ *    measured, as when `writeFindingFix` meets a moved finding. Or every check
+ *    passed and the write failed: a fix would act on a problem just measured
+ *    as gone. The run parks at `waiting-fix` with the reason in `lastFixError`.
+ *    A `fix` signal that arrived during `measuring` is dropped then; a person's
+ *    later `fix` starts the attempt, and the reconciler closes the run behind a
+ *    `resolved` or `rejected` line.
  *
  * It runs once per run, not once per fix attempt: a second attempt after a PR
  * closed unmerged does not measure again. Its activities run on
@@ -965,11 +968,12 @@ async function lifecycle(
   /**
    * The checks on production at the approved verdict (STW-589). Never throws
    * except for cancellation. `resolved` when every check passed and the write
-   * resolved the finding; `moved` when the write refused because the finding
-   * is no longer approved and unresolved; `fix` for everything else, which
-   * goes on to the fix as before.
+   * resolved the finding. `hold` when the write refused because the finding is
+   * no longer approved and unresolved, or when every check passed and the write
+   * failed: a fix then would act on a moved finding, or on a problem just
+   * measured as gone. `fix` for everything else, which goes on as before.
    */
-  const measureAtVerdict = async (): Promise<'resolved' | 'moved' | 'fix'> => {
+  const measureAtVerdict = async (): Promise<'resolved' | 'hold' | 'fix'> => {
     state.step = 'measuring';
     const unmeasured = (reason: string): VerdictMeasure => ({ at: nowIso(), workflowId, rows: null, reason });
     let measure: VerdictMeasure | null = null;
@@ -1023,9 +1027,14 @@ async function lifecycle(
         // and the run parks at `waiting-fix` with the reason.
         state.verdictMeasure = `${line} (not written: the finding moved)`;
         state.lastFixError = describeError(err);
-        return 'moved';
+        return 'hold';
       }
       state.verdictMeasure = `${line} (not written: ${describeError(err)})`;
+      if (passed) {
+        // Every check passed but the resolve did not land: no fix for a problem that is gone.
+        state.lastFixError = `Every check passed at the verdict, but the resolve was not written: ${describeError(err)}`;
+        return 'hold';
+      }
       return 'fix';
     }
     return passed ? 'resolved' : 'fix';
@@ -1047,7 +1056,7 @@ async function lifecycle(
       if (measured === 'resolved') {
         return end('resolved', `Resolved at the verdict: ${state.verdictMeasure}, so no fix was opened.`);
       }
-      if (measured === 'moved') {
+      if (measured === 'hold') {
         heldAtVerdict = true;
         fix.requested = false;
       }
@@ -1069,7 +1078,7 @@ async function lifecycle(
       if (!recut) {
         const parked = input.waitsForPerson === true && fixAttempts === 0;
         if (parked) state.waitsForPerson = true;
-        // A finding that moved under the measurement waits for a person, or for the reconciler to close the run.
+        // A finding held at the verdict waits for a person, or for the reconciler to close the run.
         const held = heldAtVerdict && fixAttempts === 0;
         if (parked || held || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
       }
