@@ -5,15 +5,15 @@
     - /url: /
     - text: mp/
   - navigation "Main navigation":
-    - link "/writing":
+    - link "writing":
       - /url: /writing/
-    - link "/projects":
+    - link "projects":
       - /url: /projects/
-    - link "/changelog":
+    - link "changelog":
       - /url: /changelog/
-    - link "/scorecard":
+    - link "scorecard":
       - /url: /scorecard/
-    - link "/about":
+    - link "about":
       - /url: /about/
 - main:
   - heading "Writing" [level=1]

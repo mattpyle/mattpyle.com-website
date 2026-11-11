@@ -46,11 +46,11 @@ function isActive(href: string): boolean {
  * page; the mobile row derives its own order from it below.
  */
 const NAV_LINKS = [
-  { label: '/writing',   href: '/writing/',   section: 'writing'   },
-  { label: '/projects',  href: '/projects/',  section: 'projects'  },
-  { label: '/changelog', href: '/changelog/', section: 'changelog' },
-  { label: '/scorecard', href: '/scorecard/', section: 'agents'    },
-  { label: '/about',     href: '/about/',     section: 'ink'       },
+  { label: 'writing',   href: '/writing/',   section: 'writing'   },
+  { label: 'projects',  href: '/projects/',  section: 'projects'  },
+  { label: 'changelog', href: '/changelog/', section: 'changelog' },
+  { label: 'scorecard', href: '/scorecard/', section: 'agents'    },
+  { label: 'about',     href: '/about/',     section: 'ink'       },
 ] as const;
 
 type NavLink = (typeof NAV_LINKS)[number];
@@ -108,7 +108,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
             data-section={section}
             aria-current={isActive(href) ? 'page' : undefined}
           >
-            {label}
+            <span aria-hidden="true">/</span>{label}
           </a>
         ))}
       </div>
@@ -121,7 +121,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
             data-section={section}
             aria-current={isActive(href) ? 'page' : undefined}
           >
-            <span class="nav-mark">{label}</span>
+            <span class="nav-mark"><span aria-hidden="true">/</span>{label}</span>
           </a>
         ))}
         <details class="nav-more">
@@ -134,7 +134,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
                 data-section={section}
                 aria-current={isActive(href) ? 'page' : undefined}
               >
-                <span class="nav-mark">{label}</span>
+                <span class="nav-mark"><span aria-hidden="true">/</span>{label}</span>
               </a>
             ))}
           </div>
