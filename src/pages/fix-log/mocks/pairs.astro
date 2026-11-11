@@ -1,0 +1,98 @@
+---
+/**
+ * Fix-log mock, round two: Pairs. A list you can scan.
+ *
+ * Each fix is a title, a before and an after, and the change. Nothing else is on the
+ * row: no dates, no durations, no explanation. A fix told as an article links to it.
+ * The before and after are two separate boxes on two grounds, so the pair reads at a
+ * glance; the label under them names what is counted, once.
+ */
+import Layout from '../../../layouts/Layout.astro';
+import MockBar from '../../../components/fix-log-mocks/MockBar.astro';
+import Glance from '../../../components/fix-log-mocks/Glance.astro';
+import { ENTRIES_NEWEST, HOW_MADE, prUrl } from '../../../data/fix-log-sample';
+---
+
+<Layout title="Fix log: Pairs mock" description="Design mock: each fix as a before and an after." noindex>
+  <MockBar slug="pairs" />
+
+  <header class="rd-section head">
+    <h1 class="title">Fixed</h1>
+    <p class="how">{HOW_MADE}</p>
+  </header>
+
+  <ol class="rd-section rows">
+    {ENTRIES_NEWEST.map((e) => (
+      <li class="row">
+        <div class="row-name">
+          <h2 class="row-title">
+            {e.article ? <a href={`/fix-log/mocks/posts/${e.key.toLowerCase()}/`}>{e.title}</a> : e.title}
+          </h2>
+          <p class="row-links">
+            <a href={prUrl(e.pr.number)} class="change">See the change</a>
+            {e.status === 'reopened' && <span class="open">Still open</span>}
+          </p>
+        </div>
+        <Glance before={e.glance.before} after={e.glance.after} label={e.glance.label} quoted={e.glance.quoted} size="sm" />
+      </li>
+    ))}
+  </ol>
+</Layout>
+
+<style>
+  .head { padding-top: 56px; padding-bottom: 32px; }
+
+  .title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 64px;
+    line-height: 1;
+    letter-spacing: -.04em;
+    color: var(--ink);
+  }
+
+  .how { margin: 14px 0 0; max-width: 60ch; font-size: 17px; line-height: 1.5; color: var(--ink-5); }
+
+  .rows { list-style: none; margin: 0 auto; padding-bottom: 96px; }
+
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+    gap: 40px;
+    align-items: center;
+    padding: 26px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .row:last-child { border-bottom: 1px solid var(--rule); }
+
+  .row-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 24px;
+    line-height: 1.2;
+    letter-spacing: -.02em;
+    color: var(--ink);
+  }
+
+  .row-title a { color: inherit; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; text-decoration-color: var(--rule); }
+  .row-title a:hover { text-decoration-color: var(--ink); }
+
+  .row-links { display: flex; gap: 16px; margin: 10px 0 0; font-size: 16px; }
+
+  .change { color: var(--writing); }
+  .change:hover { color: var(--writing-hover); }
+  .change::after { content: ' →'; }
+
+  .open { font-weight: 700; color: oklch(0.46 0.13 40); }
+
+  @media (max-width: 720px) {
+    .head { padding-top: 32px; }
+    .title { font-size: 48px; }
+    .row { grid-template-columns: 1fr; gap: 14px; padding: 22px 0; }
+    .row-title { font-size: 21px; }
+    .change { display: inline-flex; align-items: center; min-height: 44px; }
+  }
+</style>

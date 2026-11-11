@@ -1,44 +1,56 @@
 ---
 /**
- * The reserved space for a before and after screenshot pair. No capture exists yet
- * (a later slice adds them), so this is a labelled placeholder in the hatching the
- * redesign uses for imagery that does not exist yet: constraint 10, a placeholder
- * rather than an invented picture.
+ * The reserved space for screenshots. No capture exists yet (a later slice adds
+ * them), so this is a labelled placeholder rather than an invented picture.
+ *
+ * `side` draws one panel; without it, the before and after pair. `shape` follows the
+ * screen the fix is about: `tall` for a phone, `wide` for a desktop page.
  */
 interface Props {
-  /** `pair` sits two side by side; `stack` puts them one above the other. */
-  layout?: 'pair' | 'stack';
+  side?: 'before' | 'after';
+  shape?: 'wide' | 'tall';
 }
-const { layout = 'pair' } = Astro.props;
+const { side, shape = 'wide' } = Astro.props;
+const sides = side ? [side] : (['before', 'after'] as const);
 ---
 
-<div class:list={['shots', `shots--${layout}`]} role="img" aria-label="Space for a before and after screenshot, not yet captured">
-  <span class="shot">[ screenshot: before ]</span>
-  <span class="shot">[ screenshot: after ]</span>
+<div class:list={['shots', `shots--${shape}`, !side && 'shots--pair']}>
+  {sides.map((s) => (
+    <div class:list={['shot', `shot--${s}`]} role="img" aria-label={`Space for the ${s} screenshot, not yet captured`}>
+      {!side && <span class="shot-tag">{s === 'before' ? 'Before' : 'After'}</span>}
+      <span class="shot-text">screenshot to come</span>
+    </div>
+  ))}
 </div>
 
 <style>
-  .shots {
-    display: grid;
-    gap: 12px;
-  }
-
+  .shots { display: grid; gap: 10px; }
   .shots--pair { grid-template-columns: 1fr 1fr; }
-  .shots--stack { grid-template-columns: 1fr; }
 
   .shot {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    aspect-ratio: 16 / 10;
-    border-radius: var(--radius);
-    background: repeating-linear-gradient(
-      -45deg,
-      var(--hatch-projects-a) 0 6px,
-      var(--hatch-projects-b) 6px 14px
-    );
-    font-family: var(--font-mono-plex);
-    font-size: 15px;
-    color: var(--ink-6);
+    border-radius: 10px;
+    background: repeating-linear-gradient(-45deg, oklch(0.93 0.005 265) 0 8px, oklch(0.96 0.004 265) 8px 18px);
   }
+
+  .shots--wide .shot { aspect-ratio: 16 / 10; }
+  .shots--tall .shot { aspect-ratio: 9 / 16; }
+
+  .shot-tag {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .shot--before .shot-tag { color: oklch(0.46 0.13 40); }
+  .shot--after .shot-tag { color: oklch(0.42 0.11 150); }
+
+  .shot-text { font-size: 15px; color: var(--ink-6); }
 </style>

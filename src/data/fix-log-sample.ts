@@ -56,6 +56,15 @@ export interface FixEntry {
   visual: boolean;
   times: { found: string; approved: string; prOpened: string; merged: string; verified: string };
   live?: LiveCheck;
+  /**
+   * The before and after a reader takes in at a glance: a number pair where the
+   * fix has one, otherwise the shortest true quote. `label` names what is counted.
+   */
+  glance: { label: string; before: string; after: string; quoted?: boolean };
+  /** For a visual fix, the screen it is about: sets the screenshot shape. */
+  screen?: 'phone' | 'desktop';
+  /** Whether the fix is told as an article of its own. */
+  article?: boolean;
   /** The fix as a plain claim a reader can hold the site to. */
   claim: string;
   /** For a check a browser cannot run. */
@@ -68,6 +77,7 @@ export const prUrl = (n: number) => `${PR_BASE}${n}`;
 export const FIX_ENTRIES: FixEntry[] = [
   {
     key: 'MP-144',
+    glance: { label: 'what llms.txt says the homepage holds', before: 'a bio', after: 'name, tagline, latest work', quoted: true },
     claim: 'llms.txt does not call the homepage a bio.',
     title: 'Agent guides said the homepage holds a bio',
     type: 'agent-readiness',
@@ -105,6 +115,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-136',
+    glance: { label: 'RSS feeds listed in llms.txt', before: '0', after: '2' },
     claim: 'llms.txt lists both RSS feeds.',
     title: 'llms.txt listed no RSS feed',
     type: 'agent-readiness',
@@ -150,6 +161,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-46',
+    glance: { label: 'licence on the code', before: 'none', after: 'MIT' },
     claim: 'The repository’s code is MIT licensed.',
     title: 'The public repository had no licence',
     type: 'content',
@@ -179,6 +191,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-130',
+    glance: { label: 'what a screen reader says', before: 'slash writing', after: 'writing', quoted: true },
     claim: 'The navigation is not read aloud as “slash writing”, on three pages.',
     title: 'Screen readers heard “slash writing” on every page',
     type: 'accessibility',
@@ -208,6 +221,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-107',
+    glance: { label: 'launch tags in the changelog feed', before: '0', after: '3' },
     claim: 'The changelog feed carries each entry’s type.',
     title: 'The changelog feed carried no entry type',
     type: 'feature',
@@ -251,6 +265,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-109',
+    glance: { label: 'links that go through a redirect', before: '3', after: '0' },
     claim: 'The WebMCP post has no link that goes through a redirect.',
     title: 'The WebMCP post linked through a redirect',
     type: 'seo',
@@ -280,6 +295,9 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-48',
+    glance: { label: 'posts that start on the first phone screen', before: '0 of 3', after: '1 of 3' },
+    article: true,
+    screen: 'phone',
     claim: 'A post starts on the first screen of a phone.',
     title: 'On a phone, a post started two screens down',
     type: 'ux',
@@ -314,6 +332,8 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-31',
+    glance: { label: 'links onward from the oldest post', before: '0', after: '1' },
+    screen: 'desktop',
     claim: 'The oldest post ends with a link to another post.',
     title: 'The oldest post was a dead end',
     type: 'ux',
@@ -393,45 +413,31 @@ export function medianSpan(entries: FixEntry[]): number {
   return spans.length % 2 ? spans[mid] : (spans[mid - 1] + spans[mid]) / 2;
 }
 
-/** The five directions, for the mock index and the cross-links between mocks. */
+/** The round-two directions, for the mock index and the bar across each mock. */
 export const DIRECTIONS = [
   {
-    slug: 'ledger',
-    name: 'Ledger',
-    temperament: 'safe',
-    idea: 'The changelog’s own row, with what was wrong and what is true now side by side inside every entry.',
-    agent: 'An agent gets the same rows as a markdown twin, one entry per heading, with the pull request link and the four dates.',
+    slug: 'pairs',
+    name: 'Pairs',
+    temperament: 'quiet',
+    idea: 'A list you can scan: each fix is its title, a before and an after, and the change.',
+    agent: 'An agent gets the same pairs as a table in the markdown twin.',
   },
   {
-    slug: 'specimen',
-    name: 'Specimen',
-    temperament: 'conservative',
-    idea: 'Show the thing, not a description of it: the changed line, the count, the words a screen reader spoke, as it was and as it is.',
-    agent: 'An agent gets the exact before and after text of each artefact, which is what it would quote in an answer.',
+    slug: 'diptych',
+    name: 'Diptych',
+    temperament: 'visual',
+    idea: 'Two big panels per fix: the screenshots where something visible changed, the number or the words where nothing did.',
+    agent: 'An agent gets the pair as text and the screenshots with alt text.',
   },
   {
-    slug: 'front-page',
-    name: 'Front page',
-    temperament: 'adventurous',
-    idea: 'An editor’s page: the loop’s most instructive fix told as a story, two more as features, and the rest as a dense ledger.',
-    agent: 'An agent gets the lead story as prose in the markdown twin and the ledger as a list, so it can retell either.',
-  },
-  {
-    slug: 'stopwatch',
-    name: 'Stopwatch',
-    temperament: 'adventurous',
-    idea: 'Time is the story: every fix drawn to scale from the day it was found to the minute it was verified, so 18 minutes sits beside 25 days.',
-    agent: 'An agent gets the four timestamps per fix as data, which answers “how fast does this loop work” without reading a chart.',
-  },
-  {
-    slug: 'receipts',
-    name: 'Receipts',
-    temperament: 'off the wall',
-    idea: 'Every fix is a claim, and the page checks it again in your browser while you read, so the log proves itself on each visit.',
-    agent: 'An agent gets each claim as a URL and an expectation it can fetch and test itself, the same check the page runs.',
+    slug: 'posts',
+    name: 'Posts',
+    temperament: 'between Specimen and Front page',
+    idea: 'A stream of short entries, and the fix that earns it opens into an article of its own.',
+    agent: 'An agent gets each entry and each article as a markdown twin.',
   },
 ] as const;
 
 /** The one place a page says how entries are made. */
 export const HOW_MADE =
-  'An inspector reads this site the way different visitors would and files what lets them down. Matt approves the ones worth fixing. A fixer opens a pull request, and once it merges the same check runs again on the live site.';
+  'Each fix was found by an automated inspector, approved by Matt, made by an automated fixer and checked on the live site.';
