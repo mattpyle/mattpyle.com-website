@@ -92,7 +92,9 @@ const FILES: Record<string, string> = {
   'off-host': finding('off-host', 'TI-5', status('https://learn.temporal.io/x')),
   'site-down': finding('site-down', 'TI-6', status('https://docs.temporal.io/down')),
   'has-run': finding('has-run', 'TI-7', status('https://temporal.io/broken')),
-  'already-live': finding('already-live', 'TI-8', status('https://temporal.io/broken'), ['live_on: 2026-11-08']),
+  'already-live': finding('already-live', 'TI-8', status('https://temporal.io/broken'), ['live_on: 2026-11-08', 'live_by: check']),
+  // Argus's verify labelled this one `review` on an earlier day; a failing recheck takes the label over.
+  'review-labelled': finding('review-labelled', 'TI-9', status('https://temporal.io/broken'), ['live_on: 2026-11-07', 'live_by: review']),
 };
 
 function seed(keys: string[] = Object.keys(FILES)): Record<string, string> {
@@ -173,6 +175,7 @@ test('each approved finding gets one outcome, and only a still-present or fixed 
     'site-down': 'could not measure',
     'has-run': 'has an open run',
     'already-live': 'still present',
+    'review-labelled': 'still present',
   });
   assert.ok(!('still-proposed' in outcomes), 'a proposed finding is not rechecked');
   assert.equal(result.rows.find((row) => row.key === 'fixed-on-site')?.keyShort, 'TI-1');
@@ -189,8 +192,14 @@ test('each approved finding gets one outcome, and only a still-present or fixed 
   assert.equal(index.find((line) => line.key === 'fixed-on-site')?.status, 'resolved');
   assert.equal(index.find((line) => line.key === 'live-on-docs')?.status, 'approved');
 
-  // Still present, on a declared host: live_on is the Vancouver day, after lives_in.
-  assert.equal(file('live-on-docs'), FILES['live-on-docs'].replace('lives_in: page\n', 'lives_in: page\nlive_on: 2026-11-08\n'));
+  // Still present, on a declared host: live_on is the Vancouver day, after lives_in, with live_by: check after it.
+  assert.equal(file('live-on-docs'), FILES['live-on-docs'].replace('lives_in: page\n', 'lives_in: page\nlive_on: 2026-11-08\nlive_by: check\n'));
+  // A finding Argus labelled `review` reads `check` afterwards, as the one live_by line.
+  assert.equal(
+    file('review-labelled'),
+    FILES['review-labelled'].replace('live_on: 2026-11-07\nlive_by: review\n', 'live_on: 2026-11-08\nlive_by: check\n'),
+  );
+  assert.equal(file('review-labelled').match(/^live_by:/gm)!.length, 1);
 
   // Nothing written for the rest; the open run's finding was never measured.
   for (const key of ['no-block', 'empty-block', 'off-host', 'site-down', 'has-run', 'already-live']) {
@@ -199,8 +208,8 @@ test('each approved finding gets one outcome, and only a still-present or fixed 
   assert.ok(!ran.includes('has-run'), 'a finding with an open run is not measured');
   assert.equal(result.rows.find((row) => row.key === 'already-live')?.commitSha, null, 'the same day writes no commit');
 
-  // One commit per changed finding: the resolve and the live_on.
-  assert.equal(github.refUpdates.length, 2);
+  // One commit per changed finding: the resolve and the two live_on writes.
+  assert.equal(github.refUpdates.length, 3);
   assert.ok(github.refUpdates.every((update) => update.branch === 'main' && !update.force));
 
   // The fixture holds two findings production could not be asked about, so the
@@ -209,7 +218,7 @@ test('each approved finding gets one outcome, and only a still-present or fixed 
   assert.equal(pings[0]!.signal, 'findings-recheck:temporal-io');
   assert.equal(pings[0]!.shape.ok, false);
   assert.ok(pings[0]!.shape.summary.startsWith(summariseRecheck(result)));
-  assert.match(pings[0]!.shape.summary, /2 of 8 finding\(s\) were not rechecked cleanly: TI-5 could not measure .*; TI-6 could not measure \(.*answered 503/);
+  assert.match(pings[0]!.shape.summary, /2 of 9 finding\(s\) were not rechecked cleanly: TI-5 could not measure .*; TI-6 could not measure \(.*answered 503/);
 });
 
 test('a run whose rows are all resolved, still present, no checks or open pings healthy with the summary', async () => {

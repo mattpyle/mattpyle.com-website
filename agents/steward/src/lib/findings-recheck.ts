@@ -60,8 +60,10 @@ export function vancouverDay(iso: string): string {
 }
 
 /**
- * The finding file with `live_on: <day>` in its frontmatter and every other
- * byte kept. An existing `live_on` line is replaced. A new one goes after the
+ * The finding file with `live_on: <day>` and `live_by: check` (in that order)
+ * in its frontmatter and every other byte kept. An existing `live_on` line is
+ * replaced, and an existing `live_by` line, whatever it held, is replaced by
+ * the one after `live_on`. A new `live_on` goes after the
  * last of `lives_in`, `evidence` and `importance_reason`, where the Argus skill
  * places the recheck fields, or at the end of the block when none is there.
  */
@@ -73,17 +75,28 @@ export function setFrontmatterLiveOn(text: string, day: string): string {
   const close = lines.indexOf('---', 1);
   if (close < 0) throw new Error("the finding's frontmatter block is not closed");
   const line = `live_on: ${day}`;
-  const existing = lines.findIndex((l, i) => i > 0 && i < close && /^live_on:/.test(l));
-  if (existing >= 0) {
-    lines[existing] = line;
-    return lines.join(eol);
+  const byLine = 'live_by: check';
+  const find = (field: string, end: number) => lines.findIndex((l, i) => i > 0 && i < end && l.startsWith(`${field}:`));
+  let on = find('live_on', close);
+  if (on >= 0) {
+    lines[on] = line;
+  } else {
+    let after = -1;
+    for (const field of ['importance_reason', 'evidence', 'lives_in']) {
+      const at = find(field, close);
+      if (at > after) after = at;
+    }
+    on = after >= 0 ? after + 1 : close;
+    lines.splice(on, 0, line);
   }
-  let after = -1;
-  for (const field of ['importance_reason', 'evidence', 'lives_in']) {
-    const at = lines.findIndex((l, i) => i > 0 && i < close && new RegExp(`^${field}:`).test(l));
-    if (at > after) after = at;
+  // `live_by` follows `live_on`; any existing line is dropped so exactly one remains.
+  for (let i = lines.indexOf('---', 1) - 1; i > 0; i--) {
+    if (lines[i].startsWith('live_by:')) {
+      lines.splice(i, 1);
+      if (i <= on) on--;
+    }
   }
-  lines.splice(after >= 0 ? after + 1 : close, 0, line);
+  lines.splice(on + 1, 0, byLine);
   return lines.join(eol);
 }
 
