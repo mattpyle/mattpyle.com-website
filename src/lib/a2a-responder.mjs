@@ -267,6 +267,16 @@ function scorecard(digest) {
   ].join('\n');
 }
 
+/**
+ * The channels /about's "Say hello" leads with (REACH in AboutBody.astro), Bluesky first.
+ * Not `sameAs`, which leaves Bluesky out on purpose for the entity graph.
+ */
+const CONTACT_LINKS = [
+  'https://bsky.app/profile/mattpyle.com',
+  'https://github.com/mattpyle',
+  'https://linkedin.com/in/matt-pyle',
+];
+
 function person(digest) {
   const { person: who, sections } = digest.site;
   const about = sections.find((section) => section.name === 'About');
@@ -277,7 +287,7 @@ function person(digest) {
       'working code, mostly with Claude Code as a collaborator, and does not claim to be a professional ' +
       'software engineer. Writing here is personal opinion and first-hand experience, not his employer\'s position.',
     '',
-    `Elsewhere: ${who.sameAs.join(', ')}.`,
+    `Contact: ${CONTACT_LINKS.join(', ')}.`,
     '',
     `Full bio and contact links: ${about?.url ?? `${digest.site.url}about`}.`,
     '',
