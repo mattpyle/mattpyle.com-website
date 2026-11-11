@@ -113,4 +113,4 @@ until publish. Expected, not a bug.
 ## License
 
 The code is released under the [MIT License](LICENSE). The writing under `src/content/` is not
-covered by it and stays all rights reserved.
+covered by it and stays all rights reserved. Third-party files, such as the fonts in public/fonts/, keep their own licences.
