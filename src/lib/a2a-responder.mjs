@@ -127,6 +127,12 @@ function describe(digest, { unrecognised = false } = {}) {
     lines.push(`- [${section.name}](${section.url}): ${section.summary}`);
   }
   lines.push('');
+  lines.push('**Pages beyond the nav**');
+  lines.push('');
+  for (const page of site.pages) {
+    lines.push(`- [${page.name}](${page.url}): ${page.summary}`);
+  }
+  lines.push('');
   lines.push(
     `Ask me about the writing, the projects, what shipped recently, the scorecard, or the agent-readable ` +
       `surfaces. As of the last deploy: ${count(counts.writing, 'published article')}, ` +

@@ -99,7 +99,7 @@ export function createTools(getIndex) {
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       execute: async () => {
         const { site } = await getIndex();
-        return { person: site.person, site: { name: site.name, url: site.url, description: site.description }, sections: site.sections };
+        return { person: site.person, site: { name: site.name, url: site.url, description: site.description }, sections: site.sections, pages: site.pages };
       },
     },
 

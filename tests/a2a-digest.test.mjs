@@ -19,6 +19,10 @@ test('the digest carries the site description and the full section map', () => {
     generated.site.sections.map((section) => section.name),
     ['Home', 'Writing', 'Projects', 'Changelog', 'Scorecard', 'Activity', 'About']
   );
+  assert.deepEqual(
+    generated.site.pages.map((page) => page.url),
+    ['webmcp', 'steward', 'audit'].map((slug) => `${PRODUCTION_ORIGIN}/${slug}/`)
+  );
 });
 
 test('the digest carries at least one current published post, with a usable URL', () => {
