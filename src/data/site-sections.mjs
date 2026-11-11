@@ -44,7 +44,7 @@ export function sitePerson(base) {
  */
 export function siteSections(base) {
   return [
-    { name: 'Home', url: `${base}/`, summary: 'Bio, tagline, recent activity feed.' },
+    { name: 'Home', url: `${base}/`, summary: 'Name, tagline, and the latest writing, projects, scorecard and changelog.' },
     { name: 'Writing', url: `${base}/writing/`, summary: 'All writing.' },
     { name: 'Projects', url: `${base}/projects/`, summary: 'Side projects.' },
     {
