@@ -34,7 +34,7 @@ export const GET: APIRoute = async ({ site }) => {
 
   lines.push('## Pages');
   lines.push('');
-  lines.push(`- [Home](${base}/): bio, tagline, recent activity feed.`);
+  lines.push(`- [Home](${base}/): name, tagline, and the latest writing, projects, scorecard and changelog.`);
   lines.push(`- [Writing](${base}/writing/): all writing.`);
   lines.push(`- [Projects](${base}/projects/): side projects.`);
   lines.push(`- [Changelog](${base}/changelog/): reverse-chronological log of what has shipped on this site.`);
