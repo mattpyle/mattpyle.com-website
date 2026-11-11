@@ -109,3 +109,8 @@ npm run serve
 
 A draft's generated share image is deliberately not built, so its OG meta points at a missing file
 until publish. Expected, not a bug.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The writing under `src/content/` is not
+covered by it and stays all rights reserved.
