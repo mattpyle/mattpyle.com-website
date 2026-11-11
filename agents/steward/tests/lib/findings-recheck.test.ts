@@ -33,14 +33,27 @@ test('live_on goes after lives_in, and replaces itself on the next recheck', () 
   const once = setFrontmatterLiveOn(FINDING, '2026-11-08');
   const lines = once.split('\n');
   assert.equal(lines[lines.indexOf('lives_in: page') + 1], 'live_on: 2026-11-08');
+  assert.equal(lines[lines.indexOf('live_on: 2026-11-08') + 1], 'live_by: check');
   const twice = setFrontmatterLiveOn(once, '2026-11-09');
   assert.equal(twice, once.replace('live_on: 2026-11-08', 'live_on: 2026-11-09'));
   assert.equal(setFrontmatterLiveOn(once, '2026-11-08'), once, 'the same day writes nothing new');
 });
 
+test('live_by: review becomes live_by: check, as the one live_by line', () => {
+  const reviewed = FINDING.replace('lives_in: page\n', 'lives_in: page\nlive_on: 2026-11-08\nlive_by: review\n');
+  const after = setFrontmatterLiveOn(reviewed, '2026-11-09');
+  assert.equal(after, FINDING.replace('lives_in: page\n', 'lives_in: page\nlive_on: 2026-11-09\nlive_by: check\n'));
+  assert.equal(after.split('\n').filter((l) => l.startsWith('live_by:')).length, 1);
+  // A live_by that sits before live_on, or with no live_on at all, still ends as one line after live_on.
+  const before = FINDING.replace('lives_in: page\n', 'live_by: review\nlives_in: page\nlive_on: 2026-11-08\n');
+  assert.equal(setFrontmatterLiveOn(before, '2026-11-09'), FINDING.replace('lives_in: page\n', 'lives_in: page\nlive_on: 2026-11-09\nlive_by: check\n'));
+  const lone = FINDING.replace('lives_in: page\n', 'lives_in: page\nlive_by: review\n');
+  assert.equal(setFrontmatterLiveOn(lone, '2026-11-09'), FINDING.replace('lives_in: page\n', 'lives_in: page\nlive_on: 2026-11-09\nlive_by: check\n'));
+});
+
 test('live_on keeps CRLF and lands at the end of a block without recheck fields', () => {
   const bare = ['---', 'key: k', 'status: approved', '---', '', 'body'].join('\r\n');
-  assert.equal(setFrontmatterLiveOn(bare, '2026-11-08'), ['---', 'key: k', 'status: approved', 'live_on: 2026-11-08', '---', '', 'body'].join('\r\n'));
+  assert.equal(setFrontmatterLiveOn(bare, '2026-11-08'), ['---', 'key: k', 'status: approved', 'live_on: 2026-11-08', 'live_by: check', '---', '', 'body'].join('\r\n'));
   assert.throws(() => setFrontmatterLiveOn(bare, '8 Nov'), /YYYY-MM-DD/);
 });
 

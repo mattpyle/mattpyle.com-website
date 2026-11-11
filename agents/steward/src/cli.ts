@@ -2230,7 +2230,7 @@ finding
   .command('recheck')
   .requiredOption('--site <site>', 'site slug', parseFindingSlug('site'))
   .description(
-    "Recheck every approved finding of a site on production, on every host its config.yaml declares, and print each outcome. A failing check sets live_on to today; all passing resolves the finding. Runs on the hosted worker",
+    "Recheck every approved finding of a site on production, on every host its config.yaml declares, and print each outcome. A failing check sets live_on to today and live_by to check; all passing resolves the finding. Runs on the hosted worker",
   )
   .action(async (opts: { site: string }) => {
     const c = await client();

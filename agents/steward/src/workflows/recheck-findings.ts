@@ -30,7 +30,7 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  *   own expression did not run, or the block was refused by the host rule or
  *   the schema. Nothing written;
  * - **still present**: a check failed. `live_on` is set to the day, in
- *   America/Vancouver, the checks ran;
+ *   America/Vancouver, the checks ran, and `live_by` is set to `check`;
  * - **resolved**: every check passed. The file is resolved through
  *   `setFindingVerification`, with its Verification section, and its index
  *   line reads `resolved`, in one commit.
@@ -54,6 +54,11 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * **Quiet completion log.** The run ends with its one-line summary at info
  * level and nothing else. The rows stay in the workflow result, which the CLI
  * prints, so the log carries no result object.
+ *
+ * **Replay of the `live_by` write (ARG-54).** No marker. `setFrontmatterLiveOn`
+ * (the activity's pure helper) writes `live_by: check` beside `live_on`, so the
+ * workflow issues the same commands with the same inputs and no recorded
+ * history changes. Determinism rule 5 in `agents/steward/CLAUDE.md`.
  *
  * **Replay of runs open before STW-549.** Only an open run replays, and it has
  * not yet issued its last command. The ping is one activity call after the
