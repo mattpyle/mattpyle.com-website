@@ -95,7 +95,7 @@ test('the fix issue carries the finding\'s verify block verbatim, under a headin
   assert.ok(body.includes(`\n${FIX_ISSUE_VERIFY_HEADING}\n`), 'the heading');
   assert.ok(body.includes(['```yaml', BLOCK, '```'].join('\n')), 'the block in a fence, byte for byte');
   assert.match(body, /on this PR's Vercel preview before the merge, and on production after it/);
-  assert.match(body, /Search your tree for every needle/);
+  assert.match(body, /search your tree for the path of every needle/);
   // The marker is still last, and the Verdict line is where it was.
   assert.ok(body.trimEnd().endsWith(fixIssueMarker(SITE, DEFECT_KEY)));
   const lines = body.split('\n');
@@ -136,10 +136,12 @@ test('the comment lists each check with its expected and measured value, and say
 test('the comment for a clean run says so and names no draft; an unmeasured one gives the reason', () => {
   const clean = previewChecksComment(report([PASS]));
   assert.match(clean, /\*\*All 1 check passes on the preview\.\*\*/);
+  assert.match(clean, /Steward read the preview's own origin as the production origin in the measured values before it compared them\./);
   assert.ok(!clean.includes('draft'));
   const unmeasured = previewChecksComment({ ...report(null, 'No Preview deployment of the PR head was ready within 30 minutes.'), sha: null });
   assert.match(unmeasured, /\*\*The preview was not measured\.\*\* No Preview deployment .* The same checks run on production after the merge\./);
   assert.ok(!unmeasured.includes('commit `'));
+  assert.ok(!unmeasured.includes('own origin'), 'nothing was compared, so the note is left out');
 });
 
 test('the status line is one line for each outcome', () => {

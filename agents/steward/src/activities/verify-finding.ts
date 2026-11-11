@@ -1,4 +1,5 @@
 import { ApplicationFailure } from '@temporalio/activity';
+import { PROD_ORIGIN } from '../config.js';
 import { AUDIT_USER_AGENT } from '../lib/agent-audit/safe-fetch.js';
 import { openChromeProbe } from '../lib/chrome-probe.js';
 import { log } from '../lib/logger.js';
@@ -28,10 +29,20 @@ import {
  *
  * **On a preview** each check's production origin is swapped for the preview's,
  * and every request to the preview carries Vercel's Protection Bypass for
- * Automation secret. The secret is read here, from the worker's
+ * Automation secret. What a check measures there is read the other way: the
+ * preview's own origin counts as the production origin (`readAs`), in the body,
+ * a header value, a selector's text or attribute and a `js` result, before it is
+ * compared. A preview build writes its own origin into agent files
+ * (`resolveSiteOrigin`) and also serves some production URLs on purpose, so a
+ * finding's expectation, which names production, passes on either form and
+ * stays as written. Another host's URL is read as it is. The secret is read here, from the worker's
  * `VERCEL_AUTOMATION_BYPASS_SECRET`, and goes nowhere but those requests: not
  * into the input, the result or a log line. A worker without it fails the
  * activity as `PreviewBypassMissing`.
+ *
+ * **No workflow change, no `wf.patched` marker.** The workflow issues the same
+ * commands with the same inputs; only what the activity compares differs, and
+ * `tests/workflows/replay.test.ts` replays unchanged (determinism rule 5).
  */
 
 /** The worker environment variable that holds the bypass secret, under the name Vercel uses. */
@@ -70,6 +81,7 @@ export async function runFindingChecks(
     const bypass = { origin: input.previewOrigin, secret };
     checks = onOrigin(checks, input.previewOrigin);
     preview = {
+      readAs: { from: new URL(input.previewOrigin).origin, to: runner.readAs?.to ?? PROD_ORIGIN },
       fetch: bypassFetch(input.previewOrigin, secret, runner.fetch ?? fetch),
       openProbe: runner.openProbe ?? (() => openChromeProbe({ userAgent: AUDIT_USER_AGENT, bypass })),
     };

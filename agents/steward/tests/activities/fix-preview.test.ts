@@ -416,3 +416,67 @@ test('a PR the preview test fails is turned into a draft by GraphQL, and a draft
   await openFixerPr(prInput);
   assert.ok(!calls.includes('POST /graphql'), 'an existing draft is not converted again');
 });
+
+// ---------------------------------------------------------------------------
+// What a preview serves is read as production before it is compared
+// ---------------------------------------------------------------------------
+
+const RSS = `${ORIGIN}/rss.xml`;
+const RSS_CHECK: VerifyCheck = { url: `${ORIGIN}/llms.txt`, kind: 'text', expect: { contains: RSS } };
+
+async function previewBody(body: string, check: VerifyCheck = RSS_CHECK, previewOrigin: string | null = PREVIEW) {
+  process.env[BYPASS_SECRET_ENV] = SECRET;
+  const fetcher = (async () => new Response(body, { status: 200 })) as typeof fetch;
+  return runFindingChecks({ key: DEFECT_KEY, checks: [check], ...(previewOrigin ? { previewOrigin } : {}) }, { fetch: fetcher });
+}
+
+test('a needle that names production passes on a body that carries the preview origin (MP-136)', async () => {
+  const run = await previewBody(`- [RSS](${PREVIEW}/rss.xml)`);
+  assert.equal(run.passed, true);
+  assert.equal(run.results[0].expected, `contains ${JSON.stringify(RSS)}`, 'the expectation stays as the finding wrote it');
+});
+
+test('a needle that names production still passes on a preview that serves the production origin', async () => {
+  assert.equal((await previewBody(`- [RSS](${RSS})`)).passed, true);
+});
+
+test('a body that carries neither origin still fails', async () => {
+  const run = await previewBody('- [RSS](https://example.org/rss.xml)');
+  assert.equal(run.passed, false);
+  assert.equal(run.results[0].measured, '0 occurrences');
+});
+
+test("a count of a needle counts the preview's form and the production form together", async () => {
+  const count: VerifyCheck = { url: `${ORIGIN}/llms.txt`, kind: 'text', expect: { count: 2, of: RSS } };
+  assert.equal((await previewBody(`${PREVIEW}/rss.xml and ${RSS}`, count)).passed, true);
+});
+
+test('another origin is left as written, and a host that only starts with the preview origin is not read as production', async () => {
+  const foreign: VerifyCheck = { url: `${ORIGIN}/llms.txt`, kind: 'text', expect: { contains: 'https://example.org/rss.xml' } };
+  assert.equal((await previewBody('https://example.org/rss.xml', foreign)).passed, true);
+  assert.equal((await previewBody(`${PREVIEW}/rss.xml`, foreign)).passed, false);
+  // A look-alike host: it is not the preview, so the production needle is not found in it.
+  const lookalike = (await previewBody(`${PREVIEW}.evil.example/rss.xml and ${PREVIEW}-x/rss.xml`)).results[0];
+  assert.equal(lookalike.pass, false);
+});
+
+test('with no preview origin nothing is read differently', async () => {
+  assert.equal((await previewBody(`- [RSS](${PREVIEW}/rss.xml)`, RSS_CHECK, null)).passed, false);
+  assert.equal((await previewBody(`- [RSS](${RSS})`, RSS_CHECK, null)).passed, true);
+});
+
+test('a header value, and a selector or js result, are read the same way', async () => {
+  const header: VerifyCheck = { url: `${ORIGIN}/`, kind: 'header', expect: { name: 'link', contains: RSS } };
+  process.env[BYPASS_SECRET_ENV] = SECRET;
+  const fetcher = (async () => new Response('', { status: 200, headers: { link: `<${PREVIEW}/rss.xml>; rel="alternate"` } })) as typeof fetch;
+  assert.equal((await runFindingChecks({ key: DEFECT_KEY, checks: [header], previewOrigin: PREVIEW }, { fetch: fetcher })).passed, true);
+
+  const probe = { evaluate: async () => `${PREVIEW}/rss.xml`, close: async () => {} };
+  const js: VerifyCheck = { url: `${ORIGIN}/`, kind: 'js', expect: { expression: 'x', equals: RSS } };
+  const attribute: VerifyCheck = { url: `${ORIGIN}/`, kind: 'selector', expect: { selector: 'link', attribute: 'href', equals: RSS } };
+  const run = await runFindingChecks(
+    { key: DEFECT_KEY, checks: [js, attribute], previewOrigin: PREVIEW },
+    { fetch: fetcher, openProbe: async () => probe },
+  );
+  assert.deepEqual(run.results.map((row) => row.pass), [true, true]);
+});

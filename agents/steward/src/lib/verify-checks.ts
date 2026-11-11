@@ -492,6 +492,29 @@ export function onOrigin(checks: VerifyCheck[], origin: string): VerifyCheck[] {
   return checks.map((check) => ({ ...check, url: Array.isArray(check.url) ? check.url.map(swap) : swap(check.url) }));
 }
 
+/**
+ * `value` with every occurrence of the origin `from` read as the origin `to`.
+ *
+ * An occurrence ends where the host ends: `https://a.app` inside `https://a.app.evil`
+ * or `https://a.app-x` is another host and stays. Strings only; `from` equal to
+ * `to` changes nothing.
+ */
+export function readOriginAs(value: string, from: string, to: string): string {
+  if (from === to) return value;
+  const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replace(new RegExp(`${escaped}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`, 'g'), () => to);
+}
+
+/** {@link readOriginAs} over every string inside a JSON value. */
+function readJsonAs(value: unknown, from: string, to: string): unknown {
+  if (typeof value === 'string') return readOriginAs(value, from, to);
+  if (Array.isArray(value)) return value.map((item) => readJsonAs(item, from, to));
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, readJsonAs(item, from, to)]));
+  }
+  return value;
+}
+
 /** Most redirects {@link bypassFetch} follows before it hands back the last answer. */
 const REDIRECTS_MAX = 10;
 
@@ -537,6 +560,14 @@ export interface CheckRunner {
   openProbe: () => Promise<PageProbe & { close(): Promise<void> }>;
   userAgent: string;
   timeoutMs?: number;
+  /**
+   * A block run on a preview: `from` is the preview's own origin and `to` the
+   * production origin the finding's expectations name. Every measured string
+   * (the body, a header value, a selector's text or attribute, a `js` result)
+   * is read with `from` as `to` before it is compared; the expectations stay as
+   * written. Absent on production, where nothing is read differently.
+   */
+  readAs?: { from: string; to: string };
 }
 
 /**
@@ -641,6 +672,9 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
   const timeoutMs = runner.timeoutMs ?? 30_000;
   let probe: (PageProbe & { close(): Promise<void> }) | undefined;
 
+  const read = (text: string): string => (runner.readAs ? readOriginAs(text, runner.readAs.from, runner.readAs.to) : text);
+  const readValue = (value: unknown): unknown => (runner.readAs ? readJsonAs(value, runner.readAs.from, runner.readAs.to) : value);
+
   const get = async (check: VerifyCheck, url: string, init: RequestInit = {}): Promise<Response> => {
     let res: Response;
     try {
@@ -667,7 +701,8 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
       }
       case 'header': {
         const res = await get(check, url);
-        const value = res.headers.get(String(expect.name));
+        const raw = res.headers.get(String(expect.name));
+        const value = raw === null ? null : read(raw);
         const measured = value === null ? 'absent' : clip(show(value));
         if ('absent' in expect) return { pass: value === null, expected: `no ${String(expect.name)} header`, measured };
         if ('equals' in expect) {
@@ -684,7 +719,7 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
         const markdown = check.kind === 'markdown';
         const res = await get(check, url, markdown ? { headers: { Accept: 'text/markdown' } } : {});
         const type = (res.headers.get('content-type') ?? '').toLowerCase();
-        const verdict = judgeText((await res.text()).slice(0, BODY_MAX), expect);
+        const verdict = judgeText(read((await res.text()).slice(0, BODY_MAX)), expect);
         const wanted = check.status ?? 200;
         if (wanted !== 200) verdict.expected = `${verdict.expected}, on status ${wanted}`;
         if (res.status !== wanted) return { ...verdict, pass: false, measured: `status ${res.status}` };
@@ -700,7 +735,7 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
         const viewport = check.viewport ?? DEFAULT_VIEWPORT;
         const size = parseViewport(viewport);
         if (!size) throw new CheckBroken(`viewport ${show(viewport)} is not "<width>x<height>"`);
-        const value = await probe.evaluate(url, expression, size);
+        const value = readValue(await probe.evaluate(url, expression, size));
         if (check.kind === 'selector') return { ...judgeSelector(value, expect), viewport };
         return {
           pass: sameJson(value, expect.equals),
