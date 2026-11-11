@@ -1,56 +1,71 @@
 ---
 /**
- * The reserved space for screenshots. No capture exists yet (a later slice adds
- * them), so this is a labelled placeholder rather than an invented picture.
+ * The reserved space for a before and after screenshot pair. No capture exists yet,
+ * so each is a placeholder at the size a real capture would take.
  *
- * `side` draws one panel; without it, the before and after pair. `shape` follows the
- * screen the fix is about: `tall` for a phone, `wide` for a desktop page.
+ * Before sits left and after right, each named above its frame. Both frames are the
+ * same: position and the name tell them apart, not colour.
+ *
+ * `shape` follows the screen the fix is about: `tall` for a phone, `wide` for a
+ * desktop page.
  */
 interface Props {
-  side?: 'before' | 'after';
   shape?: 'wide' | 'tall';
 }
-const { side, shape = 'wide' } = Astro.props;
-const sides = side ? [side] : (['before', 'after'] as const);
+const { shape = 'wide' } = Astro.props;
 ---
 
-<div class:list={['shots', `shots--${shape}`, !side && 'shots--pair']}>
-  {sides.map((s) => (
-    <div class:list={['shot', `shot--${s}`]} role="img" aria-label={`Space for the ${s} screenshot, not yet captured`}>
-      {!side && <span class="shot-tag">{s === 'before' ? 'Before' : 'After'}</span>}
-      <span class="shot-text">screenshot to come</span>
-    </div>
+<div class:list={['shots', `shots--${shape}`]}>
+  {(['Before', 'After'] as const).map((side) => (
+    <figure class="shot">
+      <figcaption class="shot-name">{side}</figcaption>
+      <div class="shot-frame" role="img" aria-label={`${side}: screenshot not yet captured`}>
+        <span class="shot-text">screenshot to come</span>
+      </div>
+    </figure>
   ))}
 </div>
 
 <style>
-  .shots { display: grid; gap: 10px; }
-  .shots--pair { grid-template-columns: 1fr 1fr; }
+  .shots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
 
-  .shot {
-    position: relative;
+  .shots--tall {
+    grid-template-columns: minmax(0, 360px) minmax(0, 360px);
+    justify-content: center;
+    gap: 40px;
+  }
+
+  .shot { margin: 0; min-width: 0; }
+
+  .shot-name {
+    margin-bottom: 10px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: -.01em;
+    color: var(--ink);
+  }
+
+  .shot-frame {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
-    background: repeating-linear-gradient(-45deg, oklch(0.93 0.005 265) 0 8px, oklch(0.96 0.004 265) 8px 18px);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: repeating-linear-gradient(-45deg, var(--track) 0 8px, var(--paper) 8px 18px);
   }
 
-  .shots--wide .shot { aspect-ratio: 16 / 10; }
-  .shots--tall .shot { aspect-ratio: 9 / 16; }
-
-  .shot-tag {
-    position: absolute;
-    top: 12px;
-    left: 14px;
-    font-weight: 700;
-    font-size: 14px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-  }
-
-  .shot--before .shot-tag { color: oklch(0.46 0.13 40); }
-  .shot--after .shot-tag { color: oklch(0.42 0.11 150); }
+  .shots--wide .shot-frame { aspect-ratio: 16 / 10; }
+  .shots--tall .shot-frame { aspect-ratio: 9 / 19.5; }
 
   .shot-text { font-size: 15px; color: var(--ink-6); }
+
+  @media (max-width: 720px) {
+    .shots, .shots--tall { gap: 12px; grid-template-columns: 1fr 1fr; }
+    .shot-name { font-size: 16px; margin-bottom: 6px; }
+  }
 </style>

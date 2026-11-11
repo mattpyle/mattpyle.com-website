@@ -61,6 +61,8 @@ export interface FixEntry {
    * fix has one, otherwise the shortest true quote. `label` names what is counted.
    */
   glance: { label: string; before: string; after: string; quoted?: boolean };
+  /** What was done and why, in two or three plain sentences. No annotation. */
+  story: string;
   /** For a visual fix, the screen it is about: sets the screenshot shape. */
   screen?: 'phone' | 'desktop';
   /** Whether the fix is told as an article of its own. */
@@ -77,6 +79,7 @@ export const prUrl = (n: number) => `${PR_BASE}${n}`;
 export const FIX_ENTRIES: FixEntry[] = [
   {
     key: 'MP-144',
+    story: 'The guides this site writes for AI agents said the homepage holds a bio. It has none: the bio is on the About page. An agent asked about Matt for a recruiter was sent to the wrong page first, so the line now describes the homepage as it is.',
     glance: { label: 'what llms.txt says the homepage holds', before: 'a bio', after: 'name, tagline, latest work', quoted: true },
     claim: 'llms.txt does not call the homepage a bio.',
     title: 'Agent guides said the homepage holds a bio',
@@ -115,6 +118,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-136',
+    story: 'An agent asked to follow Matt’s writing starts at llms.txt, the index this site points agents to. It listed fifteen resources and neither RSS feed. Now it lists both.',
     glance: { label: 'RSS feeds listed in llms.txt', before: '0', after: '2' },
     claim: 'llms.txt lists both RSS feeds.',
     title: 'llms.txt listed no RSS feed',
@@ -127,7 +131,7 @@ export const FIX_ENTRIES: FixEntry[] = [
       text: 'The agent index listed 15 machine-readable resources and neither feed. “rss.xml” occurred 0 times, though every HTML page advertises one.',
       specimen: {
         kind: 'lines',
-        label: 'llms.txt, machine-readable resources',
+        label: 'llms.txt',
         lines: [
           { text: '- [Scorecard data](/scorecard.json): …' },
           { text: '- [Activity data](/activity.json): …' },
@@ -138,7 +142,7 @@ export const FIX_ENTRIES: FixEntry[] = [
       text: 'Both feeds are listed. Each feed URL occurs once.',
       specimen: {
         kind: 'lines',
-        label: 'llms.txt, machine-readable resources',
+        label: 'llms.txt',
         lines: [
           { text: '- [Scorecard data](/scorecard.json): …' },
           { text: '- [Activity data](/activity.json): …' },
@@ -161,6 +165,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-46',
+    story: 'The site invites developers to reuse its code, but the repository had no licence, so nobody could legally copy it. The code is now MIT licensed. The writing stays all rights reserved.',
     glance: { label: 'licence on the code', before: 'none', after: 'MIT' },
     claim: 'The repository’s code is MIT licensed.',
     title: 'The public repository had no licence',
@@ -171,11 +176,11 @@ export const FIX_ENTRIES: FixEntry[] = [
     who: 'A developer who wanted to copy the site’s audit code',
     before: {
       text: 'The site invites developers to reuse its code, but the repository had no licence, so nobody could legally copy it.',
-      specimen: { kind: 'lines', label: 'GitHub API, the repository', lines: [{ text: '"license": null', mark: 'removed' }] },
+      specimen: { kind: 'lines', label: 'GitHub API', lines: [{ text: '"license": null', mark: 'removed' }] },
     },
     after: {
       text: 'The code is MIT licensed. The writing stays all rights reserved. Confirmed when the deploy that carries the licence went live.',
-      specimen: { kind: 'lines', label: 'LICENSE, first line', lines: [{ text: 'MIT License', mark: 'added' }] },
+      specimen: { kind: 'lines', label: 'LICENSE', lines: [{ text: 'MIT License', mark: 'added' }] },
     },
     pr: { number: 658, title: 'Add MIT LICENSE for the repository code' },
     where: 'https://github.com/mattpyle/mattpyle.com-website',
@@ -191,6 +196,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-130',
+    story: 'The slash before each link in the header is decoration, but screen readers read it aloud, on every page. It is still shown, and no longer spoken.',
     glance: { label: 'what a screen reader says', before: 'slash writing', after: 'writing', quoted: true },
     claim: 'The navigation is not read aloud as “slash writing”, on three pages.',
     title: 'Screen readers heard “slash writing” on every page',
@@ -201,11 +207,11 @@ export const FIX_ENTRIES: FixEntry[] = [
     who: 'A screen-reader user moving through the main navigation',
     before: {
       text: 'Every header link’s name started with a slash, so the navigation was read aloud as “slash writing, slash projects” on every page.',
-      specimen: { kind: 'spoken', label: 'heard', words: ['slash writing', 'slash projects', 'slash changelog', 'slash scorecard', 'slash about'] },
+      specimen: { kind: 'spoken', label: 'screen reader', words: ['slash writing', 'slash projects', 'slash changelog', 'slash scorecard', 'slash about'] },
     },
     after: {
       text: 'The slash is still shown and no longer read. The old link text is gone from 3 of 3 pages checked.',
-      specimen: { kind: 'spoken', label: 'heard', words: ['writing', 'projects', 'changelog', 'scorecard', 'about'] },
+      specimen: { kind: 'spoken', label: 'screen reader', words: ['writing', 'projects', 'changelog', 'scorecard', 'about'] },
     },
     pr: { number: 656, title: 'Hide the decorative nav slash from accessible names' },
     where: '/',
@@ -221,6 +227,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-107',
+    story: 'The changelog page filters entries by type. The feed carried no types, so a feed reader could not do the same. Every item in the feed now carries its type.',
     glance: { label: 'launch tags in the changelog feed', before: '0', after: '3' },
     claim: 'The changelog feed carries each entry’s type.',
     title: 'The changelog feed carried no entry type',
@@ -233,7 +240,7 @@ export const FIX_ENTRIES: FixEntry[] = [
       text: 'The page filters the changelog by type, but the feed carried 0 categories, so a feed reader had nothing to filter on.',
       specimen: {
         kind: 'lines',
-        label: 'changelog/rss.xml, one item',
+        label: 'changelog/rss.xml',
         lines: [{ text: '<item>' }, { text: '  <title>…</title>' }, { text: '  <pubDate>…</pubDate>' }, { text: '</item>' }],
       },
     },
@@ -241,7 +248,7 @@ export const FIX_ENTRIES: FixEntry[] = [
       text: 'Every item carries its type. The feed has 3 launch categories, one per launch on the page.',
       specimen: {
         kind: 'lines',
-        label: 'changelog/rss.xml, one item',
+        label: 'changelog/rss.xml',
         lines: [
           { text: '<item>' },
           { text: '  <title>…</title>' },
@@ -265,6 +272,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-109',
+    story: 'Three links in the WebMCP post pointed at /webmcp without its trailing slash, so each click went through a redirect. They now point straight at the page.',
     glance: { label: 'links that go through a redirect', before: '3', after: '0' },
     claim: 'The WebMCP post has no link that goes through a redirect.',
     title: 'The WebMCP post linked through a redirect',
@@ -295,6 +303,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-48',
+    story: 'On a phone, a post opened with nearly two screens of links and buttons before its first sentence.',
     glance: { label: 'posts that start on the first phone screen', before: '0 of 3', after: '1 of 3' },
     article: true,
     screen: 'phone',
@@ -332,6 +341,7 @@ export const FIX_ENTRIES: FixEntry[] = [
   },
   {
     key: 'MP-31',
+    story: 'Posts linked only to the next older post, so the oldest one ended with nowhere to go. Every post now ends with a newer and an older link.',
     glance: { label: 'links onward from the oldest post', before: '0', after: '1' },
     screen: 'desktop',
     claim: 'The oldest post ends with a link to another post.',
@@ -413,30 +423,6 @@ export function medianSpan(entries: FixEntry[]): number {
   return spans.length % 2 ? spans[mid] : (spans[mid - 1] + spans[mid]) / 2;
 }
 
-/** The round-two directions, for the mock index and the bar across each mock. */
-export const DIRECTIONS = [
-  {
-    slug: 'pairs',
-    name: 'Pairs',
-    temperament: 'quiet',
-    idea: 'A list you can scan: each fix is its title, a before and an after, and the change.',
-    agent: 'An agent gets the same pairs as a table in the markdown twin.',
-  },
-  {
-    slug: 'diptych',
-    name: 'Diptych',
-    temperament: 'visual',
-    idea: 'Two big panels per fix: the screenshots where something visible changed, the number or the words where nothing did.',
-    agent: 'An agent gets the pair as text and the screenshots with alt text.',
-  },
-  {
-    slug: 'posts',
-    name: 'Posts',
-    temperament: 'between Specimen and Front page',
-    idea: 'A stream of short entries, and the fix that earns it opens into an article of its own.',
-    agent: 'An agent gets each entry and each article as a markdown twin.',
-  },
-] as const;
 
 /** The one place a page says how entries are made. */
 export const HOW_MADE =

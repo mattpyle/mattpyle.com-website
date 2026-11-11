@@ -1,0 +1,131 @@
+---
+/**
+ * One side of a fix, shown as the thing itself: a count, the lines of a file, the
+ * words a screen reader spoke, or the gap where something was missing.
+ *
+ * Before and after use this same frame. They are told apart by the name above the
+ * frame and by position (before left, after right), never by colour, and nothing is
+ * struck through. On the after side, a line the fix added is set in full ink and
+ * bold, so the change is visible inside the file.
+ *
+ * Text styles, kept distinct on purpose: the side's name in the display face; the
+ * file name in mono on a grey chip; the content in mono or the display face.
+ */
+import type { Specimen } from '../../data/fix-log-sample';
+
+interface Props {
+  specimen: Specimen;
+  name: 'Before' | 'After';
+}
+
+const { specimen, name } = Astro.props;
+const fileName = specimen.kind === 'figure' ? null : specimen.label;
+---
+
+<figure class="thing">
+  <figcaption class="thing-name">{name}</figcaption>
+  <div class="frame">
+    {fileName && <span class="file">{fileName}</span>}
+    {specimen.kind === 'figure' && (
+      <p class="figure"><span class="figure-value">{specimen.value}</span><span class="figure-of">{specimen.caption}</span></p>
+    )}
+    {specimen.kind === 'lines' && (
+      <pre class="lines"><code>{specimen.lines.map((line) => (
+        <span class:list={['line', name === 'After' && line.mark === 'added' && 'line--added']}>{line.text}</span>
+      ))}</code></pre>
+    )}
+    {specimen.kind === 'spoken' && (
+      <p class="spoken">{specimen.words.map((w, i) => <span>“{w}”{i < specimen.words.length - 1 ? ', ' : ''}</span>)}</p>
+    )}
+    {specimen.kind === 'missing' && <p class="missing">{specimen.text}</p>}
+  </div>
+</figure>
+
+<style>
+  .thing { margin: 0; min-width: 0; display: flex; flex-direction: column; }
+
+  .thing-name {
+    margin-bottom: 10px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: -.01em;
+    color: var(--ink);
+  }
+
+  .frame {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 20px 20px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    min-width: 0;
+  }
+
+  .file {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--track);
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-4);
+  }
+
+  .figure { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+
+  .figure-value {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 64px;
+    line-height: .9;
+    letter-spacing: -.04em;
+    color: var(--ink);
+  }
+
+  .figure-of { font-family: var(--font-mono-plex); font-size: 15px; color: var(--ink-5); }
+
+  .lines {
+    margin: 0;
+    overflow-x: auto;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-4);
+  }
+
+  .lines code { display: flex; flex-direction: column; font: inherit; }
+  .line { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .line--added { color: var(--ink); font-weight: 600; }
+
+  .spoken {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 22px;
+    line-height: 1.3;
+    letter-spacing: -.01em;
+    color: var(--ink);
+  }
+
+  .missing {
+    margin: 0;
+    padding: 16px;
+    border: 1px dashed var(--ink-6);
+    border-radius: 4px;
+    font-size: 16px;
+    text-align: center;
+    color: var(--ink-5);
+  }
+
+  @media (max-width: 720px) {
+    .thing-name { font-size: 16px; margin-bottom: 6px; }
+    .frame { padding: 14px; }
+    .figure-value { font-size: 48px; }
+    .spoken { font-size: 18px; }
+    .lines { font-size: 15px; }
+  }
+</style>
