@@ -37,6 +37,7 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
             maxlength={NAME_MAX}
             autocomplete="off"
             aria-describedby="gb-name-hint"
+            aria-required="true"
             data-gb-name
             disabled
           />
@@ -56,10 +57,11 @@ import { SEED_ENTRIES, NAME_MAX, MESSAGE_MAX, formatEntryNumber } from '../lib/g
             rows="4"
             maxlength={MESSAGE_MAX}
             aria-describedby="gb-message-hint"
+            aria-required="true"
             data-gb-message
             disabled></textarea>
           <div class="gb-underline">
-            <span class="gb-hint" id="gb-message-hint">Up to {MESSAGE_MAX} characters.</span>
+            <span class="gb-hint" id="gb-message-hint">Required. Up to {MESSAGE_MAX} characters.</span>
             <span class="gb-count" data-gb-message-count aria-hidden="true">0 / {MESSAGE_MAX}</span>
           </div>
           <p class="gb-error" id="gb-message-error" data-gb-message-error hidden></p>
