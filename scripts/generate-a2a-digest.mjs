@@ -81,8 +81,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
   const projects = readCollection(`${contentDir}projects`)
     .map(({ slug, data }) => ({
       title: requireString(data.title, `projects/${slug} title`),
-      // Projects have no per-entry route; src/pages/projects/ is an index page only.
-      url: `${base}/projects/`,
+      url: `${base}/projects/#project-${slug}`,
       date: isoDate(data.date, `projects/${slug} date`),
       status: requireString(data.status, `projects/${slug} status`),
       tags: data.tags ?? [],

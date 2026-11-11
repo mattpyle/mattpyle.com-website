@@ -186,7 +186,7 @@ function projectsAnswer(digest) {
       project.github ? `Source: ${project.github}` : null,
     ].filter(Boolean);
     lines.push(
-      `- **${project.title}** (${project.status}, ${formatDate(project.date)}): ${project.description}` +
+      `- [${project.title}](${project.url}) (${project.status}, ${formatDate(project.date)}): ${project.description}` +
         (links.length ? ` ${links.join('. ')}.` : '')
     );
   }
