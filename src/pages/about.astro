@@ -9,6 +9,19 @@ import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 // cannot drift; the map returns null for a path it does not negotiate, and Layout wants the prop
 // absent rather than null. The portrait rail links the same value for the same reason.
 const markdownUrl = markdownSiblingFor('/about/') ?? undefined;
+
+// Marks this page as the profile page of the Person Layout already ships on every page, by
+// reference to its @id, so the Person node is not duplicated.
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const personId = `${new URL('/', Astro.site).toString()}#person`;
+const extraJsonLd = [
+  {
+    '@type': 'ProfilePage',
+    '@id': `${canonical}#profilepage`,
+    url: canonical,
+    mainEntity: { '@id': personId },
+  },
+];
 ---
 
 <Layout
@@ -16,6 +29,7 @@ const markdownUrl = markdownSiblingFor('/about/') ?? undefined;
   fullTitle="About Matt Pyle — growth marketer and hobbyist builder"
   description="Matt Pyle is Director of Growth at Temporal Technologies: growth marketer, hobbyist builder, and a curious person who ships things in public."
   markdownAlternate={markdownUrl}
+  extraJsonLd={extraJsonLd}
 >
   {/*
     ONE ABOUT PAGE, styled by both appearances. This page shipped its content
