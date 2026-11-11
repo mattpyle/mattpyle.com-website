@@ -466,7 +466,7 @@ test('page URLs in the answers carry the trailing slash', async () => {
   for (const q of ['What are your projects?', 'What changed on the site recently?']) {
     const text = said(await ask(q));
     for (const [url] of text.matchAll(/https:\/\/www\.mattpyle\.com\/[^\s)<>]*/g)) {
-      const path = url.replace(/[.,;:]+$/, '');
+      const path = url.replace(/#.*$/, '').replace(/[.,;:]+$/, '');
       assert.ok(path.endsWith('/') || /\.[a-z]+$/i.test(path), `${q}: ${path} lacks a trailing slash`);
     }
   }

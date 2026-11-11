@@ -58,8 +58,7 @@ export const GET: APIRoute = async ({ site }) => {
     projects: projects.map((project) => ({
       title: project.data.title,
       slug: project.id,
-      // Projects have no per-entry route — src/pages/projects/ is an index page only.
-      url: `${base}/projects/`,
+      url: `${base}/projects/#project-${project.id}`,
       date: project.data.date.toISOString(),
       status: project.data.status,
       tags: project.data.tags,
