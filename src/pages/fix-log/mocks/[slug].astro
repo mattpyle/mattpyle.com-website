@@ -54,15 +54,16 @@ const url = (x: FixEntry) => `/fix-log/mocks/${x.slug}/`;
       <a href="/fix-log/mocks/" class="back">&larr; all fixes</a>
       <h1 class="title">{e.title}</h1>
       <p class="lead">{e.dek}</p>
-      <p class="meta">
-        <time datetime={e.times.verified}>{fixDate(e.times.verified)}</time>
-        <span>{TYPE_LABEL[e.type]}</span>
-        {e.status === 'reopened' && <span class="meta-open">still open</span>}
-      </p>
     </div>
 
     <div class="rd-section">
      <div class="body">
+      <aside class="meta" aria-label="About this fix">
+        <time datetime={e.times.verified} class="meta-date">{fixDate(e.times.verified)}</time>
+        <span>{TYPE_LABEL[e.type]}</span>
+        {e.status === 'reopened' && <span class="meta-open">still open</span>}
+      </aside>
+
       <div class="story">
         {e.body.map((p) => <p>{p}</p>)}
       </div>
@@ -121,56 +122,56 @@ const url = (x: FixEntry) => `/fix-log/mocks/${x.slug}/`;
   [data-module="fix-entry"] { padding-bottom: 80px; }
 
   /* ── The head: the changelog entry's, with a smaller title ── */
-  .head { padding-top: 48px; }
+  .head { padding-top: 66px; }
 
   .back { font-family: var(--font-mono-plex); font-size: 17px; color: var(--ink-5); }
   .back:hover { color: var(--ink); }
 
   .title {
-    margin: 22px 0 0;
-    max-width: 22ch;
+    margin: 26px 0 0;
+    max-width: 24ch;
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: clamp(40px, 4.6vw, 62px);
-    line-height: 1.02;
+    font-size: clamp(48px, 5.6vw, 82px);
+    line-height: 1;
     letter-spacing: -.035em;
     color: var(--ink);
     text-wrap: balance;
   }
 
   .lead {
-    margin: 22px 0 0;
-    max-width: 44ch;
+    margin: 30px 0 0;
+    max-width: 40ch;
     font-family: var(--font-display);
     font-weight: 500;
-    font-size: 25px;
+    font-size: 27px;
     line-height: 1.32;
     letter-spacing: -.02em;
     color: var(--ink-3);
     text-wrap: pretty;
   }
 
-  /* The changelog's meta line: plain mono words. */
+  /* The post rail's meta block (PostRail.astro .rail-meta): one fact per line, the
+     first in ink, the rest grey, in a 210px column beside the body. */
   .meta {
     display: flex;
-    flex-wrap: wrap;
-    column-gap: 22px;
-    row-gap: 6px;
-    margin: 22px 0 0;
+    flex-direction: column;
+    gap: 8px;
     font-family: var(--font-mono-plex);
     font-size: 17px;
     color: var(--ink-6);
   }
 
-  .meta-open { color: var(--ink); }
+  .meta-date, .meta-open { color: var(--ink); }
 
   /* ── The body: the story beside the rail ── */
   .body {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-    gap: 64px;
-    margin-top: 44px;
-    padding-top: 36px;
+    grid-template-columns: 210px minmax(0, 1fr) minmax(0, 300px);
+    gap: 48px;
+    align-items: start;
+    margin-top: 58px;
+    padding-top: 34px;
     border-top: 1px solid var(--rule);
   }
 
@@ -264,14 +265,21 @@ const url = (x: FixEntry) => `/fix-log/mocks/${x.slug}/`;
     max-width: 26ch;
   }
 
+  @media (max-width: 1080px) {
+    .body { grid-template-columns: 210px minmax(0, 1fr); }
+    .rail { grid-column: 2; }
+  }
+
   @media (max-width: 860px) {
-    .body { grid-template-columns: 1fr; gap: 36px; }
+    .body { grid-template-columns: 1fr; gap: 28px; }
+    .rail { grid-column: auto; }
+    .meta { flex-direction: row; flex-wrap: wrap; column-gap: 22px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
   }
 
   @media (max-width: 720px) {
-    .head { padding-top: 28px; }
-    .title { font-size: 36px; }
-    .lead { font-size: 21px; }
+    .head { padding-top: 34px; }
+    .title { margin-top: 20px; font-size: 40px; letter-spacing: -.03em; }
+    .lead { margin-top: 22px; font-size: 22px; }
     .meta { font-size: 16px; }
     .story p { font-size: 18px; }
     .value { font-size: 40px; }
