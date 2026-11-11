@@ -113,6 +113,8 @@ test('the status line and the all-pass rule', () => {
   assert.equal(verdictMeasurePassed(measured([PASS])), true);
   assert.equal(verdictMeasurePassed(measured([FAIL, PASS])), false);
   assert.equal(verdictMeasurePassed(unmeasured('no checks')), false);
+  // An empty list passes nothing: "all pass" over zero checks is vacuous.
+  assert.equal(verdictMeasurePassed(measured([])), false);
 });
 
 test('the section goes above a Verification section, and a later measurement replaces it', () => {
