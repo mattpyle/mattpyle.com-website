@@ -82,3 +82,5 @@ export { runFindingChecks } from './verify-finding.js';
 // The recheck (STW-543), on `steward-findings`: a site's hosts, one block read
 // against them, and one commit per changed finding.
 export { readSiteHosts, readRecheckBlock, writeFindingRecheck } from './findings-recheck.js';
+// The measurement at an approved verdict (STW-589), on `steward-findings`: one commit.
+export { writeFindingVerdictMeasure } from './findings-verdict-measure.js';

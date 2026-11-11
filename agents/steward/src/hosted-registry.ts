@@ -32,6 +32,7 @@ import {
 } from './activities/findings.js';
 import { runFindingChecks } from './activities/verify-finding.js';
 import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from './activities/findings-recheck.js';
+import { writeFindingVerdictMeasure } from './activities/findings-verdict-measure.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -164,6 +165,8 @@ const findingsActivities = {
   readSiteHosts,
   readRecheckBlock,
   writeFindingRecheck,
+  // The measurement at an approved verdict (STW-589): one commit.
+  writeFindingVerdictMeasure,
 };
 
 /**

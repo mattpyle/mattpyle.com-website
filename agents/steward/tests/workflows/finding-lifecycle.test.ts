@@ -6,6 +6,7 @@ import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
+import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -312,7 +313,7 @@ async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Pro
   const findingsWorker = await Worker.create({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
-    activities: mocks.findings,
+    activities: skipVerdictMeasure(mocks.findings),
     taskQueue: FINDINGS,
   });
   return await findingsWorker.runUntil(bounded(fn()));
@@ -384,8 +385,11 @@ test('merged, deployed and every check passes: resolved, with one execution carr
     findingPath: `sites/mattpyle-com/findings/${DEFECT_KEY}.md`,
     supersedes: null,
   });
+  // The verdict measurement's reads (STW-589) come first; `skipVerdictMeasure` leaves it unmeasured.
   assert.deepEqual(mocks.calls, [
     'writeFindingVerdict',
+    'readFinding',
+    'readVerifyBlock',
     'readSiteAutoFix',
     'openFixIssue',
     'awaitFixPr',
@@ -432,7 +436,7 @@ test('auto_fix: the approved verdict goes to the issue with no fix signal, and t
   assert.equal(result.outcome, 'resolved');
   assert.equal(result.prUrl, PR_1);
   assert.equal(result.fixAttempts, 1);
-  assert.deepEqual(mocks.calls.slice(0, 5), ['writeFindingVerdict', 'readSiteAutoFix', 'openFixIssue', 'awaitFixPr', 'writeFindingFix']);
+  assert.deepEqual(mocks.calls.slice(0, 7), ['writeFindingVerdict', 'readFinding', 'readVerifyBlock', 'readSiteAutoFix', 'openFixIssue', 'awaitFixPr', 'writeFindingFix']);
 });
 
 test('without auto_fix the approved run waits at waiting-fix and opens no issue', async () => {
@@ -447,7 +451,7 @@ test('without auto_fix the approved run waits at waiting-fix and opens no issue'
     await untilState(handle, (s) => s.step === 'waiting-fix', 'waiting-fix');
     await env.sleep('10 minutes');
     assert.equal((await handle.query(findingStateQuery)).step, 'waiting-fix');
-    assert.deepEqual(mocks.calls, ['writeFindingVerdict', 'readSiteAutoFix']);
+    assert.deepEqual(mocks.calls, ['writeFindingVerdict', 'readFinding', 'readVerifyBlock', 'readSiteAutoFix']);
     await handle.terminate('test over');
   });
 });
@@ -468,7 +472,7 @@ test('auto_fix on, kind not a defect: the approved run parks at waiting-fix with
     assert.equal(state.fixAttempts, 0);
     assert.equal(state.lastFixError, null);
     assert.equal(state.waitsForPerson, true);
-    assert.deepEqual(mocks.calls, ['writeFindingVerdict', 'readSiteAutoFix'], 'no openFixIssue was scheduled');
+    assert.deepEqual(mocks.calls, ['writeFindingVerdict', 'readFinding', 'readVerifyBlock', 'readSiteAutoFix'], 'no openFixIssue was scheduled');
     await handle.terminate('test over');
   });
 });
@@ -487,7 +491,7 @@ test('a fix signal on the parked opportunity runs the attempt, and the waiting r
     const fixing = await untilState(handle, (s) => s.step === 'fixing' && Boolean(s.issueUrl), 'fixing with an issue');
     assert.equal(fixing.fixAttempts, 1);
     assert.equal(fixing.waitsForPerson, false);
-    assert.deepEqual(mocks.calls.slice(0, 3), ['writeFindingVerdict', 'readSiteAutoFix', 'openFixIssue']);
+    assert.deepEqual(mocks.calls.slice(0, 5), ['writeFindingVerdict', 'readFinding', 'readVerifyBlock', 'readSiteAutoFix', 'openFixIssue']);
     await handle.terminate('test over');
   });
 });

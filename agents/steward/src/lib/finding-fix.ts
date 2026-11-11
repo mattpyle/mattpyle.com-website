@@ -84,9 +84,11 @@ export interface FindingFixDeps {
  * own, and without it the run waits at `waiting-fix` for the fix signal.
  */
 export function approvedNextStep(key: string, autoFix: boolean): string {
+  // STW-589: the run measures the checks on production first.
+  const first = 'The run measures the checks on production first, and resolves the finding with no fix if all pass.';
   return autoFix
-    ? 'The run opens the fix issue now: the site has auto_fix.'
-    : `The workflow waits for \`steward finding fix ${key}\`.`;
+    ? `${first} Otherwise it opens the fix issue: the site has auto_fix.`
+    : `${first} Otherwise it waits for \`steward finding fix ${key}\`.`;
 }
 
 /** A refusal the operator can act on; the CLI prints the message alone. */
@@ -257,7 +259,8 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
 
   const deadline = Date.now() + waitMs;
   let state = await queryState(lifecycle, deadline, pollMs);
-  if (state.step !== 'waiting-verdict' && state.step !== 'waiting-fix') {
+  // `measuring` (STW-589) is the run reading production at the verdict; the loop below waits it out.
+  if (state.step !== 'waiting-verdict' && state.step !== 'measuring' && state.step !== 'waiting-fix') {
     throw new FixRefused(`${id} is ${state.step}, not waiting for a fix.`);
   }
   if (!state.verdict && !started) {
@@ -268,6 +271,10 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
     await lifecycle.signal(verdictSignal, prepared.verdict);
   }
   while (state.step !== 'waiting-fix') {
+    if (state.step === 'done' && state.verdict?.status === 'approved' && state.verdictMeasure) {
+      // STW-589: every check passed at the verdict, and the run resolved the finding.
+      throw new FixRefused(`${id} resolved the finding at its verdict (${state.verdictMeasure}), so there is nothing to fix.`);
+    }
     if (state.step === 'done' || state.verdict?.status === 'rejected') {
       throw new FixRefused(`${id} has a rejected verdict, so there is nothing to fix.`);
     }

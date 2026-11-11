@@ -92,7 +92,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin` | The scheduled path: `checkActionUsage` and the `nightly-scorecard` health signal. It needs a run started by the schedule, and none is recorded. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin` | A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin` | The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin` | The checks path (`runFindingChecks`, then `writeFindingVerification`, resolved or reopened). The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin` | All three markers on current code: `listFixableFindings`, the restart start and signal, the close cancel. A reconcile that throws (`reportRunHealth` before the rethrow). |
@@ -734,6 +734,50 @@ test('a lifecycle run that passed its preview test before the retest replays its
     { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/agent-readiness-retest-fixture--webmcp-index-json',
+  );
+});
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the measurement at the
+ * verdict (STW-589): CLI approve and its write, the `fixer-auto-fix` marker
+ * and `readSiteAutoFix` (on), a slot the activity granted, the issue, the PR,
+ * a preview test with one check that failed, the merge wait, the PR closed
+ * unmerged, the return written, and the run parked at `waiting-fix` with
+ * `fixAttempts` 1. 94 events.
+ *
+ * New code measures the finding's checks on production right after the
+ * verdict write, before `readSiteAutoFix`, so this replays only because
+ * `verdict-measure` sends a history without the marker straight to the
+ * auto-fix read. No run was past its verdict when this shipped; every
+ * `resolved` run waiting for a verdict takes the new path live.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at cd966e0, the
+ * worktree before its first edit) against the time-skipping server with mocked
+ * activities, so it holds no real finding text.
+ *
+ * Probe (2026-11-11): replacing `wf.patched(VERDICT_MEASURE_PATCH)` with
+ * `true` made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ * for change fixer-auto-fix, but there is no corresponding change command!
+ * ```
+ *
+ * Seven other lifecycle fixtures failed the same way (the frozen-child one on
+ * its `StartChildWorkflowExecutionInitiated` event): every history that took
+ * an approved verdict reaches the guard. The guard was restored and all 25
+ * replays re-ran green.
+ */
+const findingApprovedBeforeVerdictMeasurePath = fileURLToPath(
+  new URL('../fixtures/histories/finding-approved-before-verdict-measure.bin', import.meta.url),
+);
+
+test('a lifecycle run approved before the measurement at the verdict replays straight to its auto-fix read', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingApprovedBeforeVerdictMeasurePath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/agent-readiness-verdict-measure-fixture--llms-txt',
   );
 });
 

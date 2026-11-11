@@ -159,6 +159,12 @@ export const QUIET_NO_FIXER = 'no fixer for this site';
 /** What a `resolved` or `rejected` row says while its open run waits for the reconciler to cancel it. */
 export const QUIET_RUN_CLOSING = 'Run closing on the next reconcile.';
 
+/** What an approved row says while its run measures the checks at the verdict (STW-589). */
+export const HOLD_MEASURING = 'Steward is measuring its checks on production, before any fix.';
+
+/** What a `resolved` row says while its run, which resolved it at the verdict, ends. */
+export const QUIET_RESOLVED_AT_VERDICT = 'Resolved at the verdict; the run is ending.';
+
 /**
  * What holds an approved row, in one line: the gate's refusal as the file
  * stands now, else (for a run at `waiting-fix`) the run's last failure, else the
@@ -168,6 +174,7 @@ export const QUIET_RUN_CLOSING = 'Run closing on the next reconcile.';
 export function holdLineFor(input: { status: string; run: FindingRunView; refusal: string | null; autoFix: boolean }): string | null {
   const { run } = input;
   if (input.status !== 'approved') return null;
+  if (run.open && run.step === 'measuring') return HOLD_MEASURING;
   if (run.open && run.step !== 'waiting-fix') return null;
   if (input.refusal) return `The fixer's gate refuses it: ${input.refusal}.`;
   if (!run.open) return input.autoFix ? 'Waits for the hourly reconcile to start it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
@@ -222,6 +229,8 @@ export function assessRow(
       // `waiting-verdict` takes the verdict instead and ends too). Any other open run is still drift.
       if (run.open) {
         if (run.step === 'waiting-fix' || (status === 'rejected' && run.step === 'waiting-verdict')) quietReason = QUIET_RUN_CLOSING;
+        // The measurement's own commit resolves the row a moment before its run ends.
+        else if (status === 'resolved' && run.step === 'measuring') quietReason = QUIET_RESOLVED_AT_VERDICT;
         else drift.push(`${status} with an open run`);
       }
       break;

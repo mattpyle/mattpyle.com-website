@@ -892,6 +892,22 @@ export interface Verification {
    * failed: its {@link previewResultLine} and the commit it measured.
    */
   previewAtMerge?: string;
+  /**
+   * True when the checks ran at the approved verdict and all passed, so the
+   * finding was resolved without a fix (STW-589). The section says so.
+   */
+  atVerdict?: boolean;
+}
+
+/** The line a Verification section carries when the checks all passed at the verdict. */
+export const VERDICT_RESOLVED_LINE = 'Every check passed at the approved verdict, so Steward opened no fix.';
+
+/**
+ * One measured check as a section prints it. The Verification section and the
+ * section measured at the verdict share it, so one parser reads both.
+ */
+export function verificationCheckLine(row: VerificationRow): string {
+  return `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${rowUrlLabel(row.url)}${row.viewport ? ` at ${row.viewport}` : ''}. Expected: ${row.expected}. Measured: ${row.measured}.`;
 }
 
 /** A row's URL, or the count and every URL of a list: `urlLabel` in `verify-checks.ts`, kept here since this file takes no imports. */
@@ -923,10 +939,10 @@ export function buildVerificationSection(verification: Verification): string {
       '',
     );
   }
-  for (const row of verification.rows) {
-    lines.push(
-      `${row.n}. ${row.pass ? 'Pass' : 'Fail'}, \`${row.kind}\` on ${rowUrlLabel(row.url)}${row.viewport ? ` at ${row.viewport}` : ''}. Expected: ${row.expected}. Measured: ${row.measured}.`,
-    );
+  for (const row of verification.rows) lines.push(verificationCheckLine(row));
+  if (verification.atVerdict) {
+    if (verification.rows.length > 0) lines.push('');
+    lines.push(VERDICT_RESOLVED_LINE);
   }
   if (verification.reason) {
     if (verification.rows.length > 0) lines.push('');
@@ -1054,6 +1070,158 @@ export function setFindingVerification(text: string, verification: Verification)
   while (body.length > 1 && body[body.length - 1].trim() === '') body.pop();
   body.push('', ...buildVerificationSection(verification).split('\n'), '');
   return [...head, ...body].join(eol);
+}
+
+// ---------------------------------------------------------------------------
+// The measurement at the approved verdict (STW-589)
+// ---------------------------------------------------------------------------
+
+/** The heading of the section a finding's checks write at its approved verdict. */
+export const VERDICT_MEASURE_HEADING = '## Measured at the verdict';
+
+/**
+ * What `findingWorkflow` measured on production at an approved verdict: each
+ * check's row, or no rows and the reason nothing was measured.
+ */
+export interface VerdictMeasure {
+  /** ISO 8601: when the checks ran, or when measuring was given up. */
+  at: string;
+  /** The `findingWorkflow` run that measured. */
+  workflowId: string;
+  /** The measured rows. Null when nothing was measured. */
+  rows: VerificationRow[] | null;
+  /** Why nothing was measured, one clause. Set exactly when `rows` is null. */
+  reason: string | null;
+}
+
+/** Every check ran and passed: the problem is already gone. */
+export function verdictMeasurePassed(measure: VerdictMeasure): boolean {
+  return measure.rows !== null && measure.rows.length > 0 && measure.rows.every((row) => row.pass);
+}
+
+/** The one line `steward finding status` prints as `measured at verdict:`. */
+export function verdictMeasureLine(measure: VerdictMeasure): string {
+  if (measure.rows === null) return `unmeasured: ${measure.reason ?? 'no reason recorded'}`;
+  const total = measure.rows.length;
+  const failed = measure.rows.filter((row) => !row.pass).map((row) => row.n);
+  if (failed.length === 0) return `${total} of ${total} checks pass on production`;
+  const which = failed.length === 1 ? `check ${failed[0]}` : `checks ${failed.join(', ')}`;
+  return `${which} of ${total} ${failed.length === 1 ? 'fails' : 'fail'} on production`;
+}
+
+/**
+ * The `## Measured at the verdict` section: a lead line with the time and the
+ * workflow, then each check in the Verification section's own line. An
+ * unmeasured finding gets the lead line with the reason and no check lines.
+ */
+export function buildVerdictMeasureSection(measure: VerdictMeasure): string {
+  const lines = [VERDICT_MEASURE_HEADING, ''];
+  if (measure.rows === null) {
+    lines.push(
+      `Steward did not measure this finding at its approved verdict, ${measure.at}: ${measure.reason ?? 'no reason recorded'}. Workflow \`${measure.workflowId}\`.`,
+    );
+  } else {
+    lines.push(
+      `Steward ran this finding's checks against production at ${measure.at}, at its approved verdict. Workflow \`${measure.workflowId}\`.`,
+      '',
+      ...measure.rows.map(verificationCheckLine),
+    );
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The finding file with its section measured at the verdict and every other
+ * byte kept. The section goes above `## Verification` when the file has one,
+ * and at the end of the body otherwise. A section from an earlier run is
+ * replaced: the file holds the measurement of the latest approval.
+ */
+export function setFindingVerdictMeasure(text: string, measure: VerdictMeasure): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== '---') throw new Error('the finding has no frontmatter block');
+  const close = lines.indexOf('---', 1);
+  if (close < 0) throw new Error("the finding's frontmatter block is not closed");
+  const head = lines.slice(0, close);
+  const body = lines.slice(close);
+  const heading = (line: string) => /^##\s+Measured at the verdict\s*$/.test(line);
+  const at = body.findIndex(heading);
+  if (at >= 0) {
+    let end = body.findIndex((line, i) => i > at && /^##\s/.test(line));
+    if (end < 0) end = body.length;
+    // The section's own trailing blank line goes with it; the one before it stays.
+    body.splice(at, end - at);
+  }
+  const section = buildVerdictMeasureSection(measure).split('\n');
+  const verification = body.findIndex((line) => /^##\s+Verification\s*$/.test(line));
+  if (verification >= 0) {
+    body.splice(verification, 0, ...section, '');
+  } else {
+    while (body.length > 1 && body[body.length - 1].trim() === '') body.pop();
+    body.push('', ...section, '');
+  }
+  return [...head, ...body].join(eol);
+}
+
+/** A finding's section measured at the verdict, read back for the fix log. */
+export interface ParsedVerdictMeasure {
+  at: string | null;
+  workflowId: string | null;
+  /** False when the section says nothing was measured. */
+  measured: boolean;
+  /** Why nothing was measured, when `measured` is false. */
+  reason: string | null;
+  checks: ParsedVerificationCheck[];
+  /** Check lines that did not parse, kept verbatim. */
+  unparsed: string[];
+}
+
+const VERDICT_MEASURE_LEAD =
+  /^Steward ran this finding's checks against production at (\S+), at its approved verdict\. Workflow `([^`]+)`\.$/;
+const VERDICT_UNMEASURED_LEAD =
+  /^Steward did not measure this finding at its approved verdict, (\S+): (.*)\. Workflow `([^`]+)`\.$/;
+
+/** The inverse of {@link buildVerdictMeasureSection}; null when the file has no such section. */
+export function parseVerdictMeasureSection(text: string): ParsedVerdictMeasure | null {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^##\s+Measured at the verdict\s*$/.test(line));
+  if (start < 0) return null;
+  let end = lines.findIndex((line, i) => i > start && /^##\s/.test(line));
+  if (end < 0) end = lines.length;
+  const parsed: ParsedVerdictMeasure = { at: null, workflowId: null, measured: true, reason: null, checks: [], unparsed: [] };
+  for (const raw of lines.slice(start + 1, end)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const lead = VERDICT_MEASURE_LEAD.exec(line);
+    if (lead) {
+      parsed.at = lead[1];
+      parsed.workflowId = lead[2];
+      continue;
+    }
+    const unmeasured = VERDICT_UNMEASURED_LEAD.exec(line);
+    if (unmeasured) {
+      parsed.at = unmeasured[1];
+      parsed.measured = false;
+      parsed.reason = unmeasured[2];
+      parsed.workflowId = unmeasured[3];
+      continue;
+    }
+    const check = VERIFICATION_CHECK.exec(line);
+    if (check) {
+      parsed.checks.push({
+        n: Number(check[1]),
+        pass: check[2] === 'Pass',
+        kind: check[3],
+        url: check[4],
+        viewport: check[5] ?? null,
+        expected: check[6],
+        measured: check[7],
+      });
+      continue;
+    }
+    if (/^\d+\.\s/.test(line)) parsed.unparsed.push(line);
+  }
+  return parsed;
 }
 
 /**

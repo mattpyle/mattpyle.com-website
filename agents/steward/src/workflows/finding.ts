@@ -8,8 +8,12 @@ import {
   fixWorkflowId,
   parsePrUrl,
   previewResultLine,
+  verdictMeasureLine,
+  verdictMeasurePassed,
   verifyWorkflowId,
   type FindingVerdict,
+  type VerdictMeasure,
+  type Verification,
   type PreviewChecksReport,
   type PreviewEarlierResult,
   type VerifyOutcome,
@@ -197,6 +201,41 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * on the merge. A run whose merge wait was scheduled before this change was
  * scheduled without `retestAfter`, so a push does not retest it; the Update
  * does, once the worker runs this code.
+ *
+ * **The measurement at the verdict** (STW-589, 2026-11-11). Right after an
+ * approved verdict, before `readSiteAutoFix` and so before any slot or issue,
+ * the run reads the finding's `verify:` block and runs its checks on
+ * production with `runFindingChecks`. Production is still broken then, so the
+ * values are a true before. `writeFindingVerdictMeasure` writes them into the
+ * finding file as a `## Measured at the verdict` section, in the Verification
+ * section's check-line shape. The step is `measuring`, and `verdictMeasure`
+ * holds the result in one line for `steward finding status`.
+ *
+ * 1. A check fails: the section holds the values, and the fix goes on as before.
+ * 2. Every check passes: the problem is already gone. The same commit resolves
+ *    the finding with a Verification section that says so, as the recheck
+ *    does, and the run ends `resolved` with no slot and no issue. A person
+ *    reopens it from the dashboard.
+ * 3. No checks, a block that does not read, production not answering, or a
+ *    check that does not run: the section records the reason, and the fix goes
+ *    on. So does a write that fails after its retries.
+ * 4. The write refuses with `FindingMoved`: a person or another run moved the
+ *    finding while it was measured. As when `writeFindingFix` meets a moved
+ *    finding, no fix starts: the run parks at `waiting-fix` with the reason in
+ *    `lastFixError`, and drops a `fix` sent while it measured. The reconciler
+ *    closes it behind a `resolved` or `rejected` line, and a person's `fix`
+ *    starts the attempt.
+ *
+ * It runs once per run, not once per fix attempt: a second attempt after a PR
+ * closed unmerged does not measure again. Its activities run on
+ * `steward-findings` like the rest, so a batch of verdicts queues its
+ * measurements behind that queue's activity concurrency in `hosted-registry.ts`.
+ *
+ * **Versioned with `patched`.** {@link VERDICT_MEASURE_PATCH} is read once, as
+ * the first thing the fix loop does. A history recorded before it has the
+ * `fixer-auto-fix` marker and `readSiteAutoFix` next, so it replays straight
+ * to them. The fixture is `finding-approved-before-verdict-measure.bin` in
+ * `tests/workflows/replay.test.ts`; its docblock holds the probe.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -218,6 +257,9 @@ export const FIX_DISPATCH_PATCH = 'fix-dispatch';
 
 /** The `patched` marker of the preview test between the fix PR and its merge wait (fix-pr-runs-the-verify-block). */
 export const PREVIEW_TEST_PATCH = 'fix-preview-test';
+
+/** The `patched` marker of the checks measured on production at an approved verdict (STW-589). */
+export const VERDICT_MEASURE_PATCH = 'verdict-measure';
 
 /**
  * How long a run waits for the fix PR's preview. A Vercel preview takes about
@@ -301,6 +343,7 @@ export interface FindingWorkflowResult {
  */
 export type FindingStep =
   | 'waiting-verdict'
+  | 'measuring'
   | 'waiting-fix'
   | 'waiting-slot'
   | 'fixing'
@@ -352,6 +395,11 @@ export interface FindingState {
   previewTests?: number;
   /** True from an accepted `retest` Update until the test it asked for starts. */
   retestRequested?: boolean;
+  /**
+   * What the checks measured on production at the approved verdict, in one
+   * line, with the reason when nothing was measured. Absent before STW-589.
+   */
+  verdictMeasure?: string | null;
 }
 
 /** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
@@ -414,6 +462,7 @@ const writing = wf.proxyActivities<
     | 'readSiteAutoFix'
     | 'requestFixSlot'
     | 'closeConflictingFixPr'
+    | 'writeFindingVerdictMeasure'
   >
 >({
   taskQueue: QUEUE_FINDINGS,
@@ -486,6 +535,16 @@ const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>
   },
 });
 
+// The measurement at the verdict: production, with the recheck's policy. Twelve
+// browser checks take about eight minutes, so the bound leaves room for
+// Chrome's launch. A check whose own expression does not run is not mended by
+// a retry; production answering 5xx is retried once.
+const measuring = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '15 minutes',
+  retry: { maximumAttempts: 2, initialInterval: '30 seconds', nonRetryableErrorTypes: ['VerifyCheckBroken'] },
+});
+
 // The comment and the draft: both safe to repeat, so five attempts with backoff.
 const reporting = wf.proxyActivities<Pick<typeof activities, 'reportPreviewChecks'>>({
   taskQueue: QUEUE_FINDINGS,
@@ -537,6 +596,11 @@ function isVerdict(value: unknown): value is FindingVerdict {
     typeof v.reason === 'string' &&
     typeof v.at === 'string'
   );
+}
+
+/** An activity that refused because a person or another run moved the finding. */
+function isFindingMoved(err: unknown): boolean {
+  return err instanceof wf.ActivityFailure && err.cause instanceof wf.ApplicationFailure && err.cause.type === 'FindingMoved';
 }
 
 /** A wait that ran out its schedule-to-close bound, rather than failing outright. */
@@ -618,7 +682,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     const accepting =
       input.stopAfter === 'resolved' &&
       state.verdict?.status === 'approved' &&
-      (state.step === 'waiting-verdict' || state.step === 'waiting-fix');
+      (state.step === 'waiting-verdict' || state.step === 'measuring' || state.step === 'waiting-fix');
     if (!accepting) {
       wf.log.info('ignoring a fix signal', { key: input.key, step: state.step, at: request?.at });
       return;
@@ -898,6 +962,75 @@ async function lifecycle(
     }
   };
 
+  /**
+   * The checks on production at the approved verdict (STW-589). Never throws
+   * except for cancellation. `resolved` when every check passed and the write
+   * resolved the finding; `moved` when the write refused because the finding
+   * is no longer approved and unresolved; `fix` for everything else, which
+   * goes on to the fix as before.
+   */
+  const measureAtVerdict = async (): Promise<'resolved' | 'moved' | 'fix'> => {
+    state.step = 'measuring';
+    const unmeasured = (reason: string): VerdictMeasure => ({ at: nowIso(), workflowId, rows: null, reason });
+    let measure: VerdictMeasure | null = null;
+    let checks;
+    try {
+      const finding = await readingChecks.readFinding(input.repo, input.findingPath);
+      checks = (
+        await readingChecks.readVerifyBlock({
+          repo: input.repo,
+          findingPath: input.findingPath,
+          findingText: finding.text,
+          origin: input.origin,
+        })
+      ).checks;
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      measure = unmeasured(`its checks could not be read: ${describeError(err)}`);
+    }
+    if (!measure && checks) {
+      if (checks.length === 0) measure = unmeasured('the finding has no checks');
+      else {
+        try {
+          const run = await measuring.runFindingChecks({ key: input.key, checks });
+          measure = { at: run.ranAt, workflowId, rows: run.results, reason: null };
+        } catch (err) {
+          if (wf.isCancellation(err)) throw err;
+          measure = unmeasured(`the checks did not run on production: ${describeError(err)}`);
+        }
+      }
+    }
+    const taken = measure as VerdictMeasure;
+    const line = verdictMeasureLine(taken);
+    state.verdictMeasure = line;
+    const passed = verdictMeasurePassed(taken);
+    const verification: Verification | null = passed
+      ? { status: 'resolved', at: taken.at, workflowId, source: 'finding', rows: taken.rows ?? [], atVerdict: true }
+      : null;
+    try {
+      await writing.writeFindingVerdictMeasure({
+        repo: input.repo,
+        key: input.key,
+        findingPath: input.findingPath,
+        indexPath: input.indexPath,
+        measure: taken,
+        ...(verification ? { verification } : {}),
+      });
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      if (isFindingMoved(err)) {
+        // As a fix whose write meets a moved finding: no automatic attempt,
+        // and the run parks at `waiting-fix` with the reason.
+        state.verdictMeasure = `${line} (not written: the finding moved)`;
+        state.lastFixError = describeError(err);
+        return 'moved';
+      }
+      state.verdictMeasure = `${line} (not written: ${describeError(err)})`;
+      return 'fix';
+    }
+    return passed ? 'resolved' : 'fix';
+  };
+
   try {
     return await fixLoop();
   } finally {
@@ -906,6 +1039,20 @@ async function lifecycle(
   }
 
   async function fixLoop(): Promise<FindingWorkflowResult> {
+    // Once per run, before any slot or issue (STW-589). A history recorded
+    // before it has the auto-fix marker here and replays without it.
+    let heldAtVerdict = false;
+    if (wf.patched(VERDICT_MEASURE_PATCH)) {
+      const measured = await measureAtVerdict();
+      if (measured === 'resolved') {
+        return end('resolved', `Resolved at the verdict: ${state.verdictMeasure}, so no fix was opened.`);
+      }
+      if (measured === 'moved') {
+        heldAtVerdict = true;
+        fix.requested = false;
+      }
+    }
+
     // Read once, at the verdict: the flag the site had when the finding was approved.
     let autoFix = false;
     if (wf.patched(AUTO_FIX_PATCH)) {
@@ -922,7 +1069,9 @@ async function lifecycle(
       if (!recut) {
         const parked = input.waitsForPerson === true && fixAttempts === 0;
         if (parked) state.waitsForPerson = true;
-        if (parked || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
+        // A finding that moved under the measurement waits for a person, or for the reconciler to close the run.
+        const held = heldAtVerdict && fixAttempts === 0;
+        if (parked || held || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
       }
       recut = false;
       state.waitsForPerson = false;
