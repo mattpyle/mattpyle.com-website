@@ -232,7 +232,7 @@ jobs:
           # the marking summary written by the marker's `--summary` flag, and
           # quotes that same material back a point at a time.
           # ---------------------------------------------------------------
-          private='^CLAUDE\.local\.md$|^AGENTS\.md$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/|^agents/benchmark/runs/|^agents/benchmark/calibration\.md$'
+          private='^CLAUDE\.local\.md$|^AGENTS\.md$|^\.worktreeinclude$|^docs/|^steward/|^design_handoff_[^/]*/|(^|/)\.claude/|(^|/)\.agents/|(^|/)\.impeccable/|(^|/)skills-lock\.json$|^public/og/|(^|/)\.obsidian/|^agents/steward/\.reviews-drafts/|^agents/benchmark/runs/|^agents/benchmark/calibration\.md$'
 
           tracked_private=$(git ls-files | grep -E "$private")
 
