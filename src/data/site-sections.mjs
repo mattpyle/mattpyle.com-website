@@ -11,7 +11,8 @@
  * src/pages/llms.txt.ts deliberately keeps its own wording. It is a human-readable markdown index
  * rather than a data feed, its summaries are sentence-cased prose tuned for that, and it lists
  * pages (/webmcp) that are not content sections. Folding it in here would change published output
- * to serve tidiness.
+ * to serve tidiness. The three pages the header nav leaves out are named in sitePages() below, so
+ * the tools do not omit them.
  *
  * NO TOP-LEVEL SIDE EFFECTS — plain Node scripts import this at build time.
  */
@@ -62,5 +63,31 @@ export function siteSections(base) {
       summary: 'Agent traffic to this site: agent-surface fetches and pages served as Markdown, counted per UTC hour.',
     },
     { name: 'About', url: `${base}/about/`, summary: 'Full bio, interests, contact links.' },
+  ];
+}
+
+/**
+ * The pages about the site's agent work. They are not in the header nav, so they are not in
+ * siteSections(); the tools return them as a separate list beside it, matching llms.txt "## Pages".
+ *
+ * @param {string} base Origin with no trailing slash.
+ */
+export function sitePages(base) {
+  return [
+    {
+      name: 'WebMCP',
+      url: `${base}/webmcp/`,
+      summary: 'The WebMCP tools this site registers for in-browser AI agents, what they return, and how to test them.',
+    },
+    {
+      name: 'Steward',
+      url: `${base}/steward/`,
+      summary: 'The agent-readiness auditor this site runs, the identity it arrives under in your logs, how to refuse it, and how to run an audit yourself.',
+    },
+    {
+      name: 'Audit',
+      url: `${base}/audit/`,
+      summary: "A form that runs Steward's fast agent-readiness audit on a site you name and shows the report in the page.",
+    },
   ];
 }

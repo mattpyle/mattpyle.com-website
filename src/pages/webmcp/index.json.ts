@@ -4,6 +4,7 @@ import { compareChangelogEntries } from '../../lib/changelog-order';
 import {
   SITE_DESCRIPTION,
   SITE_NAME,
+  sitePages,
   sitePerson,
   siteSections,
 } from '../../data/site-sections.mjs';
@@ -45,6 +46,7 @@ export const GET: APIRoute = async ({ site }) => {
       description: SITE_DESCRIPTION,
       person: sitePerson(base),
       sections: siteSections(base),
+      pages: sitePages(base),
     },
     writing: articles.map((article) => ({
       title: article.data.title,

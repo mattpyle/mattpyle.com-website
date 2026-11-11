@@ -32,6 +32,7 @@ import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 import {
   SITE_DESCRIPTION,
   SITE_NAME,
+  sitePages,
   sitePerson,
   siteSections,
 } from '../src/data/site-sections.mjs';
@@ -131,6 +132,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       description: SITE_DESCRIPTION,
       person: sitePerson(base),
       sections: siteSections(base),
+      pages: sitePages(base),
     },
     // What this site hands to agents, which is the question the skill exists to answer.
     surfaces: [
