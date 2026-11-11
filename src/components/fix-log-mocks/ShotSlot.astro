@@ -1,0 +1,44 @@
+---
+/**
+ * The reserved space for a before and after screenshot pair. No capture exists yet
+ * (a later slice adds them), so this is a labelled placeholder in the hatching the
+ * redesign uses for imagery that does not exist yet: constraint 10, a placeholder
+ * rather than an invented picture.
+ */
+interface Props {
+  /** `pair` sits two side by side; `stack` puts them one above the other. */
+  layout?: 'pair' | 'stack';
+}
+const { layout = 'pair' } = Astro.props;
+---
+
+<div class:list={['shots', `shots--${layout}`]} role="img" aria-label="Space for a before and after screenshot, not yet captured">
+  <span class="shot">[ screenshot: before ]</span>
+  <span class="shot">[ screenshot: after ]</span>
+</div>
+
+<style>
+  .shots {
+    display: grid;
+    gap: 12px;
+  }
+
+  .shots--pair { grid-template-columns: 1fr 1fr; }
+  .shots--stack { grid-template-columns: 1fr; }
+
+  .shot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 16 / 10;
+    border-radius: var(--radius);
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--hatch-projects-a) 0 6px,
+      var(--hatch-projects-b) 6px 14px
+    );
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+  }
+</style>

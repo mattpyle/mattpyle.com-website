@@ -1,0 +1,259 @@
+---
+/**
+ * Fix-log mock 1, Ledger (safe). The changelog's row idiom (ChangelogLog.astro):
+ * hairline rows grouped under a date, a mono date column on the left, the kind words
+ * on the right. Inside each row, before and after sit side by side as two columns,
+ * so they are always two separate things. The pull request is one line under them,
+ * and the times are one line under that.
+ *
+ * Every row has the same weight, which is the safe choice and the risk Matt named:
+ * at 75 entries it is a long, even list. Grouping by the day a fix was verified keeps
+ * it scannable, and the hero states the one number that summarises it.
+ */
+import Layout from '../../../layouts/Layout.astro';
+import MockBar from '../../../components/fix-log-mocks/MockBar.astro';
+import ShotSlot from '../../../components/fix-log-mocks/ShotSlot.astro';
+import {
+  ENTRIES_NEWEST, HOW_MADE, TYPE_LABEL, fixDate, fixSpan, foundDate, formatSpan, medianSpan, prUrl,
+} from '../../../data/fix-log-sample';
+
+const groups: { day: string; items: typeof ENTRIES_NEWEST }[] = [];
+for (const entry of ENTRIES_NEWEST) {
+  const day = fixDate(entry.times.verified);
+  const group = groups.at(-1);
+  if (group && group.day === day) group.items.push(entry);
+  else groups.push({ day, items: [entry] });
+}
+const median = formatSpan(medianSpan(ENTRIES_NEWEST));
+---
+
+<Layout title="Fix log: Ledger mock" description="Design mock: the fix log as a ledger of rows." noindex>
+  <MockBar slug="ledger" />
+
+  <div class="rd-section rd-hero ledger-hero">
+    <h1><span class="rd-fill rd-fill--ink">Fixes</span></h1>
+    <div class="hero-row">
+      <p class="hero-statement">What was wrong on this site, what changed, and how we know it holds.</p>
+      <div class="hero-aside ledger-aside">
+        <span class="aside-big">{median}</span>
+        <span>median, from approval to verified on the live site, over {ENTRIES_NEWEST.length} fixes.</span>
+      </div>
+    </div>
+    <p class="how">{HOW_MADE}</p>
+  </div>
+
+  <section class="rd-section ledger" aria-labelledby="ledger-title">
+    <h2 id="ledger-title" class="sr-only">All fixes</h2>
+    {groups.map((group) => (
+      <div class="day-group">
+        <h3 class="day">{group.day}</h3>
+        {group.items.map((e) => (
+          <article class="row" aria-labelledby={`t-${e.key}`}>
+            <span class="row-key">{e.key}</span>
+            <div class="row-body">
+              <h4 class="row-title" id={`t-${e.key}`}>{e.title}</h4>
+              <div class="pair">
+                <div class="side">
+                  <span class="side-label">before</span>
+                  <p>{e.before.text}</p>
+                </div>
+                <div class="side side--after">
+                  <span class="side-label">after</span>
+                  <p>{e.after.text}</p>
+                </div>
+              </div>
+              {e.visual && <div class="row-shots"><ShotSlot /></div>}
+              <p class="change">
+                <span class="side-label">change</span>
+                <a href={prUrl(e.pr.number)}>{e.pr.title}</a> <span class="pr-n">PR {e.pr.number}</span>
+              </p>
+              {e.followUp && (
+                <p class="change">
+                  <span class="side-label">then</span>
+                  <a href={prUrl(e.followUp.number)}>{e.followUp.title}</a> <span class="pr-n">PR {e.followUp.number}</span>
+                </p>
+              )}
+              <p class="times">
+                found {foundDate(e)}, approved {fixDate(e.times.approved)}, {e.confirmedBy === 'deploy' ? 'confirmed by its deploy' : e.status === 'reopened' ? 'checked' : 'verified'} {formatSpan(fixSpan(e))} later
+              </p>
+            </div>
+            <span class="row-kind">
+              <span class="kind-type">{TYPE_LABEL[e.type]}</span>
+              <span>{e.kind}</span>
+              {e.status === 'reopened' && <span class="kind-open">reopened</span>}
+            </span>
+          </article>
+        ))}
+        <div class="rows-end"></div>
+      </div>
+    ))}
+  </section>
+</Layout>
+
+<style>
+  .ledger-hero { padding-top: 64px; }
+
+  .ledger-aside { gap: 4px; max-width: 30ch; font-size: 17px; color: var(--ink-5); }
+
+  .aside-big {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 44px;
+    letter-spacing: -.03em;
+    color: var(--ink);
+  }
+
+  .how {
+    margin: 36px 0 0;
+    max-width: 68ch;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-5);
+  }
+
+  .ledger { padding-top: 56px; padding-bottom: 96px; }
+
+  .day-group + .day-group { margin-top: 56px; }
+
+  .day {
+    margin: 0;
+    padding-bottom: 8px;
+    font-family: var(--font-mono-plex);
+    font-weight: 400;
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr) 190px;
+    gap: 36px;
+    padding: 30px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .rows-end { border-top: 1px solid var(--rule); }
+
+  .row-key,
+  .row-kind {
+    padding-top: 6px;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .row-kind {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: right;
+  }
+
+  .kind-type { color: var(--ink); }
+  .kind-open { color: var(--status-fail); }
+
+  .row-body { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+  .row-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    color: var(--ink);
+    max-width: 28ch;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+
+  .side { display: flex; flex-direction: column; gap: 6px; }
+
+  .side p {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    text-wrap: pretty;
+  }
+
+  .side--after p { color: var(--ink-2); }
+
+  /* The after column opens with a rule, so the eye reads the pair as two
+     moments and not as one paragraph broken in two. */
+  .side--after { border-left: 1px solid var(--rule); padding-left: 28px; margin-left: -14px; }
+
+  .side-label {
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+  }
+
+  .row-shots { max-width: 560px; }
+
+  .change {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.5;
+  }
+
+  .change a { color: var(--writing); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+  .change a:hover { color: var(--writing-hover); }
+
+  .pr-n { font-family: var(--font-mono-plex); font-size: 15px; color: var(--ink-6); }
+
+  .times {
+    margin: 0;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    .ledger-hero { padding-top: 40px; }
+    .ledger { padding-top: 40px; }
+
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 24px 0;
+    }
+
+    .row-key { padding-top: 0; font-size: 15px; }
+
+    .row-kind {
+      flex-direction: row;
+      gap: 14px;
+      text-align: left;
+      padding-top: 0;
+      font-size: 15px;
+    }
+
+    .row-title { font-size: 25px; line-height: 1.2; }
+
+    .pair { grid-template-columns: 1fr; gap: 14px; }
+
+    .side--after { border-left: 0; padding-left: 0; margin-left: 0; border-top: 1px solid var(--rule); padding-top: 14px; }
+
+    .change a { display: inline-flex; min-height: 44px; align-items: center; }
+  }
+</style>

@@ -1,0 +1,373 @@
+---
+/**
+ * Fix-log mock 5, Receipts (off the wall). Every fix is a claim, and the page checks
+ * it again in the reader's browser while they read.
+ *
+ * Each fix is a receipt: the claim at the top, before and after, the times as
+ * itemised lines with dotted leaders, and a stamp at the foot that starts as
+ * "not checked yet" and becomes "holds" or "does not hold" once the page has fetched
+ * the live URL and tested it. The tally in the hero adds them up.
+ *
+ * The checks are the same ones run on production after each merge, rerun on this
+ * site's own origin (connect-src 'self'). Two cannot run in a browser and say so.
+ *
+ * THE ORIGIN TRAP. The site writes its own origin into llms.txt, so on a Vercel
+ * preview the file names the preview host, not www.mattpyle.com. A needle that
+ * holds ORIGIN passes if either the served origin or the production origin is
+ * present, so a fix that holds never reads as broken on a preview.
+ *
+ * The script is an Astro-bundled module script, which Astro hashes into the CSP.
+ * Never `is:inline`: Astro does not hash those, and production refuses them.
+ */
+import Layout from '../../../layouts/Layout.astro';
+import MockBar from '../../../components/fix-log-mocks/MockBar.astro';
+import ShotSlot from '../../../components/fix-log-mocks/ShotSlot.astro';
+import {
+  ENTRIES_NEWEST, HOW_MADE, fixDate, fixTime, foundDate, formatSpan, fixSpan, prUrl,
+} from '../../../data/fix-log-sample';
+
+const checkable = ENTRIES_NEWEST.filter((e) => e.live).length;
+const unchecked = ENTRIES_NEWEST.length - checkable;
+---
+
+<Layout title="Fix log: Receipts mock" description="Design mock: every fix as a claim the page checks again in your browser." noindex>
+  <MockBar slug="receipts" />
+
+  <div class="rd-section rd-hero rc-hero">
+    <h1><span class="rd-fill rd-fill--ink">Receipts</span></h1>
+    <div class="hero-row">
+      <p class="hero-statement">Every fix on this site is a claim. This page checks each one again, in your browser, while you read.</p>
+      <div class="hero-aside rc-tally" data-tally data-total={checkable}>
+        <span class="tally-num" data-tally-num>{checkable}</span>
+        <span class="tally-text" data-tally-text aria-live="polite">claims to check. Your browser has not checked them yet.</span>
+        <span class="tally-note">{unchecked} more cannot be checked from a browser, and say why.</span>
+      </div>
+    </div>
+    <p class="how">{HOW_MADE}</p>
+  </div>
+
+  <section class="rd-section receipts" aria-labelledby="rc-title">
+    <h2 id="rc-title" class="sr-only">All fixes</h2>
+    <ul class="rc-list">
+      {ENTRIES_NEWEST.map((e) => (
+        <li class="rc" data-check={e.live ? JSON.stringify(e.live) : undefined} data-state={e.live ? 'idle' : 'manual'}>
+          <p class="rc-claim">{e.claim}</p>
+          <h3 class="rc-title">{e.title}</h3>
+
+          <div class="rc-pair">
+            <p><span class="rc-label">before</span> {e.before.text}</p>
+            <p><span class="rc-label">after</span> {e.after.text}</p>
+          </div>
+
+          {e.visual && <div class="rc-shots"><ShotSlot /></div>}
+
+          <dl class="rc-lines">
+            <div><dt>found</dt><dd>{foundDate(e)}</dd></div>
+            <div><dt>approved</dt><dd>{fixDate(e.times.approved)}, {fixTime(e.times.approved)}</dd></div>
+            <div><dt>pull request</dt><dd><a href={prUrl(e.pr.number)}>{e.pr.number}</a>, {fixTime(e.times.prOpened)}</dd></div>
+            <div><dt>merged</dt><dd>{fixTime(e.times.merged)}</dd></div>
+            <div><dt>{e.confirmedBy === 'deploy' ? 'deploy confirmed' : e.status === 'reopened' ? 'checked, failed' : 'held on the live site'}</dt><dd>{fixTime(e.times.verified)}</dd></div>
+            <div class="rc-total"><dt>approval to {e.status === 'reopened' ? 'check' : 'proof'}</dt><dd>{formatSpan(fixSpan(e))}</dd></div>
+          </dl>
+
+          <div class="rc-stamp">
+            {e.live ? (
+              <>
+                <span class="stamp-word" data-stamp-word>not checked yet</span>
+                <span class="stamp-detail" data-stamp-detail>Your browser checks this when the page loads.</span>
+              </>
+            ) : (
+              <>
+                <span class="stamp-word">{e.status === 'reopened' ? 'open' : 'checked at deploy'}</span>
+                <span class="stamp-detail">{e.liveNote}</span>
+              </>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+</Layout>
+
+<script>
+  type Check =
+    | { kind: 'count'; paths: string[]; needle: string; equals: number }
+    | { kind: 'contains'; paths: string[]; needles: string[] }
+    | { kind: 'selector'; paths: string[]; test: 'post-links-onward' };
+
+  const PRODUCTION = 'https://www.mattpyle.com';
+
+  /** Every spelling a needle may take: the served origin, or production's. */
+  const variants = (needle: string) =>
+    needle.includes('ORIGIN')
+      ? [needle.replaceAll('ORIGIN', location.origin), needle.replaceAll('ORIGIN', PRODUCTION)]
+      : [needle];
+
+  const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
+
+  async function fetchText(path: string): Promise<string> {
+    const res = await fetch(path, { cache: 'no-store', headers: { accept: 'text/html,text/plain,*/*' } });
+    if (!res.ok) throw new Error(`${path} answered ${res.status}`);
+    return res.text();
+  }
+
+  /** Returns [holds, a sentence on what was measured]. */
+  async function run(check: Check): Promise<[boolean, string]> {
+    if (check.kind === 'count') {
+      const counts = await Promise.all(check.paths.map(async (p) => {
+        const text = await fetchText(p);
+        return Math.min(...variants(check.needle).map((v) => occurrences(text, v)));
+      }));
+      const passing = counts.filter((c) => c === check.equals).length;
+      const where = check.paths.length === 1 ? check.paths[0] : `${passing} of ${check.paths.length} pages`;
+      return [passing === check.paths.length,
+        check.paths.length === 1
+          ? `Fetched ${where}: “${check.needle}” occurs ${counts[0]} times.`
+          : `“${check.needle}” occurs ${check.equals} times on ${where}.`];
+    }
+    if (check.kind === 'contains') {
+      const text = (await Promise.all(check.paths.map(fetchText))).join('\n');
+      const found = check.needles.filter((n) => variants(n).some((v) => text.includes(v)));
+      return [found.length === check.needles.length,
+        `Fetched ${check.paths.join(', ')}: ${found.length} of ${check.needles.length} expected ${check.needles.length === 1 ? 'line is' : 'lines are'} there.`];
+    }
+    const path = check.paths[0];
+    const doc = new DOMParser().parseFromString(await fetchText(path), 'text/html');
+    const re = /^\/writing\/[a-z0-9-]+\/$/;
+    const onward = [...doc.querySelectorAll('a[href^="/writing/"]')]
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((h) => re.test(h) && h !== path);
+    return [onward.length > 0, `Fetched ${path}: it links to ${onward.length === 1 ? 'one other post' : `${onward.length} other posts`}.`];
+  }
+
+  function init() {
+    const receipts = [...document.querySelectorAll<HTMLElement>('.rc[data-check]')];
+    const tallyNum = document.querySelector<HTMLElement>('[data-tally-num]');
+    const tallyText = document.querySelector<HTMLElement>('[data-tally-text]');
+    if (!receipts.length || !tallyNum || !tallyText) return;
+
+    let done = 0;
+    let holding = 0;
+    tallyText.textContent = 'claims being checked now.';
+
+    const clock = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    for (const el of receipts) {
+      const word = el.querySelector<HTMLElement>('[data-stamp-word]');
+      const detail = el.querySelector<HTMLElement>('[data-stamp-detail]');
+      el.dataset.state = 'checking';
+      if (word) word.textContent = 'checking';
+      run(JSON.parse(el.dataset.check!) as Check)
+        .then(([holds, what]) => {
+          el.dataset.state = holds ? 'holds' : 'fails';
+          if (word) word.textContent = holds ? 'holds' : 'does not hold';
+          if (detail) detail.textContent = `${what} Checked at ${clock()}, just now.`;
+          if (holds) holding += 1;
+        })
+        .catch((err: Error) => {
+          el.dataset.state = 'error';
+          if (word) word.textContent = 'could not check';
+          if (detail) detail.textContent = `${err.message}. Try reloading the page.`;
+        })
+        .finally(() => {
+          done += 1;
+          tallyNum.textContent = String(holding);
+          tallyText.textContent = done < receipts.length
+            ? `of ${receipts.length} hold so far. Still checking.`
+            : `of ${receipts.length} claims hold right now, checked by your browser at ${clock()}.`;
+        });
+    }
+  }
+
+  init();
+  document.addEventListener('astro:page-load', init);
+</script>
+
+<style>
+  .rc-hero { padding-top: 64px; }
+
+  .rc-tally { gap: 6px; max-width: 32ch; }
+
+  .tally-num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 64px;
+    line-height: .9;
+    letter-spacing: -.04em;
+    color: var(--ink);
+  }
+
+  .tally-text { font-size: 17px; line-height: 1.45; color: var(--ink-3); }
+  .tally-note { font-size: 15px; line-height: 1.45; color: var(--ink-6); }
+
+  .how {
+    margin: 36px 0 0;
+    max-width: 68ch;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-5);
+  }
+
+  .receipts { padding-top: 64px; padding-bottom: 96px; }
+
+  .rc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+    align-items: start;
+  }
+
+  /* A receipt: white paper, a torn-looking dashed top and foot, mono line items. */
+  .rc {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 28px 28px 0;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-top: 2px dashed var(--ink-6);
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+
+  .rc-claim {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 26px;
+    line-height: 1.15;
+    letter-spacing: -.02em;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+
+  .rc-title {
+    margin: -8px 0 0;
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 16px;
+    color: var(--ink-5);
+  }
+
+  .rc-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .rc-pair p {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ink-4);
+  }
+
+  .rc-pair p + p { padding-left: 20px; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+  .rc-label { font-family: var(--font-mono-plex); font-size: 15px; color: var(--ink-6); }
+
+  .rc-lines {
+    margin: 0;
+    padding-top: 14px;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-4);
+  }
+
+  /* Dotted leaders between the item and its value, as on a till receipt. */
+  .rc-lines div {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 0;
+  }
+
+  .rc-lines dt { white-space: nowrap; }
+
+  .rc-lines div > dd {
+    order: 2;
+    margin: 0;
+    white-space: nowrap;
+    color: var(--ink-2);
+  }
+
+  .rc-lines div::before {
+    content: '';
+    order: 1;
+    flex: 1;
+    border-bottom: 1px dotted var(--ink-6);
+    transform: translateY(-4px);
+  }
+
+  .rc-lines a { color: var(--writing); text-decoration: underline; text-underline-offset: 3px; }
+
+  .rc-lines .rc-total {
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--ink);
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .rc-stamp {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 -28px;
+    padding: 18px 28px 22px;
+    border-top: 2px dashed var(--ink-6);
+    background: var(--bg);
+  }
+
+  .stamp-word {
+    align-self: flex-start;
+    padding: 2px 10px;
+    border: 2px solid var(--ink-6);
+    border-radius: 4px;
+    font-family: var(--font-mono-plex);
+    font-weight: 600;
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .stamp-detail { font-size: 15px; line-height: 1.5; color: var(--ink-5); }
+
+  /* The word carries the state; the colour only repeats it (the /audit rule). */
+  .rc[data-state='holds'] .stamp-word { border-color: var(--status-pass); color: var(--status-pass); }
+  .rc[data-state='fails'] .stamp-word,
+  .rc[data-state='error'] .stamp-word { border-color: var(--status-fail); color: var(--status-fail); }
+  .rc[data-state='manual'] .stamp-word { border-style: dashed; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 860px) {
+    .rc-list { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 720px) {
+    .rc-hero { padding-top: 40px; }
+    .receipts { padding-top: 40px; }
+    .rc { padding: 22px 20px 0; }
+    .rc-stamp { margin: 0 -20px; padding: 16px 20px 20px; }
+    .rc-claim { font-size: 23px; }
+    .rc-pair { grid-template-columns: 1fr; gap: 12px; }
+    .rc-pair p + p { padding-left: 0; border-left: 0; padding-top: 12px; border-top: 1px solid var(--rule); }
+    .rc-lines a { display: inline-flex; align-items: center; min-height: 44px; }
+  }
+</style>

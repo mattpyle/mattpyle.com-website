@@ -1,0 +1,135 @@
+---
+/**
+ * The index of the fix-log design mocks (MPW-543): five directions built from one
+ * sample of eight real fixes, for Matt to judge. noindex, out of the sitemap,
+ * llms.txt and the nav. Deleted when a direction is chosen and built.
+ */
+import Layout from '../../../layouts/Layout.astro';
+import { DIRECTIONS, FIX_ENTRIES } from '../../../data/fix-log-sample';
+---
+
+<Layout
+  title="Fix log: design mocks"
+  description="Five design directions for a public log of the fixes this site's loop makes."
+  noindex
+  breadcrumbs={[{ name: 'Home', url: '/' }, { name: 'Fix log mocks', url: '/fix-log/mocks/' }]}
+>
+  <div class="rd-section rd-hero mocks-hero">
+    <h1><span class="rd-fill rd-fill--ink">Fix log</span></h1>
+    <div class="hero-row">
+      <p class="hero-statement">Five ways to show what was wrong on this site, what changed, and that it holds.</p>
+      <div class="hero-aside mocks-aside">
+        <span>{DIRECTIONS.length} directions, one sample of {FIX_ENTRIES.length} real fixes.</span>
+        <span>Design mocks. Not linked from the site.</span>
+      </div>
+    </div>
+  </div>
+
+  <section class="rd-section mocks" aria-labelledby="mocks-title">
+    <h2 id="mocks-title" class="mocks-h2">The directions</h2>
+    <ol class="mock-rows">
+      {DIRECTIONS.map((d, i) => (
+        <li>
+          <a href={`/fix-log/mocks/${d.slug}/`} class="mock-row">
+            <span class="row-n">{String(i + 1).padStart(2, '0')}</span>
+            <span class="row-body">
+              <span class="row-title">{d.name}</span>
+              <span class="row-idea">{d.idea}</span>
+              <span class="row-agent"><span class="row-agent-label">for an agent:</span> {d.agent}</span>
+            </span>
+            <span class="row-temper">{d.temperament}</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  </section>
+</Layout>
+
+<style>
+  .mocks-hero { padding-top: 78px; }
+
+  .mocks-aside {
+    gap: 8px;
+    font-size: 17px;
+    color: var(--ink-5);
+  }
+
+  .mocks { padding-top: 64px; padding-bottom: 96px; }
+
+  .mocks-h2 {
+    margin: 0 0 18px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -.02em;
+  }
+
+  .mock-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .mock-row {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) max-content;
+    gap: 32px;
+    padding: 28px 20px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .mock-row:hover { background: var(--tint-agents); }
+
+  .row-n,
+  .row-temper {
+    padding-top: 8px;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .row-body { display: flex; flex-direction: column; gap: 10px; }
+
+  .row-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 34px;
+    line-height: 1.1;
+    letter-spacing: -.025em;
+  }
+
+  .row-idea {
+    max-width: 60ch;
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink-4);
+  }
+
+  .row-agent {
+    max-width: 64ch;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ink-6);
+  }
+
+  .row-agent-label { font-family: var(--font-mono-plex); color: var(--agents); }
+
+  @media (max-width: 720px) {
+    .mocks-hero { padding-top: 40px; }
+    .mocks { padding-top: 40px; }
+
+    .mock-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      padding: 22px 0;
+      margin: 0;
+    }
+
+    .row-n, .row-temper { padding-top: 0; font-size: 15px; }
+    .row-title { font-size: 28px; }
+  }
+</style>

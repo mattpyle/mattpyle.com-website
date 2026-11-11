@@ -166,6 +166,8 @@ export default defineConfig({
       // `serialize`, so they get the same lastmod policy as everything else.
       customPages: ON_DEMAND_PAGES.map((pathname) => `${SITE_ORIGIN}${pathname}`),
       filter: (url) => {
+        // Design mocks for the fix log (noindex, unlinked). Removed when a direction is built.
+        if (new URL(url).pathname.startsWith('/fix-log/mocks/')) return false;
         const writingId = collectionSlug(url, 'writing');
         if (writingId) return !writingMetadata.get(writingId)?.draft;
         const changelogId = collectionSlug(url, 'changelog');
