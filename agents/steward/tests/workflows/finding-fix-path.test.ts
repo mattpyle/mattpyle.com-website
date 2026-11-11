@@ -8,6 +8,7 @@ import { Client, WorkflowNotFoundError } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
+import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { DEFECT_FINDING } from '../helpers/finding-fixtures.js';
 import { FixRefused, followFix, requestFix, type FindingFixDeps } from '../../src/lib/finding-fix.js';
 import { findingPath, findingWorkflowId } from '../../src/lib/findings.js';
@@ -144,7 +145,7 @@ async function withWorkers<T>(activities: object, fn: () => Promise<T>): Promise
   const findingsWorker = await Worker.create({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
-    activities,
+    activities: skipVerdictMeasure(activities),
     taskQueue: FINDINGS,
   });
   return await findingsWorker.runUntil(bounded(fn()));

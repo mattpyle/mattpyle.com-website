@@ -6,6 +6,7 @@ import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { bounded, createTestEnv, untilBetweenAttempts } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
+import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -184,7 +185,7 @@ async function withWorker<T>(activities: object, fn: () => Promise<T>): Promise<
   const worker = await Worker.create({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
-    activities,
+    activities: skipVerdictMeasure(activities),
     taskQueue: FINDINGS,
   });
   return await worker.runUntil(bounded(fn()));

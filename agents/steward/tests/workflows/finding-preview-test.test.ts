@@ -5,6 +5,7 @@ import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
+import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { DEFECT_FINDING, DEFECT_KEY, ORIGIN } from '../helpers/finding-fixtures.js';
 import {
@@ -185,7 +186,7 @@ async function runAttempt(id: string): Promise<FindingState> {
   const worker = await Worker.create({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
-    activities,
+    activities: skipVerdictMeasure(activities),
     taskQueue: FINDINGS,
   });
   return await worker.runUntil(

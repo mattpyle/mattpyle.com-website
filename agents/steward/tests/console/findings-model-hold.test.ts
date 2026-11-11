@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { createFindingsLoader, holdLineFor, type ConsoleClient, type FindingRunView, type FindingRow } from '../../src/console/findings-model.js';
+import { HOLD_MEASURING, QUIET_RESOLVED_AT_VERDICT, assessRow, createFindingsLoader, holdLineFor, type ConsoleClient, type FindingRunView, type FindingRow } from '../../src/console/findings-model.js';
 import { findingWorkflowId } from '../../src/lib/findings.js';
 import type { FindingState } from '../../src/workflows/finding.js';
 
@@ -180,4 +180,12 @@ test('a resolved or rejected row whose run is still open says the run is closing
   assert.equal(rows['done-fixing'].quietReason, null);
   assert.deepEqual(rows['done-idle'].drift, []);
   assert.equal(rows['done-idle'].holdLine, null);
+});
+
+test('a run measuring its checks at the verdict shows a hold line, and its resolve is not drift (STW-589)', () => {
+  const run: FindingRunView = { open: true, since: null, step: 'measuring', queried: true, queryError: null, prUrl: null, issueUrl: null, previewResult: null, lastFixError: null, slotLine: null };
+  assert.equal(holdLineFor({ status: 'approved', run, refusal: null, autoFix: true }), HOLD_MEASURING);
+  assert.deepEqual(assessRow('approved', 'approved', run), { drift: [], quietReason: null });
+  // The measurement's commit resolves the row a moment before the run ends.
+  assert.deepEqual(assessRow('resolved', 'resolved', run), { drift: [], quietReason: QUIET_RESOLVED_AT_VERDICT });
 });

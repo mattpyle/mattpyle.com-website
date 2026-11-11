@@ -58,6 +58,11 @@ that's the property being dogfooded here, on a low-stakes, real target.
   opportunity attempts the fix at its verdict and the gate decides; a gate refusal parks the run
   with `lastFixError`. A run started for a direction parks at `waiting-fix` without the automatic
   attempt, and `steward finding status` says why.
+  Right after an approved verdict, at step `measuring`, the run runs the finding's checks on
+  production once and writes the values into the finding file as a `## Measured at the verdict`
+  section: the before. When every check passes, the same commit resolves the finding and the run
+  ends `resolved` with no fix. A finding with no checks, or one that could not be measured, records
+  the reason and goes on to its fix. `steward finding status` prints the result as `measured at verdict:`.
   The fix issue carries the finding's `verify:` block verbatim. Once the Action's PR is open, the run
   reads the block and, at step `testing-preview`, waits up to 30 minutes for the PR head's Vercel
   `Preview` deployment, runs the checks against it with the bypass secret, and posts the expected
