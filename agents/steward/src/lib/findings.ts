@@ -728,7 +728,7 @@ export function fixIssueVerifyLines(text: string): string[] {
   return [
     FIX_ISSUE_VERIFY_HEADING,
     '',
-    "Steward runs these checks on this PR's Vercel preview before the merge, and on production after it. Each `text` needle must read on your tree as its check expects. Search your tree for every needle before you push.",
+    "Steward runs these checks on this PR's Vercel preview before the merge, and on production after it. Each `text` needle must read on your tree as its check expects, where the preview's own address counts as the production address; search your tree for the path of every needle before you push.",
     '',
     '```yaml',
     block,
@@ -1216,6 +1216,10 @@ export function runStateLines(end: RunEnd): { closed: boolean; lines: string[] }
 /** The hidden line on Steward's preview comment, so a retry does not post it twice. */
 export const PREVIEW_CHECKS_MARKER = '<!-- steward:preview-checks -->';
 
+/** The one sentence the comment says about how a preview's measured values were read. */
+export const PREVIEW_ORIGIN_NOTE =
+  "Steward read the preview's own origin as the production origin in the measured values before it compared them.";
+
 /** One check's measured row, the slice of `VerifyCheckResult` the comment prints. */
 export interface PreviewCheckRow {
   n: number;
@@ -1271,7 +1275,7 @@ export function previewChecksComment(report: PreviewChecksReport): string {
   } else {
     lines.push(`> **All ${report.results.length} ${report.results.length === 1 ? 'check passes' : 'checks pass'} on the preview.**`);
   }
-  lines.push('');
+  lines.push('', PREVIEW_ORIGIN_NOTE, '');
   for (const row of report.results) {
     const where = Array.isArray(row.url) ? `${row.url.length} URLs (${row.url.join(', ')})` : row.url;
     lines.push(`${row.n}. \`${row.kind}\` ${where}`);

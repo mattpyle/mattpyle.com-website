@@ -66,6 +66,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
   a build that failed, or a worker without `VERCEL_AUTOMATION_BYPASS_SECRET` is recorded as
   unmeasured, and the merge wait goes on. `steward finding status` prints the result on a `preview:`
   line.
+  The preview's own origin is read as the production origin in every measured value before it is compared; the expectations stay as the finding wrote them. The test runs once per fix attempt, when its PR opens, and cannot be run again for that PR: a new `steward finding fix` opens a new issue and a new PR.
 - **`fixDispatchWorkflow`**: one execution per site (`dispatch/<site>`) on `steward-findings`,
   started by the first slot request. Before each fix attempt opens its issue, the
   `findingWorkflow` sends it the repository paths its finding's cause names and parks at
