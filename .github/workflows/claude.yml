@@ -67,4 +67,4 @@ jobs:
           # on the shell: the allowlist is the fence, as it is for the Steward fixer.
           claude_args: |
             --allowedTools "Bash(npm test:*),Bash(npm run check:*),Bash(gh pr create:*),Bash(git log:*)"
-            --append-system-prompt "Before you push, run npm test and npm run check and leave both passing. When the fix is pushed, open the pull request yourself with gh pr create against master. The PR body is public and short: what changed, why, and the evidence."
+            --append-system-prompt "Before you push, run npm test and npm run check and leave both passing. When the fix is pushed, open the pull request yourself with gh pr create against master. The PR body is public and short: what changed, why, and the evidence. When you push a commit to a pull request that Steward has tested, Steward tests the new commit on its preview by itself and clears a draft it set, so do not tell anyone to run a retest or to mark the pull request ready."
