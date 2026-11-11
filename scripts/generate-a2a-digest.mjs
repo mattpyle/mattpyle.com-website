@@ -220,6 +220,16 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
         description: 'Agent-traffic counts as JSON, at UTC-hour resolution.',
       },
       {
+        name: 'Writing feed',
+        url: `${base}/rss.xml`,
+        description: 'RSS feed of the writing, for subscribing to new posts.',
+      },
+      {
+        name: 'Changelog feed',
+        url: `${base}/changelog/rss.xml`,
+        description: 'RSS feed of the changelog, for following what ships on this site.',
+      },
+      {
         name: 'Sitemap',
         url: `${base}/sitemap-index.xml`,
         description: 'Every published URL, with lastmod.',

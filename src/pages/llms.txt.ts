@@ -62,6 +62,8 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Steward's key directory](${base}/.well-known/http-message-signatures-directory): the Ed25519 public keys that verify Steward's request signatures, per draft-ietf-webbotauth-httpsig-protocol-00.`);
   lines.push(`- [scorecard.json](${base}/scorecard.json): every scorecard run as JSON — the same numbers /scorecard displays.`);
   lines.push(`- [activity.json](${base}/activity.json): the agent-traffic counts as JSON — the same numbers /activity displays, at UTC-hour resolution.`);
+  lines.push(`- [Writing feed](${base}/rss.xml): RSS feed of the writing, for subscribing to new posts.`);
+  lines.push(`- [Changelog feed](${base}/changelog/rss.xml): RSS feed of the changelog, for following what ships on this site.`);
   lines.push(`- [llms-full.txt](${base}/llms-full.txt): the full plain-text content export.`);
   lines.push(`- [agents.md](${base}/agents.md): how to read and cite this site.`);
   lines.push('');
