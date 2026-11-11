@@ -36,11 +36,12 @@ import { NOTE_MAX } from '../lib/webmaster-notes.mjs';
         rows="4"
         maxlength={NOTE_MAX}
         aria-describedby="wm-msg-hint"
+        aria-required="true"
         data-wm-input
         disabled></textarea>
 
       <div class="wm-underline">
-        <span class="wm-hint" id="wm-msg-hint">Up to {NOTE_MAX} characters.</span>
+        <span class="wm-hint" id="wm-msg-hint">Required. Up to {NOTE_MAX} characters.</span>
         <span class="wm-count" data-wm-count aria-hidden="true">0 / {NOTE_MAX}</span>
       </div>
 
