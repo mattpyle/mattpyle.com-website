@@ -67,3 +67,5 @@ State no intent and no future work. The story says what is true on production no
 4. Never name the system that found, measured or fixed the problem.
 5. Leave out the verdict reason, any workflow identifier, any preview hostname and any private path. The strings `verify/`, `finding/`, `vercel.app`, `docs/` and `.claude/` fail the check.
 6. Times stay as the script wrote them.
+7. Put a path, a tag or a placeholder in backticks, such as `/writing/<slug>.md`. A bare angle-bracket tag in the story breaks the page.
+8. Set `updated` to the day of any substantive edit, so the sitemap date moves. A new entry needs none.

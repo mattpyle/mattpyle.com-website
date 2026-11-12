@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { SCORECARD } from '../data/scorecard';
 import { compareChangelogEntries } from '../lib/changelog-order';
-import { FIX_LOG, fixDate, fixUrl, getFixesNewest } from '../lib/fix-log';
+import { FIX_LOG, fixDate, fixUrl, getFixesNewest, prUrl } from '../lib/fix-log';
 import { rewriteVideoTags } from '../lib/video-embed.mjs';
 
 function formatDate(date: Date): string {
@@ -178,6 +178,13 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push(fix.data.lead);
     lines.push('');
     lines.push(demoteHeadings(fix.body ?? ''));
+    lines.push('');
+    for (const m of fix.data.measures) {
+      const [beforeName, afterName] = m.sides ?? ['Before', 'After'];
+      const shown = (value: string) => (m.quoted ? `"${value}"` : value);
+      lines.push(`${m.label}: ${beforeName} ${shown(m.before)}, ${afterName} ${shown(m.after)}`);
+    }
+    for (const c of fix.data.changes) lines.push(`Change: ${c.title} (${prUrl(c.number)})`);
     lines.push('');
     lines.push('---');
     lines.push('');

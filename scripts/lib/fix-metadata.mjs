@@ -3,8 +3,8 @@
  * astro.config.mjs (the sitemap), scripts/validate-sitemap.mjs and scripts/generate-page-paths.mjs.
  *
  * It returns each fix keyed by its `slug`, the segment of its URL, with the date its sitemap
- * entry carries. The date is the day the fix was confirmed on production, `verified`, as a calendar date
- * in America/Vancouver, the zone the pages show it in: that is the field the pages order and date the entries by.
+ * entry carries: the later of `verified` (the day the fix was confirmed on production) and the
+ * optional `updated`, as calendar dates: `verified` in America/Vancouver, the zone the pages show times in, `updated` as written.
  *
  * NO TOP-LEVEL SIDE EFFECTS.
  */
@@ -27,7 +27,12 @@ export function readFixMetadata(directory = ENTRIES_DIR) {
       throw new Error(`${entry.file}: "verified" is not a date`);
     }
     if (metadata.has(slug)) throw new Error(`${entry.file}: slug "${slug}" is used twice`);
-    metadata.set(slug, { draft: false, lastmod: verified.toLocaleDateString("en-CA", { timeZone: "America/Vancouver" }), key: String(entry.key) });
+    const day = (date) => date.toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });
+    const updated = entry.data.updated ? new Date(entry.data.updated) : null;
+    if (updated && Number.isNaN(updated.getTime())) throw new Error(`${entry.file}: "updated" is not a date`);
+    // `updated` is a calendar date, read as UTC like `found`. The later of `verified` and `updated`: an edit to the text moves the sitemap date.
+    const lastmod = [day(verified), ...(updated ? [updated.toISOString().slice(0, 10)] : [])].sort().at(-1);
+    metadata.set(slug, { draft: false, lastmod, key: String(entry.key) });
   }
   return metadata;
 }

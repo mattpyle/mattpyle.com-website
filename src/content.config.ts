@@ -122,6 +122,8 @@ const fixes = defineCollection({
     approved:    z.coerce.date(),
     /** When the fix was confirmed on production. */
     verified:    z.coerce.date(),
+    /** The calendar day of a substantive edit (UTC, like `found`). The sitemap date is the later of this and `verified`. */
+    updated:     z.coerce.date().optional(),
     /** The fix pull request first, then any later one that finished or repaired it. */
     changes:     z.array(z.object({
       number: z.number().int().positive(),
