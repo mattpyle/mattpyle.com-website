@@ -152,6 +152,22 @@ Steward ran this finding's checks against production at 2026-10-03T04:05:06.789Z
   );
 });
 
+test('a URL on another host that starts with the origin stays a full URL', () => {
+  withFindings(
+    {
+      'host.md': finding({
+        key: 'MP-908',
+        body: `## Verification
+
+Steward ran this finding's checks against production at 2026-10-03T04:05:06.789Z. Outcome: resolved.
+
+1. Pass, \`text\` on ${ORIGIN}.example.net/page/. Expected: 0 occurrences of "x". Measured: 0 occurrences.`,
+      }),
+    },
+    (dir) => assert.deepEqual(readFinding(path.join(dir, 'host.md')).checks[0].urls, [`${ORIGIN}.example.net/page/`]),
+  );
+});
+
 test('only resolved or reopened findings with a fix pull request are in the log', () => {
   const body = '## Verification\n\nNothing.';
   withFindings(

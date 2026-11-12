@@ -90,7 +90,13 @@ function parseChecks(text) {
 
 /** A production URL as a site path; anything else as it is. */
 function sitePath(url) {
-  return url.startsWith(ORIGIN) ? url.slice(ORIGIN.length) || '/' : url;
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return url;
+  }
+  return u.origin === ORIGIN ? `${u.pathname}${u.search}${u.hash}` : url;
 }
 
 const VERIFIED_LINE = /^Steward (?:ran this finding's checks against production|confirmed this finding's fix by its deploy) at (\S+?)\. Outcome: (\w+)\./m;
