@@ -36,6 +36,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readCollection } from './lib/content-frontmatter.mjs';
+import { readFixMetadata } from './lib/fix-metadata.mjs';
 
 const PAGES_DIR = fileURLToPath(new URL('../src/pages/', import.meta.url));
 const CONTENT_DIR = fileURLToPath(new URL('../src/content/', import.meta.url));
@@ -118,6 +119,9 @@ export function buildPagePaths() {
   const changelog = publishedSlugs('changelog');
   for (const slug of changelog) paths.add(`/changelog/${slug}`);
   for (let page = 2; page <= pageCount(changelog.length); page += 1) paths.add(`/changelog/${page}`);
+
+  // Each fix is a page at its own slug, which is frontmatter and not the file name.
+  for (const slug of readFixMetadata().keys()) paths.add(`/fix-log/${slug}`);
 
   return [...paths].sort();
 }

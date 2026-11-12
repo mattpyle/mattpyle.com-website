@@ -24,21 +24,32 @@ Use only facts from those sources. When a source does not say something, leave i
 
 Good: "The WebMCP post sent readers to its tools through a redirect".
 
+## The slug
+
+Set `slug` once, when you first write the title: the title in lower case, words joined by hyphens, under 71 characters. Never change it afterwards, because the page's URL is the slug and people hold links to it.
+
 ## The lead
 
 One sentence under the title, under 25 words. Say whom the problem let down and how, or give the cause in plain words. Add what the title leaves out; do not repeat it.
 
-## The measures
+## The before and after
 
-1. At least one pair: a label, a before and an after.
-2. The label names what is counted or shown, in a reader's words: "Links in the post that go through a redirect".
-3. The before is what was observed when the problem was found. Use a measured value only when one exists in the facts.
-4. The after is the value on production after the fix. For a fix confirmed by its deploy, it is what the merged change does.
-5. Use numbers where the finding has them. Where the before and after are words, keep them short and set `quoted: true` only for text the reader would see or hear verbatim.
+An entry shows its before and after once, in the single best form. Hold one `measures` pair or `text`, never both and never neither. The schema refuses both, and refuses a second measure.
 
-## The text band
+The forms, in order of preference:
 
-Set `text` when the change is a few lines a reader can read: a line of `llms.txt`, a link, a spoken label. Leave it out when the measures already show the whole change. Set `visual: true` and `screen` when something visible on a page changed.
+1. A real measurement, a number a reader cares about: "Posts that start on the first phone screen", 0 of 3, then 1 of 3. Use one only where the finding or the fix pull request holds the number.
+2. A short pair of words: the channels a file names, the label a screen reader spoke. Set `quoted: true` only for text the reader would see or hear verbatim.
+3. The changed lines, in `text`: a few lines a reader can read, as they were and as they are.
+
+Rules for the form:
+
+1. Keep a count as the measure when it is "N of M" with M above 1, or a count above 1 of things a reader would recognise: pages, links, snippets, controls, sections. Use words or changed lines when the count goes 0 to 1 or 1 to 0, or when it counts occurrences of a string; a label that names one fails the test.
+2. An entry has one measure or one changed-text pair. When a fix changed several things, choose the one a reader would care about most.
+3. The label names what is counted or shown, in a reader's words.
+4. The before is what was observed when the problem was found, unless a measured value exists. The after is the value on production after the fix. For a fix confirmed by its deploy, it is what the merged change does.
+5. Add no fact the finding and the pull request do not hold.
+6. Set `visual: true` and `screen` when something visible on a page changed.
 
 ## The story
 
@@ -63,3 +74,6 @@ State no intent and no future work. The story says what is true on production no
 4. Never name the system that found, measured or fixed the problem.
 5. Leave out the verdict reason, any workflow identifier, any preview hostname and any private path. The strings `verify/`, `finding/`, `vercel.app`, `docs/` and `.claude/` fail the check.
 6. Times stay as the script wrote them.
+7. Put a path, a tag or a placeholder in backticks, such as `/writing/<slug>.md`. A bare angle-bracket tag in the story breaks the page.
+8. Set `updated` to the day of any substantive edit, so the sitemap date moves. A new entry needs none.
+9. Before you write a title, read the existing titles. Two entries must not open with the same thing.

@@ -1,0 +1,72 @@
+- link "Skip to content":
+  - /url: "#main"
+- banner:
+  - link "Matt Pyle — home":
+    - /url: /
+    - text: mp/
+  - navigation "Main navigation":
+    - link "writing":
+      - /url: /writing/
+    - link "projects":
+      - /url: /projects/
+    - link "changelog":
+      - /url: /changelog/
+    - link "scorecard":
+      - /url: /scorecard/
+    - link "about":
+      - /url: /about/
+- main:
+  - article:
+    - link "← all fixes":
+      - /url: /fix-log/
+    - heading "·" [level=1]
+    - paragraph: ·
+    - complementary "·":
+      - heading "·" [level=2]
+      - term: ·
+      - definition:
+        - time: ·
+      - term: ·
+      - definition: ·
+      - link "· ·":
+        - /url: "#"
+      - link "·":
+        - /url: "#"
+    - region "What happened":
+      - heading "What happened" [level=2]
+    - region "Before and after":
+      - heading "Before and after" [level=2]
+      - table "·":
+        - caption: ·
+        - rowgroup:
+          - row "· ·":
+            - columnheader "·"
+            - columnheader "·"
+        - rowgroup:
+          - row "· ·":
+            - cell "·"
+            - cell "·"
+    - navigation "·":
+      - link "· ·":
+        - /url: "#"
+- contentinfo:
+  - text: Matt Pyle
+  - paragraph: Growth at Temporal. Writing about accessibility, agents, and the parts of the web that are about to get weird.
+  - navigation "Footer":
+    - link "rss":
+      - /url: /rss.xml
+    - link "github (opens in a new tab)":
+      - /url: https://github.com/mattpyle
+    - link "linkedin (opens in a new tab)":
+      - /url: https://linkedin.com/in/matt-pyle
+    - link "bluesky (opens in a new tab)":
+      - /url: https://bsky.app/profile/mattpyle.com
+    - link "activity":
+      - /url: /activity/
+    - link "fix log":
+      - /url: /fix-log/
+    - link "webmcp":
+      - /url: /webmcp/
+    - button "Switch to retro mode"
+  - text: "if (agent) goto /webmcp else { coffee(); read('/writing'); } robots.txt says yes. The cat abstained."
+- status

@@ -101,6 +101,8 @@
       - /url: https://bsky.app/profile/mattpyle.com
     - link "activity":
       - /url: /activity/
+    - link "fix log":
+      - /url: /fix-log/
     - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"

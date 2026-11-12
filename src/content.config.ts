@@ -101,6 +101,8 @@ const fixes = defineCollection({
     /** The finding's short key. Joins the entry to its finding; unique. */
     key:         z.string().regex(/^MP-\d+$/),
     title:       z.string().min(1),
+    /** The page URL segment: /fix-log/<slug>/. Written once with the first title, never derived at build time, so a later title edit leaves the link alone. Unique. */
+    slug:        z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     /** One sentence under the title. */
     lead:        z.string().min(1),
     type:        z.enum(['seo', 'agent-readiness', 'content', 'ux', 'accessibility', 'feature']),
@@ -120,6 +122,8 @@ const fixes = defineCollection({
     approved:    z.coerce.date(),
     /** When the fix was confirmed on production. */
     verified:    z.coerce.date(),
+    /** The calendar day of a substantive edit (UTC, like `found`). The sitemap date is the later of this and `verified`. */
+    updated:     z.coerce.date().optional(),
     /** The fix pull request first, then any later one that finished or repaired it. */
     changes:     z.array(z.object({
       number: z.number().int().positive(),
@@ -127,7 +131,7 @@ const fixes = defineCollection({
       opened: z.coerce.date(),
       merged: z.coerce.date(),
     })).min(1),
-    /** The before and after a reader takes in at a glance. Before is what was observed when the problem was found, unless a measured value exists. */
+    /** The before and after, as named pairs. An entry shows its before and after once: one measure or one changed text, never both. */
     measures:    z.array(z.object({
       label:  z.string().min(1),
       before: z.string().min(1),
@@ -136,8 +140,8 @@ const fixes = defineCollection({
       quoted: z.boolean().default(false),
       /** Names for the two sides, when they are not Before and After. */
       sides:  z.tuple([z.string(), z.string()]).optional(),
-    })).min(1),
-    /** The changed text, as it was and as it is. Left out where the measures show the whole change. */
+    })).length(1).optional(),
+    /** The before and after as changed lines, or words spoken, or a gap. Used when measures are not the best form. */
     text:        z.object({ before: specimen, after: specimen }).optional(),
     /** The checks run on production when the fix was confirmed. `before` is set only where a check also ran before the fix. */
     checks:      z.array(z.object({
@@ -149,6 +153,8 @@ const fixes = defineCollection({
       measured: z.string(),
       before:   z.string().optional(),
     })).default([]),
+  }).refine((entry) => Boolean(entry.measures) !== Boolean(entry.text), {
+    message: 'An entry shows its before and after once: hold measures or changed text, not both and not neither.',
   }),
 });
 

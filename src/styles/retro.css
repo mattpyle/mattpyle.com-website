@@ -4216,3 +4216,187 @@ html[data-appearance='retro'] [data-module='audit'] .evidence {
   border-radius: 0;
   color: var(--retro-ink);
 }
+
+/* ── /fix-log ─────────────────────────────────────────────────────────────
+   Retro styles the SAME index and entry the modern appearance does. The index
+   reuses the /changelog ledger's treatment under its own module names: the maroon
+   headline with the fill flattened, the facts block as a filed card, dashed row
+   rules and a double rule under each year. The entry shares
+   `data-module='article'` and the `.entry-*` classes with the changelog entry, so
+   its head and foot take the rules above; only the `.fix-*` parts are styled
+   here. */
+
+html[data-appearance='retro'] [data-module='fixlog-hero'] h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='fixlog-hero'] .rd-fill {
+  background: none;
+  color: var(--retro-maroon);
+  padding: 0;
+}
+
+html[data-appearance='retro'] [data-module='fixlog-hero'] .hero-facts {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+  padding: 14px 18px;
+}
+
+html[data-appearance='retro'] [data-module='fixlog-hero'] .hero-facts-copy {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .row,
+html[data-appearance='retro'] [data-module='fixlog-log'] .rows-end {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .row {
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .row:hover {
+  background: var(--retro-sidebar-bg);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .row-date,
+html[data-appearance='retro'] [data-module='fixlog-log'] .row-kind {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .row-title {
+  font-family: var(--retro-font-display);
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .row:hover .row-title {
+  color: var(--retro-link);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .row-summary {
+  font-family: var(--retro-font-body);
+  font-size: 15px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .year {
+  font-family: var(--retro-font-mono);
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--retro-maroon);
+  border-bottom: 3px double var(--retro-frame-border);
+  padding-bottom: 6px;
+}
+
+html[data-appearance='retro'] [data-module='fixlog-log'] .year + .row {
+  border-top: 0;
+}
+
+/* The entry page. The head and foot take the changelog entry's rules above, and the rail takes
+   the post rail's (`.post-rail`, `.rail-block`, `.rail-meta`, `.rail-action`). What is left to
+   style is the body grid, the section headings, the facts, the pull request links, the
+   measures table and the changed lines. Like the writing post, retro flattens the grid to one
+   column, with the rail above the story. */
+html[data-appearance='retro'] [data-module='article'] .fix-body {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-h {
+  font-family: var(--retro-font-display);
+  font-size: 24px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-rail .fact-type {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-rail .change-title {
+  font-family: var(--retro-font-body);
+  font-size: 14px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-rail .change:hover .rail-action {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures caption {
+  font-family: var(--retro-font-body);
+  font-size: 16px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures td {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures td + td {
+  border-left: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-measures .side {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-measures .v-num {
+  font-family: var(--retro-font-display);
+  font-size: 48px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-measures .v-words {
+  font-family: var(--retro-font-display);
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .spec-frame {
+  background: var(--retro-frame-bg);
+  border: 2px inset var(--retro-frame-border);
+  border-radius: 0;
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='article'] .spec-frame .added {
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='article'] .spec figcaption {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='article'] .spec-side {
+  color: var(--retro-maroon);
+}
+
+@media (max-width: 720px) {
+  html[data-appearance='retro'] [data-module='article'] .fix-measures .v-num {
+    font-size: 40px;
+  }
+}

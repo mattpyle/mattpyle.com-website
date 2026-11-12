@@ -30,6 +30,8 @@ export const RETRO_ROUTES = [
   '/projects',
   '/changelog',
   '/changelog/public-scorecard/',
+  '/fix-log',
+  '/fix-log/the-webmcp-post-sent-readers-to-its-tools-through-a-redirect/',
   '/scorecard',
   '/activity',
   '/steward',

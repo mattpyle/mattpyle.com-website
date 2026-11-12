@@ -222,6 +222,68 @@ function listRowHeaderTables(root) {
   }
 }
 
+// A table with a heading row keeps its `caption` as the name of the table. The gfm plugin has
+// no place for one, so it ends up inside the table or is lost. A caption is content: it goes
+// ahead of the table as a paragraph, the way a row-header table's caption does above.
+function captionsAheadOfTables(root) {
+  for (const table of asArray(root.getElementsByTagName('table'))) {
+    const caption = asArray(table.children).find((child) => child.tagName === 'CAPTION');
+    if (!caption) continue;
+    const paragraph = table.ownerDocument.createElement('p');
+    while (caption.firstChild) paragraph.appendChild(caption.firstChild);
+    table.parentNode.insertBefore(paragraph, table);
+    table.removeChild(caption);
+  }
+}
+
+// A `dl` of short facts, such as a fix's "fixed" date and "type", is a list of one-line
+// items: `term: value`. Turndown has no rule for a `dl`, so each `dt` and `dd` came out as
+// a paragraph of its own and the value drifted away from its name. A `dl` whose terms or
+// descriptions run to prose is left to turndown, because a sentence does not read as a fact.
+const FACT_MAX_CHARS = 60;
+
+function factPairs(dl) {
+  const pairs = [];
+  const groups = asArray(dl.children).flatMap((child) => (child.tagName === 'DIV' ? asArray(child.children) : [child]));
+  let term = null;
+  for (const child of groups) {
+    if (child.tagName === 'DT') {
+      if (term) return null;
+      term = child;
+    } else if (child.tagName === 'DD') {
+      if (!term) return null;
+      pairs.push([term, child]);
+      term = null;
+    } else {
+      return null;
+    }
+  }
+  if (term || pairs.length === 0) return null;
+  return pairs;
+}
+
+function listFactLists(root) {
+  for (const dl of asArray(root.getElementsByTagName('dl'))) {
+    const pairs = factPairs(dl);
+    if (!pairs) continue;
+    const short = pairs.every(([dt, dd]) =>
+      [dt, dd].every((el) => el.textContent.replace(/\s+/g, ' ').trim().length <= FACT_MAX_CHARS && el.querySelector('p, ul, ol, pre, table, div, h1, h2, h3, h4, h5, h6') == null));
+    if (!short) continue;
+
+    const document = dl.ownerDocument;
+    const list = document.createElement('ul');
+    for (const [dt, dd] of pairs) {
+      const item = document.createElement('li');
+      while (dt.firstChild) item.appendChild(dt.firstChild);
+      item.appendChild(document.createTextNode(': '));
+      while (dd.firstChild) item.appendChild(dd.firstChild);
+      list.appendChild(item);
+    }
+    dl.parentNode.insertBefore(list, dl);
+    dl.parentNode.removeChild(dl);
+  }
+}
+
 function prune(node) {
   for (const child of asArray(node.children)) {
     if (isDroppable(child)) child.remove();
@@ -259,6 +321,8 @@ export function pageToMarkdown(html) {
   prune(root);
   hoistBlockLinks(root);
   listRowHeaderTables(root);
+  captionsAheadOfTables(root);
+  listFactLists(root);
   separateAdjacentElements(root);
 
   const body = service.turndown(root).trim();

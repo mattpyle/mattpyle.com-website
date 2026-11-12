@@ -110,6 +110,8 @@ jobs:
             http://localhost:4321/projects \
             http://localhost:4321/changelog \
             http://localhost:4321/changelog/public-scorecard/ \
+            http://localhost:4321/fix-log \
+            http://localhost:4321/fix-log/the-webmcp-post-sent-readers-to-its-tools-through-a-redirect/ \
             http://localhost:4321/scorecard \
             http://localhost:4321/activity \
             http://localhost:4321/steward \

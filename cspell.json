@@ -33,5 +33,16 @@
   // `seoTitle`, and `seoDescription` are all checked — verified empirically, not
   // assumed. This matters: a typo in `description` flows into <title>, OG, and RSS.
   // Frontmatter dates/enums and markdown link targets aren't prose.
-  "ignoreRegExpList": ["/\\]\\([^)]*\\)/g"]
+  "ignoreRegExpList": ["/\\]\\([^)]*\\)/g"],
+
+  // A fix entry's `checks[].expected` and `checks[].measured` are the production check as
+  // recorded: code expressions and quoted page text, some cut short. They are not prose,
+  // and a comment in the frontmatter would not survive a tool that rewrites the YAML.
+  // Title, lead, story, measures and changed text stay spell-checked.
+  "overrides": [
+    {
+      "filename": "**/src/content/fixes/**",
+      "ignoreRegExpList": ["/^[ \\t]+(?:expected|measured):.*$/gm"]
+    }
+  ]
 }

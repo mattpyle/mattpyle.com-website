@@ -219,3 +219,26 @@ test('frontmatter carries the head metadata, decoded', () => {
   assert.match(markdown, /canonical: https:\/\/www\.mattpyle\.com\/page\//);
   assert.match(markdown, /source: https:\/\/www\.mattpyle\.com\/page\//);
 });
+
+test('a table caption goes ahead of the table as a paragraph', () => {
+  const markdown = pageToMarkdown(
+    page(
+      '<h1>Fix</h1><table><caption>Pages that send a Link header</caption><thead><tr><th>Before</th><th>After</th></tr></thead><tbody><tr><td>0 of 16</td><td>16 of 16</td></tr></tbody></table>'
+    )
+  );
+  assert.match(markdown, /Pages that send a Link header\n\n\| Before \| After \|\n\| --- \| --- \|\n\| 0 of 16 \| 16 of 16 \|/);
+});
+
+test('a definition list of short facts becomes one line per fact', () => {
+  const markdown = pageToMarkdown(
+    page('<h1>Fix</h1><dl><div><dt>fixed</dt><dd><time>11 Nov 2026</time></dd></div><div><dt>type</dt><dd>agent readiness</dd></div></dl>')
+  );
+  assert.match(markdown, /-\s+fixed: 11 Nov 2026\n-\s+type: agent readiness/);
+});
+
+test('a definition list that runs to prose is left to the converter', () => {
+  const prose = 'One worker sits behind this endpoint, so a busy moment is a real wait rather than a slow site.';
+  const markdown = pageToMarkdown(page(`<h1>Steward</h1><dl><div><dt>Queued means queued</dt><dd>${prose}</dd></div></dl>`));
+  assert.equal(/^-\s+Queued means queued:/m.test(markdown), false);
+  assert.ok(markdown.includes(prose));
+});

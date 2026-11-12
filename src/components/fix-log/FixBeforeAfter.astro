@@ -1,0 +1,188 @@
+---
+/**
+ * The "Before and after" section of a fix entry: exactly one of three forms.
+ *
+ * 1. A measurement: a table named by its caption, the label, whose two cells hold the values
+ *    as large figures (the Scorecard gate's figure style).
+ * 2. A pair of words: the same table, with the values set as words.
+ * 3. Changed lines: two figures, Before then After, each a `pre` with a caption.
+ *
+ * The heading is the page's third `h2`. A measure's label is a table header, never a heading.
+ * On a phone every pair stacks, Before above After, at full width. Nothing marks a change by
+ * colour or strikethrough: position and the caption say which is which.
+ */
+import { isWordedMeasure, type Fix } from '../../lib/fix-log';
+
+interface Props {
+  measures?: Fix['data']['measures'];
+  text?: Fix['data']['text'];
+}
+
+const { measures, text } = Astro.props;
+const measure = measures?.[0];
+const sides = measure?.sides ?? ['before', 'after'];
+const worded = measure ? isWordedMeasure(measure) : false;
+const shown = (value: string) => (measure?.quoted ? `“${value}”` : value);
+// A figure of more than six characters, such as "16 of 16", is set a step smaller so it fits half the column.
+const long = measure ? Math.max(measure.before.length, measure.after.length) > 6 : false;
+
+const NEWLINE = String.fromCharCode(10);
+
+type Specimen = NonNullable<Fix['data']['text']>['before'];
+const lines = (specimen: Specimen): { text: string; added: boolean }[] =>
+  specimen.kind === 'lines'
+    ? specimen.lines.map((l) => ({ text: l.text, added: l.mark === 'added' }))
+    : specimen.kind === 'spoken'
+      ? [{ text: specimen.words.map((w) => `“${w}”`).join(', '), added: false }]
+      : [{ text: specimen.text, added: false }];
+---
+
+<section aria-labelledby="fix-ba-title">
+  <h2 id="fix-ba-title" class="fix-h">Before and after</h2>
+
+  {measure && (
+    <table class="fix-measures">
+      <caption>{measure.label}</caption>
+      <thead class="sr-only">
+        <tr><th scope="col">Before</th><th scope="col">After</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          {[measure.before, measure.after].map((value, i) => (
+            <td>
+              <span class="cell">
+                <span class:list={[worded ? 'v-words' : 'v-num', !worded && long && 'v-num--long']}>{shown(value)}</span>
+                <span class="side" aria-hidden="true">{sides[i].toLowerCase()}</span>
+              </span>
+            </td>
+          ))}
+        </tr>
+      </tbody>
+    </table>
+  )}
+
+  {text && (
+    <div class="specimens">
+      {([['Before', text.before], ['After', text.after]] as const).map(([side, specimen]) => (
+        <figure class="spec">
+          <pre class="spec-frame" tabindex="0"><code>{lines(specimen).map((l) => <span class:list={[l.added && 'added']}>{l.text + NEWLINE}</span>)}</code></pre>
+          <figcaption><span class="spec-side">{side}</span> &middot; {specimen.label}</figcaption>
+        </figure>
+      ))}
+    </div>
+  )}
+</section>
+
+<style>
+  .fix-h {
+    margin: 0 0 24px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -.025em;
+    color: var(--ink);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .fix-measures { width: 100%; border-collapse: collapse; table-layout: fixed; }
+
+  .fix-measures caption {
+    padding: 0 0 14px;
+    text-align: left;
+    caption-side: top;
+    font: 400 20px/1.4 var(--font-body);
+    color: var(--ink-2);
+  }
+
+  .fix-measures td {
+    padding: 34px 32px 0 0;
+    vertical-align: top;
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .fix-measures td + td { padding-left: 32px; border-left: 1px solid var(--rule); }
+
+  .cell { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+  .side { font-family: var(--font-mono-plex); font-size: 15px; color: var(--ink-6); }
+
+  .v-num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 84px;
+    line-height: .9;
+    letter-spacing: -.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+  .v-num--long { font-size: 64px; }
+
+  .v-words {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    color: var(--ink);
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+  }
+
+  .specimens { display: flex; flex-direction: column; gap: 28px; }
+
+  .spec { margin: 0; min-width: 0; }
+
+  .spec-frame {
+    margin: 0;
+    padding: 18px 20px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    font-family: var(--font-mono-plex);
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--ink-5);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .spec-frame .added { color: var(--ink); font-weight: 600; }
+
+  .spec figcaption {
+    margin-top: 10px;
+    font-family: var(--font-mono-plex);
+    font-size: 15px;
+    color: var(--ink-6);
+    overflow-wrap: anywhere;
+  }
+
+  .spec-side { color: var(--ink); }
+
+  @media (max-width: 720px) {
+    .fix-h { font-size: 26px; margin-bottom: 18px; }
+    .fix-measures caption { font-size: 19px; }
+    .fix-measures tr { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .fix-measures td { display: block; padding: 24px 0 0; }
+    .fix-measures td + td { margin-top: 24px; padding-left: 0; border-left: 0; }
+    .v-num, .v-num--long { font-size: 64px; }
+    .v-words { font-size: 24px; }
+    .spec-frame { padding: 14px 16px; font-size: 14.5px; }
+  }
+
+  @media (max-width: 900px) and (min-width: 721px) {
+    .v-num--long { font-size: 56px; }
+  }
+</style>

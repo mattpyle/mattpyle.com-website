@@ -1,0 +1,191 @@
+---
+/**
+ * One fix on its own URL. The head is the changelog entry's (src/pages/changelog/[slug].astro),
+ * the body grid is the writing post's (src/pages/writing/[slug].astro): a 210px rail on the left
+ * and one reading column, then the newer and older rows. It shares `data-module="article"` and
+ * the `.entry-*`, `.post-*` and `.rail-*` class names with those pages, so retro dresses it from
+ * the rules it already has.
+ *
+ * The heading outline is the same on every entry: the title, a visually hidden "About this fix"
+ * that names the rail, "What happened" and "Before and after". A measure's label is a table
+ * header and not a heading. Nothing on the page shows a status; `status` stays in the data.
+ *
+ * Times show in America/Vancouver.
+ */
+import { getCollection, render } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import FixRail from '../../components/fix-log/FixRail.astro';
+import FixBeforeAfter from '../../components/fix-log/FixBeforeAfter.astro';
+import { FIX_LOG, compareFixes, fixDate, fixUrl } from '../../lib/fix-log';
+
+export async function getStaticPaths() {
+  const fixes = (await getCollection('fixes')).sort(compareFixes);
+  return fixes.map((fix, index) => ({
+    params: { slug: fix.data.slug },
+    // Newest first: `newer` sits before an entry in the list and `older` after it.
+    props: { fix, newer: fixes[index - 1] ?? null, older: fixes[index + 1] ?? null },
+  }));
+}
+
+const { fix, newer, older } = Astro.props;
+const { Content } = await render(fix);
+const { title, lead, type, verified, measures, changes, text } = fix.data;
+const path = fixUrl(fix);
+const markdownUrl = `${path.slice(0, -1)}.md`;
+---
+
+<Layout
+  title={title}
+  description={lead}
+  type="article"
+  publishedTime={verified}
+  markdownAlternate={markdownUrl}
+  breadcrumbs={[
+    { name: 'Home', url: '/' },
+    { name: FIX_LOG.name, url: FIX_LOG.path },
+    { name: title, url: path },
+  ]}
+>
+  <article data-module="article">
+    <div class="entry-head rd-section">
+      <a href={FIX_LOG.path} class="entry-back">&larr; all fixes</a>
+      <h1 class="entry-title">{title}</h1>
+      <p class="entry-lead">{lead}</p>
+    </div>
+
+    <div class="rd-section">
+      <div class="post-body fix-body">
+        <FixRail verified={verified} type={type} changes={changes} markdownUrl={markdownUrl} />
+
+        <div class="fix-main">
+          <section aria-labelledby="fix-what-title">
+            <h2 id="fix-what-title" class="fix-h">What happened</h2>
+            <div class="prose"><Content /></div>
+          </section>
+
+          <FixBeforeAfter measures={measures} text={text} />
+        </div>
+      </div>
+    </div>
+
+    {(newer || older) && (
+      <nav class="entry-nav rd-section" aria-label="Fix log entry navigation">
+        {newer && (
+          <a href={fixUrl(newer)} class="entry-step">
+            <span class="entry-step-label">newer &middot; {fixDate(newer.data.verified)}</span>
+            <span class="entry-step-title">{newer.data.title}</span>
+          </a>
+        )}
+        {older && (
+          <a href={fixUrl(older)} class="entry-step">
+            <span class="entry-step-label">older &middot; {fixDate(older.data.verified)}</span>
+            <span class="entry-step-title">{older.data.title}</span>
+          </a>
+        )}
+      </nav>
+    )}
+  </article>
+</Layout>
+
+<style>
+  [data-module="article"] { padding: 0 0 80px; }
+
+  /* ── The head: the changelog entry's, with the back link in the accent ── */
+  .entry-head { padding-top: 66px; }
+
+  .entry-back { font-family: var(--font-mono-plex); font-size: 17px; color: var(--changelog); }
+  .entry-back:hover { color: var(--changelog-hover); }
+
+  .entry-title {
+    margin: 26px 0 0;
+    max-width: 24ch;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(48px, 5.6vw, 82px);
+    line-height: 1;
+    letter-spacing: -.035em;
+    color: var(--ink);
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+  }
+
+  .entry-lead {
+    margin: 30px 0 0;
+    max-width: 40ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 27px;
+    line-height: 1.32;
+    letter-spacing: -.02em;
+    color: var(--ink-3);
+    text-wrap: pretty;
+  }
+
+  /* ── The body: the writing post's grid, a 210px rail and one column ── */
+  .fix-body {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+    margin-top: 58px;
+    padding-top: 34px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .fix-main { display: flex; flex-direction: column; gap: 64px; min-width: 0; }
+
+  .fix-h {
+    margin: 0 0 24px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -.025em;
+    color: var(--ink);
+  }
+
+  /* ── Newer and older: the changelog entry's foot ── */
+  .entry-nav { margin-top: 76px; }
+
+  .entry-step {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: baseline;
+    padding: 30px 20px 34px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .entry-step:hover { background: var(--tint-writing); }
+
+  .entry-step-label { font-family: var(--font-mono-plex); font-size: 17px; color: var(--ink-6); }
+
+  .entry-step-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    max-width: 26ch;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 900px) {
+    .fix-body { grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 44px; }
+  }
+
+  @media (max-width: 720px) {
+    .entry-head { padding-top: 34px; }
+    .entry-title { margin-top: 12px; font-size: 40px; letter-spacing: -.03em; }
+    .entry-lead { margin-top: 22px; font-size: 22px; }
+    .fix-main { gap: 48px; }
+    .fix-h { font-size: 26px; margin-bottom: 18px; }
+    .entry-nav { margin-top: 48px; }
+    .entry-step { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 22px 0; margin: 0; }
+    .entry-step-title { font-size: 25px; }
+    .entry-back { display: inline-flex; align-items: center; min-height: 44px; }
+  }
+</style>

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ENTRIES_DIR, FORBIDDEN, entryFile, readEntries, readFinding, readFindings } from '../scripts/fix-log-entries.mjs';
+import { ENTRIES_DIR, FORBIDDEN, entryFile, entryText, readEntries, readFinding, readFindings } from '../scripts/fix-log-entries.mjs';
 
 /**
  * The fix log's guards that CI can run.
@@ -189,8 +189,56 @@ test('each entry file is named by its key in lower case, and no key repeats', ()
   assert.equal(new Set(keys).size, keys.length, 'no key repeats');
 });
 
+test('each entry has a URL-safe slug, and no slug repeats', () => {
+  const slugs = readEntries(ENTRIES_DIR).map((e) => e.data.slug);
+  for (const slug of slugs) assert.match(String(slug), /^[a-z0-9]+(?:-[a-z0-9]+)*$/, `slug ${slug}`);
+  assert.equal(new Set(slugs).size, slugs.length, 'no slug repeats');
+});
+
+test('a freshly extracted entry has an empty slug beside its empty title', () => {
+  const text = entryText({ key: 'MP-902', type: 'content', kind: 'defect', status: 'fixed', confirmedBy: 'check', where: '/about/', found: '2026-10-01', approved: '2026-10-02T03:04:05.678Z', verified: '2026-10-03T03:04:05.678Z', checks: [] }, { number: 900, title: 't', opened: '2026-10-02T04:00:00Z', merged: '2026-10-02T05:00:00Z' });
+  assert.ok(text.includes('title: ""\nslug: ""\n'), 'title and slug are both empty');
+});
+
+test('no entry body holds an angle-bracket tag outside code', () => {
+  for (const e of readEntries(ENTRIES_DIR)) {
+    const prose = e.body.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
+    const tag = prose.match(/<[A-Za-z/!][^>\n]*>?/);
+    assert.equal(tag, null, `${e.file} holds ${tag?.[0]} outside backticks`);
+  }
+});
+
+test('each entry shows its before and after once, and no measure is a count of occurrences', () => {
+  for (const e of readEntries(ENTRIES_DIR)) {
+    const hasMeasures = Array.isArray(e.data.measures) && e.data.measures.length > 0;
+    const hasText = Boolean(e.data.text);
+    assert.ok((e.data.measures ?? []).length <= 1, `${e.file} holds more than one measure`);
+    assert.notEqual(hasMeasures, hasText, `${e.file} must hold measures or changed text, not both and not neither`);
+    for (const m of e.data.measures ?? []) {
+      assert.doesNotMatch(m.label, /\b(occurrences?|copies|instances|count) of\b/i, `${e.file}: "${m.label}" names a count of occurrences`);
+    }
+  }
+});
+
 test('no entry holds a string a workflow id, preview or private path leaves behind', () => {
   for (const e of readEntries(ENTRIES_DIR)) {
     for (const s of FORBIDDEN) assert.ok(!e.text.includes(s), `${e.file} holds ${s}`);
+  }
+});
+
+test('the sitemap date is the later of verified and updated, in Vancouver time', async () => {
+  const { readFixMetadata } = await import('../scripts/lib/fix-metadata.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fix-meta-'));
+  const entry = (slug, extra) => `---\nkey: MP-9${slug.length}\nslug: "${slug}"\nverified: "2026-11-11T04:02:41.358Z"\n${extra}---\nBody.\n`;
+  try {
+    fs.writeFileSync(path.join(dir, 'a.md'), entry('plain', ''));
+    fs.writeFileSync(path.join(dir, 'b.md'), entry('edited', 'updated: "2026-11-20"\n'));
+    fs.writeFileSync(path.join(dir, 'c.md'), entry('earlier', 'updated: "2026-11-01"\n'));
+    const meta = readFixMetadata(dir);
+    assert.equal(meta.get('plain').lastmod, '2026-11-10');
+    assert.equal(meta.get('edited').lastmod, '2026-11-20');
+    assert.equal(meta.get('earlier').lastmod, '2026-11-10');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
