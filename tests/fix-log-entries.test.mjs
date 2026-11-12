@@ -212,6 +212,7 @@ test('each entry shows its before and after once, and no measure is a count of o
   for (const e of readEntries(ENTRIES_DIR)) {
     const hasMeasures = Array.isArray(e.data.measures) && e.data.measures.length > 0;
     const hasText = Boolean(e.data.text);
+    assert.ok((e.data.measures ?? []).length <= 1, `${e.file} holds more than one measure`);
     assert.notEqual(hasMeasures, hasText, `${e.file} must hold measures or changed text, not both and not neither`);
     for (const m of e.data.measures ?? []) {
       assert.doesNotMatch(m.label, /\b(occurrences?|copies|instances|count) of\b/i, `${e.file}: "${m.label}" names a count of occurrences`);

@@ -34,7 +34,7 @@ One sentence under the title, under 25 words. Say whom the problem let down and 
 
 ## The before and after
 
-An entry shows its before and after once, in the single best form. Hold `measures` or `text`, never both and never neither. The schema refuses both.
+An entry shows its before and after once, in the single best form. Hold one `measures` pair or `text`, never both and never neither. The schema refuses both, and refuses a second measure.
 
 The forms, in order of preference:
 
@@ -45,7 +45,7 @@ The forms, in order of preference:
 Rules for the form:
 
 1. The check's own test is never a measure. A count of occurrences of a string, copies of a sentence or instances of a phrase tells a reader nothing. A label that names one fails the test.
-2. A second measure stays only when it measures a different thing.
+2. An entry has one measure or one changed-text pair. When a fix changed several things, choose the one a reader would care about most.
 3. The label names what is counted or shown, in a reader's words.
 4. The before is what was observed when the problem was found, unless a measured value exists. The after is the value on production after the fix. For a fix confirmed by its deploy, it is what the merged change does.
 5. Add no fact the finding and the pull request do not hold.

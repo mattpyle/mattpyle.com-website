@@ -131,7 +131,7 @@ const fixes = defineCollection({
       opened: z.coerce.date(),
       merged: z.coerce.date(),
     })).min(1),
-    /** The before and after, as named pairs. An entry shows its before and after once: measures or changed text, never both. */
+    /** The before and after, as named pairs. An entry shows its before and after once: one measure or one changed text, never both. */
     measures:    z.array(z.object({
       label:  z.string().min(1),
       before: z.string().min(1),
@@ -140,7 +140,7 @@ const fixes = defineCollection({
       quoted: z.boolean().default(false),
       /** Names for the two sides, when they are not Before and After. */
       sides:  z.tuple([z.string(), z.string()]).optional(),
-    })).min(1).optional(),
+    })).length(1).optional(),
     /** The before and after as changed lines, or words spoken, or a gap. Used when measures are not the best form. */
     text:        z.object({ before: specimen, after: specimen }).optional(),
     /** The checks run on production when the fix was confirmed. `before` is set only where a check also ran before the fix. */
