@@ -46,16 +46,17 @@ assert.ok(withText, 'no entry holds changed text');
   checkShared(withMeasure, markdown);
   const [m] = withMeasure.data.measures;
   const shown = (value) => (m.quoted ? `“${value}”` : value);
-  const escape = (value) => value.replace(/\|/g, '\\|');
+  // Turndown backslash-escapes markdown characters, so compare with the escapes removed.
+  const plain = (value) => value.split(String.fromCharCode(92)).join('');
   const section = markdown.split('## Before and after')[1];
-  assert.ok(section.includes(m.label), `${withMeasure.data.slug}: the label is missing from the twin`);
+  assert.ok(plain(section).includes(m.label), `${withMeasure.data.slug}: the label is missing from the twin`);
   const table = section.split('\n').filter((line) => line.startsWith('|'));
   assert.equal(table.length, 3, `${withMeasure.data.slug}: the measure is not a three-line table`);
   assert.equal(table[0].replace(/\s+/g, ' ').trim(), '| Before | After |');
   assert.match(table[1], /^\|\s*---\s*\|\s*---\s*\|$/);
   assert.equal(
-    table[2].replace(/\s+/g, ' ').trim(),
-    `| ${escape(shown(m.before))} | ${escape(shown(m.after))} |`,
+    plain(table[2]).replace(/\s+/g, ' ').trim(),
+    `| ${shown(m.before)} | ${shown(m.after)} |`,
     `${withMeasure.data.slug}: the values are not the entry's before and after`,
   );
 }
