@@ -44,7 +44,7 @@ The forms, in order of preference:
 
 Rules for the form:
 
-1. The check's own test is never a measure. A count of occurrences of a string, copies of a sentence or instances of a phrase tells a reader nothing. A label that names one fails the test.
+1. Keep a count as the measure when it is "N of M" with M above 1, or a count above 1 of things a reader would recognise: pages, links, snippets, controls, sections. Use words or changed lines when the count goes 0 to 1 or 1 to 0, or when it counts occurrences of a string; a label that names one fails the test.
 2. An entry has one measure or one changed-text pair. When a fix changed several things, choose the one a reader would care about most.
 3. The label names what is counted or shown, in a reader's words.
 4. The before is what was observed when the problem was found, unless a measured value exists. The after is the value on production after the fix. For a fix confirmed by its deploy, it is what the merged change does.

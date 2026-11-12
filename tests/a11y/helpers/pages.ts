@@ -40,7 +40,7 @@ export interface PageSpec {
 export const WRITING_ENTRY = 'accessibility-and-ai';
 export const CHANGELOG_ENTRY = 'public-scorecard';
 // A fix's slug is written once and never changes, so the entry template's golden can name one.
-export const FIX_ENTRY = 'the-webmcp-post-sent-readers-to-its-tools-through-a-redirect';
+export const FIX_ENTRY = 'the-discovery-documents-said-nothing-is-stored-but-reports-were-kept';
 // The same template with measures in the rail and no changed text (MP-48, two changes).
 export const FIX_ENTRY_MEASURES = 'on-a-phone-a-posts-first-sentence-sat-two-screens-down';
 
