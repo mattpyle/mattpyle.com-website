@@ -179,7 +179,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(demoteHeadings(fix.body ?? ''));
     lines.push('');
-    for (const m of fix.data.measures) {
+    for (const m of fix.data.measures ?? []) {
       const [beforeName, afterName] = m.sides ?? ['Before', 'After'];
       const shown = (value: string) => (m.quoted ? `"${value}"` : value);
       lines.push(`${m.label}: ${beforeName} ${shown(m.before)}, ${afterName} ${shown(m.after)}`);

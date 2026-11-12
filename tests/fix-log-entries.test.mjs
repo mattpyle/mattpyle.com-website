@@ -208,6 +208,17 @@ test('no entry body holds an angle-bracket tag outside code', () => {
   }
 });
 
+test('each entry shows its before and after once, and no measure is a count of occurrences', () => {
+  for (const e of readEntries(ENTRIES_DIR)) {
+    const hasMeasures = Array.isArray(e.data.measures) && e.data.measures.length > 0;
+    const hasText = Boolean(e.data.text);
+    assert.notEqual(hasMeasures, hasText, `${e.file} must hold measures or changed text, not both and not neither`);
+    for (const m of e.data.measures ?? []) {
+      assert.doesNotMatch(m.label, /\b(occurrences?|copies|instances|count) of\b/i, `${e.file}: "${m.label}" names a count of occurrences`);
+    }
+  }
+});
+
 test('no entry holds a string a workflow id, preview or private path leaves behind', () => {
   for (const e of readEntries(ENTRIES_DIR)) {
     for (const s of FORBIDDEN) assert.ok(!e.text.includes(s), `${e.file} holds ${s}`);

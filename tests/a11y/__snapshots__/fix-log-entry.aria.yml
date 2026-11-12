@@ -26,9 +26,6 @@
       - text: ·
     - complementary "·":
       - heading "·" [level=2]
-      - paragraph: · ·
-      - paragraph: · ·
-      - heading "·" [level=2]
       - paragraph:
         - link "·":
           - /url: "#"

@@ -64,7 +64,7 @@ const path = fixUrl(fix);
         <div class="fix-story"><Content /></div>
 
         <aside class="fix-rail" aria-label="The fix in numbers">
-          {measures.map((m) => {
+          {(measures ?? []).map((m) => {
             const sides = m.sides ?? ['Before', 'After'];
             const worded = isWordedMeasure(m);
             return (

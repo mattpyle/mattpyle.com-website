@@ -41,6 +41,8 @@ export const WRITING_ENTRY = 'accessibility-and-ai';
 export const CHANGELOG_ENTRY = 'public-scorecard';
 // A fix's slug is written once and never changes, so the entry template's golden can name one.
 export const FIX_ENTRY = 'the-webmcp-post-sent-readers-to-its-tools-through-a-redirect';
+// The same template with measures in the rail and no changed text (MP-48, two changes).
+export const FIX_ENTRY_MEASURES = 'on-a-phone-a-posts-first-sentence-sat-two-screens-down';
 
 export const PAGES: PageSpec[] = [
   {
@@ -189,6 +191,21 @@ export const PAGES: PageSpec[] = [
     name: 'fix-log-entry',
     path: `/fix-log/${FIX_ENTRY}`,
     why: 'Fix entry template: the head, the facts, the story beside the numbers, the changed text and the newer/older steps, all read by both appearances',
+    snapshotDrop: ['.fix-story > *'],
+    // Entry text is edited by hand and the neighbours move when a fix ships either side.
+    snapshotRedact: [
+      '.entry-nav',
+      '.entry-title',
+      '.entry-lead',
+      '.fix-meta',
+      '.fix-rail',
+      '.fix-band',
+    ],
+  },
+  {
+    name: 'fix-log-entry-measures',
+    path: `/fix-log/${FIX_ENTRY_MEASURES}`,
+    why: 'Fix entry template: the head, the facts, the story beside measures and the change links, and the newer/older steps, all read by both appearances',
     snapshotDrop: ['.fix-story > *'],
     // Entry text is edited by hand and the neighbours move when a fix ships either side.
     snapshotRedact: [

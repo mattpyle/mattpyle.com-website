@@ -186,7 +186,6 @@ export function entryText(f, pr) {
     approved: f.approved,
     verified: f.verified,
     changes: [pr],
-    measures: [],
     checks: f.checks,
   };
   const head = yaml.dump(facts, { lineWidth: -1, quotingType: '"', noRefs: true });
