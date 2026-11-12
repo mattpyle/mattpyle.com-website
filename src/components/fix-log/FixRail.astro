@@ -8,7 +8,7 @@
  * facts are a `dl` whose visible `dt` words name each value, and there is no status fact. Each
  * pull request link carries the GitHub mark, and its title sits under it.
  */
-import { FIX_AREA_LABEL, FIX_DATE_LABEL, TYPE_LABEL, fixDate, prUrl, type Fix } from '../../lib/fix-log';
+import { FIX_TYPE_LABEL, FIX_DATE_LABEL, TYPE_LABEL, fixDate, prUrl, type Fix } from '../../lib/fix-log';
 
 interface Props {
   verified: Date;
@@ -25,7 +25,7 @@ const { verified, type, changes, markdownUrl } = Astro.props;
 
   <dl class="rail-block rail-meta">
     <div class="fact"><dt>{FIX_DATE_LABEL}</dt><dd><time datetime={verified.toISOString()}>{fixDate(verified)}</time></dd></div>
-    <div class="fact"><dt>{FIX_AREA_LABEL}</dt><dd class="fact-area">{TYPE_LABEL[type]}</dd></div>
+    <div class="fact"><dt>{FIX_TYPE_LABEL}</dt><dd class="fact-type">{TYPE_LABEL[type]}</dd></div>
   </dl>
 
   <div class="rail-block rail-changes">
@@ -82,7 +82,7 @@ const { verified, type, changes, markdownUrl } = Astro.props;
 
   .fact { display: flex; flex-wrap: wrap; gap: 10px; }
   .fact dd { margin: 0; }
-  .fact-area { color: var(--changelog); }
+  .fact-type { color: var(--changelog); }
 
   .rail-changes { gap: 16px; }
 

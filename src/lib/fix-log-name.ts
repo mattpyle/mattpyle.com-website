@@ -9,8 +9,8 @@ export const FIX_LOG = {
   description: 'Problems on this site that its agents found, and the fixes they made, each with a before and an after.',
 } as const;
 
-/** The visible word beside a fix's type in the rail. Matt has not ruled on it. */
-export const FIX_AREA_LABEL = 'area';
+/** The visible word beside a fix's type in the rail. The Steward dashboard calls this value type. */
+export const FIX_TYPE_LABEL = 'type';
 
 /** The visible word beside a fix's date in the rail. */
 export const FIX_DATE_LABEL = 'fixed';

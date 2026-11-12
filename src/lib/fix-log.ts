@@ -5,7 +5,7 @@ import { FIX_LOG } from './fix-log-name';
  * The fix log's shared pieces: its name and path, the order of its entries, and how a
  * page shows a time. The name may change, so every page reads it from here.
  */
-export { FIX_LOG, FIX_AREA_LABEL, FIX_DATE_LABEL } from './fix-log-name';
+export { FIX_LOG, FIX_TYPE_LABEL, FIX_DATE_LABEL } from './fix-log-name';
 
 export type Fix = CollectionEntry<'fixes'>;
 
