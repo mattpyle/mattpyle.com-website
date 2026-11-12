@@ -72,4 +72,84 @@ const changelog = defineCollection({
   }),
 });
 
-export const collections = { writing, projects, changelog };
+/**
+ * One problem on this site that its agents found and fixed, one file per fix.
+ * `scripts/fix-log-entries.mjs` writes the facts once from the finding and its fix
+ * pull request and never overwrites a file; a person or a model writes the title,
+ * the lead, the measures and the story under `agents/steward/briefs/fix-log.md`.
+ * Times are UTC instants; a page shows them in America/Vancouver.
+ *
+ * Outside Steward's RULES table on purpose: RULES covers the collections Steward
+ * reviews before publishing (`COLLECTIONS` in agents/steward/src/config.ts), and
+ * nothing reviews a fix entry. Steward writes these, it does not gate them.
+ */
+const lines = z.object({
+  kind:  z.literal('lines'),
+  /** What the lines are from, such as `llms.txt`. */
+  label: z.string(),
+  lines: z.array(z.object({ text: z.string(), mark: z.enum(['added', 'removed']).optional() })).min(1),
+});
+const specimen = z.discriminatedUnion('kind', [
+  lines,
+  z.object({ kind: z.literal('spoken'), label: z.string(), words: z.array(z.string()).min(1) }),
+  z.object({ kind: z.literal('missing'), label: z.string(), text: z.string() }),
+]);
+
+const fixes = defineCollection({
+  loader: glob({ pattern: '**/*.md', base: './src/content/fixes' }),
+  schema: z.object({
+    /** The finding's short key. Joins the entry to its finding; unique. */
+    key:         z.string().regex(/^MP-\d+$/),
+    title:       z.string().min(1),
+    /** One sentence under the title. */
+    lead:        z.string().min(1),
+    type:        z.enum(['seo', 'agent-readiness', 'content', 'ux', 'accessibility', 'feature']),
+    kind:        z.enum(['defect', 'opportunity']),
+    /** `reopened` when the check on production still failed after the fix. */
+    status:      z.enum(['fixed', 'reopened']),
+    /** How the after was confirmed: a check on production, or the deploy that carries the fix. */
+    confirmedBy: z.enum(['check', 'deploy']),
+    /** The site path, or URL, where a reader can see the fix. */
+    where:       z.string().min(1),
+    /** Something visible changed, so a screenshot pair belongs here later. */
+    visual:      z.boolean(),
+    /** For a visual fix, the screen it is about. */
+    screen:      z.enum(['phone', 'desktop']).optional(),
+    /** The day the problem was first seen. */
+    found:       z.coerce.date(),
+    approved:    z.coerce.date(),
+    /** When the fix was confirmed on production. */
+    verified:    z.coerce.date(),
+    /** The fix pull request first, then any later one that finished or repaired it. */
+    changes:     z.array(z.object({
+      number: z.number().int().positive(),
+      title:  z.string(),
+      opened: z.coerce.date(),
+      merged: z.coerce.date(),
+    })).min(1),
+    /** The before and after a reader takes in at a glance. Before is what was observed when the problem was found, unless a measured value exists. */
+    measures:    z.array(z.object({
+      label:  z.string().min(1),
+      before: z.string().min(1),
+      after:  z.string().min(1),
+      /** Words, not a number: shown in quotation marks. */
+      quoted: z.boolean().default(false),
+      /** Names for the two sides, when they are not Before and After. */
+      sides:  z.tuple([z.string(), z.string()]).optional(),
+    })).min(1),
+    /** The changed text, as it was and as it is. Left out where the measures show the whole change. */
+    text:        z.object({ before: specimen, after: specimen }).optional(),
+    /** The checks run on production when the fix was confirmed. `before` is set only where a check also ran before the fix. */
+    checks:      z.array(z.object({
+      passed:   z.boolean(),
+      method:   z.enum(['text', 'js', 'selector', 'markdown', 'header']),
+      urls:     z.array(z.string()).min(1),
+      viewport: z.string().optional(),
+      expected: z.string(),
+      measured: z.string(),
+      before:   z.string().optional(),
+    })).default([]),
+  }),
+});
+
+export const collections = { writing, projects, changelog, fixes };
