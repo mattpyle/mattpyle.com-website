@@ -21,19 +21,34 @@
       - /url: /fix-log/
     - heading "·" [level=1]
     - paragraph: ·
-    - paragraph:
-      - time: ·
-      - text: · ·
     - complementary "·":
       - heading "·" [level=2]
-      - paragraph: · ·
-      - paragraph: · ·
-      - heading "·" [level=2]
-      - paragraph:
-        - link "·":
-          - /url: "#"
-        - link "·":
-          - /url: "#"
+      - term: ·
+      - definition:
+        - time: ·
+      - term: ·
+      - definition: ·
+      - link "· ·":
+        - /url: "#"
+      - link "· ·":
+        - /url: "#"
+      - link "·":
+        - /url: "#"
+    - region "What happened":
+      - heading "What happened" [level=2]
+    - region "Before and after":
+      - heading "Before and after" [level=2]
+      - table:
+        - rowgroup:
+          - row "· ·":
+            - columnheader "·"
+            - columnheader "·"
+        - rowgroup:
+          - row "·":
+            - rowheader "·"
+          - row "· ·":
+            - cell "·"
+            - cell "·"
     - navigation "·":
       - link "· ·":
         - /url: "#"
@@ -53,6 +68,8 @@
       - /url: https://bsky.app/profile/mattpyle.com
     - link "activity":
       - /url: /activity/
+    - link "fix log":
+      - /url: /fix-log/
     - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"

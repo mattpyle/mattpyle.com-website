@@ -564,8 +564,6 @@ textarea:focus-visible,
   --agents-hover:    oklch(0.33 0.16 330);
   --changelog:       oklch(0.45 0.11 65);
   --changelog-hover: oklch(0.32 0.1 65);
-  --fixlog:          oklch(0.45 0.09 205);
-  --fixlog-hover:    oklch(0.32 0.08 205);
 
   /* Status and control, added for /audit (design_handoff_audit).
      ─────────────────────────────────────────────────────────────────────────
@@ -931,7 +929,6 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
 .rd-fill--writing   { --fill: var(--writing); }
 .rd-fill--projects  { --fill: var(--projects); }
 .rd-fill--changelog { --fill: var(--changelog); }
-.rd-fill--fixlog    { --fill: var(--fixlog); }
 .rd-fill--ink       { --fill: var(--ink); }
 
 /* :active as well as :hover so the effect exists on touch, where there is no

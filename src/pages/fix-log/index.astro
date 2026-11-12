@@ -32,14 +32,11 @@ const latest = fixes[0]?.data.verified;
 >
   {/* A div, not a section: validate:html names an h1 inside sectioning content. */}
   <div class="rd-section rd-hero fixlog-hero" data-module="fixlog-hero">
-    <h1><span class="rd-fill rd-fill--fixlog">{FIX_LOG.name}</span></h1>
+    <h1><span class="rd-fill rd-fill--changelog">{FIX_LOG.name}</span></h1>
     <div class="hero-row">
       <div class="hero-aside hero-facts">
         <span class="hero-facts-copy">
           {fixes.length} fixes{latest && <>, latest <time datetime={latest.toISOString()}>{fixDate(latest)}</time></>}.
-        </span>
-        <span class="hero-facts-links">
-          <a href="/changelog/" class="link-changelog">changelog</a>
         </span>
       </div>
     </div>
@@ -57,10 +54,7 @@ const latest = fixes[0]?.data.verified;
               <span class="row-title">{fix.data.title}</span>
               <span class="row-summary">{fix.data.lead}</span>
             </span>
-            <span class="row-kind">
-              <span>{TYPE_LABEL[fix.data.type]}</span>
-              {fix.data.status === 'reopened' && <span class="row-open">still open</span>}
-            </span>
+            <span class="row-kind">{TYPE_LABEL[fix.data.type]}</span>
           </a>
         ))}
         <div class="rows-end"></div>
@@ -73,11 +67,6 @@ const latest = fixes[0]?.data.verified;
   .fixlog-hero { padding-top: 78px; }
 
   .hero-facts-copy { font-size: 17px; color: var(--ink-5); }
-
-  .hero-facts-links { display: block; margin-top: 8px; font-family: var(--font-mono-plex); font-size: 16px; }
-
-  .hero-facts-links a { color: var(--changelog); text-decoration: underline; text-underline-offset: 3px; }
-  .hero-facts-links a:hover { color: var(--changelog-hover); }
 
   .log { padding-top: 56px; padding-bottom: 96px; }
 
@@ -144,8 +133,6 @@ const latest = fixes[0]?.data.verified;
     color: var(--ink-6);
     white-space: nowrap;
   }
-
-  .row-open { color: var(--ink); }
 
   .sr-only {
     position: absolute;

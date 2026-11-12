@@ -1,14 +1,11 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
+import { FIX_LOG } from './fix-log-name';
 
 /**
  * The fix log's shared pieces: its name and path, the order of its entries, and how a
  * page shows a time. The name may change, so every page reads it from here.
  */
-export const FIX_LOG = {
-  name: 'Fix log',
-  path: '/fix-log/',
-  description: 'Problems on this site that its agents found, and the fixes they made, each with a before and an after.',
-} as const;
+export { FIX_LOG, FIX_AREA_LABEL, FIX_DATE_LABEL } from './fix-log-name';
 
 export type Fix = CollectionEntry<'fixes'>;
 

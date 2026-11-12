@@ -43,6 +43,8 @@ export const CHANGELOG_ENTRY = 'public-scorecard';
 export const FIX_ENTRY = 'the-discovery-documents-said-nothing-is-stored-but-reports-were-kept';
 // The same template with measures in the rail and no changed text (MP-48, two changes).
 export const FIX_ENTRY_MEASURES = 'on-a-phone-a-posts-first-sentence-sat-two-screens-down';
+// The same template with a pair of words in Before and after (MP-73).
+export const FIX_ENTRY_WORDS = 'agents-md-named-only-github-and-linkedin-as-ways-to-reach-matt';
 
 export const PAGES: PageSpec[] = [
   {
@@ -190,31 +192,46 @@ export const PAGES: PageSpec[] = [
   {
     name: 'fix-log-entry',
     path: `/fix-log/${FIX_ENTRY}`,
-    why: 'Fix entry template: the head, the facts, the story beside the numbers, the changed text and the newer/older steps, all read by both appearances',
-    snapshotDrop: ['.fix-story > *'],
+    why: 'Fix entry template, changed lines: the head, the rail, the story, two figures and the newer/older steps, all read by both appearances',
+    snapshotDrop: ['.fix-main .prose > *'],
     // Entry text is edited by hand and the neighbours move when a fix ships either side.
     snapshotRedact: [
       '.entry-nav',
       '.entry-title',
       '.entry-lead',
-      '.fix-meta',
       '.fix-rail',
-      '.fix-band',
+      '.fix-measures',
+      '.specimens',
     ],
   },
   {
     name: 'fix-log-entry-measures',
     path: `/fix-log/${FIX_ENTRY_MEASURES}`,
     why: 'Fix entry template: the head, the facts, the story beside measures and the change links, and the newer/older steps, all read by both appearances',
-    snapshotDrop: ['.fix-story > *'],
+    snapshotDrop: ['.fix-main .prose > *'],
     // Entry text is edited by hand and the neighbours move when a fix ships either side.
     snapshotRedact: [
       '.entry-nav',
       '.entry-title',
       '.entry-lead',
-      '.fix-meta',
       '.fix-rail',
-      '.fix-band',
+      '.fix-measures',
+      '.specimens',
+    ],
+  },
+  {
+    name: 'fix-log-entry-words',
+    path: `/fix-log/${FIX_ENTRY_WORDS}`,
+    why: 'Fix entry template: the head, the facts, the story and a pair of words in Before and after, and the newer/older steps, all read by both appearances',
+    snapshotDrop: ['.fix-main .prose > *'],
+    // Entry text is edited by hand and the neighbours move when a fix ships either side.
+    snapshotRedact: [
+      '.entry-nav',
+      '.entry-title',
+      '.entry-lead',
+      '.fix-rail',
+      '.fix-measures',
+      '.specimens',
     ],
   },
   {

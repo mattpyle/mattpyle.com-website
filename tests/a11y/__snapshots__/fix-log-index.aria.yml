@@ -20,8 +20,6 @@
   - text: ·
   - time: ·
   - text: ·
-  - link "changelog":
-    - /url: /changelog/
   - region "All fixes":
     - heading "All fixes" [level=2]
     - text: ·
@@ -43,6 +41,8 @@
       - /url: https://bsky.app/profile/mattpyle.com
     - link "activity":
       - /url: /activity/
+    - link "fix log":
+      - /url: /fix-log/
     - link "webmcp":
       - /url: /webmcp/
     - button "Switch to retro mode"

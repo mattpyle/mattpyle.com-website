@@ -16,6 +16,7 @@
  * page through one delegated listener and a querySelectorAll, so the legacy
  * button and this one stay in sync with each other and with localStorage.
  */
+import { FIX_LOG } from '../lib/fix-log-name';
 ---
 
 <footer data-module="site-footer">
@@ -49,6 +50,7 @@
           the cross-link on /scorecard are how /activity is reached.
         */}
         <a href="/activity/">activity</a>
+        <a href={FIX_LOG.path}>{FIX_LOG.name.toLowerCase()}</a>
         <a href="/webmcp/">webmcp</a>
         <button
           type="button"

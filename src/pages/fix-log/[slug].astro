@@ -1,23 +1,22 @@
 ---
 /**
- * One fix on its own URL, in the manner of a changelog entry (src/pages/changelog/[slug].astro):
- * a back link, the title as the page's h1, a one-sentence lead, the body, and the newer and
- * older fixes at the foot. It shares the entry's `data-module="article"` and `.entry-*`
- * class names for the head and the foot, so retro dresses them from the rules it already has.
+ * One fix on its own URL. The head is the changelog entry's (src/pages/changelog/[slug].astro),
+ * the body grid is the writing post's (src/pages/writing/[slug].astro): a 210px rail on the left
+ * and one reading column, then the newer and older rows. It shares `data-module="article"` and
+ * the `.entry-*`, `.post-*` and `.rail-*` class names with those pages, so retro dresses it from
+ * the rules it already has.
  *
- * What a fix adds to a changelog entry:
- * 1. A rail beside the story with the named before-and-after measures, before left and after
- *    right, and the pull requests that made the change. Position and the names tell before
- *    from after, never colour.
- * 2. Under the story, at full width, the changed text as it was and as it is, where the entry
- *    holds it.
+ * The heading outline is the same on every entry: the title, a visually hidden "About this fix"
+ * that names the rail, "What happened" and "Before and after". A measure's label is a table
+ * header and not a heading. Nothing on the page shows a status; `status` stays in the data.
  *
- * Times show in America/Vancouver. `found` is a UTC calendar date and is not shown here.
+ * Times show in America/Vancouver.
  */
 import { getCollection, render } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
-import FixText from '../../components/fix-log/FixText.astro';
-import { FIX_LOG, TYPE_LABEL, compareFixes, fixDate, fixUrl, isWordedMeasure, prUrl } from '../../lib/fix-log';
+import FixRail from '../../components/fix-log/FixRail.astro';
+import FixBeforeAfter from '../../components/fix-log/FixBeforeAfter.astro';
+import { FIX_LOG, compareFixes, fixDate, fixUrl } from '../../lib/fix-log';
 
 export async function getStaticPaths() {
   const fixes = (await getCollection('fixes')).sort(compareFixes);
@@ -30,8 +29,9 @@ export async function getStaticPaths() {
 
 const { fix, newer, older } = Astro.props;
 const { Content } = await render(fix);
-const { title, lead, type, status, verified, measures, changes, text } = fix.data;
+const { title, lead, type, verified, measures, changes, text } = fix.data;
 const path = fixUrl(fix);
+const markdownUrl = `${path.slice(0, -1)}.md`;
 ---
 
 <Layout
@@ -39,7 +39,7 @@ const path = fixUrl(fix);
   description={lead}
   type="article"
   publishedTime={verified}
-  markdownAlternate={`${path.slice(0, -1)}.md`}
+  markdownAlternate={markdownUrl}
   breadcrumbs={[
     { name: 'Home', url: '/' },
     { name: FIX_LOG.name, url: FIX_LOG.path },
@@ -54,52 +54,22 @@ const path = fixUrl(fix);
     </div>
 
     <div class="rd-section">
-      <div class="fix-body">
-        <p class="fix-meta">
-          <time datetime={verified.toISOString()} class="fix-meta-date">{fixDate(verified)}</time>
-          <span>{TYPE_LABEL[type]}</span>
-          {status === 'reopened' && <span class="fix-meta-open">still open</span>}
-        </p>
+      <div class="post-body fix-body">
+        <FixRail verified={verified} type={type} changes={changes} markdownUrl={markdownUrl} />
 
-        <div class="fix-story"><Content /></div>
-
-        <aside class="fix-rail" aria-label="The fix in numbers">
-          {(measures ?? []).map((m) => {
-            const sides = m.sides ?? ['Before', 'After'];
-            const worded = isWordedMeasure(m);
-            return (
-              <section class="fix-measure">
-                <h2 class="fix-measure-name">{m.label}</h2>
-                <div class:list={['fix-measure-pair', worded && 'fix-measure-pair--words']}>
-                  {[m.before, m.after].map((value, i) => (
-                    <p>
-                      <span class="fix-side">{sides[i]}</span>
-                      <span class:list={['fix-value', worded && 'fix-value--words']}>{m.quoted ? `“${value}”` : value}</span>
-                    </p>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-          <section class="fix-measure">
-            <h2 class="fix-measure-name">{changes.length === 1 ? 'The change' : 'The changes'}</h2>
-            <p class="fix-changes">
-              {changes.map((c) => <a href={prUrl(c.number)}>{c.title}</a>)}
-            </p>
+        <div class="fix-main">
+          <section aria-labelledby="fix-what-title">
+            <h2 id="fix-what-title" class="fix-h">What happened</h2>
+            <div class="prose"><Content /></div>
           </section>
-        </aside>
+
+          <FixBeforeAfter measures={measures} text={text} />
+        </div>
       </div>
     </div>
 
-    {text && (
-      <div class="rd-section fix-band">
-        <FixText specimen={text.before} name="Before" />
-        <FixText specimen={text.after} name="After" />
-      </div>
-    )}
-
     {(newer || older) && (
-      <nav class="entry-nav rd-section" aria-label="Other fixes">
+      <nav class="entry-nav rd-section" aria-label="Fix log entry navigation">
         {newer && (
           <a href={fixUrl(newer)} class="entry-step">
             <span class="entry-step-label">newer &middot; {fixDate(newer.data.verified)}</span>
@@ -120,11 +90,11 @@ const path = fixUrl(fix);
 <style>
   [data-module="article"] { padding: 0 0 80px; }
 
-  /* ── The head: the changelog entry's ── */
+  /* ── The head: the changelog entry's, with the back link in the accent ── */
   .entry-head { padding-top: 66px; }
 
-  .entry-back { font-family: var(--font-mono-plex); font-size: 17px; color: var(--ink-5); }
-  .entry-back:hover { color: var(--ink); }
+  .entry-back { font-family: var(--font-mono-plex); font-size: 17px; color: var(--changelog); }
+  .entry-back:hover { color: var(--changelog-hover); }
 
   .entry-title {
     margin: 26px 0 0;
@@ -151,96 +121,27 @@ const path = fixUrl(fix);
     text-wrap: pretty;
   }
 
-  /* The post rail's meta block (PostRail.astro .rail-meta): one fact per line, the first in
-     ink, the rest grey, in a 210px column beside the body. */
-  .fix-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin: 0;
-    font-family: var(--font-mono-plex);
-    font-size: 17px;
-    color: var(--ink-6);
-  }
-
-  .fix-meta-date, .fix-meta-open { color: var(--ink); }
-
-  /* ── The body: the story beside the rail ── */
+  /* ── The body: the writing post's grid, a 210px rail and one column ── */
   .fix-body {
     display: grid;
-    grid-template-columns: 210px minmax(0, 1fr) minmax(0, 300px);
-    gap: 48px;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
     align-items: start;
     margin-top: 58px;
     padding-top: 34px;
     border-top: 1px solid var(--rule);
   }
 
-  .fix-story :global(p) {
-    margin: 0 0 1.05em;
-    max-width: 62ch;
-    font-family: var(--font-body);
-    font-size: 19px;
-    line-height: 1.65;
-    color: var(--ink-2);
-    overflow-wrap: anywhere;
-  }
+  .fix-main { display: flex; flex-direction: column; gap: 64px; min-width: 0; }
 
-  .fix-story :global(p:last-child) { margin-bottom: 0; }
-
-  .fix-rail { display: flex; flex-direction: column; gap: 30px; min-width: 0; }
-
-  .fix-measure { padding-top: 14px; border-top: 1px solid var(--ink); }
-
-  .fix-measure-name {
-    margin: 0 0 14px;
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 18px;
-    line-height: 1.25;
-    letter-spacing: -.01em;
-    color: var(--ink);
-  }
-
-  .fix-measure-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-  .fix-measure-pair p { display: flex; flex-direction: column; gap: 4px; margin: 0; min-width: 0; }
-  .fix-measure-pair p + p { padding-left: 16px; border-left: 1px solid var(--rule); }
-
-  .fix-side { font-family: var(--font-body); font-weight: 600; font-size: 15px; color: var(--ink-5); }
-
-  .fix-value {
+  .fix-h {
+    margin: 0 0 24px;
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 48px;
-    line-height: 1;
-    letter-spacing: -.035em;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -.025em;
     color: var(--ink);
-    overflow-wrap: anywhere;
-  }
-
-  /* Words, not a number: Before stacks above After at the rail's full width, in a size that suits a phrase. */
-  .fix-measure-pair--words { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .fix-measure-pair--words p + p { padding-left: 0; padding-top: 12px; border-left: 0; border-top: 1px solid var(--rule); }
-  .fix-value--words { font-weight: 600; font-size: 21px; line-height: 1.3; letter-spacing: -.015em; }
-
-  .fix-changes { display: flex; flex-direction: column; gap: 10px; margin: 0; font-size: 17px; line-height: 1.4; }
-
-  .fix-changes a {
-    color: var(--ink);
-    text-decoration: underline;
-    text-decoration-color: var(--ink-6);
-    text-underline-offset: 3px;
-    overflow-wrap: anywhere;
-  }
-
-  .fix-changes a:hover { text-decoration-color: var(--ink); }
-
-  /* ── The band: the changed text, full width ── */
-  .fix-band {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 24px;
-    margin-top: 56px;
   }
 
   /* ── Newer and older: the changelog entry's foot ── */
@@ -272,30 +173,19 @@ const path = fixUrl(fix);
     overflow-wrap: anywhere;
   }
 
-  @media (max-width: 1080px) {
-    .fix-body { grid-template-columns: 210px minmax(0, 1fr); }
-    .fix-rail { grid-column: 2; }
-  }
-
-  @media (max-width: 860px) {
-    .fix-body { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-    .fix-rail { grid-column: auto; }
-    .fix-meta { flex-direction: row; flex-wrap: wrap; column-gap: 22px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
-    .fix-band { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 900px) {
+    .fix-body { grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 44px; }
   }
 
   @media (max-width: 720px) {
     .entry-head { padding-top: 34px; }
-    .entry-title { margin-top: 20px; font-size: 40px; letter-spacing: -.03em; }
+    .entry-title { margin-top: 12px; font-size: 40px; letter-spacing: -.03em; }
     .entry-lead { margin-top: 22px; font-size: 22px; }
-    .fix-meta { font-size: 16px; }
-    .fix-story :global(p) { font-size: 18px; }
-    .fix-value { font-size: 40px; }
-    .fix-value--words { font-size: 19px; }
-    .fix-band { margin-top: 40px; gap: 18px; }
-    .entry-nav { margin-top: 56px; }
+    .fix-main { gap: 48px; }
+    .fix-h { font-size: 26px; margin-bottom: 18px; }
+    .entry-nav { margin-top: 48px; }
     .entry-step { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 22px 0; margin: 0; }
-    .entry-step-title { font-size: 24px; }
-    .fix-changes a, .entry-back { display: inline-flex; align-items: center; min-height: 44px; }
+    .entry-step-title { font-size: 25px; }
+    .entry-back { display: inline-flex; align-items: center; min-height: 44px; }
   }
 </style>

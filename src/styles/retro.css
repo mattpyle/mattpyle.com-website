@@ -4253,19 +4253,6 @@ html[data-appearance='retro'] [data-module='fixlog-hero'] .hero-facts-copy {
   color: var(--retro-ink-muted);
 }
 
-html[data-appearance='retro'] [data-module='fixlog-hero'] .hero-facts-links {
-  font-family: var(--retro-font-mono);
-  font-size: 14px;
-}
-
-html[data-appearance='retro'] [data-module='fixlog-hero'] .hero-facts-links a {
-  color: var(--retro-link);
-}
-
-html[data-appearance='retro'] [data-module='fixlog-hero'] .hero-facts-links a:hover {
-  color: var(--retro-maroon);
-}
-
 html[data-appearance='retro'] [data-module='fixlog-log'] .row,
 html[data-appearance='retro'] [data-module='fixlog-log'] .rows-end {
   border-top: 2px dashed var(--retro-frame-border);
@@ -4284,10 +4271,6 @@ html[data-appearance='retro'] [data-module='fixlog-log'] .row-kind {
   font-family: var(--retro-font-mono);
   font-size: 12px;
   color: var(--retro-ink-muted);
-}
-
-html[data-appearance='retro'] [data-module='fixlog-log'] .row-open {
-  color: var(--retro-maroon);
 }
 
 html[data-appearance='retro'] [data-module='fixlog-log'] .row-title {
@@ -4321,145 +4304,99 @@ html[data-appearance='retro'] [data-module='fixlog-log'] .year + .row {
   border-top: 0;
 }
 
-/* The entry's rail of facts, story and measures. The facts take the post rail's
-   mono and muted colour; the measures sit in the ridge panel the post rail uses. */
-html[data-appearance='retro'] [data-module='article'] .fix-meta {
-  font-family: var(--retro-font-mono);
-  font-size: 12px;
-  color: var(--retro-ink-muted);
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-meta-date,
-html[data-appearance='retro'] [data-module='article'] .fix-meta-open {
-  color: var(--retro-maroon);
-}
-
+/* The entry page. The head and foot take the changelog entry's rules above, and the rail takes
+   the post rail's (`.post-rail`, `.rail-block`, `.rail-meta`, `.rail-action`). What is left to
+   style is the body grid, the section headings, the facts, the pull request links, the
+   measures table and the changed lines. Like the writing post, retro flattens the grid to one
+   column, with the rail above the story. */
 html[data-appearance='retro'] [data-module='article'] .fix-body {
-  border-top: 2px dashed var(--retro-frame-border);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-story p {
-  font-family: var(--retro-font-body);
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--retro-ink);
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-rail {
-  background: var(--retro-sidebar-bg);
-  border: 3px ridge var(--retro-frame-border);
-  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
-  padding: 14px 16px;
-  gap: 16px;
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-measure {
-  border-top: 2px dashed var(--retro-frame-border);
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-measure:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-measure-name {
+html[data-appearance='retro'] [data-module='article'] .fix-h {
   font-family: var(--retro-font-display);
-  font-size: 15px;
+  font-size: 24px;
   font-weight: normal;
   letter-spacing: normal;
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-rail .fix-measure-pair p + p {
+html[data-appearance='retro'] [data-module='article'] .fix-rail .fact-area {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-rail .change-title {
+  font-family: var(--retro-font-body);
+  font-size: 14px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-rail .change:hover .rail-action {
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures tbody th {
+  font-family: var(--retro-font-body);
+  font-size: 16px;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures td {
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures td + td {
   border-left: 2px dashed var(--retro-frame-border);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-rail .fix-measure-pair--words p + p {
-  border-left: 0;
-  border-top: 2px dashed var(--retro-frame-border);
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-side {
+html[data-appearance='retro'] [data-module='article'] .fix-measures .side {
   font-family: var(--retro-font-mono);
   font-size: 12px;
-  font-weight: normal;
   color: var(--retro-ink-muted);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-value {
+html[data-appearance='retro'] [data-module='article'] .fix-measures .v-num {
   font-family: var(--retro-font-display);
-  font-size: 30px;
+  font-size: 48px;
   font-weight: normal;
   letter-spacing: normal;
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-value--words {
-  font-family: var(--retro-font-body);
-  font-size: 15px;
-  line-height: 1.3;
-  color: var(--retro-ink);
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-changes {
-  font-family: var(--retro-font-body);
-  font-size: 14px;
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-changes a {
-  color: var(--retro-link);
-  text-decoration-color: currentColor;
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-changes a:hover {
-  color: var(--retro-maroon);
-}
-
-/* The changed text: the inset cream frame the prose snippets use. */
-html[data-appearance='retro'] [data-module='article'] .fix-text-name {
+html[data-appearance='retro'] [data-module='article'] .fix-measures .v-words {
   font-family: var(--retro-font-display);
-  font-size: 15px;
+  font-size: 22px;
   font-weight: normal;
   letter-spacing: normal;
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-text-frame {
+html[data-appearance='retro'] [data-module='article'] .spec-frame {
   background: var(--retro-frame-bg);
   border: 2px inset var(--retro-frame-border);
   border-radius: 0;
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-text-file {
-  background: transparent;
-  border: 1px solid var(--retro-frame-border);
-  border-radius: 0;
   font-family: var(--retro-font-mono);
   font-size: 12px;
   color: var(--retro-ink-muted);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-text-lines {
+html[data-appearance='retro'] [data-module='article'] .spec-frame .added {
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='article'] .spec figcaption {
   font-family: var(--retro-font-mono);
   font-size: 12px;
   color: var(--retro-ink-muted);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-text-line--added {
-  color: var(--retro-ink);
+html[data-appearance='retro'] [data-module='article'] .spec-side {
+  color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-text-spoken {
-  font-family: var(--retro-font-body);
-  font-size: 16px;
-  font-weight: normal;
-  letter-spacing: normal;
-  color: var(--retro-ink);
-}
-
-html[data-appearance='retro'] [data-module='article'] .fix-text-missing {
-  border-color: var(--retro-frame-border);
-  border-radius: 0;
-  font-family: var(--retro-font-body);
-  color: var(--retro-ink-muted);
+@media (max-width: 720px) {
+  html[data-appearance='retro'] [data-module='article'] .fix-measures .v-num {
+    font-size: 40px;
+  }
 }
