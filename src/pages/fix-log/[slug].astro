@@ -17,7 +17,7 @@
 import { getCollection, render } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import FixText from '../../components/fix-log/FixText.astro';
-import { FIX_LOG, TYPE_LABEL, compareFixes, fixDate, fixUrl, prUrl } from '../../lib/fix-log';
+import { FIX_LOG, TYPE_LABEL, compareFixes, fixDate, fixUrl, isWordedMeasure, prUrl } from '../../lib/fix-log';
 
 export async function getStaticPaths() {
   const fixes = (await getCollection('fixes')).sort(compareFixes);
@@ -66,14 +66,15 @@ const path = fixUrl(fix);
         <aside class="fix-rail" aria-label="The fix in numbers">
           {measures.map((m) => {
             const sides = m.sides ?? ['Before', 'After'];
+            const worded = isWordedMeasure(m);
             return (
               <section class="fix-measure">
                 <h2 class="fix-measure-name">{m.label}</h2>
-                <div class="fix-measure-pair">
+                <div class:list={['fix-measure-pair', worded && 'fix-measure-pair--words']}>
                   {[m.before, m.after].map((value, i) => (
                     <p>
                       <span class="fix-side">{sides[i]}</span>
-                      <span class:list={['fix-value', m.quoted && 'fix-value--quoted']}>{m.quoted ? `“${value}”` : value}</span>
+                      <span class:list={['fix-value', worded && 'fix-value--words']}>{m.quoted ? `“${value}”` : value}</span>
                     </p>
                   ))}
                 </div>
@@ -217,8 +218,10 @@ const path = fixUrl(fix);
     overflow-wrap: anywhere;
   }
 
-  /* Words, not a number: set smaller so a quotation wraps inside its half of the rail. */
-  .fix-value--quoted { font-weight: 600; font-size: 24px; line-height: 1.2; letter-spacing: -.015em; }
+  /* Words, not a number: Before stacks above After at the rail's full width, in a size that suits a phrase. */
+  .fix-measure-pair--words { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .fix-measure-pair--words p + p { padding-left: 0; padding-top: 12px; border-left: 0; border-top: 1px solid var(--rule); }
+  .fix-value--words { font-weight: 600; font-size: 21px; line-height: 1.3; letter-spacing: -.015em; }
 
   .fix-changes { display: flex; flex-direction: column; gap: 10px; margin: 0; font-size: 17px; line-height: 1.4; }
 
@@ -288,7 +291,7 @@ const path = fixUrl(fix);
     .fix-meta { font-size: 16px; }
     .fix-story :global(p) { font-size: 18px; }
     .fix-value { font-size: 40px; }
-    .fix-value--quoted { font-size: 21px; }
+    .fix-value--words { font-size: 19px; }
     .fix-band { margin-top: 40px; gap: 18px; }
     .entry-nav { margin-top: 56px; }
     .entry-step { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 22px 0; margin: 0; }

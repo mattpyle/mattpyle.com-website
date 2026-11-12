@@ -69,3 +69,4 @@ State no intent and no future work. The story says what is true on production no
 6. Times stay as the script wrote them.
 7. Put a path, a tag or a placeholder in backticks, such as `/writing/<slug>.md`. A bare angle-bracket tag in the story breaks the page.
 8. Set `updated` to the day of any substantive edit, so the sitemap date moves. A new entry needs none.
+9. Before you write a title, read the existing titles. Two entries must not open with the same thing.

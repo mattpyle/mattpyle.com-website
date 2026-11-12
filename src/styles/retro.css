@@ -4374,6 +4374,11 @@ html[data-appearance='retro'] [data-module='article'] .fix-rail .fix-measure-pai
   border-left: 2px dashed var(--retro-frame-border);
 }
 
+html[data-appearance='retro'] [data-module='article'] .fix-rail .fix-measure-pair--words p + p {
+  border-left: 0;
+  border-top: 2px dashed var(--retro-frame-border);
+}
+
 html[data-appearance='retro'] [data-module='article'] .fix-side {
   font-family: var(--retro-font-mono);
   font-size: 12px;
@@ -4389,7 +4394,7 @@ html[data-appearance='retro'] [data-module='article'] .fix-value {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-value--quoted {
+html[data-appearance='retro'] [data-module='article'] .fix-value--words {
   font-family: var(--retro-font-body);
   font-size: 15px;
   line-height: 1.3;

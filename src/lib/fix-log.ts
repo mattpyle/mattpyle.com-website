@@ -52,3 +52,14 @@ export function fixDate(date: Date): string {
 
 /** The calendar year of a time in Matt's zone, for grouping the index. */
 export const fixYear = (date: Date): string => fixDate(date).slice(-4);
+
+const NUMBER_LIKE = /^[\d.,]+( ?(%|px|ms|s|of [\d.,]+|\/[\d.,]+))?$/;
+
+/**
+ * Whether a measure reads as words rather than as a number. A short number pair sits side
+ * by side at the large size. Anything else, a phrase, a date or a quotation, stacks Before
+ * above After at the rail's full width, in a size that suits a phrase.
+ */
+export function isWordedMeasure(m: { before: string; after: string; quoted: boolean }): boolean {
+  return m.quoted || !(NUMBER_LIKE.test(m.before.trim()) && NUMBER_LIKE.test(m.after.trim()));
+}
