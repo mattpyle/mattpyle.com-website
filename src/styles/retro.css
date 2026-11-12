@@ -4336,7 +4336,7 @@ html[data-appearance='retro'] [data-module='article'] .fix-rail .change:hover .r
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures tbody th {
+html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures caption {
   font-family: var(--retro-font-body);
   font-size: 16px;
   color: var(--retro-ink);

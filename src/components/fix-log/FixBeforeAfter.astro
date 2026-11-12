@@ -2,7 +2,7 @@
 /**
  * The "Before and after" section of a fix entry: exactly one of three forms.
  *
- * 1. A measurement: a table whose row header is the label and whose two cells hold the values
+ * 1. A measurement: a table named by its caption, the label, whose two cells hold the values
  *    as large figures (the Scorecard gate's figure style).
  * 2. A pair of words: the same table, with the values set as words.
  * 3. Changed lines: two figures, Before then After, each a `pre` with a caption.
@@ -42,11 +42,11 @@ const lines = (specimen: Specimen): { text: string; added: boolean }[] =>
 
   {measure && (
     <table class="fix-measures">
+      <caption>{measure.label}</caption>
       <thead class="sr-only">
         <tr><th scope="col">Before</th><th scope="col">After</th></tr>
       </thead>
       <tbody>
-        <tr><th scope="rowgroup" colspan="2">{measure.label}</th></tr>
         <tr>
           {[measure.before, measure.after].map((value, i) => (
             <td>
@@ -98,9 +98,10 @@ const lines = (specimen: Specimen): { text: string; added: boolean }[] =>
 
   .fix-measures { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
-  .fix-measures tbody th {
+  .fix-measures caption {
     padding: 0 0 14px;
     text-align: left;
+    caption-side: top;
     font: 400 20px/1.4 var(--font-body);
     color: var(--ink-2);
   }
@@ -172,7 +173,7 @@ const lines = (specimen: Specimen): { text: string; added: boolean }[] =>
 
   @media (max-width: 720px) {
     .fix-h { font-size: 26px; margin-bottom: 18px; }
-    .fix-measures tbody th { font-size: 19px; }
+    .fix-measures caption { font-size: 19px; }
     .fix-measures tr { display: grid; grid-template-columns: minmax(0, 1fr); }
     .fix-measures td { display: block; padding: 24px 0 0; }
     .fix-measures td + td { margin-top: 24px; padding-left: 0; border-left: 0; }
