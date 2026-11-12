@@ -17,6 +17,7 @@
  * page keeps ONE type override, the mobile H1 below, and it is measured.
  */
 import { formatSiteDate } from '../../lib/format-date.mjs';
+import { FIX_LOG } from '../../lib/fix-log';
 
 interface Props {
   /** Entries in the whole collection, not on this page. */
@@ -59,6 +60,7 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
       <span class="hero-facts-links">
         <a href="/changelog/rss.xml" class="link-changelog">rss.xml</a>
         <a href="/changelog.md" class="link-agents">changelog.md</a>
+        <a href={FIX_LOG.path} class="link-changelog">{FIX_LOG.name.toLowerCase()}</a>
       </span>
     </div>
   </div>
@@ -76,6 +78,7 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
 
   .hero-facts-links {
     display: flex;
+    flex-wrap: wrap;
     column-gap: 20px;
     font-family: var(--font-mono-plex);
     font-size: 19px;

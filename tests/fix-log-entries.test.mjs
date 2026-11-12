@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ENTRIES_DIR, FORBIDDEN, entryFile, readEntries, readFinding, readFindings } from '../scripts/fix-log-entries.mjs';
+import { ENTRIES_DIR, FORBIDDEN, entryFile, entryText, readEntries, readFinding, readFindings } from '../scripts/fix-log-entries.mjs';
 
 /**
  * The fix log's guards that CI can run.
@@ -187,6 +187,17 @@ test('each entry file is named by its key in lower case, and no key repeats', ()
   for (const e of entries) assert.equal(e.file, entryFile(String(e.key)), `${e.file} holds key ${e.key}`);
   const keys = entries.map((e) => e.key);
   assert.equal(new Set(keys).size, keys.length, 'no key repeats');
+});
+
+test('each entry has a URL-safe slug, and no slug repeats', () => {
+  const slugs = readEntries(ENTRIES_DIR).map((e) => e.data.slug);
+  for (const slug of slugs) assert.match(String(slug), /^[a-z0-9]+(?:-[a-z0-9]+)*$/, `slug ${slug}`);
+  assert.equal(new Set(slugs).size, slugs.length, 'no slug repeats');
+});
+
+test('a freshly extracted entry has an empty slug beside its empty title', () => {
+  const text = entryText({ key: 'MP-902', type: 'content', kind: 'defect', status: 'fixed', confirmedBy: 'check', where: '/about/', found: '2026-10-01', approved: '2026-10-02T03:04:05.678Z', verified: '2026-10-03T03:04:05.678Z', checks: [] }, { number: 900, title: 't', opened: '2026-10-02T04:00:00Z', merged: '2026-10-02T05:00:00Z' });
+  assert.ok(text.includes('title: ""\nslug: ""\n'), 'title and slug are both empty');
 });
 
 test('no entry holds a string a workflow id, preview or private path leaves behind', () => {

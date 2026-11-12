@@ -39,6 +39,8 @@ export interface PageSpec {
 
 export const WRITING_ENTRY = 'accessibility-and-ai';
 export const CHANGELOG_ENTRY = 'public-scorecard';
+// A fix's slug is written once and never changes, so the entry template's golden can name one.
+export const FIX_ENTRY = 'the-webmcp-post-sent-readers-to-its-tools-through-a-redirect';
 
 export const PAGES: PageSpec[] = [
   {
@@ -164,6 +166,38 @@ export const PAGES: PageSpec[] = [
       '.entry-title',
       '.entry-lead',
       '.entry-meta',
+    ],
+  },
+  {
+    name: 'fix-log-index',
+    path: '/fix-log',
+    why: 'Index template: the year-grouped fix rows under the hero, read by both appearances',
+    snapshotKeepFirst: [
+      '[data-module="fixlog-log"] .row',
+      '[data-module="fixlog-log"] .year-group',
+    ],
+    // Rows, year heads and the hero's "N fixes, latest ..." line change every time a fix ships.
+    // The golden guards the template's shape (a link per row holding a date, a title and a
+    // lead), not the log's contents.
+    snapshotRedact: [
+      '[data-module="fixlog-log"] .row',
+      '[data-module="fixlog-log"] .year',
+      '.hero-facts-copy',
+    ],
+  },
+  {
+    name: 'fix-log-entry',
+    path: `/fix-log/${FIX_ENTRY}`,
+    why: 'Fix entry template: the head, the facts, the story beside the numbers, the changed text and the newer/older steps, all read by both appearances',
+    snapshotDrop: ['.fix-story > *'],
+    // Entry text is edited by hand and the neighbours move when a fix ships either side.
+    snapshotRedact: [
+      '.entry-nav',
+      '.entry-title',
+      '.entry-lead',
+      '.fix-meta',
+      '.fix-rail',
+      '.fix-band',
     ],
   },
   {

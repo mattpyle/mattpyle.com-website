@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { SyntaxValidator } from 'fast-xml-validator';
 import { readWritingMetadata } from './lib/writing-metadata.mjs';
+import { readFixMetadata } from './lib/fix-metadata.mjs';
 import {
   ON_DEMAND_PAGES,
   STATIC_ROUTE_LASTMOD,
@@ -47,22 +48,28 @@ const writingDir = join(root, 'src', 'content', 'writing');
 const writingMetadata = readWritingMetadata(writingDir);
 const changelogDir = join(root, 'src', 'content', 'changelog');
 const changelogMetadata = readWritingMetadata(changelogDir);
+const fixMetadata = readFixMetadata();
 const expected = new Map();
 
 for (const pathname of Object.keys(STATIC_ROUTE_LASTMOD)) {
-  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
+  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata, fixMetadata));
 }
 
 for (const [slug, entry] of writingMetadata) {
   if (entry.draft) continue;
   const pathname = `/writing/${slug}/`;
-  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
+  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata, fixMetadata));
 }
 
 for (const [slug, entry] of changelogMetadata) {
   if (entry.draft) continue;
   const pathname = `/changelog/${slug}/`;
-  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata));
+  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata, fixMetadata));
+}
+
+for (const slug of fixMetadata.keys()) {
+  const pathname = `/fix-log/${slug}/`;
+  expected.set(`${siteOrigin}${pathname}`, resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata, fixMetadata));
 }
 
 const child = parseXml('sitemap-0.xml');

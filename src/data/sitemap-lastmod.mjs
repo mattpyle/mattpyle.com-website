@@ -50,6 +50,7 @@ export const STATIC_ROUTE_LASTMOD = Object.freeze({
   '/audit/': '2026-09-06',
   '/projects/': '2026-10-17',
   '/changelog/': '2026-07-17',
+  '/fix-log/': '2026-11-11',
   '/scorecard/': '2026-07-18',
   '/steward/': '2026-08-12',
   '/webmcp/': '2026-07-24',
@@ -91,8 +92,9 @@ export function resolveStaticLastmod(pathname) {
  * @param {string} pathname
  * @param {Map<string, { draft: boolean, lastmod: string }>} writingMetadata
  * @param {Map<string, { draft: boolean, lastmod: string }>} [changelogMetadata]
+ * @param {Map<string, { draft: boolean, lastmod: string }>} [fixMetadata]
  */
-export function resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata) {
+export function resolveSitemapLastmod(pathname, writingMetadata, changelogMetadata, fixMetadata) {
   if (pathname === '/writing/') {
     const publishedDates = [...writingMetadata.values()]
       .filter(({ draft }) => !draft)
@@ -121,6 +123,18 @@ export function resolveSitemapLastmod(pathname, writingMetadata, changelogMetada
     return entry && !entry.draft
       ? latestDate(SITEWIDE_LASTMOD, entry.lastmod)
       : undefined;
+  }
+
+  // The fix log: the index moves with its newest fix, an entry with the day it was confirmed.
+  if (pathname === '/fix-log/') {
+    const dates = [...(fixMetadata?.values() ?? [])].map(({ lastmod }) => lastmod);
+    return latestDate(resolveStaticLastmod(pathname), ...dates);
+  }
+
+  if (pathname.startsWith('/fix-log/')) {
+    const slug = decodeURIComponent(pathname.slice('/fix-log/'.length).replace(/\/$/, ''));
+    const entry = fixMetadata?.get(slug);
+    return entry ? latestDate(SITEWIDE_LASTMOD, entry.lastmod) : undefined;
   }
 
   if (pathname === '/scorecard/') {

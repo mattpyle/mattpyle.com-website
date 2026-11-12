@@ -24,6 +24,10 @@ Use only facts from those sources. When a source does not say something, leave i
 
 Good: "The WebMCP post sent readers to its tools through a redirect".
 
+## The slug
+
+Set `slug` once, when you first write the title: the title in lower case, words joined by hyphens, under 71 characters. Never change it afterwards, because the page's URL is the slug and people hold links to it.
+
 ## The lead
 
 One sentence under the title, under 25 words. Say whom the problem let down and how, or give the cause in plain words. Add what the title leaves out; do not repeat it.

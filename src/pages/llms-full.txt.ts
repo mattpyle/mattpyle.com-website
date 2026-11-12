@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { SCORECARD } from '../data/scorecard';
 import { compareChangelogEntries } from '../lib/changelog-order';
+import { FIX_LOG, fixDate, fixUrl, getFixesNewest } from '../lib/fix-log';
 import { rewriteVideoTags } from '../lib/video-embed.mjs';
 
 function formatDate(date: Date): string {
@@ -55,6 +56,8 @@ export const GET: APIRoute = async ({ site }) => {
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
     compareChangelogEntries
   );
+
+  const fixes = await getFixesNewest();
 
   const lines: string[] = [];
 
@@ -157,6 +160,24 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push(entry.data.summary);
     lines.push('');
     lines.push(demoteHeadings(entry.body ?? ''));
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
+  lines.push(`## ${FIX_LOG.name}`);
+  lines.push('');
+  for (const fix of fixes) {
+    lines.push(`### ${fix.data.title}`);
+    lines.push('');
+    lines.push(`URL: ${base}${fixUrl(fix)}`);
+    lines.push(`Date: ${fixDate(fix.data.verified)}`);
+    lines.push(`Type: ${fix.data.type}`);
+    lines.push(`Status: ${fix.data.status}`);
+    lines.push('');
+    lines.push(fix.data.lead);
+    lines.push('');
+    lines.push(demoteHeadings(fix.body ?? ''));
     lines.push('');
     lines.push('---');
     lines.push('');

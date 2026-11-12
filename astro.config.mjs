@@ -8,6 +8,7 @@ import { satteri } from '@astrojs/markdown-satteri';
 import sitemap from '@astrojs/sitemap';
 import vercel from '@astrojs/vercel';
 import { readWritingMetadata } from './scripts/lib/writing-metadata.mjs';
+import { readFixMetadata } from './scripts/lib/fix-metadata.mjs';
 import { SITE_ORIGIN } from './src/data/site-origin.mjs';
 import { ON_DEMAND_PAGES, resolveSitemapLastmod } from './src/data/sitemap-lastmod.mjs';
 import { PRE_PAINT_APPEARANCE_SCRIPT } from './src/lib/pre-paint-appearance.mjs';
@@ -37,6 +38,8 @@ const writingMetadata = readWritingMetadata(writingDir);
 // updated) — reused verbatim for the changelog collection.
 const changelogDir = fileURLToPath(new URL('./src/content/changelog/', import.meta.url));
 const changelogMetadata = readWritingMetadata(changelogDir);
+// The fixes collection, keyed by each entry's slug (scripts/lib/fix-metadata.mjs).
+const fixMetadata = readFixMetadata();
 
 /** @param {string} url @param {string} section */
 function collectionSlug(url, section) {
@@ -182,6 +185,7 @@ export default defineConfig({
           new URL(item.url).pathname,
           writingMetadata,
           changelogMetadata,
+          fixMetadata,
         );
         if (!lastmod) {
           throw new Error(`Sitemap URL ${item.url} has no lastmod policy`);

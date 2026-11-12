@@ -23,6 +23,8 @@
   - text: .
   - link "changelog.md":
     - /url: /changelog.md
+  - link "fix log":
+    - /url: /fix-log/
   - region "All entries":
     - heading "All entries" [level=2]
     - radiogroup "Filter by type":

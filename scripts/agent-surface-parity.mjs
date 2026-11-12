@@ -32,6 +32,7 @@ const PROBES = [
   // Content negotiation, unchanged behaviour expected on both sides of the branch.
   { path: '/writing/', accept: 'text/html' },
   { path: '/changelog/', accept: 'text/html' },
+  { path: '/fix-log/', accept: 'text/html' },
 ];
 
 // Fields that change on every deploy without anything about the surface changing. The two WebMCP

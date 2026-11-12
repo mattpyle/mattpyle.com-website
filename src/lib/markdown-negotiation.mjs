@@ -130,4 +130,5 @@ export const NEGOTIABLE_PAGE_MATCHER = [
   '/webmcp/:path*',
   '/writing/:path*',
   '/changelog/:path*',
+  '/fix-log/:path*',
 ];

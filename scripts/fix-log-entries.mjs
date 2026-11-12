@@ -174,6 +174,7 @@ export function entryText(f, pr) {
   const facts = {
     key: f.key,
     title: '',
+    slug: '',
     lead: '',
     type: f.type,
     kind: f.kind,
@@ -216,7 +217,7 @@ function main(argv) {
     const repeated = [...counts].filter(([, n]) => n > 1).map(([k]) => k);
     const wanted = new Set(findings.map((f) => f.key));
     const extra = entries.filter((e) => !wanted.has(e.key)).map((e) => e.key);
-    const unwritten = entries.filter((e) => !e.data.title || !e.data.lead || !e.body.trim()).map((e) => e.key);
+    const unwritten = entries.filter((e) => !e.data.title || !e.data.slug || !e.data.lead || !e.body.trim()).map((e) => e.key);
     const leaks = entries.flatMap((e) => FORBIDDEN.filter((s) => e.text.includes(s)).map((s) => `${e.file}: ${s}`));
     console.log(`findings in the log: ${findings.length}; entries: ${entries.length}`);
     console.log(`missing: ${missing.length}${missing.length ? ` (${missing.join(', ')})` : ''}`);

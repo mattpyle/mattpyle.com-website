@@ -101,6 +101,8 @@ const fixes = defineCollection({
     /** The finding's short key. Joins the entry to its finding; unique. */
     key:         z.string().regex(/^MP-\d+$/),
     title:       z.string().min(1),
+    /** The page URL segment: /fix-log/<slug>/. Written once with the first title, never derived at build time, so a later title edit leaves the link alone. Unique. */
+    slug:        z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     /** One sentence under the title. */
     lead:        z.string().min(1),
     type:        z.enum(['seo', 'agent-readiness', 'content', 'ux', 'accessibility', 'feature']),

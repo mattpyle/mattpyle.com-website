@@ -274,6 +274,28 @@
       "headers": [{ "key": "Vary", "value": "Accept" }]
     },
     {
+      "source": "/fix-log",
+      "headers": [
+        { "key": "Link", "value": "</fix-log.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
+    },
+    {
+      "source": "/fix-log/",
+      "headers": [
+        { "key": "Link", "value": "</fix-log.md>; rel=\"alternate\"; type=\"text/markdown\"" },
+        { "key": "Vary", "value": "Accept" }
+      ]
+    },
+    {
+      "source": "/fix-log/:slug([^/.]+)",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/fix-log/:slug([^/.]+)/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {

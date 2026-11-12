@@ -1,0 +1,177 @@
+---
+/**
+ * The fix log index: every fix the site's agents made, newest first.
+ *
+ * Taken from what /changelog has: its hero and its year-grouped rows. Each row is a date,
+ * a title with its one-sentence lead, and the fix's kind at the end. The date is the day
+ * the fix was confirmed on production, in America/Vancouver, and it is the field the
+ * order runs on. Each row opens the fix's own page.
+ */
+import Layout from '../../layouts/Layout.astro';
+import { FIX_LOG, TYPE_LABEL, fixDate, fixUrl, fixYear, getFixesNewest, type Fix } from '../../lib/fix-log';
+
+const fixes = await getFixesNewest();
+
+const groups: { year: string; items: Fix[] }[] = [];
+for (const fix of fixes) {
+  const year = fixYear(fix.data.verified);
+  const group = groups.at(-1);
+  if (group && group.year === year) group.items.push(fix);
+  else groups.push({ year, items: [fix] });
+}
+const latest = fixes[0]?.data.verified;
+---
+
+<Layout
+  title={FIX_LOG.name}
+  description={FIX_LOG.description}
+  breadcrumbs={[
+    { name: 'Home', url: '/' },
+    { name: FIX_LOG.name, url: FIX_LOG.path },
+  ]}
+>
+  {/* A div, not a section: validate:html names an h1 inside sectioning content. */}
+  <div class="rd-section rd-hero fixlog-hero" data-module="fixlog-hero">
+    <h1><span class="rd-fill rd-fill--fixlog">{FIX_LOG.name}</span></h1>
+    <div class="hero-row">
+      <div class="hero-aside hero-facts">
+        <span class="hero-facts-copy">
+          {fixes.length} fixes{latest && <>, latest <time datetime={latest.toISOString()}>{fixDate(latest)}</time></>}.
+        </span>
+        <span class="hero-facts-links">
+          <a href="/changelog/" class="link-changelog">changelog</a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <section class="rd-section log" data-module="fixlog-log" aria-labelledby="fixlog-log-title">
+    <h2 id="fixlog-log-title" class="sr-only">All fixes</h2>
+    {groups.map((g) => (
+      <div class="year-group">
+        <div class="year">{g.year}</div>
+        {g.items.map((fix) => (
+          <a href={fixUrl(fix)} class="row">
+            <time datetime={fix.data.verified.toISOString()} class="row-date">{fixDate(fix.data.verified)}</time>
+            <span class="row-body">
+              <span class="row-title">{fix.data.title}</span>
+              <span class="row-summary">{fix.data.lead}</span>
+            </span>
+            <span class="row-kind">
+              <span>{TYPE_LABEL[fix.data.type]}</span>
+              {fix.data.status === 'reopened' && <span class="row-open">still open</span>}
+            </span>
+          </a>
+        ))}
+        <div class="rows-end"></div>
+      </div>
+    ))}
+  </section>
+</Layout>
+
+<style>
+  .fixlog-hero { padding-top: 78px; }
+
+  .hero-facts-copy { font-size: 17px; color: var(--ink-5); }
+
+  .hero-facts-links { display: block; margin-top: 8px; font-family: var(--font-mono-plex); font-size: 16px; }
+
+  .hero-facts-links a { color: var(--changelog); text-decoration: underline; text-underline-offset: 3px; }
+  .hero-facts-links a:hover { color: var(--changelog-hover); }
+
+  .log { padding-top: 56px; padding-bottom: 96px; }
+
+  .year-group + .year-group { margin-top: 56px; }
+
+  .year {
+    padding-bottom: 8px;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) max-content;
+    gap: 36px;
+    align-items: start;
+    padding: 28px 20px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .row:hover { background: var(--tint-writing); }
+
+  .rows-end { border-top: 1px solid var(--rule); }
+
+  .row-date {
+    padding-top: 7px;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  .row-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+  .row-title {
+    max-width: 26ch;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    overflow-wrap: anywhere;
+  }
+
+  .row-summary {
+    max-width: 64ch;
+    font-size: 17.5px;
+    line-height: 1.55;
+    color: var(--ink-5);
+    text-wrap: pretty;
+  }
+
+  .row-kind {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 7px;
+    text-align: right;
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+    white-space: nowrap;
+  }
+
+  .row-open { color: var(--ink); }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 720px) {
+    .fixlog-hero { padding-top: 40px; }
+    .log { padding-top: 40px; }
+
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 22px 0;
+      margin: 0;
+    }
+
+    .row-date { padding-top: 0; font-size: 16px; }
+    .row-title { font-size: 25px; line-height: 1.2; }
+    .row-summary { font-size: 17px; }
+    .row-kind { flex-direction: row; gap: 14px; padding-top: 0; text-align: left; font-size: 16px; }
+  }
+</style>

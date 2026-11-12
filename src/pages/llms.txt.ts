@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { compareChangelogEntries } from '../lib/changelog-order';
+import { FIX_LOG, getFixesNewest, fixUrl } from '../lib/fix-log';
 import { formatSkillsIndexLines } from '../lib/agent-skills.mjs';
 import skillsIndex from '../data/agent-skills-index.json';
 
@@ -18,6 +19,8 @@ export const GET: APIRoute = async ({ site }) => {
   const changelog = (await getCollection('changelog', ({ data }) => !data.draft)).sort(
     compareChangelogEntries
   );
+
+  const fixes = await getFixesNewest();
 
   const lines: string[] = [];
 
@@ -38,6 +41,7 @@ export const GET: APIRoute = async ({ site }) => {
   lines.push(`- [Writing](${base}/writing/): all writing.`);
   lines.push(`- [Projects](${base}/projects/): side projects.`);
   lines.push(`- [Changelog](${base}/changelog/): reverse-chronological log of what has shipped on this site.`);
+  lines.push(`- [${FIX_LOG.name}](${base}${FIX_LOG.path}): ${FIX_LOG.description}`);
   lines.push(`- [Scorecard](${base}/scorecard/): latest verified accessibility, performance, SEO, and agentic browsing scores.`);
   lines.push(`- [Activity](${base}/activity/): agent traffic to this site — fetches of its agent surfaces and pages served as Markdown, counted per UTC hour.`);
   lines.push(`- [About](${base}/about/): full bio, interests, contact links.`);
@@ -120,6 +124,13 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push(
       `- [${entry.data.title}](${base}/changelog/${entry.id}/) (${entry.data.type}, ${entry.data.significance}): ${entry.data.summary}`
     );
+  }
+  lines.push('');
+
+  lines.push(`## ${FIX_LOG.name}`);
+  lines.push('');
+  for (const fix of fixes) {
+    lines.push(`- [${fix.data.title}](${base}${fixUrl(fix)}) (${fix.data.type}, ${fix.data.status}): ${fix.data.lead}`);
   }
   lines.push('');
 

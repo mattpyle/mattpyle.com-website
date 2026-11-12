@@ -48,7 +48,7 @@ const RETIRABLE = /^\/writing\/([^/.]+?)(\.md)?\/?$/;
 // An entry page (post or changelog entry) is a slug under a collection root. vercel.json hand-lists a
 // `Link` header per section path, which cannot cover pages generated from a slug, so entry pages get
 // theirs here. Purely numeric slugs are pagination pages, not entries.
-const ENTRY_PAGE = /^\/(?:writing|changelog)\/(?!\d+\/?$)[^/.]+\/?$/;
+const ENTRY_PAGE = /^\/(?:writing|changelog|fix-log)\/(?!\d+\/?$)[^/.]+\/?$/;
 
 // Fire-and-forget durable counting, in its own failure domain and its own try/catch.
 //
@@ -317,6 +317,7 @@ export const config = {
     '/webmcp/:path*',
     '/writing/:path*',
     '/changelog/:path*',
+    '/fix-log/:path*',
     '/llms.txt',
     '/llms-full.txt',
     '/agents.md',
