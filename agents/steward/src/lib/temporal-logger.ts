@@ -124,14 +124,165 @@ export function sdkMetricsState(env: Record<string, string | undefined>): string
     : 'configured';
 }
 
+/** The slice of the SDK meter the sampler uses. A test passes a fake. */
+export type ProcessMeter = Pick<Runtime['metricMeter'], 'createGauge' | 'createCounter' | 'withTags'>;
+
+/** What one tick reads from the process. */
+export interface ProcessReading {
+  rssBytes: number;
+  heapUsedBytes: number;
+  /** Cumulative CPU time since the process started, in microseconds. */
+  cpuUserMicros: number;
+  cpuSystemMicros: number;
+}
+
+/** What one tick records, and the state the next tick needs. */
+export interface ProcessSample {
+  rssBytes: number;
+  heapUsedBytes: number;
+  /** Whole milliseconds of CPU since the previous tick. */
+  cpuUserMs: number;
+  cpuSystemMs: number;
+  /** Microseconds not yet reported, carried to the next tick. */
+  carry: { userMicros: number; systemMicros: number };
+}
+
+export function readProcess(): ProcessReading {
+  const mem = process.memoryUsage();
+  const cpu = process.cpuUsage();
+  return { rssBytes: mem.rss, heapUsedBytes: mem.heapUsed, cpuUserMicros: cpu.user, cpuSystemMicros: cpu.system };
+}
+
+/**
+ * Turns two readings into one sample (STW-604). Gauges are the reading as read.
+ * The CPU counter takes whole milliseconds, so the sub-millisecond remainder is
+ * carried to the next tick instead of being lost. `prev` is the previous reading
+ * (`undefined` on the first tick: the first tick reports all CPU time so far).
+ * A reading that goes backwards is clamped to zero.
+ */
+export function sampleProcess(
+  now: ProcessReading,
+  prev: ProcessReading | undefined,
+  carry: ProcessSample['carry'] = { userMicros: 0, systemMicros: 0 },
+): ProcessSample {
+  const user = Math.max(0, now.cpuUserMicros - (prev?.cpuUserMicros ?? 0)) + carry.userMicros;
+  const system = Math.max(0, now.cpuSystemMicros - (prev?.cpuSystemMicros ?? 0)) + carry.systemMicros;
+  return {
+    rssBytes: now.rssBytes,
+    heapUsedBytes: now.heapUsedBytes,
+    cpuUserMs: Math.floor(user / 1000),
+    cpuSystemMs: Math.floor(system / 1000),
+    carry: { userMicros: user % 1000, systemMicros: system % 1000 },
+  };
+}
+
+const PROCESS_METRICS_INTERVAL_MS = 60_000;
+
+let processMetricsStop: (() => void) | undefined;
+
+/**
+ * Exports the worker process's own memory and CPU beside the SDK metrics
+ * (STW-604, STW-603).
+ *
+ * ## Metric names
+ *
+ * Grafana's OTLP gateway appends the unit, so these show as:
+ *
+ * - `steward_process_resident_memory_bytes`: gauge, resident set size.
+ * - `steward_process_heap_used_bytes`: gauge, V8 `heapUsed` of the main isolate.
+ * - `steward_process_cpu_milliseconds_total`: counter, label `mode` = `user` or `system`.
+ *
+ * Every series carries `worker_kind` = `hosted` or `local`, the same value as the
+ * SDK's `worker` global tag. That tag lands on `target_info`, not on each series,
+ * so the series carry their own.
+ *
+ * ## Why the SDK's meter
+ *
+ * `Runtime.metricMeter` rides the export the Runtime already has: no new package,
+ * variable or endpoint. The Metric API is marked Experimental in the SDK; checked
+ * against `@temporalio/worker` 1.20.3. A rename in a later SDK breaks this at
+ * `tsc`, not at run time.
+ *
+ * ## What it does not cover
+ *
+ * `heap_used` is the main isolate's heap. Workflows run in the SDK's worker
+ * thread, so the workflow cache is outside it (STW-602 measured that). Resident
+ * memory is the whole process, and the figure that tracks the Railway bill.
+ *
+ * ## Behaviour
+ *
+ * - Samples once at start, then every 60 seconds (the export interval). A process
+ *   that lives under a minute still leaves one reading.
+ * - The timer is `unref`ed and is not the recycle timer in `worker-hosted.ts`.
+ * - A throw from the process read, the meter or a gauge is caught and logged once
+ *   at WARN. Later failures stay silent. A metric never hurts the worker.
+ * - A throw while creating the metrics logs once at WARN, starts no timer and
+ *   returns a no-op stop function.
+ * - One sampler per process: a second call returns the first one's stop function.
+ */
+export function startProcessMetrics(
+  meter: ProcessMeter,
+  worker: WorkerKind,
+  read: () => ProcessReading = readProcess,
+  sink: Pick<Logger, 'warn'> = log,
+): () => void {
+  if (processMetricsStop) return processMetricsStop;
+
+  let rss: ReturnType<ProcessMeter['createGauge']>;
+  let heap: ReturnType<ProcessMeter['createGauge']>;
+  let cpu: ReturnType<ProcessMeter['createCounter']>;
+  try {
+    const tagged = meter.withTags({ worker_kind: worker });
+    rss = tagged.createGauge('steward_process_resident_memory', 'int', 'bytes', 'Resident set size of the worker process');
+    heap = tagged.createGauge('steward_process_heap_used', 'int', 'bytes', 'V8 heap used by the main isolate (not the workflow worker thread)');
+    cpu = tagged.createCounter('steward_process_cpu', 'ms', 'CPU time used by the worker process');
+  } catch (err) {
+    // The meter is Experimental: a throw here must not stop the worker starting.
+    sink.warn({ err }, 'process metrics setup failed; process metrics are off for this run');
+    return () => {};
+  }
+
+  let prev: ProcessReading | undefined;
+  let carry: ProcessSample['carry'] | undefined;
+  let warned = false;
+
+  const tick = () => {
+    try {
+      const now = read();
+      const sample = sampleProcess(now, prev, carry);
+      prev = now;
+      carry = sample.carry;
+      rss.set(sample.rssBytes);
+      heap.set(sample.heapUsedBytes);
+      cpu.add(sample.cpuUserMs, { mode: 'user' });
+      cpu.add(sample.cpuSystemMs, { mode: 'system' });
+    } catch (err) {
+      if (warned) return;
+      warned = true;
+      sink.warn({ err }, 'process metrics sample failed; further failures are not logged');
+    }
+  };
+
+  tick();
+  const timer = setInterval(tick, PROCESS_METRICS_INTERVAL_MS);
+  timer.unref();
+  processMetricsStop = () => {
+    clearInterval(timer);
+    processMetricsStop = undefined;
+  };
+  return processMetricsStop;
+}
+
 /**
  * Installs the Runtime once for this process: SDK, workflow and activity logs go
  * to pino, Core logs are forwarded at WARN, and SDK metrics go to Grafana Cloud
- * when `sdkMetricsOptions` says so.
+ * when `sdkMetricsOptions` says so. The same condition starts the process
+ * metrics sampler, once, here: the hosted entry point builds three workers on
+ * this one Runtime and calls this function once.
  */
 export function installTemporalRuntime(worker: WorkerKind, env: Record<string, string | undefined> = process.env): Runtime {
   const metrics = sdkMetricsOptions(env, worker);
-  return Runtime.install({
+  const runtime = Runtime.install({
     logger: temporalLogger(),
     telemetryOptions: {
       logging: {
@@ -141,4 +292,6 @@ export function installTemporalRuntime(worker: WorkerKind, env: Record<string, s
       ...(metrics ? { metrics } : {}),
     },
   });
+  if (metrics) startProcessMetrics(runtime.metricMeter, worker);
+  return runtime;
 }
