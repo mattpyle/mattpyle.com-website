@@ -1,0 +1,4 @@
+2026-11-13T05:12:54.870Z [INFO] Workflow bundle created {
+  size: '8.12MB'
+worker up: queue=mpw-224-consultant model=claude-sonnet-5-5 pid=40768
+2026-11-13T05:12:55.510Z [INFO] Worker state changed {

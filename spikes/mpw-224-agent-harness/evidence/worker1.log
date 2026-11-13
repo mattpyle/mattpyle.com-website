@@ -1,0 +1,5 @@
+2026-11-13T05:10:01.511Z [INFO] Workflow bundle created {
+  size: '8.12MB'
+worker up: queue=mpw-224-consultant model=claude-sonnet-5-5 pid=11524
+2026-11-13T05:10:02.395Z [INFO] Worker state changed {
+[audit_site] activity ran for host=www.mattpyle.com

@@ -1,0 +1,25 @@
+05:11:44 plain @temporalio/client 1.20.3, workflow conv-kill
+05:11:44 started AuditConsultant
+05:11:44 USER (turn 2): Can you check my site and tell me what matters?
+05:11:44 send_agent_message -> {"turn_number":1,"turn_id":"780846f4-2a2f-475b-acf4-a6d0f44568b5","message_id":"5bef600a-0f15-425c-b328-22ac2b476f92","disposition":"opened","accepted_offset":0}
+05:11:46 INPUT-REQUIRED: agent_status shows pending callback ask_user {"question":"Which site should I audit? Please give me the bare host name, for example example.com."}
+05:11:46 stopping with the callback parked (--stop-at-callback)
+SUCCESS: The process with PID 11524 has been terminated.
+  HistoryLength         29
+--- worker restarted (pid 45648), resuming
+05:12:26 plain @temporalio/client 1.20.3, workflow conv-kill
+05:12:26 RESUME: agent_status says turn 1, turn_active=true, pending_callbacks=1
+05:12:26 INPUT-REQUIRED: agent_status shows pending callback ask_user {"question":"Which site should I audit? Please give me the bare host name, for example example.com."}
+05:12:26 provide_callback_result("www.mattpyle.com") -> {"tool_id":"toolu_01J2SsKEsx5BbzbtutP9Ge65","accepted":true}
+05:12:31 stream event types this turn: ["message_accepted","turn_started","message_handler_start","model_interaction_started","tool_requested","model_interaction_ended","tool_start","callback_requested","callback_resolved","tool_end","model_interaction_started","tool_requested","model_interaction_ended","tool_start","tool_end","model_interaction_started","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","reply_delta","model_interaction_ended","message_handler_end","turn_end"]
+05:12:31 tool events: ["tool_requested:ask_user","tool_start:ask_user","tool_end:ask_user","tool_requested:audit_site","tool_start:audit_site","tool_end:audit_site"]
+05:12:31 usage so far: {"calls":3,"input":2406,"output":424}
+05:12:31 AGENT (turn 2): www.mattpyle.com scored 71. These two findings matter most:
+
+1. **Markdown negotiation fails.** When an agent sends `Accept: text/markdown`, your site returns HTML. Agents that ask for markdown get cluttered pages that cost more tokens and are harder to parse. Serving markdown on request is probably the cheapest fix with the biggest payoff for every page.
+
+2. **MCP discovery fails.** `/.well-known/mcp-server` returns 404, so agents can't find any tool or server endpoint on your site. If you want agents to take actions and not just read, you need to publish this. If you don't offer an MCP server, you can treat this as lower priority.
+
+Two smaller items:
+- Your A2A agent card has no skills array, so agents can't tell what it does. Fill that in.
+- Your `llms.txt` and the AI-crawler rules in `robots.txt` both pass.
