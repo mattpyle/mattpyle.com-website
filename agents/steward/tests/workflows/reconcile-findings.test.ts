@@ -595,6 +595,20 @@ test('the health summary states how many runs were listed, how many were queried
   assert.match(s.pings[0].summary, /Listed 2 open runs, queried 1, read 1 indexes to decide\./);
 });
 
+test('the summary reports the queried count of the activity, which includes a queried run dropped as done', async () => {
+  const s = store({ 'site-a': header(['a-one | proposed | Title | ']) });
+  // One listed run is unskipped, but the activity queried three: two read `done` and left the list.
+  s.activities.listOpenFindingWorkflows = (async (): Promise<unknown> => ({
+    runs: [{ workflowId: findingWorkflowId('site-a', 'a-one'), step: 'waiting-verdict', fixAttempts: 0, issueUrl: null }],
+    queried: 3,
+    indexReads: 1,
+  })) as never;
+  await withWorker(s.activities, async () => {
+    await reconcileOnce();
+  });
+  assert.match(s.pings[0].summary, /Listed 1 open runs, queried 3, read 1 indexes to decide\./);
+});
+
 test('a verdict that reaches a run past its verdict is dropped and the first one stands', async () => {
   // The pruned listing can hand a run a verdict it is past (the index changed between
   // the activity's read and the workflow's). `findingWorkflow` must drop it.

@@ -216,7 +216,9 @@ async function reconcile(input: ReconcileFindingsInput): Promise<{ result: Recon
   const open = listedRuns(listing);
   const stats: ListingStats = {
     listed: open.length,
-    queried: open.filter((run) => typeof run === 'string' || run.queried !== false).length,
+    // The activity's own count includes a run whose query read `done` and was dropped from the
+    // list. A bare array from an old history has no count, so it is recomputed from the runs.
+    queried: Array.isArray(listing) ? open.filter((run) => typeof run === 'string' || run.queried !== false).length : listing.queried,
     // A list recorded before the activity pruned is a bare array: it read no index.
     indexReads: Array.isArray(listing) ? 0 : listing.indexReads,
   };
