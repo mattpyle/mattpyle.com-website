@@ -11,10 +11,12 @@ import test from 'node:test';
 // merged PRs, forks and every other branch, and the step script, which runs
 // here under bash against a stub `gh` that records its arguments.
 
+// A Windows checkout delivers the workflow with CRLF (autocrlf); both the
+// string search below and the bash run need LF.
 const source = readFileSync(
   fileURLToPath(new URL('../.github/workflows/scorecard-branch-cleanup.yml', import.meta.url)),
   'utf8',
-);
+).replace(/\r\n/g, '\n');
 
 function stepScript() {
   const marker = source.indexOf('        run: |\n');
