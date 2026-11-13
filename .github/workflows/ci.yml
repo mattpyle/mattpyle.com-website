@@ -273,6 +273,17 @@ jobs:
           path: ~/.cache/steward/temporal-test-server
           key: temporal-test-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # The Temporal CLI dev server, for the suites that need no time skipping
+      # (`createLocalEnv` in `tests/helpers/test-env.ts`). Its own entry: a
+      # cache key that already exists is never saved again, so sharing the test
+      # server's entry would never store this binary.
+      - name: Restore Temporal dev server binary
+        if: steps.select.outputs.tests != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/steward/temporal-dev-server
+          key: temporal-dev-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Typecheck (tsc --noEmit)
         run: npm run --silent check:steward
 
@@ -319,6 +330,10 @@ jobs:
         with:
           path: ~/.cache/steward/temporal-test-server
           key: temporal-test-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/steward/temporal-dev-server
+          key: temporal-dev-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Merge-and-retest beside the merge-timeout test, up to 20 times
         working-directory: agents/steward
         run: |

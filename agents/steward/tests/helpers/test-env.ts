@@ -53,6 +53,37 @@ export function createTestEnv(): Promise<TestWorkflowEnvironment> {
 }
 
 /**
+ * Where the Temporal CLI dev server binary is cached, for {@link createLocalEnv}.
+ * A sibling of {@link TEST_SERVER_DIR}, with its own CI cache entry in
+ * `ci.yml`: the two binaries arrive at different times, and a cache entry that
+ * already exists for a key is never saved again. `STEWARD_DEV_SERVER_DIR`
+ * overrides it.
+ */
+export const DEV_SERVER_DIR =
+  process.env.STEWARD_DEV_SERVER_DIR ?? path.join(path.dirname(TEST_SERVER_DIR), 'temporal-dev-server');
+
+/**
+ * A real Temporal dev server, for a suite that needs no time skipping.
+ *
+ * The time-skipping test server differs from the real server in ways a test
+ * can trip on. On CI in November 2026 an Update that won a race made the
+ * workflow cancel an activity; the test server refused that workflow task's
+ * completion with `ACTIVITY_UNKNOWN`, recorded no failure, and held the task
+ * until its 10-second timeout (STW-593). The SDK's own reference says the
+ * time-skipping server "may occasionally present different behaviors" and
+ * that `createLocal` is generally preferable. `finding-retest.test.ts` uses
+ * this: none of its tests waits on a timer.
+ */
+export function createLocalEnv(): Promise<TestWorkflowEnvironment> {
+  fs.mkdirSync(DEV_SERVER_DIR, { recursive: true });
+  return TestWorkflowEnvironment.createLocal({
+    server: {
+      executable: { type: 'cached-download', downloadDir: DEV_SERVER_DIR, ttl: '365 days' },
+    },
+  });
+}
+
+/**
  * How long a test's worker may run before the harness stops it: under the
  * suite's 60-second `--test-timeout`, with room for the worker to drain.
  */

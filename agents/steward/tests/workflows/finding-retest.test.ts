@@ -6,7 +6,7 @@ import { ApplicationFailure, defaultPayloadConverter } from '@temporalio/common'
 import { Worker } from '@temporalio/worker';
 import proto from '@temporalio/proto';
 import { tsToMs } from '@temporalio/common/lib/time.js';
-import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { bounded, createLocalEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
@@ -45,6 +45,15 @@ import { FAKE_APP_SLUG } from '../helpers/fake-github-app.js';
  * A server per test, for the reason `finding-lifecycle.test.ts` gives. No test
  * waits on a timer, so none needs time skipping; results are read with a plain
  * `Client` and the `state` query.
+ *
+ * The server is a real dev server (`createLocalEnv`), not the time-skipping
+ * test server (STW-593). In the merge-and-retest test the Update can win the
+ * race, so the workflow cancels the merge poll; the test server then refused
+ * the workflow task's completion with `ACTIVITY_UNKNOWN` and held the task
+ * until its timeout, about one CI run in two. No test here depends on skipped
+ * time: the `requestFixSlot` mock answers `dispatched: false`, so the 6-hour
+ * slot resend is never reached, and the merge mock's 5-minute retry backoff
+ * starts only after 20 s of polling, longer than any `until` deadline.
  */
 
 const FINDINGS = 'steward-findings';
@@ -83,7 +92,7 @@ const page = { text: FAILING };
 const previous = { fetch: globalThis.fetch, secret: process.env[BYPASS_SECRET_ENV] };
 
 beforeEach(async () => {
-  env = await createTestEnv();
+  env = await createLocalEnv();
   client = new Client({ connection: env.connection, namespace: env.namespace });
 }, { timeout: 120_000 });
 
@@ -129,6 +138,20 @@ function push(gh: FakeGitHub, sha: string, text: string): void {
 
 const none = { findingCommitSha: null, indexCommitSha: null, commitSha: null };
 const mergeCalls: AwaitFixPrMergeOptions[] = [];
+
+/**
+ * The merge wait's options once the poll matching `ready` has started. The run
+ * reports `waiting-merge` when it schedules the poll; on a real server the
+ * worker may not have started it yet when the state query answers.
+ */
+async function mergeCall(ready: (o: AwaitFixPrMergeOptions) => boolean, limitMs = 5_000): Promise<AwaitFixPrMergeOptions[]> {
+  const deadline = Date.now() + limitMs;
+  while (!mergeCalls.some(ready)) {
+    if (Date.now() > deadline) assert.fail(`no merge poll matched within ${limitMs / 1000} s; calls: ${JSON.stringify(mergeCalls)}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return mergeCalls;
+}
 
 /** The merge wait as the fake PR answers it, polled every 50 ms for up to 20 seconds. */
 async function awaitFixPrMerge(prUrl: string, options: AwaitFixPrMergeOptions = {}): Promise<FixPrOutcome> {
@@ -344,6 +367,7 @@ test('a new head commit after a failed test is tested again, and a pass clears t
     assert.equal(first.previewResult, 'check 2 of 2 fails on the preview; PR marked draft');
     assert.equal(first.previewSha, FIRST);
     assert.equal(gh.pulls[0].draft, true, 'the failure made the PR a draft');
+    await mergeCall((o) => o.retestAfter === FIRST);
     assert.deepEqual(mergeCalls.at(-1), { reportConflict: true, retestAfter: FIRST }, 'the merge wait names the commit it tested');
 
     push(gh, SECOND, PASSING);
@@ -361,6 +385,7 @@ test('a new head commit after a failed test is tested again, and a pass clears t
     assert.match(comments[0], /for commit `bbbbbbb`/);
     assert.match(comments[0], /has marked it ready for review again/);
     assert.match(comments[0], /Earlier tests of this PR, oldest first:\n\n- `aaaaaaa`: check 2 of 2 fails on the preview; PR marked draft/);
+    await mergeCall((o) => o.retestAfter === SECOND);
     assert.deepEqual(mergeCalls.at(-1), { reportConflict: true, retestAfter: SECOND });
   });
 });
@@ -416,7 +441,7 @@ test('a finding with no checks refuses a retest', async () => {
   await scenario(async (handle) => {
     await until(handle, 'the merge wait', (s) => s.step === 'waiting-merge');
     await assert.rejects(requestRetest(client, SITE, DEFECT_KEY, '2026-11-10T19:00:00Z'), /no checks, so there is nothing to test/);
-    assert.deepEqual(mergeCalls, [{ reportConflict: true }], 'the merge wait as before the retest: no retestAfter');
+    assert.deepEqual(await mergeCall(() => true), [{ reportConflict: true }], 'the merge wait as before the retest: no retestAfter');
   });
 });
 
