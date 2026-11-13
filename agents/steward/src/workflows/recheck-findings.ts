@@ -1,6 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
-import { findingWorkflowId, type Verification } from '../lib/findings.js';
+import { findingWorkflowId, listedRuns, type Verification } from '../lib/findings.js';
 import { findingsRecheckSignal, recheckShape } from '../lib/run-health.js';
 import {
   summariseRecheck,
@@ -138,7 +138,8 @@ async function recheck(input: RecheckFindingsInput): Promise<RecheckFindingsResu
   const { workflowId } = wf.workflowInfo();
   const { origin, hosts } = await reading.readSiteHosts({ repo: input.repo, site: input.site });
   const index = await reading.readFindingsIndex(input.repo, input.site);
-  const open = new Set((await reading.listOpenFindingWorkflows()).map((run) => (typeof run === 'string' ? run : run.workflowId)));
+  // Only the IDs are read, so no `state` query is worth its cost.
+  const open = new Set(listedRuns(await reading.listOpenFindingWorkflows({ idsOnly: true })).map((run) => (typeof run === 'string' ? run : run.workflowId)));
 
   const rows: RecheckRow[] = [];
   for (const line of index.filter((entry) => entry.status === 'approved')) {

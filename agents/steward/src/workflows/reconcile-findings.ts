@@ -6,6 +6,7 @@ import {
   findingsIndexPath,
   fixCandidates,
   hasParkedDefect,
+  listedRuns,
   planReconcile,
   restartCandidates,
   startsParked,
@@ -126,6 +127,15 @@ import { fixSignal, verdictSignal } from './finding.js';
  * workflow that has just closed are both counted as unchanged rather than
  * failing the run.
  *
+ * **Pruned listing** (STW-598). The list asks only the runs behind an approved,
+ * rejected or resolved line for their step; the rest come back with a null step
+ * and `queried: false`. It is the same one activity call with other arguments,
+ * and a call's arguments are not compared on replay, so the command sequence is
+ * unchanged and no marker is needed. A history recorded before holds a bare
+ * array, read by `listedRuns`. The counts of listed runs, queried runs and
+ * index reads go into the log line and the health summary, not into the result.
+ * The activity's docblock holds the two risks the pruning accepts.
+ *
  * **Health.** Every run pings `findings-reconcile`, success and failure, so a
  * reconciler that stops running goes late at the alerting service.
  */
@@ -200,9 +210,16 @@ function isGone(err: unknown): boolean {
   return err instanceof Error && /not found|already completed|WorkflowNotFound/i.test(`${err.name} ${err.message}`);
 }
 
-async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindingsResult> {
+async function reconcile(input: ReconcileFindingsInput): Promise<{ result: ReconcileFindingsResult; stats: ListingStats }> {
   const sites = await reading.listSites(input.repo);
-  const open = await reading.listOpenFindingWorkflows();
+  const listing = await reading.listOpenFindingWorkflows({ repo: input.repo, sites });
+  const open = listedRuns(listing);
+  const stats: ListingStats = {
+    listed: open.length,
+    queried: open.filter((run) => typeof run === 'string' || run.queried !== false).length,
+    // A list recorded before the activity pruned is a bare array: it read no index.
+    indexReads: Array.isArray(listing) ? 0 : listing.indexReads,
+  };
   const result: ReconcileFindingsResult = {};
   const anyKind = wf.patched(RECONCILE_FIX_ANY_KIND_PATCH);
   const restartApproved = anyKind && wf.patched(RECONCILE_RESTART_APPROVED_PATCH);
@@ -311,22 +328,30 @@ async function reconcile(input: ReconcileFindingsInput): Promise<ReconcileFindin
 
     result[site] = counts;
   }
-  return result;
+  return { result, stats };
 }
 
-function summarise(result: ReconcileFindingsResult): string {
+/** How one firing's listing went: the cost line for the health summary and the log. */
+interface ListingStats {
+  listed: number;
+  queried: number;
+  indexReads: number;
+}
+
+function summarise(result: ReconcileFindingsResult, stats: ListingStats): string {
+  const cost = `Listed ${stats.listed} open runs, queried ${stats.queried}, read ${stats.indexReads} indexes to decide.`;
   const sites = Object.entries(result);
-  if (sites.length === 0) return 'Findings reconcile: no site folders.';
+  if (sites.length === 0) return `Findings reconcile: no site folders. ${cost}`;
   const parts = sites.map(
     ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, fixed ${c.fixed}, restarted ${c.restarted ?? 0}, closed ${c.closed ?? 0}, unchanged ${c.unchanged}`,
   );
-  return `Findings reconcile: ${parts.join('; ')}.`;
+  return `Findings reconcile: ${parts.join('; ')}. ${cost}`;
 }
 
 export async function reconcileFindingsWorkflow(input: ReconcileFindingsInput): Promise<ReconcileFindingsResult> {
-  let result: ReconcileFindingsResult;
+  let outcome: { result: ReconcileFindingsResult; stats: ListingStats };
   try {
-    result = await reconcile(input);
+    outcome = await reconcile(input);
   } catch (err) {
     await alerting.reportRunHealth({
       signal: 'findings-reconcile',
@@ -342,7 +367,8 @@ export async function reconcileFindingsWorkflow(input: ReconcileFindingsInput): 
     throw err;
   }
 
-  const summary = summarise(result);
+  const { result, stats } = outcome;
+  const summary = summarise(result, stats);
   // The one-line plan counts, not the result object: this runs hourly, and the
   // result stays in the return value. A log line is not a command, so no marker.
   wf.log.info(summary);

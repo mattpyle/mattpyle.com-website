@@ -575,3 +575,45 @@ test('a new finding of a known site starts at resolved, with its paths, branch a
     );
   });
 });
+
+test('the health summary states how many runs were listed, how many were queried and how many indexes were read', async () => {
+  const s = store({ 'site-a': header(['a-one | proposed | Title | ', 'a-two | resolved | Title | Done.']) });
+  // The pruned listing the real activity returns: two runs, one of them skipped.
+  s.activities.listOpenFindingWorkflows = (async (): Promise<unknown> => ({
+    runs: [
+      { workflowId: findingWorkflowId('site-a', 'a-one'), step: null, fixAttempts: null, issueUrl: null, queried: false },
+      { workflowId: findingWorkflowId('site-a', 'a-two'), step: 'waiting-verdict', fixAttempts: 0, issueUrl: null },
+    ],
+    queried: 1,
+    indexReads: 1,
+  })) as never;
+  await withWorker(s.activities, async () => {
+    const result = await reconcileOnce();
+    // The run for a-one exists, so nothing is started, and the result keeps its per-site shape.
+    assert.deepEqual(result, { 'site-a': { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 2 } });
+  });
+  assert.match(s.pings[0].summary, /Listed 2 open runs, queried 1, read 1 indexes to decide\./);
+});
+
+test('a verdict that reaches a run past its verdict is dropped and the first one stands', async () => {
+  // The pruned listing can hand a run a verdict it is past (the index changed between
+  // the activity's read and the workflow's). `findingWorkflow` must drop it.
+  const kinded = (status: string) =>
+    ['# Findings index', '', 'Format: `key | status | kind | title | verdict reason`.', '', `k-late | ${status} | direction | Title | Yes.`].join('\n');
+  const s = store({ 'mattpyle-com': kinded('proposed') });
+  const id = findingWorkflowId('mattpyle-com', 'k-late');
+  await withWorker(s.activities, async () => {
+    await reconcileOnce();
+    s.indexes['mattpyle-com'] = kinded('approved');
+    await reconcileOnce();
+    await stateWhen(id, (st) => st.step === 'waiting-fix');
+    const handle = client.workflow.getHandle(id);
+    await handle.signal('verdict', { status: 'rejected', reason: 'Late.', source: 'file', at: new Date().toISOString() });
+    // A query after the signal sees the handler's effect: the workflow task that ran it ran first.
+    const state = await handle.query(findingStateQuery);
+    assert.equal(state.verdict?.status, 'approved');
+    assert.equal(state.step, 'waiting-fix');
+    assert.equal((await handle.describe()).status.name, 'RUNNING');
+    await handle.terminate('test over');
+  });
+});

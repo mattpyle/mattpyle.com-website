@@ -25,6 +25,7 @@ import {
   parseIssueUrl,
   parsePrUrl,
   previewChecksComment,
+  readsRunState,
   type PreviewDraftAction,
   type PreviewEarlierResult,
   findingsIndexPath,
@@ -39,6 +40,7 @@ import {
   type FindingVerdictSource,
   type FindingVerdictStatus,
   type FindingsIndexLine,
+  type OpenFindingListing,
   type OpenFindingWorkflow,
   type PreviewChecksReport,
   type DeploymentRecord,
@@ -1373,6 +1375,22 @@ export async function startFindingWorkflow(
 }
 
 /**
+ * What {@link listOpenFindingWorkflows} is asked to do. The three forms are
+ * three promises, and the absent one is the safe default:
+ *
+ * - no argument: query every run, as the activity did before it had modes. A
+ *   reconcile run started by the previous workflow code sends no argument, and
+ *   it must still get real steps, or `planReconcile` would send a verdict to
+ *   every approved and rejected run;
+ * - `{ idsOnly: true }`: list the IDs and query nothing. For a caller that reads
+ *   only which runs exist (`recheckFindingsWorkflow`);
+ * - `{ repo, sites }`: the reconciler's form. Read each site's index here and
+ *   query only the runs behind a line whose decision reads the run's state
+ *   ({@link readsRunState}).
+ */
+export type ListOpenFindingsInput = { idsOnly: true } | { repo: string; sites: string[] };
+
+/**
  * Every running `findingWorkflow` from the visibility store, with the `step`,
  * `fixAttempts` and `issueUrl` its `state` query reports.
  *
@@ -1386,13 +1404,67 @@ export async function startFindingWorkflow(
  * failure (a run whose workflow task is failing, say) keeps the run with a
  * null step, which the reconciler treats as it treated every run before it
  * knew steps: one stuck run must not stop the whole pass.
+ *
+ * **Pruning** (`{ repo, sites }`). A run is queried only when an index line of a
+ * site names it and that line's status reads the run's state. Every other run
+ * is listed with a null step and `queried: false`. A run no listed site's index
+ * names is never read by the plan, so it is not queried. If this activity cannot
+ * read a site's index, it queries every run of that site for this firing: a null
+ * step is never the fallback for an approved or rejected line. The activity reads
+ * the indexes itself, so the reconciler's own reads happen once more later. Two
+ * risks follow, and both are tolerated:
+ *
+ * 1. The index can change between this read and the workflow's. A line that
+ *    turns `approved` or `rejected` in that gap meets a run listed with a null
+ *    step and gets one verdict signal. A run past its verdict logs and drops a
+ *    later verdict (`verdictSignal` handler in `findingWorkflow`), so the signal
+ *    does no harm, and the next hourly firing reads the real step.
+ * 2. A run that closes between the list and the plan is dropped today only when
+ *    its query reads `done`. An unqueried run stays listed for this firing. It
+ *    sits behind a line that reads only whether a run exists, so the cost is one
+ *    hour: a `proposed` or `reopened` line starts its new run at the next firing.
  */
-export async function listOpenFindingWorkflows(): Promise<OpenFindingWorkflow[]> {
+export async function listOpenFindingWorkflows(
+  input?: ListOpenFindingsInput,
+): Promise<OpenFindingWorkflow[] | OpenFindingListing> {
   const client = Context.current().client;
-  const runs: OpenFindingWorkflow[] = [];
+  const infos: Array<{ workflowId: string; runId: string }> = [];
   for await (const info of client.workflow.list({
     query: "WorkflowType='findingWorkflow' AND ExecutionStatus='Running'",
   })) {
+    infos.push({ workflowId: info.workflowId, runId: info.runId });
+  }
+
+  let indexReads = 0;
+  let wanted: Set<string> | undefined;
+  if (input && 'sites' in input) {
+    wanted = new Set<string>();
+    for (const site of input.sites) {
+      indexReads++;
+      try {
+        for (const line of await readFindingsIndex(input.repo, site)) {
+          if (readsRunState(line.status)) wanted.add(findingWorkflowId(site, line.key));
+        }
+      } catch (err) {
+        log.warn(
+          { activity: 'listOpenFindingWorkflows', site, error: err instanceof Error ? err.message : String(err) },
+          'index read failed; querying every run of the site',
+        );
+        const prefix = findingWorkflowId(site, '');
+        for (const info of infos) if (info.workflowId.startsWith(prefix)) wanted.add(info.workflowId);
+      }
+    }
+  }
+
+  const runs: OpenFindingWorkflow[] = [];
+  let queried = 0;
+  for (const info of infos) {
+    const skip = input ? 'idsOnly' in input || !wanted?.has(info.workflowId) : false;
+    if (skip) {
+      runs.push({ workflowId: info.workflowId, step: null, fixAttempts: null, issueUrl: null, queried: false });
+      continue;
+    }
+    queried++;
     try {
       // By name: importing `findingStateQuery` would load the workflow module here.
       const state = await client.workflow.getHandle(info.workflowId, info.runId).query<FindingState>('state');
@@ -1412,7 +1484,8 @@ export async function listOpenFindingWorkflows(): Promise<OpenFindingWorkflow[]>
       runs.push({ workflowId: info.workflowId, step: null, fixAttempts: null, issueUrl: null });
     }
   }
-  return runs.sort((a, b) => a.workflowId.localeCompare(b.workflowId));
+  runs.sort((a, b) => a.workflowId.localeCompare(b.workflowId));
+  return input && 'sites' in input ? { runs, queried, indexReads } : runs;
 }
 
 export interface ListFixableFindingsInput {
