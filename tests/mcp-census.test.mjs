@@ -583,16 +583,16 @@ test('the count is its own failure domain and never awaited in front of the resp
   assert.ok(!/await /.test(fn), 'no await inside the counting function');
 });
 
-test('the three renders carry the same legends and the same counts note', () => {
+test('the three renders carry the same legends, and the data twin carries the counts note', () => {
   assert.match(bodySource, /MCP_CLIENTS_LEGEND/);
   assert.match(bodySource, /MCP_METHODS_LEGEND/);
-  assert.match(bodySource, /MCP_COUNTS_NOTE/);
+  assert.ok(!/COUNTS_NOTE/.test(bodySource), 'the page carries no counting paragraph');
   assert.match(jsonSource, /MCP_CLIENTS_LEGEND/);
   assert.match(jsonSource, /MCP_METHODS_LEGEND/);
   assert.match(jsonSource, /MCP_COUNTS_NOTE/);
   assert.match(markdownSource, /MCP_CLIENTS_LEGEND/);
   assert.match(markdownSource, /MCP_METHODS_LEGEND/);
-  assert.match(markdownSource, /MCP_COUNTS_NOTE/);
+  assert.ok(!/COUNTS_NOTE/.test(markdownSource), 'the markdown twin carries no counting paragraph');
   for (const source of [bodySource, jsonSource, markdownSource]) assert.match(source, /flattenMcpHashes|activity\.mcp/);
 });
 

@@ -47,13 +47,11 @@
  * selectors below and that attribute counts as a class, so a retro rule without it loses silently.
  */
 import {
-  A2A_COUNTS_NOTE,
   A2A_METHODS_LEGEND,
   A2A_SKILLS_LEGEND,
   FAMILY_NOTES,
   MCP_CLIENTS_LEGEND,
   MCP_CLIENT_NOTES,
-  MCP_COUNTS_NOTE,
   MCP_METHODS_LEGEND,
   MCP_VERSION_NOTES,
   SIGNERS_LEGEND,
@@ -540,13 +538,7 @@ function mcpVersionNote(version: string): string | undefined {
     </section>
   )}
 
-  <section class="rd-section band-how" aria-labelledby="activity-how-title">
-    <div>
-      <h2 id="activity-how-title">How this is counted</h2>
-      <p class="how-prose">
-        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. {MCP_COUNTS_NOTE} {A2A_COUNTS_NOTE} What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
-      </p>
-    </div>
+  <section class="rd-section band-how" aria-label="The same numbers, as data">
     <div class="as-data">
       <span class="as-data-label">The same numbers, as data</span>
       <a href="/activity.json" class="as-data-link">activity.json</a>
@@ -862,41 +854,19 @@ function mcpVersionNote(version: string): string | undefined {
 
   .band-tables .band-head { margin-bottom: 20px; gap: 14px; }
 
-  /* ── Band 6: how this is counted ────────────────────────────────────────── */
+  /* ── Band 6: the data link ──────────────────────────────────────────────── */
   .band-how {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 64px;
-    align-items: start;
     /* No bottom padding: SiteFooter.astro opens with the spec's 96px margin-top, and setting it
        here as well doubles the gap. Measured on the served build for /about and /steward. */
     padding-top: 76px;
-  }
-
-  .band-how h2 {
-    margin: 0 0 16px;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 28px;
-    letter-spacing: -.02em;
-    color: var(--agents);
-  }
-
-  .how-prose {
-    margin: 0;
-    max-width: 62ch;
-    font-size: 20px;
-    line-height: 1.6;
-    color: var(--ink-2);
-    text-wrap: pretty;
   }
 
   .as-data {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    border-left: 1px solid var(--rule);
-    padding-left: 26px;
+    border-top: 1px solid var(--rule);
+    padding-top: 20px;
   }
 
   .as-data-label {
@@ -927,18 +897,6 @@ function mcpVersionNote(version: string): string | undefined {
     .band-tables {
       grid-template-columns: minmax(0, 1fr);
       row-gap: 56px;
-    }
-
-    .band-how {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 32px;
-    }
-
-    .as-data {
-      border-left: 0;
-      padding-left: 0;
-      border-top: 1px solid var(--rule);
-      padding-top: 20px;
     }
 
     /* The middle column goes to a second line rather than squeezing: client and count on the
@@ -1015,8 +973,7 @@ function mcpVersionNote(version: string): string | undefined {
     .band-signers,
     .band-how { padding-top: 56px; }
 
-    .band-head h2,
-    .band-how h2 { font-size: 26px; }
+    .band-head h2 { font-size: 26px; }
 
     .count-number { font-size: 64px; }
 
@@ -1071,7 +1028,6 @@ function mcpVersionNote(version: string): string | undefined {
     .hour-table thead tr,
     .hour-table tbody tr { grid-template-columns: 9px minmax(0, 1fr) 68px; }
 
-    .how-prose { font-size: 18px; }
   }
 
   @media (max-width: 500px) {

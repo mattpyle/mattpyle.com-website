@@ -315,9 +315,9 @@ test('the three renders carry the A2A legends and read the same rows', () => {
   for (const source of [bodySource, jsonSource, markdownSource]) {
     assert.match(source, /A2A_METHODS_LEGEND/);
     assert.match(source, /A2A_SKILLS_LEGEND/);
-    assert.match(source, /A2A_COUNTS_NOTE/);
     assert.match(source, /activity\.a2a/);
   }
+  assert.match(jsonSource, /A2A_COUNTS_NOTE/);
   assert.match(A2A_METHODS_LEGEND, /unparsed/);
   assert.match(A2A_SKILLS_LEGEND, /costly path/);
 });

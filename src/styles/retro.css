@@ -1873,8 +1873,7 @@ html[data-appearance='retro'] [data-module='activity-hero'] .stamp-rendered {
   }
 }
 
-html[data-appearance='retro'] [data-module='activity-body'] .band-head h2,
-html[data-appearance='retro'] [data-module='activity-body'] .band-how h2 {
+html[data-appearance='retro'] [data-module='activity-body'] .band-head h2 {
   font-family: var(--retro-font-display);
   font-size: 22px;
   font-weight: normal;
@@ -1882,8 +1881,7 @@ html[data-appearance='retro'] [data-module='activity-body'] .band-how h2 {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='activity-body'] .band-head h2::before,
-html[data-appearance='retro'] [data-module='activity-body'] .band-how h2::before {
+html[data-appearance='retro'] [data-module='activity-body'] .band-head h2::before {
   content: '';
   display: inline-block;
   width: 12px;
@@ -2043,16 +2041,8 @@ html[data-appearance='retro'] [data-module='activity-body'] .band-empty--lead {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='activity-body'] .how-prose {
-  font-family: var(--retro-font-body);
-  font-size: 17px;
-  color: var(--retro-ink);
-}
-
 html[data-appearance='retro'] [data-module='activity-body'] .as-data {
-  border-left-color: var(--retro-frame-border);
-  border-left-style: dotted;
-  border-left-width: 2px;
+  border-top: 2px dotted var(--retro-frame-border);
 }
 
 html[data-appearance='retro'] [data-module='activity-body'] .as-data-label {
@@ -2073,11 +2063,6 @@ html[data-appearance='retro'] [data-module='activity-body'] .as-data-link:hover 
 }
 
 @media (max-width: 900px) {
-  html[data-appearance='retro'] [data-module='activity-body'] .as-data {
-    border-left: 0;
-    border-top: 2px dotted var(--retro-frame-border);
-  }
-
   /* Below 900px the last-hour rows are grids, so their separators move off the
      cells (where the rules above recolour them) and onto the ROWS, which are new
      ground. Without these two the phone view paints modern's cool hairlines

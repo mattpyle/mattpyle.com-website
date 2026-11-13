@@ -1,11 +1,9 @@
 import type { APIRoute } from 'astro';
 import {
-  A2A_COUNTS_NOTE,
   A2A_METHODS_LEGEND,
   A2A_SKILLS_LEGEND,
   MCP_CLIENTS_LEGEND,
   MCP_CLIENT_NOTES,
-  MCP_COUNTS_NOTE,
   MCP_METHODS_LEGEND,
   MCP_VERSION_NOTES,
   SIGNERS_LEGEND,
@@ -234,11 +232,6 @@ export const GET: APIRoute = async () => {
   } else {
     sections.push('Live counts were unavailable for this render.');
   }
-
-  sections.push(
-    '## How this is counted',
-    `Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page loaded in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. ${MCP_COUNTS_NOTE} ${A2A_COUNTS_NOTE} What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.`
-  );
 
   return new Response(`${sections.join('\n\n')}\n`, {
     headers: {
