@@ -149,9 +149,37 @@
           - cell "·"
           - cell "·"
     - paragraph: Every POST to /mcp counts once under its JSON-RPC method, whether the server answered it or refused it. other-method covers any method not listed, a notification, and a body that is not a JSON-RPC request. server/discover is the discovery request of the 2026-07-28 protocol revision.
-  - region "How this is counted":
-    - heading "How this is counted" [level=2]
-    - paragraph: "Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. A POST to the MCP endpoint is also counted by its JSON-RPC method, and a request that identifies its client, an initialize or any request carrying the 2026-07-28 _meta envelope, by the client name and protocol revision it gives. A client name is the name of a piece of software, such as an editor or an inspector tool, and not of a person; it is stored alone, lowercased and cut to 64 characters, and nothing else in the request body is read. What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you."
+  - region "A2A methods":
+    - heading "A2A methods" [level=2]
+    - table:
+      - rowgroup:
+        - row "Method 7 days 30 days":
+          - columnheader "Method"
+          - columnheader "7 days"
+          - columnheader "30 days"
+      - rowgroup:
+        - row "· · ·":
+          - cell "·"
+          - cell "·"
+          - cell "·"
+    - paragraph: Every POST to /a2a counts once under its JSON-RPC method, whether the endpoint answered it or refused it. SendMessage and GetTask are the two methods it implements, and their pre-1.0 spellings count under them. other-method is any method not listed, and a body that is not a JSON-RPC request. unparsed is a body that was not JSON at all.
+  - region "A2A skills and tiers":
+    - heading "A2A skills and tiers" [level=2]
+    - table:
+      - rowgroup:
+        - row "Value Kind 7 days 30 days":
+          - columnheader "Value"
+          - columnheader "Kind"
+          - columnheader "7 days"
+          - columnheader "30 days"
+      - rowgroup:
+        - row "· · · ·":
+          - cell "·"
+          - cell "·"
+          - cell "·"
+          - cell "·"
+    - paragraph: "Each SendMessage that carries text counts once under the skill it routed to, and an audit request counts once under the tier it asked for: fast answers in the call, deep starts a durable workflow and is the costly path. none is a request that routed to no skill, such as a GetTask or a malformed message."
+  - region "The same numbers, as data":
     - text: The same numbers, as data
     - link "activity.json":
       - /url: /activity.json

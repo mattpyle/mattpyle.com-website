@@ -20,7 +20,7 @@
  * buckets with no store and no deploy. Same split as agent-traffic.mjs itself.
  */
 
-import { epochHour, hourStart, summarizeMcp, summarizeSigners, summarizeTraffic } from './agent-traffic.mjs';
+import { epochHour, hourStart, summarizeA2a, summarizeMcp, summarizeSigners, summarizeTraffic } from './agent-traffic.mjs';
 import {
   MAX_MCP_CLIENTS_PER_DAY,
   MAX_MCP_VERSIONS_PER_DAY,
@@ -152,6 +152,18 @@ export const MCP_METHODS_LEGEND =
 export const MCP_COUNTS_NOTE =
   'A POST to the MCP endpoint is also counted by its JSON-RPC method, and a request that identifies its client, an initialize or any request carrying the 2026-07-28 _meta envelope, by the client name and protocol revision it gives. A client name is the name of a piece of software, such as an editor or an inspector tool, and not of a person; it is stored alone, lowercased and cut to 64 characters, and nothing else in the request body is read.';
 
+/** What the A2A methods table proves, printed under it on every surface. */
+export const A2A_METHODS_LEGEND =
+  'Every POST to /a2a counts once under its JSON-RPC method, whether the endpoint answered it or refused it. SendMessage and GetTask are the two methods it implements, and their pre-1.0 spellings count under them. other-method is any method not listed, and a body that is not a JSON-RPC request. unparsed is a body that was not JSON at all.';
+
+/** What the A2A skills and tiers table proves. */
+export const A2A_SKILLS_LEGEND =
+  'Each SendMessage that carries text counts once under the skill it routed to, and an audit request counts once under the tier it asked for: fast answers in the call, deep starts a durable workflow and is the costly path. none is a request that routed to no skill, such as a GetTask or a malformed message.';
+
+/** The sentence about the A2A census that sits beside MCP_COUNTS_NOTE on all three surfaces. */
+export const A2A_COUNTS_NOTE =
+  'A POST to the A2A endpoint is also counted by its JSON-RPC method, the skill it routed to and the audit tier it asked for, each from a fixed list. The message text, the audited site and the task id are not read into the store.';
+
 /** Two-digit UTC hour, the form the chart's ticks are written in. @param {number} hour */
 function hourLabel(hour) {
   return String(hour).padStart(2, '0');
@@ -256,9 +268,10 @@ export function utcStamp(at) {
  * counts are second counts of requests that are already in `rows` as `surface` hits on /mcp.
  *
  * @param {{ signers?: Array<{ hour: number | null, host: string, count: number }>,
- *           mcp?: ReturnType<typeof import('./agent-traffic.mjs').flattenMcpHashes> }} [extra]
+ *           mcp?: ReturnType<typeof import('./agent-traffic.mjs').flattenMcpHashes>,
+ *           a2a?: ReturnType<typeof import('./agent-traffic.mjs').flattenA2aHashes> }} [extra]
  */
-export function buildActivity(rows, now = new Date(), { signers = [], mcp = [] } = {}) {
+export function buildActivity(rows, now = new Date(), { signers = [], mcp = [], a2a = [] } = {}) {
   const summary = summarizeTraffic(rows, now);
   const hours = hourlySeries(rows, now);
   const lastHour = lastHourRows(rows, now);
@@ -289,6 +302,11 @@ export function buildActivity(rows, now = new Date(), { signers = [], mcp = [] }
      * not absent, before any client has called /mcp.
      */
     mcp: summarizeMcp(mcp, now),
+    /**
+     * The A2A census: the method mix, the skill mix and the audit tier mix, a row for every
+     * counted value, zeros included, before any agent has called /a2a.
+     */
+    a2a: summarizeA2a(a2a, now),
     pages: summary.pages,
     /**
      * Which of this site's pages named bots have read, from the `page` event class.

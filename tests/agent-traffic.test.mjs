@@ -29,6 +29,7 @@ import {
   dayKeyFor,
   daysKeyFor,
   hitKeys,
+  a2aKeyFor,
   mcpKeyFor,
   monthKeyFor,
   monthsKeyFor,
@@ -366,6 +367,7 @@ test('the fold order removes a day from the set before it adds it to a month', (
     // census hash follows it for the same reason.
     ['DEL', signersKeyFor('2026-05-04')],
     ['DEL', mcpKeyFor('2026-05-04')],
+    ['DEL', a2aKeyFor('2026-05-04')],
   ]);
 });
 
@@ -375,6 +377,7 @@ test('a day with nothing foldable in it is removed without minting a month', () 
     ['DEL', dayKeyFor('2026-05-04')],
     ['DEL', signersKeyFor('2026-05-04')],
     ['DEL', mcpKeyFor('2026-05-04')],
+    ['DEL', a2aKeyFor('2026-05-04')],
   ]);
 });
 
@@ -606,6 +609,8 @@ test('the reader asks for both sets, then one HGETALL per day and per month, by 
     ['HGETALL', signersKeyFor('2026-08-06')],
     ['HGETALL', mcpKeyFor('2026-08-05')],
     ['HGETALL', mcpKeyFor('2026-08-06')],
+    ['HGETALL', a2aKeyFor('2026-08-05')],
+    ['HGETALL', a2aKeyFor('2026-08-06')],
   ]);
   // No day is eligible here, so no lock is taken and no third round trip happens.
   assert.equal(sent.length, 2);
@@ -668,7 +673,7 @@ test('two empty sets are a successful read of nothing', async () => {
     fetchImpl: async () =>
       new Response(JSON.stringify([{ result: [] }, { result: [] }, { result: [] }, { result: [] }]), { status: 200 }),
   });
-  assert.deepEqual(result, { ok: true, dayHashes: [], monthHashes: [], signerHashes: [], mcpHashes: [] });
+  assert.deepEqual(result, { ok: true, dayHashes: [], monthHashes: [], signerHashes: [], mcpHashes: [], a2aHashes: [] });
 });
 
 test('a store that errors is a reason, never a throw', async () => {
@@ -756,6 +761,7 @@ test('a render with an eligible day takes the lock in the read pipeline and then
     ['DEL', dayKeyFor(old)],
     ['DEL', signersKeyFor(old)],
     ['DEL', mcpKeyFor(old)],
+    ['DEL', a2aKeyFor(old)],
   ]);
 
   // The render that folds still reports the day it folded, so its own numbers are unchanged.

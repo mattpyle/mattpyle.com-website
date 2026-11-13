@@ -7,7 +7,11 @@ import {
 } from '@mattpyle/steward/agent-audit/fast';
 import digest from '../data/a2a-digest.json';
 import { A2A_METHOD, A2A_METHODS, GET_TASK_METHOD, respond } from '../lib/a2a-responder.mjs';
-import { AUDIT_SKILL_ID, ASK_SKILL_ID } from '../lib/a2a-audit-skill.mjs';
+import { AUDIT_SKILL_ID, ASK_SKILL_ID, routeMessage } from '../lib/a2a-audit-skill.mjs';
+import { readText } from '../lib/a2a-rpc.mjs';
+import { A2A_ENDPOINT_PATH, a2aFactsFrom, recordA2aRequest, recordHit } from '../lib/agent-hits.mjs';
+import { identifyRequest } from '../lib/web-bot-auth.mjs';
+import { ipAddress, waitUntil } from '@vercel/functions';
 import { originFor } from '../lib/mcp-audit-server.mjs';
 import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mcp-temporal.mjs';
@@ -35,6 +39,15 @@ import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mc
  * output stays `static` (astro.config.mjs) and every page still prerenders. Delete this file,
  * public/.well-known/agent-card.json and src/pages/mcp.ts and the built site is unchanged, which
  * is the progressive-enhancement rule this whole experiment runs under, made checkable.
+ *
+ * **Counted here, because the middleware cannot.** `middleware.ts` leaves `/a2a` out of its matcher
+ * on purpose: a slash rule that reached it would 308 a JSON-RPC call. So the route counts itself,
+ * once per POST and before the responder runs, exactly as src/pages/mcp.ts does. `countRequest`
+ * writes the same `surface` hit the middleware writes for every other agent surface, so `/a2a`
+ * joins By client and By surface, and a census of three facts from fixed lists: the JSON-RPC
+ * method, the skill the message routed to and the audit tier it asked for
+ * (src/lib/agent-hits.mjs, a2aFactsFrom). Neither write delays the response and neither can fail
+ * it. A GET is not a call and is not counted.
  *
  * The digest is a static import, so it is bundled into the function at build time. No fetch, no
  * content-collection read, no cold-start I/O: see scripts/generate-a2a-digest.mjs.
@@ -78,8 +91,43 @@ function log(fields: Record<string, string | number>) {
   );
 }
 
+/**
+ * The router the census asks, the same `routeMessage` the responder uses and on the same terms: a
+ * SendMessage with no text never reaches it there, so it routes to nothing here.
+ */
+function routeFor(params: { message?: unknown }) {
+  const text = readText(params.message);
+  return text === null ? null : routeMessage(params, text);
+}
+
+/**
+ * Count one POST: the shared `surface` hit, then the census. Both go through `waitUntil`, so
+ * neither is awaited in front of the reply, and the whole body is a try/catch because observation
+ * is never worth a failed response.
+ *
+ * `body` is the parsed JSON, or undefined when it did not parse, which is still a data point. The
+ * address goes to identifyRequest() and does not come out, exactly as in the middleware.
+ */
+function countRequest(request: Request, body: unknown): void {
+  try {
+    const identity = identifyRequest(request, { address: ipAddress(request) ?? null });
+    waitUntil(recordHit({ event: 'surface', path: A2A_ENDPOINT_PATH, ua: request.headers.get('user-agent'), identity }));
+    waitUntil(recordA2aRequest({ facts: a2aFactsFrom(body, routeFor) }));
+  } catch {
+    // Deliberately empty: observation is never worth a failed response.
+  }
+}
+
 export const POST: APIRoute = async ({ request }) => {
   const raw = await request.text();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = undefined;
+  }
+  countRequest(request, parsed);
 
   const { status, outcome, payload } = await respond(raw, {
     digest,

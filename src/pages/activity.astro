@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import ActivityHero from '../components/activity/ActivityHero.astro';
 import ActivityBody from '../components/activity/ActivityBody.astro';
 import { buildActivity } from '../lib/activity-summary.mjs';
-import { flattenMcpHashes, flattenSignerHashes, flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import { flattenA2aHashes, flattenMcpHashes, flattenSignerHashes, flattenTraffic, readAgentTraffic } from '../lib/agent-traffic.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 
 // The page's markdown sibling, declared in the head by Layout. Derived from the negotiation map
@@ -43,6 +43,7 @@ const activity = traffic.ok
   ? buildActivity(flattenTraffic(traffic), renderedAt, {
       signers: flattenSignerHashes(traffic.signerHashes),
       mcp: flattenMcpHashes(traffic.mcpHashes),
+      a2a: flattenA2aHashes(traffic.a2aHashes),
     })
   : null;
 

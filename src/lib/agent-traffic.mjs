@@ -27,6 +27,9 @@
  */
 
 import {
+  A2A_METHOD_VALUES,
+  A2A_SKILL_VALUES,
+  A2A_TIER_VALUES,
   KEY_VERSION,
   KEY_VERSIONS,
   LEGACY_KEY_VERSION,
@@ -34,6 +37,7 @@ import {
   OTHER_MCP_METHOD,
   ROLLUP_LOCK_KEY,
   VERIFICATION_STATES,
+  a2aKeyFor,
   dayKeyFor,
   daysKeyFor,
   isCounterMonth,
@@ -42,6 +46,7 @@ import {
   monthKeyFor,
   monthOf,
   monthsKeyFor,
+  parseA2aField,
   parseHitField,
   parseMcpField,
   parseMonthField,
@@ -212,6 +217,31 @@ export function flattenMcpHashes(mcpHashes) {
       if (!Number.isFinite(count) || count <= 0) continue;
       if (parsed.kind === 'method') rows.push({ hour, kind: 'method', method: parsed.method, count });
       else rows.push({ hour, kind: 'client', name: parsed.name, protocolVersion: parsed.protocolVersion, count });
+    }
+  }
+  return rows;
+}
+
+/**
+ * A2A census hashes in, one flat row per bucket out: `{ hour, kind, value, count }`, where `kind` is
+ * `method`, `skill` or `tier`. Kept apart from flattenTraffic()'s rows for the reason the MCP rows
+ * are: each is a second count of a request already in the day hash as a `surface` hit on /a2a.
+ * Same drop-rather-than-guess rule as the others.
+ *
+ * @param {Array<{ day: string, fields: Record<string, string | number> }>} a2aHashes
+ * @returns {Array<{ hour: number, kind: 'method' | 'skill' | 'tier', value: string, count: number }>}
+ */
+export function flattenA2aHashes(a2aHashes) {
+  const rows = [];
+  for (const { day, fields } of a2aHashes ?? []) {
+    for (const [field, rawCount] of Object.entries(fields ?? {})) {
+      const parsed = parseA2aField(field);
+      if (!parsed) continue;
+      const hour = bucketHour(day, parsed.hour);
+      if (hour === null) continue;
+      const count = Number(rawCount);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      rows.push({ hour, kind: parsed.kind, value: parsed.value, count });
     }
   }
   return rows;
@@ -433,6 +463,37 @@ export function summarizeMcp(rows, now = new Date()) {
   };
 }
 
+/**
+ * The A2A census: one table of methods and one of skills and tiers, from flattenA2aHashes() rows.
+ * Like the MCP methods table, every fixed value has a row, always, in list order: a value nobody
+ * has sent reads as zero, and a table that left it out would read as not having looked.
+ *
+ * @param {ReturnType<typeof flattenA2aHashes>} rows
+ * @param {Date} now
+ */
+export function summarizeA2a(rows, now = new Date()) {
+  const nowHour = epochHour(now);
+  /**
+   * @param {'method' | 'skill' | 'tier'} kind
+   * @param {readonly string[]} values
+   * @returns {Array<{ kind: 'method' | 'skill' | 'tier', value: string, day: number, week: number, month: number, total: number }>}
+   */
+  const rowsFor = (kind, values) => {
+    const counted = new Map(
+      tally(rows.filter((row) => row.kind === kind), ({ value }) => ({ value }), nowHour).rows.map((row) => [row.value, row])
+    );
+    return values.map((value) => {
+      const found = counted.get(value);
+      return { kind, value, day: found?.day ?? 0, week: found?.week ?? 0, month: found?.month ?? 0, total: found?.total ?? 0 };
+    });
+  };
+  return {
+    methods: { rows: rowsFor('method', A2A_METHOD_VALUES) },
+    skills: { rows: rowsFor('skill', A2A_SKILL_VALUES) },
+    tiers: { rows: rowsFor('tier', A2A_TIER_VALUES) },
+  };
+}
+
 // ── The monthly rollup ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -559,6 +620,7 @@ export function rollupCommands(dayHashes) {
     if (version === KEY_VERSION) {
       commands.push(['DEL', signersKeyFor(day, version)]);
       commands.push(['DEL', mcpKeyFor(day, version)]);
+      commands.push(['DEL', a2aKeyFor(day, version)]);
     }
   }
   return commands;
@@ -639,8 +701,8 @@ async function pipeline(store, commands, fetchImpl) {
  *
  * Two round trips, because the two sets have to come back before the hashes can be asked for. The
  * second is pipelined into one request whatever the count. The bill for a render is therefore
- * `2 + 3D + M`, where D is capped by the rollup at around 33 recent days and M grows twelve a year;
- * the second and third D are one HGETALL each of a `v2` day's signers hash and MCP census hash,
+ * `2 + 4D + M`, where D is capped by the rollup at around 33 recent days and M grows twelve a year;
+ * the second to fourth D are one HGETALL each of a `v2` day's signers, MCP census and A2A census hashes,
  * which are empty for most days and cost the same either way.
  *
  * The rollup rides along rather than costing a third round trip: eligibility is decided from the
@@ -663,7 +725,8 @@ async function pipeline(store, commands, fetchImpl) {
  *                     dayHashes: Array<{ day: string, version: string, fields: Record<string, string> }>,
  *                     monthHashes: Array<{ month: string, version: string, fields: Record<string, string> }>,
  *                     signerHashes: Array<{ day: string, fields: Record<string, string> }>,
- *                     mcpHashes: Array<{ day: string, fields: Record<string, string> }> }
+ *                     mcpHashes: Array<{ day: string, fields: Record<string, string> }>,
+ *                     a2aHashes: Array<{ day: string, fields: Record<string, string> }> }
  *                  | { ok: false, reason: string }>}
  */
 export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, now = new Date() } = {}) {
@@ -675,6 +738,7 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
         monthHashes: fixtureMonthHashes(now),
         signerHashes: fixtureSignerHashes(now),
         mcpHashes: fixtureMcpHashes(now),
+        a2aHashes: fixtureA2aHashes(now),
       };
     }
 
@@ -710,7 +774,7 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       }
     });
     if (orderedDays.length === 0 && orderedMonths.length === 0) {
-      return { ok: true, dayHashes: [], monthHashes: [], signerHashes: [], mcpHashes: [] };
+      return { ok: true, dayHashes: [], monthHashes: [], signerHashes: [], mcpHashes: [], a2aHashes: [] };
     }
 
     const eligible = new Set(
@@ -727,6 +791,7 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       ...orderedMonths.map(({ month, version }) => ['HGETALL', monthKeyFor(month, version)]),
       ...signerDays.map((day) => ['HGETALL', signersKeyFor(day)]),
       ...signerDays.map((day) => ['HGETALL', mcpKeyFor(day)]),
+      ...signerDays.map((day) => ['HGETALL', a2aKeyFor(day)]),
     ];
     if (anyEligible) commands.push(rollupLockCommand(now.toISOString()));
 
@@ -752,13 +817,18 @@ export async function readAgentTraffic({ env = process.env, fetchImpl = fetch, n
       fields: toFieldMap(results[orderedDays.length + orderedMonths.length + signerDays.length + index]),
     }));
 
+    const a2aHashes = signerDays.map((day, index) => ({
+      day,
+      fields: toFieldMap(results[orderedDays.length + orderedMonths.length + signerDays.length * 2 + index]),
+    }));
+
     // Null means another render holds the lock, which is a reason to do nothing at all: the read
     // above is already complete and correct, and the fold will happen on some later render.
     if (anyEligible && results[commands.length - 1] !== null) {
       await rollUp(store, dayHashes.filter(({ day }) => eligible.has(day)), fetchImpl);
     }
 
-    return { ok: true, dayHashes, monthHashes, signerHashes, mcpHashes };
+    return { ok: true, dayHashes, monthHashes, signerHashes, mcpHashes, a2aHashes };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.name || error.message : 'error' };
   }
@@ -878,6 +948,42 @@ function fixtureMcpHashes(now) {
     [30, 'client|probe.example|2025-03-26', 2],
     [400, 'client|example-client|2025-06-18', 5],
     [500, 'client|unnamed|unstated', 1],
+  ];
+
+  /** @type {Map<string, Record<string, string>>} */
+  const byDay = new Map();
+  for (const [hoursAgo, suffix, count] of seed) {
+    const at = hourStart(nowHour - hoursAgo);
+    const day = at.toISOString().slice(0, 10);
+    const hour = at.toISOString().slice(11, 13);
+    const fields = byDay.get(day) ?? {};
+    fields[`${hour}|${suffix}`] = String(count);
+    byDay.set(day, fields);
+  }
+  return [...byDay.entries()].sort().map(([day, fields]) => ({ day, fields }));
+}
+
+/**
+ * A canned A2A census, so the A2A tables are in the aria golden and under axe like the MCP ones.
+ *
+ * @param {Date} now
+ */
+function fixtureA2aHashes(now) {
+  const nowHour = epochHour(now);
+  /** @type {Array<[number, string, number]>} hours-ago, field suffix, count */
+  const seed = [
+    [1, 'method|SendMessage', 4],
+    [2, 'method|GetTask', 2],
+    [9, 'method|other-method', 1],
+    [30, 'method|unparsed', 2],
+    [400, 'method|SendMessage', 6],
+    [1, 'skill|ask-about-site', 3],
+    [2, 'skill|audit-a-site', 1],
+    [1, 'skill|none', 1],
+    [400, 'skill|ask-about-site', 6],
+    [2, 'tier|fast', 1],
+    [30, 'tier|deep', 1],
+    [1, 'tier|none', 3],
   ];
 
   /** @type {Map<string, Record<string, string>>} */

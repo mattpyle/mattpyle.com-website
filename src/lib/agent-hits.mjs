@@ -29,6 +29,10 @@
  *    held to a short list of characters and stored alone as a count. The method of each request
  *    is stored too, from a fixed list. No `clientInfo.version`, no argument, no target URL and no
  *    other part of the body is read at all; mcpFactsFrom() is the only function that sees it.
+ *    One more census is stored since 2026-11-12, for POSTs to /a2a (a2aKeyFor() below): the JSON-RPC
+ *    method, the skill it routed to and the audit tier it asked for, each from a fixed list in this
+ *    file. The message text, a target host, a task id and every other part of the body are never
+ *    read into the store; a2aFactsFrom() is the only function that sees the body.
  * 2. Bounded cardinality. Every component of every key comes from a fixed list or is bucketed into
  *    one. Nothing a stranger can send mints a new key. The signer hostname is bucketed by a cap:
  *    MAX_SIGNER_HOSTS_PER_DAY distinct hosts a day, the rest counted as OTHER_SIGNER_HOST. The MCP
@@ -278,8 +282,15 @@ export function isPageClient(family) {
  */
 export const MCP_ENDPOINT_PATH = '/mcp';
 
+/**
+ * The A2A endpoint, counted as a surface since 2026-11-12, for the reason /mcp is: it is a function
+ * that counts itself (src/pages/a2a.ts), and listing it in AGENT_SURFACE_PATHS would put it in the
+ * middleware's matcher, where a slash rule would 308 a JSON-RPC call.
+ */
+export const A2A_ENDPOINT_PATH = '/a2a';
+
 /** The surfaces that get a key of their own; anything else under /.well-known/ buckets. */
-const NAMED_SURFACES = new Set([...AGENT_SURFACE_PATHS, ...WELL_KNOWN_SURFACE_PATHS, MCP_ENDPOINT_PATH]);
+const NAMED_SURFACES = new Set([...AGENT_SURFACE_PATHS, ...WELL_KNOWN_SURFACE_PATHS, MCP_ENDPOINT_PATH, A2A_ENDPOINT_PATH]);
 const WELL_KNOWN_PREFIX = '/.well-known/';
 
 /** The bucket for a well-known path the site does not publish. */
@@ -853,6 +864,13 @@ export function parseMonthField(field, version = KEY_VERSION) {
  * |---|---|---|
  * | `hits:v2:mcp:<utc-day>` | hash, field `<utc-hour>\|method\|<method>` or `<utc-hour>\|client\|<name>\|<revision>` | which JSON-RPC methods clients send /mcp, and which clients and protocol revisions open a session |
  *
+ * And one more, since 2026-11-12, written by recordA2aRequest() for every POST to /a2a (a2aKeyFor()
+ * above says what its three kinds of field count):
+ *
+ * | Key | Type | Answers |
+ * |---|---|---|
+ * | `hits:v2:a2a:<utc-day>` | hash, field `<utc-hour>\|method\|<method>`, `<utc-hour>\|skill\|<skill>` or `<utc-hour>\|tier\|<tier>` | which A2A methods clients send /a2a, which skill each routed to, and which audit tier it asked for |
+ *
  * The `v1` keys have the same shape with the verification part absent: four parts in a day field,
  * three in a month field. They hold every hit from 2026-07-21 to 2026-10-17.
  *
@@ -1101,6 +1119,162 @@ async function readMcpNamed(store, day, fetchImpl) {
     return mcpNamedFrom(fields);
   } catch {
     return null;
+  }
+}
+
+// ── A2A census ───────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The hash holding one UTC day of POSTs to /a2a, counted by what the body says rather than by who
+ * sent it. Three kinds of field, told apart by their second part, every value from a fixed list in
+ * this file (nothing a caller sends becomes a field name or part of one):
+ *
+ * | Field | Counts |
+ * |---|---|
+ * | `<utc-hour>\|method\|<method>` | every POST, under its JSON-RPC method (A2A_METHOD_VALUES) |
+ * | `<utc-hour>\|skill\|<skill>` | every POST, under the skill it routed to (A2A_SKILL_VALUES) |
+ * | `<utc-hour>\|tier\|<tier>` | every POST, under the audit tier it asked for (A2A_TIER_VALUES) |
+ *
+ * A key of its own for the reason the MCP census is one: these are second counts of a request that
+ * is already in the day hash as a `surface` hit on `/a2a`. The rollup deletes it with the day hash.
+ *
+ * @param {string} day YYYY-MM-DD, UTC @param {string} [version]
+ */
+export function a2aKeyFor(day, version = KEY_VERSION) {
+  return `hits:${version}:a2a:${day}`;
+}
+
+/** The two methods the endpoint implements, by their A2A 1.0 names. */
+export const A2A_METHODS_COUNTED = Object.freeze(['SendMessage', 'GetTask']);
+
+/**
+ * Pre-1.0 spellings, folded into the 1.0 name so the dialect is not kept. Mirrored from
+ * src/lib/a2a-responder.mjs and src/lib/a2a-audit-skill.mjs, which this module does not import
+ * (the middleware imports this file); tests/a2a-census.test.mjs holds the two lists equal.
+ */
+const A2A_LEGACY_METHODS = Object.freeze({ 'message/send': 'SendMessage', 'tasks/get': 'GetTask' });
+
+/** A method the endpoint does not implement, or a body with no usable `method`. A client asked for something the endpoint lacks. */
+export const OTHER_A2A_METHOD = 'other-method';
+
+/** A body that did not parse as JSON. A client sent garbage. */
+export const UNPARSED_A2A_METHOD = 'unparsed';
+
+/** Every method value a field can carry. */
+export const A2A_METHOD_VALUES = Object.freeze([...A2A_METHODS_COUNTED, OTHER_A2A_METHOD, UNPARSED_A2A_METHOD]);
+
+/** The skill ids the Agent Card declares; mirrored from src/lib/a2a-audit-skill.mjs and held equal by the same test. */
+export const A2A_SKILLS_COUNTED = Object.freeze(['ask-about-site', 'audit-a-site']);
+
+/** No skill: a GetTask, a request that failed validation, or a router that threw. */
+export const NO_A2A_SKILL = 'none';
+
+export const A2A_SKILL_VALUES = Object.freeze([...A2A_SKILLS_COUNTED, NO_A2A_SKILL]);
+
+/** The audit tiers. `deep` is the costly path. */
+export const A2A_TIERS_COUNTED = Object.freeze(['fast', 'deep']);
+
+/** No tier: every request that is not an audit. */
+export const NO_A2A_TIER = 'none';
+
+export const A2A_TIER_VALUES = Object.freeze([...A2A_TIERS_COUNTED, NO_A2A_TIER]);
+
+/**
+ * The three facts the census keeps about one POST to /a2a, and nothing else. The message text, a
+ * target host, a task id, a context id and metadata die here, the way a user agent dies in
+ * classifyClient().
+ *
+ * `routeFor(params)` is the caller's router, `{ skill, tier? }` for a SendMessage that carries text
+ * and null for one that does not. It is injected so this module stays free of the audit skill. A
+ * router that throws, or answers with a value outside the fixed lists, counts as skill `none` and
+ * tier `none`: the request is still a data point.
+ *
+ * @param {unknown} body the parsed JSON, or undefined when the body did not parse
+ * @param {(params: any) => ({ skill?: unknown, tier?: unknown } | null)} routeFor
+ * @returns {{ method: string, skill: string, tier: string }}
+ */
+export function a2aFactsFrom(body, routeFor) {
+  if (body === undefined) return { method: UNPARSED_A2A_METHOD, skill: NO_A2A_SKILL, tier: NO_A2A_TIER };
+  const message = body && typeof body === 'object' && !Array.isArray(body) ? /** @type {any} */ (body) : null;
+  const raw = typeof message?.method === 'string' ? message.method : '';
+  const method = A2A_METHODS_COUNTED.includes(raw) ? raw : (A2A_LEGACY_METHODS[/** @type {keyof typeof A2A_LEGACY_METHODS} */ (raw)] ?? OTHER_A2A_METHOD);
+  const facts = { method, skill: NO_A2A_SKILL, tier: NO_A2A_TIER };
+  if (method !== 'SendMessage') return facts;
+  try {
+    const params = message.params && typeof message.params === 'object' && !Array.isArray(message.params) ? message.params : null;
+    const route = params ? routeFor(params) : null;
+    if (route && typeof route.skill === 'string' && A2A_SKILLS_COUNTED.includes(route.skill)) {
+      facts.skill = route.skill;
+      if (typeof route.tier === 'string' && A2A_TIERS_COUNTED.includes(route.tier)) facts.tier = route.tier;
+    }
+  } catch {
+    // Deliberately empty: a throwing router leaves skill and tier at none.
+  }
+  return facts;
+}
+
+/**
+ * An A2A-hash field, back into its parts. A field that is not exactly what the schema promises is
+ * null, and the caller drops it rather than guessing.
+ *
+ * @param {string} field
+ * @returns {{ hour: string, kind: 'method' | 'skill' | 'tier', value: string } | null}
+ */
+export function parseA2aField(field) {
+  const parts = field.split(FIELD_DELIMITER);
+  const [hour, kind, value] = parts;
+  if (parts.length !== 3 || !/^\d{2}$/.test(hour ?? '')) return null;
+  const allowed = { method: A2A_METHOD_VALUES, skill: A2A_SKILL_VALUES, tier: A2A_TIER_VALUES }[/** @type {'method'} */ (kind)];
+  if (!allowed || !allowed.includes(value)) return null;
+  return { hour, kind: /** @type {'method' | 'skill' | 'tier'} */ (kind), value };
+}
+
+/**
+ * The commands that count one POST to /a2a: three fields and the day set entry.
+ *
+ * @param {{ method: string, skill: string, tier: string }} facts
+ * @param {Date} now
+ */
+export function a2aCensusKeys(facts, now = new Date()) {
+  const day = counterDay(now);
+  const hour = counterHour(now);
+  const key = a2aKeyFor(day);
+  const fields = [
+    [hour, 'method', facts.method].join(FIELD_DELIMITER),
+    [hour, 'skill', facts.skill].join(FIELD_DELIMITER),
+    [hour, 'tier', facts.tier].join(FIELD_DELIMITER),
+  ];
+  const commands = fields.map((field) => ['HINCRBY', key, field, '1']);
+  commands.push(['SADD', DAYS_KEY, day]);
+  return { day, fields, commands };
+}
+
+/**
+ * Count one POST to /a2a in the census. Never throws, never rejects, and returns what it did so a
+ * test can assert the env-absent path made no network call at all. The route fires it through
+ * `waitUntil` beside its recordHit() call, so the write never delays the response. Facts that are
+ * not on the fixed lists are refused here, so the key space stays closed whatever the caller built.
+ *
+ * @param {{ facts: { method: string, skill: string, tier: string }, now?: Date, env?: Record<string, string | undefined>, fetchImpl?: typeof fetch }} request
+ * @returns {Promise<{ ok: boolean, reason?: string, fields?: string[] }>}
+ */
+export async function recordA2aRequest({ facts, now, env = process.env, fetchImpl = fetch }) {
+  try {
+    const store = readStoreConfig(env);
+    if (!store) return { ok: false, reason: 'no-store' };
+    if (
+      !A2A_METHOD_VALUES.includes(facts?.method) ||
+      !A2A_SKILL_VALUES.includes(facts?.skill) ||
+      !A2A_TIER_VALUES.includes(facts?.tier)
+    ) {
+      return { ok: false, reason: 'unlisted-fact' };
+    }
+    const keys = a2aCensusKeys(facts, now ?? new Date());
+    const response = await pipeline(store, keys.commands, fetchImpl);
+    if (!response.ok) return { ok: false, reason: `status-${response.status}`, fields: keys.fields };
+    return { ok: true, fields: keys.fields };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.name : 'error' };
   }
 }
 
