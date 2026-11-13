@@ -13,6 +13,8 @@
  *
  * Reads TEMPORAL_ADDRESS (default localhost:7300), TEMPORAL_NAMESPACE (default default) and
  * CONSULTANT_TASK_QUEUE (default audit-consultant). It needs no model key: the worker holds that.
+ * With TEMPORAL_API_KEY set it connects over TLS with that key, which is how it reaches a Temporal
+ * Cloud namespace; pass the key with `op run`, never on the command line.
  */
 import fs from 'node:fs';
 import { Client, Connection } from '@temporalio/client';
@@ -38,8 +40,15 @@ if (!id || messages.length === 0) {
 const stamp = () => new Date().toISOString().slice(11, 19);
 const log = (...parts: unknown[]) => console.log(stamp(), ...parts);
 
-const connection = await Connection.connect({ address: process.env.TEMPORAL_ADDRESS ?? 'localhost:7300' });
-const client = new Client({ connection, namespace: process.env.TEMPORAL_NAMESPACE ?? 'default' });
+const namespace = process.env.TEMPORAL_NAMESPACE ?? 'default';
+const apiKey = process.env.TEMPORAL_API_KEY?.trim() || undefined;
+const connection = await Connection.connect({
+  address: process.env.TEMPORAL_ADDRESS ?? 'localhost:7300',
+  // A Cloud namespace takes an API key over TLS. The namespace header is redundant against a
+  // namespace endpoint and needed against a regional one, as in the site's src/lib/mcp-temporal.mjs.
+  ...(apiKey ? { tls: true, apiKey, metadata: { 'temporal-namespace': namespace } } : {}),
+});
+const client = new Client({ connection, namespace });
 const taskQueue = process.env.CONSULTANT_TASK_QUEUE ?? DEFAULT_TASK_QUEUE;
 
 const session = flag('--attach')

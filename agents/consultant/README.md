@@ -46,7 +46,7 @@ The worker needs a Temporal server and a Claude key. With a required variable mi
 
 1. Start a dev server: `temporal server start-dev --port 7300 --ui-port 8300`.
 2. Start the worker with `TEMPORAL_ADDRESS=localhost:7300`, `TEMPORAL_NAMESPACE=default` and `ANTHROPIC_API_KEY` set: `npm start -w @mattpyle/consultant`.
-3. Hold a conversation: `npm run converse -w @mattpyle/consultant -- --id demo-1 "Can you check my site?" "What should I fix first?"`. A real audit spends a slot of the public rate limit.
+3. Hold a conversation: `npm run converse -w @mattpyle/consultant -- --id demo-1 "Can you check my site?" "What should I fix first?"`. A real audit spends a slot of the public rate limit. With `TEMPORAL_API_KEY` set, the script connects over TLS with that key, so it reaches a Temporal Cloud namespace.
 
 ## Tests
 
