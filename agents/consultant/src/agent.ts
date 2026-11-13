@@ -116,7 +116,7 @@ export const AuditConsultant = defineAgent({
     const auditSite = tool({
       name: 'audit_site',
       description:
-        'Run a fast agent-readiness audit of one website over plain HTTP. Returns check ids, ' +
+        'Run a fast agent-readiness audit of one website, without a browser. Returns check ids, ' +
         'statuses, severities and counts. Takes seconds.',
       inputSchema: UrlInput,
       outputSchema: ToolResult,
