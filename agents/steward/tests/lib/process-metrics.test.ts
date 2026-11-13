@@ -158,6 +158,38 @@ test('a throwing read is caught, logged once at WARN, and the timer keeps runnin
   }
 });
 
+test('a createGauge that throws leaves startProcessMetrics returning, with one WARN and no timer', () => {
+  mock.timers.enable({ apis: ['setInterval'] });
+  const warnings: unknown[] = [];
+  const meter = {
+    withTags() {
+      return meter;
+    },
+    createGauge() {
+      throw new Error('no gauges today');
+    },
+    createCounter: () => ({ add() {} }),
+  } as unknown as ProcessMeter;
+  let reads = 0;
+  try {
+    const stop = startProcessMetrics(
+      meter,
+      'hosted',
+      () => {
+        reads += 1;
+        return reading();
+      },
+      { warn: (...args: unknown[]) => void warnings.push(args) } as never,
+    );
+    mock.timers.tick(120_000);
+    assert.equal(warnings.length, 1);
+    assert.equal(reads, 0);
+    assert.doesNotThrow(() => stop());
+  } finally {
+    mock.timers.reset();
+  }
+});
+
 test('a throwing gauge is caught the same way', () => {
   const warnings: unknown[] = [];
   const meter = {

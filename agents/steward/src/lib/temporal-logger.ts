@@ -216,6 +216,8 @@ let processMetricsStop: (() => void) | undefined;
  * - The timer is `unref`ed and is not the recycle timer in `worker-hosted.ts`.
  * - A throw from the process read, the meter or a gauge is caught and logged once
  *   at WARN. Later failures stay silent. A metric never hurts the worker.
+ * - A throw while creating the metrics logs once at WARN, starts no timer and
+ *   returns a no-op stop function.
  * - One sampler per process: a second call returns the first one's stop function.
  */
 export function startProcessMetrics(
@@ -226,10 +228,19 @@ export function startProcessMetrics(
 ): () => void {
   if (processMetricsStop) return processMetricsStop;
 
-  const tagged = meter.withTags({ worker_kind: worker });
-  const rss = tagged.createGauge('steward_process_resident_memory', 'int', 'bytes', 'Resident set size of the worker process');
-  const heap = tagged.createGauge('steward_process_heap_used', 'int', 'bytes', 'V8 heap used by the main isolate (not the workflow worker thread)');
-  const cpu = tagged.createCounter('steward_process_cpu', 'ms', 'CPU time used by the worker process');
+  let rss: ReturnType<ProcessMeter['createGauge']>;
+  let heap: ReturnType<ProcessMeter['createGauge']>;
+  let cpu: ReturnType<ProcessMeter['createCounter']>;
+  try {
+    const tagged = meter.withTags({ worker_kind: worker });
+    rss = tagged.createGauge('steward_process_resident_memory', 'int', 'bytes', 'Resident set size of the worker process');
+    heap = tagged.createGauge('steward_process_heap_used', 'int', 'bytes', 'V8 heap used by the main isolate (not the workflow worker thread)');
+    cpu = tagged.createCounter('steward_process_cpu', 'ms', 'CPU time used by the worker process');
+  } catch (err) {
+    // The meter is Experimental: a throw here must not stop the worker starting.
+    sink.warn({ err }, 'process metrics setup failed; process metrics are off for this run');
+    return () => {};
+  }
 
   let prev: ProcessReading | undefined;
   let carry: ProcessSample['carry'] | undefined;
