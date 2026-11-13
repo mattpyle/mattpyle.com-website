@@ -197,10 +197,15 @@ function beforeDeadline<T>(promise: Promise<T>, deadline: number): Promise<T | t
 
 /**
  * What the server holds for a stalled run, for the failure message: the
- * pending workflow task as `describe` reports it, the pending activities, and
- * the history's events from the last completed workflow task onward, with
- * their offsets from the run's first event. Read through the plain client,
- * which needs no worker; bounded at 5 s so a dead server cannot hang it.
+ * pending workflow task, the pending activities, and the run's whole history
+ * with each event's offset from the first. An activity event names its
+ * activity type through its scheduled event, so a refused command such as
+ * "ACTIVITY_UNKNOWN for scheduledEventId=128" can be read against the list.
+ * Read through the plain client, which needs no worker; bounded at 5 s so a
+ * dead server cannot hang it.
+ *
+ * The pending workflow task is read from the history: the time-skipping
+ * test server leaves `pendingWorkflowTask` empty in `describe`.
  *
  * Why: on CI on 2026-11-11 and 2026-11-13 the merge-and-retest test stalled
  * with nothing in its log but Core's "Error while completing workflow
@@ -212,25 +217,58 @@ async function stallReport(handle: WorkflowHandle): Promise<string> {
     const events = history.events ?? [];
     const t0 = events[0]?.eventTime ? tsToMs(events[0].eventTime) : Date.now();
     const at = (ts: Parameters<typeof tsToMs>[0]) => (ts ? `+${tsToMs(ts) - t0} ms` : '');
-    const lastDone = events.findLastIndex((e) => e.eventType === EventType.EVENT_TYPE_WORKFLOW_TASK_COMPLETED);
-    const lines = events.slice(Math.max(lastDone, 0)).map((e) => {
+    const typeOf = new Map<string, string>();
+    for (const e of events) {
+      const name = e.activityTaskScheduledEventAttributes?.activityType?.name;
+      if (name) typeOf.set(String(e.eventId), name);
+    }
+    const scheduledOf = (e: (typeof events)[number]) =>
+      (
+        e.activityTaskCompletedEventAttributes ??
+        e.activityTaskFailedEventAttributes ??
+        e.activityTaskTimedOutEventAttributes ??
+        e.activityTaskCanceledEventAttributes ??
+        e.activityTaskCancelRequestedEventAttributes
+      )?.scheduledEventId;
+    const lines = events.map((e) => {
       const name = EventType[e.eventType ?? 0]?.replace('EVENT_TYPE_', '') ?? String(e.eventType);
+      const scheduled = scheduledOf(e);
       const extra = [
         e.workflowTaskStartedEventAttributes?.identity,
         e.workflowTaskTimedOutEventAttributes ? `timeout ${e.workflowTaskTimedOutEventAttributes.timeoutType}` : null,
         e.workflowTaskFailedEventAttributes ? `cause ${e.workflowTaskFailedEventAttributes.cause}` : null,
         e.activityTaskScheduledEventAttributes?.activityType?.name,
+        scheduled != null ? `${typeOf.get(String(scheduled)) ?? '?'} scheduled at ${scheduled}` : null,
+        e.workflowExecutionUpdateAcceptedEventAttributes?.acceptedRequest?.input?.name,
+        e.workflowExecutionUpdateAdmittedEventAttributes?.request?.input?.name,
+        e.workflowExecutionSignaledEventAttributes?.signalName,
       ].filter(Boolean);
       return `  ${e.eventId} ${name} ${at(e.eventTime)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
     });
+    // The last workflow task event says whether one is open: SCHEDULED or
+    // STARTED with no COMPLETED, FAILED or TIMED_OUT after it.
+    const T = EventType;
+    const lastTask = events.findLast((e) =>
+      [
+        T.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+        T.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+        T.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+        T.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+        T.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+      ].includes(e.eventType as number),
+    );
+    const open =
+      lastTask?.eventType === T.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED || lastTask?.eventType === T.EVENT_TYPE_WORKFLOW_TASK_STARTED;
     const task = described.raw.pendingWorkflowTask;
     const pending = task
-      ? `pending workflow task: ${TaskState[task.state ?? 0]}, attempt ${task.attempt}, scheduled ${at(task.scheduledTime)}, started ${at(task.startedTime) || 'no'}`
-      : 'pending workflow task: none reported';
+      ? `pending workflow task (describe): ${TaskState[task.state ?? 0]}, attempt ${task.attempt}`
+      : open
+        ? `pending workflow task (history): ${EventType[lastTask?.eventType ?? 0]?.replace('EVENT_TYPE_', '')} at event ${lastTask?.eventId}, ${at(lastTask?.eventTime)}`
+        : 'pending workflow task: none';
     const activities = (described.raw.pendingActivities ?? []).map(
       (a) => `pending activity: ${a.activityType?.name}, attempt ${a.attempt}, ${ActivityState[a.state ?? 0]}`,
     );
-    return [`server state at +${Date.now() - t0} ms (wall clock):`, pending, ...activities, 'events from the last completed workflow task:', ...lines].join('\n');
+    return [`server state at +${Date.now() - t0} ms (wall clock):`, pending, ...activities, 'history:', ...lines].join('\n');
   };
   const report = await beforeDeadline(read().catch((err: unknown) => `the history could not be read: ${err}`), Date.now() + 5_000);
   return report === STALLED ? 'the history read did not answer within 5 s' : report;
