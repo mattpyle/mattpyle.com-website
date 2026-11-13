@@ -47,6 +47,9 @@
  * selectors below and that attribute counts as a class, so a retro rule without it loses silently.
  */
 import {
+  A2A_COUNTS_NOTE,
+  A2A_METHODS_LEGEND,
+  A2A_SKILLS_LEGEND,
   FAMILY_NOTES,
   MCP_CLIENTS_LEGEND,
   MCP_CLIENT_NOTES,
@@ -469,6 +472,66 @@ function mcpVersionNote(version: string): string | undefined {
           <p class="state-legend">{MCP_METHODS_LEGEND}</p>
         </section>
       </div>
+
+      {/*
+        The A2A census, since 2026-11-12: what agents send the /a2a endpoint, counted in the route
+        (src/pages/a2a.ts) for the reason /mcp is. The MCP band's markup and classes, unchanged.
+        Like MCP methods it shows a row for every counted value, so a value nobody has sent reads
+        as zero and not as absent. Skills and tiers share one table, told apart by the Kind column.
+      */}
+      <div class="rd-section band-tables band-mcp">
+        <section class="table-half" aria-labelledby="activity-a2a-methods-title">
+          <div class="band-head">
+            <h2 id="activity-a2a-methods-title">A2A methods</h2>
+          </div>
+          <table class="grid-table a2a-method-table">
+            <thead>
+              <tr>
+                <th scope="col" class="c-client">Method</th>
+                <th scope="col" class="c-num">7 days</th>
+                <th scope="col" class="c-num">30 days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activity.a2a.methods.rows.map(row => (
+                <tr>
+                  <td class="c-client">{row.value}</td>
+                  <td class="c-num c-lead">{counts.format(row.week)}</td>
+                  <td class="c-num">{counts.format(row.month)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p class="state-legend">{A2A_METHODS_LEGEND}</p>
+        </section>
+
+        <section class="table-half" aria-labelledby="activity-a2a-skills-title">
+          <div class="band-head">
+            <h2 id="activity-a2a-skills-title">A2A skills and tiers</h2>
+          </div>
+          <table class="grid-table a2a-skill-table">
+            <thead>
+              <tr>
+                <th scope="col" class="c-client">Value</th>
+                <th scope="col" class="c-version">Kind</th>
+                <th scope="col" class="c-num">7 days</th>
+                <th scope="col" class="c-num">30 days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...activity.a2a.skills.rows, ...activity.a2a.tiers.rows].map(row => (
+                <tr>
+                  <td class="c-client">{row.value}</td>
+                  <td class="c-version">{row.kind}</td>
+                  <td class="c-num c-lead">{counts.format(row.week)}</td>
+                  <td class="c-num">{counts.format(row.month)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p class="state-legend">{A2A_SKILLS_LEGEND}</p>
+        </section>
+      </div>
     </Fragment>
   ) : (
     <section class="rd-section band-counts" aria-labelledby="activity-unavailable-title">
@@ -481,7 +544,7 @@ function mcpVersionNote(version: string): string | undefined {
     <div>
       <h2 id="activity-how-title">How this is counted</h2>
       <p class="how-prose">
-        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. {MCP_COUNTS_NOTE} What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
+        Three things are counted at the edge: a fetch of one of this site's agent surfaces, a page served as Markdown to a client that asked for it, and a page fetched by a bot this site can name by its user agent. A page you load in a browser is not counted, and neither is one fetched by a client that did not say what it is. Each counted request is checked for a Web Bot Auth signature, and a bot's address against the ranges its operator publishes; the address is checked and discarded. A signature from a signer this site does not name is also counted by the hostname of the key directory that verified it: the operator's domain, which the operator publishes for exactly this purpose, stored alone and never beside a path, a user agent or an address. {MCP_COUNTS_NOTE} {A2A_COUNTS_NOTE} What is kept is a count per UTC hour — no cookies, no script in your browser, nothing that identifies you.
       </p>
     </div>
     <div class="as-data">
@@ -1028,7 +1091,11 @@ function mcpVersionNote(version: string): string | undefined {
     .mcp-client-table th:last-child,
     .mcp-client-table td:last-child,
     .mcp-method-table th:last-child,
-    .mcp-method-table td:last-child { display: none; }
+    .mcp-method-table td:last-child,
+    .a2a-method-table th:last-child,
+    .a2a-method-table td:last-child,
+    .a2a-skill-table th:last-child,
+    .a2a-skill-table td:last-child { display: none; }
   }
 
   /* ── The bar-height ladder ──────────────────────────────────────────────── */

@@ -1,12 +1,15 @@
 import type { APIRoute } from 'astro';
 import {
+  A2A_COUNTS_NOTE,
+  A2A_METHODS_LEGEND,
+  A2A_SKILLS_LEGEND,
   MCP_CLIENTS_LEGEND,
   MCP_COUNTS_NOTE,
   MCP_METHODS_LEGEND,
   SIGNERS_LEGEND,
   buildActivity,
 } from '../lib/activity-summary.mjs';
-import { flattenMcpHashes, flattenSignerHashes, flattenTraffic, hourStart, readAgentTraffic } from '../lib/agent-traffic.mjs';
+import { flattenA2aHashes, flattenMcpHashes, flattenSignerHashes, flattenTraffic, hourStart, readAgentTraffic } from '../lib/agent-traffic.mjs';
 import {
   MAX_MCP_CLIENTS_PER_DAY,
   MAX_MCP_VERSIONS_PER_DAY,
@@ -73,6 +76,7 @@ export const GET: APIRoute = async () => {
   const activity = buildActivity(flattenTraffic(traffic), renderedAt, {
     signers: flattenSignerHashes(traffic.signerHashes),
     mcp: flattenMcpHashes(traffic.mcpHashes),
+    a2a: flattenA2aHashes(traffic.a2aHashes),
   });
 
   const body = {
@@ -84,7 +88,7 @@ export const GET: APIRoute = async () => {
      * What is counted, in the payload rather than only in the page's prose: a reader of the JSON
      * gets the same scope statement a reader of the page does.
      */
-    counts: 'Fetches of this site\'s agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted. A request whose Web Bot Auth signature verified under a signer this site does not name is also counted by the hostname of the key directory that verified it, and by nothing else. ' + MCP_COUNTS_NOTE,
+    counts: 'Fetches of this site\'s agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted. A request whose Web Bot Auth signature verified under a signer this site does not name is also counted by the hostname of the key directory that verified it, and by nothing else. ' + MCP_COUNTS_NOTE + ' ' + A2A_COUNTS_NOTE,
     counted: activity.counted,
     /** Rolling windows ending at `renderedAt`, so none of them is a calendar period in any zone. */
     totals: {
@@ -197,6 +201,31 @@ export const GET: APIRoute = async () => {
           last30Days: row.month,
         })),
         omitted: activity.mcp.clients.omitted,
+      },
+    },
+    /**
+     * The A2A census: what agents send the /a2a endpoint. Every list has a row for each counted
+     * value, zeros included. `skills` and `tiers` count the same SendMessage requests two ways.
+     */
+    a2a: {
+      methods: {
+        proves: A2A_METHODS_LEGEND,
+        rows: activity.a2a.methods.rows.map(row => ({
+          method: row.value,
+          last24Hours: row.day,
+          last7Days: row.week,
+          last30Days: row.month,
+        })),
+      },
+      skillsAndTiers: {
+        proves: A2A_SKILLS_LEGEND,
+        rows: [...activity.a2a.skills.rows, ...activity.a2a.tiers.rows].map(row => ({
+          kind: row.kind,
+          value: row.value,
+          last24Hours: row.day,
+          last7Days: row.week,
+          last30Days: row.month,
+        })),
       },
     },
     /**

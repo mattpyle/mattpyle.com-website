@@ -292,6 +292,8 @@ export const PAGES: PageSpec[] = [
       '.signer-table tbody tr',
       '.mcp-client-table tbody tr',
       '.mcp-method-table tbody tr',
+      '.a2a-method-table tbody tr',
+      '.a2a-skill-table tbody tr',
     ],
     snapshotRedact: [
       '.stamp-rendered',
@@ -305,6 +307,8 @@ export const PAGES: PageSpec[] = [
       '.signer-table tbody tr',
       '.mcp-client-table tbody tr',
       '.mcp-method-table tbody tr',
+      '.a2a-method-table tbody tr',
+      '.a2a-skill-table tbody tr',
     ],
   },
   {
