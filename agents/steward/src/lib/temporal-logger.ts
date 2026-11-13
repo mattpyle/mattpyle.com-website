@@ -53,7 +53,7 @@ export function temporalLogger(sink?: Parameters<typeof bridgeLogEntry>[1]): Def
   return new DefaultLogger('INFO', (entry) => bridgeLogEntry(entry, sink));
 }
 
-export type WorkerKind = 'hosted' | 'local';
+export type WorkerKind = 'hosted' | 'public' | 'local';
 
 /** The three variables that switch SDK metrics on. All three, or none. */
 const METRICS_URL_VAR = 'STEWARD_METRICS_OTLP_URL';
@@ -192,7 +192,7 @@ let processMetricsStop: (() => void) | undefined;
  * - `steward_process_heap_used_bytes`: gauge, V8 `heapUsed` of the main isolate.
  * - `steward_process_cpu_milliseconds_total`: counter, label `mode` = `user` or `system`.
  *
- * Every series carries `worker_kind` = `hosted` or `local`, the same value as the
+ * Every series carries `worker_kind` = `hosted`, `public` or `local`, the same value as the
  * SDK's `worker` global tag. That tag lands on `target_info`, not on each series,
  * so the series carry their own.
  *
