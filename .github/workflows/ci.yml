@@ -29,6 +29,7 @@ name: CI (tests & typecheck)
 #   Changed file                                        steward  site  browser
 #   Markdown outside src/content/ and
 #     agents/steward/src/                               no       no    no
+#   agents/consultant/** (not Markdown)                 no       no    no
 #   agents/steward/** (not Markdown outside
 #     agents/steward/src/)                              yes      no    no
 #   agents/steward/src/lib/agent-audit/**, and
@@ -42,6 +43,11 @@ name: CI (tests & typecheck)
 #     scripts/vercel-ignore.sh                           yes      yes   yes
 #   src/content/**, src/data/**, package.json            yes      yes   no
 #   anything else outside agents/steward/                no       yes   no
+#
+# A fifth output, `consultant`, runs the audit consultant's job. It is set by
+# agents/consultant/** (not Markdown), package.json, package-lock.json, this file
+# and scripts/route-changes.sh, and by every push to master. The site never
+# imports the package, so a change confined to it sets nothing else.
 #
 #   Change                                              steward_tests runs
 #   a push to master                                     tests/**
@@ -135,6 +141,7 @@ jobs:
       browser: ${{ steps.route.outputs.browser }}
       steward_tests: ${{ steps.route.outputs.steward_tests }}
       steward_changed: ${{ steps.route.outputs.steward_changed }}
+      consultant: ${{ steps.route.outputs.consultant }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -311,3 +318,38 @@ jobs:
       - name: No Steward test reaches this change
         if: steps.select.outputs.tests == ''
         run: echo "No Steward test imports a file this change touches, so the typecheck above is the whole Steward check."
+
+  consultant:
+    name: Audit consultant tests & tsc
+    needs: changes
+    if: needs.changes.outputs.consultant == 'true'
+    runs-on: ubuntu-latest
+    # The suite takes about a minute; this bounds a hang outside a test.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The tests run the agent on a local Temporal dev server with a scripted
+      # model and a stub site: no model call and no site call. The dev server
+      # binary is the one Steward's suites use, from the same cache entry.
+      - name: Restore Temporal dev server binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/steward/temporal-dev-server
+          key: temporal-dev-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run --silent typecheck -w @mattpyle/consultant
+
+      - name: Run audit consultant tests
+        run: npm test -w @mattpyle/consultant

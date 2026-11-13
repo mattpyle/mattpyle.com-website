@@ -1,0 +1,38 @@
+{
+  "name": "@mattpyle/consultant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The audit consultant: a Claude-driven agent on @temporalio/agent-harness that audits a site through the public MCP endpoint and says what matters.",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "start": "node --import tsx --import ./src/sdk-compat.ts src/worker.ts",
+    "converse": "node --import tsx --import ./src/sdk-compat.ts scripts/converse.ts",
+    "test": "node --import tsx --import ./src/sdk-compat.ts --test --test-concurrency=1 --test-timeout=120000 \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.109.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@opentelemetry/api": "1.9.1",
+    "@strands-agents/sdk": "1.24.0",
+    "@temporalio/activity": "1.25.0",
+    "@temporalio/agent-harness": "0.5.0",
+    "@temporalio/agent-harness-worker": "0.5.0",
+    "@temporalio/client": "1.25.0",
+    "@temporalio/common": "1.25.0",
+    "@temporalio/proto": "1.25.0",
+    "@temporalio/worker": "1.25.0",
+    "@temporalio/workflow": "1.25.0",
+    "@temporalio/workflow-streams": "1.25.0",
+    "tsx": "4.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@temporalio/testing": "1.25.0",
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3"
+  }
+}
