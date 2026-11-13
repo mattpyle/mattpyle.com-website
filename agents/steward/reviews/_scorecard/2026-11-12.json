@@ -1,0 +1,5201 @@
+{
+  "iso": "2026-11-12",
+  "timestamp": "2026-11-12T03:47:32-07:00",
+  "scope": "107 live pages",
+  "tools": [
+    "Lighthouse 13.5",
+    "axe-core 4.12"
+  ],
+  "entry": "Nightly · automated",
+  "commentary": "Accessibility moved from Pass to Fail; Accessibility: 100/100, 3 axe violations across 107 tested pages (Fail).",
+  "metrics": [
+    {
+      "name": "Accessibility",
+      "value": "100",
+      "maximum": "100",
+      "status": "Fail",
+      "description": "3 axe violations across 107 tested pages."
+    },
+    {
+      "name": "Performance",
+      "value": "97",
+      "maximum": "100",
+      "status": "Pass",
+      "description": "The lowest Lighthouse performance score across 107 tested pages."
+    },
+    {
+      "name": "SEO",
+      "value": "100",
+      "maximum": "100",
+      "status": "Pass",
+      "description": "The lowest Lighthouse SEO score across 107 tested pages."
+    },
+    {
+      "name": "Agentic Browsing",
+      "value": "6",
+      "maximum": "6",
+      "status": "Pass",
+      "description": "6 of 6 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt, AI catalog, WebMCP form coverage."
+    }
+  ],
+  "readingBudget": {
+    "pages": 107,
+    "text": {
+      "lowest": 49,
+      "url": "https://www.mattpyle.com/writing/"
+    },
+    "markdown": {
+      "lowest": 52,
+      "url": "https://www.mattpyle.com/changelog/public-scorecard/"
+    }
+  },
+  "id": "2026-11-12",
+  "perPage": [
+    {
+      "url": "https://www.mattpyle.com/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 84,
+          "measured": 5778
+        },
+        "markdown": {
+          "share": 90,
+          "measured": 3102
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/about/",
+      "scores": {
+        "performance": 97,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 3,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 76,
+          "measured": 3903
+        },
+        "markdown": {
+          "share": 90,
+          "measured": 3222
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/activity/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 95,
+          "measured": 8000
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/audit/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-form-coverage",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 75,
+          "measured": 3853
+        },
+        "markdown": {
+          "share": 89,
+          "measured": 3892
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 82,
+          "measured": 5364
+        },
+        "markdown": {
+          "share": 93,
+          "measured": 4809
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/activity-agent-identity/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 82,
+          "measured": 5397
+        },
+        "markdown": {
+          "share": 88,
+          "measured": 4965
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/agent-driven-retro-mode/",
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 75,
+          "measured": 3800
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2794
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/agent-reading-budget/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 72,
+          "measured": 3376
+        },
+        "markdown": {
+          "share": 76,
+          "measured": 2622
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/agent-signed-guestbook/",
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 76,
+          "measured": 3907
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2801
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/astro-rebuild/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 60,
+          "measured": 2385
+        },
+        "markdown": {
+          "share": 63,
+          "measured": 1382
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/homepage-activity-from-changelog/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 58,
+          "measured": 2276
+        },
+        "markdown": {
+          "share": 63,
+          "measured": 1520
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/light-theme/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2468
+        },
+        "markdown": {
+          "share": 60,
+          "measured": 1258
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/markdown-post-variants/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 69,
+          "measured": 3101
+        },
+        "markdown": {
+          "share": 75,
+          "measured": 2317
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/public-changelog/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2557
+        },
+        "markdown": {
+          "share": 72,
+          "measured": 1705
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/public-scorecard/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 54,
+          "measured": 2053
+        },
+        "markdown": {
+          "share": 52,
+          "measured": 1223
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/scorecard-run-history/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 70,
+          "measured": 3140
+        },
+        "markdown": {
+          "share": 75,
+          "measured": 2291
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/self-hosted-fonts/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 60,
+          "measured": 2386
+        },
+        "markdown": {
+          "share": 66,
+          "measured": 1629
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/site-live/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2431
+        },
+        "markdown": {
+          "share": 66,
+          "measured": 1557
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/webmcp-resource-page/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 75,
+          "measured": 3839
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2716
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/changelog/webmcp-tools/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2721
+        },
+        "markdown": {
+          "share": 72,
+          "measured": 1879
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 97,
+          "measured": 8000
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/a-changelog-entry-said-homepage-rows-link-to-entries-but-none-do/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2541
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2055
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/a-changelog-entry-writing-slug-md-showed-as-writing-md/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2733
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2228
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/a-project-card-on-the-projects-page-linked-to-the-page-itself/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2506
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2016
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/agents-md-and-the-mcp-document-left-out-the-2025-11-25-revision/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2492
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2019
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/agents-md-named-only-github-and-linkedin-as-ways-to-reach-matt/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 60,
+          "measured": 2393
+        },
+        "markdown": {
+          "share": 77,
+          "measured": 1929
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/agents-md-taught-agents-a-webmcp-call-that-now-fails/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 67,
+          "measured": 2850
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2362
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/asked-how-to-reach-matt-the-sites-a2a-agent-left-out-bluesky/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2602
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2099
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/changelog-entries-hid-the-date-they-were-last-revised/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2509
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 1994
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/changelog-entries-never-said-who-wrote-them-on-the-page/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2454
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 1957
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/feed-readers-west-of-utc-showed-posts-a-day-early/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2548
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2030
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/four-tool-input-tables-on-webmcp-were-silent-tab-stops/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2507
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 1981
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/keyboard-focus-slid-under-the-sticky-header-on-the-webmcp-post/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2532
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2051
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/leaving-retro-mode-with-the-banner-button-dropped-keyboard-focus/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2649
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2185
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/llms-txt-listed-no-rss-feed-for-following-the-site/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2489
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 1972
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/markdown-pages-repeated-a-screen-reader-hint-inside-link-text/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2637
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2145
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/matts-employer-in-the-page-data-had-no-web-address/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2409
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 1904
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/on-a-phone-a-posts-first-sentence-sat-two-screens-down/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 69,
+          "measured": 3084
+        },
+        "markdown": {
+          "share": 85,
+          "measured": 2581
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/on-phones-the-about-page-put-matts-photo-and-job-title-last/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2619
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2127
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/on-phones-the-headers-more-menu-stayed-open-over-the-page/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2650
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2147
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/posts-and-changelog-entries-sent-no-markdown-link-header/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2728
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2224
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/retro-mode-tables-on-steward-drew-their-text-against-the-frame/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2653
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2171
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/screen-readers-spoke-the-slash-in-every-nav-link/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2547
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2045
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-404-page-promised-moved-pages-that-the-changelog-never-lists/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2596
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2122
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-about-page-said-the-code-is-public-without-linking-to-it/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2473
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 1974
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-about-page-was-not-marked-as-matts-profile-page/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2452
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 1947
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-accessibility-post-described-two-filter-widgets-that-were-gone/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2550
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2078
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-activity-client-table-cut-rows-by-a-count-it-did-not-show/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2644
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2137
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-activity-page-counted-the-sites-own-auditor-as-agent-traffic/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2469
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 1994
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-activity-pages-bot-or-agent-column-was-silent-to-screen-readers/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2649
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2206
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-agent-docs-said-a2a-replies-always-use-the-1-0-shape/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2664
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2164
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-agent-index-said-the-homepage-holds-a-bio-which-it-lacks/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2630
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2138
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-audit-check-list-showed-stray-backticks-around-two-terms/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 67,
+          "measured": 2922
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2461
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-audit-form-did-not-mark-a-refused-address-as-invalid/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2533
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2032
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-audit-measured-the-first-callers-page-for-everyone/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 67,
+          "measured": 2864
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2368
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-audit-page-head-had-no-link-to-its-markdown-version/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2547
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2042
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-audit-pages-markdown-held-its-fact-table-as-raw-html/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 67,
+          "measured": 2874
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2382
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-audit-report-page-had-the-same-title-as-the-empty-form/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2500
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2017
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-audits-bad-address-error-asked-for-a-scheme-it-did-not-need/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2591
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2113
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-changelog-feed-carried-no-entry-types-to-filter-on/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 60,
+          "measured": 2363
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 1852
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-changelog-feeds-website-link-opened-the-homepage-not-the-changelog/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2522
+        },
+        "markdown": {
+          "share": 78,
+          "measured": 2067
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-discovery-documents-said-nothing-is-stored-but-reports-were-kept/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 69,
+          "measured": 3069
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2617
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-end-of-post-link-said-next-but-led-to-an-older-post/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2447
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 1943
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-five-experiment-pages-all-shared-the-generic-site-card/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2575
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2109
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-footer-navigation-was-labelled-social-links-for-seven-controls/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2482
+        },
+        "markdown": {
+          "share": 78,
+          "measured": 2025
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-hello-world-post-said-two-public-files-were-private/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 67,
+          "measured": 2921
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2435
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-llms-full-txt-export-ranked-post-sections-above-post-titles/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2727
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2260
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-markdown-check-list-ran-each-name-text-and-weight-together/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2688
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2200
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-markdown-copy-of-a-post-left-out-its-updated-date/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2526
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 1997
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-markdown-index-pages-ran-each-list-item-into-one-line/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 67,
+          "measured": 2899
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2406
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-oldest-post-ended-without-a-link-to-any-other-post/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2524
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2001
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-post-rail-hid-its-rss-link-on-the-longest-post/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2561
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2042
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-projects-page-card-described-this-site-as-static/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2690
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2193
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-projects-page-claimed-every-change-starts-from-a-hypothesis/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2605
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2134
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-reading-budget-entry-cited-a-study-it-never-linked/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 58,
+          "measured": 2274
+        },
+        "markdown": {
+          "share": 78,
+          "measured": 1750
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-repository-readme-said-the-site-has-no-backend/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2611
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2102
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-repository-the-site-invites-readers-to-reuse-had-no-licence/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2489
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2004
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-retro-webmaster-note-lost-focus-and-was-read-out-twice/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2707
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2214
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-scorecard-labelled-a-perfect-accessibility-score-as-a-failure/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2634
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2157
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-signature-row-on-the-agent-page-read-its-signature-agent/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2583
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2093
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-site-description-tools-left-out-the-audit-and-tools-pages/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2659
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2190
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-site-skill-said-llms-full-txt-held-every-published-word/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2594
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2101
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-sitemap-dated-the-projects-page-before-it-existed/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2419
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 1912
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-sites-agent-cited-two-pages-with-redirecting-addresses/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2747
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2270
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-sites-agent-files-called-it-a-portfolio-its-own-page-denied-it/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2597
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2127
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-sites-agent-left-the-mcp-endpoint-out-of-its-surface-list/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2629
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2149
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-sites-agent-said-its-endpoint-takes-send-message-only/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2594
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2120
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-steward-page-never-linked-to-the-code-it-describes/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2509
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2010
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-steward-page-said-every-audit-call-spends-a-dozen-requests/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 66,
+          "measured": 2819
+        },
+        "markdown": {
+          "share": 83,
+          "measured": 2310
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-webmcp-index-gave-every-project-the-same-projects-url/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 65,
+          "measured": 2679
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2190
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-webmcp-post-changed-three-times-but-showed-no-update/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2526
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2025
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-webmcp-post-sent-readers-to-its-tools-through-a-redirect/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 61,
+          "measured": 2468
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 1983
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-webmcp-posts-copyable-handler-skipped-input-checks/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 64,
+          "measured": 2607
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2111
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-webmcp-testing-lines-named-a-chrome-too-old-for-their-code/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 62,
+          "measured": 2487
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2002
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/the-writing-feeds-title-link-opened-the-homepage-not-the-list-of-posts/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2566
+        },
+        "markdown": {
+          "share": 79,
+          "measured": 2115
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/three-required-homepage-form-fields-did-not-say-so/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2568
+        },
+        "markdown": {
+          "share": 81,
+          "measured": 2062
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/two-posts-showed-an-updated-date-for-a-change-nobody-could-see/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 66,
+          "measured": 2812
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2326
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/webmcp-examples-passed-a-json-string-that-chrome-now-rejects/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 67,
+          "measured": 2854
+        },
+        "markdown": {
+          "share": 82,
+          "measured": 2394
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/fix-log/webmcp-read-tools-did-not-declare-themselves-read-only/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 63,
+          "measured": 2551
+        },
+        "markdown": {
+          "share": 80,
+          "measured": 2071
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/projects/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 53,
+          "measured": 2016
+        },
+        "markdown": {
+          "share": 76,
+          "measured": 1373
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/scorecard/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 81,
+          "measured": 4937
+        },
+        "markdown": {
+          "share": 93,
+          "measured": 4445
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/steward/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 96,
+          "measured": 8000
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/webmcp/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 96,
+          "measured": 8000
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/",
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 49,
+          "measured": 1862
+        },
+        "markdown": {
+          "share": 76,
+          "measured": 1249
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/accessibility-and-ai/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 93,
+          "measured": 8000
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/hello-world/",
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 94,
+          "measured": 7606
+        }
+      }
+    },
+    {
+      "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "axeViolations": 0,
+      "agenticChecks": [
+        {
+          "id": "agent-accessibility-tree",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "webmcp-schema-validity",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "cumulative-layout-shift",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "llms-txt",
+          "score": 1,
+          "passed": true
+        },
+        {
+          "id": "ard-schema",
+          "score": 1,
+          "passed": true
+        }
+      ],
+      "readingBudget": {
+        "text": {
+          "share": 95,
+          "measured": 8000
+        },
+        "markdown": {
+          "share": 94,
+          "measured": 8000
+        }
+      }
+    }
+  ],
+  "decision": "open-pr",
+  "reason": "Accessibility Pass→Fail",
+  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/681",
+  "dryRun": false,
+  "archiveId": "2026-11-12"
+}
