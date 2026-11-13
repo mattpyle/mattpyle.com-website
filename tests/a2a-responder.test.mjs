@@ -220,23 +220,23 @@ test('malformed JSON returns -32700 and says what failed', async () => {
 });
 
 test('an unknown method returns -32601 naming the methods that work', async () => {
-  // `CancelTask` rather than `tasks/get`, which this test used until the audit skill arrived:
-  // `tasks/get` is now the accepted 0.x alias for `GetTask`. `CancelTask` is a real A2A method
-  // this endpoint genuinely does not implement, which is the case worth pinning.
+  // `SubscribeToTask`: a real A2A method this endpoint genuinely does not implement. It was
+  // `tasks/get` until the audit skill made that an alias, and `CancelTask` until the consultant
+  // skill implemented it.
   const result = await respond(
-    JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'CancelTask', params: {} }),
+    JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'SubscribeToTask', params: {} }),
     { digest, newId: ids() }
   );
 
   assert.equal(result.payload.error.code, ERROR_CODES.methodNotFound);
-  assert.match(result.payload.error.message, /CancelTask/, 'names what was asked for');
+  assert.match(result.payload.error.message, /SubscribeToTask/, 'names what was asked for');
   assert.match(result.payload.error.message, /"SendMessage"/, 'names what would have worked');
   assert.match(result.payload.error.message, /"GetTask"/, 'and names the other one');
 
   const info = result.payload.error.data[0];
   assert.equal(info['@type'], 'type.googleapis.com/google.rpc.ErrorInfo');
   assert.equal(info.reason, 'METHOD_NOT_FOUND');
-  assert.equal(info.metadata.supported, `${A2A_METHOD},${GET_TASK_METHOD}`);
+  assert.equal(info.metadata.supported, `${A2A_METHOD},${GET_TASK_METHOD},CancelTask`);
   assert.match(info.metadata.acceptedAliases, /tasks\/get/, 'the 0.x spellings are listed too');
   assert.match(info.metadata.agentCard, /\/\.well-known\/agent-card\.json$/);
 });

@@ -106,6 +106,12 @@ export const AuditConsultant = defineAgent({
       );
     };
 
+    /** Records the turn's answer for `consultant_session` and hands it back. No command. */
+    const answered = (text: string) => {
+      session = { ...session, lastReply: { turn: session.turns, text } };
+      return { text };
+    };
+
     /** Counts a tool call; returns a refusal once the turn has used its share. */
     const admitToolCall = (): Refusal | null => {
       if (session.ended) return refused('session_ended');
@@ -187,7 +193,7 @@ export const AuditConsultant = defineAgent({
           session.totalTokens += session.caps.maxOutputTokens;
           const reason = capReached(session, undefined);
           if (reason) end(reason);
-          return { text: TOO_LONG_TEXT };
+          return answered(TOO_LONG_TEXT);
         }
         // Strands accumulates usage over the agent's life, so these are totals, not increments.
         const usage = result.metrics?.accumulatedUsage;
@@ -201,7 +207,7 @@ export const AuditConsultant = defineAgent({
           .join('');
         const reason = capReached(session, result.stopReason);
         if (reason) end(reason);
-        return { text: reply || (reason ? ENDED_TEXT(reason) : '') };
+        return answered(reply || (reason ? ENDED_TEXT(reason) : ''));
       },
     };
   },

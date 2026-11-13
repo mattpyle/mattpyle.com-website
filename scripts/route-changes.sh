@@ -106,6 +106,8 @@ else
         esac
         case "$file" in
           package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh) consultant=true ;;
+          # The site's A2A adapter for the consultant: its integration test lives in the package.
+          src/lib/a2a-consultant-*|src/lib/consultant-task-id.mjs|src/lib/a2a-responder.mjs|src/lib/mcp-temporal.mjs) consultant=true ;;
         esac
         ;;
     esac

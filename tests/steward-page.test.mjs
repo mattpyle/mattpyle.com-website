@@ -80,6 +80,11 @@ test('the limits table renders the caps this deployment enforces, not the defaul
     /readDeepLimits\(process\.env\)/,
     'the deep caps must resolve through readDeepLimits'
   );
+  assert.match(
+    page,
+    /readSessionLimits\(process\.env\)/,
+    'the consultant session caps must resolve through readSessionLimits'
+  );
   assert.doesNotMatch(
     page,
     /\{DEFAULT_[A-Z_]+\}/,

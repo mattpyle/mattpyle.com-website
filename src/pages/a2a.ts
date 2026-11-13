@@ -6,8 +6,9 @@ import {
   runFastAudit,
 } from '@mattpyle/steward/agent-audit/fast';
 import digest from '../data/a2a-digest.json';
-import { A2A_METHOD, A2A_METHODS, GET_TASK_METHOD, respond } from '../lib/a2a-responder.mjs';
-import { AUDIT_SKILL_ID, ASK_SKILL_ID, routeMessage } from '../lib/a2a-audit-skill.mjs';
+import { A2A_METHOD, A2A_METHODS, CANCEL_TASK_METHOD, GET_TASK_METHOD, respond } from '../lib/a2a-responder.mjs';
+import { AUDIT_SKILL_ID, ASK_SKILL_ID, CONSULTANT_SKILL_ID, routeMessage } from '../lib/a2a-audit-skill.mjs';
+import { consultantEngine } from '../lib/a2a-consultant-temporal.mjs';
 import { readText } from '../lib/a2a-rpc.mjs';
 import { A2A_ENDPOINT_PATH, a2aFactsFrom, recordA2aRequest, recordHit } from '../lib/agent-hits.mjs';
 import { identifyRequest } from '../lib/web-bot-auth.mjs';
@@ -17,7 +18,7 @@ import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mcp-temporal.mjs';
 
 /**
- * The A2A endpoint. JSON-RPC 2.0 over POST; two methods; two skills.
+ * The A2A endpoint. JSON-RPC 2.0 over POST; three methods; three skills.
  *
  * All the protocol logic lives in src/lib/a2a-responder.mjs and src/lib/a2a-audit-skill.mjs, both
  * pure and tested; this file is the transport plus the wiring: read the body, hand the responder
@@ -48,6 +49,12 @@ import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mc
  * method, the skill the message routed to and the audit tier it asked for
  * (src/lib/agent-hits.mjs, a2aFactsFrom). Neither write delays the response and neither can fail
  * it. A GET is not a call and is not counted.
+ *
+ * **The third skill, on 2026-11-13: the audit consultant** (src/lib/a2a-consultant-skill.mjs). It
+ * starts and reads a Claude-driven agent's workflow on the same Temporal client the deep tier uses,
+ * by raw call names, and imports nothing from `agents/consultant/`. A new session is charged on the
+ * limiter's session tier, before the start. Without a Temporal connection the skill answers that
+ * it is not configured, and nothing is charged.
  *
  * The digest is a static import, so it is bundled into the function at build time. No fetch, no
  * content-collection read, no cold-start I/O: see scripts/generate-a2a-digest.mjs.
@@ -129,7 +136,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
   countRequest(request, parsed);
 
-  const { status, outcome, payload } = await respond(raw, {
+  const { status, outcome, payload, detail } = await respond(raw, {
     digest,
     newId: () => crypto.randomUUID(),
     now: () => new Date().toISOString(),
@@ -150,6 +157,13 @@ export const POST: APIRoute = async ({ request }) => {
       readTask: readAuditSnapshot,
       renderSummary: renderMarkdownSummary,
     },
+    consultant: DEEP_ENABLED
+      ? {
+          // The same function, store and caller key as the audits, on the session tier's own keys.
+          checkLimit: () => checkRateLimit({ ip: clientIpFrom(request.headers), tier: 'session' }),
+          engine: consultantEngine,
+        }
+      : undefined,
   });
 
   log({
@@ -159,6 +173,8 @@ export const POST: APIRoute = async ({ request }) => {
     status,
     bytes: raw.length,
     ua: request.headers.get('user-agent') ?? '',
+    // An internal error's own text, which the caller's reply leaves out on purpose.
+    ...(detail ? { detail } : {}),
   });
 
   if (payload === null) return new Response(null, { status });
@@ -189,7 +205,7 @@ export const GET: APIRoute = ({ request }) => {
         error: 'This is an A2A endpoint. It speaks JSON-RPC 2.0 over POST, not GET.',
         agentCard: CARD_URL,
         supportedMethods: A2A_METHODS,
-        skills: [ASK_SKILL_ID, AUDIT_SKILL_ID],
+        skills: [ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID],
         example: {
           method: 'POST',
           url: 'https://www.mattpyle.com/a2a',
@@ -224,6 +240,27 @@ export const GET: APIRoute = ({ request }) => {
             },
           },
           then: `Poll ${GET_TASK_METHOD} with the returned task id until the state is TASK_STATE_COMPLETED.`,
+        },
+        consultantExample: {
+          method: 'POST',
+          url: 'https://www.mattpyle.com/a2a',
+          headers: { 'Content-Type': 'application/json' },
+          body: {
+            jsonrpc: '2.0',
+            id: 3,
+            method: A2A_METHOD,
+            params: {
+              message: {
+                role: 'ROLE_USER',
+                messageId: '3',
+                parts: [{ text: 'Can you check my site and tell me what matters?' }],
+                metadata: { skill: CONSULTANT_SKILL_ID },
+              },
+            },
+          },
+          then:
+            `Poll ${GET_TASK_METHOD} with the returned task id. At TASK_STATE_INPUT_REQUIRED, reply with ` +
+            `${A2A_METHOD} and message.taskId set to that id; ${CANCEL_TASK_METHOD} closes the session.`,
         },
         note:
           `The audit skill arrives at the site it audits as \`${AUDIT_USER_AGENT}\` and obeys its ` +

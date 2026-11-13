@@ -44,8 +44,12 @@
  * expected, and the one call that would have worked, because an agent that cannot self-correct
  * from the error will either retry identically or conclude the site is broken.
  *
- * WHAT IT DOES NOT DO: streaming, push notifications, task cancellation, the extended Agent Card,
- * authentication, or any state of its own. There is still no session and no server-side store
+ * THREE SKILLS SINCE 2026-11-13. `consult-on-a-site` is src/lib/a2a-consultant-skill.mjs: a
+ * conversation with a Claude-driven agent, as a multi-turn Task with `input-required` pauses and
+ * `CancelTask`. It is reached only by name or by its task id.
+ *
+ * WHAT IT DOES NOT DO: streaming, push notifications, the extended Agent Card, authentication, or
+ * any state of its own. There is still no session and no server-side store
  * here: the only state either skill has is a Temporal workflow, and `GetTask` reads it rather than
  * remembering it.
  */
@@ -66,6 +70,16 @@ import {
   handleGetTask,
   routeMessage,
 } from './a2a-audit-skill.mjs';
+import {
+  CANCEL_TASK_METHOD,
+  CONSULTANT_SKILL_ID,
+  LEGACY_CANCEL_TASK_METHODS,
+  handleConsultantCancel,
+  handleConsultantGetTask,
+  handleConsultantMessage,
+  isConsultantTaskId,
+} from './a2a-consultant-skill.mjs';
+import { isAuditTaskId } from './audit-task-id.mjs';
 
 /** The message-sending method, in its A2A 1.0 spelling. */
 export const A2A_METHOD = 'SendMessage';
@@ -73,10 +87,10 @@ export const A2A_METHOD = 'SendMessage';
 /** Pre-1.0 spellings accepted from older clients, and answered in the matching dialect. */
 export const LEGACY_METHODS = Object.freeze(['message/send']);
 
-/** Both methods, in both dialects, for the help text and the not-found error. */
-export const A2A_METHODS = Object.freeze([A2A_METHOD, GET_TASK_METHOD]);
+/** The methods, in their 1.0 spelling, for the help text and the not-found error. */
+export const A2A_METHODS = Object.freeze([A2A_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
 
-export { ERROR_CODES, GET_TASK_METHOD, LEGACY_GET_TASK_METHODS };
+export { CANCEL_TASK_METHOD, ERROR_CODES, GET_TASK_METHOD, LEGACY_CANCEL_TASK_METHODS, LEGACY_GET_TASK_METHODS };
 
 /* ------------------------------------------------------------------ formatting helpers */
 
@@ -500,16 +514,17 @@ function validateEnvelope(request) {
   const method = request.method;
   const sendMessage = method === A2A_METHOD || LEGACY_METHODS.includes(method);
   const getTask = method === GET_TASK_METHOD || LEGACY_GET_TASK_METHODS.includes(method);
-  if (!sendMessage && !getTask) {
+  const cancelTask = method === CANCEL_TASK_METHOD || LEGACY_CANCEL_TASK_METHODS.includes(method);
+  if (!sendMessage && !getTask && !cancelTask) {
     return {
       refusal: {
         outcome: `method-not-found/${method}`,
         notification: isNotification,
-        payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements two methods: "${A2A_METHOD}", and "${GET_TASK_METHOD}" for polling a Task the audit skill started. Streaming, push notifications, task cancellation and the extended Agent Card are not implemented; the Agent Card at ${AGENT_CARD_URL} declares the same thing.`, [
+        payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements three methods: "${A2A_METHOD}", "${GET_TASK_METHOD}" for reading a Task, and "${CANCEL_TASK_METHOD}" for closing a consultant session. Streaming, push notifications and the extended Agent Card are not implemented; the Agent Card at ${AGENT_CARD_URL} declares the same thing.`, [
           errorInfo('METHOD_NOT_FOUND', {
             requested: method,
             supported: A2A_METHODS.join(','),
-            acceptedAliases: [...LEGACY_METHODS, ...LEGACY_GET_TASK_METHODS].join(','),
+            acceptedAliases: [...LEGACY_METHODS, ...LEGACY_GET_TASK_METHODS, ...LEGACY_CANCEL_TASK_METHODS].join(','),
             agentCard: AGENT_CARD_URL,
           }),
         ]),
@@ -521,8 +536,11 @@ function validateEnvelope(request) {
   // outcome token rather than a new log field because the token is the whole dataset until the
   // hit counter exists, and it is a prefix rather than a suffix because the tokens already carry
   // slashes of their own (`method-not-found/CancelTask`).
-  const legacy = LEGACY_METHODS.includes(method) || LEGACY_GET_TASK_METHODS.includes(method);
-  return { id, isNotification, method, legacy, dialect: legacy ? 'legacy/' : '', getTask };
+  const legacy =
+    LEGACY_METHODS.includes(method) ||
+    LEGACY_GET_TASK_METHODS.includes(method) ||
+    LEGACY_CANCEL_TASK_METHODS.includes(method);
+  return { id, isNotification, method, legacy, dialect: legacy ? 'legacy/' : '', getTask, cancelTask };
 }
 
 /** The caller's thread id where they set one, and a fresh one otherwise. */
@@ -590,16 +608,47 @@ function handleAsk(text, params, { id, legacy, dialect }, { digest, newId }) {
  * rather than quietly answered as the other skill, because a caller who asked for an audit and got
  * a description of the site would read it as the answer.
  */
-function notConfigured(id) {
+function notConfigured(id, skill = AUDIT_SKILL_ID) {
   return {
-    outcome: 'audit-unavailable/not-configured',
+    outcome: `${skill === AUDIT_SKILL_ID ? 'audit' : 'consultant'}-unavailable/not-configured`,
     payload: errorResponse(
       id,
       ERROR_CODES.internal,
-      'The audit skill is not available on this deployment. The ask-about-site skill is unaffected.',
-      [errorInfo('SKILL_NOT_CONFIGURED', { skill: AUDIT_SKILL_ID })]
+      skill === AUDIT_SKILL_ID
+        ? 'The audit skill is not available on this deployment. The ask-about-site skill is unaffected.'
+        : `The ${skill} skill is not available on this deployment. The ask-about-site skill is unaffected.`,
+      [errorInfo('SKILL_NOT_CONFIGURED', { skill })]
     ),
   };
+}
+
+/** A task id from `GetTask` or `CancelTask` params, or null when there is none to read. */
+function taskIdParam(params) {
+  const taskId = params && typeof params === 'object' && !Array.isArray(params) ? params.id : undefined;
+  return typeof taskId === 'string' && taskId.trim() !== '' ? taskId : null;
+}
+
+/** `CancelTask`: only a consultant session can be closed. An audit is not cancelable over A2A. */
+async function handleCancel(id, params, legacy, context) {
+  const taskId = taskIdParam(params);
+  if (taskId === null) {
+    return {
+      outcome: 'invalid-params/task-id',
+      payload: errorResponse(id, ERROR_CODES.invalidParams, `Invalid parameters. ${CANCEL_TASK_METHOD} takes the task's id, which is the id SendMessage returned when it started a ${CONSULTANT_SKILL_ID} session.`, [
+        badRequest([{ field: 'id', description: 'Must be a non-empty task id string.' }]),
+      ]),
+    };
+  }
+  if (isAuditTaskId(taskId)) {
+    return {
+      outcome: 'task-not-cancelable/audit',
+      payload: errorResponse(id, ERROR_CODES.taskNotCancelable, `Task "${taskId}" is an audit, and an audit runs to its end, so it cannot be canceled. Only a ${CONSULTANT_SKILL_ID} session can.`, [
+        errorInfo('TASK_NOT_CANCELABLE', { taskId }),
+      ]),
+    };
+  }
+  if (!context.consultant) return notConfigured(id, CONSULTANT_SKILL_ID);
+  return handleConsultantCancel({ id, taskId, contextId: context.newId(), legacy, newId: context.newId, now: context.now, consultant: context.consultant });
 }
 
 /**
@@ -616,8 +665,8 @@ async function handleRequest(request, context) {
   const envelope = validateEnvelope(request);
   if (envelope.refusal) return envelope.refusal;
 
-  const { id, isNotification, legacy, dialect, getTask } = envelope;
-  const { newId, now = () => new Date().toISOString(), audit } = context;
+  const { id, isNotification, legacy, dialect, getTask, cancelTask } = envelope;
+  const { newId, now = () => new Date().toISOString(), audit, consultant } = context;
   const params = request.params;
   const settled = (handled) => ({
     ...handled,
@@ -625,8 +674,19 @@ async function handleRequest(request, context) {
     notification: isNotification,
   });
 
+  if (cancelTask) return settled(await handleCancel(id, params, legacy, { newId, now, consultant }));
+
+  if (getTask && isConsultantTaskId(taskIdParam(params))) {
+    if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
+    return settled(
+      await handleConsultantGetTask({ id, taskId: taskIdParam(params), contextId: newId(), legacy, newId, now, consultant })
+    );
+  }
+
   if (getTask) {
-    if (!audit) return settled(notConfigured(id));
+    // Only an audit id needs the audit engine. Any other id is refused as not found, which
+    // handleGetTask does before it reads anything.
+    if (!audit && isAuditTaskId(taskIdParam(params))) return settled(notConfigured(id));
     return settled(
       await handleGetTask({
         id,
@@ -635,7 +695,7 @@ async function handleRequest(request, context) {
         contextId: newId(),
         newId,
         now,
-        audit,
+        audit: audit ?? {},
       })
     );
   }
@@ -674,6 +734,23 @@ async function handleRequest(request, context) {
   // an audit verb AND a token naming a site, or the skill named outright in metadata. That is what
   // leaves `ask-about-site` answering exactly as it did — none of its questions names a site.
   const route = routeMessage(params, text);
+  if (route.skill === CONSULTANT_SKILL_ID) {
+    if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
+    const inbound = params.message?.taskId;
+    return settled(
+      await handleConsultantMessage({
+        id,
+        params,
+        text,
+        taskId: typeof inbound === 'string' && inbound !== '' ? inbound : null,
+        contextId: contextIdFor(params, newId),
+        legacy,
+        newId,
+        now,
+        consultant,
+      })
+    );
+  }
   if (route.skill === AUDIT_SKILL_ID) {
     if (!audit) return settled(notConfigured(id));
     return settled(
@@ -696,12 +773,15 @@ async function handleRequest(request, context) {
  * Handle one raw request body.
  *
  * @param {string} rawBody
- * @param {{ digest: object, newId: () => string, now?: () => string, audit?: object }} context
+ * @param {{ digest: object, newId: () => string, now?: () => string, audit?: object,
+ *           consultant?: object }} context
+ *   `consultant` is the consultant skill's limiter and engine, `{ checkLimit, engine }`.
  *   `audit` is the audit skill's engine, injected: `originFor`, `checkLimit`, `runFast`,
  *   `startDeep`, `readTask` and `renderSummary`. Absent, the endpoint serves `ask-about-site`
  *   alone, which is what keeps this module free of everything that half needs.
- * @returns {Promise<{ status: number, outcome: string, payload: object | null }>} payload null
- *   means send no body (a JSON-RPC notification).
+ * @returns {Promise<{ status: number, outcome: string, payload: object | null, detail?: string }>}
+ *   payload null means send no body (a JSON-RPC notification). `detail` is an internal error's
+ *   text, for the log line only.
  */
 export async function respond(rawBody, context) {
   let request;
@@ -719,8 +799,14 @@ export async function respond(rawBody, context) {
     };
   }
 
-  const { outcome, payload, notification } = await handleRequest(request, context);
+  const { outcome, payload, notification, detail } = await handleRequest(request, context);
   // JSON-RPC errors ride a 200: the HTTP call succeeded, the RPC did not, and a client that reads
   // the status instead of the envelope would otherwise never see the error it needs to correct.
-  return { status: notification ? 204 : 200, outcome, payload: notification ? null : payload };
+  // `detail` is for the function's log only, and never part of the payload.
+  return {
+    status: notification ? 204 : 200,
+    outcome,
+    payload: notification ? null : payload,
+    ...(detail ? { detail } : {}),
+  };
 }

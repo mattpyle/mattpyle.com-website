@@ -17,6 +17,15 @@
  * | fast | Global | 500 audits | UTC day | `mcp:v1:global:<utc-day>` |
  * | deep | Per caller | 2 audits | UTC day | `mcp:v1:deep:caller:<hmac>:<utc-day>` |
  * | deep | Global | 10 audits | UTC day | `mcp:v1:deep:global:<utc-day>` |
+ * | session | Per caller | 3 sessions | UTC day | `mcp:v1:session:caller:<hmac>:<utc-day>` |
+ * | session | Global | 20 sessions | UTC day | `mcp:v1:session:global:<utc-day>` |
+ *
+ * **The session tier bounds the audit consultant** (src/lib/a2a-consultant-skill.mjs). One session
+ * is a Claude-driven conversation whose own caps (turns, tokens, one deep audit) bound what it can
+ * spend; these counters bound how many sessions strangers can open in a day, which is the bound
+ * the consultant's caps leave to its starter. A session is charged once, when it starts, and never
+ * for a later message on it. Its audits are not charged here: the agent reaches the audit tiers
+ * through `/mcp` like any other caller, on the counters above.
  *
  * **Why the deep numbers are two orders of magnitude smaller.** A fast audit is a
  * dozen HTTP round trips inside the function that answered the request: it prices
@@ -62,6 +71,8 @@
  * | `MCP_AUDIT_RATE_GLOBAL_PER_DAY` | Fast audits the endpoint runs per UTC day. Default 500. |
  * | `MCP_DEEP_RATE_PER_CALLER` | Deep audits one caller may start per UTC day. Default 2. |
  * | `MCP_DEEP_RATE_GLOBAL_PER_DAY` | Deep audits the endpoint starts per UTC day. Default 10. |
+ * | `A2A_SESSION_RATE_PER_CALLER` | Consultant sessions one caller may start per UTC day. Default 3. |
+ * | `A2A_SESSION_RATE_GLOBAL_PER_DAY` | Consultant sessions the endpoint starts per UTC day. Default 20. |
  * | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | The store. `KV_REST_API_URL` / `_TOKEN` is read too. |
  *
  * Setting the secret is what turns the endpoint on, which is the right way round: a deploy that
@@ -117,6 +128,10 @@ export const DEFAULT_GLOBAL_PER_DAY = 500;
 export const DEFAULT_DEEP_PER_CALLER = 2;
 export const DEFAULT_DEEP_GLOBAL_PER_DAY = 10;
 
+/** The session tier's, both per UTC day: the audit consultant's new sessions. */
+export const DEFAULT_SESSION_PER_CALLER = 3;
+export const DEFAULT_SESSION_GLOBAL_PER_DAY = 20;
+
 /** One request's worth of budget against the store. Past this the audit is refused, not admitted. */
 const STORE_TIMEOUT_MS = 1500;
 
@@ -167,6 +182,23 @@ export function readDeepLimits(env) {
   return {
     perCaller: positive(env.MCP_DEEP_RATE_PER_CALLER, DEFAULT_DEEP_PER_CALLER),
     globalPerDay: positive(env.MCP_DEEP_RATE_GLOBAL_PER_DAY, DEFAULT_DEEP_GLOBAL_PER_DAY),
+  };
+}
+
+/**
+ * The session tier's limits, from the environment, with the same rule. Both are per UTC day, for
+ * the deep tier's reason: the cost being bounded is a daily model bill.
+ *
+ * @param {Record<string, string | undefined>} env
+ */
+export function readSessionLimits(env) {
+  const positive = (raw, fallback) => {
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+  };
+  return {
+    perCaller: positive(env.A2A_SESSION_RATE_PER_CALLER, DEFAULT_SESSION_PER_CALLER),
+    globalPerDay: positive(env.A2A_SESSION_RATE_GLOBAL_PER_DAY, DEFAULT_SESSION_GLOBAL_PER_DAY),
   };
 }
 
@@ -283,6 +315,16 @@ export function deepGlobalKeyFor(day) {
   return `mcp:${KEY_VERSION}:deep:global:${day}`;
 }
 
+/** `mcp:v1:session:caller:<hmac>:<utc-day>`: one caller, one UTC day, consultant sessions. */
+export function sessionCallerKeyFor(hash, day) {
+  return `mcp:${KEY_VERSION}:session:caller:${hash}:${day}`;
+}
+
+/** `mcp:v1:session:global:<utc-day>`: everyone, one UTC day, consultant sessions. */
+export function sessionGlobalKeyFor(day) {
+  return `mcp:${KEY_VERSION}:session:global:${day}`;
+}
+
 /**
  * One counter's worth of Redis: increment it, then set its TTL to the time left in its window.
  *
@@ -341,7 +383,7 @@ async function increment(store, fetchImpl, key, ttlSeconds) {
  *
  * @param {{
  *   ip: string | null,
- *   tier?: 'fast' | 'deep',
+ *   tier?: 'fast' | 'deep' | 'session',
  *   env?: Record<string, string | undefined>,
  *   now?: Date,
  *   fetchImpl?: typeof fetch,
@@ -361,7 +403,7 @@ export async function checkRateLimit({
 }) {
   const fast = readLimits(env);
   const deep = readDeepLimits(env);
-  const limits = tier === 'deep' ? deep : fast;
+  const limits = tier === 'deep' ? deep : tier === 'session' ? readSessionLimits(env) : fast;
   const secret = env.MCP_AUDIT_RATE_SECRET;
 
   // The three refusals that are the endpoint's own fault. Each says which, because an operator
@@ -400,12 +442,23 @@ export async function checkRateLimit({
   // The two tiers differ in exactly two places: which keys are incremented, and
   // how long the per-caller window is. The deep tier's per-caller window is the
   // UTC day, so both of its counters expire together.
-  const window = tier === 'deep' ? day : windowFor(now, fast.windowSeconds);
+  // The session tier is the deep tier's shape on its own keys.
+  const daily = tier === 'deep' || tier === 'session';
+  const window = daily ? day : windowFor(now, fast.windowSeconds);
   const callerKey =
-    tier === 'deep' ? deepCallerKeyFor(hash, day.day) : callerKeyFor(hash, window.index);
-  const globalKey = tier === 'deep' ? deepGlobalKeyFor(day.day) : globalKeyFor(day.day);
-  const unit = tier === 'deep' ? 'deep audits' : 'audits';
-  const per = tier === 'deep' ? 'today' : 'in the current window';
+    tier === 'deep'
+      ? deepCallerKeyFor(hash, day.day)
+      : tier === 'session'
+        ? sessionCallerKeyFor(hash, day.day)
+        : callerKeyFor(hash, window.index);
+  const globalKey =
+    tier === 'deep'
+      ? deepGlobalKeyFor(day.day)
+      : tier === 'session'
+        ? sessionGlobalKeyFor(day.day)
+        : globalKeyFor(day.day);
+  const unit = tier === 'deep' ? 'deep audits' : tier === 'session' ? 'consultant sessions' : 'audits';
+  const per = daily ? 'today' : 'in the current window';
 
   try {
     // Caller first, and only then global: a caller past their own limit must not spend the day's

@@ -10,6 +10,8 @@
  *   count moved to the provider's total, and a turn that hits the output limit is caught and rolled
  *   back. It replays clean across both. Exported with `temporal workflow show -o json`.
  * - `proof-final.json` is the same path on the code as merged, written by `scripts/converse.ts`.
+ * - Both replay clean across `lastReply` on `consultant_session`, which records state and issues
+ *   no command.
  *
  * Probe: a `sleep('1 second')` added at the top of the `ask` handler made this test fail with a
  * nondeterminism error; removing it made it pass again.

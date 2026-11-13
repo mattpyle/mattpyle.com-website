@@ -20,7 +20,7 @@ import Layout from '../layouts/Layout.astro';
 import StewardHero from '../components/steward/StewardHero.astro';
 import StewardBody from '../components/steward/StewardBody.astro';
 import { STEWARD_FAST_CHECKS, STEWARD_CHECK_CATEGORIES } from '../data/steward-audit-checks.mjs';
-import { readLimits, readDeepLimits } from '../lib/mcp-rate-limit.mjs';
+import { readLimits, readDeepLimits, readSessionLimits } from '../lib/mcp-rate-limit.mjs';
 import { markdownSiblingFor } from '../lib/markdown-negotiation.mjs';
 import { DIRECTORY_PATH, SIGNATURE_AGENT_CARD_PATH } from '../lib/steward-identity.mjs';
 
@@ -57,6 +57,7 @@ const ISSUES_URL = `${REPO_URL}/issues`;
  */
 const fastLimits = readLimits(process.env);
 const deepLimits = readDeepLimits(process.env);
+const sessionLimits = readSessionLimits(process.env);
 
 const windowHours = fastLimits.windowSeconds / 3600;
 
@@ -68,7 +69,7 @@ const byCategory = STEWARD_CHECK_CATEGORIES.map(category => ({
 const windowLabel = windowHours === 1 ? 'One hour' : `${windowHours} hours`;
 
 /**
- * The four rate-limit rows, built once so the redesigned table and the legacy one cannot disagree
+ * The rate-limit rows, built once so the redesigned table and the legacy one cannot disagree
  * about what this deployment enforces.
  */
 const limitRows = [
@@ -76,6 +77,8 @@ const limitRows = [
   { tier: 'Fast', scope: 'Everyone together', cap: `${fastLimits.globalPerDay}`, window: 'One UTC day' },
   { tier: 'Deep', scope: 'Per caller', cap: `${deepLimits.perCaller}`, window: 'One UTC day' },
   { tier: 'Deep', scope: 'Everyone together', cap: `${deepLimits.globalPerDay}`, window: 'One UTC day' },
+  { tier: 'Consultant session', scope: 'Per caller', cap: `${sessionLimits.perCaller}`, window: 'One UTC day' },
+  { tier: 'Consultant session', scope: 'Everyone together', cap: `${sessionLimits.globalPerDay}`, window: 'One UTC day' },
 ];
 
 const refusalSnippet = `User-agent: ${AGENT_TOKEN}\nDisallow: /`;

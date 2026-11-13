@@ -56,7 +56,7 @@ Every representation is also fetchable directly, at the page's own path with `.m
 
 ## A2A (experimental)
 
-This site is an A2A participant. There is an Agent Card at `/.well-known/agent-card.json` and a live endpoint at `/a2a`, and between them they do two things: answer questions about this site, and audit a site you name for agent-readiness.
+This site is an A2A participant. There is an Agent Card at `/.well-known/agent-card.json` and a live endpoint at `/a2a`, and between them they do three things: answer questions about this site, audit a site you name for agent-readiness, and hold a conversation with the audit consultant, a Claude-driven agent.
 
 | | |
 |---|---|
@@ -64,8 +64,8 @@ This site is an A2A participant. There is an Agent Card at `/.well-known/agent-c
 | Endpoint | `https://www.mattpyle.com/a2a` |
 | Binding | JSON-RPC 2.0 over HTTPS POST, `Content-Type: application/json` |
 | Protocol version | A2A 1.0 |
-| Methods | `SendMessage`, and `GetTask` for polling a Task |
-| Skills | `ask-about-site` and `audit-a-site` |
+| Methods | `SendMessage`, `GetTask` for polling a Task, and `CancelTask` for closing a consultant session |
+| Skills | `ask-about-site`, `audit-a-site` and `consult-on-a-site` |
 | Auth | None. Read-only or outbound-only; no accounts and no private data. |
 
 `ask-about-site` answers who Matt is, what he has written and built, what shipped recently, and which agent surfaces exist. Its reply is a direct `Message`, not a `Task`: one read-only turn with no state to track, so there is nothing to poll to completion. Replies come back as `text/markdown` in the voice of this site's retro webmaster, with the facts and URLs compiled from the site's own published content at build time. Nothing it returns is unavailable to a plain `fetch`.
@@ -83,6 +83,15 @@ Both tiers hand back the report twice in the one response: as markdown, and as i
 - **The auditor is Steward.** It obeys the target's robots.txt under the token `steward-audit` and arrives as `steward-audit/0.2.0 (+https://www.mattpyle.com/steward)`, so one audit is one visitor in the target's log. `/steward` says what an audit costs a site and how to refuse it.
 - **Audits are rate limited per caller and per day, on a budget shared with the MCP endpoint** at `https://www.mattpyle.com/mcp`. A deep slot spent on either protocol is spent on both. Deep audits are capped far lower than fast ones, because each spends real browser time on a hosted worker. A refusal is `-32000` naming which limit was hit and when to retry. Reading a Task with `GetTask` is free.
 - **No model is involved anywhere in this path.** The skill starts audits and reports state; it does not interpret a report or answer questions about one.
+
+`consult-on-a-site` is the audit consultant: a Claude-driven agent that audits a site and says what matters. The model decides the path: whether to audit, which tier, and when to ask you a question. It runs as a durable Temporal workflow, and the Task id is that workflow's id.
+
+1. Start a session by name: `SendMessage` with `metadata` `{"skill": "consult-on-a-site"}` and no task id. Plain text never reaches this skill. The reply is a `Task` in `TASK_STATE_WORKING`.
+2. Poll `GetTask` with the task's id. `TASK_STATE_INPUT_REQUIRED` means it waits for you, and `metadata.awaiting` says for what: `answer` for a question it asked, `approval` for a deep audit it wants to run, or `message` when it has answered. The status message carries the question or the answer.
+3. Reply with `SendMessage` and `message.taskId` set to the id. Answer a deep-audit request with "yes" or "no", or with `metadata` `{"approve": true}` or `false`.
+4. `CancelTask` closes the session, and it then reads `TASK_STATE_CANCELED`. A session that reaches one of its caps, or sits idle for 30 minutes, reads `TASK_STATE_COMPLETED` with `metadata.ended` naming why.
+
+New sessions are rate limited per caller and per day; the caps in force are on [/steward](https://www.mattpyle.com/steward). The consultant audits through the MCP endpoint like any other caller, and it sees check results, never the audited site's text.
 
 A minimal call:
 
@@ -109,13 +118,37 @@ curl -sS https://www.mattpyle.com/a2a \
        "params":{"id":"steward-audit-example.com-deep-1a2b3c4d"}}'
 ```
 
+A consultant session, started, polled and answered:
+
+```bash
+curl -sS https://www.mattpyle.com/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"SendMessage",
+       "params":{"message":{"role":"ROLE_USER","messageId":"1",
+                            "parts":[{"text":"Can you check my site and tell me what matters?"}],
+                            "metadata":{"skill":"consult-on-a-site"}}}}'
+
+curl -sS https://www.mattpyle.com/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"GetTask",
+       "params":{"id":"a2a-consultant-<the id from the first reply>"}}'
+
+curl -sS https://www.mattpyle.com/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"SendMessage",
+       "params":{"message":{"role":"ROLE_USER","messageId":"2",
+                            "taskId":"a2a-consultant-<the id>",
+                            "parts":[{"text":"www.example.com"}]}}}'
+```
+
 Notes for anyone calling it:
 
 - **The method is `SendMessage`, not `message/send`.** A2A 1.0 (spec §9.1) renamed the JSON-RPC methods to PascalCase matching gRPC. The 0.x `message/send` spelling is accepted here as an alias, per the migration guidance in the spec's Appendix A.2, and is answered in the 0.x dialect it was asked in (`kind` discriminators, lowercase roles and task states).
 - **Text parts are the 1.0 shape**, `{"text": "..."}`, with no `kind` discriminator. The 0.x `{"kind":"text","text":"..."}` form is also read, since the member is in the same place either way.
 - **Errors ride an HTTP 200** with a JSON-RPC error object, as JSON-RPC intends. `error.data` is an array of objects each carrying an `@type`, per spec §9.5. An unknown method returns `-32601` naming the one method that works; a message with no text part returns `-32602` naming the field.
 - **`GetTask` takes `{"id": "..."}`**, and the 0.x `tasks/get` spelling is accepted as an alias on the same terms as `message/send`. An id this endpoint did not issue returns `-32001`, A2A's `TaskNotFoundError`.
-- **Not implemented:** streaming, push notifications, task cancellation, the extended Agent Card, and authentication. The Agent Card declares the capabilities it has as false rather than leaving you to find out. Polling `GetTask` is what stands in for streaming here.
+- **`CancelTask` takes `{"id": "..."}`**, with `tasks/cancel` as its 0.x alias. Only a consultant session can be canceled; an audit runs to its end and returns `-32002`, A2A's `TaskNotCancelableError`.
+- **Not implemented:** streaming, push notifications, the extended Agent Card, and authentication. The Agent Card declares the capabilities it has as false rather than leaving you to find out. Polling `GetTask` is what stands in for streaming here.
 - **A `GET`** returns `405` with a worked example of each skill, rather than a bare status.
 - This is an experiment on a personal site, not a supported API, and it may be withdrawn without notice.
 

@@ -193,6 +193,16 @@
           - cell "Everyone together"
           - cell /\d+/
           - cell "One UTC day"
+        - row /Consultant session Per caller \d+ One UTC day/:
+          - cell "Consultant session"
+          - cell "Per caller"
+          - cell /\d+/
+          - cell "One UTC day"
+        - row /Consultant session Everyone together \d+ One UTC day/:
+          - cell "Consultant session"
+          - cell "Everyone together"
+          - cell /\d+/
+          - cell "One UTC day"
     - paragraph:
       - text: A refusal is a JSON-RPC error with a
       - code: Retry-After
