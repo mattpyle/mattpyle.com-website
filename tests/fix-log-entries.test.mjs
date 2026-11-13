@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { readFixMetadata } from '../scripts/lib/fix-metadata.mjs';
 import { ENTRIES_DIR, FORBIDDEN, entryFile, entryText, readEntries, readFinding, readFindings } from '../scripts/fix-log-entries.mjs';
 
 /**
@@ -241,4 +242,29 @@ test('the sitemap date is the later of verified and updated, in Vancouver time',
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('the dependency-free reader agrees with the js-yaml reader on every real entry', () => {
+  const expected = new Map();
+  const day = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });
+  for (const e of readEntries(ENTRIES_DIR)) {
+    const dates = [day(new Date(e.data.verified)), ...(e.data.updated ? [new Date(e.data.updated).toISOString().slice(0, 10)] : [])];
+    expected.set(e.data.slug, { draft: false, lastmod: dates.sort().at(-1), key: String(e.key) });
+  }
+  assert.ok(expected.size > 0, 'the collection has entries');
+  assert.deepEqual(readFixMetadata(ENTRIES_DIR), expected);
+});
+
+test('the dependency-free reader ignores indented keys, accepts CRLF, and keeps its refusals', () => {
+  const entry = (extra = '', body = '') => `---\r\nkey: MP-1\r\nslug: 'a-slug'\r\nverified: 2026-11-01T10:00:00Z\r\n${extra}changes:\r\n  - title: "x"\r\n    updated: nonsense\r\n---\r\n${body}`;
+  withFindings(
+    { 'mp-1.md': entry('updated: 2026-11-05\r\n') },
+    (dir) => assert.deepEqual([...readFixMetadata(dir)], [['a-slug', { draft: false, lastmod: '2026-11-05', key: 'MP-1' }]]),
+  );
+  withFindings({ 'mp-1.md': entry() }, (dir) => assert.equal(readFixMetadata(dir).get('a-slug').lastmod, '2026-11-01'));
+  withFindings({ 'mp-1.md': entry().replace('key: MP-1', 'name: x') }, (dir) => assert.throws(() => readFixMetadata(dir), /needs a key/));
+  withFindings({ 'mp-1.md': entry().replace("slug: 'a-slug'", 'slug: ""') }, (dir) => assert.throws(() => readFixMetadata(dir), /needs a slug/));
+  withFindings({ 'mp-1.md': entry().replace('2026-11-01T10:00:00Z', 'soon') }, (dir) => assert.throws(() => readFixMetadata(dir), /"verified" is not a date/));
+  withFindings({ 'mp-1.md': entry('updated: later\r\n') }, (dir) => assert.throws(() => readFixMetadata(dir), /"updated" is not a date/));
+  withFindings({ 'mp-1.md': entry(), 'mp-2.md': entry() }, (dir) => assert.throws(() => readFixMetadata(dir), /used twice/));
 });
