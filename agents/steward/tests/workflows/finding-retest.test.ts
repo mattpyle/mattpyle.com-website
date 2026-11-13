@@ -47,11 +47,13 @@ import { FAKE_APP_SLUG } from '../helpers/fake-github-app.js';
  * `Client` and the `state` query.
  *
  * The server is a real dev server (`createLocalEnv`), not the time-skipping
- * test server (STW-593). In the merge-and-retest test the Update can win the
- * race, so the workflow cancels the merge poll; the test server then refused
- * the workflow task's completion with `ACTIVITY_UNKNOWN` and held the task
- * until its timeout, about one CI run in two. No test here depends on skipped
- * time: the `requestFixSlot` mock answers `dispatched: false`, so the 6-hour
+ * test server (STW-593). In CI run 43354788359 the test server refused one
+ * workflow task completion in the merge-and-retest test with
+ * `ACTIVITY_UNKNOWN for scheduledEventId=128`, recorded no failure, and held
+ * the task until its timeout. One reading, not proven: the Update won its
+ * race and the refused command was the cancel of the merge poll.
+ *
+ * No test here depends on skipped time: the `requestFixSlot` mock answers `dispatched: false`, so the 6-hour
  * slot resend is never reached, and the merge mock's 5-minute retry backoff
  * starts only after 20 s of polling, longer than any `until` deadline.
  */

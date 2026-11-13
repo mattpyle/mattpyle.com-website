@@ -66,13 +66,18 @@ export const DEV_SERVER_DIR =
  * A real Temporal dev server, for a suite that needs no time skipping.
  *
  * The time-skipping test server differs from the real server in ways a test
- * can trip on. On CI in November 2026 an Update that won a race made the
- * workflow cancel an activity; the test server refused that workflow task's
- * completion with `ACTIVITY_UNKNOWN`, recorded no failure, and held the task
- * until its 10-second timeout (STW-593). The SDK's own reference says the
- * time-skipping server "may occasionally present different behaviors" and
- * that `createLocal` is generally preferable. `finding-retest.test.ts` uses
- * this: none of its tests waits on a timer.
+ * can trip on. In CI run 43354788359 it refused one workflow task completion
+ * in `finding-retest.test.ts` with `ACTIVITY_UNKNOWN for scheduledEventId=128`,
+ * recorded no failure, and held the task until its 10-second timeout
+ * (STW-593). Which command it refused is not proven. The SDK's own reference
+ * says the time-skipping server "may occasionally present different
+ * behaviors" and that `createLocal` is generally preferable.
+ * `finding-retest.test.ts` uses this: none of its tests waits on a timer.
+ *
+ * Neither binary names a version, so both take the SDK's "default": the
+ * release matched to the installed `@temporalio/testing`, in a file named for
+ * that SDK version. An SDK upgrade fetches a new binary, and the lockfile hash
+ * in the CI cache key changes with it.
  */
 export function createLocalEnv(): Promise<TestWorkflowEnvironment> {
   fs.mkdirSync(DEV_SERVER_DIR, { recursive: true });
