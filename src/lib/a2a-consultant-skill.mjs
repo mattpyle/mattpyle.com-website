@@ -196,8 +196,15 @@ function taskNotFound(id, taskId) {
  * `detail`, which the route writes to the function's log line and nowhere else.
  */
 export const UNAVAILABLE_TEXT =
-  'The consultant could not be reached just now. Nothing was changed by this call; try the same ' +
-  'call again in a minute.';
+  'The consultant could not be reached just now. Try again in a minute.';
+
+/**
+ * The same, when the call named a task. A message, an answer or an approval that ran out of time
+ * may still reach the session, so a blind resend could deliver it twice.
+ */
+export const UNAVAILABLE_TASK_TEXT =
+  'The consultant could not be reached just now. Poll GetTask with this task\'s id to see where ' +
+  'the session stands before you send the message again.';
 
 function unavailable(id, error, taskId, outcome) {
   const detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
@@ -206,8 +213,8 @@ function unavailable(id, error, taskId, outcome) {
   return {
     outcome,
     detail,
-    payload: errorResponse(id, ERROR_CODES.internal, UNAVAILABLE_TEXT, [
-      errorInfo('CONSULTANT_UNAVAILABLE', { retry: 'true', ...(taskId ? { taskId } : {}) }),
+    payload: errorResponse(id, ERROR_CODES.internal, taskId ? UNAVAILABLE_TASK_TEXT : UNAVAILABLE_TEXT, [
+      errorInfo('CONSULTANT_UNAVAILABLE', taskId ? { taskId } : undefined),
     ]),
   };
 }

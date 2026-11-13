@@ -7,6 +7,7 @@ import {
   approvalFrom,
   consultantStateFor,
   isConsultantTaskId,
+  UNAVAILABLE_TASK_TEXT,
   UNAVAILABLE_TEXT,
 } from '../src/lib/a2a-consultant-skill.mjs';
 import { ASK_SKILL_ID, AUDIT_SKILL_ID, routeMessage } from '../src/lib/a2a-audit-skill.mjs';
@@ -220,7 +221,8 @@ test('an unreachable consultant gets a fixed reply, and the error text stays in 
     const result = await rpc(method, params, consultant);
     const body = JSON.stringify(result.payload);
     assert.equal(result.outcome, outcome);
-    assert.equal(result.payload.error.message, UNAVAILABLE_TEXT);
+    assert.equal(result.payload.error.message, method === A2A_METHOD && !params.message.taskId ? UNAVAILABLE_TEXT : UNAVAILABLE_TASK_TEXT);
+    assert.doesNotMatch(result.payload.error.message, /nothing was changed/i);
     assert.ok(!/zz99q|tmprl|7233|namespace/i.test(body), `${method}: ${body}`);
     assert.match(result.detail, /example-ns\.zz99q/, 'the detail keeps the cause for the log');
   }
@@ -230,6 +232,7 @@ test('an unreachable consultant gets a fixed reply, and the error text stays in 
   fake.engine.send = async () => { throw leak; };
   const send = await rpc(A2A_METHOD, message('more', { taskId: ID }), { checkLimit: async () => ({ allowed: true }), engine: fake.engine });
   assert.equal(send.outcome, 'consultant-unavailable/send');
+  assert.equal(send.payload.error.message, UNAVAILABLE_TASK_TEXT, 'a send that may have landed says to poll first');
   assert.ok(!/zz99q|tmprl/.test(JSON.stringify(send.payload)));
 });
 
