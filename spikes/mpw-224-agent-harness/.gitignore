@@ -1,0 +1,11 @@
+# Spike MPW-565: nothing here may carry the Anthropic key. It lives only in the
+# environment of a process that `op run` starts.
+node_modules/
+.env
+.env.*
+*.log
+!evidence/*.log
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
