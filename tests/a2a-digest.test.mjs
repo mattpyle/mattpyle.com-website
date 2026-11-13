@@ -21,7 +21,7 @@ test('the digest carries the site description and the full section map', () => {
   );
   assert.deepEqual(
     generated.site.pages.map((page) => page.url),
-    ['webmcp', 'steward', 'audit'].map((slug) => `${PRODUCTION_ORIGIN}/${slug}/`)
+    ['webmcp', 'steward', 'audit', 'fix-log'].map((slug) => `${PRODUCTION_ORIGIN}/${slug}/`)
   );
 });
 
