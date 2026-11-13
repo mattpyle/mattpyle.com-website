@@ -154,7 +154,7 @@ export const MCP_COUNTS_NOTE =
 
 /** What the A2A methods table proves, printed under it on every surface. */
 export const A2A_METHODS_LEGEND =
-  'Every POST to /a2a counts once under its JSON-RPC method, whether the endpoint answered it or refused it. SendMessage and GetTask are the two methods it implements, and their pre-1.0 spellings count under them. other-method is any method not listed, and a body that is not a JSON-RPC request. unparsed is a body that was not JSON at all.';
+  'Every POST to /a2a counts once under its JSON-RPC method, whether the endpoint answered it or refused it. SendMessage, GetTask and CancelTask are the three methods it implements, and their pre-1.0 spellings count under them. other-method is any method not listed, and a body that is not a JSON-RPC request. unparsed is a body that was not JSON at all.';
 
 /** What the A2A skills and tiers table proves. */
 export const A2A_SKILLS_LEGEND =

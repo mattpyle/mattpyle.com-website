@@ -38,11 +38,14 @@ import {
   errorResponse,
 } from './a2a-rpc.mjs';
 import { isAuditTaskId } from './audit-task-id.mjs';
+import { isConsultantTaskId } from './consultant-task-id.mjs';
 
 /** The skills this endpoint declares. The Agent Card is validated against this list. */
 export const ASK_SKILL_ID = 'ask-about-site';
 export const AUDIT_SKILL_ID = 'audit-a-site';
-export const SKILL_IDS = Object.freeze([ASK_SKILL_ID, AUDIT_SKILL_ID]);
+/** The third, src/lib/a2a-consultant-skill.mjs. Named here so the router has no I/O import. */
+export const CONSULTANT_SKILL_ID = 'consult-on-a-site';
+export const SKILL_IDS = Object.freeze([ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID]);
 
 /** The second method the endpoint answers, in its A2A 1.0 spelling, and the 0.x alias. */
 export const GET_TASK_METHOD = 'GetTask';
@@ -133,12 +136,19 @@ function mentions(padded, words) {
  * keeps `ask-about-site` exactly as it was — none of its pinned questions names a site, and this
  * function is asked before the keyword classifier is.
  *
+ * The consultant is reached only explicitly: by `metadata.skill`, or by a message whose `taskId`
+ * is a consultant session's. Plain text never routes to it, so the two older skills answer every
+ * sentence exactly as they did.
+ *
  * @param {object} params the SendMessage params
  * @returns {{ skill: string, tier?: 'fast' | 'deep', target?: string | null, explicit: boolean }}
  */
 export function routeMessage(params, text) {
   const metadata = { ...(params?.metadata ?? {}), ...(params?.message?.metadata ?? {}) };
   const named = typeof metadata.skill === 'string' ? metadata.skill : null;
+  if (named === CONSULTANT_SKILL_ID || isConsultantTaskId(params?.message?.taskId)) {
+    return { skill: CONSULTANT_SKILL_ID, explicit: true };
+  }
   const padded = ` ${String(text ?? '').toLowerCase().replace(/[^a-z0-9.+:/-]+/g, ' ')} `;
   const tierNamed = metadata.tier === 'deep' || metadata.tier === 'fast' ? metadata.tier : null;
 

@@ -77,7 +77,7 @@ test('the card declares exactly the skills the endpoint dispatches', () => {
     schema
   );
   assert.deepEqual(errors, [
-    'skills: expected exactly [ask-about-site, audit-a-site], found [ask-about-site, audit-a-site, explain-finding]',
+    'skills: expected exactly [ask-about-site, audit-a-site, consult-on-a-site], found [ask-about-site, audit-a-site, consult-on-a-site, explain-finding]',
   ]);
 });
 

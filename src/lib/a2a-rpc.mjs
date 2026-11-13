@@ -21,7 +21,9 @@ export const AGENT_CARD_URL = `https://${DOMAIN}/.well-known/agent-card.json`;
  * implementation-defined range and outside the block A2A reserved (`-32001`..`-32009`), used for
  * the one refusal that is neither the caller's request being wrong nor the server being broken —
  * a rate limit. It is the same code /mcp answers a refused audit with, so a caller hitting the
- * shared budget from either protocol reads the same number.
+ * shared budget from either protocol reads the same number. `taskNotCancelable` (-32002) and
+ * `unsupportedOperation` (-32004) are A2A's `TaskNotCancelableError` and
+ * `UnsupportedOperationError`, which the consultant skill answers a closed or busy task with.
  */
 export const ERROR_CODES = Object.freeze({
   parse: -32700,
@@ -31,6 +33,8 @@ export const ERROR_CODES = Object.freeze({
   internal: -32603,
   serverError: -32000,
   taskNotFound: -32001,
+  taskNotCancelable: -32002,
+  unsupportedOperation: -32004,
 });
 
 export function errorResponse(id, code, message, data) {

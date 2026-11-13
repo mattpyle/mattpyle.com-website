@@ -47,7 +47,10 @@ name: CI (tests & typecheck)
 # A fifth output, `consultant`, runs the audit consultant's job. It is set by
 # agents/consultant/** (not Markdown), package.json, package-lock.json, this file
 # and scripts/route-changes.sh, and by every push to master. The site never
-# imports the package, so a change confined to it sets nothing else.
+# imports the package, so a change confined to it sets nothing else. The site's
+# A2A adapter for the consultant (src/lib/a2a-consultant-*, consultant-task-id.mjs,
+# a2a-responder.mjs, mcp-temporal.mjs) also sets it, because the adapter's
+# integration test runs in the package against the real agent.
 #
 #   Change                                              steward_tests runs
 #   a push to master                                     tests/**

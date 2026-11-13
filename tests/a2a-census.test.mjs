@@ -20,10 +20,11 @@ import {
 } from '../src/lib/agent-hits.mjs';
 import { bucketHour, flattenA2aHashes, summarizeA2a } from '../src/lib/agent-traffic.mjs';
 import { A2A_METHODS_LEGEND, A2A_SKILLS_LEGEND, buildActivity } from '../src/lib/activity-summary.mjs';
-import { A2A_METHOD, GET_TASK_METHOD, LEGACY_METHODS } from '../src/lib/a2a-responder.mjs';
+import { A2A_METHOD, CANCEL_TASK_METHOD, GET_TASK_METHOD, LEGACY_CANCEL_TASK_METHODS, LEGACY_METHODS } from '../src/lib/a2a-responder.mjs';
 import {
   ASK_SKILL_ID,
   AUDIT_SKILL_ID,
+  CONSULTANT_SKILL_ID,
   LEGACY_GET_TASK_METHODS,
   SKILL_IDS,
   routeMessage,
@@ -67,12 +68,13 @@ const markdownSource = readFileSync(fileURLToPath(new URL('../src/pages/activity
 // --- the fixed lists --------------------------------------------------------------------------
 
 test('the census lists are the responder and the audit skill lists, held equal', () => {
-  assert.deepEqual([...A2A_METHODS_COUNTED], [A2A_METHOD, GET_TASK_METHOD]);
+  assert.deepEqual([...A2A_METHODS_COUNTED], [A2A_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
   assert.deepEqual([...A2A_SKILLS_COUNTED], [...SKILL_IDS]);
-  assert.deepEqual([...A2A_SKILLS_COUNTED], [ASK_SKILL_ID, AUDIT_SKILL_ID]);
+  assert.deepEqual([...A2A_SKILLS_COUNTED], [ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID]);
   // The legacy spellings fold into their 1.0 name.
   assert.equal(a2aFactsFrom({ jsonrpc: '2.0', id: 1, method: LEGACY_METHODS[0] }, routeFor).method, A2A_METHOD);
   assert.equal(a2aFactsFrom({ jsonrpc: '2.0', id: 1, method: LEGACY_GET_TASK_METHODS[0] }, routeFor).method, GET_TASK_METHOD);
+  assert.equal(a2aFactsFrom({ jsonrpc: '2.0', id: 1, method: LEGACY_CANCEL_TASK_METHODS[0] }, routeFor).method, CANCEL_TASK_METHOD);
 });
 
 // --- the facts a body gives -------------------------------------------------------------------
@@ -100,6 +102,16 @@ test('metadata can name the skill and the tier, and the legacy spelling counts a
   assert.deepEqual(a2aFactsFrom(named, routeFor), { method: 'SendMessage', skill: AUDIT_SKILL_ID, tier: 'deep' });
 });
 
+test('a message to the consultant counts under its skill, by name or by its task id', () => {
+  const named = send('Can you check my site?', { metadata: { skill: CONSULTANT_SKILL_ID } });
+  assert.deepEqual(a2aFactsFrom(named, routeFor), { method: 'SendMessage', skill: CONSULTANT_SKILL_ID, tier: 'none' });
+  const reply = send('example.com');
+  reply.params.message.taskId = 'a2a-consultant-00000000-0000-4000-8000-000000000000';
+  assert.deepEqual(a2aFactsFrom(reply, routeFor), { method: 'SendMessage', skill: CONSULTANT_SKILL_ID, tier: 'none' });
+  const cancel = { jsonrpc: '2.0', id: 3, method: 'CancelTask', params: { id: 'a2a-consultant-x' } };
+  assert.deepEqual(a2aFactsFrom(cancel, routeFor), { method: 'CancelTask', skill: 'none', tier: 'none' });
+});
+
 test('a GetTask has no skill and no tier', () => {
   const body = { jsonrpc: '2.0', id: 2, method: 'GetTask', params: { id: 'task-123' } };
   assert.deepEqual(a2aFactsFrom(body, routeFor), { method: 'GetTask', skill: 'none', tier: 'none' });
@@ -109,7 +121,7 @@ test('a body that did not parse is unparsed, apart from a method the endpoint la
   assert.equal(a2aFactsFrom(undefined, routeFor).method, UNPARSED_A2A_METHOD);
   for (const body of [
     { jsonrpc: '2.0', id: 1, method: 'SendStreamingMessage' },
-    { jsonrpc: '2.0', id: 1, method: 'CancelTask' },
+    { jsonrpc: '2.0', id: 1, method: 'SubscribeToTask' },
     { jsonrpc: '2.0', id: 1, method: 7 },
     { jsonrpc: '2.0', id: 1 },
     [send('hi')],

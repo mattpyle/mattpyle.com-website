@@ -1144,15 +1144,19 @@ export function a2aKeyFor(day, version = KEY_VERSION) {
   return `hits:${version}:a2a:${day}`;
 }
 
-/** The two methods the endpoint implements, by their A2A 1.0 names. */
-export const A2A_METHODS_COUNTED = Object.freeze(['SendMessage', 'GetTask']);
+/** The methods the endpoint implements, by their A2A 1.0 names. */
+export const A2A_METHODS_COUNTED = Object.freeze(['SendMessage', 'GetTask', 'CancelTask']);
 
 /**
  * Pre-1.0 spellings, folded into the 1.0 name so the dialect is not kept. Mirrored from
  * src/lib/a2a-responder.mjs and src/lib/a2a-audit-skill.mjs, which this module does not import
  * (the middleware imports this file); tests/a2a-census.test.mjs holds the two lists equal.
  */
-const A2A_LEGACY_METHODS = Object.freeze({ 'message/send': 'SendMessage', 'tasks/get': 'GetTask' });
+const A2A_LEGACY_METHODS = Object.freeze({
+  'message/send': 'SendMessage',
+  'tasks/get': 'GetTask',
+  'tasks/cancel': 'CancelTask',
+});
 
 /** A method the endpoint does not implement, or a body with no usable `method`. A client asked for something the endpoint lacks. */
 export const OTHER_A2A_METHOD = 'other-method';
@@ -1164,7 +1168,7 @@ export const UNPARSED_A2A_METHOD = 'unparsed';
 export const A2A_METHOD_VALUES = Object.freeze([...A2A_METHODS_COUNTED, OTHER_A2A_METHOD, UNPARSED_A2A_METHOD]);
 
 /** The skill ids the Agent Card declares; mirrored from src/lib/a2a-audit-skill.mjs and held equal by the same test. */
-export const A2A_SKILLS_COUNTED = Object.freeze(['ask-about-site', 'audit-a-site']);
+export const A2A_SKILLS_COUNTED = Object.freeze(['ask-about-site', 'audit-a-site', 'consult-on-a-site']);
 
 /** No skill: a GetTask, a request that failed validation, or a router that threw. */
 export const NO_A2A_SKILL = 'none';
