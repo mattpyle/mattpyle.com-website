@@ -109,7 +109,7 @@ test('a target that resolves to a private address is refused before any connecti
   const fetcher = new SafeFetcher(); // default policy — the guard is on
   await assert.rejects(
     () => fetcher.fetch(`${mock.origin}/`),
-    (err: unknown) => err instanceof BlockedTargetError && /loopback/.test(err.reason),
+    (err: unknown) => err instanceof BlockedTargetError && /private address/.test(err.reason),
   );
   assert.equal(mock.connections, 0, 'the guard opened a socket before refusing');
 });
@@ -118,7 +118,7 @@ test('the cloud metadata address is refused by literal', async () => {
   const fetcher = new SafeFetcher();
   await assert.rejects(
     () => fetcher.fetch('http://169.254.169.254/latest/meta-data/'),
-    (err: unknown) => err instanceof BlockedTargetError && /link-local/.test(err.reason),
+    (err: unknown) => err instanceof BlockedTargetError && /private address/.test(err.reason),
   );
 });
 
@@ -161,7 +161,7 @@ test('a redirect to another private host is refused even though the first hop wa
   const fetcher = new SafeFetcher(testPolicy());
   await assert.rejects(
     () => fetcher.fetch(`${mock.origin}/start`),
-    (err: unknown) => err instanceof BlockedTargetError && /RFC 1918/.test(err.reason),
+    (err: unknown) => err instanceof BlockedTargetError && /private address/.test(err.reason),
   );
 });
 
@@ -256,8 +256,8 @@ test('a name resolving to both a public and a private address is refused whole',
     () => new SafeFetcher().fetch('http://split-horizon.test/'),
     (err: unknown) =>
       err instanceof BlockedTargetError &&
-      /10\.0\.0\.7/.test(err.reason) &&
-      /RFC 1918/.test(err.reason),
+      !/10\.0\.0\.7/.test(err.reason) &&
+      /private address/.test(err.reason),
   );
 });
 

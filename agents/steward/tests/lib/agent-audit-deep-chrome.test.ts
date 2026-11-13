@@ -90,6 +90,6 @@ test(
       refusals.some((n) => n.includes(METADATA) && !n.includes('logo.png')),
       `no refusal for the redirect target:\n${notes.join('\n')}`,
     );
-    for (const line of refusals) assert.match(line, /link-local/);
+    for (const line of refusals) assert.match(line, /private address/);
   },
 );

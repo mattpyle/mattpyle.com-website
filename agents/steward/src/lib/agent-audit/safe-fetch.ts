@@ -245,9 +245,21 @@ async function vetAndResolve(url: URL, policy: FetchPolicy): Promise<PinnedAddre
       const reason = classifyAddress(address);
       // One bad address refuses the whole name — see the docblock.
       if (reason) {
+        // What the name resolved to goes to the process log and nowhere a caller can read. The
+        // refusal text reaches reports, notes and failure messages, and naming the address would
+        // let a caller probe the resolver's view of an internal hostname. Not the shared logger:
+        // the site's fast entry reaches this file, and `console.warn` is what that entry may use.
+        console.warn(
+          JSON.stringify({
+            event: 'audit-refused-private-address',
+            host: hostname,
+            addresses: addresses.map((a) => a.address),
+            reason,
+          }),
+        );
         throw new BlockedTargetError(
           url.href,
-          `${hostname} ${BLOCKED_REASON_MARKERS.privateAddress} ${reason}`,
+          `${hostname} ${BLOCKED_REASON_MARKERS.privateAddress} a private address`,
         );
       }
     }

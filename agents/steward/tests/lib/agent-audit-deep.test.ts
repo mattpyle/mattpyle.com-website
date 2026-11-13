@@ -191,7 +191,7 @@ test('a page inside a private range is refused before the browser is launched', 
   assert.equal(renderedPages, 0);
   const perf = check(checks, 'lighthouse-performance');
   assert.equal(perf.status, 'error');
-  assert.match(perf.evidence.map((e) => e.note).join(' '), /link-local/);
+  assert.match(perf.evidence.map((e) => e.note).join(' '), /private address/);
 });
 
 test('both tools are launched through one vetting proxy, and it does not outlive the run', async () => {
@@ -244,7 +244,7 @@ test("what the browser was refused is reported in the run's notes", async () => 
   const { notes } = await runDeepChecks(context(), { runners: tools, maxPages: 1 });
 
   assert.ok(
-    notes.some((n) => /the browser was refused http:\/\/169\.254\.169\.254\/.*link-local/.test(n)),
+    notes.some((n) => /the browser was refused http:\/\/169\.254\.169\.254\/.*private address/.test(n)),
     notes.join(' | '),
   );
 });
