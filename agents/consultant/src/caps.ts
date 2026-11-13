@@ -62,6 +62,13 @@ export interface Session {
   unmeteredTokens: number;
   /** Set once, when a cap ends the session. Idle closes show in `agent_status.close_reason`. */
   ended: { reason: EndReason; turn: number } | null;
+  /**
+   * The answer to the latest turn, as the caller received it, so a client that does not stream can
+   * read it with this Query rather than a stream poll (an Update, written into history). Only the
+   * agent's own reply text: the model's answer or the fixed too-long reply. The fixed ended reply
+   * does not replace it, so the last real answer stays readable after a cap.
+   */
+  lastReply: { turn: number; text: string } | null;
 }
 
 export function newSession(caps: Caps): Session {
@@ -75,6 +82,7 @@ export function newSession(caps: Caps): Session {
     cacheReadTokens: 0,
     unmeteredTokens: 0,
     ended: null,
+    lastReply: null,
   };
 }
 

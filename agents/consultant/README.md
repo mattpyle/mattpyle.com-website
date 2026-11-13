@@ -20,7 +20,8 @@ The model decides the path: whether to audit, which tier, and when to ask the ca
 1. The tools reach the site only through `https://www.mattpyle.com/mcp`, the same `audit_site`, `deep_audit` and `get_audit` tools any agent calls. The client names itself `audit-consultant`.
 2. A tool hands the model check ids, statuses, severities, categories and counts. No string from the audited site reaches the model: `src/project.ts` copies by allow-list and drops the rest.
 3. `deep_audit` needs the caller's approval. The harness parks the call until the caller answers the `tool_approval` Update. Starting a deep audit is safe to retry: the start records the audit's id in a heartbeat, and a retried attempt reuses it.
-4. A cap ends the session. Later messages get a fixed reply, `consultant_session` reports the reason, and the harness closes the agent after a grace period.
+4. `consultant_session` also returns the latest answer as `lastReply`, so a client that does not stream reads it with a Query, not a stream poll. The A2A adapter on `/a2a` reads it this way.
+5. A cap ends the session. Later messages get a fixed reply, `consultant_session` reports the reason, and the harness closes the agent after a grace period.
 
 ## Limits a reader must know
 

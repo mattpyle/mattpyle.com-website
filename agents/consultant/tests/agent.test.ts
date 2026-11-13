@@ -177,3 +177,17 @@ test('an answer that hits the output limit is rolled back, and the next turn wor
   assert.equal(counts.unmeteredTokens, DEFAULT_CAPS.maxOutputTokens);
   assert.equal(counts.ended, null);
 });
+
+test('consultant_session carries the latest answer, and a cap does not overwrite it', async () => {
+  h.reset({ turns: 2, closeGraceSeconds: 5 });
+  h.script.set([{ text: 'One.' }, { text: 'Two.' }]);
+  const s = await open('lastreply');
+  assert.equal((await s.session()).lastReply, null);
+  await s.ask('first', caller());
+  assert.deepEqual((await s.session()).lastReply, { turn: 1, text: 'One.' });
+  await s.ask('second', caller());
+  assert.deepEqual((await s.session()).lastReply, { turn: 2, text: 'Two.' });
+  const ended = await s.ask('third', caller());
+  assert.match(ended.reply, /This session has ended \(cap:turns\)/);
+  assert.deepEqual((await s.session()).lastReply, { turn: 2, text: 'Two.' });
+});
