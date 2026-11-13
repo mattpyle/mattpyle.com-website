@@ -10,7 +10,8 @@ import {
   WORKER_READY_LOG,
   temporalConnectionOptions,
 } from './config.js';
-import { hostedRegistry, type HostedQueue } from './hosted-registry.js';
+import { hostedRegistry, publicRegistry, type HostedQueue } from './hosted-registry.js';
+import { assertPublicRoleEnvironment, parseWorkerRole } from './worker-role.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { APP_ID_ENV, APP_KEY_ENV, describeGitHubBoot, resolveGitHubAppForBoot } from './lib/github.js';
 import { log } from './lib/logger.js';
@@ -24,6 +25,9 @@ import {
 
 /**
  * The **hosted** worker: one process, three queues, no checkout.
+ *
+ * `STEWARD_WORKER_ROLE=public` starts the same image as the uncredentialed public-audit
+ * worker instead: two queues, one workflow, no GitHub credential (`worker-role.ts`, STW-610).
  *
  * The third queue, `steward-findings` (2026-09-12), follows the second's shape
  * and is described where it is created in `main()`.
@@ -76,6 +80,8 @@ import {
  */
 
 const workflowsPath = fileURLToPath(new URL('./workflows/index.ts', import.meta.url));
+/** The public role's bundle: `auditSiteWorkflow` alone (STW-610). */
+const publicWorkflowsPath = fileURLToPath(new URL('./workflows/public-audit.ts', import.meta.url));
 
 /**
  * The same `unhandledRejection` guard `worker.ts` carries, and for the same
@@ -221,20 +227,33 @@ function watchForRecycle(
 }
 
 async function main() {
+  // First, so a mistyped role never starts the credentialed worker by accident.
+  const role = parseWorkerRole(process.env);
+  const isPublic = role === 'public';
   // Before the first poll; see the same guard in `worker.ts`.
   const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);
-  const githubApp = await assertPublishCredentials();
+  // The public role holds no GitHub credential and refuses to start beside one
+  // (STW-610, `worker-role.ts`). It also skips the monitoring warnings: it has no
+  // scorecard to ping about and no Cloud usage to sample.
+  let githubApp = 'none (public role)';
+  if (isPublic) {
+    assertPublicRoleEnvironment(process.env);
+  } else {
+    githubApp = await assertPublishCredentials();
+  }
   // Before the first `NativeConnection` or `Worker`. Without it the SDK writes
   // to stderr, which Railway tags as `error` (STW-549, `lib/temporal-logger.ts`).
-  installTemporalRuntime('hosted');
-  warnIfUnmonitored();
+  // The kind is the metrics tag that tells the two roles' series apart.
+  installTemporalRuntime(isPublic ? 'public' : 'hosted');
+  if (!isPublic) warnIfUnmonitored();
 
   const connection = await NativeConnection.connect(temporalConnectionOptions());
 
   const tracker = new ActivityTracker();
 
-  const [audit, fast, findings] = hostedRegistry();
-  const queues = () => [audit.taskQueue, fast.taskQueue, findings.taskQueue];
+  const entries: HostedQueue[] = isPublic ? [...publicRegistry()] : [...hostedRegistry()];
+  const [audit, fast, findings] = entries;
+  const queues = () => entries.map((entry) => entry.taskQueue);
 
   /**
    * One `Worker` per registry entry: the queue, its activity map, the workflow
@@ -271,7 +290,7 @@ async function main() {
     Worker.create({
       connection,
       namespace: NAMESPACE,
-      ...(entry.carriesWorkflows ? { workflowsPath } : {}),
+      ...(entry.carriesWorkflows ? { workflowsPath: isPublic ? publicWorkflowsPath : workflowsPath } : {}),
       activities: entry.activities,
       taskQueue: entry.taskQueue,
       // The SDK's default is 100, which is how two strangers' deep audits came to
@@ -293,42 +312,43 @@ async function main() {
   const fastWorker = await createWorker(fast);
   // The findings gate's queue: `findingWorkflow`, `reconcileFindingsWorkflow` and
   // their activities, with its own `Worker` so a verdict write never waits
-  // behind a page render.
-  const findingsWorker = await createWorker(findings);
+  // behind a page render. The public role has no such queue.
+  const findingsWorker = findings ? await createWorker(findings) : undefined;
 
+  const common = {
+    // Both roles say which they are, so a log reader never infers it from the queue list.
+    role,
+    queues: queues(),
+    lighthouse,
+    namespace: NAMESPACE,
+    address: TEMPORAL_ADDRESS,
+    service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
+    activities: Object.keys(audit.activities),
+    fastActivities: Object.keys(fast.activities),
+    hosted: true,
+    // Which app and installation the credential resolved to: the line a
+    // deploy is checked against after the app's values change. The bot login
+    // is `<slug>[bot]`.
+    github: githubApp,
+    activityConcurrency: audit.maxConcurrentActivityTaskExecutions,
+    fastActivityConcurrency: fast.maxConcurrentActivityTaskExecutions,
+    // The Temporal SDK's own metrics, pushed to Grafana Cloud (STW-552).
+    sdkMetrics: sdkMetricsState(process.env),
+  };
   log.info(
-    {
-      queues: queues(),
-      lighthouse,
-      namespace: NAMESPACE,
-      address: TEMPORAL_ADDRESS,
-      service: IS_TEMPORAL_CLOUD ? 'temporal-cloud' : 'local-dev-server',
-      activities: Object.keys(audit.activities),
-      fastActivities: Object.keys(fast.activities),
-      findingsActivities: Object.keys(findings.activities),
-      hosted: true,
-      // Which app and installation the credential resolved to: the line a
-      // deploy is checked against after the app's values change. The bot login
-      // is `<slug>[bot]`.
-      github: githubApp,
-      // In the ready line for the same reason `alerting` is: it is a fact a
-      // deploy can change, and the operator reading this line after a deploy is
-      // the person who would otherwise find out from a corrupted report.
-      activityConcurrency: audit.maxConcurrentActivityTaskExecutions,
-      fastActivityConcurrency: fast.maxConcurrentActivityTaskExecutions,
-      findingsActivityConcurrency: findings.maxConcurrentActivityTaskExecutions,
-      // Named in the ready line because the operator reads this line after every
-      // deploy, and "alerting is off" is precisely the fact a deploy can change
-      // by accident (a variable dropped from the Variables tab) and that nothing
-      // else would ever announce.
-      alerting: HEALTHCHECK_BASE ? 'configured' : 'OFF',
-      // Beside `alerting` and for the same reason: a variable dropped from the
-      // Variables tab switches this check off silently, and the ready line after
-      // a deploy is the only place that fact ever surfaces.
-      actionUsage: METRICS_API_KEY ? 'configured' : 'OFF',
-      // The Temporal SDK's own metrics, pushed to Grafana Cloud (STW-552).
-      sdkMetrics: sdkMetricsState(process.env),
-    },
+    findings
+      ? {
+          ...common,
+          findingsActivities: Object.keys(findings.activities),
+          findingsActivityConcurrency: findings.maxConcurrentActivityTaskExecutions,
+          // In the ready line because the operator reads this line after every
+          // deploy, and "alerting is off" is precisely the fact a deploy can change
+          // by accident (a variable dropped from the Variables tab) and that nothing
+          // else would ever announce. `actionUsage` is the same for the usage check.
+          alerting: HEALTHCHECK_BASE ? 'configured' : 'OFF',
+          actionUsage: METRICS_API_KEY ? 'configured' : 'OFF',
+        }
+      : common,
     WORKER_READY_LOG,
   );
 
@@ -336,8 +356,8 @@ async function main() {
   // rather than a race: a worker that stops on its own (a SIGTERM from a deploy,
   // a fatal error) has to take the other one down with it, or the container
   // would sit half-serving a queue with nobody watching.
-  const running = Promise.all([worker.run(), fastWorker.run(), findingsWorker.run()]);
-  const workers = [worker, fastWorker, findingsWorker];
+  const workers = findingsWorker ? [worker, fastWorker, findingsWorker] : [worker, fastWorker];
+  const running = Promise.all(workers.map((each) => each.run()));
   const stopAll = () => {
     for (const each of workers) if (each.getState() === 'RUNNING') each.shutdown();
   };

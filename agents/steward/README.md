@@ -121,6 +121,30 @@ local worker.
 
 Both workers log through pino. A Temporal Runtime logger passes the SDK's workflow, activity and worker entries to pino, one JSON line each. Core logs at WARN.
 
+### The public-audit role
+
+The same image starts as a second worker when `STEWARD_WORKER_ROLE=public`. It serves the public audits and nothing else, and holds no credential that writes to GitHub. A deep audit renders a page that a stranger chose, so this role keeps that browser away from the findings loop's secrets. Unset, empty or `default` gives the worker described above; any other value stops the start.
+
+| | Public role |
+|---|---|
+| Queues | `steward-audit` and `steward-audit-fast` |
+| Activities | `auditSiteFast`, `auditSiteFetchChecks`, `auditRenderedPage` and `assembleDeepAudit` |
+| Workflows | `auditSiteWorkflow` alone (`src/workflows/public-audit.ts`) |
+| Ready line | `role: "public"`, two queues, no `findingsActivities`, no `alerting`, no `actionUsage`, `github: "none (public role)"` |
+| Metrics | The SDK `worker` tag and the `worker_kind` series label read `public`; the credentialed worker reads `hosted` |
+
+The namespace is whatever `TEMPORAL_NAMESPACE` says. Nothing in the audit path names a namespace, and none assumes the findings or scorecard workflows live beside it. The scorecard keeps its own `steward-audit` queue on the credentialed worker in its own namespace.
+
+A public-role deployment needs:
+
+1. `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE` and `TEMPORAL_API_KEY`, for a namespace that holds only the public audits.
+2. `STEWARD_WORKER_ROLE=public`.
+3. Optionally `STEWARD_WEB_BOT_AUTH_KEY` (signs the auditor's requests) and the three `STEWARD_METRICS_OTLP_*` variables (SDK metrics).
+
+It must not have any of these, and refuses to start if one is set (the error names the variable, never the value): `STEWARD_GITHUB_APP_ID`, `STEWARD_GITHUB_APP_PRIVATE_KEY`, `STEWARD_GITHUB_APP_INSTALLATION_ID`, `GITHUB_TOKEN`, `GH_TOKEN`, `ANTHROPIC_API_KEY`, `TEMPORAL_METRICS_API_KEY`, `TEMPORAL_READ_ONLY_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET`. `PUBLIC_ROLE_REFUSED_CREDENTIALS` in `src/worker-role.ts` is the list, and a test fails when the code reads a new credential variable that the allowed and refused sets do not name. `STEWARD_HEALTHCHECK_BASE` is a URL, not a credential: the role neither requires it nor warns when it is missing.
+
+**The namespace must allow standalone activities.** The fast tier starts `auditSiteFast` as a standalone activity on `steward-audit-fast` (`src/lib/mcp-fast-standalone.mjs`). If the namespace does not support them, the start fails, the site's function logs `fast-audit-fallback` with the reason, and it runs the fast audit inside the function itself with what is left of the request's time budget. The caller still gets a report, but the audit then runs on the function instead of the worker. The deep tier uses an ordinary workflow start and has no such fallback: it needs a worker polling `steward-audit` in that namespace.
+
 ### The publish leg
 
 Approving a gate review doesn't publish anything by itself — it starts a sequence that opens a PR,

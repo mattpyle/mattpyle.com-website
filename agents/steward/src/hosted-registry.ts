@@ -203,3 +203,30 @@ export function hostedRegistry(): readonly [HostedQueue, HostedQueue, HostedQueu
     },
   ];
 }
+
+/**
+ * The public-audit role's queues (STW-610): `steward-audit` and
+ * `steward-audit-fast`, and nothing else. A fresh object each call.
+ *
+ * The audit queue registers the four activities `auditSiteWorkflow` schedules
+ * and `auditSiteFast`, which the workflow also uses. The scorecard's activities
+ * and the findings queue belong to the credentialed role. The audit queue
+ * carries the narrowed workflow bundle (`workflows/public-audit.ts`); the fast
+ * queue carries none, as in the default role. Caps are the default role's.
+ */
+export function publicRegistry(): readonly [HostedQueue, HostedQueue] {
+  return [
+    {
+      taskQueue: QUEUE_AUDIT,
+      activities: { auditSiteFast, auditSiteFetchChecks, auditRenderedPage, assembleDeepAudit },
+      carriesWorkflows: true,
+      maxConcurrentActivityTaskExecutions: HOSTED_ACTIVITY_CONCURRENCY,
+    },
+    {
+      taskQueue: QUEUE_AUDIT_FAST,
+      activities: fastActivities,
+      carriesWorkflows: false,
+      maxConcurrentActivityTaskExecutions: HOSTED_FAST_ACTIVITY_CONCURRENCY,
+    },
+  ];
+}
