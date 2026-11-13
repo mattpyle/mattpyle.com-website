@@ -9,7 +9,9 @@ import {
   parseFindingsIndex,
   pendingActivityLine,
   planReconcile,
+  readsRunState,
   restartCandidates,
+  type OpenFindingWorkflow,
   runStateLines,
   type FindingsIndexLine,
   setFrontmatterVerdict,
@@ -308,3 +310,58 @@ test('a completed run prints its outcome, the verify workflow where there is one
   assert.equal(runStateLines({ status: 'COMPLETED', closeTime }).lines.length, 1, 'no result read, no outcome line');
 });
 
+
+test('the plan is identical when runs behind lines that read no state carry a null step', () => {
+  // Every status, kind and run state in one index, so each decision in planReconcile is held:
+  // start, signal (approved and rejected), fix, restart (approved, no run) and close (resolved, rejected).
+  const statuses = ['proposed', 'reopened', 'approved', 'rejected', 'resolved', 'wontfix'];
+  const kinds = ['defect', 'opportunity', 'direction'];
+  const runStates: Array<{ name: string; run?: Omit<OpenFindingWorkflow, 'workflowId'> }> = [
+    { name: 'none' },
+    { name: 'verdict', run: { step: 'waiting-verdict', fixAttempts: 0, issueUrl: null } },
+    { name: 'fix0', run: { step: 'waiting-fix', fixAttempts: 0, issueUrl: null } },
+    { name: 'fixIssue', run: { step: 'waiting-fix', fixAttempts: 1, issueUrl: 'https://github.com/o/r/issues/1' } },
+    { name: 'fixing', run: { step: 'fixing', fixAttempts: 1, issueUrl: null } },
+  ];
+  const lines: string[] = [];
+  const full: OpenFindingWorkflow[] = [];
+  for (const status of statuses) {
+    for (const kind of kinds) {
+      for (const state of runStates) {
+        const key = `${status}-${kind}-${state.name}`;
+        lines.push(`${key} | ${status} | ${kind} | s | title | reason`);
+        if (state.run) full.push({ workflowId: findingWorkflowId('s', key), ...state.run });
+      }
+    }
+  }
+  const index = parseFindingsIndex(['Format: `key | status | kind | scenario | title | verdict reason`.', ...lines].join(String.fromCharCode(10)));
+  const wanted = new Set(index.filter((line) => readsRunState(line.status)).map((line) => findingWorkflowId('s', line.key)));
+  const pruned = full.map((run): OpenFindingWorkflow =>
+    wanted.has(run.workflowId) ? run : { workflowId: run.workflowId, step: null, fixAttempts: null, issueUrl: null, queried: false },
+  );
+  assert.ok(pruned.some((run) => run.queried === false), 'the fixture prunes something');
+
+  const allKeys = new Set(index.map((line) => line.key));
+  const someKeys = new Set(index.filter((_, i) => i % 2 === 0).map((line) => line.key));
+  for (const autoFix of [true, false]) {
+    for (const fixable of [undefined, allKeys, someKeys]) {
+      for (const closeParked of [true, false]) {
+        const before = planReconcile('s', index, full, autoFix, fixable, closeParked);
+        const after = planReconcile('s', index, pruned, autoFix, fixable, closeParked);
+        assert.deepEqual(after, before, `autoFix ${autoFix}, fixable ${fixable ? fixable.size : 'none'}, close ${closeParked}`);
+      }
+    }
+  }
+  // The decisions are all exercised by the fixture, not vacuously equal.
+  const plan = planReconcile('s', index, full, true, allKeys, true);
+  for (const part of ['start', 'signal', 'fix', 'restart', 'close'] as const) assert.ok(plan[part].length > 0, part);
+  // The candidate lists and the parked-defect probe agree as well.
+  assert.deepEqual(fixCandidates('s', index, pruned), fixCandidates('s', index, full));
+  assert.deepEqual(restartCandidates('s', index, pruned), restartCandidates('s', index, full));
+  assert.equal(hasParkedDefect('s', index, pruned), hasParkedDefect('s', index, full));
+});
+
+test('only approved, rejected and resolved lines read a run state', () => {
+  for (const status of ['approved', 'rejected', 'resolved']) assert.ok(readsRunState(status), status);
+  for (const status of ['proposed', 'reopened', 'wontfix', '']) assert.ok(!readsRunState(status), status);
+});

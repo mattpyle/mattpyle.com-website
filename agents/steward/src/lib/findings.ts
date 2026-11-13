@@ -217,6 +217,40 @@ export interface OpenFindingWorkflow {
    * before the field existed; read it as null.
    */
   issueUrl?: string | null;
+  /**
+   * False when the listing skipped the `state` query for this run: its step is
+   * null because nobody asked, not because the query failed. Absent from a list
+   * recorded before the field existed; read it as queried.
+   */
+  queried?: boolean;
+}
+
+/**
+ * The index statuses whose decision reads a run's `step`, `fixAttempts` or
+ * `issueUrl` (see {@link planReconcile}): `approved` and `rejected` (a verdict
+ * goes to a run at `waiting-verdict`; `approved` also feeds `fix`), and
+ * `resolved` (`close`). Every other status reads only whether a run exists.
+ * A run behind one of these must be queried: a null step reads as "awaiting a
+ * verdict", so a skipped `approved` or `rejected` run would be signalled.
+ */
+export function readsRunState(status: string): boolean {
+  return status === 'approved' || status === 'rejected' || status === 'resolved';
+}
+
+/**
+ * What `listOpenFindingWorkflows` returns when the reconciler asks it to prune:
+ * the runs, how many it queried, and how many index files it read to decide.
+ * The other modes return the bare array.
+ */
+export interface OpenFindingListing {
+  runs: OpenFindingWorkflow[];
+  queried: number;
+  indexReads: number;
+}
+
+/** The runs of either return shape; a history recorded before the listing existed holds an array. */
+export function listedRuns(listing: OpenFindingWorkflow[] | OpenFindingListing): OpenFindingWorkflow[] {
+  return Array.isArray(listing) ? listing : listing.runs;
 }
 
 export interface ReconcilePlan {
