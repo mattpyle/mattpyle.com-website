@@ -1,5 +1,58 @@
 [
   {
+    "iso": "2026-11-12",
+    "timestamp": "2026-11-12T03:47:32-07:00",
+    "scope": "107 live pages",
+    "tools": [
+      "Lighthouse 13.5",
+      "axe-core 4.12"
+    ],
+    "entry": "Nightly · automated",
+    "commentary": "Accessibility moved from Pass to Fail; Accessibility: 100/100, 3 axe violations across 107 tested pages (Fail).",
+    "metrics": [
+      {
+        "name": "Accessibility",
+        "value": "100",
+        "maximum": "100",
+        "status": "Fail",
+        "description": "3 axe violations across 107 tested pages."
+      },
+      {
+        "name": "Performance",
+        "value": "97",
+        "maximum": "100",
+        "status": "Pass",
+        "description": "The lowest Lighthouse performance score across 107 tested pages."
+      },
+      {
+        "name": "SEO",
+        "value": "100",
+        "maximum": "100",
+        "status": "Pass",
+        "description": "The lowest Lighthouse SEO score across 107 tested pages."
+      },
+      {
+        "name": "Agentic Browsing",
+        "value": "6",
+        "maximum": "6",
+        "status": "Pass",
+        "description": "6 of 6 agent checks pass: accessibility tree, WebMCP, layout stability, llms.txt, AI catalog, WebMCP form coverage."
+      }
+    ],
+    "readingBudget": {
+      "pages": 107,
+      "text": {
+        "lowest": 49,
+        "url": "https://www.mattpyle.com/writing/"
+      },
+      "markdown": {
+        "lowest": 52,
+        "url": "https://www.mattpyle.com/changelog/public-scorecard/"
+      }
+    },
+    "id": "2026-11-12"
+  },
+  {
     "iso": "2026-11-09",
     "timestamp": "2026-11-09T21:42:44-07:00",
     "scope": "28 live pages",
