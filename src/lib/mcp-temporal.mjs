@@ -56,6 +56,7 @@ import {
   DEEP_BUDGET_SECONDS,
   auditWorkflowIdFor,
 } from '@mattpyle/steward/agent-audit/deep-contract';
+import { isAuditTaskId } from './audit-task-id.mjs';
 
 /**
  * How long a connect may take before the deep tools give up and answer.
@@ -298,6 +299,17 @@ async function failureMessage(handle, execution) {
 }
 
 /**
+ * The refusal for an id that is not a readable audit. Missing runs, malformed ids and runs of
+ * another workflow type all get this one message, so a caller cannot tell them apart.
+ */
+function noSuchAudit(workflowId) {
+  return new Error(
+    `No audit with workflow ID "${workflowId}". Start one with the deep_audit tool; an ID is ` +
+      "only valid for as long as Temporal keeps that run's history.",
+  );
+}
+
+/**
  * One execution's state, from the two sources that answer different questions.
  *
  * `describe()` is the server's account: the execution status, the start and close
@@ -307,22 +319,21 @@ async function failureMessage(handle, execution) {
  * the task queue with no worker free has nobody to answer it, and that silence is
  * the queued signal rather than an error.
  */
-async function readState(workflowId) {
-  const client = await getClient();
+async function readState(workflowId, clientFor = getClient) {
+  // A caller's id that is not an audit id never reaches Temporal: no client, no handle, no read.
+  if (!isAuditTaskId(workflowId)) throw noSuchAudit(workflowId);
+  const client = await clientFor();
   const handle = client.workflow.getHandle(workflowId);
 
   let description;
   try {
     description = await withDeadline(handle.describe(), DESCRIBE_TIMEOUT_MS, 'Temporal Cloud');
   } catch (err) {
-    if (err instanceof WorkflowNotFoundError) {
-      throw new Error(
-        `No audit with workflow ID "${workflowId}". Start one with the deep_audit tool; an ID is ` +
-          "only valid for as long as Temporal keeps that run's history.",
-      );
-    }
+    if (err instanceof WorkflowNotFoundError) throw noSuchAudit(workflowId);
     throw err;
   }
+  // A run that exists but is not an audit gets the refusal a missing one gets, before any query.
+  if (description.type !== AUDIT_WORKFLOW_TYPE) throw noSuchAudit(workflowId);
 
   let state;
   let queryError;
@@ -371,8 +382,8 @@ export function statusNote({ note, queued, done, queryError }) {
  * poller looping until it gave up. `succeeded` is the second half of that
  * sentence.
  */
-async function readStatus(workflowId) {
-  return statusFrom(workflowId, await readState(workflowId));
+async function readStatus(workflowId, clientFor) {
+  return statusFrom(workflowId, await readState(workflowId, clientFor));
 }
 
 /**
@@ -441,7 +452,11 @@ async function statusFrom(workflowId, { client, handle, description, state, quer
  * @returns {Promise<{ status: object, result?: object }>}
  */
 export async function readAuditSnapshot(workflowId) {
-  const reading = await readState(workflowId);
+  return snapshotWith(getClient, workflowId);
+}
+
+async function snapshotWith(clientFor, workflowId) {
+  const reading = await readState(workflowId, clientFor);
   const status = await statusFrom(workflowId, reading);
   return reading.state?.result ? { status, result: reading.state.result } : { status };
 }
@@ -453,10 +468,10 @@ export async function readAuditSnapshot(workflowId) {
  * agent handed a 200 and a "not ready" object will summarise it as the audit's
  * findings, and an empty finding list reads as a clean site.
  */
-async function readReport(workflowId) {
+async function readReport(workflowId, clientFor) {
   // One `readState`, not a `readStatus` plus a second read: a status document is
   // three round trips to Cloud and this path needs one field of it.
-  const { handle, description, state } = await readState(workflowId);
+  const { handle, description, state } = await readState(workflowId, clientFor);
   if (state?.result) return state.result;
 
   const execution = description.status.name;
@@ -487,9 +502,29 @@ async function readReport(workflowId) {
  *   the fast tier's auditor is: this file is imported by tests with no Temporal.
  */
 export async function readAuditView(workflowId, view, renderSummary) {
-  if (view === 'status') return `${JSON.stringify(await readStatus(workflowId), null, 2)}\n`;
-  const result = await readReport(workflowId);
+  return viewWith(getClient, workflowId, view, renderSummary);
+}
+
+async function viewWith(clientFor, workflowId, view, renderSummary) {
+  if (view === 'status') {
+    return `${JSON.stringify(await readStatus(workflowId, clientFor), null, 2)}\n`;
+  }
+  const result = await readReport(workflowId, clientFor);
   return view === 'summary'
     ? `${renderSummary(result)}\n`
     : `${JSON.stringify(result, null, 2)}\n`;
+}
+
+/**
+ * The two readers bound to a given client source. **Exists for tests**, so a fake Temporal client
+ * can stand in for the real one. No route or tool handler calls it: `/mcp` and `/a2a` import the
+ * plain `readAuditView` and `readAuditSnapshot`, which always use the real client, and nothing a
+ * caller sends can reach this argument.
+ */
+export function createAuditReadersForTests(clientFor) {
+  return {
+    readAuditSnapshot: (workflowId) => snapshotWith(clientFor, workflowId),
+    readAuditView: (workflowId, view, renderSummary) =>
+      viewWith(clientFor, workflowId, view, renderSummary),
+  };
 }

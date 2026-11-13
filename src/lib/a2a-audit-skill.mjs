@@ -37,6 +37,7 @@ import {
   errorInfo,
   errorResponse,
 } from './a2a-rpc.mjs';
+import { isAuditTaskId } from './audit-task-id.mjs';
 
 /** The skills this endpoint declares. The Agent Card is validated against this list. */
 export const ASK_SKILL_ID = 'ask-about-site';
@@ -47,17 +48,7 @@ export const SKILL_IDS = Object.freeze([ASK_SKILL_ID, AUDIT_SKILL_ID]);
 export const GET_TASK_METHOD = 'GetTask';
 export const LEGACY_GET_TASK_METHODS = Object.freeze(['tasks/get']);
 
-/**
- * `auditWorkflowIdFor` in the Steward workspace writes `steward-audit-<host>-<tier>-<suffix>`.
- * Matched by its prefix rather than by the whole scheme: this guard exists so a caller who passes
- * an arbitrary string gets `TaskNotFound` instead of a Temporal lookup, and re-encoding the id
- * scheme here would be the hand-copy the deep-contract entry exists to avoid.
- */
-const TASK_ID_PATTERN = /^steward-audit-[A-Za-z0-9.-]{1,240}$/;
-
-export function isAuditTaskId(id) {
-  return typeof id === 'string' && TASK_ID_PATTERN.test(id);
-}
+export { isAuditTaskId };
 
 /* ------------------------------------------------------------------ asking for the skill */
 
