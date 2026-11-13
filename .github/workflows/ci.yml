@@ -179,11 +179,15 @@ jobs:
       # are gitignored: `pretest` and `precheck` generate them. A pull request's
       # own diff therefore no longer shows what an agent will be told, so this
       # step generates the three files on the base commit as well and writes the
-      # difference to the job summary. The generators import only `node:`
-      # builtins and repo files, so the base worktree needs no `npm ci`. They are
-      # run directly, not through `npm run generate`, because an older base has
-      # no such script. `!cancelled()` keeps the summary when a test fails, which
-      # is when a reviewer wants it.
+      # difference to the job summary. The base worktree has no `npm ci`: the
+      # generators must import only `node:` builtins and repo files, and
+      # tests/generator-imports.test.mjs holds that rule for the head. A base
+      # that predates the rule cannot run its generators; the step then writes
+      # one line saying so and stays green. The head's own generators and the
+      # summary script still fail the job. The generators are run directly, not
+      # through `npm run generate`, because an older base has no such script.
+      # `!cancelled()` keeps the summary when a test fails, which is when a
+      # reviewer wants it.
       - name: Show generated data diff
         if: github.event_name == 'pull_request' && !cancelled()
         env:
@@ -191,9 +195,14 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+          base_ok=true
           for generator in a2a-digest agent-skills-index page-paths; do
-            node "$RUNNER_TEMP/base/scripts/generate-$generator.mjs"
+            node "$RUNNER_TEMP/base/scripts/generate-$generator.mjs" || base_ok=false
           done
+          if [ "$base_ok" != true ]; then
+            echo "Generated data diff skipped: the base commit's generators could not run without an install." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           node scripts/summarise-generated-diff.mjs "$RUNNER_TEMP/base" . >> "$GITHUB_STEP_SUMMARY"
 
   steward:

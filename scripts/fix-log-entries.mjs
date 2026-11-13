@@ -32,9 +32,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
+import { ENTRIES_DIR } from './lib/fix-metadata.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const ENTRIES_DIR = path.join(ROOT, 'src/content/fixes');
+export { ENTRIES_DIR };
 const ORIGIN = 'https://www.mattpyle.com';
 const REPO = 'mattpyle/mattpyle.com-website';
 
