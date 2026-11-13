@@ -84,6 +84,7 @@ const FULL_PREFIXES = [`${STEWARD}/tests/helpers/`, `${STEWARD}/tests/fixtures/`
 export const DIRECTORY_READERS = {
   'tests/lib/steward-update.test.ts': ['src/workflows/'],
   'tests/workflows/finding-fix-path.test.ts': ['src/'],
+  'tests/workflows/bounded-workers.test.ts': ['tests/'],
 };
 
 const posix = (p) => p.split(path.sep).join('/');

@@ -5,6 +5,7 @@ import { Client, type WorkflowHandle } from '@temporalio/client';
 import { ApplicationFailure, defaultPayloadConverter } from '@temporalio/common';
 import { Worker } from '@temporalio/worker';
 import proto from '@temporalio/proto';
+import { tsToMs } from '@temporalio/common/lib/time.js';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
@@ -179,13 +180,99 @@ const input: FindingWorkflowInput = {
 const APPROVE: FindingVerdict = { status: 'approved', reason: 'Real.', source: 'file', at: '2026-11-10T18:00:00Z' };
 const WORKFLOW_ID = findingWorkflowId(SITE, DEFECT_KEY);
 
-async function until(handle: WorkflowHandle, what: string, done: (s: FindingState) => boolean): Promise<FindingState> {
-  for (let i = 0; i < 400; i++) {
-    const state: FindingState = await handle.query(findingStateQuery);
+const EventType = proto.temporal.api.enums.v1.EventType;
+const TaskState = proto.temporal.api.enums.v1.PendingWorkflowTaskState;
+const ActivityState = proto.temporal.api.enums.v1.PendingActivityState;
+const STALLED = Symbol('stalled');
+
+/** `promise`, or {@link STALLED} once `deadline` (epoch ms) passes. The abandoned promise's rejection is swallowed. */
+function beforeDeadline<T>(promise: Promise<T>, deadline: number): Promise<T | typeof STALLED> {
+  promise.catch(() => undefined);
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<typeof STALLED>((resolve) => {
+    timer = setTimeout(() => resolve(STALLED), Math.max(0, deadline - Date.now()));
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * What the server holds for a stalled run, for the failure message: the
+ * pending workflow task as `describe` reports it, the pending activities, and
+ * the history's events from the last completed workflow task onward, with
+ * their offsets from the run's first event. Read through the plain client,
+ * which needs no worker; bounded at 5 s so a dead server cannot hang it.
+ *
+ * Why: on CI on 2026-11-11 and 2026-11-13 the merge-and-retest test stalled
+ * with nothing in its log but Core's "Error while completing workflow
+ * activation". The next stall says where the run stood.
+ */
+async function stallReport(handle: WorkflowHandle): Promise<string> {
+  const read = async () => {
+    const [history, described] = await Promise.all([handle.fetchHistory(), handle.describe()]);
+    const events = history.events ?? [];
+    const t0 = events[0]?.eventTime ? tsToMs(events[0].eventTime) : Date.now();
+    const at = (ts: Parameters<typeof tsToMs>[0]) => (ts ? `+${tsToMs(ts) - t0} ms` : '');
+    const lastDone = events.findLastIndex((e) => e.eventType === EventType.EVENT_TYPE_WORKFLOW_TASK_COMPLETED);
+    const lines = events.slice(Math.max(lastDone, 0)).map((e) => {
+      const name = EventType[e.eventType ?? 0]?.replace('EVENT_TYPE_', '') ?? String(e.eventType);
+      const extra = [
+        e.workflowTaskStartedEventAttributes?.identity,
+        e.workflowTaskTimedOutEventAttributes ? `timeout ${e.workflowTaskTimedOutEventAttributes.timeoutType}` : null,
+        e.workflowTaskFailedEventAttributes ? `cause ${e.workflowTaskFailedEventAttributes.cause}` : null,
+        e.activityTaskScheduledEventAttributes?.activityType?.name,
+      ].filter(Boolean);
+      return `  ${e.eventId} ${name} ${at(e.eventTime)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
+    });
+    const task = described.raw.pendingWorkflowTask;
+    const pending = task
+      ? `pending workflow task: ${TaskState[task.state ?? 0]}, attempt ${task.attempt}, scheduled ${at(task.scheduledTime)}, started ${at(task.startedTime) || 'no'}`
+      : 'pending workflow task: none reported';
+    const activities = (described.raw.pendingActivities ?? []).map(
+      (a) => `pending activity: ${a.activityType?.name}, attempt ${a.attempt}, ${ActivityState[a.state ?? 0]}`,
+    );
+    return [`server state at +${Date.now() - t0} ms (wall clock):`, pending, ...activities, 'events from the last completed workflow task:', ...lines].join('\n');
+  };
+  const report = await beforeDeadline(read().catch((err: unknown) => `the history could not be read: ${err}`), Date.now() + 5_000);
+  return report === STALLED ? 'the history read did not answer within 5 s' : report;
+}
+
+/**
+ * Polls the run's state until `done` holds. Each query races the deadline:
+ * a query waits for a worker to answer it and has no deadline of its own, so
+ * a run whose workflow task never completes would otherwise hold this loop,
+ * and the test, forever.
+ */
+async function until(handle: WorkflowHandle, what: string, done: (s: FindingState) => boolean, limitMs = 15_000): Promise<FindingState> {
+  const deadline = Date.now() + limitMs;
+  let last = 'no state read';
+  while (Date.now() < deadline) {
+    const state = await beforeDeadline(handle.query(findingStateQuery) as Promise<FindingState>, deadline);
+    if (state === STALLED) {
+      last = `${last}; the last query had no answer`;
+      break;
+    }
     if (done(state)) return state;
+    last = `step ${state.step}, ${state.previewTests} preview tests`;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error(`the run did not reach: ${what}`);
+  throw new Error(`the run did not reach: ${what} within ${limitMs / 1000} s (${last})\n${await stallReport(handle)}`);
+}
+
+/**
+ * One phase of a test that runs its own workflow worker: `body` under a bound,
+ * so the worker drains when the phase stalls, with the server's state on the
+ * failure. A worker whose `runUntil` promise never settles outlives the test,
+ * holds the connection open, and keeps the file's process alive.
+ */
+async function phase<T>(handle: WorkflowHandle, what: string, ms: number, body: Promise<T>): Promise<T> {
+  try {
+    return await bounded(body, ms);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("The test's workflows did not finish")) {
+      throw new Error(`${what}: ${err.message}\n${await stallReport(handle)}`);
+    }
+    throw err;
+  }
 }
 
 const merging = (n: number) => (s: FindingState) => s.step === 'waiting-merge' && s.previewTests === n;
@@ -341,13 +428,21 @@ test('a merge and a retest in the same workflow task: the merge wins', async () 
       (async () => {
         const handle = await client.workflow.start(findingWorkflow, { workflowId: WORKFLOW_ID, taskQueue: FINDINGS, args: [input] });
         try {
+          // Each workflow worker's phase is bounded on its own: the outer bound
+          // stops only the activity worker, and an unbounded inner worker would
+          // outlive the test (STW-593). 18 s + 1 s + 25 s stays under the outer 50 s.
           const first = await workflowWorker();
           await first.runUntil(
-            (async () => {
-              await handle.signal(verdictSignal, APPROVE);
-              await handle.signal(fixSignal, { source: 'cli', at: '2026-11-10T18:05:00Z' });
-              await until(handle, 'the first test', merging(1));
-            })(),
+            phase(
+              handle,
+              'the first worker',
+              18_000,
+              (async () => {
+                await handle.signal(verdictSignal, APPROVE);
+                await handle.signal(fixSignal, { source: 'cli', at: '2026-11-10T18:05:00Z' });
+                await until(handle, 'the first test', merging(1));
+              })(),
+            ),
           );
           // No workflow worker now. The Update waits for one; the merge lands meanwhile.
           const update = requestRetest(client, SITE, DEFECT_KEY, '2026-11-10T19:00:00Z');
@@ -358,31 +453,36 @@ test('a merge and a retest in the same workflow task: the merge wins', async () 
           await new Promise((resolve) => setTimeout(resolve, 500));
           const second = await workflowWorker();
           await second.runUntil(
-            (async () => {
-              const end = await until(handle, 'the end', (s) => s.step === 'done');
-              assert.equal(end.previewTests, 1, 'no second test ran');
-              const history = await handle.fetchHistory();
-              const types = (history.events ?? [])
-                .map((e) => e.activityTaskScheduledEventAttributes?.activityType?.name)
-                .filter(Boolean);
-              // One at the verdict (STW-589), one preview test.
-              assert.equal(types.filter((t) => t === 'runFindingChecks').length, 2, 'the checks ran at the verdict and on one preview');
-              assert.ok(types.includes('awaitProductionDeploy'), 'the run went on to the deploy');
-              // The merge's completion and the Update are in one workflow task:
-              // the task right after the poll completed accepts the Update.
-              const events = history.events ?? [];
-              const T = proto.temporal.api.enums.v1.EventType;
-              const mergeDone = events.findIndex(
-                (e, i) => e.eventType === T.EVENT_TYPE_ACTIVITY_TASK_COMPLETED && i > events.findLastIndex((x) => x.activityTaskScheduledEventAttributes?.activityType?.name === 'awaitFixPrMerge'),
-              );
-              assert.deepEqual(
-                events.slice(mergeDone + 1, mergeDone + 4).map((e) => e.eventType),
-                [T.EVENT_TYPE_WORKFLOW_TASK_STARTED, T.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, T.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED],
-                'one task holds the merge result and the Update',
-              );
-              // Accepted before the merge settled the race, so it returns a test number no test takes.
-              assert.equal((await update).test, 2);
-            })(),
+            phase(
+              handle,
+              'the second worker',
+              25_000,
+              (async () => {
+                const end = await until(handle, 'the end', (s) => s.step === 'done');
+                assert.equal(end.previewTests, 1, 'no second test ran');
+                const history = await handle.fetchHistory();
+                const types = (history.events ?? [])
+                  .map((e) => e.activityTaskScheduledEventAttributes?.activityType?.name)
+                  .filter(Boolean);
+                // One at the verdict (STW-589), one preview test.
+                assert.equal(types.filter((t) => t === 'runFindingChecks').length, 2, 'the checks ran at the verdict and on one preview');
+                assert.ok(types.includes('awaitProductionDeploy'), 'the run went on to the deploy');
+                // The merge's completion and the Update are in one workflow task:
+                // the task right after the poll completed accepts the Update.
+                const events = history.events ?? [];
+                const T = proto.temporal.api.enums.v1.EventType;
+                const mergeDone = events.findIndex(
+                  (e, i) => e.eventType === T.EVENT_TYPE_ACTIVITY_TASK_COMPLETED && i > events.findLastIndex((x) => x.activityTaskScheduledEventAttributes?.activityType?.name === 'awaitFixPrMerge'),
+                );
+                assert.deepEqual(
+                  events.slice(mergeDone + 1, mergeDone + 4).map((e) => e.eventType),
+                  [T.EVENT_TYPE_WORKFLOW_TASK_STARTED, T.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, T.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED],
+                  'one task holds the merge result and the Update',
+                );
+                // Accepted before the merge settled the race, so it returns a test number no test takes.
+                assert.equal((await update).test, 2);
+              })(),
+            ),
           );
         } finally {
           gh.pulls[0].state = 'closed';

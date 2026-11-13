@@ -4,6 +4,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
+import { ApplicationFailureCategory } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
@@ -104,6 +105,16 @@ function skipResult(handle: { workflowId: string }) {
   return env.client.workflow.getHandle<typeof findingWorkflow>(handle.workflowId).result();
 }
 
+/**
+ * A scripted "not yet" from a wait stub: retryable, and BENIGN, so the worker
+ * logs it at DEBUG rather than WARN with a stack trace. The merge-timeout test
+ * alone throws 8,640 of them, which wrote about 285,000 lines into every CI log
+ * that ran it (STW-593). A non-retryable or unexpected failure still logs WARN.
+ */
+function notYet(message: string, type: string): ApplicationFailure {
+  return ApplicationFailure.create({ message, type, nonRetryable: false, category: ApplicationFailureCategory.BENIGN });
+}
+
 interface Script {
   /** The site config's `auto_fix`. */
   autoFix?: boolean;
@@ -185,7 +196,7 @@ function lifecycle(script: Script) {
       const fail = script.prFail?.[attempt];
       if (fail) throw ApplicationFailure.nonRetryable('GitHub rejected the credential (403).', fail);
       if (n <= (script.prPolls?.[attempt] ?? 2)) {
-        throw ApplicationFailure.retryable(`No open PR from claude/issue-${input.issueNumber}- yet.`, 'FixPrNotOpen');
+        throw notYet(`No open PR from claude/issue-${input.issueNumber}- yet.`, 'FixPrNotOpen');
       }
       calls.push('awaitFixPr');
       return { prUrl: attempt === 0 ? PR_1 : PR_2, branch: `claude/issue-${input.issueNumber}-20261016-0338` };
@@ -200,7 +211,7 @@ function lifecycle(script: Script) {
       const n = (previewPolls[input.prUrl] = (previewPolls[input.prUrl] ?? 0) + 1);
       if (script.previewFail) throw ApplicationFailure.nonRetryable('The Preview deployment ended failure.', script.previewFail);
       if (script.previewNever || n <= (script.previewPolls ?? 0)) {
-        throw ApplicationFailure.retryable('No Preview deployment of the head yet.', 'PreviewNotReady');
+        throw notYet('No Preview deployment of the head yet.', 'PreviewNotReady');
       }
       calls.push('awaitPrPreview');
       return { origin: PREVIEW, deploymentId: 7, sha: 'head-sha-1' };
@@ -214,7 +225,7 @@ function lifecycle(script: Script) {
     awaitFixPrMerge: async (prUrl: string): Promise<FixPrOutcome> => {
       const n = (mergePolls[prUrl] = (mergePolls[prUrl] ?? 0) + 1);
       const plan = script.merge[prUrl];
-      if (n <= plan.openPolls) throw ApplicationFailure.retryable(`${prUrl} is still open.`, 'PrStillOpen');
+      if (n <= plan.openPolls) throw notYet(`${prUrl} is still open.`, 'PrStillOpen');
       calls.push(`awaitFixPrMerge:${plan.outcome.state}`);
       return plan.outcome;
     },
@@ -225,10 +236,10 @@ function lifecycle(script: Script) {
       deployPolls++;
       // The activity's own decision, over the scripted GitHub answers.
       const live = liveDeployment(list);
-      if (!live) throw ApplicationFailure.retryable('No production deployment yet.', 'DeployNotLive');
+      if (!live) throw notYet('No production deployment yet.', 'DeployNotLive');
       const compare = script.contains?.[`${input.mergeSha}...${live.sha}`] ? 'ahead' : 'behind';
       if (live.sha !== input.mergeSha && !compareContains(compare)) {
-        throw ApplicationFailure.retryable(`${live.sha} does not contain ${input.mergeSha}.`, 'DeployNotLive');
+        throw notYet(`${live.sha} does not contain ${input.mergeSha}.`, 'DeployNotLive');
       }
       calls.push(`awaitProductionDeploy:${live.sha}`);
       return { liveSha: live.sha, deploymentId: live.id };
@@ -309,14 +320,14 @@ function lifecycle(script: Script) {
 }
 
 /** One worker, as on the hosted container: no `steward-heavy` poller, so a child sent there would never run. */
-async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Promise<T>): Promise<T> {
+async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Promise<T>, boundMs?: number): Promise<T> {
   const findingsWorker = await Worker.create({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: skipVerdictMeasure(mocks.findings),
     taskQueue: FINDINGS,
   });
-  return await findingsWorker.runUntil(bounded(fn()));
+  return await findingsWorker.runUntil(bounded(fn(), boundMs));
 }
 
 function input(id: string): FindingWorkflowInput {
@@ -683,7 +694,9 @@ test('a PR nobody merges or closes times out after 30 days: still fixing, no dep
   const mocks = lifecycle({
     merge: { [PR_1]: { openPolls: Number.POSITIVE_INFINITY, outcome: merged(PR_1, 'never') } },
   });
-  const result = await withWorkers(mocks, async () => skipResult(await startApproved('merge-timeout')));
+  // 8,640 polls take 23 to 34 s on CI: the worker's bound must sit well above
+  // that and below the test's own 300 s timeout.
+  const result = await withWorkers(mocks, async () => skipResult(await startApproved('merge-timeout')), 240_000);
 
   assert.equal(result.outcome, 'merge-timeout');
   assert.equal(result.prUrl, PR_1);
