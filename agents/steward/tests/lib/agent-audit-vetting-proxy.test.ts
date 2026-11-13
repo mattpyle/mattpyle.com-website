@@ -128,7 +128,7 @@ test('a subresource pointed at a blocked address is refused, and nothing connect
 
   const res = await throughProxy(proxy, 'http://169.254.169.254/latest/meta-data/');
   assert.equal(res.status, 403);
-  assert.match(res.body, /link-local/);
+  assert.match(res.body, /private address/);
   assert.deepEqual(
     proxy.blocked.map((b) => b.url),
     ['http://169.254.169.254/latest/meta-data/'],
@@ -173,7 +173,7 @@ test('a top-level redirect is handed back rather than followed, and its target i
 
   const followed = await throughProxy(proxy, String(first.headers.location));
   assert.equal(followed.status, 403);
-  assert.match(followed.body, /link-local/);
+  assert.match(followed.body, /private address/);
   assert.equal(proxy.blocked.length, 1);
 });
 
@@ -202,7 +202,7 @@ test('a name that resolves to a private address is refused whichever way it arri
 
   const plain = await throughProxy(proxy, 'http://internal.example/admin');
   assert.equal(plain.status, 403);
-  assert.match(plain.body, /RFC 1918/);
+  assert.match(plain.body, /private address/);
 
   const tunnel = await tunnelThroughProxy(proxy, 'internal.example:443');
   assert.equal(tunnel.established, false);
