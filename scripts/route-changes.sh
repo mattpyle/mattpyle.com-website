@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sorts a pull request's changed files into the routing outputs and writes
-# them to $GITHUB_OUTPUT: `site`, `steward` and `browser`, plus `steward_tests`,
+# them to $GITHUB_OUTPUT: `site`, `steward`, `browser` and `consultant`, plus `steward_tests`,
 # which says how the Steward job picks its tests, and `steward_changed`, the
 # changed files it picks from.
 #
@@ -51,6 +51,7 @@ scratch="${RUNNER_TEMP:-$(mktemp -d)}"
 site=false
 steward=false
 browser=false
+consultant=false
 # Set by any change that sets `steward` from outside `agents/steward/`, and by any
 # event but a pull request; it keeps the full glob.
 steward_wide=false
@@ -59,6 +60,7 @@ steward_nonconsole=false
 if [ "$event_name" != "pull_request" ]; then
   site=true
   steward=true
+  consultant=true
   steward_wide=true
 else
   # The checkout is shallow: fetch HEAD's parents before reading them.
@@ -90,6 +92,10 @@ else
           agents/steward/src/lib/audit-engine.ts|agents/steward/src/lib/chrome-probe.ts|agents/steward/Dockerfile) browser=true ;;
         esac
         ;;
+      agents/consultant/*)
+        # The audit consultant: its own package and its own job. The site never imports it.
+        consultant=true
+        ;;
       *)
         site=true
         case "$file" in
@@ -97,6 +103,9 @@ else
         esac
         case "$file" in
           package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) browser=true ;;
+        esac
+        case "$file" in
+          package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh) consultant=true ;;
         esac
         ;;
     esac
@@ -114,6 +123,7 @@ fi
 echo "site=$site" >> "$output"
 echo "steward=$steward" >> "$output"
 echo "browser=$browser" >> "$output"
+echo "consultant=$consultant" >> "$output"
 echo "steward_tests=$steward_tests" >> "$output"
 if [ "$steward_tests" = select ]; then
   {
@@ -122,4 +132,4 @@ if [ "$steward_tests" = select ]; then
     echo "CHANGED_FILES_EOF"
   } >> "$output"
 fi
-echo "Routing: site=$site steward=$steward browser=$browser steward_tests=$steward_tests"
+echo "Routing: site=$site steward=$steward browser=$browser consultant=$consultant steward_tests=$steward_tests"
