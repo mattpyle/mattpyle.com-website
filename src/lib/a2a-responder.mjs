@@ -779,8 +779,9 @@ async function handleRequest(request, context) {
  *   `audit` is the audit skill's engine, injected: `originFor`, `checkLimit`, `runFast`,
  *   `startDeep`, `readTask` and `renderSummary`. Absent, the endpoint serves `ask-about-site`
  *   alone, which is what keeps this module free of everything that half needs.
- * @returns {Promise<{ status: number, outcome: string, payload: object | null }>} payload null
- *   means send no body (a JSON-RPC notification).
+ * @returns {Promise<{ status: number, outcome: string, payload: object | null, detail?: string }>}
+ *   payload null means send no body (a JSON-RPC notification). `detail` is an internal error's
+ *   text, for the log line only.
  */
 export async function respond(rawBody, context) {
   let request;
@@ -798,8 +799,14 @@ export async function respond(rawBody, context) {
     };
   }
 
-  const { outcome, payload, notification } = await handleRequest(request, context);
+  const { outcome, payload, notification, detail } = await handleRequest(request, context);
   // JSON-RPC errors ride a 200: the HTTP call succeeded, the RPC did not, and a client that reads
   // the status instead of the envelope would otherwise never see the error it needs to correct.
-  return { status: notification ? 204 : 200, outcome, payload: notification ? null : payload };
+  // `detail` is for the function's log only, and never part of the payload.
+  return {
+    status: notification ? 204 : 200,
+    outcome,
+    payload: notification ? null : payload,
+    ...(detail ? { detail } : {}),
+  };
 }

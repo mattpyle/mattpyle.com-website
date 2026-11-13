@@ -7,6 +7,7 @@ import {
   approvalFrom,
   consultantStateFor,
   isConsultantTaskId,
+  UNAVAILABLE_TEXT,
 } from '../src/lib/a2a-consultant-skill.mjs';
 import { ASK_SKILL_ID, AUDIT_SKILL_ID, routeMessage } from '../src/lib/a2a-audit-skill.mjs';
 import { A2A_METHOD, respond } from '../src/lib/a2a-responder.mjs';
@@ -199,6 +200,48 @@ test('CancelTask sends close on an open session and answers in the legacy dialec
   assert.equal(result.payload.result.status.state, 'canceled');
   assert.equal(result.payload.result.kind, 'task');
   assert.deepEqual(fake.calls.at(-1), ['close', ID]);
+});
+
+test('an unreachable consultant gets a fixed reply, and the error text stays in the log detail', async () => {
+  const leak = new Error('Failed to connect to example-ns.zz99q.tmprl.example:7233 in namespace example-ns.zz99q');
+  const failing = {
+    start: async () => { throw leak; },
+    read: async () => { throw leak; },
+    close: async () => { throw leak; },
+  };
+  const consultant = { checkLimit: async () => ({ allowed: true }), engine: failing };
+  const calls = [
+    [A2A_METHOD, message('hi', { metadata: { skill: CONSULTANT_SKILL_ID } }), 'consultant-unavailable/start'],
+    ['GetTask', { id: ID }, 'consultant-unavailable/read'],
+    [A2A_METHOD, message('more', { taskId: ID }), 'consultant-unavailable/read'],
+    ['CancelTask', { id: ID }, 'consultant-unavailable/read'],
+  ];
+  for (const [method, params, outcome] of calls) {
+    const result = await rpc(method, params, consultant);
+    const body = JSON.stringify(result.payload);
+    assert.equal(result.outcome, outcome);
+    assert.equal(result.payload.error.message, UNAVAILABLE_TEXT);
+    assert.ok(!/zz99q|tmprl|7233|namespace/i.test(body), `${method}: ${body}`);
+    assert.match(result.detail, /example-ns\.zz99q/, 'the detail keeps the cause for the log');
+  }
+
+  // A failed write after a good read: the same.
+  const fake = fakeEngine({ execution: 'RUNNING', status: status(), session: session() });
+  fake.engine.send = async () => { throw leak; };
+  const send = await rpc(A2A_METHOD, message('more', { taskId: ID }), { checkLimit: async () => ({ allowed: true }), engine: fake.engine });
+  assert.equal(send.outcome, 'consultant-unavailable/send');
+  assert.ok(!/zz99q|tmprl/.test(JSON.stringify(send.payload)));
+});
+
+test('no handler in the two new files puts an error\'s own text into a reply', () => {
+  for (const file of ['src/lib/a2a-consultant-skill.mjs', 'src/lib/a2a-consultant-temporal.mjs']) {
+    const source = read(file);
+    const echoes = [...source.matchAll(/error\.message|err\.message/g)].length;
+    // a2a-consultant-skill.mjs: once, into `detail`. a2a-consultant-temporal.mjs: once, into a
+    // reading's `queryError`, which no reply reads.
+    assert.equal(echoes, 1, file);
+  }
+  assert.doesNotMatch(read('src/lib/a2a-consultant-skill.mjs'), /queryError/);
 });
 
 test('without a Temporal connection the skill says it is not configured', async () => {

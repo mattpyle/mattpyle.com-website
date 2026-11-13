@@ -188,13 +188,28 @@ function taskNotFound(id, taskId) {
   );
 }
 
-function unavailable(id, error, taskId) {
-  return errorResponse(
-    id,
-    ERROR_CODES.internal,
-    `The consultant could not be reached: ${error instanceof Error ? error.message : String(error)}.`,
-    [errorInfo('CONSULTANT_UNAVAILABLE', taskId ? { taskId } : undefined)]
-  );
+/**
+ * The refusal when Temporal or the consultant's worker does not answer.
+ *
+ * The caller gets a fixed sentence and never the error's own text: a Temporal or gRPC error can
+ * name the namespace or the address it tried, and no public text names those. The text goes to
+ * `detail`, which the route writes to the function's log line and nowhere else.
+ */
+export const UNAVAILABLE_TEXT =
+  'The consultant could not be reached just now. Nothing was changed by this call; try the same ' +
+  'call again in a minute.';
+
+function unavailable(id, error, taskId, outcome) {
+  const detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
+    .replace(/\s+/g, ' ')
+    .slice(0, 300);
+  return {
+    outcome,
+    detail,
+    payload: errorResponse(id, ERROR_CODES.internal, UNAVAILABLE_TEXT, [
+      errorInfo('CONSULTANT_UNAVAILABLE', { retry: 'true', ...(taskId ? { taskId } : {}) }),
+    ]),
+  };
 }
 
 function wrapTask(id, task, legacy, inSendMessage) {
@@ -210,7 +225,7 @@ async function readOrRefuse(id, taskId, consultant) {
     if (error?.name === 'ConsultantNotFound') {
       return { refusal: { outcome: 'task-not-found/unknown', payload: taskNotFound(id, taskId) } };
     }
-    return { refusal: { outcome: 'consultant-unavailable', payload: unavailable(id, error, taskId) } };
+    return { refusal: unavailable(id, error, taskId, 'consultant-unavailable/read') };
   }
 }
 
@@ -264,7 +279,7 @@ export async function handleConsultantMessage({ id, params, text, taskId, contex
     try {
       started = await engine.start(text);
     } catch (error) {
-      return { outcome: 'consultant-unavailable/start', payload: unavailable(id, error) };
+      return unavailable(id, error, undefined, 'consultant-unavailable/start');
     }
     const view = started.accepted
       ? { state: 'working', text: `The consultant is working on your message. Poll GetTask with id "${started.workflowId}".` }
@@ -327,7 +342,7 @@ export async function handleConsultantMessage({ id, params, text, taskId, contex
     }
   } catch (error) {
     if (error?.name === 'ConsultantNotFound') return { outcome: 'task-not-found/unknown', payload: taskNotFound(id, taskId) };
-    return { outcome: 'consultant-unavailable/send', payload: unavailable(id, error, taskId) };
+    return unavailable(id, error, taskId, 'consultant-unavailable/send');
   }
 
   const working = { state: 'working', text: 'The consultant is working on your message.', turn: view.turn };
@@ -367,7 +382,7 @@ export async function handleConsultantCancel({ id, taskId, contextId, legacy, ne
   try {
     await consultant.engine.close(taskId);
   } catch (error) {
-    return { outcome: 'consultant-unavailable/cancel', payload: unavailable(id, error, taskId) };
+    return unavailable(id, error, taskId, 'consultant-unavailable/cancel');
   }
   const canceled = { state: 'canceled', text: view.awaiting === 'message' ? view.text : 'The session was canceled.', turn: view.turn };
   return {

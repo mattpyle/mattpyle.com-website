@@ -136,7 +136,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
   countRequest(request, parsed);
 
-  const { status, outcome, payload } = await respond(raw, {
+  const { status, outcome, payload, detail } = await respond(raw, {
     digest,
     newId: () => crypto.randomUUID(),
     now: () => new Date().toISOString(),
@@ -173,6 +173,8 @@ export const POST: APIRoute = async ({ request }) => {
     status,
     bytes: raw.length,
     ua: request.headers.get('user-agent') ?? '',
+    // An internal error's own text, which the caller's reply leaves out on purpose.
+    ...(detail ? { detail } : {}),
   });
 
   if (payload === null) return new Response(null, { status });
