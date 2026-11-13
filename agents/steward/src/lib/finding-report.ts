@@ -1,5 +1,5 @@
 import { defaultPayloadConverter } from '@temporalio/common';
-import type { History } from '@temporalio/common/lib/proto-utils.js';
+import type { History } from '@temporalio/common/proto-utils';
 import { parseIssueUrl, parsePrUrl, type FindingVerdict } from './findings.js';
 
 /**

@@ -5,7 +5,7 @@ import { Client, type WorkflowHandle } from '@temporalio/client';
 import { ApplicationFailure, defaultPayloadConverter } from '@temporalio/common';
 import { Worker } from '@temporalio/worker';
 import proto from '@temporalio/proto';
-import { tsToMs } from '@temporalio/common/lib/time.js';
+import { tsToMs } from '@temporalio/common/time';
 import { bounded, createLocalEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
