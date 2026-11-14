@@ -27,8 +27,8 @@ name: CI (tests & typecheck)
 # costs a build and adds nothing to review.
 #
 #   Changed file                                        steward  site  browser
-#   Markdown outside src/content/ and
-#     agents/steward/src/                               no       no    no
+#   Markdown outside src/content/, src/data/,
+#     public/ and agents/steward/src/                   no       no    no
 #   agents/consultant/** (not Markdown)                 no       no    no
 #   agents/steward/** (not Markdown outside
 #     agents/steward/src/)                              yes      no    no

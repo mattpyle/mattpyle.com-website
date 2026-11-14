@@ -75,9 +75,11 @@ else
   fi
   while IFS= read -r file; do
     [ -n "$file" ] || continue
-    # Markdown is documentation unless it is published content or Steward source.
+    # Markdown is documentation unless it is published content, a file the site
+    # serves or builds from (`public/agents.md`, the skills under `src/data/`),
+    # or Steward source.
     case "$file" in
-      src/content/*|agents/steward/src/*) ;;
+      src/content/*|src/data/*|public/*|agents/steward/src/*) ;;
       *.md) continue ;;
     esac
     case "$file" in
