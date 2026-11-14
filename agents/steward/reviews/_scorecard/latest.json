@@ -1,13 +1,13 @@
 {
-  "iso": "2026-11-13",
-  "timestamp": "2026-11-13T03:45:14-07:00",
+  "iso": "2026-11-14",
+  "timestamp": "2026-11-14T03:45:52-07:00",
   "scope": "107 live pages",
   "tools": [
     "Lighthouse 13.5",
     "axe-core 4.12"
   ],
   "entry": "Nightly · automated",
-  "commentary": "Accessibility moved from Fail to Pass; all 107 pages passed all four public metrics.",
+  "commentary": "All 107 pages passed all four public metrics.",
   "metrics": [
     {
       "name": "Accessibility",
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-11-13",
+  "id": "2026-11-14",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -4895,12 +4895,12 @@
       ],
       "readingBudget": {
         "text": {
-          "share": 81,
-          "measured": 5070
+          "share": 82,
+          "measured": 5174
         },
         "markdown": {
           "share": 93,
-          "measured": 4582
+          "measured": 4690
         }
       }
     },
@@ -5147,7 +5147,7 @@
     {
       "url": "https://www.mattpyle.com/writing/how-to-implement-webmcp-on-a-website/",
       "scores": {
-        "performance": 99,
+        "performance": 100,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -5193,9 +5193,8 @@
       }
     }
   ],
-  "decision": "open-pr",
-  "reason": "Accessibility Fail→Pass",
-  "prUrl": "https://github.com/mattpyle/mattpyle.com-website/pull/698",
+  "decision": "no-op",
+  "reason": "unchanged, published 1d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-11-13"
+  "archiveId": "2026-11-14"
 }
