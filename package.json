@@ -46,7 +46,7 @@
     "@temporalio/client": "1.25.0",
     "@vercel/functions": "^3.7.5",
     "@vercel/speed-insights": "^2.0.0",
-    "astro": "^7.4.2",
+    "astro": "^7.4.12",
     "satteri": "^0.9.1",
     "undici": "^7.30.1",
     "web-bot-auth": "0.2.0",
