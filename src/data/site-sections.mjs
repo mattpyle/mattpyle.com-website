@@ -89,5 +89,10 @@ export function sitePages(base) {
       url: `${base}/audit/`,
       summary: "A form that runs Steward's fast agent-readiness audit on a site you name and shows the report in the page.",
     },
+    {
+      name: 'Fix log',
+      url: `${base}/fix-log/`,
+      summary: 'Problems on this site that its agents found, and the fixes they made, each with a before and an after.',
+    },
   ];
 }
