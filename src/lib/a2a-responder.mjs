@@ -80,6 +80,7 @@ import {
   isConsultantTaskId,
 } from './a2a-consultant-skill.mjs';
 import { isAuditTaskId } from './audit-task-id.mjs';
+import { A2A_METHODS, countWord, methodsQuoted } from './a2a-methods.mjs';
 
 /** The message-sending method, in its A2A 1.0 spelling. */
 export const A2A_METHOD = 'SendMessage';
@@ -87,8 +88,8 @@ export const A2A_METHOD = 'SendMessage';
 /** Pre-1.0 spellings accepted from older clients, and answered in the matching dialect. */
 export const LEGACY_METHODS = Object.freeze(['message/send']);
 
-/** The methods, in their 1.0 spelling, for the help text and the not-found error. */
-export const A2A_METHODS = Object.freeze([A2A_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
+/** The methods, in their 1.0 spelling, for the help text and the not-found error. Defined in a2a-methods.mjs. */
+export { A2A_METHODS };
 
 export { CANCEL_TASK_METHOD, ERROR_CODES, GET_TASK_METHOD, LEGACY_CANCEL_TASK_METHODS, LEGACY_GET_TASK_METHODS };
 
@@ -520,7 +521,7 @@ function validateEnvelope(request) {
       refusal: {
         outcome: `method-not-found/${method}`,
         notification: isNotification,
-        payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements three methods: "${A2A_METHOD}", "${GET_TASK_METHOD}" for reading a Task, and "${CANCEL_TASK_METHOD}" for closing a consultant session. Streaming, push notifications and the extended Agent Card are not implemented; the Agent Card at ${AGENT_CARD_URL} declares the same thing.`, [
+        payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements ${countWord(A2A_METHODS.length)} methods: ${methodsQuoted()}. Streaming, push notifications and the extended Agent Card are not implemented; the Agent Card at ${AGENT_CARD_URL} declares the same thing.`, [
           errorInfo('METHOD_NOT_FOUND', {
             requested: method,
             supported: A2A_METHODS.join(','),

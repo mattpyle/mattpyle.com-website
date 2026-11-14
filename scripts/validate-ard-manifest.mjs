@@ -18,7 +18,7 @@
  * The identifier pattern is the spec's own (Appendix C) with the publisher segment pinned to this
  * domain: an entry here that claims a different publisher is a mistake, not an extension.
  *
- * ## The three decisions this file exists to hold
+ * ## The four decisions this file exists to hold
  *
  * **1. The skill entries carry `type: "text/markdown; profile=\"urn:air:agent-skills\""`.** As of
  * 2026-10-23 the spec allows two forms for a skill in markdown, `application/agent-skills+md` and
@@ -42,6 +42,8 @@
  * tests/agent-surfaces.test.mjs: the diff that keeps a hand-written list honest is the one that
  * fails when the generated source moves under it.
  *
+ * **4. The A2A entry's capabilities are the Agent Card's skill ids.** See the check below.
+ *
  * Not asserted: the four `url`s resolving. Each already has its own validator in this chain —
  * validate-a2a-card, validate-mcp-discovery, validate-agent-skills-index — and a fourth check that
  * the same documents exist would fail in pairs and say nothing new.
@@ -52,6 +54,7 @@ import { fileURLToPath } from 'node:url';
 import { readSkills, skillUrlFor } from '../src/lib/agent-skills.mjs';
 
 const DOCUMENT = fileURLToPath(new URL('../public/.well-known/ard.json', import.meta.url));
+const AGENT_CARD = fileURLToPath(new URL('../public/.well-known/agent-card.json', import.meta.url));
 const ORIGIN = 'https://www.mattpyle.com';
 const PUBLISHER = 'mattpyle.com';
 
@@ -135,6 +138,22 @@ for (const entry of skillEntries) {
   if (entry.type !== SKILL_TYPE) {
     failures.push(
       `[${entry.identifier}] type must be ${SKILL_TYPE}, the markdown skill type both the spec and Lighthouse's ard-schema audit accept; see this file's docblock. Found ${JSON.stringify(entry.type)}`
+    );
+  }
+}
+
+// Decision 4. The A2A entry's capabilities are the Agent Card's skill ids. The card is tied to
+// SKILL_IDS by tests/a2a-card.test.mjs; this entry was tied to nothing, and still said two skills
+// after the card gained a third.
+const a2aEntries = entries.filter((entry) => entry?.type === 'application/a2a-agent-card+json');
+if (a2aEntries.length !== 1) {
+  failures.push(`expected exactly one A2A Agent Card entry; found ${a2aEntries.length}`);
+} else {
+  const cardSkills = (JSON.parse(readFileSync(AGENT_CARD, 'utf8')).skills ?? []).map((skill) => skill.id);
+  const capabilities = Array.isArray(a2aEntries[0].capabilities) ? a2aEntries[0].capabilities : [];
+  if (JSON.stringify([...capabilities].sort()) !== JSON.stringify([...cardSkills].sort())) {
+    failures.push(
+      `[${a2aEntries[0].identifier}] capabilities must equal the Agent Card's skill ids — expected ${JSON.stringify(cardSkills)}, found ${JSON.stringify(capabilities)}`
     );
   }
 }
