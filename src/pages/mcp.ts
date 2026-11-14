@@ -10,6 +10,7 @@ import {
   DEEP_TOOL_NAME,
   GET_AUDIT_TOOL_NAME,
   MCP_HANDLER_OPTIONS,
+  MCP_TOOL_NAMES,
   refusalForBody,
   SERVER_NAME,
   TOOL_NAME,
@@ -369,7 +370,7 @@ export const GET: APIRoute = ({ request }) => {
         // a person who followed it out of their access log. Both are one hop from the page that
         // explains the auditor, what one audit costs a site, and how to refuse it.
         docs: 'https://www.mattpyle.com/steward',
-        tools: DEEP_ENABLED ? [TOOL_NAME, DEEP_TOOL_NAME, GET_AUDIT_TOOL_NAME] : [TOOL_NAME],
+        tools: DEEP_ENABLED ? [...MCP_TOOL_NAMES] : [TOOL_NAME],
         example: {
           method: 'POST',
           url: 'https://www.mattpyle.com/mcp',

@@ -106,6 +106,15 @@ export const DEEP_TOOL_NAME = 'deep_audit';
 export const GET_AUDIT_TOOL_NAME = 'get_audit';
 
 /**
+ * Every tool this server registers, fast tool first. The one list that GET /mcp and the tests read.
+ * The server has no registry of its own: `server.registerTool` is called once per name below, in
+ * `createAuditServer` and `registerDeepTools`. tests/change-kinds-skills.test.mjs fails when a
+ * `registerTool` name in this file is not listed here, or a name here is never registered, and
+ * names the surface of prose (public/agents.md, the Steward page) that omits it.
+ */
+export const MCP_TOOL_NAMES = Object.freeze([TOOL_NAME, DEEP_TOOL_NAME, GET_AUDIT_TOOL_NAME]);
+
+/**
  * The output schema, mirroring the audit document's top level and going no deeper.
  *
  * Every nested object is loose on purpose. The canonical schema lives in Steward's `result.ts` and
