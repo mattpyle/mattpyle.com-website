@@ -89,7 +89,7 @@ export const GET: APIRoute = async () => {
     ].join('\n'),
 
     '# Activity',
-    "Fetches of this site's agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted, and the nightly scorecard audit does not appear in these numbers.",
+    "Fetches of this site's agent surfaces, pages served as Markdown to clients that asked for them, and pages fetched by a bot this site can name by its user agent. Page views by a browser, and by any client this site cannot name, are not counted. This site's own nightly auditor is counted, under `steward-audit`.",
     `Read from the store at ${utcStamp(renderedAt)}. Every count is a UTC hour bucket or a rolling window over hour buckets; there are no per-request records and no sub-hour timestamps. The same figures as JSON: ${SITE_ORIGIN}/activity.json`,
   ];
 
