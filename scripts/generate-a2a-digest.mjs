@@ -23,6 +23,7 @@
  * then projected to digest rows, so the comparator sees the shape it is written against.
  */
 
+import { methodsClause } from '../src/lib/a2a-methods.mjs';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -170,7 +171,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       {
         name: 'A2A endpoint',
         url: `${base}/a2a`,
-        description: 'This endpoint. JSON-RPC 2.0: SendMessage; GetTask for polling a Task; CancelTask for closing a consultant session.',
+        description: `This endpoint. JSON-RPC 2.0: ${methodsClause()}.`,
       },
       {
         name: 'MCP server',

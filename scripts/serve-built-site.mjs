@@ -2,10 +2,10 @@
 /**
  * Serve a production build locally, including the routes that render on demand.
  *
- * A static file server was enough while every page prerendered to a file. /scorecard no longer
- * does — its Agent traffic section reads the hit store at request time — so a static server
- * answers 404 for one of the seven routes the accessibility audits cover, and for its `.md`
- * sibling. This serves dist/client exactly as before and falls back to the adapter's own render
+ * A static file server was enough while every page prerendered to a file. /activity and /audit do
+ * not — /activity reads the hit store at request time — so a static server answers 404 for two of
+ * the routes the accessibility audits cover, and for their `.md` siblings. (/scorecard went back
+ * to prerendering on 2026-08-22.) This serves dist/client exactly as before and falls back to the adapter's own render
  * function for anything not on disk, which is the same ordering Vercel uses (`handle: filesystem`
  * first, then the function routes).
  *
