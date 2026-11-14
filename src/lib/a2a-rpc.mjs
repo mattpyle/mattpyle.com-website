@@ -9,6 +9,8 @@
  * PURE, like everything else under this endpoint: no I/O, no clock, no randomness.
  */
 
+import { createHash } from 'node:crypto';
+
 export const DOMAIN = 'www.mattpyle.com';
 
 export const AGENT_CARD_URL = `https://${DOMAIN}/.well-known/agent-card.json`;
@@ -70,4 +72,21 @@ export function readText(message) {
     }
   }
   return null;
+}
+
+/**
+ * The context id of a Task whose caller named none: the same value on every call for one task.
+ *
+ * This endpoint stores nothing between calls, so it cannot look up the id it gave a task the
+ * first time. It used to mint a fresh one on every response, so one session read as six
+ * conversations across six calls, and a client that groups by context saw them as unrelated.
+ * A hash of the task id needs no storage and no randomness. It is shaped like a UUID because
+ * that is what every other context id here looks like, and it is not a UUID of any version.
+ *
+ * @param {string} taskId
+ * @returns {string}
+ */
+export function contextIdForTask(taskId) {
+  const hex = createHash('sha256').update(`a2a-context:${taskId}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
