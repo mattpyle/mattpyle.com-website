@@ -549,6 +549,12 @@ function contextIdFor(params, newId) {
   return typeof inbound === 'string' && inbound !== '' ? inbound : newId();
 }
 
+/** The caller's thread id where they set one, and null otherwise: a Task then derives its own. */
+function namedContextId(params) {
+  const inbound = params?.message?.contextId;
+  return typeof inbound === 'string' && inbound !== '' ? inbound : null;
+}
+
 /**
  * `ask-about-site`: the webmaster's one-turn answer, unchanged since the v1.
  *
@@ -648,7 +654,7 @@ async function handleCancel(id, params, legacy, context) {
     };
   }
   if (!context.consultant) return notConfigured(id, CONSULTANT_SKILL_ID);
-  return handleConsultantCancel({ id, taskId, contextId: context.newId(), legacy, newId: context.newId, now: context.now, consultant: context.consultant });
+  return handleConsultantCancel({ id, taskId, contextId: null, legacy, newId: context.newId, now: context.now, consultant: context.consultant });
 }
 
 /**
@@ -679,7 +685,7 @@ async function handleRequest(request, context) {
   if (getTask && isConsultantTaskId(taskIdParam(params))) {
     if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
     return settled(
-      await handleConsultantGetTask({ id, taskId: taskIdParam(params), contextId: newId(), legacy, newId, now, consultant })
+      await handleConsultantGetTask({ id, taskId: taskIdParam(params), contextId: null, legacy, newId, now, consultant })
     );
   }
 
@@ -692,7 +698,7 @@ async function handleRequest(request, context) {
         id,
         params: params && typeof params === 'object' && !Array.isArray(params) ? params : {},
         legacy,
-        contextId: newId(),
+        contextId: null,
         newId,
         now,
         audit: audit ?? {},
@@ -743,7 +749,7 @@ async function handleRequest(request, context) {
         params,
         text,
         taskId: typeof inbound === 'string' && inbound !== '' ? inbound : null,
-        contextId: contextIdFor(params, newId),
+        contextId: namedContextId(params),
         legacy,
         newId,
         now,
@@ -757,7 +763,7 @@ async function handleRequest(request, context) {
       await handleAuditMessage({
         id,
         route,
-        contextId: contextIdFor(params, newId),
+        contextId: namedContextId(params),
         legacy,
         newId,
         now,

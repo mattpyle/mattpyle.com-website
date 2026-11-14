@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { taskFrom } from '../src/lib/a2a-audit-skill.mjs';
 import { fileURLToPath } from 'node:url';
 import {
   ASK_SKILL_ID,
@@ -478,4 +479,15 @@ test('the task id guard accepts what the workspace generates and nothing else', 
   assert.equal(isAuditTaskId('steward-audit-example.com deep'), false);
   assert.equal(isAuditTaskId(''), false);
   assert.equal(isAuditTaskId(undefined), false);
+});
+
+test('a deep audit task shows one context id on every read when the caller named none', () => {
+  const snapshot = { status: { workflowId: 'steward-audit-example-1', url: 'https://example.com', state: 'running' } };
+  const shape = { contextId: null, legacy: false, newId: () => 'm', now: () => '2026-11-14T00:00:00.000Z', renderSummary: () => '' };
+  const first = taskFrom(snapshot, shape);
+  const second = taskFrom(snapshot, shape);
+  assert.equal(first.contextId, second.contextId);
+  assert.equal(first.status.message.contextId, first.contextId);
+  assert.notEqual(first.contextId, taskFrom({ status: { ...snapshot.status, workflowId: 'steward-audit-example-2' } }, shape).contextId);
+  assert.equal(taskFrom(snapshot, { ...shape, contextId: 'ctx-from-client' }).contextId, 'ctx-from-client');
 });
