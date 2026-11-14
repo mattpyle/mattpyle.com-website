@@ -48,12 +48,12 @@ function assertNames(family, file, text, names) {
 test('A2A skills: the prose states the count of SKILL_IDS and names every skill', () => {
   const ids = [...SKILL_IDS];
   const llms = read('src/pages/llms.txt.ts');
-  assertCount('A2A skills', 'src/pages/llms.txt.ts', llms, /\b(\w+) skills, answered by a JSON-RPC/, ids.length, 'the A2A skill count');
   assertNames('A2A skills', 'src/pages/llms.txt.ts', llms, ids);
+  assertCount('A2A skills', 'src/pages/llms.txt.ts', llms, /\b(\w+) skills, answered by a JSON-RPC/, ids.length, 'the A2A skill count');
 
   const agents = read('public/agents.md');
-  assertCount('A2A skills', 'public/agents.md', agents, /between them they do (\w+) things/, ids.length, 'the A2A skill count');
   assertNames('A2A skills', 'public/agents.md', agents, ids);
+  assertCount('A2A skills', 'public/agents.md', agents, /between them they do (\w+) things/, ids.length, 'the A2A skill count');
 
   // Checks only: the two JSON documents are not edited by this kind's tests.
   const card = JSON.parse(read('public/.well-known/agent-card.json'));
@@ -88,9 +88,9 @@ test('Agent Skills: llms.txt and agents.md state the count and agents.md names e
   const llms = read('src/pages/llms.txt.ts');
   assertCount('Agent Skills', 'src/pages/llms.txt.ts', llms, /and the (\w+) Agent Skills/, skills.length, 'the Agent Skills count');
   const agents = read('public/agents.md');
+  assertNames('Agent Skills', 'public/agents.md', agents, names);
   assertCount('Agent Skills', 'public/agents.md', agents, /It lists (\w+) skills/, skills.length, 'the Agent Skills count');
   assertCount('Agent Skills', 'public/agents.md', agents, /and the (\w+) Agent Skills/, skills.length, 'the Agent Skills count');
-  assertNames('Agent Skills', 'public/agents.md', agents, names);
 });
 
 /* ------------------------------------------------------------------ MCP tools */
