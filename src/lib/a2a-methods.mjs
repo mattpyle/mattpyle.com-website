@@ -16,8 +16,10 @@
  * `phrase` is what the method is for, written to follow "<name> for ". SendMessage has none: it is
  * the method the endpoint is for, and the sentences name it bare.
  *
- * NO TOP-LEVEL SIDE EFFECTS and no imports.
+ * NO TOP-LEVEL SIDE EFFECTS. Its only import is src/lib/count-words.mjs, which has none.
  */
+
+import { countWord, joinAnd } from './count-words.mjs';
 
 export const A2A_METHOD_PHRASES = Object.freeze([
   Object.freeze({ name: 'SendMessage', phrase: null }),
@@ -28,17 +30,7 @@ export const A2A_METHOD_PHRASES = Object.freeze([
 /** The method names, in their 1.0 spelling. */
 export const A2A_METHODS = Object.freeze(A2A_METHOD_PHRASES.map((method) => method.name));
 
-const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-
-/** `3` -> `three`. @param {number} count */
-export function countWord(count) {
-  return COUNT_WORDS[count] ?? String(count);
-}
-
-/** `a, b and c`. @param {string[]} items */
-export function joinAnd(items) {
-  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-}
+export { countWord, joinAnd };
 
 /** The endpoint description's method clause: `SendMessage; GetTask for polling a Task; ...`. */
 export function methodsClause() {

@@ -24,6 +24,9 @@
  */
 
 import { methodsClause } from '../src/lib/a2a-methods.mjs';
+import { countWord, joinAnd } from '../src/lib/count-words.mjs';
+import { readSkills } from '../src/lib/agent-skills.mjs';
+import { createTools } from '../src/lib/webmcp-tools.mjs';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +43,17 @@ import {
 
 const CONTENT = fileURLToPath(new URL('../src/content/', import.meta.url));
 export const DIGEST_PATH = fileURLToPath(new URL('../src/data/a2a-digest.json', import.meta.url));
+
+/**
+ * The counts the surface descriptions state, read from the sources: the Agent Skills are the files
+ * under src/data/skills/, the WebMCP tools are what createTools() returns, and the read ones carry
+ * `readOnlyHint`. Adding either is adding to its source, with no edit here. The test that holds the
+ * hand-written prose to the same sources is tests/change-kinds-skills-*.test.mjs.
+ */
+const AGENT_SKILLS = readSkills();
+const WEBMCP_TOOLS = createTools(() => Promise.reject(new Error('no index at build time')));
+const WEBMCP_READ_TOOLS = WEBMCP_TOOLS.filter((tool) => tool.annotations?.readOnlyHint === true);
+const capitalised = (word) => `${word[0].toUpperCase()}${word.slice(1)}`;
 
 /** How many changelog entries the responder can cite. The rest are one link away. */
 const CHANGELOG_LIMIT = 10;
@@ -161,7 +175,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       {
         name: 'WebMCP tools',
         url: `${base}/webmcp/`,
-        description: `Six tools registered on document.modelContext for in-browser agents, four read and two write. Callable only from a browser that implements WebMCP; the definitions are at ${base}/webmcp/tools.json and the data they read is at ${base}/webmcp/index.json.`,
+        description: `${capitalised(countWord(WEBMCP_TOOLS.length))} tools registered on document.modelContext for in-browser agents, ${countWord(WEBMCP_READ_TOOLS.length)} read and ${countWord(WEBMCP_TOOLS.length - WEBMCP_READ_TOOLS.length)} write. Callable only from a browser that implements WebMCP; the definitions are at ${base}/webmcp/tools.json and the data they read is at ${base}/webmcp/index.json.`,
       },
       {
         name: 'A2A Agent Card',
@@ -186,13 +200,12 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       {
         name: 'Agent Skills index',
         url: `${base}/.well-known/agent-skills/index.json`,
-        description: `Agent Skills Discovery index listing 2 skills with sha256 digests: ${base}/.well-known/agent-skills/implement-markdown-negotiation/SKILL.md and ${base}/.well-known/agent-skills/using-mattpyle-com/SKILL.md.`,
+        description: `Agent Skills Discovery index listing ${AGENT_SKILLS.length} skills with sha256 digests: ${joinAnd(AGENT_SKILLS.map((skill) => `${base}${skill.url}`))}.`,
       },
       {
         name: 'ARD catalogue',
         url: `${base}/.well-known/ard.json`,
-        description:
-          'Agentic Resource Discovery publisher catalogue pointing at the A2A Agent Card, the MCP Server Card and the two Agent Skills.',
+        description: `Agentic Resource Discovery publisher catalogue pointing at the A2A Agent Card, the MCP Server Card and the ${countWord(AGENT_SKILLS.length)} Agent Skills.`,
       },
       {
         name: 'Poppy discovery document',

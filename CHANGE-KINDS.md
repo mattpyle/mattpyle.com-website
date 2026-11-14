@@ -1,6 +1,6 @@
 # Change kinds
 
-What a common change to this site touches, and what holds each surface. A surface is either generated from one source, checked by a test or validator that fails with the surface named, or left to a person. Built so far: the first two kinds. The rest are listed so the next build starts from the same table, and marked "not yet".
+What a common change to this site touches, and what holds each surface. A surface is either generated from one source, checked by a test or validator that fails with the surface named, or left to a person. Built so far: the first three kinds. The rest are listed so the next build starts from the same table, and marked "not yet".
 
 `llms.txt` and `agents.md` stay hand-written. They are checked, never generated.
 
@@ -39,15 +39,60 @@ Add the method name and its phrase in `src/lib/a2a-methods.mjs`, then:
 | Method prose in `agents.md` | `public/agents.md` | `tests/change-kinds-a2a-methods.test.mjs` fails and names the method |
 | A2A line in `llms.txt` | `src/pages/llms.txt.ts` | `tests/change-kinds-a2a-methods.test.mjs` fails and names the method |
 
-## A new skill
+## A new skill or tool
 
-Not yet, apart from the rows below.
+Four families, each with one source. Add the member there; the counts and lists that are data follow, and `tests/change-kinds-skills.test.mjs` fails with the family, the member or count, and the file for the prose that does not.
+
+| Family | One source | Add it by |
+|---|---|---|
+| A2A skills | `SKILL_IDS` in `src/lib/a2a-audit-skill.mjs` | A new id and its skill module |
+| Agent Skills | the files in `src/data/skills/`, read by `src/lib/agent-skills.mjs` | A new `.md` file named for the skill |
+| MCP tools | `MCP_TOOL_NAMES` in `src/lib/mcp-audit-server.mjs` | A new `registerTool` call and its name in the list |
+| WebMCP tools | `createTools()` in `src/lib/webmcp-tools.mjs` | A new tool object; `readOnlyHint` marks a read tool |
+
+A2A skills:
 
 | Surface | File | Held by |
 |---|---|---|
 | Agent Card skills | `public/.well-known/agent-card.json` | `tests/a2a-card.test.mjs` |
-| Discovery catalogue entry | `public/.well-known/ard.json` | `scripts/validate-ard-manifest.mjs` ties its A2A capabilities to the Agent Card |
-| Skill prose in `llms.txt`, `agents.md` and the Steward page | `src/pages/llms.txt.ts` | Not yet |
+| Agent Card description count | `public/.well-known/agent-card.json` | `tests/change-kinds-skills.test.mjs` fails and names the count |
+| Discovery catalogue entry | `public/.well-known/ard.json` | `scripts/validate-ard-manifest.mjs` ties its A2A capabilities to the Agent Card; `tests/change-kinds-skills.test.mjs` checks the description count |
+| Census skill list | `src/lib/agent-hits.mjs` | `tests/a2a-census.test.mjs` |
+| Skill prose in `llms.txt` | `src/pages/llms.txt.ts` | `tests/change-kinds-skills.test.mjs` fails and names the skill or count |
+| Skill prose in `agents.md` | `public/agents.md` | `tests/change-kinds-skills.test.mjs` fails and names the skill or count |
+
+Agent Skills:
+
+| Surface | File | Held by |
+|---|---|---|
+| Skills index | `src/lib/agent-skills.mjs` | Generated; `scripts/validate-agent-skills-index.mjs` |
+| Skill lines in `llms.txt` | `src/pages/llms.txt.ts` | Generated from the index |
+| Skill count and URLs in the A2A digest | `scripts/generate-a2a-digest.mjs` | Generated from the skill files |
+| Logged skill paths | `src/lib/agent-surfaces.mjs` | `tests/change-kinds-skills.test.mjs` fails when the list differs from the skill files. Hand-kept: the middleware bundle cannot read the disk |
+| Count and names in `llms.txt` and `agents.md` | `src/pages/llms.txt.ts` | `tests/change-kinds-skills.test.mjs` fails and names the skill or count |
+
+MCP tools:
+
+| Surface | File | Held by |
+|---|---|---|
+| Tool names | `src/lib/mcp-audit-server.mjs` | `tests/change-kinds-skills.test.mjs` fails when `MCP_TOOL_NAMES` differs from the registered names |
+| Tool list in the GET answer | `src/pages/mcp.ts` | Generated from `MCP_TOOL_NAMES` |
+| Tool prose in `agents.md` and the Steward page | `public/agents.md` | `tests/change-kinds-skills.test.mjs` fails and names the tool |
+| Tool count on the Steward page | `src/components/steward/StewardBody.astro` | `tests/change-kinds-skills.test.mjs` fails and names the count |
+| Discovery document, Server Card and `llms.txt` | `public/.well-known/mcp-server` | Describe the fast tool only, on purpose: `scripts/validate-mcp-discovery.mjs`. The exemption list in the test names each |
+
+WebMCP tools:
+
+| Surface | File | Held by |
+|---|---|---|
+| Tool manifest | `src/pages/webmcp/tools.json.ts` | Generated from `createTools()` |
+| Tool counts in the A2A digest | `scripts/generate-a2a-digest.mjs` | Generated from `createTools()` |
+| Counts in `llms.txt` | `src/pages/llms.txt.ts` | `tests/change-kinds-skills.test.mjs` fails and names the count |
+| Counts and names in `llms-full.txt` and `agents.md` | `src/pages/llms-full.txt.ts` | `tests/change-kinds-skills.test.mjs` fails and names the tool or count |
+| Counts on the `/webmcp` page | `src/pages/webmcp/index.astro` | `tests/change-kinds-skills.test.mjs` fails and names the count |
+| Editorial notes per tool | `src/data/webmcp-catalog.mjs` | `tests/webmcp-catalog.test.mjs` |
+
+A surface left out of a family on purpose goes on the exemption list in `tests/change-kinds-skills.test.mjs`, with a reason. Not held: the "Four entries" count of catalogue entries in `llms.txt` and `agents.md`.
 
 ## Other kinds
 
