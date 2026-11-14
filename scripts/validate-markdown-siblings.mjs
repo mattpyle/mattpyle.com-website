@@ -10,6 +10,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hasCuratedSibling, markdownSiblingFor } from '../src/lib/markdown-negotiation.mjs';
+import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const primaryRoot = join(root, 'dist', 'client');
@@ -56,6 +57,8 @@ const allFiles = filesUnder(primaryRoot);
 const htmlPages = allFiles.filter((file) => file.endsWith('.html'));
 assert.ok(htmlPages.length > 0, 'no built HTML pages found — did astro build run?');
 
+const ORIGIN = SITE_ORIGIN;
+let linked = 0;
 let coveredByRoute = 0;
 let coveredByFile = 0;
 
@@ -65,6 +68,19 @@ for (const file of htmlPages) {
   const sibling = markdownSiblingFor(pageUrl);
 
   assert.ok(sibling, `built page ${pageUrl} maps to no markdown sibling URL`);
+
+  // The sibling is only discoverable from the page if its head names it. `markdownAlternate`
+  // is a prop each page passes to the layout, so a new page that forgets it builds clean and
+  // serves a twin no agent reading the HTML is told about. The 404 page is no page's twin.
+  if (pageUrl !== '/404') {
+    const head = readFileSync(file, 'utf8').split('</head>')[0];
+    assert.ok(
+      head.includes(`<link rel="alternate" type="text/markdown" href="${ORIGIN}${sibling}"`),
+      `${pageUrl} has no <link rel="alternate" type="text/markdown"> to ${sibling} in its head: ` +
+        'pass markdownAlternate to Layout'
+    );
+    linked += 1;
+  }
 
   if (hasCuratedSibling(sibling)) {
     coveredByRoute += 1;
@@ -103,5 +119,6 @@ if (existsSync(rssPath)) {
 
 console.log(
   `validate-markdown-siblings: ${htmlPages.length} built page(s) covered — ` +
-    `${coveredByFile} by a converted file in ${outputRoots.length} output root(s), ${coveredByRoute} by a curated route.`
+    `${coveredByFile} by a converted file in ${outputRoots.length} output root(s), ${coveredByRoute} by a curated route; ` +
+    `${linked} name their sibling in the head.`
 );
