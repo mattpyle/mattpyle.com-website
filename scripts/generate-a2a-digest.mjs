@@ -170,7 +170,7 @@ export function buildDigest(base = SITE_ORIGIN, contentDir = CONTENT) {
       {
         name: 'A2A endpoint',
         url: `${base}/a2a`,
-        description: 'This endpoint. JSON-RPC 2.0: SendMessage, and GetTask for polling a deep audit\'s Task.',
+        description: 'This endpoint. JSON-RPC 2.0: SendMessage; GetTask for polling a Task; CancelTask for closing a consultant session.',
       },
       {
         name: 'MCP server',
