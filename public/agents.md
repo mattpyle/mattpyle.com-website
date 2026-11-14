@@ -18,11 +18,13 @@ Matt Pyle is Director of Growth at [Temporal Technologies](https://temporal.io).
 - `/projects` — "Projects": a list of side projects (an Astro content collection at `src/content/projects/`), each with a status of `live`, `in-progress`, or `archived`, plus optional links to GitHub and a live demo. It was published at `/builds` until 2026-08-20; every old URL, including `/builds.md`, now 301s to its `/projects` equivalent.
 - `/changelog` — "Changelog": a reverse-chronological, curated log of what has shipped on this site (an Astro content collection at `src/content/changelog/`). Each entry has a title, summary, date, tags, a `type` (launch/feature/content/infra/experiment), and a `significance` (major/minor/patch).
 - `/changelog/<slug>` — Individual changelog entry pages, with the full write-up. Each has a hand-authored raw-markdown variant at `/changelog/<slug>.md` — prefer this over scraping the HTML.
+- `/fix-log` — "Fix log": problems on this site that its agents found, and the fixes they made, each with a before and an after. Each fix is at `/fix-log/<slug>`, with a raw-markdown variant at `/fix-log/<slug>.md`.
 - `/scorecard` — "Scorecard": the latest accessibility, performance, SEO, and agentic-browsing results for this site, from a nightly automated audit run. Also at `/scorecard.json`.
 - `/activity` — "Activity": agent traffic to this site — fetches of its agent surfaces and pages served as Markdown, counted per UTC hour. Also at `/activity.json`. Since 17 Oct 2026 each bot row carries a verification state: `signed` (a Web Bot Auth signature verified against the key its `Signature-Agent` URL publishes), `IP-verified` (an address in the ranges its operator publishes) or `claimed` (the user agent alone). Responses for `/llms.txt` carry an `Accept-Signature` header naming the signature this site would like to see.
 - `/about` — Bio, areas of interest, and contact/social links.
 - `/webmcp` — "WebMCP": the tools below in full — what each one takes and returns, how an agent calls them, how to test them, and the dated state of the standard.
 - `/steward` — "Steward": the agent-readiness auditor this site runs and the editorial agent that publishes it. What the audit checks, what one costs a site, the User-Agent it arrives under, and how to refuse it.
+- `/audit` — "Audit": a form that runs Steward's fast agent-readiness audit on a site you name and shows the report in the page. The same checks as `audit_site` on the MCP endpoint, with no client to set up.
 
 ## Markdown instead of HTML
 
