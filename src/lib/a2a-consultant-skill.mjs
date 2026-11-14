@@ -40,6 +40,7 @@ import {
   ERROR_CODES,
   badRequest,
   errorInfo,
+  contextIdForTask,
   errorResponse,
 } from './a2a-rpc.mjs';
 import { CONSULTANT_SKILL_ID } from './a2a-audit-skill.mjs';
@@ -153,7 +154,9 @@ function textPart(text, legacy) {
 }
 
 /** One session as an A2A `Task`, in the dialect of the request. */
-export function consultantTaskFrom(taskId, view, { contextId, legacy, newId, now }) {
+export function consultantTaskFrom(taskId, view, { contextId: named, legacy, newId, now }) {
+  // The caller's own thread id where this call carried one, and the task's own otherwise.
+  const contextId = named ?? contextIdForTask(taskId);
   const message = {
     ...(legacy ? { kind: 'message', role: 'agent' } : { role: 'ROLE_AGENT' }),
     messageId: newId(),

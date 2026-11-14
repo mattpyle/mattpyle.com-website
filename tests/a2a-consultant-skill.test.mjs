@@ -257,3 +257,20 @@ test('the route charges the session tier and passes the client address it charge
   assert.match(route, /checkRateLimit\(\{ ip: clientIpFrom\(request\.headers\), tier: 'session' \}\)/);
   assert.match(route, /consultant: DEEP_ENABLED/);
 });
+
+test('one session shows one context id on every call, and a caller\'s own is echoed', async () => {
+  const deps = { checkLimit: async () => ({ allowed: true }), engine: fakeEngine(null).engine };
+  const started = await rpc(A2A_METHOD, message('hi', { metadata: { skill: CONSULTANT_SKILL_ID } }), deps);
+  const read = await rpc('GetTask', { id: ID }, { engine: fakeEngine({ execution: 'RUNNING', status: status(), session: session() }).engine });
+  const again = await rpc('GetTask', { id: ID }, { engine: fakeEngine({ execution: 'RUNNING', status: status(), session: session() }).engine });
+  const context = started.payload.result.task.contextId;
+  assert.match(context, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  assert.equal(read.payload.result.contextId, context);
+  assert.equal(again.payload.result.contextId, context);
+  assert.equal(started.payload.result.task.status.message.contextId, context);
+
+  const named = message('hi', { metadata: { skill: CONSULTANT_SKILL_ID } });
+  named.message.contextId = 'ctx-from-client';
+  const echoed = await rpc(A2A_METHOD, named, deps);
+  assert.equal(echoed.payload.result.task.contextId, 'ctx-from-client');
+});

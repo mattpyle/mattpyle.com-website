@@ -35,6 +35,7 @@ import {
   ERROR_CODES,
   badRequest,
   errorInfo,
+  contextIdForTask,
   errorResponse,
 } from './a2a-rpc.mjs';
 import { isAuditTaskId } from './audit-task-id.mjs';
@@ -265,9 +266,11 @@ function statusText(status, state) {
  * @param {{ contextId: string, legacy: boolean, newId: () => string, now: () => string,
  *           renderSummary: (audit: object) => string }} context
  */
-export function taskFrom(snapshot, { contextId, legacy, newId, now, renderSummary }) {
+export function taskFrom(snapshot, { contextId: named, legacy, newId, now, renderSummary }) {
   const { status, result } = snapshot;
   const taskId = status.workflowId;
+  // The caller's own thread id where this call carried one, and the task's own otherwise.
+  const contextId = named ?? contextIdForTask(taskId);
   const state = taskStateFor(status, Boolean(result));
   const spelling = TASK_STATES[state][legacy ? 'legacy' : 'current'];
 
@@ -485,7 +488,8 @@ export async function handleAuditMessage({ id, route, contextId, legacy, newId, 
   }
 
   const message = fastMessageFrom(report, {
-    contextId,
+    // A Message, with no task to derive a context from.
+    contextId: contextId ?? newId(),
     legacy,
     newId,
     renderSummary: audit.renderSummary,
@@ -545,9 +549,9 @@ export async function handleGetTask({ id, params, legacy, contextId, newId, now,
   }
 
   const task = taskFrom(snapshot, {
-    // The caller's own thread id, echoed, or a fresh one. This endpoint stores nothing between
-    // calls, so there is no server-side context to look the task's original one up in — which is
-    // the honest shape for a task whose entire durable state lives in Temporal.
+    // The caller's own thread id, echoed, or null: `taskFrom` then derives the task's own from
+    // its id. This endpoint stores nothing between calls, so there is no server-side context to
+    // look the original up in.
     contextId,
     legacy,
     newId,
