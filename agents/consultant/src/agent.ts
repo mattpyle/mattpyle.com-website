@@ -12,6 +12,8 @@
  * - A deep audit is gated: `deep_audit` is not inherently safe, so the harness parks the call until
  *   the caller approves it with the `tool_approval` Update. `setup` reinstates the policy, so a
  *   starter's config cannot widen it.
+ * - Every turn's answer is kept in `consultant_session.replies`, bounded by the turn cap, so the
+ *   A2A adapter can answer for an earlier turn. It is state and issues no command.
  * - A cap ends the session: the answer to the turn still goes out, `consultant_session` reports the
  *   reason, and later messages get a fixed reply with no model call. After a grace period, the
  *   harness's own `close` signal closes the agent. An activity sends it, because a workflow cannot
@@ -35,12 +37,13 @@ import {
   modelCallsPerTurn,
   newSession,
   tokensLeft,
+  withReply,
   type EndReason,
   type Session,
 } from './caps.js';
 import { AGENT_NAME, MODEL, SESSION_QUERY } from './names.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
-import { ToolResult, UrlInput, refused, type Refusal } from './tools.js';
+import { SiteFactsInput, SiteFactsResult, ToolResult, UrlInput, refused, type Refusal } from './tools.js';
 
 export { AGENT_NAME, MODEL, SESSION_QUERY };
 export const sessionQuery = defineQuery<Session>(SESSION_QUERY);
@@ -106,9 +109,13 @@ export const AuditConsultant = defineAgent({
       );
     };
 
-    /** Records the turn's answer for `consultant_session` and hands it back. No command. */
+    /**
+     * Records the turn's answer for `consultant_session` and hands it back. No command: `replies`
+     * is state the Query reads, so a history recorded before it existed replays unchanged, and
+     * the replay rebuilds every turn's entry.
+     */
     const answered = (text: string) => {
-      session = { ...session, lastReply: { turn: session.turns, text } };
+      session = withReply(session, text);
       return { text };
     };
 
@@ -148,6 +155,17 @@ export const AuditConsultant = defineAgent({
       },
     });
 
+    const siteFacts = tool({
+      name: 'site_facts',
+      description:
+        "Read mattpyle.com's own published facts: who it belongs to and its sections, or its newest " +
+        'writing, projects or changelog entries. Use it for a question about mattpyle.com itself.',
+      inputSchema: SiteFactsInput,
+      outputSchema: SiteFactsResult,
+      inherentlySafe: true,
+      execute: async ({ topic }) => admitToolCall() ?? fast.consultantSiteFacts({ topic }),
+    });
+
     const askUser = tool({
       name: 'ask_user',
       description: 'Ask the caller one question and wait for the answer.',
@@ -160,7 +178,7 @@ export const AuditConsultant = defineAgent({
       model: MODEL,
       activityOptions: MODEL_ACTIVITY_OPTIONS,
       systemPrompt: SYSTEM_PROMPT,
-      tools: [auditSite, deepAudit, askUser].map((t) => asStrandsTool(runner, t)),
+      tools: [auditSite, deepAudit, siteFacts, askUser].map((t) => asStrandsTool(runner, t)),
       printer: false,
     });
 

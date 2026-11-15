@@ -16,8 +16,12 @@ import {
   METRIC_UNITS,
   ORIGIN,
   SEVERITIES,
+  SITE_FACTS_MAX_ENTRIES,
+  SITE_FACTS_MAX_TEXT,
   STATUSES,
+  SiteFacts,
   type CheckView,
+  type SiteFactsInput,
 } from './tools.js';
 
 type Unknown = Record<string, unknown>;
@@ -121,4 +125,94 @@ export function projectReport(report: unknown, tier: 'fast' | 'deep', origin: st
     view.decisionClasses = counts;
   }
   return AuditView.parse(view);
+}
+
+/** One line of published text: control characters and runs of space flattened, then cut to the cap. */
+function factText(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return v
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, SITE_FACTS_MAX_TEXT);
+}
+
+/** An https URL with no white space, or null. */
+function factUrl(v: unknown): string | null {
+  return typeof v === 'string' && v.length <= 300 && /^https:\/\/\S+$/.test(v) ? v : null;
+}
+
+function named(list: unknown): { name: string; url: string; summary: string }[] {
+  return (Array.isArray(list) ? list : [])
+    .flatMap((raw) => {
+      if (!isObject(raw)) return [];
+      const url = factUrl(raw.url);
+      const name = factText(raw.name);
+      return url && name ? [{ name, url, summary: factText(raw.summary) }] : [];
+    })
+    .slice(0, SITE_FACTS_MAX_ENTRIES);
+}
+
+/**
+ * Project the site's public content index (`/webmcp/index.json`) to one topic. Pure, and the only
+ * producer of a `SiteFacts`.
+ *
+ * It copies named fields only, flattens and cuts each text, drops an entry with no title, URL or
+ * date, and keeps the newest `SITE_FACTS_MAX_ENTRIES` in the index's own order. An index that is
+ * not an index projects to empty lists. Throws only if the result fails its own schema.
+ */
+export function projectSiteFacts(index: unknown, topic: SiteFactsInput['topic']): SiteFacts {
+  const doc: Unknown = isObject(index) ? index : {};
+  if (topic === 'overview') {
+    const site: Unknown = isObject(doc.site) ? doc.site : {};
+    const person: Unknown | null = isObject(site.person) ? site.person : null;
+    return SiteFacts.parse({
+      status: 'complete',
+      topic,
+      site: {
+        name: factText(site.name),
+        url: factUrl(site.url) ?? 'https://www.mattpyle.com/',
+        description: factText(site.description),
+        ...(person
+          ? {
+              person: {
+                name: factText(person.name),
+                jobTitle: factText(person.jobTitle),
+                worksFor: factText(person.worksFor),
+              },
+            }
+          : {}),
+      },
+      sections: named(site.sections),
+      pages: named(site.pages),
+    });
+  }
+
+  const rows = Array.isArray(doc[topic]) ? (doc[topic] as unknown[]) : [];
+  const entries = rows.flatMap((raw) => {
+    if (!isObject(raw)) return [];
+    const title = factText(raw.title);
+    const url = factUrl(raw.url);
+    const date = typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw.date) ? raw.date.slice(0, 10) : null;
+    if (!title || !url || !date) return [];
+    const kind = factText(topic === 'projects' ? raw.status : topic === 'changelog' ? raw.type : undefined).slice(0, 40);
+    return [
+      {
+        title,
+        url,
+        date,
+        description: factText(raw.description),
+        tags: (Array.isArray(raw.tags) ? raw.tags : [])
+          .flatMap((t) => (typeof t === 'string' && t.length <= 40 ? [t] : []))
+          .slice(0, 8),
+        ...(kind ? { kind } : {}),
+      },
+    ];
+  });
+  return SiteFacts.parse({
+    status: 'complete',
+    topic,
+    total: entries.length,
+    entries: entries.slice(0, SITE_FACTS_MAX_ENTRIES),
+  });
 }

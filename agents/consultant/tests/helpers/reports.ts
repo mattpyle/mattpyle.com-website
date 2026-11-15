@@ -97,6 +97,45 @@ export function hostileReport(origin = 'https://example.com') {
   };
 }
 
+/** The site's public content index, in the shape `/webmcp/index.json` serves. */
+export function cleanIndex() {
+  const base = 'https://www.mattpyle.com';
+  return {
+    generated: '2026-11-15T00:00:00.000Z',
+    site: {
+      name: 'Matt Pyle',
+      url: `${base}/`,
+      description: 'Growth marketer and hobbyist builder.',
+      person: { name: 'Matt Pyle', jobTitle: 'Director of Growth', worksFor: 'Temporal Technologies', url: `${base}/`, sameAs: [] },
+      sections: [{ name: 'Writing', url: `${base}/writing/`, summary: 'Long-form posts.' }],
+      pages: [{ name: 'Scorecard', url: `${base}/scorecard/`, summary: 'Conformance results.' }],
+    },
+    writing: [
+      {
+        title: 'How to implement WebMCP on a website',
+        slug: 'how-to-implement-webmcp-on-a-website',
+        url: `${base}/writing/how-to-implement-webmcp-on-a-website/`,
+        date: '2026-09-03T00:00:00.000Z',
+        tags: ['webmcp'],
+        description: 'Add WebMCP to an existing website.',
+        secret: 'a field the projection does not name',
+      },
+      { title: 'No url, so dropped', date: '2026-01-01T00:00:00.000Z' },
+    ],
+    projects: [
+      { title: 'Argus', url: `${base}/projects/#project-argus`, date: '2026-09-07T00:00:00.000Z', status: 'live', tags: [], description: 'A persona inspector.' },
+    ],
+    changelog: Array.from({ length: 15 }, (_, i) => ({
+      title: `Entry ${i + 1}`,
+      url: `${base}/changelog/entry-${i + 1}/`,
+      date: '2026-10-24T00:00:00.000Z',
+      type: 'feature',
+      tags: ['a'],
+      description: 'x'.repeat(900),
+    })),
+  };
+}
+
 /** A stub site client: canned answers, and a log of every call it received. */
 export class StubSite implements SiteClient {
   calls: string[] = [];
@@ -105,6 +144,12 @@ export class StubSite implements SiteClient {
   /** Status reads answered in order; the last one repeats. */
   statuses: SiteCall[] = [{ ok: true, data: { done: true, succeeded: true } }];
   report: SiteCall = { ok: true, data: { ...cleanReport(), browserPages: 3 } };
+  facts: SiteCall = { ok: true, data: cleanIndex() };
+
+  async siteFacts(): Promise<SiteCall> {
+    this.calls.push('facts');
+    return this.facts;
+  }
 
   async fastAudit(origin: string): Promise<SiteCall> {
     this.calls.push(`fast ${origin}`);

@@ -89,6 +89,68 @@ export const UrlInput = z.object({
 });
 export type UrlInput = z.infer<typeof UrlInput>;
 
+/**
+ * The site's published facts, for questions about mattpyle.com. The text here is the site owner's
+ * own published copy, read from the site's public content index. `src/project.ts` copies named
+ * fields only, and caps every length and every list.
+ */
+export const SITE_TOPICS = ['overview', 'writing', 'projects', 'changelog'] as const;
+/** The most entries one list topic returns, newest first. `total` says how many exist. */
+export const SITE_FACTS_MAX_ENTRIES = 12;
+/** The longest text field, in characters. Longer text is cut. */
+export const SITE_FACTS_MAX_TEXT = 400;
+
+const factText = z.string().max(SITE_FACTS_MAX_TEXT);
+const factUrl = z.string().max(300).regex(/^https:\/\/\S+$/);
+const Named = z.object({ name: factText, url: factUrl, summary: factText });
+
+export const SiteOverview = z.object({
+  status: z.literal('complete'),
+  topic: z.literal('overview'),
+  site: z.object({
+    name: factText,
+    url: factUrl,
+    description: factText,
+    person: z.object({ name: factText, jobTitle: factText, worksFor: factText }).optional(),
+  }),
+  sections: z.array(Named).max(SITE_FACTS_MAX_ENTRIES),
+  pages: z.array(Named).max(SITE_FACTS_MAX_ENTRIES),
+});
+
+export const SiteList = z.object({
+  status: z.literal('complete'),
+  topic: z.enum(['writing', 'projects', 'changelog']),
+  /** How many entries the site publishes under this topic. `entries` holds the newest. */
+  total: count,
+  entries: z
+    .array(
+      z.object({
+        title: factText,
+        url: factUrl,
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        description: factText,
+        tags: z.array(z.string().max(40)).max(8),
+        /** A project's status or a changelog entry's type. */
+        kind: z.string().max(40).optional(),
+      }),
+    )
+    .max(SITE_FACTS_MAX_ENTRIES),
+});
+
+export const SiteFacts = z.union([SiteOverview, SiteList]);
+export type SiteFacts = z.infer<typeof SiteFacts>;
+export const SiteFactsResult = z.union([SiteOverview, SiteList, Refusal]);
+export type SiteFactsResult = z.infer<typeof SiteFactsResult>;
+
+export const SiteFactsInput = z.object({
+  topic: z
+    .enum(SITE_TOPICS)
+    .describe(
+      'overview: who the site belongs to, its sections and pages. writing, projects or changelog: the newest entries of that kind.',
+    ),
+});
+export type SiteFactsInput = z.infer<typeof SiteFactsInput>;
+
 export function refused(reason: Refusal['reason']): Refusal {
   return { status: 'refused', reason };
 }

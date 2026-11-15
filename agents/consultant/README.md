@@ -1,6 +1,8 @@
 # The audit consultant
 
-A Claude-driven agent that audits a website for agent-readiness and says what matters. It runs as a Temporal workflow on [`@temporalio/agent-harness`](https://github.com/temporal-community/temporal-agent-harness), driven by Claude through the harness's Strands Agents integration.
+The model behind Steward on `/a2a`. "The consultant" is its name in the code; a caller meets it as Steward.
+
+A Claude-driven agent that audits a website for agent-readiness and says what matters, and answers questions about mattpyle.com from the site's published facts. It runs as a Temporal workflow on [`@temporalio/agent-harness`](https://github.com/temporal-community/temporal-agent-harness), driven by Claude through the harness's Strands Agents integration.
 
 The model decides the path: whether to audit, which tier, and when to ask the caller a question. The workflow sets the bounds.
 
@@ -12,16 +14,17 @@ The model decides the path: whether to audit, which tier, and when to ask the ca
 | The agent, the tools and the caps logic (workflow code) | `src/agent.ts` |
 | What a tool hands the model | `src/tools.ts`, `src/project.ts` |
 | The activities: audits, the deep-audit start and wait, the close | `src/activities.ts` |
-| The calls to the public MCP endpoint | `src/site.ts` |
+| The calls to the public MCP endpoint and the site's content index | `src/site.ts` |
 | The cap values | `src/caps.ts` |
 | The environment the worker reads | `src/config.ts` |
 | The worker | `src/worker.ts` |
 
-1. The tools reach the site only through `https://www.mattpyle.com/mcp`, the same `audit_site`, `deep_audit` and `get_audit` tools any agent calls. The client names itself `audit-consultant`.
-2. A tool hands the model check ids, statuses, severities, categories and counts. No string from the audited site reaches the model: `src/project.ts` copies by allow-list and drops the rest.
-3. `deep_audit` needs the caller's approval. The harness parks the call until the caller answers the `tool_approval` Update. Starting a deep audit is safe to retry: the start records the audit's id in a heartbeat, and a retried attempt reuses it.
-4. `consultant_session` also returns the latest answer as `lastReply`, so a client that does not stream reads it with a Query, not a stream poll. The A2A adapter on `/a2a` reads it this way.
-5. A cap ends the session. Later messages get a fixed reply, `consultant_session` reports the reason, and the harness closes the agent after a grace period.
+1. The audit tools reach the site only through `https://www.mattpyle.com/mcp`, the same `audit_site`, `deep_audit` and `get_audit` tools any agent calls. The client names itself `audit-consultant`.
+2. An audit tool hands the model check ids, statuses, severities, categories and counts. No string from the audited site reaches the model: `src/project.ts` copies by allow-list and drops the rest.
+3. `site_facts` answers questions about mattpyle.com itself. It reads `https://www.mattpyle.com/webmcp/index.json`, the public content index the WebMCP tools read, with a plain GET and no credential, on the MCP endpoint's origin. It returns one topic: the overview, or the newest writing, projects or changelog entries. The text is the site's own published copy; `src/project.ts` copies named fields and caps every length and list. The index lists no agent surfaces, so the tool cannot answer which ones the site has.
+4. `deep_audit` needs the caller's approval. The harness parks the call until the caller answers the `tool_approval` Update. Starting a deep audit is safe to retry: the start records the audit's id in a heartbeat, and a retried attempt reuses it.
+5. `consultant_session` also returns the latest answer as `lastReply` and every turn's answer as `replies`, so a client that does not stream reads them with a Query, not a stream poll. The A2A adapter on `/a2a` reads them this way: each turn is an A2A task, and an earlier turn's task still answers. The turn cap bounds `replies`.
+6. A cap ends the session. Later messages get a fixed reply, `consultant_session` reports the reason, and the harness closes the agent after a grace period.
 
 ## Limits a reader must know
 
@@ -50,7 +53,7 @@ The worker needs a Temporal server and a Claude key. With a required variable mi
 
 ## Tests
 
-`npm test -w @mattpyle/consultant` runs the agent on a local Temporal dev server with a scripted model and a stub site. It makes no model call and no site call. `tests/replay.test.ts` replays recorded sessions against the current workflow code.
+`npm test -w @mattpyle/consultant` runs the agent on a local Temporal dev server with a scripted model and a stub site. It makes no model call and no site call. `tests/replay.test.ts` replays recorded sessions against the current workflow code. `scripts/record-scripted.ts` records a new fixture with the scripted model.
 
 ## Harness compatibility
 

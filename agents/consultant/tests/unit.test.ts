@@ -1,11 +1,11 @@
 /** The pure parts: the projection, the caps, the environment, and the site client's identity. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DEFAULT_CAPS, capReached, capsFromEnv, newSession, tokensLeft } from '../src/caps.js';
+import { DEFAULT_CAPS, capReached, capsFromEnv, newSession, tokensLeft, withReply } from '../src/caps.js';
 import { readConfig } from '../src/config.js';
-import { normaliseOrigin, projectReport } from '../src/project.js';
-import { CLIENT_NAME, USER_AGENT, mcpSiteClient } from '../src/site.js';
-import { MARKER, cleanReport, hostileReport } from './helpers/reports.js';
+import { normaliseOrigin, projectReport, projectSiteFacts } from '../src/project.js';
+import { CLIENT_NAME, SITE_FACTS_PATH, USER_AGENT, mcpSiteClient } from '../src/site.js';
+import { MARKER, cleanIndex, cleanReport, hostileReport } from './helpers/reports.js';
 
 test('the projection keeps ids, enums and counts', () => {
   const view = projectReport(cleanReport(), 'fast', 'https://example.com');
@@ -115,4 +115,71 @@ test('the site client names itself and refuses a plain-http endpoint', async () 
   assert.equal(seen[0]!.ua, USER_AGENT);
   assert.match(USER_AGENT, /^audit-consultant\/\S+ \(\+https:\/\/www\.mattpyle\.com\/steward\)$/);
   assert.ok(seen.some((s) => s.body.includes(`"name":"${CLIENT_NAME}"`)), 'clientInfo.name is audit-consultant');
+});
+
+test('site facts: the overview names the site, its owner, sections and pages', () => {
+  const view = projectSiteFacts(cleanIndex(), 'overview');
+  assert.equal(view.topic, 'overview');
+  assert.ok(view.topic === 'overview');
+  assert.equal(view.site.person?.worksFor, 'Temporal Technologies');
+  assert.deepEqual(view.sections.map((s) => s.name), ['Writing']);
+  assert.deepEqual(view.pages.map((p) => p.url), ['https://www.mattpyle.com/scorecard/']);
+  assert.ok(!JSON.stringify(view).includes('sameAs'), 'only named fields are copied');
+});
+
+test('site facts: a list keeps named fields, cuts long text, caps the entries and drops a broken one', () => {
+  const writing = projectSiteFacts(cleanIndex(), 'writing');
+  assert.ok(writing.topic === 'writing');
+  assert.equal(writing.total, 1, 'the entry with no url is dropped');
+  assert.equal(writing.entries[0]!.date, '2026-09-03');
+  assert.ok(!JSON.stringify(writing).includes('secret'));
+
+  const projects = projectSiteFacts(cleanIndex(), 'projects');
+  assert.ok(projects.topic === 'projects');
+  assert.equal(projects.entries[0]!.kind, 'live');
+
+  const changelog = projectSiteFacts(cleanIndex(), 'changelog');
+  assert.ok(changelog.topic === 'changelog');
+  assert.equal(changelog.total, 15);
+  assert.equal(changelog.entries.length, 12);
+  assert.equal(changelog.entries[0]!.title, 'Entry 1', "the index's own order, newest first");
+  assert.equal(changelog.entries[0]!.description.length, 400);
+});
+
+test('site facts: an index that is not an index projects to nothing', () => {
+  for (const junk of [null, 'text', 42, [], { writing: 'x', site: [] }]) {
+    const list = projectSiteFacts(junk, 'writing');
+    assert.ok(list.topic === 'writing');
+    assert.deepEqual(list.entries, []);
+    const overview = projectSiteFacts(junk, 'overview');
+    assert.ok(overview.topic === 'overview');
+    assert.deepEqual(overview.sections, []);
+  }
+});
+
+test('site facts: the client reads the content index on the endpoint origin, with no credential', async () => {
+  const seen: { url: string; headers: Record<string, string> }[] = [];
+  const fetchImpl = (async (url: URL | string, init?: RequestInit) => {
+    seen.push({ url: String(url), headers: init?.headers as Record<string, string> });
+    return new Response(JSON.stringify(cleanIndex()), { status: 200 });
+  }) as typeof fetch;
+  const call = await mcpSiteClient(new URL('https://www.mattpyle.com/mcp'), fetchImpl).siteFacts();
+  assert.equal(call.ok, true);
+  assert.equal(seen[0]!.url, `https://www.mattpyle.com${SITE_FACTS_PATH}`);
+  assert.equal(seen[0]!.headers['User-Agent'], USER_AGENT);
+  assert.ok(!('Authorization' in seen[0]!.headers));
+
+  const down = (async () => new Response('no', { status: 503 })) as typeof fetch;
+  assert.deepEqual(await mcpSiteClient(new URL('https://www.mattpyle.com/mcp'), down).siteFacts(), { ok: false, reason: 'error' });
+});
+
+test('replies: one entry per turn, oldest first, bounded by the turn cap', () => {
+  let s = newSession({ ...DEFAULT_CAPS, turns: 2 });
+  s = withReply({ ...s, turns: 1 }, 'first');
+  s = withReply({ ...s, turns: 2 }, 'second');
+  s = withReply(s, 'second, again');
+  assert.deepEqual(s.replies, [{ turn: 1, text: 'first' }, { turn: 2, text: 'second, again' }]);
+  assert.deepEqual(s.lastReply, { turn: 2, text: 'second, again' });
+  s = withReply({ ...s, turns: 3 }, 'third');
+  assert.deepEqual(s.replies.map((r) => r.turn), [2, 3]);
 });
