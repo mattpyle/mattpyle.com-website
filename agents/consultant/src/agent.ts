@@ -115,7 +115,10 @@ export const AuditConsultant = defineAgent({
      * the replay rebuilds every turn's entry.
      */
     const answered = (text: string) => {
-      session = withReply(session, text);
+      // A turn that was still open when the caller closed the session is canceled, not answered:
+      // the harness denies its pending question or approval, and what the model says next is not
+      // kept, so the turn's task reads `canceled` and stays that way.
+      if (!runner.closed) session = withReply(session, text);
       return { text };
     };
 

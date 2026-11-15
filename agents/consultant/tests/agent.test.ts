@@ -80,6 +80,19 @@ test('every turn\'s answer is kept, oldest first', async () => {
   assert.deepEqual(counts.lastReply, { turn: 2, text: 'Two.' });
 });
 
+test('a turn still open when the session is closed keeps no answer', async () => {
+  h.script.set([{ tool: 'ask_user', input: { question: 'Which site?' } }, { text: 'Said after the close.' }]);
+  const s = await open('closed');
+  await s.handle.executeUpdate('send_agent_message', { args: [{ type: 'ask', payload: { text: 'Check my site' } }] });
+  await eventually(async () => (await s.status()).pending_callbacks.length === 1);
+  await s.handle.signal('close');
+  await eventually(async () => (await s.handle.describe()).status.name === 'COMPLETED');
+  const counts = await s.session();
+  assert.equal(counts.turns, 1);
+  assert.deepEqual(counts.replies, []);
+  assert.equal(counts.lastReply, null);
+});
+
 test('no string from the audited site reaches the model', async () => {
   h.site.fast = { ok: true, data: hostileReport() };
   h.script.set([{ tool: 'audit_site', input: { url: 'example.com' } }, { text: 'Done.' }]);
