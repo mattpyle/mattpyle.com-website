@@ -1,6 +1,6 @@
 /**
- * The A2A responder: the JSON-RPC 2.0 envelope, the method dispatch, and `ask-about-site` — the
- * webmaster's own answers, in his voice, from a digest compiled at build time.
+ * The A2A responder: the JSON-RPC 2.0 envelope, the method dispatch, and `ask-about-site` —
+ * Steward's fixed answers about this site, from a digest compiled at build time.
  *
  * TWO SKILLS SINCE 2026-08-18, and the second one lives next door. `ask-about-site` is everything
  * below the intent table: a deterministic one-turn answer with nothing to track. `audit-a-site` is
@@ -128,8 +128,8 @@ function describe(digest, { unrecognised = false } = {}) {
 
   lines.push(
     unrecognised
-      ? 'Webmaster speaking. I did not recognise the question, so here is the front desk answer.'
-      : 'mattpyle.com. Webmaster speaking.'
+      ? 'Steward speaking. I did not recognise the question, so here is the front desk answer.'
+      : 'mattpyle.com. Steward speaking.'
   );
   lines.push('');
   lines.push(
@@ -253,7 +253,7 @@ function changelog(digest) {
 function surfaces(digest) {
   const lines = [];
   lines.push(
-    'What this site hands to agents. This is the part of the job the webmaster actually enjoys.'
+    'What this site hands to agents.'
   );
   lines.push('');
   for (const surface of digest.surfaces) {
@@ -431,7 +431,7 @@ export function classify(question) {
 }
 
 /**
- * The webmaster's answer to one question.
+ * The fixed answer to one question.
  *
  * `unrecognised` is the distinction the reply already makes in prose, handed back so the caller
  * can log it. Both fallbacks answer with the orientation text, so without it a missed intent and

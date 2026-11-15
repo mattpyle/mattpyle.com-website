@@ -46,7 +46,8 @@ export const ASK_SKILL_ID = 'ask-about-site';
 export const AUDIT_SKILL_ID = 'audit-a-site';
 /** The model's, src/lib/a2a-consultant-skill.mjs. Named here so the router has no I/O import. */
 export const CONSULTANT_SKILL_ID = 'consult-on-a-site';
-export const SKILL_IDS = Object.freeze([ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID]);
+/** In the Agent Card's order: the model's skill first, because it answers a message that names none. */
+export const SKILL_IDS = Object.freeze([CONSULTANT_SKILL_ID, AUDIT_SKILL_ID, ASK_SKILL_ID]);
 
 /** The second method the endpoint answers, in its A2A 1.0 spelling, and the 0.x alias. */
 export const GET_TASK_METHOD = 'GetTask';

@@ -24,7 +24,7 @@ import { countWord, joinAnd } from './count-words.mjs';
 export const A2A_METHOD_PHRASES = Object.freeze([
   Object.freeze({ name: 'SendMessage', phrase: null }),
   Object.freeze({ name: 'GetTask', phrase: 'polling a Task' }),
-  Object.freeze({ name: 'CancelTask', phrase: 'closing a consultant session' }),
+  Object.freeze({ name: 'CancelTask', phrase: 'closing a Steward session' }),
 ]);
 
 /** The method names, in their 1.0 spelling. */

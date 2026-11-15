@@ -70,7 +70,7 @@ const markdownSource = readFileSync(fileURLToPath(new URL('../src/pages/activity
 test('the census lists are the responder and the audit skill lists, held equal', () => {
   assert.deepEqual([...A2A_METHODS_COUNTED], [A2A_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
   assert.deepEqual([...A2A_SKILLS_COUNTED], [...SKILL_IDS]);
-  assert.deepEqual([...A2A_SKILLS_COUNTED], [ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID]);
+  assert.deepEqual([...A2A_SKILLS_COUNTED], [CONSULTANT_SKILL_ID, AUDIT_SKILL_ID, ASK_SKILL_ID]);
   // The legacy spellings fold into their 1.0 name.
   assert.equal(a2aFactsFrom({ jsonrpc: '2.0', id: 1, method: LEGACY_METHODS[0] }, routeFor).method, A2A_METHOD);
   assert.equal(a2aFactsFrom({ jsonrpc: '2.0', id: 1, method: LEGACY_GET_TASK_METHODS[0] }, routeFor).method, GET_TASK_METHOD);

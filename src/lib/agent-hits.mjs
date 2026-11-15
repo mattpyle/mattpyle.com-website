@@ -1168,7 +1168,7 @@ export const UNPARSED_A2A_METHOD = 'unparsed';
 export const A2A_METHOD_VALUES = Object.freeze([...A2A_METHODS_COUNTED, OTHER_A2A_METHOD, UNPARSED_A2A_METHOD]);
 
 /** The skill ids the Agent Card declares; mirrored from src/lib/a2a-audit-skill.mjs and held equal by the same test. */
-export const A2A_SKILLS_COUNTED = Object.freeze(['ask-about-site', 'audit-a-site', 'consult-on-a-site']);
+export const A2A_SKILLS_COUNTED = Object.freeze(['consult-on-a-site', 'audit-a-site', 'ask-about-site']);
 
 /** No skill: a GetTask, a request that failed validation, or a router that threw. */
 export const NO_A2A_SKILL = 'none';
