@@ -107,7 +107,7 @@ const ogImageURL = new URL(image ?? '/og-fallback.png', Astro.site);
 // Twitter's own crop (1200x675, 16:9) — only the sitewide default needs a distinct asset;
 // per-post images are already sized right for both tags.
 const twitterImageURL = new URL(image ?? '/og-fallback-twitter.png', Astro.site);
-// Every page now has a real large share image, so this is always the large card.
+// Every page, the fallback included, is a 1200x630 image, so this is always the large card.
 const twitterCard = 'summary_large_image';
 
 // Person + WebSite ship on every page so the entity resolves the same way everywhere.

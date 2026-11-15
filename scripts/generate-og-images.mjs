@@ -249,6 +249,7 @@ async function main() {
 export {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
+  EXPERIMENT_PAGES,
   loadVariableFont,
   main,
   rasterise,

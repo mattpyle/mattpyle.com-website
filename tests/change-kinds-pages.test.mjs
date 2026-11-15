@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { staticPagePaths } from '../scripts/generate-page-paths.mjs';
+import { builtPages, canon, read } from './helpers/built-pages.mjs';
 import { sitePages, siteSections } from '../src/data/site-sections.mjs';
 
 /**
@@ -29,20 +27,6 @@ const EXEMPT = {
   // The error page is served for URLs that do not exist. It is not a destination to list.
   '/404': 'the error page, not a destination',
 };
-
-const ROOT = new URL('../', import.meta.url);
-const read = (path) => readFileSync(fileURLToPath(new URL(path, ROOT)), 'utf8');
-
-/** No trailing slash, except the root. @param {string} path */
-function canon(path) {
-  const bare = path.replace(/[?#].*$/, '').replace(/\/+$/, '');
-  return bare === '' ? '/' : bare;
-}
-
-/** The pages the site builds at the top level of src/pages, plus the changelog's page 1. */
-export function builtPages() {
-  return new Set([...staticPagePaths(), '/changelog'].map(canon));
-}
 
 /** @param {string} source the text of src/pages/llms.txt.ts */
 export function llmsPages(source) {
