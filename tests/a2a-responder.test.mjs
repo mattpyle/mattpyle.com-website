@@ -43,7 +43,7 @@ const legacyAsk = (text, method = LEGACY_METHODS[0]) =>
     { digest, newId: ids() }
   );
 
-/** The markdown the webmaster replied with. */
+/** The markdown the reply carries. */
 const said = (result) => result.payload.result.message.parts[0].text;
 
 /* ---------------------------------------------------------------- envelope validation */
@@ -100,7 +100,8 @@ test('the 0.x method name is accepted, and the 0.x text part shape with it', asy
   for (const method of LEGACY_METHODS) {
     const result = await legacyAsk('What is this site about?', method);
     assert.equal(result.payload.error, undefined, `${method} should be accepted`);
-    assert.ok(result.payload.result.parts[0].text.includes('Webmaster'));
+    assert.ok(result.payload.result.parts[0].text.includes('Steward speaking'));
+    assert.ok(!/webmaster/i.test(result.payload.result.parts[0].text));
   }
 });
 
@@ -314,7 +315,7 @@ test('every intent answers from the digest and cites a real site URL', async () 
 test('the responder writes no em dashes of its own', async () => {
   // House style, and on this repo an em dash reads as a generator fingerprint. Asserted against a
   // digest whose content strings are scrubbed, because the raw reply also contains authored post
-  // and build descriptions, and this is a check on the webmaster's prose rather than on Matt's.
+  // and build descriptions, and this is a check on the responder's prose rather than on Matt's.
   const scrub = (value) =>
     typeof value === 'string'
       ? value.replaceAll('—', '-')

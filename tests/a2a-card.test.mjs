@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readCard, readSchema, validateAgentCard } from '../scripts/validate-a2a-card.mjs';
 import { PRODUCTION_ORIGIN } from '../src/data/site-origin.mjs';
 import { A2A_METHOD, GET_TASK_METHOD } from '../src/lib/a2a-responder.mjs';
-import { ASK_SKILL_ID, AUDIT_SKILL_ID, SKILL_IDS, routeMessage } from '../src/lib/a2a-audit-skill.mjs';
+import { ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID, SKILL_IDS, routeMessage } from '../src/lib/a2a-audit-skill.mjs';
 
 const schema = readSchema();
 
@@ -77,7 +77,7 @@ test('the card declares exactly the skills the endpoint dispatches', () => {
     schema
   );
   assert.deepEqual(errors, [
-    'skills: expected exactly [ask-about-site, audit-a-site, consult-on-a-site], found [ask-about-site, audit-a-site, consult-on-a-site, explain-finding]',
+    'skills: expected exactly [consult-on-a-site, audit-a-site, ask-about-site], found [consult-on-a-site, audit-a-site, ask-about-site, explain-finding]',
   ]);
 });
 
@@ -90,11 +90,41 @@ test('the audit skill advertises both methods a caller needs and both output mod
   assert.deepEqual(audit.outputModes, ['text/markdown', 'application/json']);
 });
 
-test("every audit example the card publishes really routes to the audit skill", () => {
+test('the card is Steward, and nothing in it says webmaster', () => {
+  const card = readCard();
+  assert.equal(card.name, 'Steward');
+  assert.doesNotMatch(JSON.stringify(card), /webmaster|retro/i);
+});
+
+test('the first skill is the one a message that names no skill reaches, and its examples reach it', () => {
+  const card = readCard();
+  assert.equal(card.skills[0].id, CONSULTANT_SKILL_ID);
+  for (const example of card.skills[0].examples) {
+    assert.equal(routeMessage({}, example, { model: true }).skill, CONSULTANT_SKILL_ID, example);
+  }
+  // What a caller reads to use the reply: the artifact, the context, and the two pauses.
+  for (const word of ['artifact', 'contextId', 'TASK_STATE_COMPLETED', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_WORKING', 'CancelTask', 'returnImmediately']) {
+    assert.ok(card.skills[0].description.includes(word), word);
+  }
+});
+
+test('the two skills with no model say they are reached by name', () => {
+  const card = readCard();
+  for (const id of [AUDIT_SKILL_ID, ASK_SKILL_ID]) {
+    const skill = card.skills.find((entry) => entry.id === id);
+    assert.ok(skill.description.includes(`{"skill": "${id}"}`), id);
+    assert.match(skill.description, /no model/, id);
+  }
+});
+
+test("every audit example the card publishes routes to the audit skill, named or by wording", () => {
   // The examples are the vocabulary a caller copies. An example that falls through to
   // ask-about-site would teach the wrong words, and nothing else in the build would notice.
   const audit = readCard().skills.find((skill) => skill.id === AUDIT_SKILL_ID);
   for (const example of audit.examples) {
+    const named = routeMessage({ message: { metadata: { skill: AUDIT_SKILL_ID } } }, example, { model: true });
+    assert.equal(named.skill, AUDIT_SKILL_ID);
+    assert.ok(named.target, `"${example}" should name a target when the skill is named`);
     const route = routeMessage({}, example);
     assert.equal(route.skill, AUDIT_SKILL_ID, `"${example}" should route to the audit skill`);
     assert.ok(route.target, `"${example}" should name a target`);

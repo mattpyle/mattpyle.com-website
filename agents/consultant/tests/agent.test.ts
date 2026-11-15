@@ -54,6 +54,45 @@ test('a model that answers without a tool makes no site call', async () => {
   assert.deepEqual(h.site.calls, []);
 });
 
+test('a question about mattpyle.com is answered from the site-facts tool', async () => {
+  h.script.set([{ tool: 'site_facts', input: { topic: 'writing' } }, { text: 'The newest post is about WebMCP.' }]);
+  const s = await open('facts');
+  const turn = await s.ask('What has Matt written lately?', caller());
+  assert.equal(turn.reply, 'The newest post is about WebMCP.');
+  assert.deepEqual(h.site.calls, ['facts']);
+  assert.ok(h.script.seen[1]!.includes('how-to-implement-webmcp-on-a-website'), 'the published entry reached the model');
+  assert.ok(!h.script.seen[1]!.includes('a field the projection does not name'));
+
+  h.site.facts = { ok: false, reason: 'error' };
+  h.script.set([{ tool: 'site_facts', input: { topic: 'overview' } }, { text: 'I could not read the site just now.' }]);
+  const second = await s.ask('Who is Matt?', caller());
+  assert.equal(second.reply, 'I could not read the site just now.');
+  assert.ok(h.script.seen[1]!.includes('refused'));
+});
+
+test('every turn\'s answer is kept, oldest first', async () => {
+  h.script.set([{ text: 'One.' }, { text: 'Two.' }]);
+  const s = await open('replies');
+  await s.ask('first', caller());
+  await s.ask('second', caller());
+  const counts = await s.session();
+  assert.deepEqual(counts.replies, [{ turn: 1, text: 'One.' }, { turn: 2, text: 'Two.' }]);
+  assert.deepEqual(counts.lastReply, { turn: 2, text: 'Two.' });
+});
+
+test('a turn still open when the session is closed keeps no answer', async () => {
+  h.script.set([{ tool: 'ask_user', input: { question: 'Which site?' } }, { text: 'Said after the close.' }]);
+  const s = await open('closed');
+  await s.handle.executeUpdate('send_agent_message', { args: [{ type: 'ask', payload: { text: 'Check my site' } }] });
+  await eventually(async () => (await s.status()).pending_callbacks.length === 1);
+  await s.handle.signal('close');
+  await eventually(async () => (await s.handle.describe()).status.name === 'COMPLETED');
+  const counts = await s.session();
+  assert.equal(counts.turns, 1);
+  assert.deepEqual(counts.replies, []);
+  assert.equal(counts.lastReply, null);
+});
+
 test('no string from the audited site reaches the model', async () => {
   h.site.fast = { ok: true, data: hostileReport() };
   h.script.set([{ tool: 'audit_site', input: { url: 'example.com' } }, { text: 'Done.' }]);

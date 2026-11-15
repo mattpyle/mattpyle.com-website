@@ -2,19 +2,19 @@
   "specVersion": "1.0",
   "entries": [
     {
-      "identifier": "urn:air:mattpyle.com:agent:webmaster",
-      "displayName": "The mattpyle.com webmaster",
+      "identifier": "urn:air:mattpyle.com:agent:steward",
+      "displayName": "Steward",
       "type": "application/a2a-agent-card+json",
       "url": "https://www.mattpyle.com/.well-known/agent-card.json",
-      "description": "The webmaster of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Three skills: it answers questions about the site (its writing, projects, changelog, scorecard, and agent-readable surfaces); it audits any site you name for agent-readiness, returning the fast tier as a direct Message and the browser-rendered deep tier as a Task you poll to completion; and it hands you to the audit consultant, a Claude-driven agent that audits a site and says what matters, in a conversation held as a multi-turn Task. Unauthenticated and public: no accounts, no payments, and no private data. Audits are rate limited, and the auditor obeys the target's robots.txt.",
-      "capabilities": ["ask-about-site", "audit-a-site", "consult-on-a-site"],
+      "description": "Steward, the agent of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Hand it a task in plain text: name a site, and it audits that site for agent-readiness and answers with what matters and a plan of what to fix first. A Claude model chooses the path and uses this site's own audit as its tool; it also answers questions about mattpyle.com from the site's published content. Three skills: a message that names no skill goes to the model (consult-on-a-site); audit-a-site, named in metadata, returns the raw audit report with no model; and ask-about-site, named in metadata, returns a fixed answer about this site with no model. Unauthenticated and public: no accounts, no payments, and no private data. Sessions and audits are rate limited, and the auditor obeys the target's robots.txt.",
+      "capabilities": ["consult-on-a-site", "audit-a-site", "ask-about-site"],
       "tags": ["personal-site", "writing", "changelog", "agent-experience", "audit", "agent-readiness"],
-      "version": "0.2.0",
+      "version": "0.4.0",
       "representativeQueries": [
+        "check example.com for agent-readiness and tell me what to fix first",
+        "audit example.com for agent-readiness",
         "what is mattpyle.com about",
-        "who is Matt Pyle and what has he written recently",
-        "what agent-readable surfaces does mattpyle.com expose",
-        "audit example.com for agent-readiness"
+        "who is Matt Pyle and what has he written recently"
       ]
     },
     {

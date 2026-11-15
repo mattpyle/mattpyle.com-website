@@ -70,7 +70,7 @@ const markdownSource = readFileSync(fileURLToPath(new URL('../src/pages/activity
 test('the census lists are the responder and the audit skill lists, held equal', () => {
   assert.deepEqual([...A2A_METHODS_COUNTED], [A2A_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
   assert.deepEqual([...A2A_SKILLS_COUNTED], [...SKILL_IDS]);
-  assert.deepEqual([...A2A_SKILLS_COUNTED], [ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID]);
+  assert.deepEqual([...A2A_SKILLS_COUNTED], [CONSULTANT_SKILL_ID, AUDIT_SKILL_ID, ASK_SKILL_ID]);
   // The legacy spellings fold into their 1.0 name.
   assert.equal(a2aFactsFrom({ jsonrpc: '2.0', id: 1, method: LEGACY_METHODS[0] }, routeFor).method, A2A_METHOD);
   assert.equal(a2aFactsFrom({ jsonrpc: '2.0', id: 1, method: LEGACY_GET_TASK_METHODS[0] }, routeFor).method, GET_TASK_METHOD);
@@ -108,6 +108,14 @@ test('a message to the consultant counts under its skill, by name or by its task
   const reply = send('example.com');
   reply.params.message.taskId = 'a2a-consultant-00000000-0000-4000-8000-000000000000';
   assert.deepEqual(a2aFactsFrom(reply, routeFor), { method: 'SendMessage', skill: CONSULTANT_SKILL_ID, tier: 'none' });
+  // With a model on the deployment, the route's router sends a message that names no skill there.
+  const withModel = (params) => {
+    const text = readText(params.message);
+    return text === null ? null : routeMessage(params, text, { model: true });
+  };
+  for (const text of ['What is this site about?', 'Run a deep audit of example.com']) {
+    assert.deepEqual(a2aFactsFrom(send(text), withModel), { method: 'SendMessage', skill: CONSULTANT_SKILL_ID, tier: 'none' }, text);
+  }
   const cancel = { jsonrpc: '2.0', id: 3, method: 'CancelTask', params: { id: 'a2a-consultant-x' } };
   assert.deepEqual(a2aFactsFrom(cancel, routeFor), { method: 'CancelTask', skill: 'none', tier: 'none' });
 });

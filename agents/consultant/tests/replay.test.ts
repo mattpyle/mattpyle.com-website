@@ -2,7 +2,7 @@
  * Recorded sessions replay against the current workflow code. A session can be open across a
  * deploy, so a change that alters the commands an open session replays must fail here first.
  *
- * Both fixtures are local proofs on 2026-11-12: a real Claude model through the public MCP
+ * The two `proof-` fixtures are local proofs on 2026-11-12: a real Claude model through the public MCP
  * endpoint, two turns each. Turn 1 asks the caller which site (`ask_user`), audits it
  * (`audit_site`) and answers; turn 2 answers with no tool.
  *
@@ -12,6 +12,14 @@
  * - `proof-final.json` is the same path on the code as merged, written by `scripts/converse.ts`.
  * - Both replay clean across `lastReply` on `consultant_session`, which records state and issues
  *   no command.
+ *
+ * - `scripted-site-facts.json` is a session on the code that added the `site_facts` tool and the
+ *   kept replies, recorded on 2026-11-15 by `scripts/record-scripted.ts` with the scripted model and
+ *   the stub site: three turns, with `ask_user`, `audit_site` and `site_facts`. The two older
+ *   fixtures replay clean across the same change: `replies` on `consultant_session` is state and
+ *   issues no command, and the new tool schedules an activity only when the model calls it. Probe:
+ *   a `sleep('1 second')` before the `consultantSiteFacts` call made this fixture alone fail with
+ *   `TMPRL1100`; removing it made it pass again.
  *
  * Probe: a `sleep('1 second')` added at the top of the `ask` handler made this test fail with a
  * nondeterminism error; removing it made it pass again.

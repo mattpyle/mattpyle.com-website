@@ -69,6 +69,12 @@ export interface Session {
    * does not replace it, so the last real answer stays readable after a cap.
    */
   lastReply: { turn: number; text: string } | null;
+  /**
+   * The answer to every turn so far, oldest first, so a caller can read an earlier turn's answer
+   * after a later one. One entry per turn, so the turn cap bounds it. A session read from a worker
+   * older than this field has none; a reader then has `lastReply` alone.
+   */
+  replies: { turn: number; text: string }[];
 }
 
 export function newSession(caps: Caps): Session {
@@ -83,7 +89,15 @@ export function newSession(caps: Caps): Session {
     unmeteredTokens: 0,
     ended: null,
     lastReply: null,
+    replies: [],
   };
+}
+
+/** The session with `text` recorded as the answer to its current turn. Pure. */
+export function withReply(s: Session, text: string): Session {
+  const entry = { turn: s.turns, text };
+  const earlier = s.replies.filter((r) => r.turn !== entry.turn);
+  return { ...s, lastReply: entry, replies: [...earlier, entry].slice(-s.caps.turns) };
 }
 
 export function tokensUsed(s: Session): number {

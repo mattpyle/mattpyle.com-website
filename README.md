@@ -40,10 +40,13 @@ examples at [`/webmcp`](https://www.mattpyle.com/webmcp), and remain genuinely e
 
 **An A2A participant.** The site publishes an Agent Card at
 [`/.well-known/agent-card.json`](https://www.mattpyle.com/.well-known/agent-card.json) and answers
-real A2A 1.0 `SendMessage` calls at `/a2a`. Two skills: `ask-about-site` answers in the retro
-webmaster's voice from a digest compiled at build time, and `audit-a-site` audits a site you name —
-the fast tier as a direct `Message`, and the browser-rendered deep tier as a `Task` backed by a
-Temporal workflow, polled with `GetTask` until the report arrives as its artifact. Calls arriving
+real A2A 1.0 `SendMessage` calls at `/a2a`. The agent is Steward. A message that names no skill
+goes to a Claude model that runs as a Temporal workflow (`agents/consultant/`): it audits a site
+you name and answers in a `Task` that completes with a plan. Two skills answer with no model when
+a message names them in metadata: `ask-about-site` gives fixed answers from a digest compiled at
+build time, and `audit-a-site` returns the raw audit of a site you name — the fast tier as a
+direct `Message`, and the browser-rendered deep tier as a `Task` backed by a Temporal workflow,
+polled with `GetTask` until the report arrives as its artifact. Calls arriving
 with the 0.x `message/send` and `tasks/get` spellings are answered in the 0.x response shape, so
 legacy clients can read the reply. Delete the card and the route, and the rest of the built site is
 byte-identical.
