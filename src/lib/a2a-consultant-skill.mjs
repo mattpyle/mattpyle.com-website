@@ -34,9 +34,14 @@
  * rest. A caller that sets `configuration.returnImmediately` (or the 0.x `blocking: false`) gets
  * `working` at once.
  *
+ * **A streaming send does not wait in silence.** `SendStreamingMessage` delivers the message the
+ * same way and sends the turn as events: the task at once, then the answer and the final state
+ * (`streamConsultantMessage`). A client whose timeout is shorter than a turn reads it this way.
+ * It ends at the same budget, with the task still `working`.
+ *
  * **What a read costs.** A read is a describe and two Queries, `agent_status` and
  * `consultant_session`. It sends no Update, so `GetTask` and the wait write nothing into the
- * session's history however often they run.
+ * session's history however often they run. A stream reads the same way.
  *
  * **A session read from an older worker** has `lastReply` and no `replies`. The latest turn reads
  * from `lastReply`; an earlier turn reads `completed` with a line saying its text is not kept.
@@ -425,30 +430,25 @@ const REAL_CLOCK = Object.freeze({
 });
 
 /**
- * `SendMessage` to Steward: a new session when the message names none, otherwise the caller's text
- * delivered to the open session as what it is waiting for. The send then waits for the turn.
+ * Deliver one message to Steward: start a session when the message names none, otherwise hand the
+ * caller's text to the open session as what it is waiting for. One Update, and no wait.
  *
  * The session is named by `message.taskId` (any task of it) or by `message.contextId`. A context
  * id that is not a session's is the caller's own: the message starts a new session, and the
  * response carries the session's `contextId`.
  *
- * @param {{ id: any, params: object, text: string, taskId: string | null, contextId: string | null,
- *           legacy: boolean, newId: () => string, now: () => string,
- *           consultant: { checkLimit: () => Promise<object>, engine: object, startedAt?: number,
- *                         clock?: { now: () => number, sleep: (ms: number) => Promise<void> } } }} input
- *   `startedAt` is when the request arrived, on `clock`; the wait's budget counts from it.
+ * @returns {Promise<{ refusal: { outcome: string, payload: object, detail?: string } } |
+ *   { sessionId: string, turn: number, turnTask: string, accepted: boolean, outcome: string }>}
+ *   `accepted` is false when the session is started and no worker has taken the message yet.
+ *   `outcome` is the log token's stem: the waiting send and the stream each finish it.
  */
-export async function handleConsultantMessage({ id, params, text, taskId, contextId, legacy, newId, now, consultant }) {
-  if (text.length > MAX_MESSAGE_CHARS) return tooLong(id);
-  const shape = { legacy, newId, now };
+async function deliverMessage({ id, params, text, taskId, contextId, consultant }) {
+  if (text.length > MAX_MESSAGE_CHARS) return { refusal: tooLong(id) };
   const engine = consultant.engine;
-  const clock = consultant.clock ?? REAL_CLOCK;
-  const deadline = (consultant.startedAt ?? clock.now()) + WAIT_BUDGET_MS;
-  const immediate = wantsImmediateReturn(params);
 
   const namedTask = taskId === null ? null : parseConsultantTaskId(taskId);
   if (taskId !== null && namedTask === null) {
-    return { outcome: 'task-not-found/malformed', payload: taskNotFound(id, taskId) };
+    return { refusal: { outcome: 'task-not-found/malformed', payload: taskNotFound(id, taskId) } };
   }
   const sessionId = namedTask?.sessionId ?? (isConsultantSessionId(contextId) ? contextId : null);
 
@@ -457,78 +457,75 @@ export async function handleConsultantMessage({ id, params, text, taskId, contex
     const verdict = await consultant.checkLimit();
     if (!verdict.allowed) {
       return {
-        outcome: `rate-limited/session/${verdict.scope}`,
-        payload: errorResponse(
-          id,
-          ERROR_CODES.serverError,
-          `Rate limited: ${verdict.reason}. Try again in ${verdict.retryAfterSeconds} seconds. ` +
-            'A message that names no skill starts a Steward session, and new sessions are capped per ' +
-            'caller and per day. For a raw audit report with no model, call the MCP endpoint at ' +
-            'https://www.mattpyle.com/mcp, or name a skill in metadata: ' +
-            `{"skill":"${AUDIT_SKILL_ID}"} for an audit, or {"skill":"${ASK_SKILL_ID}"} for a ` +
-            'question about this site.',
-          [
-            errorInfo('RATE_LIMITED', {
-              tier: 'session',
-              scope: verdict.scope,
-              retryAfterSeconds: String(verdict.retryAfterSeconds),
-              ...(verdict.limit === undefined ? {} : { limit: String(verdict.limit) }),
-            }),
-          ]
-        ),
+        refusal: {
+          outcome: `rate-limited/session/${verdict.scope}`,
+          payload: errorResponse(
+            id,
+            ERROR_CODES.serverError,
+            `Rate limited: ${verdict.reason}. Try again in ${verdict.retryAfterSeconds} seconds. ` +
+              'A message that names no skill starts a Steward session, and new sessions are capped per ' +
+              'caller and per day. For a raw audit report with no model, call the MCP endpoint at ' +
+              'https://www.mattpyle.com/mcp, or name a skill in metadata: ' +
+              `{"skill":"${AUDIT_SKILL_ID}"} for an audit, or {"skill":"${ASK_SKILL_ID}"} for a ` +
+              'question about this site.',
+            [
+              errorInfo('RATE_LIMITED', {
+                tier: 'session',
+                scope: verdict.scope,
+                retryAfterSeconds: String(verdict.retryAfterSeconds),
+                ...(verdict.limit === undefined ? {} : { limit: String(verdict.limit) }),
+              }),
+            ]
+          ),
+        },
       };
     }
     let started;
     try {
       started = await engine.start(text);
     } catch (error) {
-      return unavailable(id, error, undefined, 'consultant-unavailable/start');
-    }
-    const firstTask = consultantTurnTaskId(started.workflowId, 1);
-    let view = started.accepted
-      ? { state: 'working', turn: 1, text: `${WORKING_TEXT} Poll GetTask with id "${firstTask}".` }
-      : {
-          state: 'submitted',
-          turn: 1,
-          text: `The session is started and durable, and waiting for Steward's worker. Poll GetTask with id "${firstTask}".`,
-        };
-    if (started.accepted && !immediate) {
-      const waited = await waitForTurn(engine, started.workflowId, 1, { deadline, clock });
-      view = RUNNING.has(waited.state) ? view : waited;
+      return { refusal: unavailable(id, error, undefined, 'consultant-unavailable/start') };
     }
     return {
-      outcome: `ok/consultant-start/${view.state}`,
-      payload: wrapTask(id, consultantTaskFrom(firstTask, started.workflowId, view, shape), legacy, true),
+      sessionId: started.workflowId,
+      turn: 1,
+      turnTask: consultantTurnTaskId(started.workflowId, 1),
+      accepted: started.accepted,
+      outcome: 'ok/consultant-start',
     };
   }
 
   const named = taskId ?? sessionId;
   const read = await readOrRefuse(id, named, sessionId, engine);
-  if (read.refusal) return read.refusal;
+  if (read.refusal) return { refusal: read.refusal };
   const whole = consultantStateFor(read.reading);
 
   if (TERMINAL.has(whole.state)) {
     return {
-      outcome: `task-terminal/${whole.state}`,
-      payload: errorResponse(
-        id,
-        ERROR_CODES.unsupportedOperation,
-        `The session "${sessionId}" has ended (${STATES[whole.state].current}) and takes no more ` +
-          'messages. Send the message again with no context id and no task id to start a new session.',
-        [errorInfo('TASK_TERMINAL', { taskId: named, state: STATES[whole.state].current })]
-      ),
+      refusal: {
+        outcome: `task-terminal/${whole.state}`,
+        payload: errorResponse(
+          id,
+          ERROR_CODES.unsupportedOperation,
+          `The session "${sessionId}" has ended (${STATES[whole.state].current}) and takes no more ` +
+            'messages. Send the message again with no context id and no task id to start a new session.',
+          [errorInfo('TASK_TERMINAL', { taskId: named, state: STATES[whole.state].current })]
+        ),
+      },
     };
   }
   if (RUNNING.has(whole.state)) {
     return {
-      outcome: 'task-busy',
-      payload: errorResponse(
-        id,
-        ERROR_CODES.unsupportedOperation,
-        `The session "${sessionId}" is still working on the last message. Poll GetTask on that ` +
-          "turn's task until it leaves TASK_STATE_WORKING, then send again.",
-        [errorInfo('TASK_WORKING', { taskId: named })]
-      ),
+      refusal: {
+        outcome: 'task-busy',
+        payload: errorResponse(
+          id,
+          ERROR_CODES.unsupportedOperation,
+          `The session "${sessionId}" is still working on the last message. Poll GetTask on that ` +
+            "turn's task until it leaves TASK_STATE_WORKING, then send again.",
+          [errorInfo('TASK_WORKING', { taskId: named })]
+        ),
+      },
     };
   }
 
@@ -544,14 +541,16 @@ export async function handleConsultantMessage({ id, params, text, taskId, contex
       const approved = approvalFrom(params, text);
       if (approved === null) {
         return {
-          outcome: 'invalid-params/consultant-approval',
-          payload: errorResponse(
-            id,
-            ERROR_CODES.invalidParams,
-            'Invalid parameters. Steward is waiting for a yes or a no on a deep audit. Reply ' +
-              '"yes" or "no", or set metadata {"approve": true} or {"approve": false}.',
-            [badRequest([{ field: 'message.parts', description: 'Must be "yes" or "no".' }])]
-          ),
+          refusal: {
+            outcome: 'invalid-params/consultant-approval',
+            payload: errorResponse(
+              id,
+              ERROR_CODES.invalidParams,
+              'Invalid parameters. Steward is waiting for a yes or a no on a deep audit. Reply ' +
+                '"yes" or "no", or set metadata {"approve": true} or {"approve": false}.',
+              [badRequest([{ field: 'message.parts', description: 'Must be "yes" or "no".' }])]
+            ),
+          },
         };
       }
       await engine.decide(sessionId, whole.toolId, approved);
@@ -559,20 +558,141 @@ export async function handleConsultantMessage({ id, params, text, taskId, contex
       await engine.send(sessionId, text);
     }
   } catch (error) {
-    if (error?.name === 'ConsultantNotFound') return { outcome: 'task-not-found/unknown', payload: taskNotFound(id, named) };
-    return unavailable(id, error, named, 'consultant-unavailable/send');
+    if (error?.name === 'ConsultantNotFound') {
+      return { refusal: { outcome: 'task-not-found/unknown', payload: taskNotFound(id, named) } };
+    }
+    return { refusal: unavailable(id, error, named, 'consultant-unavailable/send') };
   }
 
-  const turnTask = consultantTurnTaskId(sessionId, turn);
-  let view = { state: 'working', turn, text: `${WORKING_TEXT} Poll GetTask with id "${turnTask}".` };
-  if (!immediate) {
-    const waited = await waitForTurn(engine, sessionId, turn, { deadline, clock });
+  return {
+    sessionId,
+    turn,
+    turnTask: consultantTurnTaskId(sessionId, turn),
+    accepted: true,
+    outcome: `ok/consultant-reply/${whole.awaiting}`,
+  };
+}
+
+/** The view of a turn whose message was just delivered: running, or waiting for a worker. */
+function deliveredView(delivered, { poll }) {
+  const hint = poll ? ` Poll GetTask with id "${delivered.turnTask}".` : '';
+  return delivered.accepted
+    ? { state: 'working', turn: delivered.turn, text: `${WORKING_TEXT}${hint}` }
+    : {
+        state: 'submitted',
+        turn: delivered.turn,
+        text: `The session is started and durable, and waiting for Steward's worker.${hint}`,
+      };
+}
+
+/**
+ * `SendMessage` to Steward: deliver the message, then wait for the turn.
+ *
+ * @param {{ id: any, params: object, text: string, taskId: string | null, contextId: string | null,
+ *           legacy: boolean, newId: () => string, now: () => string,
+ *           consultant: { checkLimit: () => Promise<object>, engine: object, startedAt?: number,
+ *                         clock?: { now: () => number, sleep: (ms: number) => Promise<void> } } }} input
+ *   `startedAt` is when the request arrived, on `clock`; the wait's budget counts from it.
+ */
+export async function handleConsultantMessage({ id, params, text, taskId, contextId, legacy, newId, now, consultant }) {
+  const clock = consultant.clock ?? REAL_CLOCK;
+  const deadline = (consultant.startedAt ?? clock.now()) + WAIT_BUDGET_MS;
+
+  const delivered = await deliverMessage({ id, params, text, taskId, contextId, consultant });
+  if (delivered.refusal) return delivered.refusal;
+
+  let view = deliveredView(delivered, { poll: true });
+  if (delivered.accepted && !wantsImmediateReturn(params)) {
+    const waited = await waitForTurn(consultant.engine, delivered.sessionId, delivered.turn, { deadline, clock });
     view = RUNNING.has(waited.state) ? view : waited;
   }
   return {
-    outcome: `ok/consultant-reply/${whole.awaiting}`,
-    payload: wrapTask(id, consultantTaskFrom(turnTask, sessionId, view, shape), legacy, true),
+    // A new session's token ends with the state it returned in; a reply's names what it answered.
+    outcome: delivered.outcome === 'ok/consultant-start' ? `${delivered.outcome}/${view.state}` : delivered.outcome,
+    payload: wrapTask(
+      id,
+      consultantTaskFrom(delivered.turnTask, delivered.sessionId, view, { legacy, newId, now }),
+      legacy,
+      true
+    ),
   };
+}
+
+/**
+ * `SendStreamingMessage` to Steward: the same delivery, with the turn sent as events.
+ *
+ * | When | Event |
+ * |---|---|
+ * | The message is admitted | `task`: `working` (or `submitted` when no worker has it), with its ids |
+ * | The turn is answered | `artifactUpdate`: the whole answer, `lastChunk: true`; then `statusUpdate`: `completed` |
+ * | Steward asks a question or an approval | `statusUpdate`: `input-required`, the question as its message, `metadata.awaiting` |
+ * | The session ends with the turn open | `statusUpdate`: `canceled` or `failed` |
+ * | The budget runs out | `statusUpdate`: `working`, with the `GetTask` call to make |
+ *
+ * A refusal is one event, the JSON-RPC error the waiting send would have returned, because by then
+ * the response is already a stream. Text arrives whole, in the artifact: the model's words are read
+ * from the session Query when the turn ends, not as they are written.
+ *
+ * Delivery is the one Update. Everything after it is the same describe and two Queries `GetTask`
+ * makes, about every `WAIT_INTERVAL_MS`, so a stream writes nothing more into the session's
+ * history than a waiting send does.
+ *
+ * The stream ends at the waiting send's `WAIT_BUDGET_MS`, with the task still `working`; the turn
+ * runs on and `GetTask` reads it. `consultant.signal.aborted`, set when the client goes away, ends
+ * it sooner. The delivered message is not withdrawn either way.
+ *
+ * Yields whole JSON-RPC responses. Returns `{ outcome, detail? }` for the log line.
+ */
+export async function* streamConsultantMessage({ id, params, text, taskId, contextId, newId, now, consultant }) {
+  const clock = consultant.clock ?? REAL_CLOCK;
+  const signal = consultant.signal ?? { aborted: false };
+  const deadline = (consultant.startedAt ?? clock.now()) + WAIT_BUDGET_MS;
+  const shape = { legacy: false, newId, now };
+  const event = (result) => ({ jsonrpc: '2.0', id, result });
+
+  const delivered = await deliverMessage({ id, params, text, taskId, contextId, consultant });
+  if (delivered.refusal) {
+    yield delivered.refusal.payload;
+    return { outcome: delivered.refusal.outcome, ...(delivered.refusal.detail ? { detail: delivered.refusal.detail } : {}) };
+  }
+  const { sessionId, turn, turnTask } = delivered;
+  const taskFor = (view) => consultantTaskFrom(turnTask, sessionId, view, shape);
+  const statusUpdate = (view) => {
+    const task = taskFor(view);
+    return event({ statusUpdate: { taskId: turnTask, contextId: sessionId, status: task.status, metadata: task.metadata } });
+  };
+
+  const first = deliveredView(delivered, { poll: false });
+  yield event({ task: taskFor(first) });
+  if (!delivered.accepted || wantsImmediateReturn(params)) {
+    return { outcome: `${delivered.outcome}/${first.state}/immediate` };
+  }
+
+  for (;;) {
+    if (signal.aborted) return { outcome: `${delivered.outcome}/client-gone` };
+    const left = deadline - clock.now();
+    if (left <= 0) break;
+    let view;
+    try {
+      view = consultantTurnFor(await consultant.engine.read(sessionId, { within: left }), turn, { sent: true });
+    } catch {
+      // The message is delivered, and GetTask will say where the turn stands.
+      break;
+    }
+    if (view && !RUNNING.has(view.state)) {
+      const task = taskFor(view);
+      for (const artifact of task.artifacts ?? []) {
+        yield event({ artifactUpdate: { taskId: turnTask, contextId: sessionId, artifact, lastChunk: true } });
+      }
+      yield statusUpdate(view);
+      return { outcome: `${delivered.outcome}/${view.state}` };
+    }
+    if (deadline - clock.now() <= WAIT_INTERVAL_MS) break;
+    await clock.sleep(WAIT_INTERVAL_MS);
+  }
+
+  yield statusUpdate({ state: 'working', turn, text: `${WORKING_TEXT} Poll GetTask with id "${turnTask}".` });
+  return { outcome: `${delivered.outcome}/working/budget` };
 }
 
 /** `GetTask` on one turn of a session. A describe and two Queries; no Update. */

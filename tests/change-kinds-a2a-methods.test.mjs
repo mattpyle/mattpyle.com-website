@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { A2A_METHOD_PHRASES, A2A_METHODS as LISTED, methodsClause } from '../src/lib/a2a-methods.mjs';
-import { A2A_METHOD, A2A_METHODS, CANCEL_TASK_METHOD, GET_TASK_METHOD, respond } from '../src/lib/a2a-responder.mjs';
+import { A2A_METHOD, A2A_METHODS, CANCEL_TASK_METHOD, GET_TASK_METHOD, STREAM_METHOD, respond } from '../src/lib/a2a-responder.mjs';
 import { A2A_METHODS_LEGEND } from '../src/lib/activity-summary.mjs';
 import { buildDigest } from '../scripts/generate-a2a-digest.mjs';
 
@@ -17,7 +17,7 @@ import { buildDigest } from '../scripts/generate-a2a-digest.mjs';
 const read = (path) => readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), 'utf8');
 
 test('the listed methods are the ones the responder dispatches on', () => {
-  assert.deepEqual([...LISTED], [A2A_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
+  assert.deepEqual([...LISTED], [A2A_METHOD, STREAM_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
   assert.equal(A2A_METHODS, LISTED);
   assert.deepEqual(A2A_METHOD_PHRASES.map((method) => method.name), [...LISTED]);
 });

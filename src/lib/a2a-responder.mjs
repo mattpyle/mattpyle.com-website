@@ -51,7 +51,14 @@
  * src/lib/a2a-audit-skill.mjs holds the rule, and the routing a deployment with no Temporal
  * connection keeps.
  *
- * WHAT IT DOES NOT DO: streaming, push notifications, the extended Agent Card, authentication, or
+ * STREAMING SINCE 2026-11-15. `SendStreamingMessage` (specification section 9.4.2) is the same send
+ * answered as Server-Sent Events, so a client with a short read timeout hears from the endpoint
+ * while a turn runs. `respondOrStream()` is the entry that can return a stream; `respond()` is the one-reply
+ * half and what the tests mostly call. The model's turn streams as a task and its updates
+ * (src/lib/a2a-consultant-skill.mjs). The two skills with no model answer in one event. The bytes
+ * are src/lib/a2a-sse.mjs. `SubscribeToTask` is refused by name: `GetTask` reads a task.
+ *
+ * WHAT IT DOES NOT DO: push notifications, the extended Agent Card, authentication, or
  * any state of its own. There is still no session and no server-side store
  * here: the only state either skill has is a Temporal workflow, and `GetTask` reads it rather than
  * remembering it.
@@ -81,12 +88,25 @@ import {
   handleConsultantGetTask,
   handleConsultantMessage,
   isConsultantTaskId,
+  streamConsultantMessage,
 } from './a2a-consultant-skill.mjs';
 import { isAuditTaskId } from './audit-task-id.mjs';
 import { A2A_METHODS, countWord, methodsQuoted } from './a2a-methods.mjs';
 
 /** The message-sending method, in its A2A 1.0 spelling. */
 export const A2A_METHOD = 'SendMessage';
+
+/**
+ * The streaming send, in its A2A 1.0 spelling (specification section 9.4.2). It has no 0.x alias
+ * here: `message/stream` is answered as an unknown method.
+ */
+export const STREAM_METHOD = 'SendStreamingMessage';
+
+/**
+ * The method that reopens a stream on a task. Not implemented: it is refused by name, with the
+ * call that reads a task, because a card that declares streaming invites it.
+ */
+export const SUBSCRIBE_METHOD = 'SubscribeToTask';
 
 /** Pre-1.0 spellings accepted from older clients, and answered in the matching dialect. */
 export const LEGACY_METHODS = Object.freeze(['message/send']);
@@ -95,6 +115,7 @@ export const LEGACY_METHODS = Object.freeze(['message/send']);
 export { A2A_METHODS };
 
 export { CANCEL_TASK_METHOD, ERROR_CODES, GET_TASK_METHOD, LEGACY_CANCEL_TASK_METHODS, LEGACY_GET_TASK_METHODS };
+export { SSE_HEADERS, sseBody } from './a2a-sse.mjs';
 
 /* ------------------------------------------------------------------ formatting helpers */
 
@@ -466,7 +487,7 @@ export function answer(question, digest) {
  * rules would be two places for one endpoint to answer `-32600` differently.
  *
  * @returns {{ refusal: object } | { id: any, isNotification: boolean, method: string,
- *             legacy: boolean, dialect: string, getTask: boolean }}
+ *             legacy: boolean, dialect: string, getTask: boolean, cancelTask: boolean, stream: boolean }}
  */
 function validateEnvelope(request) {
   if (Array.isArray(request)) {
@@ -516,7 +537,19 @@ function validateEnvelope(request) {
   }
 
   const method = request.method;
-  const sendMessage = method === A2A_METHOD || LEGACY_METHODS.includes(method);
+  if (method === SUBSCRIBE_METHOD) {
+    return {
+      refusal: {
+        outcome: `unsupported-operation/${SUBSCRIBE_METHOD}`,
+        notification: isNotification,
+        payload: errorResponse(id, ERROR_CODES.unsupportedOperation, `${SUBSCRIBE_METHOD} is not supported. A stream here belongs to the ${STREAM_METHOD} call that opened it and cannot be reopened. Read the task with ${GET_TASK_METHOD} and its id; a turn that was still running when its stream closed is finished or waiting there.`, [
+          errorInfo('UNSUPPORTED_OPERATION', { requested: method, use: GET_TASK_METHOD }),
+        ]),
+      },
+    };
+  }
+  const stream = method === STREAM_METHOD;
+  const sendMessage = stream || method === A2A_METHOD || LEGACY_METHODS.includes(method);
   const getTask = method === GET_TASK_METHOD || LEGACY_GET_TASK_METHODS.includes(method);
   const cancelTask = method === CANCEL_TASK_METHOD || LEGACY_CANCEL_TASK_METHODS.includes(method);
   if (!sendMessage && !getTask && !cancelTask) {
@@ -524,7 +557,7 @@ function validateEnvelope(request) {
       refusal: {
         outcome: `method-not-found/${method}`,
         notification: isNotification,
-        payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements ${countWord(A2A_METHODS.length)} methods: ${methodsQuoted()}. Streaming, push notifications and the extended Agent Card are not implemented; the Agent Card at ${AGENT_CARD_URL} declares the same thing.`, [
+        payload: errorResponse(id, ERROR_CODES.methodNotFound, `Method not found: "${method}". This endpoint implements ${countWord(A2A_METHODS.length)} methods: ${methodsQuoted()}. Push notifications, ${SUBSCRIBE_METHOD} and the extended Agent Card are not implemented; the Agent Card at ${AGENT_CARD_URL} declares its capabilities.`, [
           errorInfo('METHOD_NOT_FOUND', {
             requested: method,
             supported: A2A_METHODS.join(','),
@@ -544,7 +577,7 @@ function validateEnvelope(request) {
     LEGACY_METHODS.includes(method) ||
     LEGACY_GET_TASK_METHODS.includes(method) ||
     LEGACY_CANCEL_TASK_METHODS.includes(method);
-  return { id, isNotification, method, legacy, dialect: legacy ? 'legacy/' : '', getTask, cancelTask };
+  return { id, isNotification, method, legacy, dialect: legacy ? 'legacy/' : stream ? 'stream/' : '', getTask, cancelTask, stream };
 }
 
 /** The caller's thread id where they set one, and a fresh one otherwise. */
@@ -662,6 +695,13 @@ async function handleCancel(id, params, legacy, context) {
   return handleConsultantCancel({ id, taskId, legacy, newId: context.newId, now: context.now, consultant: context.consultant });
 }
 
+/** A stream of one event: the reply a handler with no stream of its own returns. */
+async function* oneEvent(handle) {
+  const { outcome, payload, detail } = await handle();
+  yield payload;
+  return { outcome, ...(detail ? { detail } : {}) };
+}
+
 /**
  * Handle one already-parsed JSON-RPC request object.
  *
@@ -676,7 +716,7 @@ async function handleRequest(request, context) {
   const envelope = validateEnvelope(request);
   if (envelope.refusal) return envelope.refusal;
 
-  const { id, isNotification, legacy, dialect, getTask, cancelTask } = envelope;
+  const { id, isNotification, legacy, dialect, getTask, cancelTask, stream } = envelope;
   const { newId, now = () => new Date().toISOString(), audit, consultant } = context;
   const params = request.params;
   const settled = (handled) => ({
@@ -744,6 +784,41 @@ async function handleRequest(request, context) {
   // Which skill. A named one wins. An unnamed message goes to the model where this deployment has
   // one, and is sorted by wording where it has none.
   const route = routeMessage(params, text, { model: Boolean(consultant) });
+
+  if (stream) {
+    // A notification has no id to answer under, and a stream is nothing but answers. It gets no
+    // body and starts no work.
+    if (isNotification) return { outcome: `${dialect}notification`, notification: true, payload: null };
+    if (route.skill === CONSULTANT_SKILL_ID) {
+      if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
+      const inbound = params.message?.taskId;
+      return {
+        dialect,
+        events: streamConsultantMessage({
+          id,
+          params,
+          text,
+          taskId: typeof inbound === 'string' && inbound !== '' ? inbound : null,
+          contextId: namedContextId(params),
+          newId,
+          now,
+          consultant,
+        }),
+      };
+    }
+    if (route.skill === AUDIT_SKILL_ID && !audit) return settled(notConfigured(id));
+    // The two skills with no model answer once. Their reply is already a StreamResponse: a 1.0
+    // `{ message }` or `{ task }`. So the stream is that one event, and it closes.
+    return {
+      dialect,
+      events: oneEvent(() =>
+        route.skill === AUDIT_SKILL_ID
+          ? handleAuditMessage({ id, route, contextId: namedContextId(params), legacy: false, newId, now, audit })
+          : handleAsk(text, params, { ...envelope, dialect: '' }, context)
+      ),
+    };
+  }
+
   if (route.skill === CONSULTANT_SKILL_ID) {
     if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
     const inbound = params.message?.taskId;
@@ -796,6 +871,37 @@ async function handleRequest(request, context) {
  *   text, for the log line only.
  */
 export async function respond(rawBody, context) {
+  const opened = await respondOrStream(rawBody, context);
+  if (!opened.events) return opened;
+  // Unreachable from /a2a, which calls respondOrStream(). A caller of this function asked for one reply.
+  await opened.events.return(undefined);
+  return {
+    status: 200,
+    outcome: 'stream/unsupported-operation/no-stream',
+    payload: errorResponse(opened.id, ERROR_CODES.unsupportedOperation, `${STREAM_METHOD} needs a streaming response, and this caller of the responder asked for one reply. Send ${A2A_METHOD}.`, [
+      errorInfo('UNSUPPORTED_OPERATION', { requested: STREAM_METHOD, use: A2A_METHOD }),
+    ]),
+  };
+}
+
+/**
+ * Handle one raw request body, with a stream where the method asks for one.
+ *
+ * Everything but `SendStreamingMessage` comes back as `respond()` returns it. A streaming send
+ * that is refused before any work (a body that is not JSON, a bad envelope, no params, no text, a
+ * skill this deployment lacks) also comes back that way, as plain JSON: both official clients
+ * read a JSON-RPC error body on a streaming call. Any other streaming send comes back as
+ * `{ events }`, and a later refusal is an error event inside it. The split is at the first thing
+ * that waits, so the route can send its headers and its first bytes with no delay.
+ *
+ * @param {string} rawBody
+ * @param {object} context as `respond()` takes it. `consultant.signal`, `{ aborted: boolean }`,
+ *   ends a stream early when the client is gone.
+ * @returns {Promise<{ status: number, outcome: string, payload: object | null, detail?: string } |
+ *   { id: any, events: AsyncGenerator<object, { outcome: string, detail?: string }> }>}
+ *   `events` yields whole JSON-RPC responses and returns the log token, already prefixed.
+ */
+export async function respondOrStream(rawBody, context) {
   let request;
   try {
     request = JSON.parse(rawBody);
@@ -811,7 +917,30 @@ export async function respond(rawBody, context) {
     };
   }
 
-  const { outcome, payload, notification, detail } = await handleRequest(request, context);
+  const handled = await handleRequest(request, context);
+  if (handled.events) {
+    const { events, dialect } = handled;
+    return {
+      id: request.id,
+      events: (async function* prefixed() {
+        try {
+          const result = yield* events;
+          return { ...result, outcome: `${dialect}${result?.outcome ?? 'ended'}` };
+        } catch (error) {
+          // A source that throws still ends its stream with an answer, not with a bare close. The
+          // error's own text goes to the log line only.
+          yield errorResponse(request.id, ERROR_CODES.internal, 'The stream ended on an internal error. If a task id was sent, read the task with GetTask.', [
+            errorInfo('INTERNAL'),
+          ]);
+          return {
+            outcome: `${dialect}internal-error`,
+            detail: (error instanceof Error ? `${error.name}: ${error.message}` : String(error)).replace(/\s+/g, ' ').slice(0, 300),
+          };
+        }
+      })(),
+    };
+  }
+  const { outcome, payload, notification, detail } = handled;
   // JSON-RPC errors ride a 200: the HTTP call succeeded, the RPC did not, and a client that reads
   // the status instead of the envelope would otherwise never see the error it needs to correct.
   // `detail` is for the function's log only, and never part of the payload.

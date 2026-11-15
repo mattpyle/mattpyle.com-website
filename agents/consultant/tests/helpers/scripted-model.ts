@@ -3,14 +3,15 @@
  * the agent's model name, so the workflow, the harness and the model activity all run for real and
  * only the model's answers are canned.
  *
- * Each model call takes the next step. It also records the messages it was given, which is how the
+ * Each model call takes the next step. A step's `delayMs` makes that call take that long, as a slow
+ * model would: the wait is in the model activity, not in workflow code. It also records the messages it was given, which is how the
  * injection test sees exactly what reached "the model".
  */
 import { Model, type BaseModelConfig, type Message, type ModelStreamEvent } from '@strands-agents/sdk';
 
 export type Step =
-  | { text: string; usage?: Usage; stopReason?: string }
-  | { tool: string; input: Record<string, unknown>; usage?: Usage };
+  | { text: string; usage?: Usage; stopReason?: string; delayMs?: number }
+  | { tool: string; input: Record<string, unknown>; usage?: Usage; delayMs?: number };
 
 type Usage = { inputTokens: number; outputTokens: number; totalTokens?: number; cacheReadInputTokens?: number };
 
@@ -49,6 +50,7 @@ export class ScriptedModel extends Model<BaseModelConfig> {
     this.script.seen.push(JSON.stringify(messages));
     const step = this.script.steps.shift() ?? { text: 'Script exhausted.' };
     const usage = step.usage ?? { inputTokens: 100, outputTokens: 20 };
+    if (step.delayMs) await new Promise((resolve) => setTimeout(resolve, step.delayMs));
     yield { type: 'modelMessageStartEvent', role: 'assistant' } as ModelStreamEvent;
     if ('tool' in step) {
       toolUseCounter += 1;
