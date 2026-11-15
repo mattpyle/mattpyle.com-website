@@ -17,13 +17,14 @@ Add the page under `src/pages/`, then:
 | `agents.md` content structure | `public/agents.md` | `tests/change-kinds-pages.test.mjs` fails and names the page |
 | Hit-counter page paths | `scripts/generate-page-paths.mjs` | Generated from `src/pages` |
 | Markdown negotiation | `middleware.ts` | `tests/markdown-negotiation.test.mjs` |
-| Markdown alternate `Link` headers | `vercel.json` | Not yet |
-| Sitemap `lastmod` | `src/data/sitemap-lastmod.mjs` | `scripts/validate-sitemap.mjs` (not confirmed for a missing static entry) |
-| Retro and axe route lists | `scripts/lib/retro-routes.mjs` | Not yet |
-| Share cards | `scripts/generate-og-images.mjs` | Not yet |
-| Header and footer | `src/components/SiteHeader.astro` | Not yet, by hand |
+| Markdown alternate `Link` headers | `vercel.json` | `tests/change-kinds-pages-surfaces.test.mjs` fails and names the page, from the built pages: a pair per page, slash and no slash, the root once. `tests/markdown-negotiation.test.mjs` also checks the fixed entries of the negotiation matcher |
+| Sitemap `lastmod` | `src/data/sitemap-lastmod.mjs` | `tests/change-kinds-pages-surfaces.test.mjs` fails and names the page. The build also fails: `astro.config.mjs` throws "has no lastmod policy" naming the URL |
+| Retro and axe route lists | `scripts/lib/retro-routes.mjs`, `.github/workflows/a11y.yml` | `tests/change-kinds-pages-surfaces.test.mjs` fails when the two lists differ, and names a built page that is on neither the list nor the exemption list. The lists sample templates, so a page that shares a template goes on the exemption list naming the listed page |
+| Share cards | `scripts/generate-og-images.mjs` | `tests/change-kinds-pages-surfaces.test.mjs` fails and names the page: each built page has its own card in `EXPERIMENT_PAGES` or is on the fallback list. The generator makes no card for a page that has none |
+| Header and footer | `src/components/SiteHeader.astro` | By hand, not checked |
+| Surface probe sample | `scripts/agent-surface-parity.mjs` | By hand, a sample of three pages |
 
-A page left out of a surface on purpose goes on the exemption list in `tests/change-kinds-pages.test.mjs`, with a reason.
+A page left out of a surface on purpose goes on the exemption list in `tests/change-kinds-pages.test.mjs` (registry, `llms.txt`, `agents.md`) or in `tests/change-kinds-pages-surfaces.test.mjs` (one list per surface), with a reason. The built-page list both tests read is `tests/helpers/built-pages.mjs`.
 
 ## An agent endpoint method
 
