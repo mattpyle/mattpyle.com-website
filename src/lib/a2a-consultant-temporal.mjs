@@ -1,6 +1,7 @@
 /**
- * The audit consultant's Temporal half of `/a2a`: start a session, read it, and deliver a caller's
- * reply, by the agent harness's raw call names.
+ * Steward's Temporal half of `/a2a`: start a session with the model, read it, and deliver a
+ * caller's reply, by the agent harness's raw call names. Every id here is a session id, the
+ * workflow id; the turn-numbered task ids are src/lib/a2a-consultant-skill.mjs's.
  *
  * A Temporal client and nothing else, on the same module-scope client `/mcp` and the audit skill
  * use (src/lib/mcp-temporal.mjs). It imports no harness package and nothing from
@@ -16,7 +17,7 @@
  * | Next turn | Update `send_agent_message` |
  * | Cancel | Signal `close` |
  *
- * **No stream poll.** The reply text is `lastReply` on `consultant_session`. A stream poll is an
+ * **No stream poll.** The reply texts are `replies` and `lastReply` on `consultant_session`. A stream poll is an
  * Update, and an accepted Update is written into the workflow's history with its result, so a
  * caller who looped GetTask on an idle task would grow the history without bound. A Query writes
  * nothing.
@@ -38,7 +39,7 @@ import {
   CONSULTANT_TASK_QUEUE,
   CONSULTANT_WORKFLOW_TYPE,
   consultantTaskIdFor,
-  isConsultantTaskId,
+  isConsultantSessionId,
 } from './consultant-task-id.mjs';
 import { getClient, withDeadline } from './mcp-temporal.mjs';
 
@@ -68,9 +69,9 @@ export class ConsultantNotFound extends Error {
   }
 }
 
-async function query(handle, name) {
+async function query(handle, name, timeoutMs = QUERY_TIMEOUT_MS) {
   try {
-    return { value: await withDeadline(handle.query(name), QUERY_TIMEOUT_MS, 'the consultant worker') };
+    return { value: await withDeadline(handle.query(name), timeoutMs, 'the consultant worker') };
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
@@ -85,13 +86,13 @@ async function query(handle, name) {
  */
 export function createConsultantEngine(clientFor, { taskQueue = CONSULTANT_TASK_QUEUE, newUuid = randomUUID } = {}) {
   /** A handle to a session that exists and is a consultant, or ConsultantNotFound. */
-  async function sessionHandle(taskId) {
-    if (!isConsultantTaskId(taskId)) throw new ConsultantNotFound(taskId);
+  async function sessionHandle(taskId, timeoutMs = CALL_TIMEOUT_MS) {
+    if (!isConsultantSessionId(taskId)) throw new ConsultantNotFound(taskId);
     const client = await clientFor();
     const handle = client.workflow.getHandle(taskId);
     let description;
     try {
-      description = await withDeadline(handle.describe(), CALL_TIMEOUT_MS, 'Temporal Cloud');
+      description = await withDeadline(handle.describe(), timeoutMs, 'Temporal Cloud');
     } catch (err) {
       if (err instanceof WorkflowNotFoundError) throw new ConsultantNotFound(taskId);
       throw err;
@@ -144,11 +145,15 @@ export function createConsultantEngine(clientFor, { taskQueue = CONSULTANT_TASK_
      * answered at the workflow's state at that moment, so in parallel the session could be read
      * before a turn's end and the status after it, and an idle task would show the previous turn's
      * reply. In this order the session is never older than the status.
+     *
+     * `within` is the time the caller has left, in milliseconds. A send that waits for its turn
+     * passes it, so the last read of the wait cannot run past the request's budget.
      */
-    async read(taskId) {
-      const { handle, description } = await sessionHandle(taskId);
-      const status = await query(handle, AGENT_STATUS_QUERY);
-      const session = await query(handle, CONSULTANT_SESSION_QUERY);
+    async read(taskId, { within } = {}) {
+      const cap = (ms) => (within === undefined ? ms : Math.max(250, Math.min(ms, within)));
+      const { handle, description } = await sessionHandle(taskId, cap(CALL_TIMEOUT_MS));
+      const status = await query(handle, AGENT_STATUS_QUERY, cap(QUERY_TIMEOUT_MS));
+      const session = await query(handle, CONSULTANT_SESSION_QUERY, cap(QUERY_TIMEOUT_MS));
       return {
         execution: description.status.name,
         status: status.value ?? null,

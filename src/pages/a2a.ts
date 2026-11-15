@@ -18,7 +18,7 @@ import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mcp-temporal.mjs';
 
 /**
- * The A2A endpoint. JSON-RPC 2.0 over POST; three methods; three skills.
+ * The A2A endpoint: Steward. JSON-RPC 2.0 over POST; three methods; three skills.
  *
  * All the protocol logic lives in src/lib/a2a-responder.mjs and src/lib/a2a-audit-skill.mjs, both
  * pure and tested; this file is the transport plus the wiring: read the body, hand the responder
@@ -55,6 +55,11 @@ import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mc
  * by raw call names, and imports nothing from `agents/consultant/`. A new session is charged on the
  * limiter's session tier, before the start. Without a Temporal connection the skill answers that
  * it is not configured, and nothing is charged.
+ *
+ * **Since 2026-11-15 the model answers every message that names no skill**, where the deployment
+ * has a Temporal connection, and a send waits for its turn (`WAIT_BUDGET_MS` in the skill, counted
+ * from this route's first line). A deployment with none keeps the older routing by wording, so a
+ * preview or a local build still answers.
  *
  * The digest is a static import, so it is bundled into the function at build time. No fetch, no
  * content-collection read, no cold-start I/O: see scripts/generate-a2a-digest.mjs.
@@ -104,7 +109,7 @@ function log(fields: Record<string, string | number>) {
  */
 function routeFor(params: { message?: unknown }) {
   const text = readText(params.message);
-  return text === null ? null : routeMessage(params, text);
+  return text === null ? null : routeMessage(params, text, { model: DEEP_ENABLED });
 }
 
 /**
@@ -126,6 +131,8 @@ function countRequest(request: Request, body: unknown): void {
 }
 
 export const POST: APIRoute = async ({ request }) => {
+  // When the request arrived. A send that waits for its turn counts its budget from here.
+  const startedAt = Date.now();
   const raw = await request.text();
 
   let parsed: unknown;
@@ -162,6 +169,7 @@ export const POST: APIRoute = async ({ request }) => {
           // The same function, store and caller key as the audits, on the session tier's own keys.
           checkLimit: () => checkRateLimit({ ip: clientIpFrom(request.headers), tier: 'session' }),
           engine: consultantEngine,
+          startedAt,
         }
       : undefined,
   });
@@ -205,7 +213,7 @@ export const GET: APIRoute = ({ request }) => {
         error: 'This is an A2A endpoint. It speaks JSON-RPC 2.0 over POST, not GET.',
         agentCard: CARD_URL,
         supportedMethods: A2A_METHODS,
-        skills: [ASK_SKILL_ID, AUDIT_SKILL_ID, CONSULTANT_SKILL_ID],
+        skills: [CONSULTANT_SKILL_ID, AUDIT_SKILL_ID, ASK_SKILL_ID],
         example: {
           method: 'POST',
           url: 'https://www.mattpyle.com/a2a',
@@ -219,6 +227,7 @@ export const GET: APIRoute = ({ request }) => {
                 role: 'ROLE_USER',
                 messageId: '1',
                 parts: [{ text: 'What is this site about?' }],
+                metadata: { skill: ASK_SKILL_ID },
               },
             },
           },
@@ -236,6 +245,7 @@ export const GET: APIRoute = ({ request }) => {
                 role: 'ROLE_USER',
                 messageId: '2',
                 parts: [{ text: 'Run a deep audit of example.com' }],
+                metadata: { skill: AUDIT_SKILL_ID },
               },
             },
           },
@@ -253,14 +263,16 @@ export const GET: APIRoute = ({ request }) => {
               message: {
                 role: 'ROLE_USER',
                 messageId: '3',
-                parts: [{ text: 'Can you check my site and tell me what matters?' }],
-                metadata: { skill: CONSULTANT_SKILL_ID },
+                parts: [{ text: 'Check example.com and tell me what to fix first' }],
               },
             },
           },
           then:
-            `Poll ${GET_TASK_METHOD} with the returned task id. At TASK_STATE_INPUT_REQUIRED, reply with ` +
-            `${A2A_METHOD} and message.taskId set to that id; ${CANCEL_TASK_METHOD} closes the session.`,
+            'A message that names no skill goes to Steward\'s model. The reply is a Task, completed with ' +
+            'the answer as its artifact. Send the next message with the returned contextId. At ' +
+            `TASK_STATE_INPUT_REQUIRED, reply with ${A2A_METHOD} and message.taskId set to that task's id; ` +
+            `${CANCEL_TASK_METHOD} on any task closes the session. If the turn is still running the ` +
+            `Task reads TASK_STATE_WORKING: poll ${GET_TASK_METHOD}.`,
         },
         note:
           `The audit skill arrives at the site it audits as \`${AUDIT_USER_AGENT}\` and obeys its ` +

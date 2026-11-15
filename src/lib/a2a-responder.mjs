@@ -45,8 +45,11 @@
  * from the error will either retry identically or conclude the site is broken.
  *
  * THREE SKILLS SINCE 2026-11-13. `consult-on-a-site` is src/lib/a2a-consultant-skill.mjs: a
- * conversation with a Claude-driven agent, as a multi-turn Task with `input-required` pauses and
- * `CancelTask`. It is reached only by name or by its task id.
+ * conversation with a Claude-driven agent. SINCE 2026-11-15 IT IS THE DEFAULT: a message that
+ * names no skill goes to the model, each turn is a Task that completes with the answer as an
+ * artifact, and the session's id is the `contextId`. `routeMessage` in
+ * src/lib/a2a-audit-skill.mjs holds the rule, and the routing a deployment with no Temporal
+ * connection keeps.
  *
  * WHAT IT DOES NOT DO: streaming, push notifications, the extended Agent Card, authentication, or
  * any state of its own. There is still no session and no server-side store
@@ -557,7 +560,8 @@ function namedContextId(params) {
 }
 
 /**
- * `ask-about-site`: the webmaster's one-turn answer, unchanged since the v1.
+ * `ask-about-site`: the one-turn answer from the digest. It answers a message that names it, and
+ * every unnamed message that is not an audit where the deployment has no model.
  *
  * @returns {{ outcome: string, payload: object }}
  */
@@ -641,7 +645,7 @@ async function handleCancel(id, params, legacy, context) {
   if (taskId === null) {
     return {
       outcome: 'invalid-params/task-id',
-      payload: errorResponse(id, ERROR_CODES.invalidParams, `Invalid parameters. ${CANCEL_TASK_METHOD} takes the task's id, which is the id SendMessage returned when it started a ${CONSULTANT_SKILL_ID} session.`, [
+      payload: errorResponse(id, ERROR_CODES.invalidParams, `Invalid parameters. ${CANCEL_TASK_METHOD} takes the id of any task of a Steward session, as SendMessage returned it, and closes that session.`, [
         badRequest([{ field: 'id', description: 'Must be a non-empty task id string.' }]),
       ]),
     };
@@ -649,13 +653,13 @@ async function handleCancel(id, params, legacy, context) {
   if (isAuditTaskId(taskId)) {
     return {
       outcome: 'task-not-cancelable/audit',
-      payload: errorResponse(id, ERROR_CODES.taskNotCancelable, `Task "${taskId}" is an audit, and an audit runs to its end, so it cannot be canceled. Only a ${CONSULTANT_SKILL_ID} session can.`, [
+      payload: errorResponse(id, ERROR_CODES.taskNotCancelable, `Task "${taskId}" is an audit, and an audit runs to its end, so it cannot be canceled. Only a Steward session can.`, [
         errorInfo('TASK_NOT_CANCELABLE', { taskId }),
       ]),
     };
   }
   if (!context.consultant) return notConfigured(id, CONSULTANT_SKILL_ID);
-  return handleConsultantCancel({ id, taskId, contextId: null, legacy, newId: context.newId, now: context.now, consultant: context.consultant });
+  return handleConsultantCancel({ id, taskId, legacy, newId: context.newId, now: context.now, consultant: context.consultant });
 }
 
 /**
@@ -686,7 +690,7 @@ async function handleRequest(request, context) {
   if (getTask && isConsultantTaskId(taskIdParam(params))) {
     if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
     return settled(
-      await handleConsultantGetTask({ id, taskId: taskIdParam(params), contextId: null, legacy, newId, now, consultant })
+      await handleConsultantGetTask({ id, taskId: taskIdParam(params), legacy, newId, now, consultant })
     );
   }
 
@@ -737,10 +741,9 @@ async function handleRequest(request, context) {
     };
   }
 
-  // Which skill, decided before the keyword classifier runs and on stricter evidence than it uses:
-  // an audit verb AND a token naming a site, or the skill named outright in metadata. That is what
-  // leaves `ask-about-site` answering exactly as it did — none of its questions names a site.
-  const route = routeMessage(params, text);
+  // Which skill. A named one wins. An unnamed message goes to the model where this deployment has
+  // one, and is sorted by wording where it has none.
+  const route = routeMessage(params, text, { model: Boolean(consultant) });
   if (route.skill === CONSULTANT_SKILL_ID) {
     if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
     const inbound = params.message?.taskId;
@@ -782,7 +785,9 @@ async function handleRequest(request, context) {
  * @param {string} rawBody
  * @param {{ digest: object, newId: () => string, now?: () => string, audit?: object,
  *           consultant?: object }} context
- *   `consultant` is the consultant skill's limiter and engine, `{ checkLimit, engine }`.
+ *   `consultant` is the model's limiter and engine, `{ checkLimit, engine }`, with the request's
+ *   arrival time as `startedAt` for the wait's budget. Absent, the deployment has no model, and an
+ *   unnamed message is sorted by wording.
  *   `audit` is the audit skill's engine, injected: `originFor`, `checkLimit`, `runFast`,
  *   `startDeep`, `readTask` and `renderSummary`. Absent, the endpoint serves `ask-about-site`
  *   alone, which is what keeps this module free of everything that half needs.
