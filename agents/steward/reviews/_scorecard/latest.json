@@ -1,6 +1,6 @@
 {
-  "iso": "2026-11-14",
-  "timestamp": "2026-11-14T03:45:52-07:00",
+  "iso": "2026-11-15",
+  "timestamp": "2026-11-15T03:46:35-07:00",
   "scope": "107 live pages",
   "tools": [
     "Lighthouse 13.5",
@@ -49,7 +49,7 @@
       "url": "https://www.mattpyle.com/changelog/public-scorecard/"
     }
   },
-  "id": "2026-11-14",
+  "id": "2026-11-15",
   "perPage": [
     {
       "url": "https://www.mattpyle.com/",
@@ -587,7 +587,7 @@
     {
       "url": "https://www.mattpyle.com/changelog/light-theme/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -4859,7 +4859,7 @@
     {
       "url": "https://www.mattpyle.com/scorecard/",
       "scores": {
-        "performance": 100,
+        "performance": 99,
         "accessibility": 100,
         "best-practices": 96,
         "seo": 100,
@@ -5194,7 +5194,7 @@
     }
   ],
   "decision": "no-op",
-  "reason": "unchanged, published 1d ago (<= 7d threshold)",
+  "reason": "unchanged, published 2d ago (<= 7d threshold)",
   "dryRun": false,
-  "archiveId": "2026-11-14"
+  "archiveId": "2026-11-15"
 }
