@@ -70,11 +70,18 @@ export function validateAgentCard(card, schema, { origin = PRODUCTION_ORIGIN } =
     }
   }
 
-  // The endpoint implements none of these: streaming, push notifications and the extended Agent
-  // Card are all unimplemented, and polling GetTask is what stands in for the first two. A card
-  // that claimed otherwise would send clients down code paths that return -32601.
+  // The endpoint streams: it answers SendStreamingMessage, and both official clients read the
+  // flag to choose it. Push notifications and the extended Agent Card are unimplemented, and a
+  // card that claimed one would send clients down code paths that return an error.
   for (const [name, value] of Object.entries(card.capabilities ?? {})) {
-    if (value !== false) errors.push(`capabilities.${name}: the responder implements none of these; must be false`);
+    if (name === 'streaming') {
+      if (value !== true) errors.push('capabilities.streaming: the responder answers SendStreamingMessage; must be true');
+    } else if (value !== false) {
+      errors.push(`capabilities.${name}: the responder does not implement this; must be false`);
+    }
+  }
+  if (card.capabilities?.streaming === undefined) {
+    errors.push('capabilities.streaming: the responder answers SendStreamingMessage; must be true');
   }
 
   // Pinned to the responder's own list rather than to a number, because the failure this guards

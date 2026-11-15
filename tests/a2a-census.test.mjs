@@ -20,7 +20,7 @@ import {
 } from '../src/lib/agent-hits.mjs';
 import { bucketHour, flattenA2aHashes, summarizeA2a } from '../src/lib/agent-traffic.mjs';
 import { A2A_METHODS_LEGEND, A2A_SKILLS_LEGEND, buildActivity } from '../src/lib/activity-summary.mjs';
-import { A2A_METHOD, CANCEL_TASK_METHOD, GET_TASK_METHOD, LEGACY_CANCEL_TASK_METHODS, LEGACY_METHODS } from '../src/lib/a2a-responder.mjs';
+import { A2A_METHOD, CANCEL_TASK_METHOD, GET_TASK_METHOD, LEGACY_CANCEL_TASK_METHODS, LEGACY_METHODS, STREAM_METHOD } from '../src/lib/a2a-responder.mjs';
 import {
   ASK_SKILL_ID,
   AUDIT_SKILL_ID,
@@ -68,7 +68,7 @@ const markdownSource = readFileSync(fileURLToPath(new URL('../src/pages/activity
 // --- the fixed lists --------------------------------------------------------------------------
 
 test('the census lists are the responder and the audit skill lists, held equal', () => {
-  assert.deepEqual([...A2A_METHODS_COUNTED], [A2A_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
+  assert.deepEqual([...A2A_METHODS_COUNTED], [A2A_METHOD, STREAM_METHOD, GET_TASK_METHOD, CANCEL_TASK_METHOD]);
   assert.deepEqual([...A2A_SKILLS_COUNTED], [...SKILL_IDS]);
   assert.deepEqual([...A2A_SKILLS_COUNTED], [CONSULTANT_SKILL_ID, AUDIT_SKILL_ID, ASK_SKILL_ID]);
   // The legacy spellings fold into their 1.0 name.
@@ -125,10 +125,17 @@ test('a GetTask has no skill and no tier', () => {
   assert.deepEqual(a2aFactsFrom(body, routeFor), { method: 'GetTask', skill: 'none', tier: 'none' });
 });
 
+test('a streaming send counts under its own method, with the skill and tier of its message', () => {
+  const body = send('audit example.com', { metadata: { skill: AUDIT_SKILL_ID } }, STREAM_METHOD);
+  const plain = a2aFactsFrom(send('audit example.com', { metadata: { skill: AUDIT_SKILL_ID } }), routeFor);
+  assert.deepEqual(a2aFactsFrom(body, routeFor), { ...plain, method: STREAM_METHOD });
+  assert.notEqual(plain.skill, 'none');
+});
+
 test('a body that did not parse is unparsed, apart from a method the endpoint lacks', () => {
   assert.equal(a2aFactsFrom(undefined, routeFor).method, UNPARSED_A2A_METHOD);
   for (const body of [
-    { jsonrpc: '2.0', id: 1, method: 'SendStreamingMessage' },
+    { jsonrpc: '2.0', id: 1, method: 'message/stream' },
     { jsonrpc: '2.0', id: 1, method: 'SubscribeToTask' },
     { jsonrpc: '2.0', id: 1, method: 7 },
     { jsonrpc: '2.0', id: 1 },
@@ -306,7 +313,7 @@ test('/a2a is a named surface, not a bucket', () => {
 
 test('the route counts every POST before the responder runs, and through waitUntil', () => {
   const counted = routeSource.indexOf('countRequest(request, parsed)');
-  const responded = routeSource.indexOf('await respond(');
+  const responded = routeSource.indexOf('await respondOrStream(');
   assert.ok(counted > 0);
   assert.ok(counted < responded, 'the count runs before the responder, so a throwing responder is still counted');
   assert.match(routeSource, /waitUntil\(recordA2aRequest\(\{ facts: a2aFactsFrom\(body, routeFor\) \}\)\)/);

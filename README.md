@@ -48,7 +48,8 @@ build time, and `audit-a-site` returns the raw audit of a site you name — the 
 direct `Message`, and the browser-rendered deep tier as a `Task` backed by a Temporal workflow,
 polled with `GetTask` until the report arrives as its artifact. Calls arriving
 with the 0.x `message/send` and `tasks/get` spellings are answered in the 0.x response shape, so
-legacy clients can read the reply. Delete the card and the route, and the rest of the built site is
+legacy clients can read the reply. `SendStreamingMessage` answers the same send as Server-Sent
+Events, so a client with a short read timeout hears from the endpoint while a turn runs. Delete the card and the route, and the rest of the built site is
 byte-identical.
 
 **A curated [`/changelog`](https://www.mattpyle.com/changelog).** A public, edited-down log of what

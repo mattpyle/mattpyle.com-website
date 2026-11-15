@@ -7,6 +7,7 @@ import {
   ERROR_CODES,
   GET_TASK_METHOD,
   LEGACY_METHODS,
+  STREAM_METHOD,
   answer,
   classify,
   formatDate,
@@ -221,25 +222,45 @@ test('malformed JSON returns -32700 and says what failed', async () => {
 });
 
 test('an unknown method returns -32601 naming the methods that work', async () => {
-  // `SubscribeToTask`: a real A2A method this endpoint genuinely does not implement. It was
-  // `tasks/get` until the audit skill made that an alias, and `CancelTask` until the consultant
-  // skill implemented it.
+  // `ListTasks`: a real A2A method this endpoint does not implement. It was `tasks/get` until the
+  // audit skill made that an alias, `CancelTask` until the consultant skill implemented it, and
+  // `SubscribeToTask` until streaming gave that one a refusal of its own.
   const result = await respond(
-    JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'SubscribeToTask', params: {} }),
+    JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'ListTasks', params: {} }),
     { digest, newId: ids() }
   );
 
   assert.equal(result.payload.error.code, ERROR_CODES.methodNotFound);
-  assert.match(result.payload.error.message, /SubscribeToTask/, 'names what was asked for');
+  assert.match(result.payload.error.message, /ListTasks/, 'names what was asked for');
   assert.match(result.payload.error.message, /"SendMessage"/, 'names what would have worked');
   assert.match(result.payload.error.message, /"GetTask"/, 'and names the other one');
+  assert.match(result.payload.error.message, /four methods/);
+  assert.doesNotMatch(result.payload.error.message, /Streaming,/, 'streaming is no longer listed as missing');
 
   const info = result.payload.error.data[0];
   assert.equal(info['@type'], 'type.googleapis.com/google.rpc.ErrorInfo');
   assert.equal(info.reason, 'METHOD_NOT_FOUND');
-  assert.equal(info.metadata.supported, `${A2A_METHOD},${GET_TASK_METHOD},CancelTask`);
+  assert.equal(info.metadata.supported, `${A2A_METHOD},${STREAM_METHOD},${GET_TASK_METHOD},CancelTask`);
   assert.match(info.metadata.acceptedAliases, /tasks\/get/, 'the 0.x spellings are listed too');
+  assert.doesNotMatch(info.metadata.acceptedAliases, /message\/stream/, 'the streaming send has no 0.x alias');
   assert.match(info.metadata.agentCard, /\/\.well-known\/agent-card\.json$/);
+
+  const legacy = await respond(
+    JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'message/stream', params: {} }),
+    { digest, newId: ids() }
+  );
+  assert.equal(legacy.payload.error.code, ERROR_CODES.methodNotFound);
+});
+
+test('SubscribeToTask is refused by name, as unsupported, with the call that reads a task', async () => {
+  const result = await respond(
+    JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'SubscribeToTask', params: { id: 'x' } }),
+    { digest, newId: ids() }
+  );
+  assert.equal(result.outcome, 'unsupported-operation/SubscribeToTask');
+  assert.equal(result.payload.error.code, ERROR_CODES.unsupportedOperation);
+  assert.match(result.payload.error.message, /GetTask/);
+  assert.deepEqual(result.payload.error.data[0].metadata, { requested: 'SubscribeToTask', use: 'GetTask' });
 });
 
 test('a bad envelope returns -32600 with a request that would have worked', async () => {

@@ -15,7 +15,7 @@ import {
   wantsImmediateReturn,
 } from '../src/lib/a2a-consultant-skill.mjs';
 import { ASK_SKILL_ID, AUDIT_SKILL_ID, routeMessage } from '../src/lib/a2a-audit-skill.mjs';
-import { A2A_METHOD, respond } from '../src/lib/a2a-responder.mjs';
+import { A2A_METHOD, STREAM_METHOD, respond, respondOrStream } from '../src/lib/a2a-responder.mjs';
 import {
   CONSULTANT_SESSION_QUERY,
   CONSULTANT_TASK_QUEUE,
@@ -548,6 +548,188 @@ test('without a Temporal connection a named model skill says it is not configure
   });
   assert.equal(plain.outcome, 'ok/site');
   assert.ok(plain.payload.result.message, 'a direct Message from ask-about-site');
+});
+
+// --- the streaming send -----------------------------------------------------------------------
+
+/** Run one streaming send to its end: the events it sent, and the log token it returned. */
+async function stream(params, consultant, id = 1) {
+  const opened = await respondOrStream(JSON.stringify({ jsonrpc: '2.0', id, method: STREAM_METHOD, params }), {
+    digest: {},
+    newId: () => `id-${++n}`,
+    now: () => '2026-11-13T00:00:00.000Z',
+    consultant,
+  });
+  if (!opened.events) return { reply: opened, events: [] };
+  const events = [];
+  for (;;) {
+    const next = await opened.events.next();
+    if (next.done) return { events, outcome: next.value.outcome, detail: next.value.detail };
+    events.push(next.value);
+  }
+}
+const kinds = (events) => events.map((event) => (event.error ? 'error' : Object.keys(event.result)[0]));
+const running = () => open({ status: status({ turn_active: true }), session: session({ turns: 1, lastReply: null, replies: [] }) });
+
+test('a streamed turn: the task at once, then the answer as an artifact and the completed status', async () => {
+  const readings = [running(), running(), open()];
+  const fake = fakeEngine(() => readings.shift());
+  const time = fakeClock();
+  const { events, outcome } = await stream(message('Check example.com'), { checkLimit: allow, engine: fake.engine, clock: time.clock }, 'req-7');
+  assert.deepEqual(kinds(events), ['task', 'artifactUpdate', 'statusUpdate']);
+  assert.equal(outcome, 'stream/ok/consultant-start/completed');
+  for (const event of events) {
+    assert.equal(event.jsonrpc, '2.0');
+    assert.equal(event.id, 'req-7', 'every event answers under the request id, in its own type');
+  }
+
+  const task = events[0].result.task;
+  assert.equal(task.id, T1);
+  assert.equal(task.contextId, ID);
+  assert.equal(task.status.state, 'TASK_STATE_WORKING');
+  assert.equal(task.artifacts, undefined);
+  assert.deepEqual(task.metadata, { skill: CONSULTANT_SKILL_ID, workflowId: ID, turn: 1 });
+
+  const artifact = events[1].result.artifactUpdate;
+  assert.equal(artifact.taskId, T1);
+  assert.equal(artifact.contextId, ID);
+  assert.equal(artifact.lastChunk, true);
+  assert.equal(artifact.append, undefined, 'the text arrives whole');
+  assert.equal(artifact.artifact.name, 'answer');
+  assert.equal(artifact.artifact.artifactId, `${T1}-answer`);
+  assert.deepEqual(artifact.artifact.parts, [{ text: 'The answer.', mediaType: 'text/markdown' }]);
+
+  const done = events[2].result.statusUpdate;
+  assert.equal(done.taskId, T1);
+  assert.equal(done.contextId, ID);
+  assert.equal(done.status.state, 'TASK_STATE_COMPLETED');
+  assert.equal(done.status.message, undefined, 'the answer is carried once, in the artifact');
+  assert.deepEqual(done.metadata, { skill: CONSULTANT_SKILL_ID, workflowId: ID, turn: 1 });
+  assert.equal(done.final, undefined, '1.0 has no final flag');
+
+  assert.deepEqual(fake.calls.map(([kind]) => kind), ['start', 'read', 'read', 'read'], 'one start, then reads only');
+  assert.equal(time.sleeps.length, 2);
+});
+
+test('a streamed turn that ends in a question or an approval request ends input-required, with no artifact', async () => {
+  const cases = [
+    [{ pending_callbacks: [{ tool_id: 't1', tool_input: { question: 'Which site?' } }] }, 'answer', /Which site\?/],
+    [{ pending_approvals: [{ tool_id: 't2', tool_input: { url: 'example.com' } }] }, 'approval', /deep audit of example\.com/],
+  ];
+  for (const [pending, awaiting, text] of cases) {
+    const readings = [running(), open({ status: status({ turn_active: true, ...pending }), session: session({ turns: 1, lastReply: null, replies: [] }) })];
+    const fake = fakeEngine(() => readings.shift());
+    const { events, outcome } = await stream(message('Can you check my site?'), { checkLimit: allow, engine: fake.engine, ...fakeClock() });
+    assert.deepEqual(kinds(events), ['task', 'statusUpdate'], awaiting);
+    const update = events[1].result.statusUpdate;
+    assert.equal(update.status.state, 'TASK_STATE_INPUT_REQUIRED');
+    assert.equal(update.metadata.awaiting, awaiting);
+    assert.match(update.status.message.parts[0].text, text);
+    assert.equal(update.status.message.taskId, T1);
+    assert.equal(outcome, 'stream/ok/consultant-start/input_required');
+  }
+});
+
+test('a stream ends at the budget with the task still working, and says how to read the rest', async () => {
+  const fake = fakeEngine(running());
+  const time = fakeClock();
+  const { events, outcome } = await stream(message('Check example.com'), { checkLimit: allow, engine: fake.engine, clock: time.clock, startedAt: time.clock.now() });
+  assert.deepEqual(kinds(events), ['task', 'statusUpdate']);
+  const last = events[1].result.statusUpdate;
+  assert.equal(last.status.state, 'TASK_STATE_WORKING');
+  assert.match(last.status.message.parts[0].text, new RegExp(`Poll GetTask with id "${T1}"`));
+  assert.equal(outcome, 'stream/ok/consultant-start/working/budget');
+  assert.ok(time.sleeps.length * WAIT_INTERVAL_MS < WAIT_BUDGET_MS, 'the same budget as the waiting send');
+  assert.ok(fake.calls.filter(([kind]) => kind === 'read').every(([, , within]) => within > 0 && within <= WAIT_BUDGET_MS));
+});
+
+test('a stream sends nothing but reads after the delivery: no Update while it runs', async () => {
+  const fake = fakeEngine(running());
+  await stream(message('Check example.com'), { checkLimit: allow, engine: fake.engine, ...fakeClock() });
+  const after = fake.calls.slice(1).map(([kind]) => kind);
+  assert.equal(fake.calls[0][0], 'start');
+  assert.ok(after.length > 10);
+  assert.ok(after.every((kind) => kind === 'read'), 'start is the one Update; the rest are describes and Queries');
+});
+
+test('a streamed reply goes where the session is waiting, and a second turn is its own task', async () => {
+  const asking = open({ status: status({ turn_active: true, pending_callbacks: [{ tool_id: 't1', tool_input: { question: 'Which site?' } }] }), session: session({ turns: 1, lastReply: null, replies: [] }) });
+  const readings = [asking, running(), open()];
+  const fake = fakeEngine(() => readings.shift());
+  const answered = await stream(message('example.com', { taskId: T1 }), { checkLimit: async () => assert.fail('a reply is not charged'), engine: fake.engine, ...fakeClock() });
+  assert.deepEqual(kinds(answered.events), ['task', 'artifactUpdate', 'statusUpdate']);
+  assert.equal(answered.events[0].result.task.id, T1);
+  assert.equal(answered.outcome, 'stream/ok/consultant-reply/answer/completed');
+  assert.deepEqual(fake.calls.find(([kind]) => kind === 'answer'), ['answer', ID, 't1', 'example.com']);
+
+  const next = [open(), open({ status: status({ turn_active: true }), session: session({ turns: 2 }) }), open({ session: twoTurns() })];
+  const second = fakeEngine(() => next.shift());
+  const turn2 = await stream(message('And then?', { contextId: ID }), { checkLimit: allow, engine: second.engine, ...fakeClock() });
+  assert.equal(turn2.events[0].result.task.id, T2);
+  assert.equal(turn2.events[1].result.artifactUpdate.artifact.parts[0].text, 'Second answer.');
+  assert.equal(turn2.events[2].result.statusUpdate.taskId, T2);
+});
+
+test('an immediate return on a streaming send is the task and nothing else', async () => {
+  const fake = fakeEngine(open());
+  const { events, outcome } = await stream({ ...message('hi'), configuration: { returnImmediately: true } }, { checkLimit: allow, engine: fake.engine });
+  assert.deepEqual(kinds(events), ['task']);
+  assert.equal(events[0].result.task.status.state, 'TASK_STATE_WORKING');
+  assert.equal(outcome, 'stream/ok/consultant-start/working/immediate');
+  assert.deepEqual(fake.calls, [['start', 'hi']], 'no read');
+});
+
+test('a refusal on a streaming send is one error event, the same error the waiting send returns', async () => {
+  const refuse = async () => ({ allowed: false, scope: 'caller', reason: 'this caller has used 3 consultant sessions today', retryAfterSeconds: 60, limit: 3 });
+  const limited = await stream(message('hi'), { checkLimit: refuse, engine: fakeEngine(open()).engine });
+  const plain = await rpc(A2A_METHOD, message('hi'), { checkLimit: refuse, engine: fakeEngine(open()).engine });
+  assert.deepEqual(kinds(limited.events), ['error']);
+  assert.deepEqual(limited.events[0], plain.payload);
+  assert.equal(limited.outcome, 'stream/rate-limited/session/caller');
+
+  const ended = { execution: 'COMPLETED', status: status({ close_reason: 'requested' }), session: twoTurns() };
+  const closed = await stream(message('hi', { contextId: ID }), { checkLimit: allow, engine: fakeEngine(ended).engine });
+  assert.deepEqual(kinds(closed.events), ['error']);
+  assert.equal(closed.events[0].error.code, -32004);
+
+  const down = fakeEngine(open());
+  down.engine.start = async () => { throw new Error('connect ECONNREFUSED my-namespace.tmprl.cloud:7233'); };
+  const unreachable = await stream(message('hi'), { checkLimit: allow, engine: down.engine });
+  assert.deepEqual(kinds(unreachable.events), ['error']);
+  assert.equal(unreachable.events[0].error.message, UNAVAILABLE_TEXT);
+  assert.ok(!JSON.stringify(unreachable.events).includes('tmprl'), 'the error text stays out of the stream');
+  assert.match(unreachable.detail, /ECONNREFUSED/, 'and goes to the log line');
+});
+
+test('a read that fails mid-stream ends it working, because the message is delivered', async () => {
+  const fake = fakeEngine(() => { throw new Error('Temporal Cloud did not answer within 6s'); });
+  const { events } = await stream(message('hi'), { checkLimit: allow, engine: fake.engine, ...fakeClock() });
+  assert.deepEqual(kinds(events), ['task', 'statusUpdate']);
+  assert.equal(events[1].result.statusUpdate.status.state, 'TASK_STATE_WORKING');
+});
+
+test('a client that has gone away stops the reads at the next step, and nothing is withdrawn', async () => {
+  const signal = { aborted: false };
+  let reads = 0;
+  const fake = fakeEngine(() => {
+    reads += 1;
+    if (reads === 3) signal.aborted = true;
+    return running();
+  });
+  const { events, outcome } = await stream(message('hi'), { checkLimit: allow, engine: fake.engine, signal, ...fakeClock() });
+  assert.deepEqual(kinds(events), ['task'], 'no further event is written to a client that is gone');
+  assert.equal(outcome, 'stream/ok/consultant-start/client-gone');
+  assert.equal(reads, 3);
+  assert.ok(!fake.calls.some(([kind]) => kind === 'close'), 'the session is not closed');
+});
+
+test('what is wrong at once is answered as plain JSON, not as a stream', async () => {
+  const consultant = { checkLimit: allow, engine: fakeEngine(open()).engine };
+  const noText = await stream({ message: { role: 'ROLE_USER', messageId: 'm', parts: [] } }, consultant);
+  assert.equal(noText.reply.payload.error.code, -32602);
+  assert.equal(noText.reply.outcome, 'stream/invalid-params/no-text');
+  const noModel = await stream(message('hi', { metadata: { skill: CONSULTANT_SKILL_ID } }), undefined);
+  assert.equal(noModel.reply.payload.error.data[0].reason, 'SKILL_NOT_CONFIGURED');
 });
 
 test('the route charges the session tier, passes the arrival time, and routes the census as it routes the reply', () => {

@@ -43,15 +43,21 @@ test('the validator catches a card that drifts from the endpoint', () => {
   ]);
 });
 
-test('the validator catches a capability the responder does not implement', () => {
+test('the validator holds the capabilities to what the responder implements', () => {
   const card = readCard();
-  const errors = validateAgentCard(
-    { ...card, capabilities: { ...card.capabilities, streaming: true } },
-    schema
+  assert.equal(card.capabilities.streaming, true, 'the endpoint answers SendStreamingMessage');
+  assert.deepEqual(
+    validateAgentCard({ ...card, capabilities: { ...card.capabilities, streaming: false } }, schema),
+    ['capabilities.streaming: the responder answers SendStreamingMessage; must be true']
   );
-  assert.deepEqual(errors, [
-    'capabilities.streaming: the responder implements none of these; must be false',
-  ]);
+  assert.deepEqual(
+    validateAgentCard({ ...card, capabilities: { pushNotifications: false, extendedAgentCard: false } }, schema),
+    ['capabilities.streaming: the responder answers SendStreamingMessage; must be true']
+  );
+  assert.deepEqual(
+    validateAgentCard({ ...card, capabilities: { ...card.capabilities, pushNotifications: true } }, schema),
+    ['capabilities.pushNotifications: the responder does not implement this; must be false']
+  );
 });
 
 test('the validator enforces the required fields and the non-empty-array rule', () => {

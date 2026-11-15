@@ -20,6 +20,7 @@ const load = (name: string): Promise<any> => import(new URL(name, SITE).href);
 
 let h: Harness;
 let respond: (raw: string, context: object) => Promise<{ payload: any; outcome: string }>;
+let respondOrStream: (raw: string, context: object) => Promise<any>;
 let createConsultantEngine: (clientFor: () => Promise<unknown>, options?: object) => any;
 let engine: any;
 let limitCalls = 0;
@@ -27,7 +28,7 @@ let allow = true;
 
 before(async () => {
   h = await startHarness();
-  ({ respond } = await load('a2a-responder.mjs'));
+  ({ respond, respondOrStream } = await load('a2a-responder.mjs'));
   ({ createConsultantEngine } = await load('a2a-consultant-temporal.mjs'));
   engine = createConsultantEngine(async () => h.env.client, { taskQueue: TASK_QUEUE });
 });
@@ -197,6 +198,92 @@ test('an immediate return: the send answers working, and GetTask reads the turn'
   const done = await settle(task.id);
   assert.equal(done.status.state, 'TASK_STATE_COMPLETED');
   assert.equal(answerOf(done), 'Hello.');
+});
+
+/** One streaming send, run to its end: every event it sent, and the workflow's history length before and after the reads. */
+async function stream(text: string, extra: Extra = {}) {
+  const opened = await respondOrStream(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'SendStreamingMessage',
+      params: { message: { role: 'ROLE_USER', messageId: `m-${++counter}`, parts: [{ text }], ...(extra.taskId ? { taskId: extra.taskId } : {}) } },
+    }),
+    context(),
+  );
+  assert.ok(opened.events, JSON.stringify(opened));
+  const events: any[] = [];
+  for (;;) {
+    const next = await opened.events.next();
+    if (next.done) return { events, outcome: next.value.outcome as string };
+    events.push(next.value.result ?? next.value);
+  }
+}
+const kinds = (events: any[]) => events.map((event) => Object.keys(event)[0]);
+
+test('a streamed turn: the task first, then the answer as an artifact and the completed status, while the model is slow', async () => {
+  h.script.set([{ tool: 'audit_site', input: { url: 'example.com' } }, { text: '1. Publish llms.txt first.', delayMs: 2_000 }]);
+  const started = Date.now();
+  const { events, outcome } = await stream('Check example.com and tell me what to fix first');
+  assert.ok(Date.now() - started >= 2_000, 'the stream stays open for the turn');
+  assert.deepEqual(kinds(events), ['task', 'artifactUpdate', 'statusUpdate']);
+  const task = events[0].task;
+  assert.equal(task.status.state, 'TASK_STATE_WORKING');
+  assert.match(task.contextId, SESSION);
+  assert.equal(task.id, `${task.contextId}-t1`);
+  assert.equal(events[1].artifactUpdate.taskId, task.id);
+  assert.equal(events[1].artifactUpdate.artifact.name, 'answer');
+  assert.equal(events[1].artifactUpdate.artifact.parts[0].text, '1. Publish llms.txt first.');
+  assert.equal(events[1].artifactUpdate.lastChunk, true);
+  assert.equal(events[2].statusUpdate.status.state, 'TASK_STATE_COMPLETED');
+  assert.equal(events[2].statusUpdate.contextId, task.contextId);
+  assert.equal(outcome, 'stream/ok/consultant-start/completed');
+  // The same turn reads back with GetTask, as a waiting send's does.
+  const read = await getTask(task.id);
+  assert.equal(read.status.state, 'TASK_STATE_COMPLETED');
+  assert.equal(answerOf(read), '1. Publish llms.txt first.');
+});
+
+test('a streamed question and a streamed approval each end input-required, and the reply streams to completed', async () => {
+  h.script.set([
+    { tool: 'ask_user', input: { question: 'Which site should I audit?' } },
+    { tool: 'deep_audit', input: { url: 'example.com' } },
+    { text: 'The deep audit is read.' },
+  ]);
+  const asked = await stream('Can you check my site?');
+  assert.deepEqual(kinds(asked.events), ['task', 'statusUpdate']);
+  const question = asked.events[1].statusUpdate;
+  assert.equal(question.status.state, 'TASK_STATE_INPUT_REQUIRED');
+  assert.equal(question.metadata.awaiting, 'answer');
+  assert.equal(question.status.message.parts[0].text, 'Which site should I audit?');
+
+  const approval = await stream('example.com, the deep tier', { taskId: question.taskId });
+  assert.deepEqual(kinds(approval.events), ['task', 'statusUpdate']);
+  assert.equal(approval.events[1].statusUpdate.status.state, 'TASK_STATE_INPUT_REQUIRED');
+  assert.equal(approval.events[1].statusUpdate.metadata.awaiting, 'approval');
+  assert.equal(approval.events[1].statusUpdate.taskId, question.taskId, 'the same turn');
+
+  const done = await stream('yes', { taskId: question.taskId });
+  assert.deepEqual(kinds(done.events), ['task', 'artifactUpdate', 'statusUpdate']);
+  assert.equal(done.events[2].statusUpdate.status.state, 'TASK_STATE_COMPLETED');
+  assert.equal(done.events[1].artifactUpdate.artifact.parts[0].text, 'The deep audit is read.');
+  assert.equal(limitCalls, 1, 'one session, charged once');
+});
+
+test('a stream writes no more into the history than a waiting send: no Update while it reads', async () => {
+  const updatesIn = async (workflowId: string) => {
+    const history = await h.env.client.workflow.getHandle(workflowId).fetchHistory();
+    return (history.events ?? []).filter((event: any) => event.workflowExecutionUpdateAcceptedEventAttributes).length;
+  };
+  h.script.set([{ text: 'Hello.', delayMs: 2_500 }]);
+  const streamed = await stream('hi');
+  assert.equal(streamed.events.at(-1).statusUpdate.status.state, 'TASK_STATE_COMPLETED');
+  h.script.set([{ text: 'Hello.', delayMs: 2_500 }]);
+  const waited = await turn('hi');
+  assert.equal(waited.status.state, 'TASK_STATE_COMPLETED');
+  const streamedUpdates = await updatesIn(streamed.events[0].task.contextId);
+  assert.equal(streamedUpdates, 1, 'the delivery is the one Update');
+  assert.equal(streamedUpdates, await updatesIn(waited.contextId));
 });
 
 test('a cancel on a finished turn closes the session and leaves that task completed', async () => {

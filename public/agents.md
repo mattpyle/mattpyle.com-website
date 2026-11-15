@@ -66,7 +66,7 @@ The site's agent is Steward. There is an Agent Card at `/.well-known/agent-card.
 | Endpoint | `https://www.mattpyle.com/a2a` |
 | Binding | JSON-RPC 2.0 over HTTPS POST, `Content-Type: application/json` |
 | Protocol version | A2A 1.0 |
-| Methods | `SendMessage`, `GetTask` for polling a Task, and `CancelTask` for closing a Steward session |
+| Methods | `SendMessage`, `SendStreamingMessage` for the same send as a stream of events, `GetTask` for polling a Task, and `CancelTask` for closing a Steward session |
 | Skills | `consult-on-a-site`, `audit-a-site` and `ask-about-site` |
 | Auth | None. Read-only or outbound-only; no accounts and no private data. |
 
@@ -164,7 +164,8 @@ Notes for anyone calling it:
 - **Errors ride an HTTP 200** with a JSON-RPC error object, as JSON-RPC intends. `error.data` is an array of objects each carrying an `@type`, per spec §9.5. An unknown method returns `-32601` naming the methods it implements; a message with no text part returns `-32602` naming the field.
 - **`GetTask` takes `{"id": "..."}`**, and the 0.x `tasks/get` spelling is accepted as an alias on the same terms as `message/send`. An id this endpoint did not issue returns `-32001`, A2A's `TaskNotFoundError`.
 - **`CancelTask` takes `{"id": "..."}`**, with `tasks/cancel` as its 0.x alias. Only a Steward session can be canceled, by the id of any of its Tasks; an audit runs to its end and returns `-32002`, A2A's `TaskNotCancelableError`.
-- **Not implemented:** streaming, push notifications, the extended Agent Card, and authentication. The Agent Card declares the capabilities it has as false rather than leaving you to find out. A send that waits for its turn, and `GetTask` after it, stand in for streaming here.
+- **`SendStreamingMessage` is the same send, answered as Server-Sent Events** (spec §9.4.2). Use it when your client's read timeout is shorter than a turn, which takes 5 to 15 seconds: the official Python client gives up after 5 seconds by default, and it chooses this method by itself once the Agent Card declares streaming. Each event is a JSON-RPC response whose `result` is a `StreamResponse`. A turn with the model sends the `task` first, in `TASK_STATE_WORKING`, then an `artifactUpdate` carrying the whole answer and a `statusUpdate` with `TASK_STATE_COMPLETED`; a question or an approval request ends the stream with a `statusUpdate` in `TASK_STATE_INPUT_REQUIRED`. The text arrives whole, not word by word. A comment line arrives at least every three seconds while the turn runs. The stream closes after about 40 seconds with the Task still `TASK_STATE_WORKING` if the turn is not done; poll `GetTask`. A streaming send that names `audit-a-site` or `ask-about-site` gets one event, the same `message` or `task` that `SendMessage` returns, and the stream closes. A refusal after the stream has opened is an event carrying the JSON-RPC error. There is no 0.x `message/stream` alias.
+- **Not implemented:** `SubscribeToTask`, push notifications, the extended Agent Card, and authentication. `SubscribeToTask` returns `-32004`, A2A's `UnsupportedOperationError`, and names `GetTask`. The Agent Card declares push notifications and the extended card as false.
 - **A `GET`** returns `405` with a worked example of each skill, rather than a bare status.
 - This is an experiment on a personal site, not a supported API, and it may be withdrawn without notice.
 

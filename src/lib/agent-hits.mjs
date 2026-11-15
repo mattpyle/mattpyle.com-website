@@ -1145,7 +1145,10 @@ export function a2aKeyFor(day, version = KEY_VERSION) {
 }
 
 /** The methods the endpoint implements, by their A2A 1.0 names. */
-export const A2A_METHODS_COUNTED = Object.freeze(['SendMessage', 'GetTask', 'CancelTask']);
+export const A2A_METHODS_COUNTED = Object.freeze(['SendMessage', 'SendStreamingMessage', 'GetTask', 'CancelTask']);
+
+/** The two sends. Each carries a message, so each has a skill and a tier. */
+const A2A_SEND_METHODS = Object.freeze(['SendMessage', 'SendStreamingMessage']);
 
 /**
  * Pre-1.0 spellings, folded into the 1.0 name so the dialect is not kept. Mirrored from
@@ -1188,7 +1191,7 @@ export const A2A_TIER_VALUES = Object.freeze([...A2A_TIERS_COUNTED, NO_A2A_TIER]
  * target host, a task id, a context id and metadata die here, the way a user agent dies in
  * classifyClient().
  *
- * `routeFor(params)` is the caller's router, `{ skill, tier? }` for a SendMessage that carries text
+ * `routeFor(params)` is the caller's router, `{ skill, tier? }` for a send, streaming or not, that carries text
  * and null for one that does not. It is injected so this module stays free of the audit skill. A
  * router that throws, or answers with a value outside the fixed lists, counts as skill `none` and
  * tier `none`: the request is still a data point.
@@ -1203,7 +1206,7 @@ export function a2aFactsFrom(body, routeFor) {
   const raw = typeof message?.method === 'string' ? message.method : '';
   const method = A2A_METHODS_COUNTED.includes(raw) ? raw : (A2A_LEGACY_METHODS[/** @type {keyof typeof A2A_LEGACY_METHODS} */ (raw)] ?? OTHER_A2A_METHOD);
   const facts = { method, skill: NO_A2A_SKILL, tier: NO_A2A_TIER };
-  if (method !== 'SendMessage') return facts;
+  if (!A2A_SEND_METHODS.includes(method)) return facts;
   try {
     const params = message.params && typeof message.params === 'object' && !Array.isArray(message.params) ? message.params : null;
     const route = params ? routeFor(params) : null;

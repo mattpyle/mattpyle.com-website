@@ -68,7 +68,7 @@ Four things trip up clients, all of them A2A 1.0 versus 0.x:
 - **Errors arrive on HTTP 200** with a JSON-RPC error object. Do not treat a 200 as success without checking for `error`.
 - **This skill's reply is a `Message`, not a `Task`.** There is nothing to poll. One request, one answer, no state.
 
-Streaming, push notifications, task cancellation and authentication are not implemented, and the Agent Card at `/.well-known/agent-card.json` declares the capabilities it has as false rather than leaving you to discover it. A `GET` to `/a2a` returns 405 with a worked example in the body.
+Push notifications and authentication are not implemented, and the Agent Card at `/.well-known/agent-card.json` declares its capabilities. `SendStreamingMessage` is the same send answered as Server-Sent Events, for a client whose read timeout is shorter than an answer takes. A `GET` to `/a2a` returns 405 with a worked example in the body.
 
 This skill answers only from the site's own published content, compiled at build time. It cannot tell you anything a plain fetch could not.
 

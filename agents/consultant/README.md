@@ -56,6 +56,13 @@ The worker needs a Temporal server and a Claude key. With a required variable mi
 
 `node --import tsx --import ./src/sdk-compat.ts scripts/a2a-test-server.ts` (from this directory) serves the site's `/a2a` and the Agent Card on `http://127.0.0.1:4317`, on a local dev server with the scripted model and the stub site. It makes no model call, no site call and no limiter call, so an off-the-shelf A2A client can be pointed at it freely.
 
+| Flag | What it does |
+|---|---|
+| `--slow-ms=12000` | The scripted model's last call of each turn takes that long, so a turn outlasts a client's read timeout. |
+| `--no-streaming` | The card says `streaming: false`. An official client then sends `SendMessage` and waits in silence, as it did before the streaming send. |
+
+A streaming send is answered with the same Server-Sent Events body the site's route sends, comment lines included.
+
 ## Tests
 
 `npm test -w @mattpyle/consultant` runs the agent on a local Temporal dev server with a scripted model and a stub site. It makes no model call and no site call. `tests/replay.test.ts` replays recorded sessions against the current workflow code. `scripts/record-scripted.ts` records a new fixture with the scripted model.

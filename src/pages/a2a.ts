@@ -6,7 +6,8 @@ import {
   runFastAudit,
 } from '@mattpyle/steward/agent-audit/fast';
 import digest from '../data/a2a-digest.json';
-import { A2A_METHOD, A2A_METHODS, CANCEL_TASK_METHOD, GET_TASK_METHOD, respond } from '../lib/a2a-responder.mjs';
+import { A2A_METHOD, A2A_METHODS, CANCEL_TASK_METHOD, GET_TASK_METHOD, STREAM_METHOD, respondOrStream } from '../lib/a2a-responder.mjs';
+import { SSE_HEADERS, sseBody } from '../lib/a2a-sse.mjs';
 import { AUDIT_SKILL_ID, ASK_SKILL_ID, CONSULTANT_SKILL_ID, routeMessage } from '../lib/a2a-audit-skill.mjs';
 import { consultantEngine } from '../lib/a2a-consultant-temporal.mjs';
 import { readText } from '../lib/a2a-rpc.mjs';
@@ -18,7 +19,7 @@ import { checkRateLimit, clientIpFrom } from '../lib/mcp-rate-limit.mjs';
 import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mcp-temporal.mjs';
 
 /**
- * The A2A endpoint: Steward. JSON-RPC 2.0 over POST; three methods; three skills.
+ * The A2A endpoint: Steward. JSON-RPC 2.0 over POST; four methods; three skills.
  *
  * All the protocol logic lives in src/lib/a2a-responder.mjs and src/lib/a2a-audit-skill.mjs, both
  * pure and tested; this file is the transport plus the wiring: read the body, hand the responder
@@ -60,6 +61,15 @@ import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mc
  * has a Temporal connection, and a send waits for its turn (`WAIT_BUDGET_MS` in the skill, counted
  * from this route's first line). A deployment with none keeps the older routing by wording, so a
  * preview or a local build still answers.
+ *
+ * **It streams, since 2026-11-15.** `SendStreamingMessage` is answered as Server-Sent Events: the
+ * headers and a comment line leave at once, a comment follows every two seconds, and the turn's
+ * events follow as the session produces them (src/lib/a2a-sse.mjs has the reason for the comments).
+ * The response is a web `ReadableStream`, which the Vercel adapter's function passes through
+ * (`supportsResponseStreaming` in its function config). The log line is written when the stream
+ * ends, with its outcome and how many events it sent. When the client goes away the stream's
+ * source stops at its next step where the platform reports the disconnect, and at the wait's
+ * budget where it does not. The message is delivered either way, and `GetTask` reads the turn.
  *
  * The digest is a static import, so it is bundled into the function at build time. No fetch, no
  * content-collection read, no cold-start I/O: see scripts/generate-a2a-digest.mjs.
@@ -143,7 +153,9 @@ export const POST: APIRoute = async ({ request }) => {
   }
   countRequest(request, parsed);
 
-  const { status, outcome, payload, detail } = await respond(raw, {
+  // Set when a streaming client goes away, and read by the stream's source between its steps.
+  const signal = { aborted: false };
+  const opened = await respondOrStream(raw, {
     digest,
     newId: () => crypto.randomUUID(),
     now: () => new Date().toISOString(),
@@ -170,9 +182,35 @@ export const POST: APIRoute = async ({ request }) => {
           checkLimit: () => checkRateLimit({ ip: clientIpFrom(request.headers), tier: 'session' }),
           engine: consultantEngine,
           startedAt,
+          signal,
         }
       : undefined,
   });
+
+  if ('events' in opened) {
+    const ua = request.headers.get('user-agent') ?? '';
+    return new Response(
+      sseBody(opened.events, {
+        signal,
+        onEnd: (result, info) =>
+          log({
+            path: '/a2a',
+            http: 'POST',
+            outcome: info.error ? 'stream/internal-error' : (result?.outcome ?? 'stream/ended'),
+            status: 200,
+            bytes: raw.length,
+            events: info.events,
+            ms: Date.now() - startedAt,
+            ...(info.aborted ? { aborted: 1 } : {}),
+            ua,
+            ...(result?.detail ? { detail: result.detail } : {}),
+            ...(info.error ? { detail: String(info.error instanceof Error ? info.error.message : info.error).slice(0, 300) } : {}),
+          }),
+      }),
+      { status: 200, headers: SSE_HEADERS }
+    );
+  }
+  const { status, outcome, payload, detail } = opened;
 
   log({
     path: '/a2a',
@@ -274,6 +312,11 @@ export const GET: APIRoute = ({ request }) => {
             `${CANCEL_TASK_METHOD} on any task closes the session. If the turn is still running the ` +
             `Task reads TASK_STATE_WORKING: poll ${GET_TASK_METHOD}.`,
         },
+        streaming:
+          `${STREAM_METHOD} takes the same params as ${A2A_METHOD} and answers as Server-Sent Events ` +
+          '(text/event-stream). Each event is a JSON-RPC response whose result is a StreamResponse: the ' +
+          'task first, then an artifactUpdate with the answer and a statusUpdate with the final state. ' +
+          'A comment line arrives at least every three seconds while a turn runs.',
         note:
           `The audit skill arrives at the site it audits as \`${AUDIT_USER_AGENT}\` and obeys its ` +
           'robots.txt. Audits are rate limited per caller and in total, and that budget is shared ' +

@@ -39,6 +39,10 @@ Add the method name and its phrase in `src/lib/a2a-methods.mjs`, then:
 | Census method list | `src/lib/agent-hits.mjs` | `tests/a2a-census.test.mjs` |
 | Method prose in `agents.md` | `public/agents.md` | `tests/change-kinds-a2a-methods.test.mjs` fails and names the method |
 | A2A line in `llms.txt` | `src/pages/llms.txt.ts` | `tests/change-kinds-a2a-methods.test.mjs` fails and names the method |
+| Method list in the GET answer | `src/pages/a2a.ts` | Generated from the list |
+| Census legend in the `/activity` golden | `tests/a11y/__snapshots__/activity.aria.yml` | `npm run a11y`, advisory: the legend's sentence is in the golden |
+| Agent Card capability, for a method a capability announces | `public/.well-known/agent-card.json` | `scripts/validate-a2a-card.mjs` holds `streaming` true and the other capabilities false; `tests/a2a-card.test.mjs` |
+| Method prose in the Agent Skill | `src/data/skills/using-mattpyle-com.md` | By hand, not checked |
 
 ## A new skill or tool
 
