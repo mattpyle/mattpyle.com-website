@@ -54,7 +54,8 @@ import type { PageAuditOutcome, PageCheckResult, PublishableRun, ScorecardMetric
  * (`lib/github-contents.ts`), so the entire workflow runs on `steward-audit`
  * and finishes end to end on the hosted worker with the PC off. What the
  * activities *mean* is unchanged: same run-log entry, same PR, same archive
- * record, same never-merges-its-own-PR rule.
+ * record. Which pull requests Steward merges is the merge leg's business
+ * (`mergeScorecardPr`, below).
  *
  * The cost is that this file now needs the GitHub App credential for reads as well as
  * writes, where before only the publish leg did. A run whose credential is missing
@@ -353,6 +354,19 @@ export interface PublishScorecardRunInput {
   perPage: PerPageDetail[];
   /** Opens the PR as a draft and tags the title — same convention as `publishPost`'s dry-run. */
   dryRun?: boolean;
+  /**
+   * Set when the run's archive record rides in this pull request (STW-614): the
+   * run-log entry and `<id>.json` under the archive directory go in one commit.
+   * It carries what the archive record holds beyond the run record and the
+   * per-page detail. Absent on a call from a history recorded before the change,
+   * and the activity then commits the run-log alone, as it did.
+   */
+  archive?: { decision: 'open-pr' | 'no-op'; reason: string };
+  /**
+   * Set when the run is unhealthy and its pull request is held for a person
+   * (STW-614). The body says so, and the workflow starts no merge leg.
+   */
+  held?: { failedPages: number; totalPages: number };
 }
 
 export interface PublishScorecardRunResult {
@@ -368,6 +382,15 @@ export interface PublishScorecardRunResult {
   headSha?: string;
   /** False when the base already carried this run: no commit, so nothing to merge. */
   committed?: boolean;
+  /**
+   * The archive record this run committed beside the run-log, repo-relative.
+   * Absent when the input carried no `archive`, or when nothing was committed.
+   * The workflow hands it to `mergeScorecardPr` as the one extra file the diff
+   * may hold, and archives separately when it is absent.
+   */
+  archivePath?: string;
+  /** The archive filename stem: the run id, or `<id>-n` when that name was taken on the base. */
+  archiveId?: string;
 }
 
 /** `<iso>`, or `<iso>-2`, `<iso>-3`, … on a same-day collision (spec §5.1). */
@@ -380,7 +403,14 @@ function uniqueId(iso: string, existing: ScorecardRunRecord[]): string {
   }
 }
 
-function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail[], dryRun: boolean): string {
+interface ScorecardPrBodyOptions {
+  dryRun: boolean;
+  held?: { failedPages: number; totalPages: number };
+  archivePath?: string;
+}
+
+function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail[], options: ScorecardPrBodyOptions): string {
+  const { dryRun, held, archivePath } = options;
   const metricRows = record.metrics.map((m) => `| ${m.name} | ${m.value}/${m.maximum} | ${m.status} |`).join('\n');
   const pageRows = perPage
     .map(
@@ -405,6 +435,14 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
       '',
     );
   }
+  if (held) {
+    lines.push(
+      `> **Held for Matt.** ${held.failedPages} of ${held.totalPages} page(s) could not be audited, so Steward ` +
+        'leaves this pull request open and does not merge it. Merge it by hand if the numbers are right, or close it. ' +
+        'The next healthy night publishes its own pull request.',
+      '',
+    );
+  }
   lines.push(
     `**Scorecard run \`${record.id}\`** — ${record.entry}`,
     '',
@@ -426,11 +464,14 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
     '',
     '</details>',
     '',
+    ...(archivePath ? [`This pull request also adds the run's per-page record, \`${archivePath}\`.`, ''] : []),
     '---',
     '',
     dryRun
-      ? '*Opened by the Scorecard workflow. A dry run is never merged.*'
-      : '*Opened by the Scorecard workflow. Steward merges it after the checks pass.*',
+      ? '*Opened by the Scorecard workflow. Steward does not merge a dry run.*'
+      : held
+        ? '*Opened by the Scorecard workflow. Held: Steward does not merge this one.*'
+        : '*Opened by the Scorecard workflow. Steward merges it after the checks pass.*',
   );
   return lines.join('\n');
 }
@@ -451,9 +492,22 @@ function buildScorecardPrBody(record: ScorecardRunRecord, perPage: PerPageDetail
  * existed to survive. A scorecard publish can no longer be blocked behind a
  * `buildAndAuditDraft` holding the tree.
  *
- * **The workflow never calls this in `dry-run` mode** (spec §4.2 step 4) —
- * this function itself does not gate on `dryRun` beyond labelling the PR, so
- * that guarantee lives in the workflow, not here.
+ * **The workflow does not call this in `dry-run` mode** (spec §4.2 step 4).
+ * This function does not gate on `dryRun` beyond labelling the PR, so that
+ * guarantee lives in the workflow, not here.
+ *
+ * ## The archive record rides in the same commit (STW-614, 2026-11-15)
+ *
+ * When the input carries `archive`, the run-log entry and the run's archive
+ * record go in one commit through the Git Data API, on a branch just reset to
+ * the base. One commit, for the reason `archiveScorecardRun` gives: two pushes
+ * start two Vercel previews, and the pair raced once. The archive name is
+ * `<id>.json`, or `<id>-2.json` and so on when the base already holds that name,
+ * so a record on the default branch is not replaced. `latest.json` is not
+ * written here: the merge rule allows one archive file.
+ *
+ * The record in the file carries no `prUrl`: the commit is made before the pull
+ * request exists.
  */
 /**
  * Blocks a present-relative commentary or metric description before it ever
@@ -510,7 +564,38 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
   // empty and the API would answer 409 rather than no-op.
   let committed = false;
   let headSha: string | undefined;
-  if (updated !== runsFile.text) {
+  let archivePath: string | undefined;
+  let archiveId: string | undefined;
+  if (updated !== runsFile.text && input.archive) {
+    // Create-only by a read of the base: a tree write replaces what is at a path.
+    for (let n = 1; ; n++) {
+      archiveId = n === 1 ? id : `${id}-${n}`;
+      archivePath = `${SCORECARD_ARCHIVE_REL}/${archiveId}.json`;
+      if (!(await readRepoFile(archivePath, base))) break;
+    }
+    const archived: ScorecardArchiveRecord = {
+      ...record,
+      archiveId,
+      perPage: input.perPage,
+      decision: input.archive.decision,
+      reason: input.archive.reason,
+    };
+    const commit = await commitFiles({
+      parent: baseSha,
+      message: `chore(scorecard): publish ${id} run`,
+      files: [
+        { path: SCORECARD_RUNS_PATH, text: updated },
+        { path: archivePath, text: JSON.stringify(archived, null, 2) + '\n' },
+      ],
+    });
+    // The branch was reset to `baseSha` above, so this is a fast forward unless
+    // something else wrote to the run's branch in between.
+    if (!(await fastForwardBranch(branch, commit))) {
+      throw new Error(`${branch} moved between its reset and the run's commit; the publish was not made.`);
+    }
+    headSha = commit;
+    committed = true;
+  } else if (updated !== runsFile.text) {
     const written = await writeRepoFile({
       path: SCORECARD_RUNS_PATH,
       text: updated,
@@ -528,12 +613,27 @@ export async function publishScorecardRun(input: PublishScorecardRunInput): Prom
     branch,
     base,
     title: `${input.dryRun ? '[dry run] ' : ''}Scorecard: ${id}`,
-    body: buildScorecardPrBody(record, input.perPage, input.dryRun === true),
+    body: buildScorecardPrBody(record, input.perPage, {
+      dryRun: input.dryRun === true,
+      held: input.held,
+      archivePath,
+    }),
     draft: input.dryRun === true,
   });
-  log.info({ activity: 'publishScorecardRun', id, prUrl, branch, committed }, 'scorecard PR open');
+  log.info(
+    { activity: 'publishScorecardRun', id, prUrl, branch, committed, archivePath, held: input.held !== undefined },
+    'scorecard PR open',
+  );
 
-  return { branch, prUrl, id, prNumber: pullNumberFromUrl(prUrl), headSha, committed };
+  return {
+    branch,
+    prUrl,
+    id,
+    prNumber: pullNumberFromUrl(prUrl),
+    headSha,
+    committed,
+    ...(archivePath && committed ? { archivePath, archiveId } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -565,16 +665,23 @@ export interface MergeScorecardPrInput {
   branch: string;
   /** The commit `publishScorecardRun` made. GitHub refuses the merge if the head moved off it. */
   expectedHeadSha: string;
+  /**
+   * The archive record the run committed beside the run-log, when it did. The
+   * diff may hold this one file as well as the run-log. Absent on a call from a
+   * history recorded before STW-614, and the diff must then be the run-log alone.
+   */
+  archivePath?: string;
 }
 
 /**
- * Merges the run-log pull request this run opened, and only that one.
+ * Merges the pull request this run opened. It is not used for any other.
  *
- * It decides from GitHub at merge time, never from the workflow's memory of
+ * It decides from GitHub at merge time, not from the workflow's memory of
  * earlier polls: the pull request is this run's (number, exact branch, default
  * base, this repository), its head is the commit the run made, the diff is
- * exactly `src/data/scorecard-runs.json`, and the head's checks are complete,
- * with the required one successful. Any miss is a returned refusal naming the
+ * `src/data/scorecard-runs.json` plus at most the run's own archive record
+ * (`checkChangedFiles`), and the head's checks are complete, with the required
+ * one successful. Any miss is a returned refusal naming the
  * condition. The pull request stays open and the workflow marks the run
  * unhealthy.
  *
@@ -615,8 +722,15 @@ export async function mergeScorecardPr(input: MergeScorecardPrInput): Promise<Sc
   if (identity) return identity;
 
   const files = await gh(`/repos/${repo}/pulls/${input.prNumber}/files?per_page=100`);
-  const changed = (Array.isArray(files) ? files : []).map((f: { filename: string }) => f.filename);
-  const diff = checkChangedFiles(changed, SCORECARD_RUNS_PATH);
+  const changed = (Array.isArray(files) ? files : []).map((f: { filename: string; status?: string }) => ({
+    filename: f.filename,
+    status: f.status,
+  }));
+  const diff = checkChangedFiles(changed, {
+    runLogPath: SCORECARD_RUNS_PATH,
+    archivePath: input.archivePath,
+    archiveDir: SCORECARD_ARCHIVE_REL,
+  });
   if (diff) return diff;
 
   const checks = await readScorecardPrChecks(input.expectedHeadSha);
@@ -700,10 +814,21 @@ const ARCHIVE_MOVED_RETRIES = 3;
 
 /**
  * Writes the full run — public metrics plus per-page raw detail — to the
- * private archive (spec §5.2). **Runs on every execution, published or not**
- * (spec §4.2 step 5): a no-op night is still a fact worth keeping, and the
- * archive is the only place that per-page detail survives at all — the public
- * run-log never carries it.
+ * private archive (spec §5.2). A no-op night is still a fact worth keeping, and
+ * the archive is the only place that per-page detail survives at all — the
+ * public run-log does not carry it.
+ *
+ * ## Which runs still come here (STW-614, 2026-11-15)
+ *
+ * A run that publishes now commits its archive record in its own pull request
+ * (`publishScorecardRun`), and the workflow skips this activity for it. That is
+ * every healthy scheduled run, and a manual run with something to publish. This
+ * activity keeps the runs that open no run-log pull request: a manual no-op, a
+ * run where every page failed, a mixed-Lighthouse-version run, and a dry run
+ * (which writes nothing, below). So the archive branch and its pull request
+ * appear only after one of those, and a person merges or closes that pull
+ * request. The sections below describe this route, and were written when every
+ * run took it.
  *
  * ## It commits to one accumulating branch, not to the run's PR (2026-08-14)
  *
@@ -807,14 +932,14 @@ export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promi
     body:
       'Per-run Scorecard records — public metrics plus the per-page raw scores the ' +
       'public run-log never carries (spec §5.2).\n\n' +
-      'Every run appends to this branch, including the no-op nights that open no run-log ' +
-      'PR of their own. That is the point — a `Scorecard: <id>` PR appearing means a number ' +
-      'moved, and it would stop meaning that if the archive rode in it. Merge this whenever; ' +
-      'nothing waits on it. Merging puts these records on the default branch and deletes the ' +
-      'branch, and the next run cuts a new one from there and carries on.\n\n' +
+      'A run that publishes carries its record in its own `Scorecard: <id>` PR. This branch ' +
+      'holds the records of runs that opened no such PR: a manual run with nothing to publish, ' +
+      'a night where every page failed, or a night measured by two Lighthouse versions. ' +
+      'Merge this whenever; nothing waits on it. Merging puts these records on the default ' +
+      'branch and deletes the branch, and the next such run cuts a new one.\n\n' +
       `Most recent record: \`${archiveId}\` (${record.decision}).\n\n` +
       '---\n\n' +
-      '*Opened by the Scorecard workflow. It never merges — that is deliberately a human act (design rule 2).*',
+      '*Opened by the Scorecard workflow. Steward does not merge this one; merge or close it by hand.*',
   });
 
   log.info(

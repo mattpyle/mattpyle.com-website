@@ -443,11 +443,12 @@ export const SCORECARD_ARCHIVE_REL = 'agents/steward/reviews/_scorecard';
 /**
  * The branch `archiveScorecardRun` appends to.
  *
- * One branch and one PR, not one per run, and that split is the point: the
- * run-log PR appearing *means something changed* (spec §6), and it would stop
- * meaning that if every no-op night opened one too. The archive is written on
- * every execution including no-ops (spec §5.2), so it needs somewhere to
- * accumulate that carries no signal. Matt merges it whenever.
+ * Since STW-614 (2026-11-15) a run that publishes commits its archive record in
+ * its own pull request, which Steward merges, and does not touch this branch.
+ * The branch is the route for the runs that open no run-log pull request: a
+ * manual no-op, a night where every page failed, and a mixed-Lighthouse-version
+ * night. One branch and one PR for those, so they have somewhere to accumulate.
+ * Matt merges or closes that PR; Steward does not merge it.
  *
  * The name outlives any one branch. Merging the archive PR deletes the branch,
  * because that is this repository's setting, so `archiveScorecardRun` calls

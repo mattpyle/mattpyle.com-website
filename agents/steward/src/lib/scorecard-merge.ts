@@ -1,9 +1,10 @@
 /**
- * The rules for merging a Scorecard run-log pull request. Pure: the activities
+ * The rules for merging a Scorecard run's pull request. Pure: the activities
  * in `activities/scorecard.ts` fetch, and these functions decide.
  *
- * The merge path serves the run-log pull request and nothing else. It is not a
- * general merge helper.
+ * The merge path serves the pull request a run opened, which holds the run-log
+ * entry and, since STW-614, that run's archive file. It is not a general merge
+ * helper.
  */
 
 /**
@@ -116,14 +117,60 @@ export function checkPullIdentity(pull: PullLike, expected: MergeExpectation): S
   return undefined;
 }
 
-/** A diff of exactly the run-log file. */
-export function checkChangedFiles(files: string[], runLogPath: string): ScorecardMergeOutcome | undefined {
-  if (files.length === 1 && files[0] === runLogPath) return undefined;
-  return {
-    merged: false,
-    condition: 'extra-files',
-    detail: `the diff is ${files.length === 0 ? 'empty' : files.join(', ')}, expected only ${runLogPath}`,
-  };
+/** One entry of a pull request's diff, as GitHub lists it. */
+export interface ChangedFile {
+  filename: string;
+  /** `added`, `modified`, `removed`, `renamed` and so on. */
+  status?: string;
+}
+
+/** What a run's pull request may change. */
+export interface AllowedDiff {
+  /** The run-log file. It must be in the diff. */
+  runLogPath: string;
+  /**
+   * The archive file this run committed beside the run-log, when it committed
+   * one. It is the only other file the diff may hold.
+   */
+  archivePath?: string;
+  /** The archive directory. `archivePath` must sit directly in it. */
+  archiveDir: string;
+}
+
+/**
+ * The diff is the run-log file, plus at most this run's own archive file.
+ *
+ * The archive file is named by the run, not matched by a pattern: another file
+ * in the archive directory is refused like any other. It must be a `.json` file
+ * directly in the archive directory, and GitHub must list it as added, because
+ * the archive is append-only and a run that changed an earlier night's record is
+ * not one Steward should merge unread.
+ */
+export function checkChangedFiles(files: ChangedFile[], allowed: AllowedDiff): ScorecardMergeOutcome | undefined {
+  const names = files.map((f) => f.filename);
+  const expected = allowed.archivePath
+    ? `${allowed.runLogPath} and ${allowed.archivePath}`
+    : `only ${allowed.runLogPath}`;
+  const refuse = (detail: string): ScorecardMergeOutcome => ({ merged: false, condition: 'extra-files', detail });
+
+  if (!names.includes(allowed.runLogPath)) {
+    return refuse(`the diff is ${names.length === 0 ? 'empty' : names.join(', ')}, expected ${expected}`);
+  }
+  const others = files.filter((f) => f.filename !== allowed.runLogPath);
+  if (others.length === 0) return undefined;
+  if (others.length > 1 || !allowed.archivePath || others[0].filename !== allowed.archivePath) {
+    return refuse(`the diff is ${names.join(', ')}, expected ${expected}`);
+  }
+  const archive = others[0];
+  const prefix = `${allowed.archiveDir}/`;
+  const name = archive.filename.startsWith(prefix) ? archive.filename.slice(prefix.length) : '';
+  if (!name || name.includes('/') || !name.endsWith('.json')) {
+    return refuse(`${archive.filename} is not a record directly under ${allowed.archiveDir}`);
+  }
+  if (archive.status !== 'added') {
+    return refuse(`${archive.filename} is ${archive.status ?? 'of unknown status'} in the diff; an archive record is only ever added`);
+  }
+  return undefined;
 }
 
 /** Maps a failed checks read onto a refusal. */

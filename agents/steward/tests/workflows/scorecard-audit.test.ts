@@ -47,6 +47,9 @@ const GREEN_PAGE: PageAuditOutcome = {
   axeViolations: 0,
 };
 
+/** The archive record a publishing run commits in its own pull request. */
+const ARCHIVE_PATH = 'agents/steward/reviews/_scorecard/2026-07-22.json';
+
 interface MockOverrides {
   resolveAuditUrls?: () => Promise<string[]>;
   resolveRunStamp?: () => Promise<{ iso: string; timestamp: string }>;
@@ -59,6 +62,8 @@ interface MockOverrides {
     prNumber?: number;
     headSha?: string;
     committed?: boolean;
+    archivePath?: string;
+    archiveId?: string;
   }>;
   /** One answer per read, the last repeated. Defaults to passing every time. */
   readScorecardPrChecks?: (headSha: string) => Promise<{ state: string; failing: string[]; pending: string[]; requiredPassed: boolean }>;
@@ -79,6 +84,7 @@ function mockActivities(overrides: MockOverrides = {}) {
   const signals: SentSignal[] = [];
   const checkReads: string[] = [];
   const merges: unknown[] = [];
+  const published: unknown[] = [];
   const activities = {
     resolveAuditUrls: overrides.resolveAuditUrls ?? (async () => ['https://www.mattpyle.com/']),
     resolveRunStamp:
@@ -93,8 +99,9 @@ function mockActivities(overrides: MockOverrides = {}) {
     readPublishedScorecard: overrides.readPublishedScorecard ?? (async () => undefined),
     publishScorecardRun:
       overrides.publishScorecardRun ??
-      (async () => {
+      (async (input: unknown) => {
         calls.push('publishScorecardRun');
+        published.push(input);
         return {
           branch: 'steward/scorecard-2026-07-22',
           prUrl: 'https://github.com/o/r/pull/9',
@@ -102,6 +109,8 @@ function mockActivities(overrides: MockOverrides = {}) {
           prNumber: 9,
           headSha: 'sha-run',
           committed: true,
+          // As the real activity does: an archive path only when asked to carry the record.
+          ...((input as { archive?: unknown }).archive ? { archivePath: ARCHIVE_PATH, archiveId: '2026-07-22' } : {}),
         };
       }),
     readScorecardPrChecks:
@@ -143,7 +152,7 @@ function mockActivities(overrides: MockOverrides = {}) {
       };
     },
   };
-  return { activities, calls, archived, signals, checkReads, merges };
+  return { activities, calls, archived, signals, checkReads, merges, published };
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
@@ -164,7 +173,7 @@ function baseInput(overrides: Partial<ScorecardAuditInput> = {}): ScorecardAudit
 }
 
 test('no published run yet: opens a PR even though every page is green', async () => {
-  const { activities, calls } = mockActivities({ readPublishedScorecard: async () => undefined });
+  const { activities, calls, published } = mockActivities({ readPublishedScorecard: async () => undefined });
   const result = await withWorker(activities, () =>
     env.client.workflow.execute(scorecardAuditWorkflow, {
       workflowId: 'sc-1',
@@ -175,7 +184,12 @@ test('no published run yet: opens a PR even though every page is green', async (
   assert.equal(result.decision, 'open-pr');
   assert.equal(result.prUrl, 'https://github.com/o/r/pull/9');
   assert.ok(calls.includes('publishScorecardRun'));
-  assert.ok(calls.includes('archiveScorecardRun'));
+  // The archive record rides in the run's pull request, so the archive branch is not written.
+  assert.ok(!calls.includes('archiveScorecardRun'));
+  assert.deepEqual((published[0] as { archive?: unknown }).archive, {
+    decision: 'open-pr',
+    reason: 'no published run exists yet',
+  });
 });
 
 test('unchanged and fresh: no-op, publishScorecardRun is never called', async () => {
@@ -222,7 +236,7 @@ test('dry-run mode never calls publishScorecardRun, even when the decision is op
 });
 
 test('a tool failure on one page blocks a green decision and is archived, not dropped', async () => {
-  const { activities, archived } = mockActivities({
+  const { activities, published } = mockActivities({
     resolveAuditUrls: async () => ['https://www.mattpyle.com/', 'https://www.mattpyle.com/broken/'],
     auditLiveUrl: async (url: string) =>
       url.includes('broken') ? { url, ok: false, error: 'Lighthouse timed out' } : { ...GREEN_PAGE, url },
@@ -236,8 +250,10 @@ test('a tool failure on one page blocks a green decision and is archived, not dr
     }),
   );
   for (const m of result.record.metrics) assert.equal(m.status, 'Fail');
-  const archivedRecord = archived[0] as { perPage: unknown[] };
-  assert.equal(archivedRecord.perPage.length, 2);
+  // The record, failed page included, goes into the run's pull request.
+  const sent = published[0] as { perPage: unknown[]; archive?: unknown };
+  assert.equal(sent.perPage.length, 2);
+  assert.ok(sent.archive);
 });
 
 /**
@@ -290,8 +306,8 @@ test('every page failed: no-op, no run-log PR, the record is still archived', as
   assert.match(signals[0].summary, /No run-log PR opened/);
 });
 
-test('one page failed: the run-log PR still opens', async () => {
-  const { activities, calls, archived } = mockActivities({
+test('one page failed: the run-log PR opens held, with no check reads and no merge', async () => {
+  const { activities, calls, published, checkReads, merges, signals } = mockActivities({
     resolveAuditUrls: async () => THREE_URLS,
     auditLiveUrl: async (url: string) =>
       url.endsWith('/about/') ? { url, ok: false, error: 'Lighthouse timed out' } : { ...GREEN_PAGE, url },
@@ -308,11 +324,45 @@ test('one page failed: the run-log PR still opens', async () => {
   assert.equal(result.decision, 'open-pr');
   assert.equal(result.prUrl, 'https://github.com/o/r/pull/9');
   assert.ok(calls.includes('publishScorecardRun'));
-  assert.equal((archived[0] as ArchivedRun).decision, 'open-pr');
+  const sent = published[0] as { held?: unknown; archive?: { decision: string } };
+  assert.deepEqual(sent.held, { failedPages: 1, totalPages: 3 });
+  assert.equal(sent.archive?.decision, 'open-pr');
+  assert.ok(!calls.includes('archiveScorecardRun'));
+
+  assert.equal(checkReads.length, 0);
+  assert.equal(merges.length, 0);
+  assert.equal(result.mergeSha, undefined);
+  assert.match(result.mergeRefusal ?? '', /^unhealthy-run: 1 of 3 page\(s\) could not be audited/);
+
+  // One report, failing, naming the failed page and the pull request.
+  assert.deepEqual(signals.map((x) => [x.signal, x.ok]), [['run-shape', false]]);
+  assert.match(signals[0].summary, /is held/);
+  assert.match(signals[0].summary, /about\/ \(Lighthouse timed out\)/);
+  assert.match(signals[0].summary, /pull\/9/);
+});
+
+test('a scheduled run with a failed page is held the same way, on the nightly check', async () => {
+  const { activities, checkReads, merges, signals } = mockActivities({
+    resolveAuditUrls: async () => THREE_URLS,
+    auditLiveUrl: async (url: string) =>
+      url.endsWith('/about/') ? { url, ok: false, error: 'Lighthouse timed out' } : { ...GREEN_PAGE, url },
+    readPublishedScorecard: async () => undefined,
+  });
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-held-nightly',
+      taskQueue: QUEUE,
+      args: [baseInput({ triggeredBy: 'schedule' })],
+    }),
+  );
+  assert.equal(result.prUrl, 'https://github.com/o/r/pull/9');
+  assert.equal(checkReads.length + merges.length, 0);
+  assert.deepEqual(signals.map((x) => [x.signal, x.ok]), [['nightly-scorecard', false]]);
+  assert.match(signals[0].summary, /pull\/9/);
 });
 
 test('a healthy run is unchanged: decidePublish decides and the PR opens', async () => {
-  const { activities, calls, archived, signals } = mockActivities({
+  const { activities, calls, published, signals } = mockActivities({
     resolveAuditUrls: async () => THREE_URLS,
     readPublishedScorecard: async () => undefined,
   });
@@ -327,7 +377,8 @@ test('a healthy run is unchanged: decidePublish decides and the PR opens', async
   assert.equal(result.decision, 'open-pr');
   assert.equal(result.reason, 'no published run exists yet');
   assert.ok(calls.includes('publishScorecardRun'));
-  assert.equal((archived[0] as ArchivedRun).prUrl, 'https://github.com/o/r/pull/9');
+  assert.ok(!calls.includes('archiveScorecardRun'));
+  assert.equal((published[0] as { held?: unknown }).held, undefined);
   assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', true]]);
 });
 
@@ -943,13 +994,13 @@ test('a page\'s reading budget reaches the record, the PR body input and the arc
     'https://www.mattpyle.com/about/': { text: { share: 74, measured: 3934 }, markdown: null },
   };
   const published: unknown[] = [];
-  const { activities, archived } = mockActivities({
+  const { activities } = mockActivities({
     resolveAuditUrls: async () => Object.keys(budgets),
     auditLiveUrl: async (url: string) => ({ ...GREEN_PAGE, url, readingBudget: budgets[url] }),
     readPublishedScorecard: async () => undefined,
     publishScorecardRun: async (input: unknown) => {
       published.push(input);
-      return { branch: 'b', prUrl: 'https://github.com/o/r/pull/10', id: '2026-07-22' };
+      return { branch: 'b', prUrl: 'https://github.com/o/r/pull/10', id: '2026-07-22', committed: true, archivePath: ARCHIVE_PATH };
     },
   });
   const result = await withWorker(activities, () =>
@@ -968,13 +1019,14 @@ test('a page\'s reading budget reaches the record, the PR body input and the arc
   assert.deepEqual(result.record.readingBudget, expected);
   assert.deepEqual(result.perPage[1].readingBudget, budgets['https://www.mattpyle.com/about/']);
   assert.deepEqual((published[0] as { record: { readingBudget?: unknown } }).record.readingBudget, expected);
-  assert.deepEqual((archived[0] as { readingBudget?: unknown }).readingBudget, expected);
+  // The archive record is built from the same input, in the run's pull request.
+  assert.ok((published[0] as { archive?: unknown }).archive);
   // Still four metrics: the figure sits beside the gates, never among them.
   assert.equal(result.record.metrics.length, 4);
 });
 
 test('pages without a reading budget leave the record without one', async () => {
-  const { activities, archived } = mockActivities({ readPublishedScorecard: async () => undefined });
+  const { activities, published } = mockActivities({ readPublishedScorecard: async () => undefined });
   const result = await withWorker(activities, () =>
     env.client.workflow.execute(scorecardAuditWorkflow, {
       workflowId: 'sc-no-reading-budget',
@@ -983,7 +1035,7 @@ test('pages without a reading budget leave the record without one', async () => 
     }),
   );
   assert.equal('readingBudget' in result.record, false);
-  assert.equal('readingBudget' in (archived[0] as object), false);
+  assert.equal('readingBudget' in (published[0] as { record: object }).record, false);
 });
 
 /**
@@ -1086,7 +1138,9 @@ test('merge leg: two passing reads, then one merge of the run commit', async () 
   assert.equal(result.mergeSha, 'merge-sha');
   assert.equal(result.mergeRefusal, undefined);
   assert.deepEqual(checkReads, ['sha-run', 'sha-run'], 'two consecutive passing reads');
-  assert.deepEqual(merges, [{ prNumber: 9, branch: 'steward/scorecard-2026-07-22', expectedHeadSha: 'sha-run' }]);
+  assert.deepEqual(merges, [
+    { prNumber: 9, branch: 'steward/scorecard-2026-07-22', expectedHeadSha: 'sha-run', archivePath: ARCHIVE_PATH },
+  ]);
   assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['run-shape', true]], 'a merged run sends only its ordinary ping');
 });
 
@@ -1203,5 +1257,104 @@ test('merge leg: a publish result without the new fields (an older worker) is no
     }),
   });
   assert.equal(checkReads.length, 0);
+  assert.equal(merges.length, 0);
+});
+
+/**
+ * STW-614: a scheduled run publishes every night, its pull request carries the
+ * archive record, and Steward merges it. A manual run and a dry run keep the
+ * rule they had. `UNCHANGED` is a published run with the scores the default
+ * mocks measure, dated so the staleness rule cannot fire.
+ */
+const UNCHANGED: PublishedScorecard = {
+  iso: '2026-07-21',
+  scope: '1 live page',
+  pageCount: 1,
+  metrics: [
+    { name: 'Accessibility', value: '100', maximum: '100', status: 'Pass', description: '' },
+    { name: 'Performance', value: '98', maximum: '100', status: 'Pass', description: '' },
+    { name: 'SEO', value: '100', maximum: '100', status: 'Pass', description: '' },
+    { name: 'Agentic Browsing', value: '4', maximum: '4', status: 'Pass', description: '' },
+  ],
+};
+
+test('nightly: a scheduled run with unchanged scores publishes and merges one pull request with two files', async () => {
+  const { result, calls, published, merges, signals, archived } = await runMerge(
+    'sc-nightly-unchanged',
+    { readPublishedScorecard: async () => UNCHANGED },
+    { triggeredBy: 'schedule' },
+  );
+  assert.equal(result.decision, 'open-pr');
+  assert.equal(result.reason, 'unchanged, published 1d ago; a scheduled run publishes every night');
+  assert.equal(result.mergeSha, 'merge-sha');
+  assert.equal(result.mergeRefusal, undefined);
+
+  // One publish call carries the run-log entry and the archive record.
+  assert.equal(calls.filter((c) => c === 'publishScorecardRun').length, 1);
+  assert.deepEqual((published[0] as { archive?: unknown }).archive, { decision: 'open-pr', reason: result.reason });
+  assert.equal(archived.length, 0, 'the archive branch was written as well');
+
+  // The merge is told which second file the diff may hold.
+  assert.deepEqual(merges, [
+    { prNumber: 9, branch: 'steward/scorecard-2026-07-22', expectedHeadSha: 'sha-run', archivePath: ARCHIVE_PATH },
+  ]);
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', true]]);
+  // No delta language: the commentary states the plain pass fact.
+  assert.equal(result.record.commentary, 'All 1 page passed all four public metrics.');
+});
+
+test('nightly: a manual run with unchanged scores is still a no-op and archives on the archive branch', async () => {
+  const { result, calls, archived, merges } = await runMerge('sc-manual-unchanged', {
+    readPublishedScorecard: async () => UNCHANGED,
+  });
+  assert.equal(result.decision, 'no-op');
+  assert.ok(!calls.includes('publishScorecardRun'));
+  assert.equal(archived.length, 1);
+  assert.equal(merges.length, 0);
+});
+
+test('nightly: a scheduled dry run with unchanged scores publishes nothing', async () => {
+  const { result, calls, merges } = await runMerge(
+    'sc-nightly-dry',
+    { readPublishedScorecard: async () => UNCHANGED },
+    { triggeredBy: 'schedule', publishMode: 'dry-run' },
+  );
+  assert.equal(result.decision, 'no-op');
+  assert.ok(!calls.includes('publishScorecardRun'));
+  assert.equal(merges.length, 0);
+});
+
+test('nightly: a pull request with a third file is refused as extra-files and the night reports unhealthy', async () => {
+  const { result, signals } = await runMerge(
+    'sc-nightly-third-file',
+    {
+      readPublishedScorecard: async () => UNCHANGED,
+      // What `mergeScorecardPr` returns for such a diff; the rule itself is
+      // tested against the fake GitHub in tests/activities/scorecard-merge.test.ts.
+      mergeScorecardPr: async () => ({
+        merged: false,
+        condition: 'extra-files',
+        detail: 'the diff is src/data/scorecard-runs.json, a.json, src/pages/index.astro, expected src/data/scorecard-runs.json and a.json',
+      }),
+    },
+    { triggeredBy: 'schedule' },
+  );
+  assert.match(result.mergeRefusal ?? '', /^extra-files: /);
+  assert.equal(result.mergeSha, undefined);
+  assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', true], ['nightly-scorecard', false]]);
+  assert.match(signals[1].summary, /\(extra-files\)/);
+});
+
+test('nightly: a publish that committed nothing falls back to the archive branch', async () => {
+  const { archived, merges } = await runMerge('sc-nightly-nocommit', {
+    publishScorecardRun: async () => ({
+      branch: 'steward/scorecard-2026-07-22',
+      prUrl: 'https://github.com/o/r/pull/9',
+      id: '2026-07-22',
+      prNumber: 9,
+      committed: false,
+    }),
+  });
+  assert.equal(archived.length, 1);
   assert.equal(merges.length, 0);
 });

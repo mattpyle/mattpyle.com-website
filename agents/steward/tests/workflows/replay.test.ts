@@ -1011,6 +1011,45 @@ test('a review approved with publish replays publishPost and the deploy verifica
  * ```
  *
  * Both sleeps were removed and every replay re-ran green.
+ *
+ * **Probes on the changed code (2026-11-15), one marker at a time**, each with
+ * that marker's `wf.patched()` call replaced by `true`:
+ *
+ * - `scorecard-nightly-publish`: the no-op history failed, alone, with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'archiveScorecardRun' does not match activity type of activity command
+ * 'publishScorecardRun'
+ * ```
+ *
+ * - `scorecard-hold-unhealthy`: the unhealthy history failed, alone, with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered for
+ * change scorecard-auto-merge, but there is no corresponding change command!
+ * ```
+ *
+ * - `scorecard-archive-in-pr`: the nightly-merged and unhealthy histories
+ *   failed with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'archiveScorecardRun' does not match activity type of activity command
+ * 'reportRunHealth'
+ * ```
+ *
+ *   and the three older publishing histories (`scorecard-publish-pre-merge.bin`,
+ *   `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`)
+ *   failed with `Complete workflow machine does not handle this event:
+ *   HistoryEvent(id: 35 or 41, ActivityTaskScheduled)`. The other 23 replays
+ *   stayed green.
+ *
+ * Each guard was restored and all 28 replays re-ran green. The workflow reads
+ * whether the archive rode in the pull request off the publish result's
+ * `committed`, not off the new `archivePath` field, so that an old result
+ * cannot stand in for the marker: an earlier draft read `archivePath`, and with
+ * the guard deleted every history still passed.
  */
 const scorecardNightlyMergedPath = fileURLToPath(
   new URL('../fixtures/histories/scorecard-nightly-merged-pre.bin', import.meta.url),

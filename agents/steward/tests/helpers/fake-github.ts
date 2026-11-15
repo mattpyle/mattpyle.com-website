@@ -54,8 +54,11 @@ export interface FakeGitHub {
      * the app's bot; a test pushes a person's event itself.
      */
     timeline?: Array<{ event: string; actor: { login: string } | null }>;
-    /** The files the PR changes, as `GET /pulls/{n}/files` lists them. Defaults to none. */
-    files?: string[];
+    /**
+     * The files the PR changes, as `GET /pulls/{n}/files` lists them. Defaults to
+     * none. A bare name lists with no `status`; an object carries one.
+     */
+    files?: Array<string | { filename: string; status: string }>;
     /** `owner/name` of the head repository. Defaults to the site repository. */
     headRepo?: string;
     /** Set once merged, by the fake's merge route or by a test. */
@@ -461,7 +464,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     if (method === 'GET' && filesRoute) {
       const pull = pulls.find((p) => p.number === Number(filesRoute[1]));
       if (!pull) return response(404, { message: 'Not Found' });
-      return response(200, (pull.files ?? []).map((filename) => ({ filename })));
+      return response(200, (pull.files ?? []).map((f) => (typeof f === 'string' ? { filename: f } : f)));
     }
 
     // PUT /pulls/{n}/merge. Models the head-sha guard and a scripted refusal.

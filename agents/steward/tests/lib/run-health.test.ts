@@ -83,6 +83,24 @@ for (const condition of ['wrong-pr', 'extra-files', 'head-moved', 'checks-failed
   });
 }
 
+test('a held run is a bad shape that names the failed page, the PR and what to do with it', () => {
+  const shape = scorecardRunShape({
+    pages: [
+      { url: 'https://www.mattpyle.com/', ok: true },
+      { url: 'https://www.mattpyle.com/x/', ok: false, error: 'timeout' },
+    ],
+    decision: 'open-pr',
+    iso: '2026-11-15',
+    held: { prUrl: PR },
+  });
+  assert.equal(shape.ok, false);
+  assert.match(shape.summary, /^Scorecard 2026-11-15 is held\./);
+  assert.match(shape.summary, /1 of 2 page\(s\) could not be audited: https:\/\/www\.mattpyle\.com\/x\/ \(timeout\)/);
+  assert.match(shape.summary, /did not merge it: https:\/\/github\.com\/o\/r\/pull\/9\./);
+  assert.match(shape.summary, /merge it by hand or close it/);
+  assert.match(shape.summary, /next healthy night publishes its own PR/);
+});
+
 test('a refused merge on a run with a failed page reports both problems', () => {
   const shape = scorecardRunShape({
     pages: [

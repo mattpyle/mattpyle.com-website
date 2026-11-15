@@ -654,11 +654,18 @@ function daysBetween(fromIso: string, toIso: string): number {
  * Trigger order is deliberate, because the first match becomes the PR's stated
  * reason and the commentary's delta: a moved **number** is the most important
  * thing to say, then a change in **what was measured**, then mere staleness.
+ *
+ * `everyNight` (STW-614) turns the last case, unchanged and fresh, into a
+ * publish. The workflow sets it for a scheduled run, so the public run-log shows
+ * each night's check and not only the last change. A manual run leaves it unset
+ * and keeps the rule above. It changes nothing for a run that already had a
+ * reason to publish, so the reason and the commentary's delta stay the same.
  */
 export function decidePublish(
   candidate: PublishableRun,
   published: PublishableRun | undefined,
   maxAgeDays: number,
+  options: { everyNight?: boolean } = {},
 ): PublishDecision {
   if (!published) {
     return { decision: 'open-pr', reason: 'no published run exists yet' };
@@ -679,6 +686,13 @@ export function decidePublish(
     return {
       decision: 'open-pr',
       reason: `unchanged, but published run is ${ageDays}d old (> ${maxAgeDays}d staleness threshold)`,
+    };
+  }
+
+  if (options.everyNight === true) {
+    return {
+      decision: 'open-pr',
+      reason: `unchanged, published ${ageDays}d ago; a scheduled run publishes every night`,
     };
   }
 
