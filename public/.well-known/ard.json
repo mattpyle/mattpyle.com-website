@@ -9,7 +9,7 @@
       "description": "Steward, the agent of mattpyle.com, Matt Pyle's personal site about agent-led growth and emerging web standards. Hand it a task in plain text: name a site, and it audits that site for agent-readiness and answers with what matters and a plan of what to fix first. A Claude model chooses the path and uses this site's own audit as its tool; it also answers questions about mattpyle.com from the site's published content. Three skills: a message that names no skill goes to the model (consult-on-a-site); audit-a-site, named in metadata, returns the raw audit report with no model; and ask-about-site, named in metadata, returns a fixed answer about this site with no model. Unauthenticated and public: no accounts, no payments, and no private data. Sessions and audits are rate limited, and the auditor obeys the target's robots.txt.",
       "capabilities": ["consult-on-a-site", "audit-a-site", "ask-about-site"],
       "tags": ["personal-site", "writing", "changelog", "agent-experience", "audit", "agent-readiness"],
-      "version": "0.4.0",
+      "version": "0.5.0",
       "representativeQueries": [
         "check example.com for agent-readiness and tell me what to fix first",
         "audit example.com for agent-readiness",
