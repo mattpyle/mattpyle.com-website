@@ -91,7 +91,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | --- | --- | --- |
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
- * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin` | The scheduled path: `checkActionUsage` and the `nightly-scorecard` health signal. It needs a run started by the schedule, and none is recorded. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
+ * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
  * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin` | The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin` | The checks path (`runFindingChecks`, then `writeFindingVerification`, resolved or reopened). The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
@@ -970,5 +970,81 @@ test('a review approved with publish replays publishPost and the deploy verifica
     { workflowBundle: await workflowBundle() },
     history,
     'wf-publish-fixture',
+  );
+});
+
+/**
+ * ## Three scorecard histories from before STW-614 (2026-11-15)
+ *
+ * Recorded from `origin/master` at f34f790, the code before the nightly publish,
+ * the archive file in the run's pull request and the held unhealthy run. Each
+ * ran against the time-skipping server with mocked activities, two pages, and
+ * was read with `fetchHistory()`, so none holds a real run. Stored as protobuf
+ * binary for the reason the fix-child fixtures give.
+ *
+ * - `scorecard-nightly-merged-pre.bin`: a scheduled run, healthy, Performance
+ *   90 to 100. `checkActionUsage`, the fan-out, `publishScorecardRun`,
+ *   `archiveScorecardRun`, the `nightly-scorecard` ping, the
+ *   `scorecard-auto-merge` marker, two check reads a timer apart, and
+ *   `mergeScorecardPr`. 84 events. It is the first committed history that passes
+ *   through the merge leg and the first started as a scheduled run.
+ * - `scorecard-nightly-noop-pre.bin`: a scheduled run, healthy and unchanged. It
+ *   decided `no-op`, archived, pinged and completed, with no publish. 53 events.
+ * - `scorecard-unhealthy-merged-pre.bin`: a manual run with one of two pages
+ *   failed. It published, archived, sent a failing `run-shape` ping and then
+ *   merged, which is what the code of that day did. 78 events.
+ *
+ * **Probes on the recording code (2026-11-15).** A `wf.sleep('1 second')`
+ * injected at the head of `mergeRunLogPr` failed the first and third with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 61, ActivityTaskScheduled)
+ * ```
+ *
+ * (event 55 in the third) and left the no-op history green. A `wf.sleep('1 second')` injected before
+ * the `archiveScorecardRun` call failed all three; the no-op history with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 41, ActivityTaskScheduled)
+ * ```
+ *
+ * Both sleeps were removed and every replay re-ran green.
+ */
+const scorecardNightlyMergedPath = fileURLToPath(
+  new URL('../fixtures/histories/scorecard-nightly-merged-pre.bin', import.meta.url),
+);
+const scorecardNightlyNoopPath = fileURLToPath(
+  new URL('../fixtures/histories/scorecard-nightly-noop-pre.bin', import.meta.url),
+);
+const scorecardUnhealthyMergedPath = fileURLToPath(
+  new URL('../fixtures/histories/scorecard-unhealthy-merged-pre.bin', import.meta.url),
+);
+
+test('a scheduled scorecard run that archived separately and merged replays through the merge leg', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardNightlyMergedPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'steward-scorecard-fixture-nightly-merged',
+  );
+});
+
+test('a scheduled scorecard run that was a no-op replays with no publish', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardNightlyNoopPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'steward-scorecard-fixture-nightly-noop',
+  );
+});
+
+test('a scorecard run with a failed page that merged replays through the merge leg', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(scorecardUnhealthyMergedPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'steward-scorecard-fixture-unhealthy-merged',
   );
 });
