@@ -176,6 +176,23 @@ test('unchanged and fresh: no-op', () => {
   assert.equal(decision.decision, 'no-op');
 });
 
+test('unchanged and fresh with everyNight: opens a PR and says why', () => {
+  const decision = decidePublish(run('2026-07-16', GREEN), run('2026-07-15', GREEN), 7, { everyNight: true });
+  assert.equal(decision.decision, 'open-pr');
+  assert.equal(decision.reason, 'unchanged, published 1d ago; a scheduled run publishes every night');
+});
+
+test('everyNight leaves a run with its own reason to publish alone', () => {
+  const regressed = GREEN.map((m) => (m.name === 'Performance' ? metric('Performance', '80', '100', 'Fail') : m));
+  const withFlag = decidePublish(run('2026-07-16', regressed), run('2026-07-15', GREEN), 7, { everyNight: true });
+  const without = decidePublish(run('2026-07-16', regressed), run('2026-07-15', GREEN), 7);
+  assert.deepEqual(withFlag, without);
+  assert.deepEqual(
+    decidePublish(run('2026-07-16', GREEN), undefined, 7, { everyNight: true }),
+    decidePublish(run('2026-07-16', GREEN), undefined, 7),
+  );
+});
+
 test('unchanged but stale: opens a PR', () => {
   const decision = decidePublish(run('2026-07-25', GREEN), run('2026-07-15', GREEN), 7);
   assert.equal(decision.decision, 'open-pr');

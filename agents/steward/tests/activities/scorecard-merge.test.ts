@@ -2,8 +2,13 @@ import { test, afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { mergeScorecardPr, publishScorecardRun, readScorecardPrChecks } from '../../src/activities/scorecard.js';
-import { SCORECARD_RUNS_PATH } from '../../src/config.js';
-import { REQUIRED_SCORECARD_CHECK, evaluateScorecardChecks, pullNumberFromUrl } from '../../src/lib/scorecard-merge.js';
+import { SCORECARD_ARCHIVE_REL, SCORECARD_RUNS_PATH } from '../../src/config.js';
+import {
+  REQUIRED_SCORECARD_CHECK,
+  checkChangedFiles,
+  evaluateScorecardChecks,
+  pullNumberFromUrl,
+} from '../../src/lib/scorecard-merge.js';
 import type { ScorecardRunRecord } from '../../src/lib/scorecard-aggregate.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 
@@ -80,6 +85,79 @@ test('an empty diff is refused as well', async () => {
   hub.pulls[0].files = [];
   const outcome = await attempt();
   assert.equal(!outcome.merged && outcome.condition, 'extra-files');
+});
+
+// ---------------------------------------------------------------------------
+// The archive record in the run's pull request (STW-614)
+// ---------------------------------------------------------------------------
+
+const ARCHIVE = `${SCORECARD_ARCHIVE_REL}/2026-11-10.json`;
+const withArchive = () => mergeScorecardPr({ prNumber: number, branch, expectedHeadSha: sha, archivePath: ARCHIVE });
+const RUN_LOG = { filename: SCORECARD_RUNS_PATH, status: 'modified' };
+
+test('two files, the run-log and this run\'s added archive record: merged', async () => {
+  hub.pulls[0].files = [RUN_LOG, { filename: ARCHIVE, status: 'added' }];
+  const outcome = await withArchive();
+  assert.deepEqual(outcome, { merged: true, mergeSha: 'merge-1' });
+  assert.equal(hub.merges.length, 1);
+});
+
+test('the run-log alone still merges when the run named an archive record', async () => {
+  hub.pulls[0].files = [RUN_LOG];
+  assert.equal((await withArchive()).merged, true);
+});
+
+test('a third file beside the run-log and the archive record is refused as extra-files', async () => {
+  hub.pulls[0].files = [RUN_LOG, { filename: ARCHIVE, status: 'added' }, { filename: 'src/pages/index.astro', status: 'modified' }];
+  const outcome = await withArchive();
+  assert.equal(!outcome.merged && outcome.condition, 'extra-files');
+  assert.match(!outcome.merged ? outcome.detail : '', /src\/pages\/index\.astro/);
+  assert.equal(hub.merges.length, 0);
+});
+
+test('latest.json beside the archive record is a third file, and refused', async () => {
+  hub.pulls[0].files = [RUN_LOG, { filename: ARCHIVE, status: 'added' }, { filename: `${SCORECARD_ARCHIVE_REL}/latest.json`, status: 'modified' }];
+  const outcome = await withArchive();
+  assert.equal(!outcome.merged && outcome.condition, 'extra-files');
+  assert.equal(hub.merges.length, 0);
+});
+
+test('another night\'s archive record is not this run\'s, and refused', async () => {
+  hub.pulls[0].files = [RUN_LOG, { filename: `${SCORECARD_ARCHIVE_REL}/2026-11-09.json`, status: 'added' }];
+  const outcome = await withArchive();
+  assert.equal(!outcome.merged && outcome.condition, 'extra-files');
+  assert.equal(hub.merges.length, 0);
+});
+
+test('an archive record the diff modifies, not adds, is refused', async () => {
+  hub.pulls[0].files = [RUN_LOG, { filename: ARCHIVE, status: 'modified' }];
+  const outcome = await withArchive();
+  assert.equal(!outcome.merged && outcome.condition, 'extra-files');
+  assert.match(!outcome.merged ? outcome.detail : '', /is modified in the diff/);
+  assert.equal(hub.merges.length, 0);
+});
+
+test('an archive record is refused when the run named none', async () => {
+  hub.pulls[0].files = [RUN_LOG, { filename: ARCHIVE, status: 'added' }];
+  const outcome = await attempt();
+  assert.equal(!outcome.merged && outcome.condition, 'extra-files');
+  assert.equal(hub.merges.length, 0);
+});
+
+test('the archive record without the run-log is refused', async () => {
+  hub.pulls[0].files = [{ filename: ARCHIVE, status: 'added' }];
+  const outcome = await withArchive();
+  assert.equal(!outcome.merged && outcome.condition, 'extra-files');
+});
+
+test('the diff rule: the named file must be a .json record directly in the archive directory', () => {
+  const allowed = (archivePath: string) => ({ runLogPath: 'runs.json', archivePath, archiveDir: 'arch' });
+  const diff = (archivePath: string) => [{ filename: 'runs.json' }, { filename: archivePath, status: 'added' }];
+  assert.equal(checkChangedFiles(diff('arch/2026-11-10.json'), allowed('arch/2026-11-10.json')), undefined);
+  for (const bad of ['arch/sub/2026-11-10.json', 'elsewhere/2026-11-10.json', 'arch/2026-11-10.ts', 'src/pages/index.astro']) {
+    const outcome = checkChangedFiles(diff(bad), allowed(bad));
+    assert.equal(outcome && !outcome.merged && outcome.condition, 'extra-files', bad);
+  }
 });
 
 test('a head that moved off the run commit is refused', async () => {

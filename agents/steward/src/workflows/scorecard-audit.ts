@@ -28,20 +28,50 @@ import { scorecardRunShape, type RunShape, type ScorecardMergeShape, type Scorec
  * publish decision is known entirely from activity results, and the human
  * gate is the PR merge, not a workflow wait (spec §4.2, end).
  *
- * A sibling of `reviewPost`, not a variant — see spec §2. It never reads
- * `buildAndAuditDraft`'s numbers and never reuses its thresholds. It merges
- * only its own run-log pull request, under the conditions of the merge leg
- * below (design rule 2, as amended by STW-571).
+ * A sibling of `reviewPost`, not a variant — see spec §2. It does not read
+ * `buildAndAuditDraft`'s numbers or reuse its thresholds. The one pull request
+ * it merges is the one the run itself opened, under the conditions of the merge
+ * leg below (design rule 2, as amended by STW-571 and STW-614).
  *
  * ## The merge leg (STW-571)
  *
  * Design rule 2 changed: after the run is published and archived, Steward waits
  * for the run-log pull request's checks and merges it. The leg sits behind
  * {@link SCORECARD_AUTO_MERGE_PATCH}, after the health ping, so the nightly
- * dead-man's switch never waits on CI. `mergeScorecardPr` re-checks every
+ * dead-man's switch does not wait on CI. `mergeScorecardPr` re-checks every
  * condition against GitHub at merge time; the workflow only waits. A refusal, a
  * timeout or a thrown error leaves the pull request open and sends a second,
- * failing ping. It never fails the workflow: the run and its archive are good.
+ * failing ping. It does not fail the workflow: the run and its archive are good.
+ *
+ * ## One pull request a night, archive included (STW-614, 2026-11-15)
+ *
+ * Three changes, each behind its own marker, each read only on the path it
+ * changes, so a run on any other path records nothing new:
+ *
+ * 1. {@link NIGHTLY_PUBLISH_PATCH}. A scheduled `pr`-mode run that
+ *    `decidePublish` calls unchanged now publishes anyway. Whether a run is
+ *    scheduled is `triggeredBy`, which is in the input; the marker records that
+ *    the code changed. A manual run and a dry run keep the old rule, and so do
+ *    the all-pages-failed and mixed-version no-ops.
+ * 2. {@link HOLD_UNHEALTHY_PATCH}. A run that publishes while its own shape is
+ *    unhealthy (a failed page) opens its pull request marked as held. It gets no
+ *    check reads and no merge, and its one health report fails, naming the
+ *    failed pages and the pull request. Before this, the tail read only whether
+ *    a pull request existed, so a run with failed pages was merged.
+ * 3. {@link ARCHIVE_IN_PR_PATCH}. A run that publishes hands its archive record
+ *    to `publishScorecardRun`, which commits it beside the run-log entry, and
+ *    the separate `archiveScorecardRun` call is skipped. The merge leg passes
+ *    the archive path to `mergeScorecardPr` as the one extra file the diff may
+ *    hold. A run that opens no pull request still calls `archiveScorecardRun`.
+ *
+ * **Which histories lack them.** Every history recorded before 2026-11-15 lacks
+ * all three. `scorecard-nightly-noop-pre.bin` is a scheduled unchanged run and
+ * lacks the first: it replays to its `no-op`. `scorecard-unhealthy-merged-pre.bin`
+ * published with a failed page and lacks the second and third: it replays
+ * through its archive call and its merge. `scorecard-nightly-merged-pre.bin`
+ * and the three older publishing fixtures lack the third and replay through
+ * their archive call. A history recorded after the change holds a marker only
+ * where its run took that path.
  *
  * **Replay.** The leg runs only after the publish activity returned a pull
  * request number, a head commit and `committed: true`. A result recorded before
@@ -116,6 +146,34 @@ export const PERFORMANCE_RECHECK_PATCH = 'scorecard-performance-recheck';
 export const SCORECARD_AUTO_MERGE_PATCH = 'scorecard-auto-merge';
 
 /**
+ * The `patched` marker of the nightly publish (STW-614): a scheduled `pr`-mode
+ * run whose scores match the published run now calls `publishScorecardRun`,
+ * where it used to go straight to the archive. It is read only when
+ * `decidePublish` has returned `no-op` for such a run, so a run with a change to
+ * publish, a manual run and a dry run record no marker. A history without it
+ * keeps its `no-op`; `scorecard-nightly-noop-pre.bin` is one.
+ */
+export const NIGHTLY_PUBLISH_PATCH = 'scorecard-nightly-publish';
+
+/**
+ * The `patched` marker of the held pull request (STW-614): a run that publishes
+ * with a failed page no longer reaches the merge leg. It is read before the
+ * publish call, and only when the run is about to publish and its shape is
+ * unhealthy. A history without it replays its check reads and its merge;
+ * `scorecard-unhealthy-merged-pre.bin` is one.
+ */
+export const HOLD_UNHEALTHY_PATCH = 'scorecard-hold-unhealthy';
+
+/**
+ * The `patched` marker of the archive record in the run's pull request
+ * (STW-614): a run that publishes no longer calls `archiveScorecardRun`. It is
+ * read before the publish call, and only when the run is about to publish in
+ * `pr` mode. A history without it replays its separate archive call;
+ * `scorecard-nightly-merged-pre.bin` is one.
+ */
+export const ARCHIVE_IN_PR_PATCH = 'scorecard-archive-in-pr';
+
+/**
  * How long the merge leg waits for the checks: 30 polls, a minute apart. CI and
  * the Vercel preview take about ten to fifteen minutes, so the limit is twice
  * that. Two consecutive passing reads are needed, one poll apart.
@@ -174,7 +232,11 @@ export interface ScorecardAuditResult {
   prUrl?: string;
   /** The merge commit, when the merge leg merged the run-log pull request. */
   mergeSha?: string;
-  /** Why the merge leg left the pull request open: the condition, then GitHub's or the workflow's detail. */
+  /**
+   * Why the pull request is still open: the condition, then GitHub's or the
+   * workflow's detail. `unhealthy-run` means the run held it and started no
+   * merge leg.
+   */
   mergeRefusal?: string;
   record: ScorecardRunRecord;
   perPage: Array<{
@@ -476,9 +538,10 @@ export async function scorecardAuditWorkflow(input: ScorecardAuditInput): Promis
     });
   }
 
-  // The merge leg. `pendingMerge` exists only for a real publish that committed,
-  // so a dry run, a no-op and a run that found nothing to commit never evaluate
-  // the marker. A history without the marker issues nothing from here.
+  // The merge leg. `pendingMerge` exists only for a real publish that committed
+  // and was not held, so a dry run, a no-op, a held run and a run that found
+  // nothing to commit do not evaluate the marker. A history without the marker
+  // issues nothing from here.
   if (ran.pendingMerge && wf.patched(SCORECARD_AUTO_MERGE_PATCH)) {
     const merge = await mergeRunLogPr(ran.pendingMerge);
     if (merge.merged) {
@@ -502,6 +565,8 @@ interface PendingMerge {
   prNumber: number;
   branch: string;
   headSha: string;
+  /** The archive record the run committed beside the run-log, when it did. */
+  archivePath?: string;
 }
 
 interface RanScorecard {
@@ -542,6 +607,9 @@ async function mergeRunLogPr(pending: PendingMerge): Promise<ScorecardMergeShape
       prNumber: pending.prNumber,
       branch: pending.branch,
       expectedHeadSha: pending.headSha,
+      // Only when the run committed one, so a history from before the archive
+      // rode in the pull request sends the input it always sent.
+      ...(pending.archivePath !== undefined ? { archivePath: pending.archivePath } : {}),
     });
     return outcome.merged
       ? { merged: true, mergeSha: outcome.mergeSha, prUrl: pending.prUrl }
@@ -668,7 +736,7 @@ async function runScorecardAudit(input: ScorecardAuditInput): Promise<RanScoreca
   const auditedCount = perPage.filter((p) => p.ok).length;
   // Short-circuit: `patched` is evaluated only for a mixed run. See MIXED_LIGHTHOUSE_PATCH.
   const mixedVersions = lighthouseVersionCounts(perPage).length > 1 && wf.patched(MIXED_LIGHTHOUSE_PATCH);
-  const decision: PublishDecision =
+  const gateDecision: PublishDecision =
     auditedCount === 0
       ? {
           decision: 'no-op',
@@ -684,6 +752,19 @@ async function runScorecardAudit(input: ScorecardAuditInput): Promise<RanScoreca
               'measurement of the site; no run-log PR',
           }
         : decidePublish({ iso, metrics, scope, tools }, published, input.maxAgeDays);
+  // The nightly publish (STW-614). `decidedByGate` is true when `decidePublish`
+  // made the call above, so the two refusals keep their `no-op`. Short-circuit:
+  // `patched` is read only for a scheduled `pr`-mode run that would otherwise
+  // publish nothing. See NIGHTLY_PUBLISH_PATCH.
+  const decidedByGate = auditedCount > 0 && !mixedVersions;
+  const decision: PublishDecision =
+    gateDecision.decision === 'no-op' &&
+    decidedByGate &&
+    input.triggeredBy === 'schedule' &&
+    input.publishMode === 'pr' &&
+    wf.patched(NIGHTLY_PUBLISH_PATCH)
+      ? decidePublish({ iso, metrics, scope, tools }, published, input.maxAgeDays, { everyNight: true })
+      : gateDecision;
 
   const candidate: Omit<ScorecardRunRecord, 'id'> = {
     iso,
@@ -696,44 +777,9 @@ async function runScorecardAudit(input: ScorecardAuditInput): Promise<RanScoreca
     ...(readingBudget ? { readingBudget } : {}),
   };
 
-  // --- Step 4: publish, unless dry-run -------------------------------------
-  //
-  // `dry-run` skips this step entirely, regardless of the decision (spec
-  // §4.2 step 4) — the dry-run mode exists so `steward scorecard --dry-run`
-  // can validate the live audit numbers themselves (spec §9.6's smoke test)
-  // without ever touching GitHub, not to open a throwaway PR.
-  let prUrl: string | undefined;
-  let pendingMerge: PendingMerge | undefined;
-  let record: ScorecardRunRecord = { ...candidate, id: iso };
-  if (decision.decision === 'open-pr' && input.publishMode === 'pr') {
-    const opened = await light.publishing.publishScorecardRun({
-      record: candidate,
-      perPage: perPageSummary,
-    });
-    prUrl = opened.prUrl;
-    record = { ...candidate, id: opened.id };
-    // Nothing to merge when the run committed nothing, or when the result predates
-    // the fields (a history recorded before the merge leg).
-    if (opened.committed === true && opened.prNumber !== undefined && opened.headSha !== undefined) {
-      pendingMerge = { prUrl: opened.prUrl, prNumber: opened.prNumber, branch: opened.branch, headSha: opened.headSha };
-    }
-  }
-
-  // --- Step 5: always archive ----------------------------------------------
-  await light.archiving.archiveScorecardRun({
-    ...record,
-    perPage: perPageSummary,
-    decision: decision.decision,
-    reason: decision.reason,
-    prUrl,
-    // Carried explicitly rather than inferred: the archive commits through the
-    // GitHub API now, so this is what keeps spec §4.2 step 4's "a dry run never
-    // touches GitHub" true of the archive as well as the publish leg.
-    dryRun: input.publishMode === 'dry-run',
-  });
-
   // Read off `perPage`, which still carries each page's `ok`, before the
-  // summary above flattens it.
+  // summary above flattens it. Computed before the publish step since STW-614,
+  // because the publish step asks whether the run is healthy. Pure: no command.
   const shapeInput: ScorecardShapeInput = {
     pages: perPage.map((p) => ({
       url: p.url,
@@ -744,9 +790,88 @@ async function runScorecardAudit(input: ScorecardAuditInput): Promise<RanScoreca
     decision: decision.decision,
     iso,
   };
+  const failedCount = perPage.length - auditedCount;
+
+  // --- Step 4: publish, unless dry-run -------------------------------------
+  //
+  // `dry-run` skips this step entirely, regardless of the decision (spec
+  // §4.2 step 4) — the dry-run mode exists so `steward scorecard --dry-run`
+  // can validate the live audit numbers themselves (spec §9.6's smoke test)
+  // without touching GitHub, not to open a throwaway PR.
+  //
+  // Both markers are read here, before the publish call, and only by a run that
+  // is about to publish: `held` only when that run is also unhealthy. See
+  // HOLD_UNHEALTHY_PATCH and ARCHIVE_IN_PR_PATCH.
+  let prUrl: string | undefined;
+  let pendingMerge: PendingMerge | undefined;
+  let heldPr: string | undefined;
+  let archivedInPr = false;
+  let record: ScorecardRunRecord = { ...candidate, id: iso };
+  if (decision.decision === 'open-pr' && input.publishMode === 'pr') {
+    const held = !scorecardRunShape(shapeInput).ok && wf.patched(HOLD_UNHEALTHY_PATCH);
+    const archiveInPr = wf.patched(ARCHIVE_IN_PR_PATCH);
+    const opened = await light.publishing.publishScorecardRun({
+      record: candidate,
+      perPage: perPageSummary,
+      ...(archiveInPr ? { archive: { decision: decision.decision, reason: decision.reason } } : {}),
+      ...(held ? { held: { failedPages: failedCount, totalPages: perPage.length } } : {}),
+    });
+    prUrl = opened.prUrl;
+    record = { ...candidate, id: opened.id };
+    // A publish that committed nothing wrote no archive record either, so that
+    // run falls through to the archive branch below. Read off `committed`, which
+    // every result since the merge leg carries, so a history without the marker
+    // cannot pass through this line by accident.
+    archivedInPr = archiveInPr && opened.committed !== false;
+    if (held) {
+      heldPr = opened.prUrl;
+    } else if (opened.committed === true && opened.prNumber !== undefined && opened.headSha !== undefined) {
+      // Nothing to merge when the run committed nothing, or when the result predates
+      // the fields (a history recorded before the merge leg).
+      pendingMerge = {
+        prUrl: opened.prUrl,
+        prNumber: opened.prNumber,
+        branch: opened.branch,
+        headSha: opened.headSha,
+        ...(opened.archivePath !== undefined ? { archivePath: opened.archivePath } : {}),
+      };
+    }
+  }
+
+  // --- Step 5: archive, unless the record rode in the pull request ----------
+  //
+  // A run that opened no pull request, and a history from before
+  // ARCHIVE_IN_PR_PATCH, archive here, on the archive branch.
+  if (!archivedInPr) {
+    await light.archiving.archiveScorecardRun({
+      ...record,
+      perPage: perPageSummary,
+      decision: decision.decision,
+      reason: decision.reason,
+      prUrl,
+      // Carried explicitly rather than inferred: the archive commits through the
+      // GitHub API now, so this is what keeps spec §4.2 step 4's "a dry run does
+      // not touch GitHub" true of the archive as well as the publish leg.
+      dryRun: input.publishMode === 'dry-run',
+    });
+  }
+
+  const result: ScorecardAuditResult = {
+    decision: decision.decision,
+    reason: decision.reason,
+    prUrl,
+    record,
+    perPage: perPageSummary,
+  };
+  if (heldPr !== undefined) {
+    result.mergeRefusal =
+      `unhealthy-run: ${failedCount} of ${perPage.length} page(s) could not be audited, ` +
+      'so the pull request is held open for a person';
+  }
   return {
-    result: { decision: decision.decision, reason: decision.reason, prUrl, record, perPage: perPageSummary },
-    shape: scorecardRunShape(shapeInput),
+    result,
+    // A held run reports once, and the report names the pull request.
+    shape: scorecardRunShape(heldPr !== undefined ? { ...shapeInput, held: { prUrl: heldPr } } : shapeInput),
     shapeInput,
     pendingMerge,
   };

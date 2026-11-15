@@ -2,7 +2,7 @@ import { test, afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { publishScorecardRun, readPublishedScorecard } from '../../src/activities/scorecard.js';
-import { SCORECARD_RUNS_PATH } from '../../src/config.js';
+import { SCORECARD_ARCHIVE_BRANCH, SCORECARD_ARCHIVE_REL, SCORECARD_RUNS_PATH } from '../../src/config.js';
 import type { ScorecardRunRecord } from '../../src/lib/scorecard-aggregate.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 
@@ -197,11 +197,93 @@ test('the PR body row shows the pass count and the check that did not pass, with
   assert.match(body, /\| https:\/\/www\.mattpyle\.com\/old\/ \| 0 \| .* \| not recorded \|/);
 });
 
-test('the PR body says Steward merges after the checks pass; a dry run says it is never merged', async () => {
+test('the PR body says Steward merges after the checks pass; a dry run says Steward does not merge it', async () => {
   await publishScorecardRun({ record: run(), perPage: [] });
   assert.match(hub.pulls[0].body, /Steward merges it after the checks pass/);
   assert.doesNotMatch(hub.pulls[0].body, /never merges/);
 
   await publishScorecardRun({ record: run({ iso: '2026-08-15' }), perPage: [], dryRun: true });
-  assert.match(hub.pulls[1].body, /A dry run is never merged/);
+  assert.match(hub.pulls[1].body, /Steward does not merge a dry run/);
+});
+
+// ---------------------------------------------------------------------------
+// The archive record in the run's pull request (STW-614)
+// ---------------------------------------------------------------------------
+
+const ARCHIVE = { decision: 'open-pr' as const, reason: 'unchanged, published 1d ago; a scheduled run publishes every night' };
+const PAGE = { url: 'https://www.mattpyle.com/', scores: { performance: 100 }, axeViolations: 0 };
+
+test('with an archive, the run-log entry and the record go in one commit on the run\'s branch', async () => {
+  const result = await publishScorecardRun({ record: run(), perPage: [PAGE], archive: ARCHIVE });
+
+  assert.equal(result.committed, true);
+  assert.equal(result.archiveId, '2026-08-14');
+  assert.equal(result.archivePath, `${SCORECARD_ARCHIVE_REL}/2026-08-14.json`);
+  assert.deepEqual(hub.history(result.branch), ['chore(scorecard): publish 2026-08-14 run'], 'one commit on the branch');
+
+  const onBranch = hub.json(result.branch, SCORECARD_RUNS_PATH) as ScorecardRunRecord[];
+  assert.equal(onBranch[0].id, '2026-08-14');
+  const record = hub.json(result.branch, result.archivePath!);
+  assert.equal(record.id, '2026-08-14');
+  assert.equal(record.archiveId, '2026-08-14');
+  assert.equal(record.decision, 'open-pr');
+  assert.equal(record.reason, ARCHIVE.reason);
+  assert.deepEqual(record.perPage, [PAGE]);
+  assert.equal('prUrl' in record, false, 'the commit is made before the pull request exists');
+
+  // Nothing else: no latest.json, no archive branch, the base untouched.
+  assert.equal(hub.file(result.branch, `${SCORECARD_ARCHIVE_REL}/latest.json`), undefined);
+  assert.equal(hub.branches.has(SCORECARD_ARCHIVE_BRANCH), false);
+  assert.equal(hub.file(BASE, result.archivePath!), undefined);
+  assert.equal(hub.pulls.length, 1);
+  assert.match(hub.pulls[0].body, /also adds the run's per-page record, `agents\/steward\/reviews\/_scorecard\/2026-08-14\.json`/);
+});
+
+test('the head commit publish reports is the one the branch points at', async () => {
+  const result = await publishScorecardRun({ record: run(), perPage: [], archive: ARCHIVE });
+  hub.pulls[0].sha = result.headSha;
+  assert.ok(result.headSha);
+  assert.equal(result.prNumber, 1);
+});
+
+test('an archive name the base already holds is left alone and the record takes a suffix', async () => {
+  hub.restore();
+  hub = installFakeGitHub({
+    seed: {
+      ...seedRunLog([{ iso: '2026-08-13' }]),
+      [`${SCORECARD_ARCHIVE_REL}/2026-08-14.json`]: '{"id":"an earlier no-op"}\n',
+    },
+  });
+  const result = await publishScorecardRun({ record: run(), perPage: [], archive: ARCHIVE });
+  assert.equal(result.id, '2026-08-14');
+  assert.equal(result.archiveId, '2026-08-14-2');
+  assert.equal(hub.file(result.branch, `${SCORECARD_ARCHIVE_REL}/2026-08-14.json`)?.text, '{"id":"an earlier no-op"}\n');
+  assert.equal(hub.json(result.branch, result.archivePath!).archiveId, '2026-08-14-2');
+});
+
+test('a retried publish with an archive resets to base and keeps one pull request', async () => {
+  await publishScorecardRun({ record: run(), perPage: [], archive: ARCHIVE });
+  const second = await publishScorecardRun({ record: run(), perPage: [], archive: ARCHIVE });
+  // Reset to base, then one commit: the run-log holds the night once.
+  const onBranch = hub.json(second.branch, SCORECARD_RUNS_PATH) as ScorecardRunRecord[];
+  assert.equal(onBranch.filter((r) => r.iso === '2026-08-14').length, 1);
+  assert.equal(second.archiveId, '2026-08-14');
+  assert.equal(hub.pulls.length, 1);
+});
+
+test('without an archive the publish commits the run-log alone and reports no archive path', async () => {
+  const result = await publishScorecardRun({ record: run(), perPage: [] });
+  assert.equal(result.archivePath, undefined);
+  assert.equal(hub.file(result.branch, `${SCORECARD_ARCHIVE_REL}/2026-08-14.json`), undefined);
+});
+
+test('a held run says so at the top of the body, in plain words, and is not a draft', async () => {
+  await publishScorecardRun({ record: run(), perPage: [], archive: ARCHIVE, held: { failedPages: 1, totalPages: 19 } });
+  const body = hub.pulls[0].body;
+  assert.match(body, /^> \*\*Held for Matt\.\*\* 1 of 19 page\(s\) could not be audited/);
+  assert.match(body, /does not merge it/);
+  assert.match(body, /The next healthy night publishes its own pull request\./);
+  assert.match(body, /Held: Steward does not merge this one/);
+  assert.doesNotMatch(body, /Steward merges it after the checks pass/);
+  assert.equal(hub.pulls[0].draft, false);
 });

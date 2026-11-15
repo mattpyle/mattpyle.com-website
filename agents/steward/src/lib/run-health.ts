@@ -135,6 +135,12 @@ export interface ScorecardShapeInput {
   iso: string;
   /** What the merge leg did with the run-log pull request. Absent when the run never reached it. */
   merge?: ScorecardMergeShape;
+  /**
+   * Set when the run opened its pull request and held it for a person, because
+   * the run itself is unhealthy (STW-614). The summary then names the pull
+   * request, so one report carries both the cause and where to look.
+   */
+  held?: { prUrl: string };
 }
 
 /**
@@ -163,9 +169,21 @@ export type ScorecardMergeShape =
  *    opens no run-log PR and this rule says so in the summary.
  *
  * A partial failure keeps its wording, because that run may still open a PR.
+ * Since STW-614 the workflow holds that PR open and sets `held`, and the summary
+ * says so.
  */
 export function scorecardRunShape(input: ScorecardShapeInput): RunShape {
   const base = scorecardPagesAndVersionsShape(input);
+  if (input.held) {
+    // Unhealthy whatever the pages say: a held pull request waits for a person.
+    return {
+      ok: false,
+      summary:
+        `Scorecard ${input.iso} is held. ${base.summary} Steward opened the run's PR and did not merge it: ` +
+        `${input.held.prUrl}. Check the numbers, then merge it by hand or close it. ` +
+        'The next healthy night publishes its own PR.',
+    };
+  }
   const merge = input.merge;
   if (!merge) return base;
   if (merge.merged) {

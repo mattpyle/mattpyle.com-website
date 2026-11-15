@@ -24,9 +24,14 @@ that's the property being dogfooded here, on a low-stakes, real target.
   advisory only, no verdict, no publish leg.
 - **`scorecardAuditWorkflow`** — a separate, scheduled-or-manual sweep of the *live* site (not a
   draft) against a fixed set of public conformance metrics (axe violations, Lighthouse categories,
-  agentic-browsing checks). It opens a PR when the result changed or the last run is stale, and never
-  self-merges. A daily Temporal Schedule fires it at 03:30 local, in Temporal Cloud, on the hosted
-  worker, so a firing produces a run with this PC off.
+  agentic-browsing checks). A daily Temporal Schedule fires it at 03:30 local, in Temporal Cloud, on
+  the hosted worker, so a firing produces a run with this PC off. A scheduled run publishes every
+  night, changed or not: one PR holds the run-log entry and that night's per-page record, and Steward
+  merges it once the checks pass. A manual run opens a PR only when the result changed or the last
+  run is stale. A run with a failed page opens its PR marked as held and Steward leaves it for Matt.
+  A run that opens no PR (a manual run with nothing to publish, a night where every page failed, a
+  night measured by two Lighthouse versions) writes its record to the `steward/scorecard-archive`
+  branch and its PR, which Matt merges or closes.
 - **`auditSiteWorkflow`** — one agent-readiness audit of *any* site, run durably: the fetch-based
   checks, and on the deep tier one browser-rendered page per activity, then assembly. Started by the
   local MCP server (`steward mcp-serve`) and by the site's public `/mcp` endpoint's `deep_audit` tool;
@@ -353,12 +358,15 @@ tunnels, and a proxy cannot add a header inside TLS it does not terminate.
 - **The live origin is the only source of truth for "published."** A merged PR or a green build is
   not the finish line — the workflow doesn't call a piece published until it's verified the actual
   checks against `www.mattpyle.com`.
-- **It merges only the Scorecard run-log PR, and only under four conditions.** The review workflow
-  never merges its pull request; that stays a human act, on purpose. After a Scorecard run is
-  published and archived, `scorecardAuditWorkflow` waits for the checks and merges the run-log PR
-  when it is the one this run opened, its diff is exactly `src/data/scorecard-runs.json`, its head
-  is the run's own commit, and the checks are complete with none failed. Any miss leaves the PR open
-  and the run unhealthy. A dry run and the archive PR are never merged.
+- **The one PR it merges is a Scorecard run's own, under four conditions.** The review workflow
+  leaves its pull request for a person to merge, on purpose. After a Scorecard run is published,
+  `scorecardAuditWorkflow` waits for the checks and merges the run's PR when it is the one this run
+  opened, its diff is `src/data/scorecard-runs.json` plus at most the run's own added record under
+  `agents/steward/reviews/_scorecard/`, its head is the run's own commit, and the checks are
+  complete with none failed. Any miss leaves the PR open and the run unhealthy. A run that reports
+  itself unhealthy (a failed page) is not merged either: its PR opens marked as held, the health
+  report fails and names the PR, and the next healthy night publishes separately. Steward does not
+  merge a dry run's PR or the `steward/scorecard-archive` PR.
 - **It's a sidecar.** Delete `agents/steward/` and the site builds, deploys and serves identically,
   with the one exception above: the `/mcp` route's build depends on those two exports entries.
 
