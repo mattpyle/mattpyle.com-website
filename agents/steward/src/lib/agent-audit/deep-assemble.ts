@@ -207,6 +207,18 @@ export interface RenderedPageOutcome {
    * existed has no such key, and it still has to assemble.
    */
   agenticChecks?: AgenticCheck[] | null;
+  /**
+   * Wall time of the attempt that returned this outcome, in milliseconds: axe
+   * then Lighthouse, as `renderPage` measures it. Optional on read: an outcome
+   * recorded in workflow history before this field existed has no such key, and
+   * it still has to assemble.
+   */
+  renderMs?: number | null;
+  /**
+   * The activity's own attempt number, from 1, set by `auditRenderedPage`. Unset
+   * on the in-process path, which has one attempt, and on older outcomes.
+   */
+  attempt?: number | null;
   violations: ReducedViolation[] | null;
   axeError: string | null;
   /** True when both tools failed and both failures were this page running out of time. */
@@ -719,17 +731,34 @@ export function capNote(available: number, sampled: number): string | null {
   );
 }
 
-/** What was rendered, then why each unrendered page was not. */
+/**
+ * One sampled page in the coverage note: its path, then its render time in whole
+ * seconds when the outcome has one, then the attempt when it is above 1. A page
+ * with no outcome, or an outcome with no time, shows its path alone.
+ */
+function pageLabel(url: string, outcome: RenderedPageOutcome | undefined): string {
+  const path = new URL(url).pathname;
+  if (typeof outcome?.renderMs !== 'number') return path;
+  const attempt = typeof outcome.attempt === 'number' && outcome.attempt > 1 ? ` (attempt ${outcome.attempt})` : '';
+  return `${path}: ${Math.round(outcome.renderMs / 1000)} s${attempt}`;
+}
+
+/**
+ * What was rendered, then why each unrendered page was not. `pages` are matched
+ * to the sample by their full URL, exactly as the sampler produced it.
+ */
 export function coverageNotes(input: {
   sample: string[];
   rendered: number;
   skipped: SkippedPage[];
+  pages?: RenderedPageOutcome[];
 }): string[] {
   const notes: string[] = [];
   if (input.sample.length > 0) {
+    const byUrl = new Map((input.pages ?? []).map((p) => [p.url, p]));
     notes.push(
       `Deep tier: rendered ${input.rendered} of ${input.sample.length} sampled page(s) — ` +
-        `${input.sample.map((u) => new URL(u).pathname).join(', ')}.`,
+        `${input.sample.map((u) => pageLabel(u, byUrl.get(u))).join(', ')}.`,
     );
   }
   for (const s of input.skipped) {

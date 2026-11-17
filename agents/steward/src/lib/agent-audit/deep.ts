@@ -349,6 +349,7 @@ export async function renderPage(
   }
 
   outcome.timedOut = producedNothing(outcome) && axeExpired && lighthouseExpired;
+  outcome.renderMs = Math.max(0, Math.round(now() - started));
   return outcome;
 }
 
@@ -499,7 +500,7 @@ async function renderSample(ctx: DeepContext, opts: DeepOptions, proxy: VettingP
     }
   }
 
-  notes.push(...coverageNotes({ sample, rendered: results.length, skipped }));
+  notes.push(...coverageNotes({ sample, rendered: results.length, skipped, pages: results }));
 
   const checks = assembleDeepChecks({
     pages: results,
