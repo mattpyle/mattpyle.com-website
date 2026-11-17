@@ -249,7 +249,10 @@ export function reduceLighthouse(lhr: LighthouseLike): {
     const score = lhr.categories?.[key]?.score;
     scores[key] = typeof score === 'number' ? Math.round(score * 100) : null;
   }
-  return { scores, agenticChecks: agenticChecks(lhr), version: lhr.lighthouseVersion ?? 'unknown version',
+  return {
+    scores,
+    agenticChecks: agenticChecks(lhr),
+    version: lhr.lighthouseVersion ?? 'unknown version',
     warning: loadTimeoutWarning(lhr),
   };
 }

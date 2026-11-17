@@ -263,7 +263,8 @@ export class DeadlineExceededError extends Error {
  * not wire it into the Lighthouse call, which was never cancellable mid-run. A
  * losing race leaves Chrome to be torn down by `runLighthouse`'s own `finally`
  * when the underlying run eventually settles; `maxWaitForLoad` bounds that, and
- * `lighthouseLoadWait` keeps it inside the deadline in the usual case. What the race buys is that the *audit* does not wait for it.
+ * `lighthouseLoadWait` keeps it inside the deadline in the usual case. What the
+ * race buys is that the *audit* does not wait for it.
  */
 async function withDeadline<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
