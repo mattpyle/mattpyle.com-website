@@ -129,6 +129,30 @@ export interface DeepContext {
   robotsDetail(url: string): Promise<string | null>;
 }
 
+/** Lighthouse's own default load wait. The score then matches a standard run. */
+export const LIGHTHOUSE_LOAD_WAIT_MS = 45_000;
+
+/**
+ * Time Lighthouse needs after the load wait to gather and score. Measured at
+ * about 9 s on a page that never settles (a 45 s wait ran 53.7 s, an 86 s wait
+ * 95.3 s); 15 s leaves room for the worker's CPU limit and the audit proxy.
+ */
+export const LIGHTHOUSE_GATHER_MARGIN_MS = 15_000;
+
+/**
+ * The load wait for a run that has `leftMs` before its deadline: Lighthouse's
+ * 45 s default, or less when the slice is short. It is a cap, so a page that
+ * settles early finishes early. Below the cap it is `leftMs` minus the gather
+ * margin, so a run that waits it all out still returns inside the deadline.
+ * The `leftMs / 2` term stops a short slice from collapsing the wait to
+ * nothing and cutting off an ordinary page that needs a few seconds to load.
+ * Never above `leftMs`.
+ */
+export function lighthouseLoadWait(leftMs: number): number {
+  const wait = Math.min(LIGHTHOUSE_LOAD_WAIT_MS, Math.max(leftMs - LIGHTHOUSE_GATHER_MARGIN_MS, leftMs / 2));
+  return Math.min(wait, leftMs);
+}
+
 /** The two tool functions `defaultRunners` calls, as `audit-engine.ts` exports them. */
 export type AuditEngine = Pick<typeof import('../audit-engine.js'), 'runLighthouse' | 'runAxe'>;
 
@@ -143,9 +167,11 @@ export function defaultRunners(
   return {
     async lighthouse(url, timeoutMs, proxy) {
       const { runLighthouse } = await loadEngine();
-      // `maxWaitForLoad` is Lighthouse's own give-up timer. It is what keeps a
-      // page that never finishes loading from holding the run open: the outer
-      // race below reports the timeout, but only this stops Chrome waiting.
+      // `maxWaitForLoad` is Lighthouse's own give-up timer for a page that never
+      // goes quiet. When it runs out Lighthouse still gathers and scores, and
+      // adds a warning, so the run returns a result. That only helps if it
+      // returns before `withDeadline`, which discards whatever arrives after
+      // `timeoutMs`. So the wait is `lighthouseLoadWait`, not `timeoutMs`.
       //
       // The identity goes on twice, because Lighthouse sends requests from two
       // places: `emulatedUserAgent` for the page it renders, and the launch flag
@@ -159,7 +185,7 @@ export function defaultRunners(
       // here. An agent arriving at the site gets the same treatment, so the page
       // the auditor is shown is the page the audit is about.
       return runLighthouse(url, new AbortController().signal, {
-        flags: { maxWaitForLoad: timeoutMs, emulatedUserAgent: AUDIT_USER_AGENT },
+        flags: { maxWaitForLoad: lighthouseLoadWait(timeoutMs), emulatedUserAgent: AUDIT_USER_AGENT },
         // The proxy flags ride alongside the identity flag, and for the same
         // reason: what Chrome does off its own bat has to carry the audit's
         // rules, not the browser's defaults.
@@ -236,8 +262,9 @@ export class DeadlineExceededError extends Error {
  * `runLighthouse` is the case: it accepts an `AbortSignal` for symmetry and does
  * not wire it into the Lighthouse call, which was never cancellable mid-run. A
  * losing race leaves Chrome to be torn down by `runLighthouse`'s own `finally`
- * when the underlying run eventually settles, which `maxWaitForLoad` guarantees
- * it does. What the race buys is that the *audit* does not wait for it.
+ * when the underlying run eventually settles; `maxWaitForLoad` bounds that, and
+ * `lighthouseLoadWait` keeps it inside the deadline in the usual case. What the
+ * race buys is that the *audit* does not wait for it.
  */
 async function withDeadline<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
@@ -314,6 +341,7 @@ export async function renderPage(
       outcome.scores = reduced.scores;
       outcome.lighthouseVersion = reduced.version;
       outcome.agenticChecks = reduced.agenticChecks;
+      outcome.lighthouseWarning = reduced.warning;
     } catch (err) {
       outcome.lighthouseError = err instanceof Error ? err.message : String(err);
       lighthouseExpired = err instanceof DeadlineExceededError;

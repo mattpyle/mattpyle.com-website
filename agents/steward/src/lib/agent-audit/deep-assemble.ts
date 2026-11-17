@@ -192,6 +192,13 @@ export interface RenderedPageOutcome {
   lighthouseVersion: string | null;
   lighthouseError: string | null;
   /**
+   * Lighthouse's load-timeout warning, when the page never settled within the
+   * load wait and Lighthouse scored it anyway. Quoted as evidence beside the
+   * page's Lighthouse scores. Optional on read: an outcome recorded before this
+   * field existed has no such key, and it still has to assemble.
+   */
+  lighthouseWarning?: string | null;
+  /**
    * The page's graded Agentic Browsing sub-audits, as `agenticChecks` in
    * `audit-map.ts` returns them. `null` when Lighthouse produced no result; an
    * empty array when it ran without the category.
@@ -219,18 +226,35 @@ export interface SkippedPage {
   robots: boolean;
 }
 
+/**
+ * The one Lighthouse run warning the deep tier carries: the page did not finish
+ * loading inside `maxWaitForLoad`, so Lighthouse scored it unsettled. Matched on
+ * its wording ("The page loaded too slowly to finish within the time limit",
+ * Lighthouse 13.5.0); a version that rewords it loses the note, not the scores.
+ */
+export function loadTimeoutWarning(lhr: LighthouseLike): string | null {
+  const found = (lhr.runWarnings ?? []).find((w) => typeof w === 'string' && /too slowly/i.test(w));
+  return found ?? null;
+}
+
 /** Reduces a Lighthouse result to the scores, agentic checks and version the checks quote. */
 export function reduceLighthouse(lhr: LighthouseLike): {
   scores: Record<string, number | null>;
   agenticChecks: AgenticCheck[];
   version: string;
+  warning: string | null;
 } {
   const scores: Record<string, number | null> = {};
   for (const key of AXIS_KEYS) {
     const score = lhr.categories?.[key]?.score;
     scores[key] = typeof score === 'number' ? Math.round(score * 100) : null;
   }
-  return { scores, agenticChecks: agenticChecks(lhr), version: lhr.lighthouseVersion ?? 'unknown version' };
+  return {
+    scores,
+    agenticChecks: agenticChecks(lhr),
+    version: lhr.lighthouseVersion ?? 'unknown version',
+    warning: loadTimeoutWarning(lhr),
+  };
 }
 
 /** Reduces axe's violations to the rule, impact and element count evidence quotes. */
@@ -385,6 +409,7 @@ function axisCheck(
       url: r.url,
       version: r.lighthouseVersion ?? 'unknown version',
       score: (r.scores as Record<string, number | null>)[axis.key] ?? null,
+      warning: r.lighthouseWarning ?? null,
     }));
 
   const failedToRun = pages.filter((r) => !r.scores);
@@ -405,6 +430,9 @@ function axisCheck(
           ? `Lighthouse ${s.version} did not score the "${axis.key}" category for this page`
           : `Lighthouse ${s.version}: ${axis.key} ${s.score}`,
     })),
+    ...scored
+      .filter((s) => s.warning)
+      .map((s) => ({ url: s.url, note: `Lighthouse warned: ${s.warning}` })),
     ...failedToRun.map((r) => ({ url: r.url, note: r.lighthouseError ?? 'Lighthouse produced no result' })),
     ...skipped.map((s) => ({ url: s.url, note: s.reason })),
   ];

@@ -93,3 +93,70 @@ test(
     for (const line of refusals) assert.match(line, /private address/);
   },
 );
+
+/**
+ * A page that never goes quiet: an 80 ms task every 200 ms keeps the CPU busy,
+ * and a new request every 300 ms, each held open for 500 ms, keeps the network
+ * busy. Lighthouse waits out its whole `maxWaitForLoad` on it.
+ */
+async function neverSettlingSite(): Promise<{ origin: string; close: () => Promise<void> }> {
+  const server = http.createServer((req, res) => {
+    const url = req.url ?? '/';
+    if (url.startsWith('/slow')) {
+      setTimeout(() => res.end('ok'), 500);
+      return;
+    }
+    if (url.startsWith('/robots.txt')) {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      return res.end('User-agent: *\nAllow: /\n');
+    }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Never settles</title>` +
+        `<meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+        `<body><h1>Never settles</h1><p>A busy page.</p><script>` +
+        `setInterval(()=>{const t=performance.now();while(performance.now()-t<80){}},200);` +
+        `setInterval(()=>{fetch('/slow?'+Math.random()).catch(()=>{})},300);` +
+        `</script></body></html>`,
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    close: () => {
+      server.closeAllConnections();
+      return new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+test(
+  'a page that never settles still returns Lighthouse scores inside a 90 second slice, with the load-timeout warning',
+  { skip: ENABLED ? false : 'set STEWARD_CHROME_TESTS=1 to run the browser tests', timeout: 300_000 },
+  async (t) => {
+    const site = await neverSettlingSite();
+    t.after(() => site.close());
+
+    const started = Date.now();
+    const { checks, renderedPages } = await runDeepChecks(
+      {
+        candidates: [`${site.origin}/`],
+        remainingMs: () => 600_000,
+        policy: { ...DEFAULT_POLICY, allowedPrivateHosts: ['127.0.0.1'] },
+        robotsDetail: async () => null,
+      },
+      { maxPages: 1, pageTimeoutMs: 90_000 },
+    );
+    const elapsed = Date.now() - started;
+
+    assert.equal(renderedPages, 1);
+    const perf = checks.find((c) => c.id === 'lighthouse-performance');
+    assert.ok(perf, 'no performance check');
+    const notes = (perf.evidence ?? []).map((e) => e.note ?? '');
+    assert.ok(perf.status !== 'error', `Lighthouse lost its result: ${notes.join(' | ')}`);
+    assert.ok(!notes.some((n) => /exceeded \d+s/.test(n)), notes.join(' | '));
+    assert.ok(notes.some((n) => /too slowly/i.test(n)), `no load-timeout warning: ${notes.join(' | ')}`);
+    assert.ok(elapsed < 90_000, `took ${elapsed} ms, past the 90 s slice`);
+    console.log(`never-settling run: ${(elapsed / 1000).toFixed(1)} s`);
+  },
+);

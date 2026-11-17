@@ -124,6 +124,25 @@ test('the sampled pages carry a per-page score for every axis, naming the tool a
   }
 });
 
+test('a load-timeout warning from Lighthouse shows as evidence beside the scores', async () => {
+  const warning = 'The page loaded too slowly to finish within the time limit. Results may be incomplete.';
+  const tools = runners({
+    async lighthouse() {
+      return { ...GOOD, runWarnings: [warning, 'Some unrelated warning'] };
+    },
+  });
+  const { checks } = await runDeepChecks(context(), { runners: tools, maxPages: 1 });
+  const perf = check(checks, 'lighthouse-performance');
+  assert.equal(perf.status, 'pass');
+  const notes = perf.evidence.map((e) => e.note ?? '');
+  assert.ok(notes.some((n) => n.includes(warning)), notes.join(' | '));
+  assert.ok(!notes.some((n) => n.includes('unrelated')), 'only the load-timeout warning is carried');
+
+  const clean = await runDeepChecks(context(), { runners: runners(), maxPages: 1 });
+  const none = check(clean.checks, 'lighthouse-performance').evidence.map((e) => e.note ?? '');
+  assert.ok(!none.some((n) => /warned/.test(n)));
+});
+
 test('a score below 90 fails, naming the page it was measured on', async () => {
   const tools = runners({
     async lighthouse(url) {
