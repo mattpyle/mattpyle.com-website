@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultRunners, type AuditEngine } from '../../src/lib/agent-audit/deep.js';
+import { defaultRunners, lighthouseLoadWait, type AuditEngine } from '../../src/lib/agent-audit/deep.js';
 import { AUDIT_USER_AGENT } from '../../src/lib/agent-audit/safe-fetch.js';
 import type { VettingProxy } from '../../src/lib/agent-audit/vetting-proxy.js';
 
@@ -60,4 +60,25 @@ test('the axe runner hands the proxy options to the launcher with the identity',
   assert.equal(calls.axe.length, 1);
   assert.deepEqual(calls.axe[0].opts.chromeOptions, PROXY.chromeOptions);
   assert.equal(calls.axe[0].opts.userAgent, AUDIT_USER_AGENT);
+});
+
+test('the Lighthouse runner caps the load wait below the time left', async () => {
+  // [time left, load wait the engine must receive], with the 15 s gather margin.
+  const cases: Array<[number, number]> = [
+    [86_000, 45_000],
+    [60_000, 45_000],
+    [30_000, 15_000],
+    [20_000, 10_000],
+    [16_000, 8_000],
+  ];
+  for (const [left, wait] of cases) {
+    const { engine, calls } = fakeEngine();
+    await defaultRunners(async () => engine).lighthouse('https://example.com/', left, PROXY);
+    assert.equal(calls.lighthouse.at(-1)?.opts.flags?.maxWaitForLoad, wait, `left ${left}`);
+    assert.equal(lighthouseLoadWait(left), wait);
+  }
+});
+
+test('the load wait is never above the time left', () => {
+  for (const left of [1, 500, 5_000, 15_000, 90_000]) assert.ok(lighthouseLoadWait(left) <= left, `left ${left}`);
 });

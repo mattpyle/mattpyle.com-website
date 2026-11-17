@@ -86,6 +86,8 @@ export function axeFindings(violations: AxeViolation[], file: string, url: strin
 export interface LighthouseLike {
   /** The version string Lighthouse stamps on its own result; quoted as evidence. */
   lighthouseVersion?: string;
+  /** Lighthouse's own warnings for the run, such as the load-timeout one. */
+  runWarnings?: string[];
   categories?: Record<
     string,
     { title?: string; score?: number | null; auditRefs?: Array<{ id: string; weight?: number }> }
