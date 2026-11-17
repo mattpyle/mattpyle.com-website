@@ -114,3 +114,21 @@ test('a sample of zero assembles clean', async () => {
   const audit = await assembleDeepAudit(input());
   assert.deepEqual(audit.integrity, { status: 'clean' });
 });
+
+test('the assembled notes carry each rendered page\'s time and attempt', async () => {
+  const urls = ['https://example.test/', 'https://example.test/features'];
+  const audit = await assembleDeepAudit(
+    input({
+      sample: urls,
+      available: 2,
+      pages: [
+        { ...renderedPage(urls[0]), renderMs: 31_000, attempt: 1 },
+        { ...renderedPage(urls[1]), renderMs: 58_000, attempt: 2 },
+      ],
+    }),
+  );
+  assert.ok(
+    audit.notes.includes('Deep tier: rendered 2 of 2 sampled page(s) — /: 31 s, /features: 58 s (attempt 2).'),
+    audit.notes.join('\n'),
+  );
+});

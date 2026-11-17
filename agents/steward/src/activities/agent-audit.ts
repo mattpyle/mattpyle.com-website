@@ -231,6 +231,7 @@ export async function auditRenderedPage(input: RenderPageInput): Promise<Rendere
     try {
       const outcome = await renderPage(input.url, input.timeoutMs, proxy, defaultRunners());
       outcome.blocked = blockedFrom(proxy);
+      outcome.attempt = Context.current().info.attempt;
       if (producedNothing(outcome) && !outcome.timedOut) {
         throw ApplicationFailure.create({
           message:
@@ -303,7 +304,7 @@ export async function assembleDeepAudit(input: AssembleDeepAuditInput): Promise<
     ...fast.notes,
     ...(cap ? [cap] : []),
     ...input.progressNotes,
-    ...coverageNotes({ sample: input.sample, rendered: pages.length, skipped }),
+    ...coverageNotes({ sample: input.sample, rendered: pages.length, skipped, pages }),
     ...blockedNotes(mergeBlocked(pages)),
   ];
 

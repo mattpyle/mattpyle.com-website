@@ -4,11 +4,13 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { runAudit, samplePages } from '../../src/lib/agent-audit/checks.js';
 import {
+  renderPage,
   reportableViolations,
   runDeepChecks,
   type DeepContext,
   type DeepRunners,
 } from '../../src/lib/agent-audit/deep.js';
+import { coverageNotes, type RenderedPageOutcome } from '../../src/lib/agent-audit/deep-assemble.js';
 import { renderMarkdownSummary } from '../../src/lib/agent-audit/render.js';
 import { DEFAULT_POLICY } from '../../src/lib/agent-audit/safe-fetch.js';
 import type { VettingProxy } from '../../src/lib/agent-audit/vetting-proxy.js';
@@ -598,4 +600,91 @@ test('every rendered-experience check declares a decision class, whatever happen
     maxPages: 2,
   });
   assert.deepEqual(classes(dead.checks), classes(measured.checks));
+});
+
+/** The coverage note's per-page times. The sampler's URLs, as `renderPage` and the activity record them. */
+const COVERAGE_SAMPLE = ['https://example.test/', 'https://example.test/features', 'https://example.test/pricing'];
+
+function timed(url: string, renderMs?: number, attempt?: number): RenderedPageOutcome {
+  return {
+    url,
+    scores: null,
+    lighthouseVersion: null,
+    lighthouseError: null,
+    violations: [],
+    axeError: null,
+    timedOut: false,
+    blocked: { listed: [], total: 0 },
+    ...(renderMs === undefined ? {} : { renderMs }),
+    ...(attempt === undefined ? {} : { attempt }),
+  };
+}
+
+test('the coverage note gives each page its render time in whole seconds', () => {
+  const pages = [
+    timed(COVERAGE_SAMPLE[0], 31_200, 1),
+    timed(COVERAGE_SAMPLE[1], 58_400),
+    timed(COVERAGE_SAMPLE[2], 21_600, 1),
+  ];
+  assert.deepEqual(coverageNotes({ sample: COVERAGE_SAMPLE, rendered: 3, skipped: [], pages }), [
+    'Deep tier: rendered 3 of 3 sampled page(s) — /: 31 s, /features: 58 s, /pricing: 22 s.',
+  ]);
+});
+
+test('the coverage note shows the attempt only when it is above 1', () => {
+  const pages = [
+    timed(COVERAGE_SAMPLE[0], 31_000, 1),
+    timed(COVERAGE_SAMPLE[1], 58_000, 2),
+    timed(COVERAGE_SAMPLE[2], 22_000),
+  ];
+  assert.deepEqual(coverageNotes({ sample: COVERAGE_SAMPLE, rendered: 3, skipped: [], pages }), [
+    'Deep tier: rendered 3 of 3 sampled page(s) — /: 31 s, /features: 58 s (attempt 2), /pricing: 22 s.',
+  ]);
+});
+
+test('an outcome with neither field, or no outcome at all, shows its path alone', () => {
+  const old = COVERAGE_SAMPLE.map((u) => timed(u));
+  const expected = 'Deep tier: rendered 3 of 3 sampled page(s) — /, /features, /pricing.';
+  assert.deepEqual(coverageNotes({ sample: COVERAGE_SAMPLE, rendered: 3, skipped: [], pages: old }), [expected]);
+  assert.deepEqual(coverageNotes({ sample: COVERAGE_SAMPLE, rendered: 3, skipped: [] }), [expected]);
+  // A sampled URL with no outcome sits beside timed ones.
+  assert.deepEqual(
+    coverageNotes({
+      sample: COVERAGE_SAMPLE,
+      rendered: 2,
+      skipped: [{ url: COVERAGE_SAMPLE[2], reason: 'robots', robots: true }],
+      pages: [timed(COVERAGE_SAMPLE[0], 31_000), timed(COVERAGE_SAMPLE[1], 58_000, 2)],
+    })[0],
+    'Deep tier: rendered 2 of 3 sampled page(s) — /: 31 s, /features: 58 s (attempt 2), /pricing.',
+  );
+});
+
+test('the coverage lookup matches the full URL, so a different spelling drops the time', () => {
+  // A trailing slash or another origin on the outcome is a different key. This
+  // pins that the match is exact, so a drift between the sampler and the
+  // recorded `url` fails here instead of silently losing the times.
+  const slashed = timed('https://example.test/features/', 58_000);
+  const otherOrigin = timed('https://www.example.test/pricing', 22_000);
+  assert.deepEqual(
+    coverageNotes({ sample: COVERAGE_SAMPLE, rendered: 2, skipped: [], pages: [slashed, otherOrigin] })[0],
+    'Deep tier: rendered 2 of 3 sampled page(s) — /, /features, /pricing.',
+  );
+});
+
+test('renderPage records the wall time of the page on the outcome', async () => {
+  let t = 1_000;
+  const now = () => t;
+  const runners = {
+    axe: async () => {
+      t += 12_400;
+      return [];
+    },
+    lighthouse: async () => {
+      t += 20_000;
+      return {} as never;
+    },
+  } as unknown as DeepRunners;
+  const outcome = await renderPage('https://example.test/', 60_000, {} as VettingProxy, runners, now);
+  assert.equal(outcome.renderMs, 32_400);
+  assert.equal(outcome.attempt, undefined);
 });
