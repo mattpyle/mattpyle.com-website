@@ -1,7 +1,7 @@
 ---
 title: How to implement WebMCP on a website
 date: 2026-09-03
-updated: 2026-10-31
+updated: 2026-11-17
 tags:
   - agents
   - tech
@@ -48,10 +48,10 @@ First, register your domain in the [Chrome origin trial](https://developer.chrom
 These tokens are public by design and bound to a domain. This site's token, when decoded to JSON, shows:
 
 ```json
-{"origin":"https://www.mattpyle.com:443","feature":"WebMCP","expiry":1794873600}
+{"origin":"https://www.mattpyle.com:443","feature":"WebMCP","expiry":1806364800}
 ```
 
-*Note: All tokens are set to expire at 2026-11-17 00:00 UTC as it's the end date of the [Chrome origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241).*
+*Note: All tokens are set to expire at 2027-03-30 00:00 UTC as it's the end date of the [Chrome origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241).*
 
 ## Register your first WebMCP tool
 
@@ -206,7 +206,7 @@ The Site Tools feature launch has put significant visibility and momentum behind
 
 ### WebMCP origin trial tokens expire
 
-Every token for this trial expires on 2026-11-17. That is the token's deadline, not the feature's. Chrome may ship WebMCP to everyone, extend the trial with a renewal, or end it. If it is extended, you get an email and must deploy a new token, because Chrome ignores expired tokens and the tools stop registering without an error. Put the date in your calendar.
+Every token for this trial expires on 2027-03-30. That is the token's deadline, not the feature's. Chrome may ship WebMCP to everyone, extend the trial with a renewal, or end it. If it is extended, you get an email and must deploy a new token, because Chrome ignores expired tokens and the tools stop registering without an error. Put the date in your calendar.
 
 ### WebMCP tools only reach agents inside a browser
 

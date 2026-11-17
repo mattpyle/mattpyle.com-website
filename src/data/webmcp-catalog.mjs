@@ -37,7 +37,7 @@ export const WEBMCP_VERIFIED = Object.freeze({ iso: '2026-08-02', chrome: '150.0
  * tools silently stop registering. Matches the token comment in src/layouts/Layout.astro; keep
  * the two in sync if the token is renewed.
  */
-export const ORIGIN_TRIAL_EXPIRY = '2026-11-17';
+export const ORIGIN_TRIAL_EXPIRY = '2027-03-30';
 
 /**
  * Tools this site declares on one page, in markup, rather than registering site-wide in script.
