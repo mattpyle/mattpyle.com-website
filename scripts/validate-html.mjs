@@ -73,7 +73,7 @@ const EXCEPTIONS = [
     // alternative — Chrome's `Origin-Trial:` response header — would have to be set twice, in
     // vercel.json for the prerendered pages and in Astro for the on-demand render, which is
     // exactly the split that made the CSP a documented trap in this repo. Goes away when the
-    // trial expires (2026-11-17, ORIGIN_TRIAL_EXPIRY in src/data/webmcp-catalog.mjs) and the
+    // trial expires (2027-03-30, ORIGIN_TRIAL_EXPIRY in src/data/webmcp-catalog.mjs) and the
     // `<meta>` is deleted from src/layouts/Layout.astro.
     matches: (m) => m.message.includes('Bad value “origin-trial” for attribute “http-equiv”'),
     why: 'the WebMCP origin trial token, which Chrome only accepts in this shape',
