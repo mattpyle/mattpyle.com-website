@@ -338,6 +338,29 @@ async function phase<T>(handle: WorkflowHandle, what: string, ms: number, body: 
   }
 }
 
+/**
+ * Waits until the server holds an Update that no worker has taken (STW-627).
+ * Call it only while the run has no workflow worker and no workflow task of
+ * its own: the server then schedules a workflow task for the Update and keeps
+ * it out of the history until a worker completes it, so `describe` is the one
+ * place it shows.
+ *
+ * Why not a sleep: `requestRetest` calls `describe` before it sends the
+ * Update, so on a slow runner a fixed 500 ms ended first, and the merge
+ * reached the server before the Update. Probe: with the send delayed 1.5 s,
+ * the sleep failed 2 runs of 2 and this wait passed 10 of 10; `describe`
+ * showed no pending task before the send and a SCHEDULED one after, each time.
+ */
+async function updateHeld(handle: WorkflowHandle, limitMs = 10_000): Promise<void> {
+  const deadline = Date.now() + limitMs;
+  while (Date.now() < deadline) {
+    const described = await beforeDeadline(handle.describe(), deadline);
+    if (described !== STALLED && described.raw.pendingWorkflowTask?.state === TaskState.PENDING_WORKFLOW_TASK_STATE_SCHEDULED) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`the server did not hold the Update within ${limitMs / 1000} s\n${await stallReport(handle)}`);
+}
+
 const merging = (n: number) => (s: FindingState) => s.step === 'waiting-merge' && s.previewTests === n;
 
 /** Runs `body` against a started, approved and fixed run, then terminates it. */
@@ -512,7 +535,7 @@ test('a merge and a retest in the same workflow task: the merge wins', async () 
           // No workflow worker now. The Update waits for one; the merge lands meanwhile.
           const update = requestRetest(client, SITE, DEFECT_KEY, '2026-11-10T19:00:00Z');
           update.catch(() => undefined);
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          await updateHeld(handle);
           gh.pulls[0].merged = true;
           gh.pulls[0].mergeSha = 'merge-501';
           await new Promise((resolve) => setTimeout(resolve, 500));
