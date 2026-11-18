@@ -63,13 +63,16 @@ test('the axe runner hands the proxy options to the launcher with the identity',
 });
 
 test('the Lighthouse runner caps the load wait below the time left', async () => {
-  // [time left, load wait the engine must receive], with the 15 s gather margin.
+  // [time left, load wait the engine must receive], with the 30 s gather margin.
+  // Only the 70 s case has the margin term set the wait: above 75 s the 45 s
+  // cap does, and from 60 s down `leftMs / 2` does.
   const cases: Array<[number, number]> = [
-    [86_000, 45_000],
-    [60_000, 45_000],
-    [30_000, 15_000],
+    [90_000, 45_000],
+    [75_000, 45_000],
+    [70_000, 40_000],
+    [60_000, 30_000],
+    [40_000, 20_000],
     [20_000, 10_000],
-    [16_000, 8_000],
   ];
   for (const [left, wait] of cases) {
     const { engine, calls } = fakeEngine();

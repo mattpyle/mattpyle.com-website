@@ -133,11 +133,17 @@ export interface DeepContext {
 export const LIGHTHOUSE_LOAD_WAIT_MS = 45_000;
 
 /**
- * Time Lighthouse needs after the load wait to gather and score. Measured at
- * about 9 s on a page that never settles (a 45 s wait ran 53.7 s, an 86 s wait
- * 95.3 s); 15 s leaves room for the worker's CPU limit and the audit proxy.
+ * Time kept back after the load wait for Lighthouse to gather and score. Four
+ * production pages on railway.com ran out the 45 s wait and took 71 s, 64 s,
+ * 64 s and 69 s in all: 26 s, 19 s, 19 s and 24 s beyond the wait.
+ *
+ * 30 s errs on the safe side, for two reasons. The time beyond the wait
+ * includes axe, which runs before Lighthouse, so 26 s overstates what
+ * Lighthouse alone needs. And the two errors are not equal: too large a margin
+ * only shortens the wait in a short slice, and the page still scores with a
+ * warning; too small a margin loses the score.
  */
-export const LIGHTHOUSE_GATHER_MARGIN_MS = 15_000;
+export const LIGHTHOUSE_GATHER_MARGIN_MS = 30_000;
 
 /**
  * The load wait for a run that has `leftMs` before its deadline: Lighthouse's
