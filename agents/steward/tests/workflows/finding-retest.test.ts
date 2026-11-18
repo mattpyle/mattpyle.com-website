@@ -361,6 +361,29 @@ async function updateHeld(handle: WorkflowHandle, limitMs = 10_000): Promise<voi
   throw new Error(`the server did not hold the Update within ${limitMs / 1000} s\n${await stallReport(handle)}`);
 }
 
+/**
+ * Waits until the history holds the completion of the last merge poll, so the
+ * server has the merge before the next workflow worker starts (STW-627).
+ *
+ * Why not a sleep: a worker that starts before the poll's completion arrives
+ * accepts the Update alone, and a second preview test runs. Probe: with the
+ * mock poll's answer delayed 1.5 s, a 500 ms sleep failed 2 runs of 2 on
+ * "no second test ran" and this wait passed 5 of 5.
+ */
+async function mergeHeld(handle: WorkflowHandle, limitMs = 10_000): Promise<void> {
+  const deadline = Date.now() + limitMs;
+  while (Date.now() < deadline) {
+    const history = await beforeDeadline(handle.fetchHistory(), deadline);
+    if (history !== STALLED) {
+      const events = history.events ?? [];
+      const poll = events.findLast((e) => e.activityTaskScheduledEventAttributes?.activityType?.name === 'awaitFixPrMerge');
+      if (poll && events.some((e) => String(e.activityTaskCompletedEventAttributes?.scheduledEventId) === String(poll.eventId))) return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`the server did not hold the merge poll's result within ${limitMs / 1000} s\n${await stallReport(handle)}`);
+}
+
 const merging = (n: number) => (s: FindingState) => s.step === 'waiting-merge' && s.previewTests === n;
 
 /** Runs `body` against a started, approved and fixed run, then terminates it. */
@@ -538,7 +561,7 @@ test('a merge and a retest in the same workflow task: the merge wins', async () 
           await updateHeld(handle);
           gh.pulls[0].merged = true;
           gh.pulls[0].mergeSha = 'merge-501';
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          await mergeHeld(handle);
           const second = await workflowWorker();
           await second.runUntil(
             phase(
