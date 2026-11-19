@@ -21,6 +21,12 @@
  *   a `sleep('1 second')` before the `consultantSiteFacts` call made this fixture alone fail with
  *   `TMPRL1100`; removing it made it pass again.
  *
+ * - `scripted-fix-log.json` is a session on the code that added the `fix_log` tool, recorded on
+ *   2026-11-19 the same way: four turns, with `ask_user`, `audit_site`, `site_facts` and `fix_log`.
+ *   The three older fixtures replay clean across the change: the new tool schedules an activity
+ *   only when the model calls it. Probe: a `sleep('1 second')` before the `consultantFixLog` call
+ *   made this fixture alone fail with `TMPRL1100`; removing it made it pass again.
+ *
  * Probe: a `sleep('1 second')` added at the top of the `ask` handler made this test fail with a
  * nondeterminism error; removing it made it pass again.
  */

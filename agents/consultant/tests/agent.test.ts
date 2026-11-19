@@ -70,6 +70,41 @@ test('a question about mattpyle.com is answered from the site-facts tool', async
   assert.ok(h.script.seen[1]!.includes('refused'));
 });
 
+test('a failed check is answered from the fix log, with an address the tool built', async () => {
+  h.script.set([
+    { tool: 'audit_site', input: { url: 'example.com' } },
+    { tool: 'fix_log', input: { checks: ['llms-txt', 'robots-txt'] } },
+    { text: 'Publish llms.txt. The fix log has no matching entry for robots-txt.' },
+  ]);
+  const s = await open('fixlog');
+  const turn = await s.ask('Audit example.com', caller());
+  assert.match(turn.reply, /no matching entry/);
+  assert.deepEqual(h.site.calls, ['fast https://example.com', 'fixlog']);
+  const third = h.script.seen[2]!;
+  assert.ok(third.includes('https://www.mattpyle.com/fix-log/llms-txt-listed-no-rss-feed/'), 'the entry reached the model');
+  assert.ok(!third.includes('evil.example') && !third.includes(MARKER), 'no other link on the page reached the model');
+  assert.ok(/robots-txt[^}]*matched[^}]*0/.test(third.replaceAll('\\', '')), 'a check with no entry says so');
+  assert.equal((await s.session()).toolCallsThisTurn, 2, 'the fix log counts as a tool call');
+});
+
+test('a fix log that cannot be read is unavailable, and the turn goes on', async () => {
+  h.site.fixes = new Error('connection reset');
+  h.script.set([{ tool: 'fix_log', input: { checks: ['llms-txt'] } }, { text: 'The fix log is unavailable.' }]);
+  const s = await open('fixlogdown');
+  const turn = await s.ask('What fixed llms-txt on your site?', caller());
+  assert.equal(turn.reply, 'The fix log is unavailable.');
+  assert.deepEqual(h.site.calls, ['fixlog', 'fixlog'], 'two attempts, then the turn goes on');
+  assert.ok(h.script.seen[1]!.includes('fix_log_unavailable'));
+
+  h.site.fixes = { ok: true, data: '<html>Not the fix log</html>' };
+  h.site.calls = [];
+  h.script.set([{ tool: 'fix_log', input: { checks: ['llms-txt'] } }, { text: 'Still unavailable.' }]);
+  await s.ask('Try again', caller());
+  assert.deepEqual(h.site.calls, ['fixlog'], 'a page that is not the fix log is not retried');
+  assert.ok(h.script.seen[1]!.includes('fix_log_unavailable'));
+  assert.equal((await s.session()).ended, null);
+});
+
 test('every turn\'s answer is kept, oldest first', async () => {
   h.script.set([{ text: 'One.' }, { text: 'Two.' }]);
   const s = await open('replies');

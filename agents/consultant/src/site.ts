@@ -3,8 +3,9 @@
  * `get_audit` tools any outside agent calls, over HTTPS, with no credential. The audits draw on the
  * endpoint's public per-caller rate limit, keyed on this worker's address.
  *
- * `siteFacts` is the one call that is not an MCP tool: a plain GET of the site's public content
- * index on the same origin, also with no credential.
+ * `siteFacts` and `fixLog` are the two calls that are not MCP tools: each is a plain GET of a page
+ * the site publishes on the same origin, also with no credential. `fixLog` reads at most
+ * `FIX_LOG_MAX_BYTES` and gives up after ten seconds.
  *
  * The client says what it is: `clientInfo.name` is `audit-consultant`, which the site's activity
  * page shows, and the User-Agent names the agent and points at the site.
@@ -22,6 +23,31 @@ export const USER_AGENT = `${CLIENT_NAME}/${CLIENT_VERSION} (+https://www.mattpy
 /** The site's public content index, on the endpoint's own origin. The WebMCP tools read the same file. */
 export const SITE_FACTS_PATH = '/webmcp/index.json';
 const SITE_FACTS_TIMEOUT_MS = 10_000;
+
+/** The site's published fix log as markdown, on the endpoint's own origin. */
+export const FIX_LOG_PATH = '/fix-log.md';
+const FIX_LOG_TIMEOUT_MS = 10_000;
+/** The most bytes of the fix log this client reads. The page is about 20 KB with 78 entries. */
+export const FIX_LOG_MAX_BYTES = 512 * 1024;
+
+/** The body as text, or null once it passes `maxBytes`. */
+async function textUpTo(response: Response, maxBytes: number): Promise<string | null> {
+  if (!response.body) return '';
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = response.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 /** The endpoint's own code for a refusal by its rate limiter. */
 const RATE_LIMITED_CODE = -32000;
@@ -72,6 +98,23 @@ export function mcpSiteClient(endpoint: URL, fetchImpl?: typeof fetch): SiteClie
         return { ok: true, data: await response.json() };
       } catch {
         return { ok: false, reason: 'error' };
+      }
+    },
+    async fixLog() {
+      try {
+        const response = await (fetchImpl ?? fetch)(new URL(FIX_LOG_PATH, endpoint), {
+          headers: { 'User-Agent': USER_AGENT, Accept: 'text/markdown' },
+          signal: AbortSignal.timeout(FIX_LOG_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined);
+          return { ok: false, reason: 'error' };
+        }
+        const text = await textUpTo(response, FIX_LOG_MAX_BYTES);
+        return text === null ? { ok: false, reason: 'error' } : { ok: true, data: text };
+      } catch {
+        // A transport failure or a timeout: retryable, and stated without the underlying message.
+        throw new Error('could not reach the site for its fix log');
       }
     },
   };

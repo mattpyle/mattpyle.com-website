@@ -151,6 +151,74 @@ export const SiteFactsInput = z.object({
 });
 export type SiteFactsInput = z.infer<typeof SiteFactsInput>;
 
+/**
+ * The site's published fix log, searched by audit check. The text is the site owner's own published
+ * copy, read from `/fix-log.md`. `src/fix-log.ts` is the only producer: it copies a title and a
+ * lead, cuts both, and builds each address itself from `FIX_LOG_ORIGIN` and a slug that fits
+ * `FIX_LOG_SLUG`.
+ */
+export const FIX_LOG_ORIGIN = 'https://www.mattpyle.com';
+/** A fix-log entry's URL segment, as the site's content schema defines it, with a length bound. */
+export const FIX_LOG_SLUG = /^(?=.{1,160}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** The most checks one call searches for. */
+export const FIX_LOG_MAX_CHECKS = 5;
+/** The most entries one check returns. `matched` says how many the log holds. */
+export const FIX_LOG_MAX_ENTRIES = 3;
+/** The longest title or lead, in characters. Longer text is cut. */
+export const FIX_LOG_MAX_TEXT = 400;
+
+const fixText = z.string().max(FIX_LOG_MAX_TEXT);
+
+export const FixLogView = z.object({
+  status: z.literal('complete'),
+  /** How many entries the fix log holds. */
+  total: count,
+  results: z
+    .array(
+      z.object({
+        check: z.string().regex(CHECK_ID),
+        /** How many entries matched this check. `entries` holds the closest. */
+        matched: count,
+        entries: z
+          .array(
+            z.object({
+              title: fixText.min(1),
+              url: z.string().max(200).regex(/^https:\/\/www\.mattpyle\.com\/fix-log\/[a-z0-9-]+\/$/),
+              lead: fixText,
+              /**
+               * named: the entry's title or lead names the thing the check tests.
+               * related: it is about the same area, and no closer.
+               */
+              match: z.enum(['named', 'related']),
+            }),
+          )
+          .max(FIX_LOG_MAX_ENTRIES),
+      }),
+    )
+    .max(FIX_LOG_MAX_CHECKS),
+});
+export type FixLogView = z.infer<typeof FixLogView>;
+
+/** The fix log could not be read, or was not the fix log. The turn goes on without it. */
+export const FixLogUnavailable = z.object({
+  status: z.literal('unavailable'),
+  reason: z.literal('fix_log_unavailable'),
+});
+export type FixLogUnavailable = z.infer<typeof FixLogUnavailable>;
+export const FIX_LOG_UNAVAILABLE: FixLogUnavailable = { status: 'unavailable', reason: 'fix_log_unavailable' };
+
+export const FixLogResult = z.union([FixLogView, FixLogUnavailable, Refusal]);
+export type FixLogResult = z.infer<typeof FixLogResult>;
+
+export const FixLogInput = z.object({
+  checks: z
+    .array(z.string().min(1).max(64))
+    .min(1)
+    .max(FIX_LOG_MAX_CHECKS)
+    .describe('The ids of failed checks, exactly as an audit result gives them, such as llms-txt. At most five.'),
+});
+export type FixLogInput = z.infer<typeof FixLogInput>;
+
 export function refused(reason: Refusal['reason']): Refusal {
   return { status: 'refused', reason };
 }

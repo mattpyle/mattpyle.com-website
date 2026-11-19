@@ -1,7 +1,7 @@
 /**
  * Record one session with the scripted model and the stub site, and write its history as a replay
  * fixture. No model call and no site call. The session uses every tool that needs no approval,
- * `site_facts` included, over three turns.
+ * `site_facts` and `fix_log` included, over four turns.
  *
  *   node --import tsx --import ./src/sdk-compat.ts scripts/record-scripted.ts tests/fixtures/histories/<name>.json
  */
@@ -29,6 +29,11 @@ try {
   await session.ask('What has Matt written lately?', caller());
   h.script.set([{ text: 'Then add agents.md.' }]);
   await session.ask('What next?', caller());
+  h.script.set([
+    { tool: 'fix_log', input: { checks: ['llms-txt', 'robots-txt'] } },
+    { text: 'mattpyle.com fixed an llms.txt gap. The fix log has no matching entry for robots-txt.' },
+  ]);
+  await session.ask('Has your own site fixed these?', caller());
   const history = await session.handle.fetchHistory();
   fs.writeFileSync(out, historyToJSON(history));
   console.log(`${history.events?.length ?? 0} events written to ${out}`);

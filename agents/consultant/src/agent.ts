@@ -20,7 +20,7 @@
  *   signal itself.
  */
 import { z } from 'zod';
-import { ApplicationFailure, defineQuery, proxyActivities, proxyLocalActivities, setHandler, sleep, workflowInfo } from '@temporalio/workflow';
+import { ApplicationFailure, defineQuery, isCancellation, proxyActivities, proxyLocalActivities, setHandler, sleep, workflowInfo } from '@temporalio/workflow';
 import {
   TextMessage,
   TextReply,
@@ -43,7 +43,17 @@ import {
 } from './caps.js';
 import { AGENT_NAME, MODEL, SESSION_QUERY } from './names.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
-import { SiteFactsInput, SiteFactsResult, ToolResult, UrlInput, refused, type Refusal } from './tools.js';
+import {
+  FIX_LOG_UNAVAILABLE,
+  FixLogInput,
+  FixLogResult,
+  SiteFactsInput,
+  SiteFactsResult,
+  ToolResult,
+  UrlInput,
+  refused,
+  type Refusal,
+} from './tools.js';
 
 export { AGENT_NAME, MODEL, SESSION_QUERY };
 export const sessionQuery = defineQuery<Session>(SESSION_QUERY);
@@ -58,6 +68,11 @@ export const MODEL_ACTIVITY_OPTIONS = { startToCloseTimeout: '2 minutes', heartb
 const settings = proxyLocalActivities<ConsultantActivities>({ startToCloseTimeout: '10 seconds' });
 const fast = proxyActivities<ConsultantActivities>({
   startToCloseTimeout: '90 seconds',
+  retry: { maximumAttempts: 2 },
+});
+/** The fix log is a read of one published page: two attempts, each well inside the turn. */
+const fixLogRead = proxyActivities<ConsultantActivities>({
+  startToCloseTimeout: '30 seconds',
   retry: { maximumAttempts: 2 },
 });
 const deepStart = proxyActivities<ConsultantActivities>({
@@ -169,6 +184,28 @@ export const AuditConsultant = defineAgent({
       execute: async ({ topic }) => admitToolCall() ?? fast.consultantSiteFacts({ topic }),
     });
 
+    const fixLog = tool({
+      name: 'fix_log',
+      description:
+        "Search mattpyle.com's published fix log for what fixed a failed check on that site. Give " +
+        'it the ids of failed checks. For each it returns up to three entries: a title, an address ' +
+        'and a one-line lead, marked named or related. A check with no entry returns an empty list.',
+      inputSchema: FixLogInput,
+      outputSchema: FixLogResult,
+      inherentlySafe: true,
+      execute: async ({ checks }) => {
+        const gate = admitToolCall();
+        if (gate) return gate;
+        try {
+          return await fixLogRead.consultantFixLog({ checks });
+        } catch (err) {
+          // The read failed on every attempt. The turn goes on without the fix log.
+          if (isCancellation(err)) throw err;
+          return FIX_LOG_UNAVAILABLE;
+        }
+      },
+    });
+
     const askUser = tool({
       name: 'ask_user',
       description: 'Ask the caller one question and wait for the answer.',
@@ -181,7 +218,7 @@ export const AuditConsultant = defineAgent({
       model: MODEL,
       activityOptions: MODEL_ACTIVITY_OPTIONS,
       systemPrompt: SYSTEM_PROMPT,
-      tools: [auditSite, deepAudit, siteFacts, askUser].map((t) => asStrandsTool(runner, t)),
+      tools: [auditSite, deepAudit, siteFacts, fixLog, askUser].map((t) => asStrandsTool(runner, t)),
       printer: false,
     });
 

@@ -13,8 +13,9 @@ The model decides the path: whether to audit, which tier, and when to ask the ca
 | The system prompt | `src/system-prompt.ts` |
 | The agent, the tools and the caps logic (workflow code) | `src/agent.ts` |
 | What a tool hands the model | `src/tools.ts`, `src/project.ts` |
+| The fix-log search: the check table, the parser and the matcher | `src/fix-log.ts` |
 | The activities: audits, the deep-audit start and wait, the close | `src/activities.ts` |
-| The calls to the public MCP endpoint and the site's content index | `src/site.ts` |
+| The calls to the public MCP endpoint, the site's content index and its fix log | `src/site.ts` |
 | The cap values | `src/caps.ts` |
 | The environment the worker reads | `src/config.ts` |
 | The worker | `src/worker.ts` |
@@ -22,10 +23,15 @@ The model decides the path: whether to audit, which tier, and when to ask the ca
 1. The audit tools reach the site only through `https://www.mattpyle.com/mcp`, the same `audit_site`, `deep_audit` and `get_audit` tools any agent calls. The client names itself `audit-consultant`.
 2. An audit tool hands the model check ids, statuses, severities, categories and counts. No string from the audited site reaches the model: `src/project.ts` copies by allow-list and drops the rest.
 3. `site_facts` answers questions about mattpyle.com itself. It reads `https://www.mattpyle.com/webmcp/index.json`, the public content index the WebMCP tools read, with a plain GET and no credential, on the MCP endpoint's origin. It returns one topic: the overview, or the newest writing, projects or changelog entries. The text is the site's own published copy; `src/project.ts` copies named fields and caps every length and list. The index lists no agent surfaces, so the tool cannot answer which ones the site has.
-4. `deep_audit` needs the caller's approval. The harness parks the call until the caller answers the `tool_approval` Update. Starting a deep audit is safe to retry: the start records the audit's id in a heartbeat, and a retried attempt reuses it.
-5. `consultant_session` also returns the latest answer as `lastReply` and every turn's answer as `replies`, so a client that does not stream reads them with a Query, not a stream poll. The A2A adapter on `/a2a` reads them this way: each turn is an A2A task, and an earlier turn's task still answers. The turn cap bounds `replies`.
-6. A turn that is still open when the caller closes the session keeps no answer. The harness denies its pending question or approval, the model may say one more thing, and that text is not recorded, so the turn's task reads `canceled`.
-7. A cap ends the session. Later messages get a fixed reply, `consultant_session` reports the reason, and the harness closes the agent after a grace period.
+4. `fix_log` says what fixed a failed check on mattpyle.com itself. It reads `https://www.mattpyle.com/fix-log.md`, the published fix log, with a plain GET and no credential, and takes up to five check ids.
+   - The log carries no check id, so `CHECK_TABLE` in `src/fix-log.ts` says which phrase in an entry's title or lead answers for which check. To cover a new check, add a row there.
+   - Each check returns at most three entries: a title, a lead and an address. An entry is `named` when its title names what the check tests, and `related` otherwise. A check with nothing in the log returns an empty list, and the prompt has the model say so.
+   - The address is built here from `https://www.mattpyle.com/fix-log/` and a slug that fits a strict pattern. No other link on the page reaches the model.
+   - The read stops at ten seconds or 512 KB and is tried twice. If it still fails, or the page is not the fix log, the model gets `fix_log_unavailable` and the turn goes on.
+5. `deep_audit` needs the caller's approval. The harness parks the call until the caller answers the `tool_approval` Update. Starting a deep audit is safe to retry: the start records the audit's id in a heartbeat, and a retried attempt reuses it.
+6. `consultant_session` also returns the latest answer as `lastReply` and every turn's answer as `replies`, so a client that does not stream reads them with a Query, not a stream poll. The A2A adapter on `/a2a` reads them this way: each turn is an A2A task, and an earlier turn's task still answers. The turn cap bounds `replies`.
+7. A turn that is still open when the caller closes the session keeps no answer. The harness denies its pending question or approval, the model may say one more thing, and that text is not recorded, so the turn's task reads `canceled`.
+8. A cap ends the session. Later messages get a fixed reply, `consultant_session` reports the reason, and the harness closes the agent after a grace period.
 
 ## Limits a reader must know
 

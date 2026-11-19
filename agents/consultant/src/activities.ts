@@ -4,8 +4,10 @@
  * Every site call goes through a `SiteClient`, which the worker builds on the public MCP endpoint
  * (src/site.ts) and the tests build on canned reports. What leaves an activity for the model is an
  * `AuditView` from `projectReport`, or a `Refusal` with an enum reason. No server text and no text
- * from an audited site. The one tool that hands the model prose is `consultantSiteFacts`: the site
+ * from an audited site. One of the two tools that hand the model prose is `consultantSiteFacts`: the site
  * owner's own published copy, from the site's public content index, cut to named fields.
+ * `consultantFixLog` is the other: titles and leads from the site's published fix log, with
+ * addresses `src/fix-log.ts` builds itself.
  *
  * The deep audit is two activities, because starting one spends a slot of a small daily limit:
  *
@@ -19,8 +21,18 @@
 import { Context, heartbeat, sleep } from '@temporalio/activity';
 import type { Client } from '@temporalio/client';
 import type { Caps } from './caps.js';
+import { parseFixLog, searchFixLog } from './fix-log.js';
 import { normaliseOrigin, projectReport, projectSiteFacts } from './project.js';
-import { refused, type Refusal, type SiteFactsInput, type SiteFactsResult, type ToolResult } from './tools.js';
+import {
+  FIX_LOG_UNAVAILABLE,
+  refused,
+  type FixLogInput,
+  type FixLogResult,
+  type Refusal,
+  type SiteFactsInput,
+  type SiteFactsResult,
+  type ToolResult,
+} from './tools.js';
 
 /** One call to the site's public endpoint. `data` is the tool's structured result. */
 export type SiteCall = { ok: true; data: unknown } | { ok: false; reason: 'rate_limited' | 'error' };
@@ -31,6 +43,8 @@ export interface SiteClient {
   readDeepAudit(workflowId: string, view: 'status' | 'report'): Promise<SiteCall>;
   /** The site's public content index. A read, with no credential and no rate limit of its own. */
   siteFacts(): Promise<SiteCall>;
+  /** The site's published fix log, as markdown text in `data`. A read, like `siteFacts`. */
+  fixLog(): Promise<SiteCall>;
 }
 
 export interface DeepAuditHandle {
@@ -70,6 +84,19 @@ export function createActivities({ site, caps, client, pollMs = 10_000 }: Activi
       const call = await site.siteFacts();
       if (!call.ok) return refused(call.reason);
       return projectSiteFacts(call.data, topic);
+    },
+
+    /**
+     * The fix-log entries for some audit checks. A read, so a retry costs one more GET. A page
+     * that answers but is not the fix log is `unavailable` at once; only a failed connection
+     * throws, for the retry policy, and the workflow turns the final failure into `unavailable`.
+     */
+    async consultantFixLog({ checks }: FixLogInput): Promise<FixLogResult> {
+      const call = await site.fixLog();
+      if (!call.ok) return FIX_LOG_UNAVAILABLE;
+      const entries = parseFixLog(call.data);
+      if (entries.length === 0) return FIX_LOG_UNAVAILABLE;
+      return searchFixLog(entries, checks);
     },
 
     async consultantStartDeepAudit({ url }: { url: string }): Promise<DeepAuditHandle | Refusal> {

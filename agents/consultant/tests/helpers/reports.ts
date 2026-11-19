@@ -136,6 +136,61 @@ export function cleanIndex() {
   };
 }
 
+/**
+ * A fix log in the shape `/fix-log.md` serves: a heading that links to the entry, then a lead that
+ * ends in the entry's type. Three lines are not entries a reader should get: a link to another
+ * host, a slug with a capital, and a heading with no lead.
+ */
+export function cleanFixLog(): string {
+  return [
+    '---',
+    'title: "Fix log"',
+    'canonical: https://www.mattpyle.com/fix-log/',
+    '---',
+    '',
+    '# Fix log',
+    '',
+    '6 fixes, latest 11 Nov 2026.',
+    '',
+    '11 Nov 2026',
+    '',
+    '### [agents.md named only GitHub and LinkedIn as ways to reach Matt](/fix-log/agents-md-named-only-github-and-linkedin/)',
+    '',
+    'An agent reading the file would send a person to GitHub or LinkedIn. agent readiness',
+    '',
+    '10 Nov 2026',
+    '',
+    '### [llms.txt listed no RSS feed for following the site](/fix-log/llms-txt-listed-no-rss-feed/)',
+    '',
+    "An agent asked to follow Matt's writing found no feed in the index. agent readiness",
+    '',
+    '### [The site skill said llms-full.txt held every published word](/fix-log/the-site-skill-said-llms-full-txt-held-every-word/)',
+    '',
+    `Drafts are left out. ${'x'.repeat(900)} content`,
+    '',
+    '### [The WebMCP index gave every project the same projects URL](/fix-log/the-webmcp-index-gave-every-project-the-same-url/)',
+    '',
+    'An agent citing a project could link only the top of a list. agent readiness',
+    '',
+    '### [Screen readers spoke the slash in every nav link](/fix-log/screen-readers-spoke-the-slash/)',
+    '',
+    'Each link was announced with a stray slash. accessibility',
+    '',
+    `### [llms.txt elsewhere ${MARKER}](https://evil.example/fix-log/llms-txt-elsewhere/)`,
+    '',
+    'A link to another host. content',
+    '',
+    '### [llms.txt with a bad slug](/fix-log/Bad_Slug/)',
+    '',
+    'A slug the pattern refuses. content',
+    '',
+    '### [The sitemap dated the Projects page before it existed](/fix-log/the-sitemap-dated-the-projects-page/)',
+    '',
+    '[newer](https://evil.example/next)',
+    '',
+  ].join('\n');
+}
+
 /** A stub site client: canned answers, and a log of every call it received. */
 export class StubSite implements SiteClient {
   calls: string[] = [];
@@ -145,6 +200,14 @@ export class StubSite implements SiteClient {
   statuses: SiteCall[] = [{ ok: true, data: { done: true, succeeded: true } }];
   report: SiteCall = { ok: true, data: { ...cleanReport(), browserPages: 3 } };
   facts: SiteCall = { ok: true, data: cleanIndex() };
+  /** The fix log's answer, or an error to throw, as a failed connection would. */
+  fixes: SiteCall | Error = { ok: true, data: cleanFixLog() };
+
+  async fixLog(): Promise<SiteCall> {
+    this.calls.push('fixlog');
+    if (this.fixes instanceof Error) throw this.fixes;
+    return this.fixes;
+  }
 
   async siteFacts(): Promise<SiteCall> {
     this.calls.push('facts');
