@@ -5,6 +5,9 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+// This file loads no `config.ts`, so it runs the credential guard itself. The child CLI then
+// inherits the guard's marker and keeps the stand-in keys in a run without the `--import`.
+import '../helpers/no-real-credentials.js';
 import { readOnlyKeyRefusal } from '../../src/lib/read-only-key-guard.js';
 
 const exec = promisify(execFile);

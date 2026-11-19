@@ -10,11 +10,10 @@ import { installationToken } from '../../src/lib/github.js';
  * committed fourteen fixture records to the real repository and opened a real
  * pull request.
  *
- * `helpers/no-real-credentials.ts` is the fix, loaded by `npm test` via
- * `--import`. This is what stops the fix from being silently removed — by an
- * edit to the `test` script, by a future runner that does not use it, or by
- * someone "cleaning up" an import that looks unused because nothing references
- * it by name.
+ * The fix is `guardTestCredentials` in `src/lib/test-credential-guard.ts`. `config.ts`
+ * runs it before it reads `.env`, and `helpers/no-real-credentials.ts` runs it from the
+ * `--import` in `npm test`. This file must pass with and without that `--import`: on
+ * 2026-11-06 a targeted run without it wrote a fixture record to the live repository.
  *
  * Deliberately asserting on the *observable behaviour* an un-faked activity
  * gets, not on the two `STEWARD_GITHUB_APP_*` variables directly. What matters is not that a
@@ -26,7 +25,7 @@ test('the suite runs with no real GitHub credential', async () => {
   await assert.rejects(
     () => installationToken(),
     /STEWARD_GITHUB_APP_ID and STEWARD_GITHUB_APP_PRIVATE_KEY are not set/,
-    'a real GitHub App credential is visible to the test suite — helpers/no-real-credentials.ts is not loaded',
+    'a real GitHub App credential is visible to the test suite: guardTestCredentials did not run before config.ts read .env',
   );
 });
 

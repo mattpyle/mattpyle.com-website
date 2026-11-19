@@ -1,6 +1,9 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+// The credential guard runs here, before this file sets `STEWARD_HEALTHCHECK_BASE`. It blanks
+// once, so the `config.ts` load below keeps the loopback value in a run without the `--import`.
+import '../helpers/no-real-credentials.js';
 import type { AssembleDeepAuditInput } from '../../src/activities/agent-audit.js';
 import type { AuditResult } from '../../src/lib/agent-audit/result.js';
 import type { RenderedPageOutcome } from '../../src/lib/agent-audit/deep-assemble.js';
