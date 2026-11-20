@@ -26,7 +26,7 @@
       - link "Matt Pyle":
         - /url: /about/
       - time: /\d+ [A-Z][a-z]{2} \d+/
-      - text: 8 min read updated
+      - text: /\d+ min read updated/
       - time: /\d+ [A-Z][a-z]{2} \d+/
       - group:
         - navigation "·":
