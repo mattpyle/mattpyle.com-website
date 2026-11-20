@@ -529,10 +529,12 @@ const { address, failure, report, byGroup } = Astro.props;
     transition: background-color 240ms ease;
   }
 
-  .audit-form button:hover,
-  .rerun button:hover {
-    background: var(--agents-hover);
-    border-color: var(--agents-hover);
+  @media (hover: hover) {
+    .audit-form button:hover,
+    .rerun button:hover {
+      background: var(--agents-hover);
+      border-color: var(--agents-hover);
+    }
   }
 
   /* The in-flight treatment, one step darker than the agents colour.
@@ -583,9 +585,11 @@ const { address, failure, report, byGroup } = Astro.props;
     transition: color 240ms ease, text-decoration-color 240ms ease;
   }
 
-  .form-note a:hover {
-    color: var(--agents-hover);
-    text-decoration-color: currentColor;
+  @media (hover: hover) {
+    .form-note a:hover {
+      color: var(--agents-hover);
+      text-decoration-color: currentColor;
+    }
   }
 
   /* ── Group grids: the check catalogue and the report's own rows ───────────── */
@@ -858,7 +862,9 @@ const { address, failure, report, byGroup } = Astro.props;
     cursor: pointer;
   }
 
-  .fix-evidence summary:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .fix-evidence summary:hover { color: var(--agents-hover); }
+  }
 
   .evidence {
     margin: 12px 0 0;

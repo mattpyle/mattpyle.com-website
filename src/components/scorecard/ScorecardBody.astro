@@ -324,10 +324,12 @@ const previousRuns = SCORECARD_HISTORY.map(run => ({
     transition: color 240ms ease, text-decoration-color 240ms ease;
   }
 
-  .crosslink a:hover,
-  .how-prose a:hover {
-    color: var(--agents-hover);
-    text-decoration-color: currentColor;
+  @media (hover: hover) {
+    .crosslink a:hover,
+    .how-prose a:hover {
+      color: var(--agents-hover);
+      text-decoration-color: currentColor;
+    }
   }
 
   /* ── Band 3: previous runs ──────────────────────────────────────────────── */
@@ -419,7 +421,9 @@ const previousRuns = SCORECARD_HISTORY.map(run => ({
     color: var(--agents);
   }
 
-  .as-data-link:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .as-data-link:hover { color: var(--agents-hover); }
+  }
 
   /* ── Responsive ─────────────────────────────────────────────────────────── */
   @media (max-width: 900px) {

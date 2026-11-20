@@ -259,11 +259,13 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
   [data-section="agents"]    { color: var(--agents); }
   [data-section="ink"]       { color: var(--ink); }
 
-  [data-section="writing"]:hover   { color: var(--writing-hover); }
-  [data-section="projects"]:hover  { color: var(--projects-hover); }
-  [data-section="changelog"]:hover { color: var(--changelog-hover); }
-  [data-section="agents"]:hover    { color: var(--agents-hover); }
-  [data-section="ink"]:hover       { color: var(--ink-4); }
+  @media (hover: hover) {
+    [data-section="writing"]:hover   { color: var(--writing-hover); }
+    [data-section="projects"]:hover  { color: var(--projects-hover); }
+    [data-section="changelog"]:hover { color: var(--changelog-hover); }
+    [data-section="agents"]:hover    { color: var(--agents-hover); }
+    [data-section="ink"]:hover       { color: var(--ink-4); }
+  }
 
   /* The current section is marked in its own colour. currentColor rather than a
      repeat of the five rules above, so the two can never drift.

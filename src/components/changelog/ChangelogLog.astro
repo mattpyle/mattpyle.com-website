@@ -122,7 +122,6 @@ for (const entry of entries) {
   </div>
 </section>
 
-
 <style>
   .log { padding-top: 56px; }
 
@@ -169,7 +168,9 @@ for (const entry of entries) {
      every list row it draws: "writing rows, changelog-adjacent rows, and the
      next-post row tint to oklch(0.955 0.012 255)". An amber at that lightness
      would also be the pale cream constraint 9 rules out. */
-  .log-row:hover { background: var(--tint-writing); }
+  @media (hover: hover) {
+    .log-row:hover { background: var(--tint-writing); }
+  }
 
   .rows-end { border-top: 1px solid var(--rule); }
 

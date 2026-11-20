@@ -82,9 +82,13 @@ const countLabel = `${total} ${total === 1 ? 'entry' : 'entries'}`;
   }
 
   .link-changelog { color: var(--changelog); }
-  .link-changelog:hover { color: var(--changelog-hover); }
+  @media (hover: hover) {
+    .link-changelog:hover { color: var(--changelog-hover); }
+  }
   .link-agents { color: var(--agents); }
-  .link-agents:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .link-agents:hover { color: var(--agents-hover); }
+  }
 
   @media (max-width: 720px) {
     .changelog-hero { padding-top: 40px; }

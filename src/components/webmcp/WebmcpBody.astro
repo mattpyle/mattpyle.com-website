@@ -429,9 +429,11 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     text-decoration-color: var(--rule);
   }
 
-  .band-prose a:hover {
-    color: var(--agents-hover);
-    text-decoration-color: currentColor;
+  @media (hover: hover) {
+    .band-prose a:hover {
+      color: var(--agents-hover);
+      text-decoration-color: currentColor;
+    }
   }
 
   /* Code literals are the only place monospace appears in running text. */
@@ -496,9 +498,11 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     text-decoration-color: var(--rule);
   }
 
-  .standard-cell a:hover {
-    color: var(--agents-hover);
-    text-decoration-color: currentColor;
+  @media (hover: hover) {
+    .standard-cell a:hover {
+      color: var(--agents-hover);
+      text-decoration-color: currentColor;
+    }
   }
 
   /* ── Band 3: what WebMCP is ─────────────────────────────────────────────── */
@@ -670,7 +674,9 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     cursor: pointer;
   }
 
-  .copy-button:hover:not(:disabled) { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .copy-button:hover:not(:disabled) { color: var(--agents-hover); }
+  }
 
   .copy-button:disabled {
     color: var(--ink-6);
@@ -773,7 +779,9 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     color: var(--agents);
   }
 
-  .demo-choice:hover:not(:disabled) { border-color: var(--agents); }
+  @media (hover: hover) {
+    .demo-choice:hover:not(:disabled) { border-color: var(--agents); }
+  }
 
   .demo-choice:disabled {
     border-style: dashed;
@@ -804,9 +812,11 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     overflow-wrap: anywhere;
   }
 
-  .run-button:hover:not(:disabled) {
-    background: var(--agents-hover);
-    border-color: var(--agents-hover);
+  @media (hover: hover) {
+    .run-button:hover:not(:disabled) {
+      background: var(--agents-hover);
+      border-color: var(--agents-hover);
+    }
   }
 
   .run-button:disabled {
@@ -974,9 +984,11 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     transition: color 240ms ease, text-decoration-color 240ms ease;
   }
 
-  .page-tool-page:hover {
-    color: var(--agents-hover);
-    text-decoration-color: currentColor;
+  @media (hover: hover) {
+    .page-tool-page:hover {
+      color: var(--agents-hover);
+      text-decoration-color: currentColor;
+    }
   }
 
   .page-tool dd {
@@ -1023,8 +1035,10 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
     text-wrap: pretty;
   }
 
-  .resource-row:hover .resource-path,
-  .resource-row:hover .resource-desc { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .resource-row:hover .resource-path,
+    .resource-row:hover .resource-desc { color: var(--agents-hover); }
+  }
 
   /* ── Responsive ─────────────────────────────────────────────────────────── */
   @media (max-width: 1000px) {

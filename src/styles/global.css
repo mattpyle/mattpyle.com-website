@@ -168,8 +168,10 @@ a {
   transition: color .15s ease;
 }
 
-a:hover {
-  color: var(--color-accent-hover);
+@media (hover: hover) {
+  a:hover {
+    color: var(--color-accent-hover);
+  }
 }
 
 ::selection {
@@ -248,7 +250,9 @@ textarea:focus-visible,
   transition: text-decoration-color .15s ease;
 }
 
-.prose a:hover { text-decoration-color: var(--color-accent); }
+@media (hover: hover) {
+  .prose a:hover { text-decoration-color: var(--color-accent); }
+}
 
 .prose blockquote {
   border-left: 2px solid var(--color-accent);
@@ -947,7 +951,13 @@ html:not([data-appearance='retro']) body.skin-redesign .skip-link {
 
 /* :active as well as :hover so the effect exists on touch, where there is no
    hover state to enter. */
-.rd-fill:hover,
+@media (hover: hover) {
+  .rd-fill:hover {
+    background-size: 100% 100%;
+    color: var(--paper);
+  }
+}
+
 .rd-fill:active {
   background-size: 100% 100%;
   color: var(--paper);
@@ -1032,9 +1042,11 @@ html:not([data-appearance='retro']) body.skin-redesign .prose a {
   transition: color 240ms ease, text-decoration-color 240ms ease;
 }
 
-html:not([data-appearance='retro']) body.skin-redesign .prose a:hover {
-  color: var(--writing-hover);
-  text-decoration-color: currentColor;
+@media (hover: hover) {
+  html:not([data-appearance='retro']) body.skin-redesign .prose a:hover {
+    color: var(--writing-hover);
+    text-decoration-color: currentColor;
+  }
 }
 
 html:not([data-appearance='retro']) body.skin-redesign .prose blockquote {

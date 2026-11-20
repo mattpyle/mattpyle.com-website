@@ -54,7 +54,9 @@
   }
 
   .link-projects { color: var(--projects); }
-  .link-projects:hover { color: var(--projects-hover); }
+  @media (hover: hover) {
+    .link-projects:hover { color: var(--projects-hover); }
+  }
 
   .sr-only {
     position: absolute;

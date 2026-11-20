@@ -296,7 +296,9 @@ const contents = headings.filter(heading => heading.depth === 2);
     color: var(--ink);
   }
 
-  .rail-author:hover { color: var(--writing); }
+  @media (hover: hover) {
+    .rail-author:hover { color: var(--writing); }
+  }
 
   /* Above 900px the list is always shown and there is nothing to toggle. Two routes
      hide the summary. Once the script has opened the details, `[open]` hides it in
@@ -329,7 +331,9 @@ const contents = headings.filter(heading => heading.depth === 2);
     text-wrap: pretty;
   }
 
-  .rail-contents a:hover { color: var(--writing); }
+  @media (hover: hover) {
+    .rail-contents a:hover { color: var(--writing); }
+  }
 
   .rail-actions { gap: 14px; }
 
@@ -349,7 +353,9 @@ const contents = headings.filter(heading => heading.depth === 2);
     transition: color 240ms ease;
   }
 
-  .rail-action:hover:not(:disabled) { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .rail-action:hover:not(:disabled) { color: var(--agents-hover); }
+  }
 
   .rail-action:disabled {
     opacity: .55;

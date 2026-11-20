@@ -92,7 +92,9 @@ const latest = fixes[0]?.data.verified;
     transition: background 240ms ease;
   }
 
-  .row:hover { background: var(--tint-writing); }
+  @media (hover: hover) {
+    .row:hover { background: var(--tint-writing); }
+  }
 
   .rows-end { border-top: 1px solid var(--rule); }
 

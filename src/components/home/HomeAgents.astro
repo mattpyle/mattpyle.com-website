@@ -130,7 +130,9 @@ const SURFACES = [
   .rd-heading-row { padding-bottom: 26px; }
   .rd-heading-row h2 { color: var(--agents); }
   .rd-heading-row .rd-all-link { color: var(--agents); }
-  .rd-heading-row .rd-all-link:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .rd-heading-row .rd-all-link:hover { color: var(--agents-hover); }
+  }
 
   .grid {
     display: grid;
@@ -169,7 +171,9 @@ const SURFACES = [
     white-space: nowrap;
   }
 
-  .panel-link:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .panel-link:hover { color: var(--agents-hover); }
+  }
 
   .headline {
     display: flex;
@@ -287,9 +291,11 @@ const SURFACES = [
     transition: border-color 220ms ease, background 220ms ease;
   }
 
-  .surface:hover {
-    border-color: var(--agents);
-    background: var(--tint-agents);
+  @media (hover: hover) {
+    .surface:hover {
+      border-color: var(--agents);
+      background: var(--tint-agents);
+    }
   }
 
   .surface-path {

@@ -55,7 +55,9 @@ const { entries } = Astro.props;
   .rd-heading-row { padding-bottom: 22px; }
   .rd-heading-row h2 { color: var(--changelog); }
   .rd-all-link { color: var(--changelog); }
-  .rd-all-link:hover { color: var(--changelog-hover); }
+  @media (hover: hover) {
+    .rd-all-link:hover { color: var(--changelog-hover); }
+  }
 
   .rows { display: flex; flex-direction: column; }
 

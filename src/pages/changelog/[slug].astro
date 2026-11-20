@@ -159,7 +159,9 @@ const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : nu
     color: var(--changelog);
   }
 
-  .entry-back:hover { color: var(--changelog-hover); }
+  @media (hover: hover) {
+    .entry-back:hover { color: var(--changelog-hover); }
+  }
 
   /* A 44px touch target on a phone, as the fix-log and writing entries have. */
   @media (max-width: 720px) {
@@ -237,7 +239,9 @@ const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : nu
      comment above records. The underline stays: inside a paragraph, colour
      alone does not distinguish a link (WCAG 1.4.1). */
   .prose :global(a) { color: var(--changelog); }
-  .prose :global(a:hover) { color: var(--changelog-hover); }
+  @media (hover: hover) {
+    .prose :global(a:hover) { color: var(--changelog-hover); }
+  }
   .prose :global(blockquote) { border-left-color: var(--changelog); }
 
   @media (max-width: 720px) {

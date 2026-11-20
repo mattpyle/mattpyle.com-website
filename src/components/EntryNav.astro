@@ -63,7 +63,9 @@ const { label, newer = null, older = null } = Astro.props;
     transition: background 240ms ease;
   }
 
-  .entry-step:hover { background: var(--tint-writing); }
+  @media (hover: hover) {
+    .entry-step:hover { background: var(--tint-writing); }
+  }
 
   .entry-step-label {
     font-family: var(--font-mono-plex);
