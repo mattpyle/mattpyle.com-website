@@ -94,9 +94,10 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
  * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin` | The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
- * | `verifyFindingWorkflow` | `verify-finding-blockless.bin` | The checks path (`runFindingChecks`, then `writeFindingVerification`, resolved or reopened). The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
+ * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin` | The checks path ending reopened. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin` | All three markers on current code: `listFixableFindings`, the restart start and signal, the close cancel. A reconcile that throws (`reportRunHealth` before the rethrow). |
  * | `fixDispatchWorkflow` | `fix-dispatch-grant-after-release.bin` | The hourly sweep (`runningWorkflowIds`). A grant whose signal fails. A re-sent request for a held ticket. The idle close. The continue-as-new rollover is a test in `fix-dispatch.test.ts`, not a replay. |
+ * | `recheckFindingsWorkflow` | `recheck-findings-pre-heartbeat.bin` | A recheck that throws (`reportRunHealth` before the rethrow). A site with no approved finding. |
  *
  * `tests/lib/finding-report.test.ts` also reads `finding-resolved-action.bin`.
  * It reports on that history and does not replay it.
@@ -1086,4 +1087,63 @@ test('a scorecard run with a failed page that merged replays through the merge l
     history,
     'steward-scorecard-fixture-unhealthy-merged',
   );
+});
+
+/**
+ * Two histories from before `runFindingChecks` had a heartbeat timeout, when
+ * its stubs in `verifyFindingWorkflow` and `recheckFindingsWorkflow` set a
+ * start-to-close timeout alone.
+ *
+ * - `verify-finding-checks-pre-heartbeat.bin`: the verify's checks path, read,
+ *   PR, block, `runFindingChecks`, `writeFindingVerification`, resolved. 35
+ *   events.
+ * - `recheck-findings-pre-heartbeat.bin`: one recheck of nine approved
+ *   findings, five of them measured with `runFindingChecks`, one of those
+ *   failing unmeasured. 131 events.
+ *
+ * Both replay with no `patched` marker. The new stubs add `heartbeatTimeout`
+ * to the same `ScheduleActivityTask` command, at the same place in the same
+ * order, and the replay does not compare an activity's timeouts with the
+ * recorded ones: these two green replays are the evidence, as
+ * `finding-verify-child-heavy.bin` is for retry attributes.
+ *
+ * Recorded from the pre-change code (origin/master at 73fcdb1, the worktree
+ * before its first edit) against the time-skipping server with mocked
+ * activities and a fake GitHub, so neither holds real finding text.
+ *
+ * Probe (2026-11-20): `await wf.sleep('1 second')` before
+ * `checking.runFindingChecks` in each workflow made its fixture fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 23, ActivityTaskScheduled)
+ * ```
+ *
+ * for the verify and
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 29, ActivityTaskScheduled)
+ * ```
+ *
+ * for the recheck, and left the other 28 replays green. The sleeps were
+ * removed and all 30 re-ran green.
+ */
+const verifyChecksPreHeartbeatPath = fileURLToPath(
+  new URL('../fixtures/histories/verify-finding-checks-pre-heartbeat.bin', import.meta.url),
+);
+const recheckPreHeartbeatPath = fileURLToPath(new URL('../fixtures/histories/recheck-findings-pre-heartbeat.bin', import.meta.url));
+
+test('a verify that ran its checks before the heartbeat timeout replays with it', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(verifyChecksPreHeartbeatPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'verify/mattpyle-com/content-perfect-score-labelled-fail--scorecard/2026-10-13T041233Z-0',
+  );
+});
+
+test('a recheck that ran its checks before the heartbeat timeout replays with it', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(recheckPreHeartbeatPath));
+  await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'recheck/temporal-io/test');
 });

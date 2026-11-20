@@ -83,6 +83,9 @@ export interface ProbeBypass {
   secret: string;
 }
 
+/** Not a DevTools method: what the probe tells its own event listeners when the socket is gone. */
+const SOCKET_CLOSED = 'Steward.socketClosed';
+
 export async function openChromeProbe(options: {
   userAgent: string;
   bypass?: ProbeBypass;
@@ -98,7 +101,13 @@ export async function openChromeProbe(options: {
   });
 
   let socket: WebSocket | undefined;
+  /** Fails whatever is waiting on the socket. Set once the socket is open. */
+  let drop: (() => void) | undefined;
   const close = async () => {
+    // First, and not left to the socket's own `close` event: a run that closes
+    // the probe mid-page (a cancelled activity) must stop waiting now, whenever
+    // the event arrives.
+    drop?.();
     try {
       socket?.close();
     } catch {
@@ -145,12 +154,21 @@ export async function openChromeProbe(options: {
         for (const listener of listeners) listener(message);
       }
     });
-    ws.addEventListener('close', () => {
+    let dropped = false;
+    drop = () => {
+      dropped = true;
       for (const waiter of pending.values()) waiter.reject(new Error('the DevTools socket closed'));
       pending.clear();
-    });
+      // A wait on an event (the page's load) hears of it as an event.
+      for (const listener of [...listeners]) listener({ method: SOCKET_CLOSED });
+    };
+    ws.addEventListener('close', drop);
 
     const send = (method: string, params: Record<string, unknown> = {}, sessionId?: string): Promise<any> => {
+      // A closed socket drops what is sent to it and answers nothing, so a
+      // command sent after `close()` would wait for ever: the tab's own
+      // clean-up in `evaluate` is one, when a cancelled run closes the probe.
+      if (dropped || ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('the DevTools socket closed'));
       const id = nextId++;
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject });
@@ -191,6 +209,12 @@ export async function openChromeProbe(options: {
             reject(new CheckUnavailable(`${url} did not finish loading in ${LOAD_TIMEOUT_MS / 1000}s`));
           }, LOAD_TIMEOUT_MS);
           const onEvent = (message: any) => {
+            if (message.method === SOCKET_CLOSED) {
+              clearTimeout(timer);
+              listeners.delete(onEvent);
+              reject(new Error('the DevTools socket closed'));
+              return;
+            }
             if (message.sessionId !== sessionId || message.method !== 'Page.loadEventFired') return;
             clearTimeout(timer);
             listeners.delete(onEvent);

@@ -80,9 +80,14 @@ const reading = wf.proxyActivities<
 
 // Twelve browser checks at a 30-second load and a 10-second settle each is
 // eight minutes; the timeout leaves room for Chrome's launch.
+// The heartbeat timeout turns a worker that died mid-run into a retry in 30
+// seconds, not at the start-to-close timeout. No `patched` marker: it is an
+// attribute of the same schedule command, and the history recorded before it
+// (`recheck-findings-pre-heartbeat.bin`) replays unchanged (determinism rule 5).
 const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '15 minutes',
+  heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 2, initialInterval: '30 seconds', nonRetryableErrorTypes: ['VerifyCheckBroken'] },
 });
 

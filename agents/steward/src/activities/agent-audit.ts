@@ -1,5 +1,6 @@
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { log } from '../lib/logger.js';
+import { withHeartbeat } from './heartbeat.js';
 import {
   assembleResult,
   runFastAudit,
@@ -75,9 +76,6 @@ import type { AuditResult } from '../lib/agent-audit/result.js';
  * `RenderedPageOutcome` is that reduction.
  */
 
-/** Heartbeat cadence. Comfortably inside the 30s `heartbeatTimeout` the stubs set. */
-const HEARTBEAT_MS = 5_000;
-
 /**
  * The activity boundary's options — deliberately narrower than `RunAuditOptions`.
  *
@@ -94,24 +92,6 @@ export interface AuditActivityOptions {
 /** Translates the wire-safe options into the engine's own shape. */
 function engineOptions(options: AuditActivityOptions) {
   return options.budgetMs === undefined ? {} : { policy: { totalBudgetMs: options.budgetMs } };
-}
-
-/**
- * Runs work under a heartbeat pump, the same discipline `auditLiveUrl` and
- * `buildAndAuditDraft` use: a deep page is a minute-plus of Chrome, and an
- * activity that never heartbeats can neither be detected as wedged nor told it
- * was cancelled.
- */
-async function withHeartbeat<T>(what: string, run: () => Promise<T>): Promise<T> {
-  const ctx = Context.current();
-  const beat = () => ctx.heartbeat(what);
-  const pump = setInterval(beat, HEARTBEAT_MS);
-  try {
-    beat();
-    return await run();
-  } finally {
-    clearInterval(pump);
-  }
 }
 
 /**

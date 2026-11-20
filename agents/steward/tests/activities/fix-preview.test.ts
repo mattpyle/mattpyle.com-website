@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { awaitPreviewDeploy } from '../../src/activities/findings.js';
 import { openFixerPr, readFixChecks } from '../../src/activities/fixer.js';
-import { BYPASS_SECRET_ENV, runFindingChecks } from '../../src/activities/verify-finding.js';
+import { MockActivityEnvironment } from '@temporalio/testing';
+import { BYPASS_SECRET_ENV, runFindingChecks as runFindingChecksActivity } from '../../src/activities/verify-finding.js';
 import { buildFixerPrBody, opensAsDraft, siteCheckProblems, type FixerSiteChecks } from '../../src/lib/fixer.js';
 import { parseFindingBody } from '../../src/lib/findings.js';
 import { verifyBlockRetryPrompt } from '../../src/lib/handoff-generator.js';
@@ -16,6 +17,10 @@ import { installFakeAppCredentials, type FakeAppCredentials } from '../helpers/f
  * reach, the preview wait against a scripted GitHub, the choice of block, the
  * regeneration prompt, the PR body's Verify section and the draft flip.
  */
+
+/** The activity in a mock activity context: it heartbeats and reads its cancellation signal, so it needs one. */
+const runFindingChecks = (...args: Parameters<typeof runFindingChecksActivity>) =>
+  new MockActivityEnvironment().run(() => runFindingChecksActivity(...args)) as ReturnType<typeof runFindingChecksActivity>;
 
 const PREVIEW = 'https://mattpyle-com-website-abc123-mattpyles-projects.vercel.app';
 const SECRET = 'test-bypass-secret';

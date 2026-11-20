@@ -68,6 +68,36 @@ for (const [relPath, activity] of BROWSER_ACTIVITIES) {
   });
 }
 
+/**
+ * `runFindingChecks` drives a browser too, and several workflows schedule it:
+ * `findingWorkflow` has two stubs for it. Every one carries the package's 30
+ * seconds. `check-heartbeat-retry.test.ts` shows what the timeout does to an
+ * attempt that stops beating.
+ */
+const CHECK_STUBS = [
+  ['../../src/workflows/verify-finding.ts', 1],
+  ['../../src/workflows/recheck-findings.ts', 1],
+  ['../../src/workflows/finding.ts', 2],
+] as const;
+
+for (const [relPath, count] of CHECK_STUBS) {
+  test(`every runFindingChecks stub in ${relPath.split('/').pop()} sets a 30-second heartbeatTimeout`, () => {
+    const source = fs.readFileSync(fileURLToPath(new URL(relPath, import.meta.url)), 'utf8');
+    const blocks = proxyBlocks(source).filter((b) => b.includes("'runFindingChecks'"));
+    assert.equal(blocks.length, count, `expected ${count} stub(s) naming runFindingChecks in ${relPath}`);
+    for (const block of blocks) assert.match(block, /heartbeatTimeout: '30 seconds'/);
+  });
+}
+
+test("the frozen fixer's runFindingChecks stub deliberately has no heartbeatTimeout", () => {
+  // `fixFindingWorkflow` starts no new run; it exists so that older ones
+  // replay, and a timeout there would act on nothing.
+  const source = fs.readFileSync(fileURLToPath(new URL('../../src/workflows/fix-finding.ts', import.meta.url)), 'utf8');
+  const blocks = proxyBlocks(source).filter((b) => b.includes("'runFindingChecks'"));
+  assert.equal(blocks.length, 1);
+  assert.doesNotMatch(blocks[0], /heartbeatTimeout:/);
+});
+
 test('the publish stubs deliberately have no heartbeatTimeout', () => {
   // The inverse case, asserted so the rule above is not read as "every stub".
   // A publish waits on the worktree lock for as long as a build holds it
