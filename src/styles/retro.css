@@ -275,8 +275,10 @@ html[data-appearance='retro'] [data-module='site-header'] .wordmark::after {
   }
 }
 
-html[data-appearance='retro'] [data-module='site-header'] .wordmark:hover {
-  color: var(--retro-cream);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='site-header'] .wordmark:hover {
+    color: var(--retro-cream);
+  }
 }
 
 /* One rule for all three link trees - the desktop row, the narrow row and the
@@ -296,9 +298,14 @@ html[data-appearance='retro'] [data-module='site-header'] .nav-more > summary {
 /* The current section keeps the redesign's 2px underline, which is drawn in
    `currentColor` - so marking the label gold here marks the rule gold too, and
    the two can no more drift in retro than they can in modern. */
-html[data-appearance='retro'] [data-module='site-header'] .header-link:hover,
-html[data-appearance='retro'] [data-module='site-header'] .nav-row-link:hover,
-html[data-appearance='retro'] [data-module='site-header'] .nav-more > summary:hover,
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='site-header'] .header-link:hover,
+  html[data-appearance='retro'] [data-module='site-header'] .nav-row-link:hover,
+  html[data-appearance='retro'] [data-module='site-header'] .nav-more > summary:hover {
+    color: var(--retro-gold);
+  }
+}
+
 html[data-appearance='retro'] [data-module='site-header'] .nav-more[open] > summary,
 html[data-appearance='retro'] [data-module='site-header'] .header-link[aria-current],
 html[data-appearance='retro'] [data-module='site-header'] .nav-row-link[aria-current] {
@@ -325,7 +332,12 @@ html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link {
   text-underline-offset: 3px;
 }
 
-html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link:hover,
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link:hover {
+    color: var(--retro-maroon);
+  }
+}
+
 html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link[aria-current] {
   color: var(--retro-maroon);
 }
@@ -491,8 +503,10 @@ html[data-appearance='retro'] [data-module='site-footer'] .footer-links a {
   text-underline-offset: 3px;
 }
 
-html[data-appearance='retro'] [data-module='site-footer'] .footer-links a:hover {
-  color: var(--retro-gold);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='site-footer'] .footer-links a:hover {
+    color: var(--retro-gold);
+  }
 }
 
 /* The legacy retro footer put the appearance control in a pill, and the pill is
@@ -511,9 +525,11 @@ html[data-appearance='retro'] [data-module='site-footer'] .appearance-toggle {
   padding: 3px 10px;
 }
 
-html[data-appearance='retro'] [data-module='site-footer'] .appearance-toggle:hover {
-  color: var(--retro-gold);
-  border-color: var(--retro-gold);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='site-footer'] .appearance-toggle:hover {
+    color: var(--retro-gold);
+    border-color: var(--retro-gold);
+  }
 }
 
 html[data-appearance='retro'] [data-module='site-footer'] .footer-wink {
@@ -592,7 +608,13 @@ html[data-appearance='retro'] [data-module='home-hero'] .rd-fill {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='home-hero'] .rd-fill:hover,
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-hero'] .rd-fill:hover {
+    background-size: 0 0;
+    color: var(--retro-maroon);
+  }
+}
+
 html[data-appearance='retro'] [data-module='home-hero'] .rd-fill:active {
   background-size: 0 0;
   color: var(--retro-maroon);
@@ -629,8 +651,10 @@ html[data-appearance='retro'] [data-module='home-hero'] .hero-agent-link {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='home-hero'] .hero-agent-link:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-hero'] .hero-agent-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* ── Section heading rows ───────────────────────────────────────────────
@@ -667,15 +691,17 @@ html[data-appearance='retro'] [data-module='home-agents'] .rd-heading-row .rd-al
   color: var(--retro-link);
 }
 
-html[data-appearance='retro'] [data-module='home-agents'] .rd-heading-row .rd-all-link:hover {
-  color: var(--retro-maroon);
-}
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-agents'] .rd-heading-row .rd-all-link:hover {
+    color: var(--retro-maroon);
+  }
 
-html[data-appearance='retro'] [data-module='home-writing'] .rd-all-link:hover,
-html[data-appearance='retro'] [data-module='home-projects'] .rd-all-link:hover,
-html[data-appearance='retro'] [data-module='home-agents'] .rd-all-link:hover,
-html[data-appearance='retro'] [data-module='home-changelog'] .rd-all-link:hover {
-  color: var(--retro-maroon);
+  html[data-appearance='retro'] [data-module='home-writing'] .rd-all-link:hover,
+  html[data-appearance='retro'] [data-module='home-projects'] .rd-all-link:hover,
+  html[data-appearance='retro'] [data-module='home-agents'] .rd-all-link:hover,
+  html[data-appearance='retro'] [data-module='home-changelog'] .rd-all-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* ── Writing rows ──────────────────────────────────────────────────────
@@ -696,8 +722,10 @@ html[data-appearance='retro'] [data-module='home-writing'] .row {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='home-writing'] .row:hover {
-  background: var(--retro-sidebar-bg);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-writing'] .row:hover {
+    background: var(--retro-sidebar-bg);
+  }
 }
 
 html[data-appearance='retro'] [data-module='home-writing'] .row-date {
@@ -714,8 +742,10 @@ html[data-appearance='retro'] [data-module='home-writing'] .row-title {
   color: var(--retro-link);
 }
 
-html[data-appearance='retro'] [data-module='home-writing'] .row:hover .row-title {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-writing'] .row:hover .row-title {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='home-writing'] .row-excerpt,
@@ -739,9 +769,11 @@ html[data-appearance='retro'] [data-module='home-projects'] .card {
 /* The lift is the redesign's, not the period's: a 1997 card does not float.
    The frame goes maroon instead, which is the hover this file gives every
    other bordered thing. */
-html[data-appearance='retro'] [data-module='home-projects'] .card:hover {
-  border-color: var(--retro-maroon);
-  transform: none;
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-projects'] .card:hover {
+    border-color: var(--retro-maroon);
+    transform: none;
+  }
 }
 
 html[data-appearance='retro'] [data-module='home-projects'] .card-image {
@@ -795,8 +827,10 @@ html[data-appearance='retro'] [data-module='home-agents'] .panel-link {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='home-agents'] .panel-link:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-agents'] .panel-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='home-agents'] .headline-number {
@@ -861,9 +895,11 @@ html[data-appearance='retro'] [data-module='home-agents'] .surface {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='home-agents'] .surface:hover {
-  background: var(--retro-sidebar-bg);
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='home-agents'] .surface:hover {
+    background: var(--retro-sidebar-bg);
+    border-color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='home-agents'] .surface-path {
@@ -960,8 +996,10 @@ html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-links
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-links a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='writing-hero'] .hero-subscribe-links a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The archive. The dashed rule is the one the legacy /writing list wore, moved
@@ -976,8 +1014,10 @@ html[data-appearance='retro'] [data-module='writing-archive'] .row {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='writing-archive'] .row:hover {
-  background: var(--retro-sidebar-bg);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='writing-archive'] .row:hover {
+    background: var(--retro-sidebar-bg);
+  }
 }
 
 html[data-appearance='retro'] [data-module='writing-archive'] .row-date,
@@ -995,8 +1035,10 @@ html[data-appearance='retro'] [data-module='writing-archive'] .row-title {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='writing-archive'] .row:hover .row-title {
-  color: var(--retro-link);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='writing-archive'] .row:hover .row-title {
+    color: var(--retro-link);
+  }
 }
 
 html[data-appearance='retro'] [data-module='writing-archive'] .row-excerpt,
@@ -1075,8 +1117,10 @@ html[data-appearance='retro'] [data-module='article'] .post-back {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='article'] .post-back:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .post-back:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='article'] .draft-banner {
@@ -1145,8 +1189,10 @@ html[data-appearance='retro'] [data-module='article'] .rail-author {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='article'] .rail-author:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .rail-author:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='article'] .rail-contents a {
@@ -1156,8 +1202,10 @@ html[data-appearance='retro'] [data-module='article'] .rail-contents a {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='article'] .rail-contents a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .rail-contents a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='article'] .rail-action {
@@ -1167,8 +1215,10 @@ html[data-appearance='retro'] [data-module='article'] .rail-action {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='article'] .rail-action:hover:not(:disabled) {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .rail-action:hover:not(:disabled) {
+    color: var(--retro-maroon);
+  }
 }
 
 /* ── /projects ────────────────────────────────────────────────────────────
@@ -1229,8 +1279,10 @@ html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-links a
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-links a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='projects-hero'] .hero-source-links a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The board. The card is the deleted grid's card: frame ground, ridge border,
@@ -1244,8 +1296,10 @@ html[data-appearance='retro'] [data-module='projects-board'] .card {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='projects-board'] a.card:hover {
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='projects-board'] a.card:hover {
+    border-color: var(--retro-maroon);
+  }
 }
 
 /* The hatch behind the image slot, repainted. It is diagonal machine ruling
@@ -1281,8 +1335,10 @@ html[data-appearance='retro'] [data-module='projects-board'] .card-name {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='projects-board'] a.card:hover .card-name {
-  color: var(--retro-link);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='projects-board'] a.card:hover .card-name {
+    color: var(--retro-link);
+  }
 }
 
 html[data-appearance='retro'] [data-module='projects-board'] .card-blurb,
@@ -1351,8 +1407,10 @@ html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts-links a
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts-links a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='changelog-hero'] .hero-facts-links a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The rows, in the archive's dashed treatment so /writing and /changelog read
@@ -1366,8 +1424,10 @@ html[data-appearance='retro'] [data-module='changelog-log'] .log-row {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='changelog-log'] .log-row:hover {
-  background: var(--retro-sidebar-bg);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='changelog-log'] .log-row:hover {
+    background: var(--retro-sidebar-bg);
+  }
 }
 
 html[data-appearance='retro'] [data-module='changelog-log'] .row-date,
@@ -1399,8 +1459,10 @@ html[data-appearance='retro'] [data-module='changelog-log'] .row-title {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='changelog-log'] .log-row:hover .row-title {
-  color: var(--retro-link);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='changelog-log'] .log-row:hover .row-title {
+    color: var(--retro-link);
+  }
 }
 
 html[data-appearance='retro'] [data-module='changelog-log'] .row-summary,
@@ -1438,8 +1500,10 @@ html[data-appearance='retro'] .log-pager .pager-link {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] .log-pager .pager-link:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] .log-pager .pager-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] .log-pager .pager-count {
@@ -1495,8 +1559,10 @@ html[data-appearance='retro'] [data-module='article'] .entry-back {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='article'] .entry-back:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .entry-back:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='article'] .entry-meta {
@@ -1520,8 +1586,10 @@ html[data-appearance='retro'] [data-module='article'] .entry-step {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='article'] .entry-step:hover {
-  background: var(--retro-sidebar-bg);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .entry-step:hover {
+    background: var(--retro-sidebar-bg);
+  }
 }
 
 html[data-appearance='retro'] [data-module='article'] .entry-step-label {
@@ -1538,8 +1606,10 @@ html[data-appearance='retro'] [data-module='article'] .entry-step-title {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='article'] .entry-step:hover .entry-step-title {
-  color: var(--retro-link);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .entry-step:hover .entry-step-title {
+    color: var(--retro-link);
+  }
 }
 
 /* ── /scorecard ───────────────────────────────────────────────────────────
@@ -1694,9 +1764,11 @@ html[data-appearance='retro'] [data-module='scorecard-body'] .how-prose a:visite
   color: var(--retro-link-visited);
 }
 
-html[data-appearance='retro'] [data-module='scorecard-body'] .crosslink a:hover,
-html[data-appearance='retro'] [data-module='scorecard-body'] .how-prose a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='scorecard-body'] .crosslink a:hover,
+  html[data-appearance='retro'] [data-module='scorecard-body'] .how-prose a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The run list as a ruled archive on the frame ground, which is what the legacy
@@ -1758,8 +1830,10 @@ html[data-appearance='retro'] [data-module='scorecard-body'] .as-data-link {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='scorecard-body'] .as-data-link:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='scorecard-body'] .as-data-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The `.as-data` rail turns into a top rule below 900px, so the retro border has
@@ -2025,8 +2099,10 @@ html[data-appearance='retro'] [data-module='activity-body'] .as-data-link {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='activity-body'] .as-data-link:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='activity-body'] .as-data-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 @media (max-width: 900px) {
@@ -2123,8 +2199,10 @@ html[data-appearance='retro'] [data-module='about-hero'] .hero-agents-links a {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='about-hero'] .hero-agents-links a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='about-hero'] .hero-agents-links a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The body headings, given the `.prose h2` treatment the global block cannot
@@ -2192,9 +2270,11 @@ html[data-appearance='retro'] [data-module='about-body'] .reach-card {
   transition: none;
 }
 
-html[data-appearance='retro'] [data-module='about-body'] .reach-card:hover {
-  background: var(--retro-sidebar-bg);
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='about-body'] .reach-card:hover {
+    background: var(--retro-sidebar-bg);
+    border-color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='about-body'] .reach-icon {
@@ -2208,8 +2288,10 @@ html[data-appearance='retro'] [data-module='about-body'] .reach-label {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='about-body'] .reach-card:hover .reach-label {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='about-body'] .reach-card:hover .reach-label {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='about-body'] .reach-detail,
@@ -2257,8 +2339,10 @@ html[data-appearance='retro'] [data-module='about-body'] .rail-value a {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='about-body'] .rail-value a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='about-body'] .rail-value a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='about-body'] .rail-md {
@@ -2268,8 +2352,10 @@ html[data-appearance='retro'] [data-module='about-body'] .rail-md {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='about-body'] .rail-md:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='about-body'] .rail-md:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* ── The 404 page ─────────────────────────────────────────────────────────
@@ -2322,8 +2408,10 @@ html[data-appearance='retro'] [data-module='not-found'] .hero-agents-links a {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='not-found'] .hero-agents-links a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='not-found'] .hero-agents-links a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='not-found'] h2 {
@@ -2344,9 +2432,11 @@ html[data-appearance='retro'] [data-module='not-found'] .way {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='not-found'] .way:hover {
-  background: var(--retro-sidebar-bg);
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='not-found'] .way:hover {
+    background: var(--retro-sidebar-bg);
+    border-color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='not-found'] .way .way-path {
@@ -2428,8 +2518,10 @@ html[data-appearance='retro'] [data-module='steward-hero'] .hero-endpoint-link {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='steward-hero'] .hero-endpoint-link:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='steward-hero'] .hero-endpoint-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The band head: the ball-bulleted maroon heading every retro section carries.
@@ -2519,8 +2611,10 @@ html[data-appearance='retro'] [data-module='steward-body'] a:visited {
   color: var(--retro-link-visited);
 }
 
-html[data-appearance='retro'] [data-module='steward-body'] a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='steward-body'] a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* Inline code and the snippets. Repeated from the global `.prose` rules rather
@@ -2749,10 +2843,12 @@ html[data-appearance='retro'] [data-module='steward-body'] .contact-link {
   padding: 8px 14px;
 }
 
-html[data-appearance='retro'] [data-module='steward-body'] .contact-link:hover {
-  background: var(--retro-sidebar-bg);
-  border-color: var(--retro-maroon);
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='steward-body'] .contact-link:hover {
+    background: var(--retro-sidebar-bg);
+    border-color: var(--retro-maroon);
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='steward-body'] .contact-note {
@@ -2783,9 +2879,11 @@ html[data-appearance='retro'] .filter-pill {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] .filter-pill:hover {
-  color: var(--retro-maroon);
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] .filter-pill:hover {
+    color: var(--retro-maroon);
+    border-color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] .filter-pill.is-active {
@@ -2897,8 +2995,10 @@ html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-data-link:visite
   color: var(--retro-link-visited);
 }
 
-html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-data-link:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp-hero'] .hero-data-link:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* ── Shared band furniture ────────────────────────────────────────────── */
@@ -2952,8 +3052,10 @@ html[data-appearance='retro'] [data-module='webmcp'] .band-prose a:visited {
   color: var(--retro-link-visited);
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .band-prose a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp'] .band-prose a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* Inline code, repeated from the global `.prose code` rule for the same reason
@@ -3021,8 +3123,10 @@ html[data-appearance='retro'] [data-module='webmcp'] .standard-cell a:visited {
   color: var(--retro-link-visited);
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .standard-cell a:hover {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp'] .standard-cell a:hover {
+    color: var(--retro-maroon);
+  }
 }
 
 /* ── Band 4: the tool catalog ─────────────────────────────────────────── */
@@ -3136,10 +3240,12 @@ html[data-appearance='retro'] [data-module='webmcp'] .copy-button {
   text-decoration: none;
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .copy-button:hover:not(:disabled) {
-  background: var(--retro-sidebar-bg);
-  color: var(--retro-maroon);
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp'] .copy-button:hover:not(:disabled) {
+    background: var(--retro-sidebar-bg);
+    color: var(--retro-maroon);
+    border-color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .copy-button[data-state='copied'] {
@@ -3202,10 +3308,12 @@ html[data-appearance='retro'] [data-module='webmcp'] .demo-choice {
   font-size: 14px;
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .demo-choice:hover:not(:disabled) {
-  background: var(--retro-frame-bg);
-  color: var(--retro-maroon);
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp'] .demo-choice:hover:not(:disabled) {
+    background: var(--retro-frame-bg);
+    color: var(--retro-maroon);
+    border-color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .demo-choice:disabled {
@@ -3237,10 +3345,12 @@ html[data-appearance='retro'] [data-module='webmcp'] .run-button {
   box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .run-button:hover:not(:disabled) {
-  background: var(--retro-forest);
-  color: var(--retro-gold);
-  border-color: var(--retro-forest-hover);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp'] .run-button:hover:not(:disabled) {
+    background: var(--retro-forest);
+    color: var(--retro-gold);
+    border-color: var(--retro-forest-hover);
+  }
 }
 
 html[data-appearance='retro'] [data-module='webmcp'] .run-button:active,
@@ -3389,7 +3499,9 @@ html[data-appearance='retro'] [data-module='webmcp'] .page-tool-page {
 
 html[data-appearance='retro'] [data-module='webmcp'] .page-tool-page:visited { color: var(--retro-link-visited); }
 
-html[data-appearance='retro'] [data-module='webmcp'] .page-tool-page:hover { color: var(--retro-maroon); }
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp'] .page-tool-page:hover { color: var(--retro-maroon); }
+}
 
 html[data-appearance='retro'] [data-module='webmcp'] .page-tool dd {
   font-family: var(--retro-font-body);
@@ -3422,9 +3534,11 @@ html[data-appearance='retro'] [data-module='webmcp'] .resource-desc {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='webmcp'] .resource-row:hover .resource-path,
-html[data-appearance='retro'] [data-module='webmcp'] .resource-row:hover .resource-desc {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='webmcp'] .resource-row:hover .resource-path,
+  html[data-appearance='retro'] [data-module='webmcp'] .resource-row:hover .resource-desc {
+    color: var(--retro-maroon);
+  }
 }
 
 /* The frames cost the row 44px at every width, which is affordable at the design
@@ -3483,9 +3597,11 @@ html[data-appearance='retro'] .retro-ad-cta {
   text-decoration: none;
 }
 
-html[data-appearance='retro'] .retro-ad-cta:hover {
-  color: var(--retro-gold);
-  text-decoration: none;
+@media (hover: hover) {
+  html[data-appearance='retro'] .retro-ad-cta:hover {
+    color: var(--retro-gold);
+    text-decoration: none;
+  }
 }
 
 html[data-appearance='retro'] .retro-ad-cta:active {
@@ -3603,9 +3719,11 @@ html[data-appearance='retro'] [data-module='webmaster-note'] .wm-submit {
   box-shadow: 3px 3px 0 rgba(90, 60, 20, .3);
 }
 
-html[data-appearance='retro'] [data-module='guestbook'] .gb-submit:hover:not(:disabled),
-html[data-appearance='retro'] [data-module='webmaster-note'] .wm-submit:hover:not(:disabled) {
-  color: var(--retro-gold);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='guestbook'] .gb-submit:hover:not(:disabled),
+  html[data-appearance='retro'] [data-module='webmaster-note'] .wm-submit:hover:not(:disabled) {
+    color: var(--retro-gold);
+  }
 }
 
 html[data-appearance='retro'] [data-module='guestbook'] .gb-submit:active,
@@ -3800,9 +3918,11 @@ html[data-appearance='retro'] [data-module='web-ring'] .ring-button {
   border-radius: 0;
 }
 
-html[data-appearance='retro'] [data-module='web-ring'] .ring-button:hover:not(:disabled) {
-  background: var(--retro-sidebar-bg);
-  border-color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='web-ring'] .ring-button:hover:not(:disabled) {
+    background: var(--retro-sidebar-bg);
+    border-color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='web-ring'] .ring-button:active {
@@ -4038,7 +4158,9 @@ html[data-appearance='retro'] [data-module='audit'] .form-note a {
 
 html[data-appearance='retro'] [data-module='audit'] .form-note a:visited { color: var(--retro-link-visited); }
 
-html[data-appearance='retro'] [data-module='audit'] .form-note a:hover { color: var(--retro-maroon); }
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='audit'] .form-note a:hover { color: var(--retro-maroon); }
+}
 
 /* ── Check rows and the counts grid ───────────────────────────────────────
    Georgia for what the page says about a site, Courier for what it states as a
@@ -4159,7 +4281,9 @@ html[data-appearance='retro'] [data-module='audit'] .fix-evidence summary {
   text-decoration: underline;
 }
 
-html[data-appearance='retro'] [data-module='audit'] .fix-evidence summary:hover { color: var(--retro-maroon); }
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='audit'] .fix-evidence summary:hover { color: var(--retro-maroon); }
+}
 
 html[data-appearance='retro'] [data-module='audit'] .evidence {
   font-family: var(--retro-font-mono);
@@ -4214,8 +4338,10 @@ html[data-appearance='retro'] [data-module='fixlog-log'] .row {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='fixlog-log'] .row:hover {
-  background: var(--retro-sidebar-bg);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='fixlog-log'] .row:hover {
+    background: var(--retro-sidebar-bg);
+  }
 }
 
 html[data-appearance='retro'] [data-module='fixlog-log'] .row-date,
@@ -4233,8 +4359,10 @@ html[data-appearance='retro'] [data-module='fixlog-log'] .row-title {
   color: var(--retro-maroon);
 }
 
-html[data-appearance='retro'] [data-module='fixlog-log'] .row:hover .row-title {
-  color: var(--retro-link);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='fixlog-log'] .row:hover .row-title {
+    color: var(--retro-link);
+  }
 }
 
 html[data-appearance='retro'] [data-module='fixlog-log'] .row-summary {
@@ -4284,8 +4412,10 @@ html[data-appearance='retro'] [data-module='article'] .fix-rail .change-title {
   color: var(--retro-ink);
 }
 
-html[data-appearance='retro'] [data-module='article'] .fix-rail .change:hover .rail-action {
-  color: var(--retro-maroon);
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='article'] .fix-rail .change:hover .rail-action {
+    color: var(--retro-maroon);
+  }
 }
 
 html[data-appearance='retro'] [data-module='article'] .fix-main .fix-measures caption {

@@ -107,6 +107,6 @@ A surface left out of a family on purpose goes on the exemption list in `tests/c
 | A changed fact about the site or its author | Not yet |
 | A new content collection (`src/content.config.ts`) | `tests/frontmatter-readers.test.mjs` for the readers; the per-collection loops not yet |
 | A new post or changelog entry | Generated from the collections; `updated:` by hand. A body image is a relative path into `src/assets/`: `tests/markdown-images.test.mjs` fails and names an entry whose image is not on disk, and the build fails when `llms-full.txt` carries an image address that is not in the output (`scripts/validate-markdown-siblings.mjs`) |
-| A new hover style (a `:hover` rule in an `.astro` style block or a file under `src/styles/`) | `tests/hover-guard.test.mjs` fails and names the rule unless it is inside `@media (hover: hover)`; `tests/a11y/touch-hover.spec.ts` taps a row of each kind on an emulated phone. `src/styles/retro.css` is exempt until its own change |
+| A new hover style (a `:hover` rule in an `.astro` style block or a file under `src/styles/`) | `tests/hover-guard.test.mjs` fails and names the rule unless it is inside `@media (hover: hover)`; `tests/a11y/touch-hover.spec.ts` taps a row of each kind on an emulated phone, in both appearances |
 | A new feed or data endpoint | Not yet |
 | A new well-known document | `scripts/validate-a2a-card.mjs`, `scripts/validate-ard-manifest.mjs` and `scripts/validate-mcp-discovery.mjs` for the current ones; the path list not yet |

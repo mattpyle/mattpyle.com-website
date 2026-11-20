@@ -26,9 +26,7 @@ import postcss from 'postcss';
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 
 /** @type {Record<string, string>} */
-const FILE_EXEMPT = {
-  'src/styles/retro.css': 'second pull request: the retro appearance moves its hover rules behind the media query on its own',
-};
+const FILE_EXEMPT = {};
 
 /** `<file>|<selector as written, whitespace collapsed>` to the reason. @type {Record<string, string>} */
 const RULE_EXEMPT = {};
