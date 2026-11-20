@@ -71,7 +71,9 @@ const endpointLabel = endpoint.replace(/^https?:\/\//, '');
     overflow-wrap: anywhere;
   }
 
-  .hero-endpoint-link:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .hero-endpoint-link:hover { color: var(--agents-hover); }
+  }
 
   @media (max-width: 720px) {
     .steward-hero { padding-top: 40px; }

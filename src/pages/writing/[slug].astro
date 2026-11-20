@@ -171,7 +171,9 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
     color: var(--writing);
   }
 
-  .post-back:hover { color: var(--writing-hover); }
+  @media (hover: hover) {
+    .post-back:hover { color: var(--writing-hover); }
+  }
 
   .post-title {
     margin: 26px 0 0;

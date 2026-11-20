@@ -98,7 +98,9 @@ function cardHref(project: Project): { href: string; external: boolean } {
   .rd-heading-row { padding-bottom: 26px; }
   .rd-heading-row h2 { color: var(--projects); }
   .rd-all-link { color: var(--projects); }
-  .rd-all-link:hover { color: var(--projects-hover); }
+  @media (hover: hover) {
+    .rd-all-link:hover { color: var(--projects-hover); }
+  }
 
   .grid {
     display: grid;
@@ -117,9 +119,11 @@ function cardHref(project: Project): { href: string; external: boolean } {
     transition: border-color 240ms ease, transform 240ms ease;
   }
 
-  .card:hover {
-    border-color: var(--projects);
-    transform: translateY(-3px);
+  @media (hover: hover) {
+    .card:hover {
+      border-color: var(--projects);
+      transform: translateY(-3px);
+    }
   }
 
   .card-image {

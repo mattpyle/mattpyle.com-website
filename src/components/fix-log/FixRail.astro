@@ -107,8 +107,10 @@ const { verified, type, changes, markdownUrl } = Astro.props;
     transition: color 240ms ease;
   }
 
-  .change:hover .rail-action,
-  a.rail-action:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .change:hover .rail-action,
+    a.rail-action:hover { color: var(--agents-hover); }
+  }
 
   .rail-action svg { flex: none; }
 

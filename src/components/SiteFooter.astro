@@ -145,9 +145,11 @@ import { FIX_LOG } from '../lib/fix-log-name';
     color: var(--ink-6);
   }
 
-  .footer-links a:hover,
-  .appearance-toggle:hover {
-    color: var(--agents);
+  @media (hover: hover) {
+    .footer-links a:hover,
+    .appearance-toggle:hover {
+      color: var(--agents);
+    }
   }
 
   /* A button that reads as a link: the control is a real <button> because it

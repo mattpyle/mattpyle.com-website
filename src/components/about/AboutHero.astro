@@ -71,7 +71,9 @@
   }
 
   .hero-agents-links a { color: var(--agents); }
-  .hero-agents-links a:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .hero-agents-links a:hover { color: var(--agents-hover); }
+  }
 
   @media (max-width: 720px) {
     .about-hero { padding-top: 40px; }

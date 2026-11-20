@@ -195,7 +195,9 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
     transition: background .15s ease, color .15s ease, border-color .15s ease;
   }
 
-  .filter-pill:hover { color: var(--color-accent); border-color: var(--color-accent); }
+  @media (hover: hover) {
+    .filter-pill:hover { color: var(--color-accent); border-color: var(--color-accent); }
+  }
   .filter-pill.is-active { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
 
   /* ── Redesign: the same radiogroup as text links ────────────────────────
@@ -229,9 +231,11 @@ const { pills, groupLabel, itemSelector, itemDataAttr, matchMode, noun, nounPlur
     transition: color 240ms ease, border-color 240ms ease;
   }
 
-  html:not([data-appearance='retro']) body.skin-redesign .filter-pill:hover {
-    color: var(--changelog);
-    border-color: transparent;
+  @media (hover: hover) {
+    html:not([data-appearance='retro']) body.skin-redesign .filter-pill:hover {
+      color: var(--changelog);
+      border-color: transparent;
+    }
   }
 
   html:not([data-appearance='retro']) body.skin-redesign .filter-pill.is-active {

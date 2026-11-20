@@ -65,9 +65,13 @@
   }
 
   .link-writing { color: var(--writing); }
-  .link-writing:hover { color: var(--writing-hover); }
+  @media (hover: hover) {
+    .link-writing:hover { color: var(--writing-hover); }
+  }
   .link-agents { color: var(--agents); }
-  .link-agents:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .link-agents:hover { color: var(--agents-hover); }
+  }
 
   @media (max-width: 720px) {
     .writing-hero { padding-top: 40px; }

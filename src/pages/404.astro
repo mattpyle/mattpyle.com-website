@@ -85,7 +85,9 @@ const WAYS_BACK = [
   }
 
   .hero-agents-links a { color: var(--agents); }
-  .hero-agents-links a:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .hero-agents-links a:hover { color: var(--agents-hover); }
+  }
 
   .ways { padding-top: 72px; }
 
@@ -121,7 +123,9 @@ const WAYS_BACK = [
     transition: border-color 220ms ease;
   }
 
-  .way:hover { border-color: var(--ink-6); }
+  @media (hover: hover) {
+    .way:hover { border-color: var(--ink-6); }
+  }
 
   .way-path {
     font-family: var(--font-mono-plex);

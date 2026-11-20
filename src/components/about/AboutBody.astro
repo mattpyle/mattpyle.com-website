@@ -278,9 +278,11 @@ const REACH = [
     text-decoration-color: var(--rule);
   }
 
-  html:not([data-appearance='retro']) body.skin-redesign .prose :global(a:hover) {
-    color: var(--agents-hover);
-    text-decoration-color: currentColor;
+  @media (hover: hover) {
+    html:not([data-appearance='retro']) body.skin-redesign .prose :global(a:hover) {
+      color: var(--agents-hover);
+      text-decoration-color: currentColor;
+    }
   }
 
   .about-aside {
@@ -322,7 +324,13 @@ const REACH = [
     transition: background 240ms ease;
   }
 
-  .reach-card:hover { background: var(--tint-agents); }
+  @media (hover: hover) {
+    .reach-card:hover { background: var(--tint-agents); }
+  }
+
+  @media (hover: none) {
+    .reach-card:active { background: var(--tint-agents); }
+  }
 
   .reach-icon {
     width: 20px;
@@ -436,9 +444,11 @@ const REACH = [
     text-underline-offset: 3px;
   }
 
-  .rail-value a:hover {
-    color: var(--agents-hover);
-    text-decoration-color: currentColor;
+  @media (hover: hover) {
+    .rail-value a:hover {
+      color: var(--agents-hover);
+      text-decoration-color: currentColor;
+    }
   }
 
   .rail-md {
@@ -447,7 +457,9 @@ const REACH = [
     color: var(--agents);
   }
 
-  .rail-md:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .rail-md:hover { color: var(--agents-hover); }
+  }
 
   .sr-only {
     position: absolute;

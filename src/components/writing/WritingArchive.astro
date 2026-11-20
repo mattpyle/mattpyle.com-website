@@ -123,7 +123,13 @@ const groups = [...byYear.entries()]
     transition: background 240ms ease;
   }
 
-  .row:hover { background: var(--tint-writing); }
+  @media (hover: hover) {
+    .row:hover { background: var(--tint-writing); }
+  }
+
+  @media (hover: none) {
+    .row:active { background: var(--tint-writing); }
+  }
 
   .rows-end { border-top: 1px solid var(--rule); }
 

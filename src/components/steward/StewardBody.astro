@@ -543,7 +543,9 @@ const GUARANTEES = [
   }
 
   a { color: var(--agents); }
-  a:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    a:hover { color: var(--agents-hover); }
+  }
 
   /* Prose links keep the hairline underline: inside a paragraph, colour alone
      does not distinguish a link (WCAG 1.4.1). */
@@ -557,9 +559,11 @@ const GUARANTEES = [
     transition: color 240ms ease, text-decoration-color 240ms ease;
   }
 
-  .lead a:hover,
-  .secondary a:hover,
-  .limits-note a:hover { text-decoration-color: currentColor; }
+  @media (hover: hover) {
+    .lead a:hover,
+    .secondary a:hover,
+    .limits-note a:hover { text-decoration-color: currentColor; }
+  }
 
   /* ── Band 2: the facts table and the refusal card ─────────────────────────── */
 

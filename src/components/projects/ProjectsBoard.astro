@@ -143,9 +143,11 @@ function cardHref(project: Project): { href: string; external: boolean } | null 
     transition: border-color 240ms ease, transform 240ms ease;
   }
 
-  a.card:hover {
-    border-color: var(--projects);
-    transform: translateY(-3px);
+  @media (hover: hover) {
+    a.card:hover {
+      border-color: var(--projects);
+      transform: translateY(-3px);
+    }
   }
 
   .card-image {

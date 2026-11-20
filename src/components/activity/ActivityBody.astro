@@ -883,7 +883,9 @@ function mcpVersionNote(version: string): string | undefined {
     color: var(--agents);
   }
 
-  .as-data-link:hover { color: var(--agents-hover); }
+  @media (hover: hover) {
+    .as-data-link:hover { color: var(--agents-hover); }
+  }
 
   /* ── Responsive ─────────────────────────────────────────────────────────── */
   @media (max-width: 900px) {

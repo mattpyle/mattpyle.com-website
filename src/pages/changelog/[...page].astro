@@ -142,7 +142,9 @@ const markdownUrl = markdownSiblingFor(breadcrumbUrl) ?? undefined;
     color: var(--changelog);
   }
 
-  .pager-link:hover { color: var(--changelog-hover); }
+  @media (hover: hover) {
+    .pager-link:hover { color: var(--changelog-hover); }
+  }
 
   .pager-count {
     font-family: var(--font-mono-plex);

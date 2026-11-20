@@ -84,7 +84,9 @@ const markdownUrl = `${path.slice(0, -1)}.md`;
   .entry-head { padding-top: 66px; }
 
   .entry-back { font-family: var(--font-mono-plex); font-size: 17px; color: var(--changelog); }
-  .entry-back:hover { color: var(--changelog-hover); }
+  @media (hover: hover) {
+    .entry-back:hover { color: var(--changelog-hover); }
+  }
 
   .entry-title {
     margin: 26px 0 0;
