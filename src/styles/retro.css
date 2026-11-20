@@ -1171,42 +1171,6 @@ html[data-appearance='retro'] [data-module='article'] .rail-action:hover:not(:di
   color: var(--retro-maroon);
 }
 
-/* The next-post row, in the archive's own dashed treatment so the foot of a
-   post and the list it came from read the same.
-
-   `color` alongside the border, which the `.entry-step` twin further down this
-   file already had: the page sets the anchor to `--ink`, its two children set
-   their own colours, and what is left painted in the modern grey is the row's
-   `currentColor` — its unset borders, its outline and its text decoration. The
-   sweep never saw it because this row renders only on a post that has a next
-   one, and the site has published exactly one post. */
-html[data-appearance='retro'] [data-module='article'] .post-next {
-  border-top: 2px dashed var(--retro-frame-border);
-  color: var(--retro-ink);
-}
-
-html[data-appearance='retro'] [data-module='article'] .post-next:hover {
-  background: var(--retro-sidebar-bg);
-}
-
-html[data-appearance='retro'] [data-module='article'] .post-next-label {
-  font-family: var(--retro-font-mono);
-  font-size: 12px;
-  color: var(--retro-ink-muted);
-}
-
-html[data-appearance='retro'] [data-module='article'] .post-next-title {
-  font-family: var(--retro-font-display);
-  font-size: 20px;
-  font-weight: normal;
-  letter-spacing: normal;
-  color: var(--retro-maroon);
-}
-
-html[data-appearance='retro'] [data-module='article'] .post-next:hover .post-next-title {
-  color: var(--retro-link);
-}
-
 /* ── /projects ────────────────────────────────────────────────────────────
    Retro styles the SAME page the modern appearance does — ProjectsHero and
    ProjectsBoard. The legacy PageHeader/ProjectsGrid tree is deleted, and with it
@@ -1545,9 +1509,12 @@ html[data-appearance='retro'] [data-module='article'] .entry-type {
   color: var(--retro-maroon);
 }
 
-/* The prev/next steps in the archive's dashed treatment, so the foot of an entry
-   and the log it came from read the same — the call the post page's
-   `.post-next` already made. */
+/* The newer and older steps (src/components/EntryNav.astro) in the archive's dashed treatment,
+   so the foot of a post, a changelog entry or a fix and the list it came from read the same.
+
+   `color` alongside the border: the component sets the anchor to `--ink`, its two children set
+   their own colours, and what is left painted in the modern grey is the row's `currentColor` —
+   its unset borders, its outline and its text decoration. */
 html[data-appearance='retro'] [data-module='article'] .entry-step {
   border-top: 2px dashed var(--retro-frame-border);
   color: var(--retro-ink);

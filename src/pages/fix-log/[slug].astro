@@ -16,6 +16,7 @@ import { getCollection, render } from 'astro:content';
 import Layout from '../../layouts/Layout.astro';
 import FixRail from '../../components/fix-log/FixRail.astro';
 import FixBeforeAfter from '../../components/fix-log/FixBeforeAfter.astro';
+import EntryNav from '../../components/EntryNav.astro';
 import { FIX_LOG, compareFixes, fixDate, fixUrl } from '../../lib/fix-log';
 
 export async function getStaticPaths() {
@@ -68,22 +69,11 @@ const markdownUrl = `${path.slice(0, -1)}.md`;
       </div>
     </div>
 
-    {(newer || older) && (
-      <nav class="entry-nav rd-section" aria-label="Fix log entry navigation">
-        {newer && (
-          <a href={fixUrl(newer)} class="entry-step">
-            <span class="entry-step-label">newer &middot; {fixDate(newer.data.verified)}</span>
-            <span class="entry-step-title">{newer.data.title}</span>
-          </a>
-        )}
-        {older && (
-          <a href={fixUrl(older)} class="entry-step">
-            <span class="entry-step-label">older &middot; {fixDate(older.data.verified)}</span>
-            <span class="entry-step-title">{older.data.title}</span>
-          </a>
-        )}
-      </nav>
-    )}
+    <EntryNav
+      label="Fix log entry navigation"
+      newer={newer && { href: fixUrl(newer), date: fixDate(newer.data.verified), title: newer.data.title }}
+      older={older && { href: fixUrl(older), date: fixDate(older.data.verified), title: older.data.title }}
+    />
   </article>
 </Layout>
 
@@ -144,35 +134,6 @@ const markdownUrl = `${path.slice(0, -1)}.md`;
     color: var(--ink);
   }
 
-  /* ── Newer and older: the changelog entry's foot ── */
-  .entry-nav { margin-top: 76px; }
-
-  .entry-step {
-    display: grid;
-    grid-template-columns: 210px minmax(0, 1fr);
-    gap: 56px;
-    align-items: baseline;
-    padding: 30px 20px 34px;
-    margin: 0 -20px;
-    border-top: 1px solid var(--rule);
-    color: var(--ink);
-    transition: background 240ms ease;
-  }
-
-  .entry-step:hover { background: var(--tint-writing); }
-
-  .entry-step-label { font-family: var(--font-mono-plex); font-size: 17px; color: var(--ink-6); }
-
-  .entry-step-title {
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 30px;
-    line-height: 1.16;
-    letter-spacing: -.025em;
-    max-width: 26ch;
-    overflow-wrap: anywhere;
-  }
-
   @media (max-width: 900px) {
     .fix-body { grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 44px; }
   }
@@ -183,9 +144,6 @@ const markdownUrl = `${path.slice(0, -1)}.md`;
     .entry-lead { margin-top: 22px; font-size: 22px; }
     .fix-main { gap: 48px; }
     .fix-h { font-size: 26px; margin-bottom: 18px; }
-    .entry-nav { margin-top: 48px; }
-    .entry-step { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 22px 0; margin: 0; }
-    .entry-step-title { font-size: 25px; }
     .entry-back { display: inline-flex; align-items: center; min-height: 44px; }
   }
 </style>
