@@ -71,15 +71,17 @@ const { label, newer = null, older = null } = Astro.props;
     color: var(--ink-6);
   }
 
-  /* No width cap: the title takes the column. `overflow-wrap` is for a fix title that holds a
-     long unbroken token, a path or a file name, which would otherwise push the row wider than
-     a phone. */
+  /* No width cap: the title takes the column, and `text-wrap: balance` evens out the lines of
+     one that wraps, so it does not end on a single short word. A browser without it wraps as
+     usual. `overflow-wrap` is for a fix title that holds a long unbroken token, a path or a
+     file name, which would otherwise push the row wider than a phone. */
   .entry-step-title {
     font-family: var(--font-display);
     font-weight: 500;
-    font-size: 34px;
-    line-height: 1.14;
+    font-size: 30px;
+    line-height: 1.16;
     letter-spacing: -.025em;
+    text-wrap: balance;
     overflow-wrap: anywhere;
   }
 
@@ -101,9 +103,6 @@ const { label, newer = null, older = null } = Astro.props;
 
     .entry-step-label { font-size: 16px; }
 
-    .entry-step-title {
-      font-size: 27px;
-      line-height: 1.18;
-    }
+    .entry-step-title { font-size: 25px; }
   }
 </style>
