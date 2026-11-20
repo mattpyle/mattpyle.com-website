@@ -35,7 +35,7 @@
       - text: ","
       - link "agents.md":
         - /url: /agents.md
-      - text: ", a WebMCP surface with tools an agent can actually call, markdown at every URL for anything that asks for it, and a"
+      - text: ", a WebMCP surface with tools an agent can actually call, an MCP server at /mcp, an A2A agent at /a2a that answers and audits in conversation, markdown at every URL for anything that asks for it, and a"
       - link "scorecard":
         - /url: /scorecard/
       - text: that publishes the audit numbers whether or not they are flattering. When a check fails, the scorecard says so.
