@@ -772,7 +772,7 @@ async function runScorecardAudit(input: ScorecardAuditInput): Promise<RanScoreca
     scope,
     tools,
     entry: input.triggeredBy === 'schedule' ? 'Nightly · automated' : 'Manual · intentional',
-    commentary: withNote(input.note, buildCommentary(perPage, metrics, decision)),
+    commentary: withNote(input.note, buildCommentary(perPage, metrics, decision, published?.metrics)),
     metrics,
     ...(readingBudget ? { readingBudget } : {}),
   };
@@ -956,6 +956,29 @@ function withNote(note: string | undefined, draft: string): string {
   return `${punctuated} ${draft}`;
 }
 
+/** The check names an Agentic Browsing description lists after "pass: ", or none. */
+function agenticCheckNames(metrics: ScorecardRunRecord['metrics'] | undefined): string[] {
+  const description = metrics?.find((m) => m.name === 'Agentic Browsing')?.description ?? '';
+  const match = description.match(/ pass: (.+?)(?: — |\.(?:\s|$))/);
+  return match ? match[1].split(', ') : [];
+}
+
+/**
+ * Names the Agentic Browsing checks the published run counted that this run
+ * counts on no page. A check that applies nowhere leaves the total instead of
+ * failing, so a lapsed WebMCP token reads "4/4" unless the commentary says so.
+ */
+function describeDroppedChecks(
+  metrics: ScorecardRunRecord['metrics'],
+  published: ScorecardRunRecord['metrics'] | undefined,
+): string | undefined {
+  const now = new Set(agenticCheckNames(metrics));
+  const dropped = agenticCheckNames(published).filter((n) => !now.has(n));
+  const current = metrics.find((m) => m.name === 'Agentic Browsing');
+  if (dropped.length === 0 || !current) return undefined;
+  return `${dropped.join(' and ')} applied on no page, so ${current.value} of ${current.maximum} remaining Agentic Browsing checks pass`;
+}
+
 /**
  * A machine first-draft `commentary` (rule 7) — human-editable in the PR
  * before merge. States, factually, what *this run* measured: the delta (if
@@ -969,6 +992,7 @@ export function buildCommentary(
   perPage: PageAuditOutcome[],
   metrics: ScorecardRunRecord['metrics'],
   decision: PublishDecision,
+  publishedMetrics?: ScorecardRunRecord['metrics'],
 ): string {
   const failedPages = perPage.filter((p) => !p.ok);
   if (failedPages.length > 0) {
@@ -992,7 +1016,14 @@ export function buildCommentary(
           })
           .join('; ');
 
-  const delta = describeChangeDelta(decision);
+  const changeDelta = describeChangeDelta(decision);
+  const dropped = describeDroppedChecks(metrics, publishedMetrics);
+  // The dropped-check sentence says why the Agentic Browsing ratio moved, so it replaces that ratio sentence.
+  const delta = dropped
+    ? changeDelta && !changeDelta.startsWith('Agentic Browsing')
+      ? `${dropped}; ${changeDelta}`
+      : dropped
+    : changeDelta;
   const combined = delta ? `${delta}; ${summary}` : summary;
   return `${combined.charAt(0).toUpperCase()}${combined.slice(1)}.`;
 }
