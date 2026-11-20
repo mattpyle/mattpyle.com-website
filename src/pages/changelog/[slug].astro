@@ -163,6 +163,11 @@ const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : nu
 
   .entry-back:hover { color: var(--changelog-hover); }
 
+  /* A 44px touch target on a phone, as the fix-log and writing entries have. */
+  @media (max-width: 720px) {
+    .entry-back { display: inline-flex; align-items: center; min-height: 44px; }
+  }
+
   .entry-title {
     margin: 26px 0 0;
     max-width: 24ch;
