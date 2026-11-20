@@ -359,11 +359,21 @@ const REACH = [
     display: flex;
     flex-direction: column;
     gap: 18px;
-    position: sticky;
-    /* Below the sticky header, which is 72px tall and paints over anything that
-       sticks higher. 96px is the offset PostRail.astro uses, so the site's two
-       rails stop at the same line. */
-    top: 96px;
+  }
+
+  /* Pinned only while the whole rail fits in the window. A pinned block taller
+     than the window has a bottom that cannot be reached until the column ends
+     (PostRail.astro decides the same thing in script). 773px is the rail's
+     661px at these widths, where it is a fixed 300px wide, plus the 96px offset
+     and a 16px gutter; tests/a11y/about-rail.spec.ts fails if the rail outgrows it. */
+  @media (min-width: 1001px) and (min-height: 773px) {
+    .rail {
+      position: sticky;
+      /* Below the sticky header, which is 72px tall and paints over anything that
+         sticks higher. 96px is the offset PostRail.astro uses, so the site's two
+         rails stop at the same line. */
+      top: 96px;
+    }
   }
 
   .rail-photo {
