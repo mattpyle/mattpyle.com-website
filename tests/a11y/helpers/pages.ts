@@ -145,14 +145,15 @@ export const PAGES: PageSpec[] = [
     // "On this page", one link per section — is what this golden is guarding,
     // and that survives redaction.
     //
-    // The fixture post is the oldest one, so it never has a next-post row and
-    // this golden does not cover it. `.post-next` is listed anyway, so the day
-    // an older post exists the golden records a shape rather than a title.
+    // The fixture post is the oldest one, so it has a newer step and no older
+    // one. `.entry-step` (src/components/EntryNav.astro) redacts the step and
+    // leaves the landmark's own name in the golden: the neighbour moves when a
+    // post ships, the name "Writing entry navigation" does not.
     snapshotRedact: [
       '.post-title',
       '.post-lead',
       '.rail-contents',
-      '.post-next',
+      '.entry-step',
     ],
   },
   {

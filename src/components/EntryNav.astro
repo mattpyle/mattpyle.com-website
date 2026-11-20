@@ -1,0 +1,108 @@
+---
+/**
+ * The newer and older steps at the foot of an entry page: a writing post, a changelog entry and a
+ * fix. One copy of the markup and the styles, so a change lands on all three pages.
+ *
+ * The page works out its own neighbours and passes plain values: writing and the changelog order
+ * by `date`, the fix log by `verified`, and each builds its hrefs its own way. Each page also
+ * passes its own landmark label, so the three navigations have different names.
+ *
+ * Newer first, then older: the indexes read newest-first, so this runs the same way. A missing
+ * side is not rendered, and with neither side there is no landmark at all.
+ *
+ * The class names are the ones `src/styles/retro.css` dresses under `[data-module='article']`.
+ * Scoping adds an attribute to these elements and leaves the class names alone, so those global
+ * rules still match. `tests/a11y/helpers/pages.ts` redacts by the same names.
+ */
+interface Step {
+  href: string;
+  /** Already formatted for display, for example "20 Nov 2026". */
+  date: string;
+  title: string;
+}
+
+interface Props {
+  /** The landmark's accessible name, for example "Writing entry navigation". */
+  label: string;
+  newer?: Step | null;
+  older?: Step | null;
+}
+
+const { label, newer = null, older = null } = Astro.props;
+---
+
+{(newer || older) && (
+  <nav class="entry-nav rd-section" aria-label={label}>
+    {newer && (
+      <a href={newer.href} class="entry-step">
+        <span class="entry-step-label">newer &middot; {newer.date}</span>
+        <span class="entry-step-title">{newer.title}</span>
+      </a>
+    )}
+    {older && (
+      <a href={older.href} class="entry-step">
+        <span class="entry-step-label">older &middot; {older.date}</span>
+        <span class="entry-step-title">{older.title}</span>
+      </a>
+    )}
+  </nav>
+)}
+
+<style>
+  .entry-nav { margin-top: 76px; }
+
+  .entry-step {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: baseline;
+    padding: 30px 20px 34px;
+    margin: 0 -20px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink);
+    transition: background 240ms ease;
+  }
+
+  .entry-step:hover { background: var(--tint-writing); }
+
+  .entry-step-label {
+    font-family: var(--font-mono-plex);
+    font-size: 17px;
+    color: var(--ink-6);
+  }
+
+  /* No width cap: the title takes the column, and `text-wrap: balance` evens out the lines of
+     one that wraps, so it does not end on a single short word. A browser without it wraps as
+     usual. `overflow-wrap` is for a fix title that holds a long unbroken token, a path or a
+     file name, which would otherwise push the row wider than a phone. */
+  .entry-step-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.16;
+    letter-spacing: -.025em;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+  }
+
+  /* One column from 900px, where the entry pages' own rail-and-prose grids collapse. */
+  @media (max-width: 900px) {
+    .entry-step {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .entry-nav { margin-top: 48px; }
+
+    .entry-step {
+      padding: 22px 0 24px;
+      margin: 0;
+    }
+
+    .entry-step-label { font-size: 16px; }
+
+    .entry-step-title { font-size: 25px; }
+  }
+</style>

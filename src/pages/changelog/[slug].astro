@@ -2,6 +2,7 @@
 import { getCollection, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import Layout from '../../layouts/Layout.astro';
+import EntryNav from '../../components/EntryNav.astro';
 import { showDrafts } from '../../lib/show-drafts';
 import { compareChangelogEntries } from '../../lib/changelog-order';
 import { formatSiteDate } from '../../lib/format-date.mjs';
@@ -100,26 +101,23 @@ const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : nu
       <Content />
     </div>
 
-    {(prev || next) && (
-      <nav class="entry-nav rd-section" aria-label="Changelog entry navigation">
-        {/* Newer first, then older: the log reads newest-first, so this is the
-            same direction the index runs in. `next` is the newer entry and
-            `prev` the older one — the names come from the chronology, not from
-            where they sit on the page (see getStaticPaths above). */}
-        {next && (
-          <a href={`/changelog/${next.id}/`} class="entry-step">
-            <span class="entry-step-label">newer &middot; {formatSiteDate(next.data.date)}</span>
-            <span class="entry-step-title">{next.data.title}</span>
-          </a>
-        )}
-        {prev && (
-          <a href={`/changelog/${prev.id}/`} class="entry-step">
-            <span class="entry-step-label">older &middot; {formatSiteDate(prev.data.date)}</span>
-            <span class="entry-step-title">{prev.data.title}</span>
-          </a>
-        )}
-      </nav>
-    )}
+    {/* Newer first, then older: the log reads newest-first, so this is the
+        same direction the index runs in. `next` is the newer entry and
+        `prev` the older one — the names come from the chronology, not from
+        where they sit on the page (see getStaticPaths above). */}
+    <EntryNav
+      label="Changelog entry navigation"
+      newer={next && {
+        href: `/changelog/${next.id}/`,
+        date: formatSiteDate(next.data.date),
+        title: next.data.title,
+      }}
+      older={prev && {
+        href: `/changelog/${prev.id}/`,
+        date: formatSiteDate(prev.data.date),
+        title: prev.data.title,
+      }}
+    />
 
   </article>
 </Layout>
@@ -237,37 +235,6 @@ const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : nu
   .prose :global(a:hover) { color: var(--changelog-hover); }
   .prose :global(blockquote) { border-left-color: var(--changelog); }
 
-  .entry-nav { margin-top: 76px; }
-
-  .entry-step {
-    display: grid;
-    grid-template-columns: 210px minmax(0, 1fr);
-    gap: 56px;
-    align-items: baseline;
-    padding: 30px 20px 34px;
-    margin: 0 -20px;
-    border-top: 1px solid var(--rule);
-    color: var(--ink);
-    transition: background 240ms ease;
-  }
-
-  .entry-step:hover { background: var(--tint-writing); }
-
-  .entry-step-label {
-    font-family: var(--font-mono-plex);
-    font-size: 17px;
-    color: var(--ink-6);
-  }
-
-  .entry-step-title {
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 30px;
-    line-height: 1.16;
-    letter-spacing: -.025em;
-    max-width: 26ch;
-  }
-
   @media (max-width: 720px) {
     [data-module="article"] { padding: 0 0 56px; }
 
@@ -295,19 +262,5 @@ const revisedOn = updated && updated.getTime() !== date.getTime() ? updated : nu
     .hero { margin-inline: var(--shell-gutter-mobile); }
 
     .prose { margin-top: 36px; }
-
-    .entry-nav { margin-top: 48px; }
-
-    .entry-step {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 22px 0 24px;
-      margin: 0;
-    }
-
-    .entry-step-label { font-size: 16px; }
-
-    .entry-step-title { font-size: 25px; }
   }
 </style>
