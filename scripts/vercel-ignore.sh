@@ -31,6 +31,8 @@ git fetch --no-tags $depth origin "+refs/heads/master:refs/remotes/origin/master
 base=$(git merge-base HEAD refs/remotes/origin/master) || exit 1
 
 out=$(mktemp) || exit 1
-GITHUB_OUTPUT="$out" bash scripts/route-changes.sh pull_request "$base" || exit 1
+# `base`: diff from the merge base, even when HEAD is a merge commit. Here a merge
+# commit is the branch with master merged in, and its first parent is the branch.
+GITHUB_OUTPUT="$out" bash scripts/route-changes.sh pull_request "$base" base || exit 1
 grep -qx 'site=false' "$out" && exit 0
 exit 1
