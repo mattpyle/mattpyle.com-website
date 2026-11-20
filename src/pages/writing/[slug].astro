@@ -3,6 +3,7 @@ import { getCollection, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import Layout from '../../layouts/Layout.astro';
 import PostRail from '../../components/writing/PostRail.astro';
+import EntryNav from '../../components/EntryNav.astro';
 import { showDrafts } from '../../lib/show-drafts';
 import { readingTimeLabel, readingTimeISO8601 } from '../../lib/reading-time';
 import { formatSiteDate } from '../../lib/format-date.mjs';
@@ -113,22 +114,19 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
       </div>
     </div>
 
-    {(newerArticle || nextArticle) && (
-      <nav class="post-next-wrap rd-section" aria-label="Writing entry navigation">
-        {newerArticle && (
-          <a href={`/writing/${newerArticle.id}/`} class="post-next">
-            <span class="post-next-label">newer &middot;{formatSiteDate(newerArticle.data.date)}</span>
-            <span class="post-next-title">{newerArticle.data.title}</span>
-          </a>
-        )}
-        {nextArticle && (
-          <a href={`/writing/${nextArticle.id}/`} class="post-next">
-            <span class="post-next-label">older &middot;{formatSiteDate(nextArticle.data.date)}</span>
-            <span class="post-next-title">{nextArticle.data.title}</span>
-          </a>
-        )}
-      </nav>
-    )}
+    <EntryNav
+      label="Writing entry navigation"
+      newer={newerArticle && {
+        href: `/writing/${newerArticle.id}/`,
+        date: formatSiteDate(newerArticle.data.date),
+        title: newerArticle.data.title,
+      }}
+      older={nextArticle && {
+        href: `/writing/${nextArticle.id}/`,
+        date: formatSiteDate(nextArticle.data.date),
+        title: nextArticle.data.title,
+      }}
+    />
 
   </article>
 </Layout>
@@ -271,36 +269,6 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
      changelog entry page shares the identical treatment with no extra stylesheet
      request. Edit prose there, not here. */
 
-  .post-next-wrap { margin-top: 76px; }
-
-  .post-next {
-    display: grid;
-    grid-template-columns: 210px minmax(0, 1fr);
-    gap: 56px;
-    align-items: baseline;
-    padding: 30px 20px 34px;
-    margin: 0 -20px;
-    border-top: 1px solid var(--rule);
-    color: var(--ink);
-    transition: background 240ms ease;
-  }
-
-  .post-next:hover { background: var(--tint-writing); }
-
-  .post-next-label {
-    font-family: var(--font-mono-plex);
-    font-size: 17px;
-    color: var(--ink-6);
-  }
-
-  .post-next-title {
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 34px;
-    line-height: 1.14;
-    letter-spacing: -.025em;
-  }
-
   /* One column below 900px: 210px of rail plus 68ch of prose stops fitting well
      before the 720px the rest of the redesign breaks at. */
   @media (max-width: 900px) {
@@ -318,11 +286,6 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
     .post-body.has-hero > .prose {
       grid-column: auto;
       grid-row: auto;
-    }
-
-    .post-next {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 10px;
     }
   }
 
@@ -353,19 +316,5 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
     }
 
     .post-body { padding-inline: var(--shell-gutter-mobile); }
-
-    .post-next-wrap { margin-top: 48px; }
-
-    .post-next {
-      padding: 22px 0 24px;
-      margin: 0;
-    }
-
-    .post-next-label { font-size: 16px; }
-
-    .post-next-title {
-      font-size: 27px;
-      line-height: 1.18;
-    }
   }
 </style>
