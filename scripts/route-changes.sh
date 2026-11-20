@@ -4,7 +4,7 @@
 # which says how the Steward job picks its tests, and `steward_changed`, the
 # changed files it picks from.
 #
-#   scripts/route-changes.sh <event-name> <base-sha>
+#   scripts/route-changes.sh <event-name> <base-sha> [base]
 #
 # Called from two workflows, `ci.yml` and `a11y.yml`, each in a `changes` job.
 # There is one copy on purpose: the two tables drifted apart within a day when
@@ -23,6 +23,12 @@
 # changes then route the pull request to jobs it did not touch. The recorded base
 # is used only when HEAD is not a merge commit. The checkout is shallow, so the
 # script fetches HEAD's parents before it checks for a merge commit.
+#
+# A third argument, `base`, turns that rule off: the diff always runs from
+# `base-sha`. `vercel-ignore.sh` passes it. Vercel checks out the branch tip, not
+# GitHub's merge commit, so a merge commit there is a branch that merged master
+# in, and its first parent is the branch. A diff from the first parent would list
+# only what master brought, and a site change would lose its preview.
 #
 # `steward_tests` is one of three things:
 #   1. `tests/**/*.test.ts`, the full suite, for a push and for any change that
@@ -45,6 +51,7 @@ set -euo pipefail
 
 event_name="${1:?usage: route-changes.sh <event-name> <base-sha>}"
 base_sha="${2:-}"
+diff_from="${3:-}"
 output="${GITHUB_OUTPUT:-/dev/stdout}"
 scratch="${RUNNER_TEMP:-$(mktemp -d)}"
 
@@ -65,11 +72,11 @@ if [ "$event_name" != "pull_request" ]; then
 else
   # The checkout is shallow: fetch HEAD's parents before reading them.
   git fetch --no-tags --depth=2 origin "$(git rev-parse HEAD)"
-  if git rev-parse -q --verify HEAD^2 > /dev/null; then
+  if [ "$diff_from" != base ] && git rev-parse -q --verify HEAD^2 > /dev/null; then
     # A merge commit: its first parent is current master.
     git diff --name-only --no-renames HEAD^1 HEAD > "$scratch/changed.txt"
   else
-    # Not a merge commit: fall back to the base GitHub recorded.
+    # Not a merge commit, or the caller asked for its own base: diff from the base given.
     git fetch --no-tags --depth=1 origin "$base_sha"
     git diff --name-only --no-renames "$base_sha" HEAD > "$scratch/changed.txt"
   fi

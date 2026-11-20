@@ -561,6 +561,12 @@ export interface CheckRunner {
   userAgent: string;
   timeoutMs?: number;
   /**
+   * Aborted when the run should stop: the activity's cancellation. A request in
+   * flight is aborted, no further check starts, and the probe is closed at once,
+   * which ends the page it is waiting on. The run then throws the signal's reason.
+   */
+  signal?: AbortSignal;
+  /**
    * A block run on a preview: `from` is the preview's own origin and `to` the
    * production origin the finding's expectations name. Every measured string
    * (the body, a header value, a selector's text or attribute, a `js` result)
@@ -670,7 +676,13 @@ function sameJson(a: unknown, b: unknown): boolean {
  */
 export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Promise<VerifyCheckResult[]> {
   const timeoutMs = runner.timeoutMs ?? 30_000;
+  const signal = runner.signal;
   let probe: (PageProbe & { close(): Promise<void> }) | undefined;
+  // Closing the probe kills the browser, so the evaluate it is waiting on
+  // rejects and the run reaches `stopped` below. `close` is safe to call twice.
+  const onAbort = () => void probe?.close().catch(() => {});
+  /** Throws the signal's reason once it has aborted, whatever the run threw meanwhile. */
+  const stopped = () => signal?.throwIfAborted();
 
   const read = (text: string): string => (runner.readAs ? readOriginAs(text, runner.readAs.from, runner.readAs.to) : text);
   const readValue = (value: unknown): unknown => (runner.readAs ? readJsonAs(value, runner.readAs.from, runner.readAs.to) : value);
@@ -681,9 +693,10 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
       res = await runner.fetch(url, {
         ...init,
         headers: { 'User-Agent': runner.userAgent, ...(init.headers ?? {}) },
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
+      stopped();
       throw new CheckUnavailable(`${url} did not answer: ${err instanceof Error ? err.message : String(err)}`);
     }
     if (res.status >= 500 && !(check.kind === 'status' && check.expect === res.status)) {
@@ -731,6 +744,8 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
       case 'selector':
       case 'js': {
         probe ??= await runner.openProbe();
+        // An abort during the launch found no probe to close; the `finally` closes this one.
+        stopped();
         const expression = check.kind === 'js' ? String(expect.expression) : selectorExpression(expect);
         const viewport = check.viewport ?? DEFAULT_VIEWPORT;
         const size = parseViewport(viewport);
@@ -747,9 +762,11 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
     }
   };
 
+  signal?.addEventListener('abort', onAbort, { once: true });
   try {
     const results: VerifyCheckResult[] = [];
     for (const [i, check] of checks.entries()) {
+      stopped();
       const row = { n: i + 1, url: check.url, kind: check.kind };
       if (!Array.isArray(check.url)) {
         results.push({ ...row, ...(await judge(check, check.url)) });
@@ -767,7 +784,13 @@ export async function runChecks(checks: VerifyCheck[], runner: CheckRunner): Pro
       });
     }
     return results;
+  } catch (err) {
+    // A closed probe or an aborted request fails as whatever it was doing; the
+    // cause is the abort, and that is what the caller is told.
+    stopped();
+    throw err;
   } finally {
+    signal?.removeEventListener('abort', onAbort);
     await probe?.close().catch(() => {});
   }
 }

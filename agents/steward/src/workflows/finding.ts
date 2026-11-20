@@ -565,6 +565,7 @@ const previewing = wf.proxyActivities<Pick<typeof activities, 'awaitPrPreview'>>
 const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '5 minutes',
+  heartbeatTimeout: '30 seconds',
   retry: {
     maximumAttempts: 3,
     initialInterval: '15 seconds',
@@ -580,6 +581,7 @@ const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>
 const measuring = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '15 minutes',
+  heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 2, initialInterval: '30 seconds', nonRetryableErrorTypes: ['VerifyCheckBroken'] },
 });
 

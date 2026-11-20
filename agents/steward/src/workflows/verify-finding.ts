@@ -148,9 +148,14 @@ const reading = wf.proxyActivities<
 
 // Three attempts, a minute apart at the last: what is retried is production
 // answering 5xx or not at all, and a deploy in progress is over in that time.
+// The heartbeat timeout turns a worker that died mid-run into a retry in 30
+// seconds, not at the start-to-close timeout. No `patched` marker: it is an
+// attribute of the same schedule command, and the history recorded before it
+// (`verify-finding-checks-pre-heartbeat.bin`) replays unchanged (determinism rule 5).
 const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '5 minutes',
+  heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 3, initialInterval: '15 seconds', backoffCoefficient: 4, nonRetryableErrorTypes: ['VerifyCheckBroken'] },
 });
 

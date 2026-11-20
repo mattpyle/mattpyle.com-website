@@ -1,8 +1,9 @@
-import { ApplicationFailure } from '@temporalio/activity';
+import { ApplicationFailure, Context } from '@temporalio/activity';
 import { PROD_ORIGIN } from '../config.js';
 import { AUDIT_USER_AGENT } from '../lib/agent-audit/safe-fetch.js';
 import { openChromeProbe } from '../lib/chrome-probe.js';
 import { log } from '../lib/logger.js';
+import { withHeartbeat } from './heartbeat.js';
 import {
   CheckBroken,
   bypassFetch,
@@ -43,6 +44,17 @@ import {
  * **No workflow change, no `wf.patched` marker.** The workflow issues the same
  * commands with the same inputs; only what the activity compares differs.
  * `tests/workflows/replay.test.ts` replays unchanged (determinism rule 5).
+ *
+ * **It heartbeats, and it stops when cancelled.** A block is up to twelve
+ * checks and a browser check is a load and a settle, so a run takes minutes.
+ * The pump beats every five seconds for as long as the checks run, and each
+ * stub that schedules the activity sets a 30-second `heartbeatTimeout`: a
+ * worker that dies mid-run (a deploy, a recycle) is noticed then, and not when
+ * the `startToCloseTimeout` ends. The heartbeat's details are a fixed phrase,
+ * nothing a page returned. The activity's `cancellationSignal` goes to
+ * `runChecks`, which aborts the request in flight and closes the probe, so no
+ * Chrome outlives a cancelled or timed-out attempt; the activity then fails
+ * as cancelled.
  */
 
 /** The worker environment variable that holds the bypass secret, under the name Vercel uses. */
@@ -86,15 +98,19 @@ export async function runFindingChecks(
       openProbe: runner.openProbe ?? (() => openChromeProbe({ userAgent: AUDIT_USER_AGENT, bypass })),
     };
   }
+  const signal = Context.current().cancellationSignal;
   let results: VerifyCheckResult[];
   try {
-    results = await runChecks(checks, {
-      fetch,
-      openProbe: () => openChromeProbe({ userAgent: AUDIT_USER_AGENT }),
-      userAgent: AUDIT_USER_AGENT,
-      ...runner,
-      ...preview,
-    });
+    results = await withHeartbeat('running finding checks', () =>
+      runChecks(checks, {
+        fetch,
+        openProbe: () => openChromeProbe({ userAgent: AUDIT_USER_AGENT }),
+        userAgent: AUDIT_USER_AGENT,
+        signal,
+        ...runner,
+        ...preview,
+      }),
+    );
   } catch (err) {
     if (err instanceof CheckBroken) throw ApplicationFailure.nonRetryable(err.message, 'VerifyCheckBroken');
     throw err;
