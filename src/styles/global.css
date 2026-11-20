@@ -715,6 +715,20 @@ html:not([data-appearance='retro']) body.skin-redesign h1 ::selection {
   padding-inline: var(--shell-gutter);
 }
 
+/* The shared definition of text for screen readers only. The per-component
+   copies of this rule say the same thing and are to be removed later. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Section heading row: the h2 in its section colour, and an `all … →` link
    pushed to the right margin. Shared for the same reason as the shell. */
 .rd-heading-row {

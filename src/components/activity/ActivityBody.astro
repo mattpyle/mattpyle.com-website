@@ -538,16 +538,17 @@ function mcpVersionNote(version: string): string | undefined {
     </section>
   )}
 
-  <section class="rd-section band-how" aria-label="The same numbers, as data">
+  <section class="rd-section band-how" aria-labelledby="activity-data-title">
     <div class="as-data">
-      <span class="as-data-label">The same numbers, as data</span>
+      <h2 id="activity-data-title" class="as-data-label">The same numbers, as data</h2>
       <a href="/activity.json" class="as-data-link">activity.json</a>
     </div>
   </section>
 </div>
 
 <style>
-  /* Not global on this site: `.sr-only` is declared per component (see HomeProjects.astro,
+  /* `global.css` now holds a shared `.sr-only`; this copy predates it and is to be removed with
+     the other per-component copies. It was written when `.sr-only` was declared per component (see HomeProjects.astro,
      SiteFooter.astro and a dozen others), so a component that uses the class has to carry the rule.
      Without it the label renders as visible text — which is how the 24 hour labels below turned a
      280px chart into a 1123px one on the first reflow run. */
@@ -869,8 +870,11 @@ function mcpVersionNote(version: string): string | undefined {
     padding-top: 20px;
   }
 
+  /* An h2 set as the plain label it replaces. */
   .as-data-label {
+    margin: 0;
     font-size: 18px;
+    font-weight: 400;
     color: var(--ink-6);
   }
 

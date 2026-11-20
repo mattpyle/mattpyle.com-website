@@ -365,7 +365,8 @@ const IDLE_COMMENT = '// Nothing has been called yet.';
 </div>
 
 <style>
-  /* Not global on this site: `.sr-only` is declared per component (see ActivityBody.astro,
+  /* `global.css` now holds a shared `.sr-only`; this copy predates it and is to be removed with
+     the other per-component copies. It was written when `.sr-only` was declared per component (see ActivityBody.astro,
      Footer.astro and a dozen others), so a component that uses the class has to carry the rule.
      Without it the copy announcer renders as visible text. */
   .sr-only {
