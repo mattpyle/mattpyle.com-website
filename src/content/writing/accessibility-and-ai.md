@@ -61,6 +61,8 @@ Admittedly, I am still a bit lost here. Reading the [W3C ARIA spec](https://www.
 
 Ultimately, I settled on keeping the filters as buttons with the current active one `aria-current="true"`, and announce the result in a live region. I considered `aria-selected` but that's invalid on `role=button`, `aria-expanded` is for disclosure widgets, which this isn't. Radio/tab patterns are semantically exact but carry an arrow-key contract you'd then have to honour.
 
+That was the July version. On 21 July the filter component became a `role="radiogroup"` of `role="radio"` buttons with `aria-checked` and the arrow-key contract, which is what the filter on /changelog uses today.
+
 ## Experiencing a screen reader for the first time
 
 I had never used a screen reader. I always professed the importance of web accessibility and equity for all, spent my time reading markup and quoting best practices, yet, in a career built on the web, I had never truly listened. I had no idea what a website sounded like.
