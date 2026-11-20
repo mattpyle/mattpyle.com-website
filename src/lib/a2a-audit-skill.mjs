@@ -509,9 +509,10 @@ export async function handleAuditMessage({ id, route, contextId, legacy, newId, 
 /**
  * `GetTask`: one durable audit, read back.
  *
- * Free, and deliberately: it is a read of a run the caller already spent a slot to start, it makes
- * no request at anybody's origin, and charging it would refuse a caller who polls politely before
- * their own audit finishes. `/mcp` leaves `get_audit` uncounted for exactly this reason.
+ * It spends no audit allowance, and deliberately: it is a read of a run the caller already spent a
+ * slot to start, and it makes no request at anybody's origin. The responder counts it on the
+ * limiter's read tier before it gets here, sixty a minute by default, which a caller who polls
+ * politely does not reach. `/mcp` counts `get_audit` the same way, on the same key.
  *
  * @param {{ id: string | number | null, params: object, legacy: boolean, contextId: string,
  *           newId: () => string, now: () => string, audit: object }} input

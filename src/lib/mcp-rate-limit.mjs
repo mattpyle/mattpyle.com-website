@@ -9,7 +9,8 @@
  * stage-2 card's blocker list, and it is enforced from the first request the endpoint ever answers.
  * There is no unlimited window, not even a day of one.
  *
- * Two tiers, two limits each, all fixed-window and all env-configurable:
+ * Four tiers, all fixed-window and all env-configurable. Three count work and have two limits
+ * each. The fourth, `read`, counts reads of a run and has one:
  *
  * | Tier | Limit | Default | Window | Key |
  * |---|---|---|---|---|
@@ -19,6 +20,36 @@
  * | deep | Global | 10 audits | UTC day | `mcp:v1:deep:global:<utc-day>` |
  * | session | Per caller | 3 sessions | UTC day | `mcp:v1:session:caller:<hmac>:<utc-day>` |
  * | session | Global | 20 sessions | UTC day | `mcp:v1:session:global:<utc-day>` |
+ * | read | Per caller | 60 reads | rolling minute, aligned to the epoch | `mcp:v1:read:caller:<hmac>:<window>` |
+ *
+ * **The read tier bounds the reads that reach Temporal and spend no allowance.** It charges the
+ * MCP `get_audit` tool, every view, and the A2A `GetTask` method. Each is a describe and a Query
+ * or two against Temporal Cloud, answered by the hosted worker, and nothing else bounded how often
+ * one caller could ask. Sixty a minute is far above a polite poll: the status view tells a caller
+ * to wait five seconds between reads, which is twelve a minute. A read still spends no audit
+ * allowance, so a caller can always read back a run they started.
+ *
+ * It differs from the other three tiers in three ways, each a column of the `TIERS` table:
+ *
+ * - **No global budget.** A shared read budget would let one caller lock every other caller out of
+ *   reading their own reports. So a read is one store round trip, allowed or refused.
+ * - **It fails open.** See property 2 below.
+ * - **A shorter store timeout**, 500 ms against 1500 ms, so a slow store adds at most half a second
+ *   to a read before the read goes ahead uncounted.
+ *
+ * Not charged: the handshakes (`initialize`, `tools/list`, `ping`, notifications), which are
+ * answered from memory; `ask-about-site`; a later message on a consultant session, which the
+ * session's own caps bound; the consultant skill's own wait for a reply; a GET; a read whose id is
+ * malformed, which is refused before any Temporal call; and `CancelTask`, because a cancel lowers
+ * cost and a caller over the read limit must still be able to close a session.
+ *
+ * **The edge rule, which this repository does not enforce.** Every POST this module refuses has
+ * already cost a function invocation and a store write, so the limiter cannot protect the store
+ * from a flood. That is the job of one Vercel Firewall rate-limit rule, kept by hand in the Vercel
+ * dashboard: POST requests to `/mcp` and `/a2a`, about 200 per 60 seconds per IP address, action
+ * 429. It cannot live in `vercel.json`, whose `mitigate` action supports only challenge and deny.
+ * Nothing in this repository creates the rule or checks that it exists. `README.md`, "Operations",
+ * carries the same values for whoever has to recreate it.
  *
  * **The session tier bounds the audit consultant** (src/lib/a2a-consultant-skill.mjs). One session
  * is a Claude-driven conversation whose own caps (turns, tokens, one deep audit) bound what it can
@@ -73,6 +104,8 @@
  * | `MCP_DEEP_RATE_GLOBAL_PER_DAY` | Deep audits the endpoint starts per UTC day. Default 10. |
  * | `A2A_SESSION_RATE_PER_CALLER` | Consultant sessions one caller may start per UTC day. Default 3. |
  * | `A2A_SESSION_RATE_GLOBAL_PER_DAY` | Consultant sessions the endpoint starts per UTC day. Default 20. |
+ * | `MCP_READ_RATE_PER_CALLER` | Reads of a run one caller may make per window, on `/mcp` and `/a2a` together. Default 60. |
+ * | `MCP_READ_RATE_WINDOW_SECONDS` | The read window. Default 60. |
  * | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | The store. `KV_REST_API_URL` / `_TOKEN` is read too. |
  *
  * Setting the secret is what turns the endpoint on, which is the right way round: a deploy that
@@ -94,6 +127,12 @@
  *    for the same reason — there, the failure is one uncounted hit, and an unanswered request would
  *    be worse than a lost data point. Here the failure is an unlimited stranger, and a lost data
  *    point is better than an incident.
+ *
+ *    **The read tier is the one exception, and it fails open** (`onFailure: 'allow'` in the table).
+ *    A read that cannot be counted is allowed. A store outage must not stop a caller reading an
+ *    audit that is already running, and while the store is down the three tiers that start work
+ *    still refuse, so few new runs exist to read. The edge rule above bounds what is left. A read
+ *    that the store did count past the limit is still refused.
  *
  * 3. **Refusal costs no global budget.** The two limits are two round trips rather than one
  *    pipeline, so a single caller hammering the endpoint past their own limit cannot burn the day's
@@ -132,8 +171,18 @@ export const DEFAULT_DEEP_GLOBAL_PER_DAY = 10;
 export const DEFAULT_SESSION_PER_CALLER = 3;
 export const DEFAULT_SESSION_GLOBAL_PER_DAY = 20;
 
+/**
+ * The read tier's: reads of a run one caller may make per window, and the window. A minute rather
+ * than an hour, so a caller who polls too fast waits seconds rather than the rest of an hour.
+ */
+export const DEFAULT_READ_PER_CALLER = 60;
+export const DEFAULT_READ_WINDOW_SECONDS = 60;
+
 /** One request's worth of budget against the store. Past this the audit is refused, not admitted. */
 const STORE_TIMEOUT_MS = 1500;
+
+/** The read tier's, shorter because a read that cannot be counted goes ahead: this is all it waits. */
+const READ_STORE_TIMEOUT_MS = 500;
 
 /**
  * How long a refused caller is told to wait when the refusal is the endpoint's own fault rather
@@ -143,24 +192,108 @@ const STORE_TIMEOUT_MS = 1500;
 const INFRASTRUCTURE_RETRY_SECONDS = 60;
 
 /**
- * The limits, from the environment, with the documented defaults.
+ * The tiers, as data. `checkRateLimit`, the `read*Limits` functions and the key builders below all
+ * read this table, so a tier is described once.
+ *
+ * - `limits`: each limit's environment variable and its default.
+ * - `window`: the per-caller window. `'fixed'` is a window of `limits.windowSeconds`, aligned to the
+ *   epoch. `'utc-day'` is the UTC day, with no variable to change it. The global budget is always
+ *   the UTC day.
+ * - `callerPrefix`, `globalPrefix`: what follows `mcp:v1:` in the tier's two keys. A null
+ *   `globalPrefix` is a tier with no global budget, and its check is one store round trip.
+ * - `unit`: what the tier counts, for the refusal's sentence. `callerReason` replaces that sentence
+ *   where a count would not help the caller.
+ * - `onFailure`: what a check does when it cannot count, for want of a secret, a store, an address
+ *   or an answer. `'refuse'` is property 2 of the module docblock. `'allow'` is its one exception.
+ * - `storeTimeoutMs`: how long one store request may take.
+ */
+const TIERS = Object.freeze({
+  fast: {
+    limits: {
+      perCaller: ['MCP_AUDIT_RATE_PER_CALLER', DEFAULT_PER_CALLER],
+      windowSeconds: ['MCP_AUDIT_RATE_WINDOW_SECONDS', DEFAULT_WINDOW_SECONDS],
+      globalPerDay: ['MCP_AUDIT_RATE_GLOBAL_PER_DAY', DEFAULT_GLOBAL_PER_DAY],
+    },
+    window: 'fixed',
+    callerPrefix: 'caller',
+    globalPrefix: 'global',
+    unit: 'audits',
+    onFailure: 'refuse',
+    storeTimeoutMs: STORE_TIMEOUT_MS,
+  },
+  deep: {
+    limits: {
+      perCaller: ['MCP_DEEP_RATE_PER_CALLER', DEFAULT_DEEP_PER_CALLER],
+      globalPerDay: ['MCP_DEEP_RATE_GLOBAL_PER_DAY', DEFAULT_DEEP_GLOBAL_PER_DAY],
+    },
+    window: 'utc-day',
+    callerPrefix: 'deep:caller',
+    globalPrefix: 'deep:global',
+    unit: 'deep audits',
+    onFailure: 'refuse',
+    storeTimeoutMs: STORE_TIMEOUT_MS,
+  },
+  session: {
+    limits: {
+      perCaller: ['A2A_SESSION_RATE_PER_CALLER', DEFAULT_SESSION_PER_CALLER],
+      globalPerDay: ['A2A_SESSION_RATE_GLOBAL_PER_DAY', DEFAULT_SESSION_GLOBAL_PER_DAY],
+    },
+    window: 'utc-day',
+    callerPrefix: 'session:caller',
+    globalPrefix: 'session:global',
+    unit: 'consultant sessions',
+    onFailure: 'refuse',
+    storeTimeoutMs: STORE_TIMEOUT_MS,
+  },
+  read: {
+    limits: {
+      perCaller: ['MCP_READ_RATE_PER_CALLER', DEFAULT_READ_PER_CALLER],
+      windowSeconds: ['MCP_READ_RATE_WINDOW_SECONDS', DEFAULT_READ_WINDOW_SECONDS],
+    },
+    window: 'fixed',
+    callerPrefix: 'read:caller',
+    globalPrefix: null,
+    callerReason: 'this caller is reading too fast',
+    onFailure: 'allow',
+    storeTimeoutMs: READ_STORE_TIMEOUT_MS,
+  },
+});
+
+/**
+ * One tier's limits, from the environment, with the table's defaults.
  *
  * A malformed value falls back to the default rather than throwing. The alternative is an endpoint
  * that 500s on a typo in a dashboard field, and a limiter that refuses to start is a limiter that
  * gets switched off.
  *
+ * @param {{ limits: Record<string, [string, number]> }} spec
  * @param {Record<string, string | undefined>} env
+ * @returns {Record<string, number>}
  */
-export function readLimits(env) {
+function limitsFor(spec, env) {
   const positive = (raw, fallback) => {
     const value = Number(raw);
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
   };
-  return {
-    perCaller: positive(env.MCP_AUDIT_RATE_PER_CALLER, DEFAULT_PER_CALLER),
-    windowSeconds: positive(env.MCP_AUDIT_RATE_WINDOW_SECONDS, DEFAULT_WINDOW_SECONDS),
-    globalPerDay: positive(env.MCP_AUDIT_RATE_GLOBAL_PER_DAY, DEFAULT_GLOBAL_PER_DAY),
-  };
+  return Object.fromEntries(
+    Object.entries(spec.limits).map(([name, [variable, fallback]]) => [name, positive(env[variable], fallback)])
+  );
+}
+
+/** A key under the version prefix: `mcp:v1:<prefix>:<part>:<part>`. */
+function keyFor(prefix, ...parts) {
+  return ['mcp', KEY_VERSION, prefix, ...parts].join(':');
+}
+
+/**
+ * The fast tier's limits, from the environment, with the documented defaults and the
+ * malformed-falls-back-to-the-default rule of `limitsFor`.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {{ perCaller: number, windowSeconds: number, globalPerDay: number }}
+ */
+export function readLimits(env) {
+  return limitsFor(TIERS.fast, env);
 }
 
 /**
@@ -173,16 +306,10 @@ export function readLimits(env) {
  * cost being bounded here is a daily bill.
  *
  * @param {Record<string, string | undefined>} env
+ * @returns {{ perCaller: number, globalPerDay: number }}
  */
 export function readDeepLimits(env) {
-  const positive = (raw, fallback) => {
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-  };
-  return {
-    perCaller: positive(env.MCP_DEEP_RATE_PER_CALLER, DEFAULT_DEEP_PER_CALLER),
-    globalPerDay: positive(env.MCP_DEEP_RATE_GLOBAL_PER_DAY, DEFAULT_DEEP_GLOBAL_PER_DAY),
-  };
+  return limitsFor(TIERS.deep, env);
 }
 
 /**
@@ -190,16 +317,21 @@ export function readDeepLimits(env) {
  * the deep tier's reason: the cost being bounded is a daily model bill.
  *
  * @param {Record<string, string | undefined>} env
+ * @returns {{ perCaller: number, globalPerDay: number }}
  */
 export function readSessionLimits(env) {
-  const positive = (raw, fallback) => {
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-  };
-  return {
-    perCaller: positive(env.A2A_SESSION_RATE_PER_CALLER, DEFAULT_SESSION_PER_CALLER),
-    globalPerDay: positive(env.A2A_SESSION_RATE_GLOBAL_PER_DAY, DEFAULT_SESSION_GLOBAL_PER_DAY),
-  };
+  return limitsFor(TIERS.session, env);
+}
+
+/**
+ * The read tier's limits, from the environment, with the same rule. One limit and its window: the
+ * tier has no global budget.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {{ perCaller: number, windowSeconds: number }}
+ */
+export function readReadLimits(env) {
+  return limitsFor(TIERS.read, env);
 }
 
 /**
@@ -290,12 +422,12 @@ export function utcDayFor(now) {
 
 /** `mcp:v1:caller:<hmac>:<window>` — one caller, one window. */
 export function callerKeyFor(hash, windowIndex) {
-  return `mcp:${KEY_VERSION}:caller:${hash}:${windowIndex}`;
+  return keyFor(TIERS.fast.callerPrefix, hash, windowIndex);
 }
 
 /** `mcp:v1:global:<utc-day>` — everyone, one UTC day. */
 export function globalKeyFor(day) {
-  return `mcp:${KEY_VERSION}:global:${day}`;
+  return keyFor(TIERS.fast.globalPrefix, day);
 }
 
 /**
@@ -307,22 +439,27 @@ export function globalKeyFor(day) {
  * day's deep counters without touching the fast tier's.
  */
 export function deepCallerKeyFor(hash, day) {
-  return `mcp:${KEY_VERSION}:deep:caller:${hash}:${day}`;
+  return keyFor(TIERS.deep.callerPrefix, hash, day);
 }
 
 /** `mcp:v1:deep:global:<utc-day>` — everyone, one UTC day, deep tier. */
 export function deepGlobalKeyFor(day) {
-  return `mcp:${KEY_VERSION}:deep:global:${day}`;
+  return keyFor(TIERS.deep.globalPrefix, day);
 }
 
 /** `mcp:v1:session:caller:<hmac>:<utc-day>`: one caller, one UTC day, consultant sessions. */
 export function sessionCallerKeyFor(hash, day) {
-  return `mcp:${KEY_VERSION}:session:caller:${hash}:${day}`;
+  return keyFor(TIERS.session.callerPrefix, hash, day);
 }
 
 /** `mcp:v1:session:global:<utc-day>`: everyone, one UTC day, consultant sessions. */
 export function sessionGlobalKeyFor(day) {
-  return `mcp:${KEY_VERSION}:session:global:${day}`;
+  return keyFor(TIERS.session.globalPrefix, day);
+}
+
+/** `mcp:v1:read:caller:<hmac>:<window>`: one caller, one window, reads of a run. No global key. */
+export function readCallerKeyFor(hash, windowIndex) {
+  return keyFor(TIERS.read.callerPrefix, hash, windowIndex);
 }
 
 /**
@@ -350,7 +487,7 @@ export function counterCommands(key, ttlSeconds) {
  * `checkRateLimit` and becomes a refusal. There is no branch here that returns a count it did not
  * read.
  */
-async function increment(store, fetchImpl, key, ttlSeconds) {
+async function increment(store, fetchImpl, key, ttlSeconds, timeoutMs) {
   const response = await fetchImpl(`${store.url}/pipeline`, {
     method: 'POST',
     headers: {
@@ -358,7 +495,7 @@ async function increment(store, fetchImpl, key, ttlSeconds) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(counterCommands(key, ttlSeconds)),
-    signal: AbortSignal.timeout(STORE_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) throw new Error(`store returned ${response.status}`);
   const body = await response.json();
@@ -371,28 +508,33 @@ async function increment(store, fetchImpl, key, ttlSeconds) {
 }
 
 /**
- * Decides whether one audit may run, and counts it if it may.
+ * Decides whether one audit, session or read may go ahead, and counts it if it may.
  *
  * Counted before the audit rather than after, so a caller cannot hold ten slow audits open at once
  * by never letting any of them finish.
  *
- * `tier` picks which pair of counters is touched, and nothing else about the
- * function changes: the secret, the store, the fail-closed posture and the
- * caller-before-global ordering are the same for both, because the properties
- * they hold are the same for both.
+ * `tier` picks a row of the `TIERS` table, and with it which pair of counters is
+ * touched. Nothing else about the function changes: the secret, the store, the
+ * caller-before-global ordering and the single place a failure is answered
+ * are the same for every tier. The table says which tiers have a global
+ * budget and what a tier does when it cannot count.
  *
  * @param {{
  *   ip: string | null,
- *   tier?: 'fast' | 'deep' | 'session',
+ *   tier?: 'fast' | 'deep' | 'session' | 'read',
  *   env?: Record<string, string | undefined>,
  *   now?: Date,
  *   fetchImpl?: typeof fetch,
  * }} input
- * @returns {Promise<{ allowed: true, tier: 'fast' | 'deep',
- *                     caller: { used: number, limit: number },
- *                     global: { used: number, limit: number } }
- *                 | { allowed: false, tier: 'fast' | 'deep', scope: string, reason: string,
+ * @returns {Promise<{ allowed: true, tier: string,
+ *                     caller?: { used: number, limit: number },
+ *                     global?: { used: number, limit: number },
+ *                     counted?: false, scope?: string, reason?: string }
+ *                 | { allowed: false, tier: string, scope: string, reason: string,
  *                     retryAfterSeconds: number, used?: number, limit?: number }>}
+ *   An allowed verdict of the read tier has no `global`. When the read could not be counted it
+ *   has no `caller` either, and carries `counted: false` with the `scope` and `reason` a refusal
+ *   would have had.
  */
 export async function checkRateLimit({
   ip,
@@ -401,82 +543,59 @@ export async function checkRateLimit({
   now = new Date(),
   fetchImpl = fetch,
 }) {
-  const fast = readLimits(env);
-  const deep = readDeepLimits(env);
-  const limits = tier === 'deep' ? deep : tier === 'session' ? readSessionLimits(env) : fast;
+  // A name the table does not hold is counted as a fast audit, as it always has been.
+  const spec = Object.hasOwn(TIERS, tier) ? TIERS[tier] : TIERS.fast;
+  const limits = limitsFor(spec, env);
   const secret = env.MCP_AUDIT_RATE_SECRET;
 
-  // The three refusals that are the endpoint's own fault. Each says which, because an operator
-  // reading a 429 in the logs needs to know it was not a caller misbehaving.
+  // What a check that cannot count answers. For three tiers it is a refusal that says whose fault
+  // it was, because an operator reading a 429 in the logs needs to know it was not a caller
+  // misbehaving. For the read tier it is an allowed read that says it was not counted.
+  const uncounted = (scope, reason) =>
+    spec.onFailure === 'allow'
+      ? { allowed: true, tier, counted: false, scope, reason }
+      : { allowed: false, tier, scope, reason, retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS };
+
   if (!secret) {
-    return {
-      allowed: false,
-      tier,
-      scope: 'config',
-      reason: 'the endpoint has no rate-limit secret configured, so it cannot tell callers apart',
-      retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,
-    };
+    return uncounted('config', 'the endpoint has no rate-limit secret configured, so it cannot tell callers apart');
   }
   const store = readStoreConfig(env);
-  if (!store) {
-    return {
-      allowed: false,
-      tier,
-      scope: 'store',
-      reason: 'the endpoint has no rate-limit store configured',
-      retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,
-    };
-  }
-  if (!ip) {
-    return {
-      allowed: false,
-      tier,
-      scope: 'caller-unknown',
-      reason: 'the request carried no client address, so it cannot be rate limited',
-      retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,
-    };
-  }
+  if (!store) return uncounted('store', 'the endpoint has no rate-limit store configured');
+  if (!ip) return uncounted('caller-unknown', 'the request carried no client address, so it cannot be rate limited');
 
   const day = utcDayFor(now);
   const hash = callerHash(ip, secret);
-  // The two tiers differ in exactly two places: which keys are incremented, and
-  // how long the per-caller window is. The deep tier's per-caller window is the
-  // UTC day, so both of its counters expire together.
-  // The session tier is the deep tier's shape on its own keys.
-  const daily = tier === 'deep' || tier === 'session';
-  const window = daily ? day : windowFor(now, fast.windowSeconds);
-  const callerKey =
-    tier === 'deep'
-      ? deepCallerKeyFor(hash, day.day)
-      : tier === 'session'
-        ? sessionCallerKeyFor(hash, day.day)
-        : callerKeyFor(hash, window.index);
-  const globalKey =
-    tier === 'deep'
-      ? deepGlobalKeyFor(day.day)
-      : tier === 'session'
-        ? sessionGlobalKeyFor(day.day)
-        : globalKeyFor(day.day);
-  const unit = tier === 'deep' ? 'deep audits' : tier === 'session' ? 'consultant sessions' : 'audits';
+  // The tiers differ in two places, both read from the table: which keys are incremented, and how
+  // long the per-caller window is. A daily tier's two counters expire together.
+  const daily = spec.window === 'utc-day';
+  const window = daily ? day : windowFor(now, limits.windowSeconds);
+  const callerKey = keyFor(spec.callerPrefix, hash, daily ? day.day : window.index);
+  const unit = spec.unit;
   const per = daily ? 'today' : 'in the current window';
 
   try {
     // Caller first, and only then global: a caller past their own limit must not spend the day's
     // allowance on the way to being refused.
-    const callerUsed = await increment(store, fetchImpl, callerKey, window.secondsRemaining);
+    const callerUsed = await increment(store, fetchImpl, callerKey, window.secondsRemaining, spec.storeTimeoutMs);
     if (callerUsed > limits.perCaller) {
       return {
         allowed: false,
         tier,
         scope: 'caller',
-        reason: `this caller has used ${limits.perCaller} ${unit} ${per}`,
+        reason: spec.callerReason ?? `this caller has used ${limits.perCaller} ${unit} ${per}`,
         retryAfterSeconds: window.secondsRemaining,
         used: callerUsed,
         limit: limits.perCaller,
       };
     }
 
-    const globalUsed = await increment(store, fetchImpl, globalKey, day.secondsRemaining);
+    // A tier with no global budget is done: one round trip, and nobody else's reads were spent.
+    if (spec.globalPrefix === null) {
+      return { allowed: true, tier, caller: { used: callerUsed, limit: limits.perCaller } };
+    }
+
+    const globalKey = keyFor(spec.globalPrefix, day.day);
+    const globalUsed = await increment(store, fetchImpl, globalKey, day.secondsRemaining, spec.storeTimeoutMs);
     if (globalUsed > limits.globalPerDay) {
       return {
         allowed: false,
@@ -496,13 +615,11 @@ export async function checkRateLimit({
       global: { used: globalUsed, limit: limits.globalPerDay },
     };
   } catch (error) {
-    // The whole posture of this module, in one branch. An audit that cannot be counted does not run.
-    return {
-      allowed: false,
-      tier,
-      scope: 'store',
-      reason: `the rate-limit store could not be reached: ${error instanceof Error ? error.name : 'error'}`,
-      retryAfterSeconds: INFRASTRUCTURE_RETRY_SECONDS,
-    };
+    // The whole posture of this module, in one branch. An audit that cannot be counted does not
+    // run. A read that cannot be counted does, which is the table's one `onFailure: 'allow'`.
+    return uncounted(
+      'store',
+      `the rate-limit store could not be reached: ${error instanceof Error ? error.name : 'error'}`
+    );
   }
 }

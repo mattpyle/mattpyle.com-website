@@ -695,6 +695,39 @@ async function handleCancel(id, params, legacy, context) {
   return handleConsultantCancel({ id, taskId, legacy, newId: context.newId, now: context.now, consultant: context.consultant });
 }
 
+/**
+ * `GetTask`, counted on the limiter's read tier before it reaches Temporal: the refusal, or null to
+ * carry on.
+ *
+ * Counted only when the read is about to be made: the id names an audit or a session, and this
+ * deployment has the engine that reads it. Any other `GetTask` is answered without a Temporal call
+ * and costs the caller nothing here. `checkRead` is injected by the route, as the other limiter
+ * calls are. A caller of `respond()` that passes none counts nothing.
+ */
+async function readRefusal(id, taskId, { checkRead, audit, consultant }) {
+  if (!checkRead) return null;
+  const reaches = (isConsultantTaskId(taskId) && Boolean(consultant)) || (isAuditTaskId(taskId) && Boolean(audit));
+  if (!reaches) return null;
+  const verdict = await checkRead();
+  if (verdict.allowed) return null;
+  return {
+    outcome: `rate-limited/read/${verdict.scope}`,
+    payload: errorResponse(
+      id,
+      ERROR_CODES.serverError,
+      `Rate limited: ${verdict.reason}. Try again in ${verdict.retryAfterSeconds} seconds.`,
+      [
+        errorInfo('RATE_LIMITED', {
+          tier: 'read',
+          scope: verdict.scope,
+          retryAfterSeconds: String(verdict.retryAfterSeconds),
+          ...(verdict.limit === undefined ? {} : { limit: String(verdict.limit) }),
+        }),
+      ]
+    ),
+  };
+}
+
 /** A stream of one event: the reply a handler with no stream of its own returns. */
 async function* oneEvent(handle) {
   const { outcome, payload, detail } = await handle();
@@ -710,7 +743,8 @@ async function* oneEvent(handle) {
  * starts a workflow on Temporal Cloud. The dispatch below is the only place that knows which.
  *
  * @param {unknown} request
- * @param {{ digest: object, newId: () => string, now?: () => string, audit?: object }} context
+ * @param {{ digest: object, newId: () => string, now?: () => string, audit?: object,
+ *           consultant?: object, checkRead?: () => Promise<object> }} context
  */
 async function handleRequest(request, context) {
   const envelope = validateEnvelope(request);
@@ -725,7 +759,14 @@ async function handleRequest(request, context) {
     notification: isNotification,
   });
 
+  // Not counted on the read tier: a cancel lowers cost, and a caller who is reading too fast must
+  // still be able to close a session.
   if (cancelTask) return settled(await handleCancel(id, params, legacy, { newId, now, consultant }));
+
+  if (getTask) {
+    const refusal = await readRefusal(id, taskIdParam(params), context);
+    if (refusal) return settled(refusal);
+  }
 
   if (getTask && isConsultantTaskId(taskIdParam(params))) {
     if (!consultant) return settled(notConfigured(id, CONSULTANT_SKILL_ID));
@@ -866,6 +907,8 @@ async function handleRequest(request, context) {
  *   `audit` is the audit skill's engine, injected: `originFor`, `checkLimit`, `runFast`,
  *   `startDeep`, `readTask` and `renderSummary`. Absent, the endpoint serves `ask-about-site`
  *   alone, which is what keeps this module free of everything that half needs.
+ *   `checkRead` is the limiter's read tier, asked before a `GetTask` that reaches Temporal.
+ *   Absent, no read is counted.
  * @returns {Promise<{ status: number, outcome: string, payload: object | null, detail?: string }>}
  *   payload null means send no body (a JSON-RPC notification). `detail` is an internal error's
  *   text, for the log line only.

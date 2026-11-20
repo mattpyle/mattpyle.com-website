@@ -34,8 +34,9 @@ import { readAuditSnapshot, readTemporalConfig, startDeepAudit } from '../lib/mc
  *
  * **One budget, not two, and it is literally the same code.** The audit skill calls
  * `checkRateLimit` from src/lib/mcp-rate-limit.mjs with the same caller key and the same counters
- * `/mcp` uses. A deep slot spent over A2A is spent over MCP; `GetTask` is free for the same reason
- * `get_audit` is. A parallel limiter would have doubled this site's worst day.
+ * `/mcp` uses. A deep slot spent over A2A is spent over MCP; `GetTask` spends no audit allowance,
+ * for the same reason `get_audit` spends none, and is counted on the same read tier. A parallel
+ * limiter would have doubled this site's worst day.
  *
  * **On-demand rather than prerendered**, and note what that does and does not change: the site's
  * output stays `static` (astro.config.mjs) and every page still prerenders. Delete this file,
@@ -159,6 +160,15 @@ export const POST: APIRoute = async ({ request }) => {
     digest,
     newId: () => crypto.randomUUID(),
     now: () => new Date().toISOString(),
+    // The read tier, asked before a GetTask that reaches Temporal. One key for both endpoints.
+    checkRead: async () => {
+      const verdict = await checkRateLimit({ ip: clientIpFrom(request.headers), tier: 'read' });
+      // A read the limiter could not count goes ahead, and says so here.
+      if (verdict.allowed && verdict.counted === false) {
+        log({ path: '/a2a', http: 'POST', outcome: `rate-uncounted/read/${verdict.scope ?? 'unknown'}` });
+      }
+      return verdict;
+    },
     audit: {
       // The same refusal `/mcp` makes before any work starts, from the same function: "this is not
       // a URL" is a request that never started rather than a finding.

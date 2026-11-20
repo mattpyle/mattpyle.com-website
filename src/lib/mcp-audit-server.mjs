@@ -42,6 +42,7 @@
 
 import { McpServer, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { isAuditTaskId } from './audit-task-id.mjs';
 
 /**
  * The newest revision this server speaks, served per request with no `initialize` handshake. The
@@ -113,6 +114,56 @@ export const GET_AUDIT_TOOL_NAME = 'get_audit';
  * names the surface of prose (public/agents.md, the Steward page) that omits it.
  */
 export const MCP_TOOL_NAMES = Object.freeze([TOOL_NAME, DEEP_TOOL_NAME, GET_AUDIT_TOOL_NAME]);
+
+/**
+ * How long the status view asks a caller to wait before reading it again, while the run is going.
+ *
+ * A deep audit takes minutes and its status changes a few times in them, so five seconds loses a
+ * poller nothing. It is twelve reads a minute, a fifth of what the limiter's read tier allows
+ * (src/lib/mcp-rate-limit.mjs), so a caller who follows it never meets that limit.
+ *
+ * A plain field of the status document rather than MCP's `pollInterval`. The specification
+ * (2025-11-25) defines `pollInterval`, in milliseconds, on the Task object of a task-augmented
+ * request. This tool's result is an ordinary tool result, with no Task in it.
+ */
+export const STATUS_POLL_SECONDS = 5;
+
+/**
+ * Which tier's budget a request body spends, or `null` for a request that spends none.
+ *
+ * The limiter counts audits and reads of a run, not handshakes: `initialize` and `tools/list` are a
+ * static answer out of the function's own memory with no outbound request in them, and counting
+ * them against a caller's ten would mean a client that connects, lists, and calls once had spent
+ * three.
+ *
+ * `get_audit` spends no audit allowance: it is a read of a run the caller already paid for, and it
+ * makes no request at anybody's origin. It is counted on the `read` tier, on its own key, because
+ * each read is a describe and a Query against Temporal Cloud. That tier allows sixty reads a
+ * minute by default, and the status view asks for one every `STATUS_POLL_SECONDS`, so a caller who
+ * polls politely is never refused before their own audit finishes.
+ *
+ * A `get_audit` whose id is not an audit's id spends nothing. `readAuditView` refuses it before any
+ * Temporal call (src/lib/audit-task-id.mjs is the one rule for both), so there is no read to count.
+ *
+ * One message, because `refusalForBody` has already turned every array body away. That ordering is
+ * what makes this function's answer a *count* rather than a guess: while batches were admitted,
+ * "any member is a tools/call" read as one audit and bought as many as the array had members.
+ *
+ * @param {unknown} body the parsed JSON-RPC request
+ * @returns {'fast' | 'deep' | 'read' | null}
+ */
+export function tierFor(body) {
+  if (!body || typeof body !== 'object') return null;
+  if (body.method !== 'tools/call') return null;
+  const name = body.params?.name;
+  if (name === DEEP_TOOL_NAME) return 'deep';
+  if (name === GET_AUDIT_TOOL_NAME) return isAuditTaskId(body.params?.arguments?.workflowId) ? 'read' : null;
+  // Everything else, including an unknown tool name, is counted as a fast audit. Counting an
+  // unknown name costs a caller one slot for a call that was going to fail anyway, and the
+  // alternative — trusting the name to decide whether to count — is a free-audit oracle for
+  // anything the SDK later dispatches that this function has not been taught about.
+  return 'fast';
+}
 
 /**
  * The output schema, mirroring the audit document's top level and going no deeper.
@@ -216,6 +267,10 @@ export const GET_AUDIT_OUTPUT_SHAPE = z.looseObject({
     .boolean()
     .optional()
     .describe('status view: the run ended, either way. Terminal, not successful — poll until this is true.'),
+  pollAfterSeconds: z
+    .number()
+    .optional()
+    .describe('status view: seconds to wait before reading status again. Present only while done is false.'),
   succeeded: z
     .boolean()
     .optional()
@@ -631,7 +686,8 @@ function registerDeepTools(server, deep, normaliseTarget) {
       description:
         'Reads one audit started by deep_audit: view "status" for whether it has finished, ' +
         '"report" for the canonical JSON of a finished one, "summary" for the same report as ' +
-        'markdown. Poll status until "done" is true — done means the run ended, either way — then ' +
+        'markdown. Poll status until "done" is true, waiting "pollAfterSeconds" (' +
+        `${STATUS_POLL_SECONDS} seconds) between reads — done means the run ended, either way — then ` +
         '"succeeded" says whether there is a report to read and "error" says why if there is not. ' +
         'While it runs, "progress" lists each unit of work and "pending" carries the attempt ' +
         'number of anything being retried. If the finished report is incomplete, "integrity" says ' +
@@ -674,7 +730,19 @@ function registerDeepTools(server, deep, normaliseTarget) {
       if (resolved === 'summary') {
         return { structuredContent: { view: 'summary', markdown: text }, content: [{ type: 'text', text }] };
       }
-      return { structuredContent: JSON.parse(text), content: [{ type: 'text', text }] };
+      const document = JSON.parse(text);
+      // The polling hint, on the status of a run that is still going. Added here rather than where
+      // the status is read, because A2A's GetTask is built on the same reading and its Task has no
+      // such field. The text is written again from the same object, in the reader's own format, so
+      // the two halves still cannot disagree.
+      if (resolved === 'status' && document?.done === false) {
+        const hinted = { ...document, pollAfterSeconds: STATUS_POLL_SECONDS };
+        return {
+          structuredContent: hinted,
+          content: [{ type: 'text', text: `${JSON.stringify(hinted, null, 2)}\n` }],
+        };
+      }
+      return { structuredContent: document, content: [{ type: 'text', text }] };
     },
   );
 }

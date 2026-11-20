@@ -114,6 +114,21 @@ npm run serve
 A draft's generated share image is deliberately not built, so its OG meta points at a missing file
 until publish. Expected, not a bug.
 
+## Operations
+
+One setting that protects the site lives outside this repository.
+
+**Vercel Firewall rate-limit rule for the agent endpoints.** Kept by hand in the Vercel dashboard, under the project's Firewall rules. The repository does not create it, deploy it or check that it exists.
+
+| Setting | Value |
+|---|---|
+| Matches | `POST` requests to `/mcp` and `/a2a` |
+| Limit | About 200 requests per 60 seconds |
+| Counted per | IP address |
+| Action | 429 |
+
+Why it exists: the site's own limiter (`src/lib/mcp-rate-limit.mjs`) can tell an audit from a read, but every request it refuses has already run a function and written to its store. Only a rule at the edge stops a flood before that. It cannot be set in `vercel.json`, whose `mitigate` action supports only challenge and deny. If the project is recreated or moved, add the rule again from this table.
+
 ## License
 
 The code is released under the [MIT License](LICENSE). The writing under `src/content/` is not
