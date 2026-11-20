@@ -25,7 +25,8 @@ import { CHANGELOG_ENTRY } from './helpers/pages';
  * The rows carry no pressed style of their own. A touch browser draws its own tap highlight while
  * a finger is down, and a second tint under `:active` showed as two effects on a real phone.
  *
- * Modern only until retro's hover rules are behind the media query too.
+ * Both appearances. Retro repaints the same rows from `src/styles/retro.css` with hover rules of
+ * its own, so a row can be clean in one appearance and stick in the other.
  */
 
 test.use({ hasTouch: true, isMobile: true, viewport: { width: 412, height: 839 } });
@@ -107,43 +108,57 @@ function liveHoverRules(page: Page, selector: string) {
   }, selector);
 }
 
-for (const row of ROWS) {
-  test(`touch hover (modern): a tapped ${row.name} on ${row.path} keeps no hover style`, async ({ page }) => {
-    await gotoSettled(page, row.path);
-    expect(
-      await page.evaluate(() => matchMedia('(hover: hover)').matches),
-      'the emulated device reports that it cannot hover',
-    ).toBe(false);
+for (const retro of [false, true]) {
+  const appearance = retro ? 'retro' : 'modern';
 
-    // The tap must not leave the page or open a tab: the row is measured where it was tapped.
-    await page.evaluate(() => {
-      document.addEventListener('click', event => event.preventDefault(), true);
+  for (const row of ROWS) {
+    test(`touch hover (${appearance}): a tapped ${row.name} on ${row.path} keeps no hover style`, async ({ page }) => {
+      if (retro) {
+        await page.addInitScript(() => {
+          try {
+            localStorage.setItem('mattpyle:appearance', 'retro');
+          } catch {
+            /* ignore */
+          }
+        });
+      }
+      await gotoSettled(page, row.path);
+      if (retro) await expect(page.locator('html')).toHaveAttribute('data-appearance', 'retro');
+      expect(
+        await page.evaluate(() => matchMedia('(hover: hover)').matches),
+        'the emulated device reports that it cannot hover',
+      ).toBe(false);
+
+      // The tap must not leave the page or open a tab: the row is measured where it was tapped.
+      await page.evaluate(() => {
+        document.addEventListener('click', event => event.preventDefault(), true);
+      });
+
+      expect(
+        await liveHoverRules(page, row.selector),
+        `a hover rule for ${row.selector} is in effect on a device that cannot hover. ` +
+          'Put it inside @media (hover: hover); tests/hover-guard.test.mjs names the source line.',
+      ).toEqual([]);
+      if (!row.holdsHover) return;
+
+      const target = page.locator(row.selector).first();
+      await target.scrollIntoViewIfNeeded();
+      const before = await painted(page, row.selector);
+      expect(before.hover, 'nothing is hovered before the tap').toBe(false);
+
+      await target.tap();
+      await expect
+        .poll(async () => (await painted(page, row.selector)).hover, {
+          message: 'the emulation matches :hover on the tapped element, as a phone does. If this fails the check proves nothing.',
+        })
+        .toBe(true);
+
+      const after = await painted(page, row.selector);
+      expect(
+        after.styles,
+        `${row.selector} or something inside it is painted differently after a tap. ` +
+          'A hover rule is outside @media (hover: hover); tests/hover-guard.test.mjs names it.',
+      ).toEqual(before.styles);
     });
-
-    expect(
-      await liveHoverRules(page, row.selector),
-      `a hover rule for ${row.selector} is in effect on a device that cannot hover. ` +
-        'Put it inside @media (hover: hover); tests/hover-guard.test.mjs names the source line.',
-    ).toEqual([]);
-    if (!row.holdsHover) return;
-
-    const target = page.locator(row.selector).first();
-    await target.scrollIntoViewIfNeeded();
-    const before = await painted(page, row.selector);
-    expect(before.hover, 'nothing is hovered before the tap').toBe(false);
-
-    await target.tap();
-    await expect
-      .poll(async () => (await painted(page, row.selector)).hover, {
-        message: 'the emulation matches :hover on the tapped element, as a phone does. If this fails the check proves nothing.',
-      })
-      .toBe(true);
-
-    const after = await painted(page, row.selector);
-    expect(
-      after.styles,
-      `${row.selector} or something inside it is painted differently after a tap. ` +
-        'A hover rule is outside @media (hover: hover); tests/hover-guard.test.mjs names it.',
-    ).toEqual(before.styles);
-  });
+  }
 }
