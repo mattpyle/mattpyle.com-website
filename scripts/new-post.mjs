@@ -16,71 +16,87 @@
  *
  * Field notes, mirroring the schema:
  * - description is required by the schema; a placeholder ships so the file parses,
- *   and Steward's review is the net for forgetting to replace it.
+ *   and scripts/validate-placeholders.mjs fails a build that publishes it unreplaced.
  * - updated is omitted on purpose: it is set on substantive edits after publish.
  * - seoTitle/seoDescription are omitted: only needed past SERP limits (~60/~155).
  *
  * The body ships with one comment, the answer-first reminder, marked REPLACE like the
  * description placeholder and meant to be deleted with the first paragraph written over it.
+ * Both carry PLACEHOLDER_MARKER, the constant the build guard looks for.
  */
 
 import { existsSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PLACEHOLDER_MARKER } from './lib/placeholders.mjs';
 
-const title = process.argv[2];
-if (!title || title.startsWith('-')) {
-  console.error('Usage: npm run new-post -- "My post title"');
-  console.error('Give the human title, quoted; the filename is derived from it.');
-  process.exit(1);
-}
+/**
+ * The scaffold's file contents. Exported so a test can hold the real output against the guard.
+ *
+ * @param {{ title: string, date: string }} post `date` is YYYY-MM-DD.
+ */
+export function scaffoldSource({ title, date }) {
+  // Backslashes doubled first so the quote escapes added next are not re-escaped;
+  // both are YAML escape characters inside a double-quoted scalar.
+  const yamlTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
-const slug = title
-  .toLowerCase()
-  .replace(/['’]/g, '')
-  .replace(/[^a-z0-9]+/g, '-')
-  .replace(/^-+|-+$/g, '');
-
-if (!slug) {
-  console.error(`Could not derive a slug from "${title}".`);
-  process.exit(1);
-}
-
-// Local date, not UTC: an evening scaffold should carry today's date.
-const now = new Date();
-const date = [
-  now.getFullYear(),
-  String(now.getMonth() + 1).padStart(2, '0'),
-  String(now.getDate()).padStart(2, '0'),
-].join('-');
-
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const file = join(root, 'src', 'content', 'writing', `${slug}.md`);
-
-if (existsSync(file)) {
-  console.error(`Refusing to overwrite existing ${file}`);
-  process.exit(1);
-}
-
-// Backslashes doubled first so the quote escapes added next are not re-escaped;
-// both are YAML escape characters inside a double-quoted scalar.
-const yamlTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-
-const frontmatter = `---
+  return `---
 title: "${yamlTitle}"
 date: ${date}
-description: "REPLACE: one to two sentences; drives the index card and meta description."
+description: "${PLACEHOLDER_MARKER} one to two sentences; drives the index card and meta description."
 tags: []
 draft: true
 ---
 
-<!-- REPLACE: delete this comment. Lead each section with the answer, then support it. Models
+<!-- ${PLACEHOLDER_MARKER} delete this comment. Lead each section with the answer, then support it. Models
      read one section at a time and quote it out of context, so a section that opens with
      build-up gets extracted without its point. Full house style is in CLAUDE.md. -->
 
 `;
+}
 
-writeFileSync(file, frontmatter);
-console.log(`Created src/content/writing/${slug}.md (draft: true)`);
-console.log('Body headings start at h2; the template emits the h1 from title.');
-console.log('Lead each section with the answer; the scaffold repeats that in the body.');
+function main() {
+  const title = process.argv[2];
+  if (!title || title.startsWith('-')) {
+    console.error('Usage: npm run new-post -- "My post title"');
+    console.error('Give the human title, quoted; the filename is derived from it.');
+    return 1;
+  }
+
+  const slug = title
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (!slug) {
+    console.error(`Could not derive a slug from "${title}".`);
+    return 1;
+  }
+
+  // Local date, not UTC: an evening scaffold should carry today's date.
+  const now = new Date();
+  const date = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const file = join(root, 'src', 'content', 'writing', `${slug}.md`);
+
+  if (existsSync(file)) {
+    console.error(`Refusing to overwrite existing ${file}`);
+    return 1;
+  }
+
+  writeFileSync(file, scaffoldSource({ title, date }));
+  console.log(`Created src/content/writing/${slug}.md (draft: true)`);
+  console.log('Body headings start at h2; the template emits the h1 from title.');
+  console.log('Lead each section with the answer; the scaffold repeats that in the body.');
+  return 0;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(main());
+}
