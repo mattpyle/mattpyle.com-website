@@ -114,7 +114,7 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
     </div>
 
     {(newerArticle || nextArticle) && (
-      <div class="post-next-wrap rd-section">
+      <nav class="post-next-wrap rd-section" aria-label="Writing entry navigation">
         {newerArticle && (
           <a href={`/writing/${newerArticle.id}/`} class="post-next">
             <span class="post-next-label">newer &middot;{formatSiteDate(newerArticle.data.date)}</span>
@@ -127,7 +127,7 @@ const { head: titleHead, fill: titleFill } = splitTitleFill(title);
             <span class="post-next-title">{nextArticle.data.title}</span>
           </a>
         )}
-      </div>
+      </nav>
     )}
 
   </article>
