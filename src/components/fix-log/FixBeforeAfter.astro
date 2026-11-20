@@ -65,7 +65,7 @@ const lines = (specimen: Specimen): { text: string; added: boolean }[] =>
     <div class="specimens">
       {([['Before', text.before], ['After', text.after]] as const).map(([side, specimen]) => (
         <figure class="spec">
-          <pre class="spec-frame" tabindex="0"><code>{lines(specimen).map((l) => <span class:list={[l.added && 'added']}>{l.text + NEWLINE}</span>)}</code></pre>
+          <pre class="spec-frame"><code>{lines(specimen).map((l) => <span class:list={[l.added && 'added']}>{l.text + NEWLINE}</span>)}</code></pre>
           <figcaption><span class="spec-side">{side}</span> &middot; {specimen.label}</figcaption>
         </figure>
       ))}

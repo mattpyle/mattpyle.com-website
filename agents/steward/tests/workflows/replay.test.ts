@@ -92,7 +92,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin` | The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin` | The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin` | The checks path ending reopened. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin` | All three markers on current code: `listFixableFindings`, the restart start and signal, the close cancel. A reconcile that throws (`reportRunHealth` before the rethrow). |
@@ -779,6 +779,49 @@ test('a lifecycle run approved before the measurement at the verdict replays str
     { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/agent-readiness-verdict-measure-fixture--llms-txt',
+  );
+});
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before the `record-verdict`
+ * Update (STW-636): parked at the verdict wait in a workflow task of its own,
+ * a malformed `verdict` Signal dropped, parked again, a CLI approve by Signal
+ * and its write, the measurement at the verdict (unmeasured), the auto-fix
+ * read (off), and parked at `waiting-fix`. 61 events.
+ *
+ * New code adds the Update's handler, a try/catch around the write, and a
+ * `wf.condition(wf.allHandlersFinished)` after it. None issues a command, so
+ * the change carries no marker, and a run parked at the verdict wait takes an
+ * Update from the first worker that has the handler. This fixture holds both
+ * sides of the wait: the park before the verdict and the commands after it.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at 73fcdb1, the
+ * worktree before its first edit) against the time-skipping server with mocked
+ * activities, so it holds no real finding text.
+ *
+ * Probe (2026-11-20): replacing the new `await wf.condition(wf.allHandlersFinished)`
+ * with `await wf.sleep('1 second')` made this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ * for change verdict-measure, but there is no corresponding change command!
+ * ```
+ *
+ * Ten other `findingWorkflow` fixtures failed with it, every one that takes a
+ * verdict: the two verdict-only histories on their `WorkflowExecutionCompleted`
+ * event, the lifecycle ones on their next marker or child start. The other 18
+ * replays passed. The wait was restored and all 29 replays re-ran green.
+ */
+const findingParkedBeforeVerdictUpdatePath = fileURLToPath(
+  new URL('../fixtures/histories/finding-parked-before-verdict-update.bin', import.meta.url),
+);
+
+test('a lifecycle run parked and approved before the verdict Update replays with the handler added', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingParkedBeforeVerdictUpdatePath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/agent-readiness-verdict-update-fixture--llms-txt',
   );
 });
 

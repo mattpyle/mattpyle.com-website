@@ -83,29 +83,29 @@
     - paragraph: What the site says an agent may do.
     - paragraph: 4 checks
     - list "Crawlability":
-      - listitem: robots.txt exists and parses 200, 3 user-agent group(s), 1 sitemap declaration(s) Pass medium
-      - listitem: "robots.txt lets user-triggered AI agents read the site a blanket \"User-agent: * / Disallow: /\" blocks every agent, user-triggered ones included Fail high"
-      - listitem: Content Signals preferences are declared no Content-Signal directives in robots.txt and no Content-Signal response header Fail low
-      - listitem: A sitemap is declared in robots.txt and fetchable 200, 42 URL(s), parses as a urlset Pass high
+      - listitem: "robots.txt exists and parses 200, 3 user-agent group(s), 1 sitemap declaration(s) Pass (weight: medium )"
+      - listitem: "robots.txt lets user-triggered AI agents read the site a blanket \"User-agent: * / Disallow: /\" blocks every agent, user-triggered ones included Fail (weight: high )"
+      - listitem: "Content Signals preferences are declared no Content-Signal directives in robots.txt and no Content-Signal response header Fail (weight: low )"
+      - listitem: "A sitemap is declared in robots.txt and fetchable 200, 42 URL(s), parses as a urlset Pass (weight: high )"
     - heading "Discovery" [level=3]
     - paragraph: What an agent can find without being told where to look.
     - paragraph: 6 checks
     - list "Discovery":
-      - listitem: llms.txt exists and follows the spec 404 — the origin serves no llms.txt Fail medium
-      - listitem: The links in llms.txt resolve not run — there is no llms.txt to take links from N/A medium
-      - listitem: Every llms.txt list item leads with a markdown link not run — there is no llms.txt to read list items from N/A low
-      - listitem: agents.md exists and is markdown 200, but the response is text/html rather than markdown Fail medium
-      - listitem: An MCP server is discoverable at /.well-known/mcp-server 200, application/json, names an endpoint at https://example.com/mcp Pass low
-      - listitem: "An A2A agent card is published could not fetch: the connection was reset before any response arrived N/A low"
+      - listitem: "llms.txt exists and follows the spec 404 — the origin serves no llms.txt Fail (weight: medium )"
+      - listitem: "The links in llms.txt resolve not run — there is no llms.txt to take links from N/A (weight: medium )"
+      - listitem: "Every llms.txt list item leads with a markdown link not run — there is no llms.txt to read list items from N/A (weight: low )"
+      - listitem: "agents.md exists and is markdown 200, but the response is text/html rather than markdown Fail (weight: medium )"
+      - listitem: "An MCP server is discoverable at /.well-known/mcp-server 200, application/json, names an endpoint at https://example.com/mcp Pass (weight: low )"
+      - listitem: "An A2A agent card is published could not fetch: the connection was reset before any response arrived N/A (weight: low )"
     - heading "Content access" [level=3]
     - paragraph: Whether the content comes back in a form a model can read.
     - paragraph: 5 checks
     - list "Content access":
-      - listitem: The homepage serves markdown when asked for it 200 with Content-Type text/markdown and a markdown body Pass high
-      - listitem: "A content page serves markdown when asked for it could not fetch: the connection was reset before any response arrived N/A high"
-      - listitem: "/The homepage's first \\d+,\\d+ characters are measured for content share text: \\d+% of the first \\d+,\\d+ characters is content \\(the main element\\); markdown: \\d+% of all \\d+,\\d+ characters \\(the whole page, shorter than \\d+,\\d+\\) is content Pass medium/"
-      - listitem: "/A content page's first \\d+,\\d+ characters are measured for content share text: \\d+% of the first \\d+,\\d+ characters is content \\(the main element\\); markdown: no markdown twin to measure Pass medium/"
-      - listitem: The homepage advertises its alternates in a Link header the homepage Link header names an alternate of type text/markdown Pass low
+      - listitem: "The homepage serves markdown when asked for it 200 with Content-Type text/markdown and a markdown body Pass (weight: high )"
+      - listitem: "A content page serves markdown when asked for it could not fetch: the connection was reset before any response arrived N/A (weight: high )"
+      - listitem: "/The homepage's first \\d+,\\d+ characters are measured for content share text: \\d+% of the first \\d+,\\d+ characters is content \\(the main element\\); markdown: \\d+% of all \\d+,\\d+ characters \\(the whole page, shorter than \\d+,\\d+\\) is content Pass \\(weight: medium \\)/"
+      - listitem: "/A content page's first \\d+,\\d+ characters are measured for content share text: \\d+% of the first \\d+,\\d+ characters is content \\(the main element\\); markdown: no markdown twin to measure Pass \\(weight: medium \\)/"
+      - listitem: "The homepage advertises its alternates in a Link header the homepage Link header names an alternate of type text/markdown Pass (weight: low )"
   - region "Notes on the run":
     - heading "Notes on the run" [level=2]
     - list:

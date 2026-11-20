@@ -35,6 +35,15 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * it with source `file` when the verdict is already in the file (Discord through
  * Argus, or an edit in Obsidian), and this workflow writes nothing.
  *
+ * **The `record-verdict` Update** (STW-636) is the same gate for a caller that
+ * wants the answer: the CLI and the console send it. Its validator refuses a
+ * malformed verdict, and one that disagrees with the verdict already taken.
+ * Its handler sets the verdict the main body waits on and returns after the
+ * write, with the verdict and the commit. The first well-formed verdict by
+ * either path stands; a later Update of the same status is answered with it.
+ * The handler and its waits issue no command, so the change carries no marker:
+ * `finding-parked-before-verdict-update.bin` is the proof.
+ *
  * **`stopAfter`** is where the run ends.
  *
  * - `'verdict'`: it completes with the verdict, as every execution started
@@ -428,7 +437,33 @@ export interface RetestAccepted {
   test: number;
 }
 
+/**
+ * What the `record-verdict` Update returns (STW-636): the verdict the run
+ * recorded and its commit, read after the write.
+ */
+export interface VerdictRecorded {
+  /** The recorded verdict. It is the earlier one when `first` is false. */
+  verdict: FindingVerdict;
+  /** The commit that wrote it, or null when nothing was written (a file verdict, or a file that already carried it). */
+  commitSha: string | null;
+  /** True when this Update's verdict is the one recorded; false when an earlier verdict of the same status stands. */
+  first: boolean;
+  /** The run's stop point, so the caller knows whether an approved run goes on. */
+  stopAfter: FindingStopAfter;
+}
+
+/** The failure type of a `record-verdict` Update whose write failed or was cancelled. */
+export const VERDICT_WRITE_FAILED = 'VerdictWriteFailed';
+const VERDICT_CANCELLED = 'The run was cancelled before the verdict was written.';
+
 export const verdictSignal = wf.defineSignal<[FindingVerdict]>('verdict');
+/**
+ * The verdict as an Update (STW-636): the validator refuses at once, and the
+ * handler returns after the write. The name differs from the Signal's.
+ * Rollback: a run whose history holds an accepted `record-verdict` Update
+ * needs a worker that has this handler.
+ */
+export const verdictUpdate = wf.defineUpdate<VerdictRecorded, [FindingVerdict]>('record-verdict');
 export const retestUpdate = wf.defineUpdate<RetestAccepted, [RetestRequest]>('retest');
 export const fixSignal = wf.defineSignal<[FixRequest]>('fix');
 export const findingStateQuery = wf.defineQuery<FindingState>('state');
@@ -720,25 +755,73 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
   );
 
+  // The verdict as an Update (STW-636). One rule for a verdict by either
+  // path: the first well-formed one to reach the run stands. A later one of
+  // the same status is answered with the first; a later one of the other
+  // status is refused here, where the Signal handler above drops it.
+  //
+  // The handler starts no activity: it sets the verdict the main body waits
+  // on, so a verdict by Update issues the commands a verdict by Signal does.
+  // It returns once the verdict is recorded (`state.status` is `done`), not
+  // while it is in flight (`state.verdict` set, the write not yet back), and
+  // fails when the write fails. Neither wait issues a command.
+  const write: { failed: string | null } = { failed: null };
+  wf.setHandler(
+    verdictUpdate,
+    async (verdict): Promise<VerdictRecorded> => {
+      const first = state.verdict === null;
+      if (first) state.verdict = verdict;
+      try {
+        await wf.condition(() => state.status === 'done' || write.failed !== null);
+      } catch (err) {
+        // The handler runs in the run's own scope, so a cancelled run ends this wait too.
+        if (!wf.isCancellation(err)) throw err;
+        throw wf.ApplicationFailure.nonRetryable(VERDICT_CANCELLED, VERDICT_WRITE_FAILED);
+      }
+      if (state.status !== 'done') {
+        throw wf.ApplicationFailure.nonRetryable(write.failed as string, VERDICT_WRITE_FAILED);
+      }
+      return { verdict: state.verdict as FindingVerdict, commitSha: state.commitSha, first, stopAfter: input.stopAfter };
+    },
+    {
+      validator: (verdict: FindingVerdict): void => {
+        const refusal = verdictRefusal(state, verdict);
+        if (refusal) throw new Error(refusal);
+      },
+    },
+  );
+
   await wf.condition(() => state.verdict !== null);
   const verdict = state.verdict as unknown as FindingVerdict;
 
   if (verdict.source === 'cli') {
     state.status = 'writing';
-    const written = await writing.writeFindingVerdict({
-      repo: input.repo,
-      site: input.site,
-      key: input.key,
-      findingPath: input.findingPath,
-      indexPath: input.indexPath,
-      status: verdict.status,
-      reason: verdict.reason,
-      at: verdict.at,
-      source: verdict.source,
-    });
+    let written;
+    try {
+      written = await writing.writeFindingVerdict({
+        repo: input.repo,
+        site: input.site,
+        key: input.key,
+        findingPath: input.findingPath,
+        indexPath: input.indexPath,
+        status: verdict.status,
+        reason: verdict.reason,
+        at: verdict.at,
+        source: verdict.source,
+      });
+    } catch (err) {
+      // A waiting Update is answered before the run ends on the failure.
+      write.failed = wf.isCancellation(err)
+        ? VERDICT_CANCELLED
+        : `The verdict was not written: ${describeError(err)}`;
+      await wf.CancellationScope.nonCancellable(() => wf.condition(wf.allHandlersFinished));
+      throw err;
+    }
     state.commitSha = written.commitSha;
   }
   state.status = 'done';
+  // A waiting Update returns before the run can close on the next lines.
+  await wf.condition(wf.allHandlersFinished);
 
   const base = { site: input.site, key: input.key, verdict, commitSha: state.commitSha };
   if (input.stopAfter === 'verdict') {
@@ -763,6 +846,19 @@ interface Retest {
   requested: boolean;
   prUrl: string | null;
   testedSha: string | null;
+}
+
+/**
+ * Why a `record-verdict` Update is refused, in a sentence the CLI prints, or
+ * null to accept it. Read-only. A verdict that agrees with the one already
+ * taken is accepted, so a retry after a lost reply is harmless.
+ */
+function verdictRefusal(state: FindingState, verdict: FindingVerdict): string | null {
+  if (!isVerdict(verdict)) return 'The verdict is malformed.';
+  if (state.verdict && state.verdict.status !== verdict.status) {
+    return `A verdict is already recorded: ${state.verdict.status} (source ${state.verdict.source}).`;
+  }
+  return null;
 }
 
 /**

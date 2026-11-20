@@ -232,7 +232,7 @@ steward audit-url example.com    # agent-readiness checks against any site
 steward mcp-serve                # serve the audit over MCP, backed by local Temporal
 steward finding list             # open finding workflows, one per line; a run waiting for a fix slot is tagged
 steward finding status <key>     # opens with `run: open`, or how and when a closed run ended (and its outcome); a closed run's step, gate and verdict follow under `last state:`
-steward finding approve <key>    # signal the verdict; the workflow writes it into the file
+steward finding approve <key>    # send the verdict as an Update; the workflow writes it into the file and answers
 steward finding reject <key> --reason "why"
 steward finding fix <key>        # signal the finding's lifecycle, or start the fixer alone for an older finding
 steward finding retest <key>     # test the open fix PR's head on its preview again (a Workflow Update; refused with the reason when there is no open fix PR)
