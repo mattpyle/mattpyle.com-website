@@ -378,7 +378,7 @@
       const res = d.result || {};
       const n = nextProposed(rows, state, r);
       const lines = [];
-      if (res.recorded && res.recorded.source && res.recorded.source !== 'cli') lines.push('An earlier verdict in the file was recorded first, so nothing was written.');
+      if (res.first === false) lines.push('An earlier verdict of the same status already stood, so this one wrote nothing.');
       if (res.commitSha) lines.push(`Commit <code>${esc(res.commitSha)}</code>`);
       if (res.nextStepError) lines.push(`The next step is unknown: <code>steward finding status ${esc(r.key)}</code> shows it.`);
       if (res.nextStep) lines.push(esc(plain(res.nextStep)));

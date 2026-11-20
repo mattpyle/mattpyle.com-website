@@ -110,6 +110,7 @@ before(async () => {
         workflowId: `finding/${request.site}/${request.key}`,
         sent: buildFindingVerdict(request.status, request.reason),
         recorded: buildFindingVerdict(request.status, request.reason),
+        first: true,
         commitSha: 'abc1234',
         nextStep: null,
         nextStepError: null,

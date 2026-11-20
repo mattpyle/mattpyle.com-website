@@ -1908,7 +1908,7 @@ function parseFindingSlug(label: string) {
 }
 
 /**
- * The verbs' side of {@link sendVerdict}: the same signal the console sends,
+ * The verbs' side of {@link sendVerdict}: the same Update the console sends,
  * printed as the verbs always printed it.
  */
 async function sendFindingVerdict(site: string, key: string, status: FindingVerdict['status'], reason: string) {
@@ -1918,7 +1918,7 @@ async function sendFindingVerdict(site: string, key: string, status: FindingVerd
     try {
       result = await sendVerdict(
         { site, key, status, reason },
-        { client: c, onSent: (id) => console.log(`\n  ${status} signal sent to ${id}`) },
+        { client: c },
       );
     } catch (err) {
       if (err instanceof FindingVerdictError) {
@@ -1927,9 +1927,10 @@ async function sendFindingVerdict(site: string, key: string, status: FindingVerd
       }
       throw err;
     }
+    console.log(`\n  ${result.workflowId}`);
     console.log(`  verdict: ${result.recorded.status} (source ${result.recorded.source})`);
-    if (result.recorded.source !== 'cli') {
-      console.log('  An earlier verdict from the file was recorded first, so nothing was written.');
+    if (!result.first) {
+      console.log(`  An earlier ${result.recorded.status} verdict (${result.recorded.at}) already stood, so this one wrote nothing.`);
     }
     console.log(`  commit: ${result.commitSha ?? 'none (the file already carried this verdict)'}`);
     if (result.nextStepError) {
