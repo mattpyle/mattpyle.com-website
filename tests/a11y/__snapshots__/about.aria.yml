@@ -62,7 +62,6 @@
   - region "Some things that are true":
     - heading "Some things that are true" [level=2]
     - list:
-      - listitem: I am not a professional engineer, and nothing here pretends otherwise.
       - listitem: Good coffee, taken seriously.
       - listitem: The question behind most of this is “why does this actually work?”
   - separator
