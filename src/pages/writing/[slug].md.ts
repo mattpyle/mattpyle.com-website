@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { formatLogLine } from '../../lib/agent-surfaces.mjs';
+import { withPublicImages } from '../../lib/content-image-urls';
 import { showDrafts } from '../../lib/show-drafts';
 import { rewriteVideoTags } from '../../lib/video-embed.mjs';
 
@@ -57,7 +58,11 @@ export const GET: APIRoute = async ({ params, site, request }) => {
   // Through rewriteVideoTags: the body is emitted verbatim otherwise, and the
   // `<Video />` tag Keystatic stores means nothing to a markdown reader. The site's
   // markdown pipeline runs the same helper, so both surfaces carry the same element.
-  const body = `${frontmatter}\n\n# ${title}\n\n${rewriteVideoTags(article.body ?? '')}`;
+  //
+  // Through withPublicImages: a post writes an image relative to its own source file,
+  // which resolves to nothing from this URL. 'keep', not 'throw': see content-image-urls.ts.
+  const markdown = withPublicImages(rewriteVideoTags(article.body ?? ''), article, base, 'keep');
+  const body = `${frontmatter}\n\n# ${title}\n\n${markdown}`;
 
   return new Response(body, {
     headers: {
