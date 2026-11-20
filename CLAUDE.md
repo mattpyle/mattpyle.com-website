@@ -33,7 +33,7 @@ mattpyle.com is a personal site and a testbed for emerging web standards (WebMCP
 | `npm run generate` | Writes the gitignored `src/data/a2a-digest.json`, `agent-skills-index.json` and `page-paths.mjs`. `pretest`, `precheck`, `predev` and `prebuild` run it. On a pull request, the CI job summary shows their diff against the base. |
 | `npm test` | The site test suite. CI runs it on every PR, and the fix Action runs it before it pushes. |
 | `npm run check` | The Astro and TypeScript check. CI runs it on every PR, and the fix Action runs it before it pushes. |
-| `npm run new-post -- "Title"` | Scaffold a draft with correct frontmatter. |
+| `npm run new-post -- "Title"` | Scaffold a draft with correct frontmatter; a build fails if a published post still holds one of its `REPLACE:` placeholders. |
 | `npm run a11y` | Playwright suite for the manual WCAG checks. Advisory. Regenerate one golden with `--update-snapshots --grep <template>`, never `--update-snapshots=all`. |
 | `npm run sweep:retro` | Reports modern colour tokens or fonts leaking into the retro appearance. Advisory. |
 | `npm run validate:html`, `npm run validate:llms-txt`, `npm run spellcheck` | Advisory validators. Add jargon with `npm run steward -w @mattpyle/steward -- dict-add <word>`. |
