@@ -22,8 +22,8 @@ import { CHANGELOG_ENTRY } from './helpers/pages';
  * second measurement that needs no hover at all: the stylesheets the page loaded hold no hover
  * rule for the row, or anything inside it, that is live on this device.
  *
- * Not checked: the pressed state. The rows carry an `:active` tint under `@media (hover: none)`,
- * and the emulation does not match `:active` while a touch is held, so only a real phone shows it.
+ * The rows carry no pressed style of their own. A touch browser draws its own tap highlight while
+ * a finger is down, and a second tint under `:active` showed as two effects on a real phone.
  *
  * Modern only until retro's hover rules are behind the media query too.
  */
