@@ -1,13 +1,14 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { ApplicationFailure } from '@temporalio/activity';
+import { ApplicationFailure, CancelledFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import {
   readVerifyBlock,
   writeFindingVerification,
   type WriteFindingVerificationInput,
 } from '../../src/activities/findings.js';
-import { runFindingChecks } from '../../src/activities/verify-finding.js';
+import { MockActivityEnvironment } from '@temporalio/testing';
+import { runFindingChecks as runFindingChecksActivity } from '../../src/activities/verify-finding.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { verifyWorkflowId } from '../../src/lib/findings.js';
 import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
@@ -17,6 +18,10 @@ import { DEFECT_FINDING, DEFECT_HANDOFF, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORI
  * read, and the write back under the two-writer contract of design decision
  * 19), and the check run with a fetch in production's place.
  */
+
+/** The activity in a mock activity context: it heartbeats and reads its cancellation signal, so it needs one. */
+const runFindingChecks = (...args: Parameters<typeof runFindingChecksActivity>) =>
+  new MockActivityEnvironment().run(() => runFindingChecksActivity(...args)) as ReturnType<typeof runFindingChecksActivity>;
 
 const REPO = 'mattpyle/argus';
 const FINDING = `sites/mattpyle-com/findings/${DEFECT_KEY}.md`;
@@ -268,4 +273,124 @@ test('production answering 5xx is a retryable failure, never a reopened finding'
     runFindingChecks({ key: DEFECT_KEY, checks: [{ url: `${ORIGIN}/`, kind: 'text', expect: { contains: 'Matt' } }] }, runner),
     (err: Error) => err.name === 'CheckUnavailable' && !(err instanceof ApplicationFailure),
   );
+});
+
+// ---------------------------------------------------------------------------
+// runFindingChecks: the heartbeat and the cancellation
+// ---------------------------------------------------------------------------
+
+/** A probe that records its `close()` and whose page never answers until it is closed, as a wedged Chrome. */
+function hangingProbe() {
+  const state = { opened: 0, closed: 0, evaluating: 0 };
+  let fail: ((err: Error) => void) | undefined;
+  const probe = {
+    evaluate: () =>
+      new Promise<unknown>((_, reject) => {
+        state.evaluating++;
+        fail = reject;
+      }),
+    close: async () => {
+      state.closed++;
+      fail?.(new Error('the DevTools socket closed'));
+    },
+  };
+  return {
+    state,
+    openProbe: async () => {
+      state.opened++;
+      return probe;
+    },
+  };
+}
+
+const JS_CHECK = { url: `${ORIGIN}/`, kind: 'js' as const, expect: { expression: 'document.title', equals: 'Home' } };
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('the check run heartbeats at once and every five seconds while it runs, with details that carry nothing from the page', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const env = new MockActivityEnvironment();
+  const beats: unknown[] = [];
+  env.on('heartbeat', (details: unknown) => beats.push(details));
+  let answer!: (res: Response) => void;
+  let asked = false;
+  const runner = {
+    fetch: (() => {
+      asked = true;
+      return new Promise<Response>((resolve) => (answer = resolve));
+    }) as typeof fetch,
+  };
+  const running = env.run(() =>
+    runFindingChecksActivity({ key: DEFECT_KEY, checks: [{ url: `${ORIGIN}/`, kind: 'text', expect: { contains: 'secret' } }] }, runner),
+  );
+  while (!asked) await tick();
+  assert.equal(beats.length, 1, 'one beat before any time has passed');
+  t.mock.timers.tick(5_000);
+  t.mock.timers.tick(5_000);
+  assert.equal(beats.length, 3, 'one more for each five seconds the page takes');
+
+  answer(new Response('<p>secret page text</p>', { status: 200 }));
+  assert.equal(((await running) as { passed: boolean }).passed, true);
+  t.mock.timers.tick(60_000);
+  assert.deepEqual(beats, Array(3).fill('running finding checks'), 'the pump stops with the run');
+});
+
+test('cancelling the activity closes the browser and fails the attempt as cancelled', async () => {
+  const env = new MockActivityEnvironment();
+  const { state, openProbe } = hangingProbe();
+  const running = env.run(() =>
+    runFindingChecksActivity({ key: DEFECT_KEY, checks: [JS_CHECK, JS_CHECK] }, { fetch: globalThis.fetch, openProbe }),
+  );
+  while (state.evaluating === 0) await tick();
+  assert.equal(state.closed, 0, 'the browser is open while the page is being measured');
+
+  env.cancel();
+  await assert.rejects(running, (err: Error) => err instanceof CancelledFailure);
+  assert.equal(state.opened, 1);
+  assert.ok(state.closed >= 1, 'the probe was closed');
+  assert.equal(state.evaluating, 1, 'the second check never started');
+});
+
+test('a cancellation during the browser launch closes the browser once it has opened', async () => {
+  const env = new MockActivityEnvironment();
+  const { state, openProbe } = hangingProbe();
+  let launching = false;
+  let launched!: () => void;
+  const gate = new Promise<void>((resolve) => (launched = resolve));
+  const running = env.run(() =>
+    runFindingChecksActivity(
+      { key: DEFECT_KEY, checks: [JS_CHECK] },
+      {
+        fetch: globalThis.fetch,
+        openProbe: async () => {
+          launching = true;
+          await gate;
+          return openProbe();
+        },
+      },
+    ),
+  );
+  while (!launching) await tick();
+  env.cancel();
+  launched();
+  await assert.rejects(running, (err: Error) => err instanceof CancelledFailure);
+  assert.equal(state.opened, 1);
+  assert.ok(state.closed >= 1, 'the browser that finished launching was closed');
+  assert.equal(state.evaluating, 0, 'no page was opened');
+});
+
+test('a cancellation aborts the request in flight and no later check runs', async () => {
+  const env = new MockActivityEnvironment();
+  let requests = 0;
+  const fetcher = ((_url: string | URL | Request, init: RequestInit = {}) => {
+    requests++;
+    return new Promise<Response>((_, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    });
+  }) as typeof fetch;
+  const check = { url: `${ORIGIN}/`, kind: 'status' as const, expect: 200 };
+  const running = env.run(() => runFindingChecksActivity({ key: DEFECT_KEY, checks: [check, check] }, { fetch: fetcher }));
+  while (requests === 0) await tick();
+  env.cancel();
+  await assert.rejects(running, (err: Error) => err instanceof CancelledFailure);
+  assert.equal(requests, 1);
 });
