@@ -143,24 +143,85 @@ const STORE_TIMEOUT_MS = 1500;
 const INFRASTRUCTURE_RETRY_SECONDS = 60;
 
 /**
- * The limits, from the environment, with the documented defaults.
+ * The tiers, as data. `checkRateLimit`, the `read*Limits` functions and the key builders below all
+ * read this table, so a tier is described once.
+ *
+ * - `limits`: each limit's environment variable and its default.
+ * - `window`: the per-caller window. `'fixed'` is a window of `limits.windowSeconds`, aligned to the
+ *   epoch. `'utc-day'` is the UTC day, with no variable to change it. The global budget is always
+ *   the UTC day.
+ * - `callerPrefix`, `globalPrefix`: what follows `mcp:v1:` in the tier's two keys.
+ * - `unit`: what the tier counts, for the refusal's sentence.
+ */
+const TIERS = Object.freeze({
+  fast: {
+    limits: {
+      perCaller: ['MCP_AUDIT_RATE_PER_CALLER', DEFAULT_PER_CALLER],
+      windowSeconds: ['MCP_AUDIT_RATE_WINDOW_SECONDS', DEFAULT_WINDOW_SECONDS],
+      globalPerDay: ['MCP_AUDIT_RATE_GLOBAL_PER_DAY', DEFAULT_GLOBAL_PER_DAY],
+    },
+    window: 'fixed',
+    callerPrefix: 'caller',
+    globalPrefix: 'global',
+    unit: 'audits',
+  },
+  deep: {
+    limits: {
+      perCaller: ['MCP_DEEP_RATE_PER_CALLER', DEFAULT_DEEP_PER_CALLER],
+      globalPerDay: ['MCP_DEEP_RATE_GLOBAL_PER_DAY', DEFAULT_DEEP_GLOBAL_PER_DAY],
+    },
+    window: 'utc-day',
+    callerPrefix: 'deep:caller',
+    globalPrefix: 'deep:global',
+    unit: 'deep audits',
+  },
+  session: {
+    limits: {
+      perCaller: ['A2A_SESSION_RATE_PER_CALLER', DEFAULT_SESSION_PER_CALLER],
+      globalPerDay: ['A2A_SESSION_RATE_GLOBAL_PER_DAY', DEFAULT_SESSION_GLOBAL_PER_DAY],
+    },
+    window: 'utc-day',
+    callerPrefix: 'session:caller',
+    globalPrefix: 'session:global',
+    unit: 'consultant sessions',
+  },
+});
+
+/**
+ * One tier's limits, from the environment, with the table's defaults.
  *
  * A malformed value falls back to the default rather than throwing. The alternative is an endpoint
  * that 500s on a typo in a dashboard field, and a limiter that refuses to start is a limiter that
  * gets switched off.
  *
+ * @param {{ limits: Record<string, [string, number]> }} spec
  * @param {Record<string, string | undefined>} env
+ * @returns {Record<string, number>}
  */
-export function readLimits(env) {
+function limitsFor(spec, env) {
   const positive = (raw, fallback) => {
     const value = Number(raw);
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
   };
-  return {
-    perCaller: positive(env.MCP_AUDIT_RATE_PER_CALLER, DEFAULT_PER_CALLER),
-    windowSeconds: positive(env.MCP_AUDIT_RATE_WINDOW_SECONDS, DEFAULT_WINDOW_SECONDS),
-    globalPerDay: positive(env.MCP_AUDIT_RATE_GLOBAL_PER_DAY, DEFAULT_GLOBAL_PER_DAY),
-  };
+  return Object.fromEntries(
+    Object.entries(spec.limits).map(([name, [variable, fallback]]) => [name, positive(env[variable], fallback)])
+  );
+}
+
+/** A key under the version prefix: `mcp:v1:<prefix>:<part>:<part>`. */
+function keyFor(prefix, ...parts) {
+  return ['mcp', KEY_VERSION, prefix, ...parts].join(':');
+}
+
+/**
+ * The fast tier's limits, from the environment, with the documented defaults and the
+ * malformed-falls-back-to-the-default rule of `limitsFor`.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {{ perCaller: number, windowSeconds: number, globalPerDay: number }}
+ */
+export function readLimits(env) {
+  return limitsFor(TIERS.fast, env);
 }
 
 /**
@@ -173,16 +234,10 @@ export function readLimits(env) {
  * cost being bounded here is a daily bill.
  *
  * @param {Record<string, string | undefined>} env
+ * @returns {{ perCaller: number, globalPerDay: number }}
  */
 export function readDeepLimits(env) {
-  const positive = (raw, fallback) => {
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-  };
-  return {
-    perCaller: positive(env.MCP_DEEP_RATE_PER_CALLER, DEFAULT_DEEP_PER_CALLER),
-    globalPerDay: positive(env.MCP_DEEP_RATE_GLOBAL_PER_DAY, DEFAULT_DEEP_GLOBAL_PER_DAY),
-  };
+  return limitsFor(TIERS.deep, env);
 }
 
 /**
@@ -190,16 +245,10 @@ export function readDeepLimits(env) {
  * the deep tier's reason: the cost being bounded is a daily model bill.
  *
  * @param {Record<string, string | undefined>} env
+ * @returns {{ perCaller: number, globalPerDay: number }}
  */
 export function readSessionLimits(env) {
-  const positive = (raw, fallback) => {
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-  };
-  return {
-    perCaller: positive(env.A2A_SESSION_RATE_PER_CALLER, DEFAULT_SESSION_PER_CALLER),
-    globalPerDay: positive(env.A2A_SESSION_RATE_GLOBAL_PER_DAY, DEFAULT_SESSION_GLOBAL_PER_DAY),
-  };
+  return limitsFor(TIERS.session, env);
 }
 
 /**
@@ -290,12 +339,12 @@ export function utcDayFor(now) {
 
 /** `mcp:v1:caller:<hmac>:<window>` — one caller, one window. */
 export function callerKeyFor(hash, windowIndex) {
-  return `mcp:${KEY_VERSION}:caller:${hash}:${windowIndex}`;
+  return keyFor(TIERS.fast.callerPrefix, hash, windowIndex);
 }
 
 /** `mcp:v1:global:<utc-day>` — everyone, one UTC day. */
 export function globalKeyFor(day) {
-  return `mcp:${KEY_VERSION}:global:${day}`;
+  return keyFor(TIERS.fast.globalPrefix, day);
 }
 
 /**
@@ -307,22 +356,22 @@ export function globalKeyFor(day) {
  * day's deep counters without touching the fast tier's.
  */
 export function deepCallerKeyFor(hash, day) {
-  return `mcp:${KEY_VERSION}:deep:caller:${hash}:${day}`;
+  return keyFor(TIERS.deep.callerPrefix, hash, day);
 }
 
 /** `mcp:v1:deep:global:<utc-day>` — everyone, one UTC day, deep tier. */
 export function deepGlobalKeyFor(day) {
-  return `mcp:${KEY_VERSION}:deep:global:${day}`;
+  return keyFor(TIERS.deep.globalPrefix, day);
 }
 
 /** `mcp:v1:session:caller:<hmac>:<utc-day>`: one caller, one UTC day, consultant sessions. */
 export function sessionCallerKeyFor(hash, day) {
-  return `mcp:${KEY_VERSION}:session:caller:${hash}:${day}`;
+  return keyFor(TIERS.session.callerPrefix, hash, day);
 }
 
 /** `mcp:v1:session:global:<utc-day>`: everyone, one UTC day, consultant sessions. */
 export function sessionGlobalKeyFor(day) {
-  return `mcp:${KEY_VERSION}:session:global:${day}`;
+  return keyFor(TIERS.session.globalPrefix, day);
 }
 
 /**
@@ -376,10 +425,10 @@ async function increment(store, fetchImpl, key, ttlSeconds) {
  * Counted before the audit rather than after, so a caller cannot hold ten slow audits open at once
  * by never letting any of them finish.
  *
- * `tier` picks which pair of counters is touched, and nothing else about the
- * function changes: the secret, the store, the fail-closed posture and the
- * caller-before-global ordering are the same for both, because the properties
- * they hold are the same for both.
+ * `tier` picks a row of the `TIERS` table, and with it which pair of counters is
+ * touched. Nothing else about the function changes: the secret, the store, the
+ * fail-closed posture and the caller-before-global ordering are the same for
+ * every tier, because the properties they hold are the same for every tier.
  *
  * @param {{
  *   ip: string | null,
@@ -401,9 +450,9 @@ export async function checkRateLimit({
   now = new Date(),
   fetchImpl = fetch,
 }) {
-  const fast = readLimits(env);
-  const deep = readDeepLimits(env);
-  const limits = tier === 'deep' ? deep : tier === 'session' ? readSessionLimits(env) : fast;
+  // A name the table does not hold is counted as a fast audit, as it always has been.
+  const spec = Object.hasOwn(TIERS, tier) ? TIERS[tier] : TIERS.fast;
+  const limits = limitsFor(spec, env);
   const secret = env.MCP_AUDIT_RATE_SECRET;
 
   // The three refusals that are the endpoint's own fault. Each says which, because an operator
@@ -439,25 +488,13 @@ export async function checkRateLimit({
 
   const day = utcDayFor(now);
   const hash = callerHash(ip, secret);
-  // The two tiers differ in exactly two places: which keys are incremented, and
-  // how long the per-caller window is. The deep tier's per-caller window is the
-  // UTC day, so both of its counters expire together.
-  // The session tier is the deep tier's shape on its own keys.
-  const daily = tier === 'deep' || tier === 'session';
-  const window = daily ? day : windowFor(now, fast.windowSeconds);
-  const callerKey =
-    tier === 'deep'
-      ? deepCallerKeyFor(hash, day.day)
-      : tier === 'session'
-        ? sessionCallerKeyFor(hash, day.day)
-        : callerKeyFor(hash, window.index);
-  const globalKey =
-    tier === 'deep'
-      ? deepGlobalKeyFor(day.day)
-      : tier === 'session'
-        ? sessionGlobalKeyFor(day.day)
-        : globalKeyFor(day.day);
-  const unit = tier === 'deep' ? 'deep audits' : tier === 'session' ? 'consultant sessions' : 'audits';
+  // The tiers differ in two places, both read from the table: which keys are incremented, and how
+  // long the per-caller window is. A daily tier's two counters expire together.
+  const daily = spec.window === 'utc-day';
+  const window = daily ? day : windowFor(now, limits.windowSeconds);
+  const callerKey = keyFor(spec.callerPrefix, hash, daily ? day.day : window.index);
+  const globalKey = keyFor(spec.globalPrefix, day.day);
+  const unit = spec.unit;
   const per = daily ? 'today' : 'in the current window';
 
   try {
