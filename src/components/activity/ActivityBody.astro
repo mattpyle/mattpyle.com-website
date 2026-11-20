@@ -538,9 +538,9 @@ function mcpVersionNote(version: string): string | undefined {
     </section>
   )}
 
-  <section class="rd-section band-how" aria-label="The same numbers, as data">
+  <section class="rd-section band-how" aria-labelledby="activity-data-title">
     <div class="as-data">
-      <span class="as-data-label">The same numbers, as data</span>
+      <h2 id="activity-data-title" class="as-data-label">The same numbers, as data</h2>
       <a href="/activity.json" class="as-data-link">activity.json</a>
     </div>
   </section>
@@ -869,8 +869,11 @@ function mcpVersionNote(version: string): string | undefined {
     padding-top: 20px;
   }
 
+  /* An h2 set as the plain label it replaces. */
   .as-data-label {
+    margin: 0;
     font-size: 18px;
+    font-weight: 400;
     color: var(--ink-6);
   }
 

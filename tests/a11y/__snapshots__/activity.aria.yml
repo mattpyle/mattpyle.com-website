@@ -180,7 +180,7 @@
           - cell "·"
     - paragraph: "Each SendMessage that carries text counts once under the skill it routed to, and an audit request counts once under the tier it asked for: fast answers in the call, deep starts a durable workflow and is the costly path. none is a request that routed to no skill, such as a GetTask or a malformed message."
   - region "The same numbers, as data":
-    - text: The same numbers, as data
+    - heading "The same numbers, as data" [level=2]
     - link "activity.json":
       - /url: /activity.json
 - contentinfo:
