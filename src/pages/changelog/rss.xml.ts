@@ -3,10 +3,7 @@ import type { APIContext } from 'astro';
 import { getCollection } from 'astro:content';
 import { compareChangelogEntries } from '../../lib/changelog-order';
 import { dateOnlyToFeedInstant, lastBuildDateElement } from '../../lib/feed-build-date.mjs';
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+import { escapeHtml } from '../../lib/feed-text.mjs';
 
 // The changelog's own feed, alongside /rss.xml rather than merged into it: the two
 // have different subjects, and a reader who subscribed to posts never asked to hear
