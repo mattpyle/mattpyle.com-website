@@ -468,6 +468,24 @@ test('buildCommentary keeps the bare score for a gate whose description is gener
   assert.ok(!commentary.includes('lowest Lighthouse'), commentary);
 });
 
+test('buildCommentary names an Agentic Browsing check that applied last run and applies on no page now', () => {
+  const metric = (value: string, names: string) => ({
+    name: 'Agentic Browsing',
+    value,
+    maximum: value,
+    status: 'Pass' as const,
+    description: `${value} of ${value} agent checks pass: ${names}.`,
+  });
+  const commentary = buildCommentary(
+    [GREEN_PAGE],
+    [metric('4', 'accessibility tree, layout stability, llms.txt, AI catalog')],
+    { decision: 'open-pr', reason: 'Agentic Browsing 6/6→4/4' },
+    [metric('6', 'accessibility tree, layout stability, llms.txt, AI catalog, WebMCP, WebMCP form coverage')],
+  );
+  assert.match(commentary, /^WebMCP and WebMCP form coverage applied on no page, so 4 of 4 remaining/);
+  assert.ok(!commentary.includes('fell from 6/6'), commentary);
+});
+
 test('buildCommentary keeps the score for a gate that carries no description', () => {
   const commentary = buildCommentary(
     [GREEN_PAGE],
