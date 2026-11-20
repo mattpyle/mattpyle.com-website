@@ -2,6 +2,7 @@ import rss from '@astrojs/rss';
 import type { APIContext } from 'astro';
 import { getCollection } from 'astro:content';
 import { dateOnlyToFeedInstant, lastBuildDateElement } from '../lib/feed-build-date.mjs';
+import { escapeHtml } from '../lib/feed-text.mjs';
 
 // The draft filter here is unconditional — deliberately stricter than the writing
 // index, which relaxes it under SHOW_DRAFTS. An RSS entry gets cached and
@@ -23,7 +24,8 @@ export async function GET(context: APIContext) {
     site: new URL('/writing/', context.site),
     items: articles.map((article) => ({
       title: article.data.title,
-      description: article.data.description,
+      // `description` is plain text, a reader parses an RSS description as HTML, and rss() only escapes it for XML.
+      description: escapeHtml(article.data.description),
       pubDate: dateOnlyToFeedInstant(article.data.date),
       link: `/writing/${article.id}/`,
     })),
