@@ -86,7 +86,8 @@ export interface FindingVerdictResult {
  * - `no-run`: there is no open run; nothing was sent.
  * - `refused`: the run's validator refused the verdict; nothing was recorded.
  * - `old-worker`: the run's worker has no `record-verdict` handler; nothing was recorded.
- * - `unaccepted`: no worker took the verdict in time; nothing is recorded.
+ * - `unaccepted`: no worker took the verdict in time. It is not recorded yet, and a worker that
+ *   returns may still take it, so the message says to check before sending it again.
  * - `timeout`: the run accepted the verdict and is still writing it.
  * - `write-failed`: the run accepted the verdict and its write failed or was cancelled.
  */
@@ -201,7 +202,7 @@ export async function sendFindingVerdict(
   if (update === TIMED_OUT) {
     throw new FindingVerdictError(
       'unaccepted',
-      `No worker took the verdict in ${waitMs / 1000}s, so nothing is recorded. ${check}`,
+      `No worker took the verdict in ${waitMs / 1000}s. It is not recorded yet; a worker that returns may still take it. ${check}`,
     );
   }
   let recorded: VerdictRecorded | typeof TIMED_OUT;

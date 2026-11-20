@@ -150,7 +150,7 @@ test('a worker with no handler: a clear refusal, and nothing was recorded', asyn
 
 test('no worker takes the Update within the bound: nothing is recorded', async () => {
   const message = await refused(() => never(), 'unaccepted');
-  assert.match(message, /^No worker took the verdict in 0\.05s, so nothing is recorded\. Check `steward finding status stub-finding--page`/);
+  assert.match(message, /^No worker took the verdict in 0\.05s\. It is not recorded yet; a worker that returns may still take it\. Check `steward finding status stub-finding--page`/);
 });
 
 test('accepted and not written within the bound: the error says accepted and still writing', async () => {
