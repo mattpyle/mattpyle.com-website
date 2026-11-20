@@ -300,8 +300,8 @@ html[data-appearance='retro'] [data-module='site-header'] .header-link:hover,
 html[data-appearance='retro'] [data-module='site-header'] .nav-row-link:hover,
 html[data-appearance='retro'] [data-module='site-header'] .nav-more > summary:hover,
 html[data-appearance='retro'] [data-module='site-header'] .nav-more[open] > summary,
-html[data-appearance='retro'] [data-module='site-header'] .header-link[aria-current='page'],
-html[data-appearance='retro'] [data-module='site-header'] .nav-row-link[aria-current='page'] {
+html[data-appearance='retro'] [data-module='site-header'] .header-link[aria-current],
+html[data-appearance='retro'] [data-module='site-header'] .nav-row-link[aria-current] {
   color: var(--retro-gold);
 }
 
@@ -326,7 +326,7 @@ html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link {
 }
 
 html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link:hover,
-html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link[aria-current='page'] {
+html[data-appearance='retro'] [data-module='site-header'] .nav-panel-link[aria-current] {
   color: var(--retro-maroon);
 }
 
