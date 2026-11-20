@@ -106,6 +106,6 @@ A surface left out of a family on purpose goes on the exemption list in `tests/c
 | A new on-demand route (`src/lib/on-demand-routes.mjs`, `middleware.ts`) | `tests/on-demand-routes.test.mjs` for the matcher; sitemap and sibling lists not yet |
 | A changed fact about the site or its author | Not yet |
 | A new content collection (`src/content.config.ts`) | `tests/frontmatter-readers.test.mjs` for the readers; the per-collection loops not yet |
-| A new post or changelog entry | Generated from the collections; `updated:` by hand |
+| A new post or changelog entry | Generated from the collections; `updated:` by hand. A body image is a relative path into `src/assets/`: `tests/markdown-images.test.mjs` fails and names an entry whose image is not on disk, and the build fails when `llms-full.txt` carries an image address that is not in the output (`scripts/validate-markdown-siblings.mjs`) |
 | A new feed or data endpoint | Not yet |
 | A new well-known document | `scripts/validate-a2a-card.mjs`, `scripts/validate-ard-manifest.mjs` and `scripts/validate-mcp-discovery.mjs` for the current ones; the path list not yet |

@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { SCORECARD } from '../data/scorecard';
 import { compareChangelogEntries } from '../lib/changelog-order';
+import { withPublicImages } from '../lib/content-image-urls';
 import { FIX_LOG, fixDate, fixUrl, getFixesNewest, prUrl } from '../lib/fix-log';
 import { rewriteVideoTags } from '../lib/video-embed.mjs';
 
@@ -46,6 +47,12 @@ export const GET: APIRoute = async ({ site }) => {
   // Derive the host from astro.config.mjs `site` so this file can never emit a
   // different host than the canonicals and sitemap do.
   const base = site!.toString().replace(/\/$/, '');
+
+  // Every body below goes through this. A body writes an image relative to its own
+  // source file, which resolves to nothing from this URL. 'throw': this route is
+  // prerendered, so an image with no built address fails the build and names the entry.
+  const publicImages = (body: string, entry: { filePath?: string }) =>
+    withPublicImages(body, entry, base, 'throw');
 
   const articles = (await getCollection('writing', ({ data }) => !data.draft)).sort(
     (a, b) => b.data.date.getTime() - a.data.date.getTime()
@@ -120,7 +127,7 @@ export const GET: APIRoute = async ({ site }) => {
     // Same rewrite the site's markdown pipeline runs, so the `<Video />` tag
     // Keystatic stores reaches this export as a real element. See
     // src/lib/video-embed.mjs.
-    lines.push(demoteHeadings(rewriteVideoTags(article.body ?? '')));
+    lines.push(demoteHeadings(publicImages(rewriteVideoTags(article.body ?? ''), article)));
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -139,7 +146,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(project.data.description);
     lines.push('');
-    lines.push(demoteHeadings(project.body ?? ''));
+    lines.push(demoteHeadings(publicImages(project.body ?? '', project)));
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -159,7 +166,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(entry.data.summary);
     lines.push('');
-    lines.push(demoteHeadings(entry.body ?? ''));
+    lines.push(demoteHeadings(publicImages(entry.body ?? '', entry)));
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -177,7 +184,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push('');
     lines.push(fix.data.lead);
     lines.push('');
-    lines.push(demoteHeadings(fix.body ?? ''));
+    lines.push(demoteHeadings(publicImages(fix.body ?? '', fix)));
     lines.push('');
     for (const m of fix.data.measures ?? []) {
       const [beforeName, afterName] = m.sides ?? ['Before', 'After'];

@@ -12,6 +12,7 @@
  * emit `article.body` for agents (src/pages/writing/[slug].md.ts and
  * src/pages/llms-full.txt.ts, through `rewriteVideoTags`). One definition, three
  * consumers, so an agent reading the markdown sees the element a browser does.
+ * The same two routes rewrite image paths, through src/lib/markdown-images.mjs.
  *
  * The match is deliberately exact: one line, `<Video`, capital V, self-closing,
  * carrying exactly the four required attributes. Anything else is left untouched

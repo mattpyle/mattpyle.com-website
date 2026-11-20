@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { formatLogLine } from '../../lib/agent-surfaces.mjs';
+import { withPublicImages } from '../../lib/content-image-urls';
 import { showDrafts } from '../../lib/show-drafts';
 
 // On-demand, per-request — mirrors src/pages/writing/[slug].md.ts. middleware.ts
@@ -52,7 +53,9 @@ export const GET: APIRoute = async ({ params, site, request }) => {
     '---',
   ].join('\n');
 
-  const body = `${frontmatter}\n\n# ${title}\n\n${entry.body ?? ''}`;
+  // Through withPublicImages, as writing/[slug].md.ts does: a relative image path in a
+  // body resolves to nothing from this URL.
+  const body = `${frontmatter}\n\n# ${title}\n\n${withPublicImages(entry.body ?? '', entry, base, 'keep')}`;
 
   return new Response(body, {
     headers: {

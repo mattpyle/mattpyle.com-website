@@ -10,6 +10,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hasCuratedSibling, markdownSiblingFor } from '../src/lib/markdown-negotiation.mjs';
+import { findImageTargets, isRelativeTarget } from '../src/lib/markdown-images.mjs';
 import { SITE_ORIGIN } from '../src/data/site-origin.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -117,6 +118,36 @@ if (existsSync(rssPath)) {
   assert.ok(!readFileSync(rssPath, 'utf8').includes('.md<'), 'rss.xml lists a .md sibling');
 }
 
+// Image addresses in the bodies the curated routes emit. Those routes copy a content body
+// rather than convert rendered HTML, and a body writes an image relative to its own source
+// file, so the routes rewrite each one to its built address (src/lib/markdown-images.mjs).
+// The curated `.md` routes render on demand and leave no file to read. llms-full.txt is
+// prerendered through the same helper and the same image map, and carries every published
+// body, so it is the build's evidence for all of them: no image target that only resolves
+// in the source tree, and no `/_astro/` image the build did not write.
+let imagesChecked = 0;
+for (const outputRoot of outputRoots) {
+  const exportPath = join(outputRoot, 'llms-full.txt');
+  assert.ok(existsSync(exportPath), `llms-full.txt is missing from ${relative(root, outputRoot)}`);
+  for (const image of findImageTargets(readFileSync(exportPath, 'utf8'))) {
+    const where = `llms-full.txt line ${image.line} in ${relative(root, outputRoot)}`;
+    assert.ok(
+      !isRelativeTarget(image.target) && !image.target.includes('src/assets'),
+      `${where}: image "${image.target}" is a source-tree path an agent cannot fetch`
+    );
+    const builtPath = image.target.startsWith(`${ORIGIN}/`)
+      ? image.target.slice(ORIGIN.length)
+      : image.target;
+    if (!builtPath.startsWith('/_astro/')) continue;
+    const file = join(outputRoot, ...decodeURI(builtPath.replace(/[?#].*$/, '')).slice(1).split('/'));
+    assert.ok(existsSync(file), `${where}: image ${image.target} is not in the build output`);
+    imagesChecked += 1;
+  }
+}
+
+console.log(
+  `validate-markdown-siblings: ${imagesChecked} image address check(s) on llms-full.txt across ${outputRoots.length} output root(s), each file in the build output.`
+);
 console.log(
   `validate-markdown-siblings: ${htmlPages.length} built page(s) covered — ` +
     `${coveredByFile} by a converted file in ${outputRoots.length} output root(s), ${coveredByRoute} by a curated route; ` +
