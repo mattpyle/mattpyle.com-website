@@ -38,6 +38,13 @@ function isActive(href: string): boolean {
   return href === '/' ? path === '/' : path.startsWith(href);
 }
 
+// 'page' only for the exact page. A section link on a child page (a post under
+// /writing/) is the current section, so 'true'.
+function ariaCurrent(href: string): 'page' | 'true' | undefined {
+  if (!isActive(href)) return undefined;
+  return path === href ? 'page' : 'true';
+}
+
 /**
  * Five items, as the spec fixes it: trimmed from six to stay calm at laptop
  * widths. `section` names the semantic colour, not the route.
@@ -106,7 +113,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
             href={href}
             class="header-link"
             data-section={section}
-            aria-current={isActive(href) ? 'page' : undefined}
+            aria-current={ariaCurrent(href)}
           >
             <span aria-hidden="true">/</span>{label}
           </a>
@@ -119,7 +126,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
             href={href}
             class:list={['nav-row-link', collapsible && 'is-collapsible']}
             data-section={section}
-            aria-current={isActive(href) ? 'page' : undefined}
+            aria-current={ariaCurrent(href)}
           >
             <span class="nav-mark"><span aria-hidden="true">/</span>{label}</span>
           </a>
@@ -132,7 +139,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
                 href={href}
                 class:list={['nav-panel-link', collapsible && 'is-collapsible']}
                 data-section={section}
-                aria-current={isActive(href) ? 'page' : undefined}
+                aria-current={ariaCurrent(href)}
               >
                 <span class="nav-mark"><span aria-hidden="true">/</span>{label}</span>
               </a>
@@ -265,12 +272,12 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
      hugs the text. The mobile trees put it on an inner span instead, because
      their anchors are 48px flex rows and a border on the anchor would draw at
      the bottom of the row rather than under the word. */
-  .header-link[aria-current="page"] {
+  .header-link[aria-current] {
     border-bottom: 2px solid currentColor;
     padding-bottom: 3px;
   }
 
-  [aria-current="page"] .nav-mark {
+  [aria-current] .nav-mark {
     border-bottom: 2px solid currentColor;
     padding-bottom: 3px;
   }
