@@ -7,12 +7,11 @@ import {
 } from '@mattpyle/steward/agent-audit/fast';
 import {
   createAuditServer,
-  DEEP_TOOL_NAME,
-  GET_AUDIT_TOOL_NAME,
   MCP_HANDLER_OPTIONS,
   MCP_TOOL_NAMES,
   refusalForBody,
   SERVER_NAME,
+  tierFor,
   TOOL_NAME,
 } from '../lib/mcp-audit-server.mjs';
 import { createSiteFastAudit, TEMPORAL_ENABLED } from '../lib/fast-audit.mjs';
@@ -137,37 +136,6 @@ function idOf(body: unknown): string | number | null {
   return null;
 }
 
-/**
- * Which tier's budget this body spends, or `null` for a request that spends none.
- *
- * The limiter counts audits, not handshakes: `initialize` and `tools/list` are a static answer out
- * of this function's own memory with no outbound request in them, and counting them against a
- * caller's ten would mean a client that connects, lists, and calls once had spent three.
- *
- * `get_audit` is deliberately free. It is a read of a run the caller already paid for, it makes no
- * request at anybody's origin, and charging it would mean a caller who polls politely every five
- * seconds is refused before their own audit finishes — turning the limiter into a reason not to use
- * the tool correctly. Its cost ceiling is the deep cap it sits behind: nobody has a workflow ID to
- * poll without having spent a deep slot to get one.
- *
- * One message, because `refusalForBody` has already turned every array body away. That ordering is
- * what makes this function's answer a *count* rather than a guess: while batches were admitted,
- * "any member is a tools/call" read as one audit and bought as many as the array had members.
- */
-function tierFor(body: unknown): 'fast' | 'deep' | null {
-  if (!body || typeof body !== 'object') return null;
-  const message = body as { method?: unknown; params?: { name?: unknown } };
-  if (message.method !== 'tools/call') return null;
-  const name = message.params?.name;
-  if (name === DEEP_TOOL_NAME) return 'deep';
-  if (name === GET_AUDIT_TOOL_NAME) return null;
-  // Everything else, including an unknown tool name, is counted as a fast audit. Counting an
-  // unknown name costs a caller one slot for a call that was going to fail anyway, and the
-  // alternative — trusting the name to decide whether to count — is a free-audit oracle for
-  // anything the SDK later dispatches that this function has not been taught about.
-  return 'fast';
-}
-
 /** What one request's audit did, for the success log line. Absent on a request that ran none. */
 type AuditFacts = { auditPath: string; ms: number };
 
@@ -239,10 +207,15 @@ export const POST: APIRoute = async ({ request }) => {
   // Before the audit, never after: a refused caller must cost this site nothing at the target's
   // origin, and a caller cannot hold ten slow audits open by never letting one finish. For the deep
   // tier the same rule matters more — the count happens before the workflow is started, so a
-  // refused deep call costs no worker time, no Cloud action and no queue slot.
+  // refused deep call costs no worker time, no Cloud action and no queue slot. A `get_audit` is
+  // counted on the read tier, which spends no audit allowance; see `tierFor`.
   const tier = tierFor(body);
   if (tier) {
     const verdict = await checkRateLimit({ ip: clientIpFrom(request.headers), tier });
+    // Only the read tier answers this way: a read it could not count goes ahead, and says so here.
+    if (verdict.allowed && verdict.counted === false) {
+      log({ path: '/mcp', http: 'POST', outcome: `rate-uncounted/${tier}/${verdict.scope ?? 'unknown'}`, ua });
+    }
     if (!verdict.allowed) {
       log({
         path: '/mcp',

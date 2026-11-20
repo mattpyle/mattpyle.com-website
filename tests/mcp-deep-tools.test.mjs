@@ -335,7 +335,9 @@ test('the declared schema accepts every document get_audit actually returns', as
     name: GET_AUDIT_TOOL_NAME,
     arguments: { workflowId: 'wf-1', view: 'status' },
   });
-  assert.deepEqual(status.structuredContent, STATUS_MID_RUN);
+  // A run that is still going gains one field, the polling hint, in both halves.
+  assert.deepEqual(status.structuredContent, { ...STATUS_MID_RUN, pollAfterSeconds: 5 });
+  assert.deepEqual(JSON.parse(status.content[0].text), status.structuredContent);
 
   // The summary still reads as markdown to a person, in the text block and in the envelope.
   const summary = await client.callTool({
