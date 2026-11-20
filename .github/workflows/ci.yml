@@ -304,7 +304,7 @@ jobs:
       # The `select` step's `tests` is the list of test files to run, or a glob;
       # the step name says which. The flags are those of the `test` script
       # in `agents/steward/package.json`; keep the two in step. The credential
-      # guard stays: without it two tests in `tests/lib` fail. The value is split
+      # guard stays: it covers a test file that loads no `config.ts`. The value is split
       # on spaces into an array, so each file or the glob reaches node as one
       # argument and node, not the shell, expands the glob.
       - name: Run Steward tests (${{ steps.select.outputs.label }})

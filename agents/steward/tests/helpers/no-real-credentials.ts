@@ -1,7 +1,12 @@
 /**
  * Default-deny for real credentials in the test suite. Loaded by `npm test` via
- * `--import`, so it runs in every test process before any test file and before
- * `config.ts` gets a chance to read `.env`.
+ * `--import`, so it runs in every test process before any test file.
+ *
+ * It is the second of two callers. `config.ts` runs the same guard before it reads `.env`,
+ * so a run without this `--import` is covered too (the 2026-11-06 incident: a targeted run
+ * without the flag archived a fixture record to the live repository). This import still
+ * covers a test file that never loads `config.ts`. The list of variables and the reasons
+ * are in `src/lib/test-credential-guard.ts`.
  *
  * ## The incident this exists because of (2026-08-14)
  *
@@ -26,11 +31,9 @@
  * The token provider in `lib/github.ts` throws a non-retryable `AuthError` when
  * `STEWARD_GITHUB_APP_ID` or `STEWARD_GITHUB_APP_PRIVATE_KEY` is absent, so
  * removing the credential converts an accidental live call into a loud,
- * immediate test failure that names the cause. Setting it to the empty
- * string rather than deleting it is deliberate: `config.ts`'s `loadDotEnv`
- * skips any key that is already **defined**, so an empty value is what stops
- * `.env` from putting the real values back a moment later. `delete` would leave
- * it undefined and `.env` would win.
+ * immediate test failure that names the cause. The guard sets each variable to
+ * the empty string, and `config.ts` leaves the same variables out of its `.env`
+ * read in a test process, so `.env` cannot put the real values back.
  *
  * A test that genuinely exercises the GitHub path opts back in by installing
  * the fake (`helpers/fake-github.ts`), which sets its own app credential and
@@ -44,22 +47,7 @@
  * opening a real PR, and that failure is quieter.
  */
 
-process.env.STEWARD_GITHUB_APP_ID = '';
-process.env.STEWARD_GITHUB_APP_PRIVATE_KEY = '';
-process.env.STEWARD_GITHUB_APP_INSTALLATION_ID = '';
-process.env.ANTHROPIC_API_KEY = '';
-// The preview bypass secret: a test that wants one sets its own.
-process.env.VERCEL_AUTOMATION_BYPASS_SECRET = '';
-// The Web Bot Auth signing key: every test that signs builds a throwaway key at run time, so the
-// real one in `.env` must never sign a test request against a mock server.
-process.env.STEWARD_WEB_BOT_AUTH_KEY = '';
-// The alerting base URL: every run-health signal posts to it, healthy or not, so a suite
-// run beside a real `.env` must not reach the live checks. A test that wants one sets its own.
-process.env.STEWARD_HEALTHCHECK_BASE = '';
-// The Temporal API keys. Since PR 640 a `.env` line may hold a 1Password reference, and a
-// reference that reaches `config.ts` stops every test that loads it ("Refusing to start").
-// An empty value is defined, so `.env` cannot put the reference back. The suite never connects
-// to Temporal Cloud: the workflow suites use the time-skipping server.
-process.env.TEMPORAL_API_KEY = '';
-process.env.TEMPORAL_METRICS_API_KEY = '';
-process.env.TEMPORAL_READ_ONLY_API_KEY = '';
+import { guardTestCredentials } from '../../src/lib/test-credential-guard.js';
+
+// `--import` also runs this in the runner's own process, where `--test` is in `execArgv`.
+guardTestCredentials();

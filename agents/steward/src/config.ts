@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unresolvedReferenceRefusal } from './lib/env-reference.js';
+import { guardTestCredentials, TEST_GUARDED_VARIABLES } from './lib/test-credential-guard.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,8 +25,11 @@ export const STEWARD_DIR = path.resolve(here, '..');
  * Values are never logged. The file is gitignored (`.gitignore`), and nothing in
  * Steward puts a secret into a workflow input or result, where Temporal
  * would persist it in history (spec §13).
+ *
+ * `skip` names variables the file must not supply: in a test process, the credentials
+ * (`lib/test-credential-guard.ts`).
  */
-function loadDotEnv(): void {
+function loadDotEnv(skip: ReadonlySet<string>): void {
   const envPath = path.join(STEWARD_DIR, '.env');
   let raw: string;
   try {
@@ -39,7 +43,7 @@ function loadDotEnv(): void {
     const eq = trimmed.indexOf('=');
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
-    if (!key || process.env[key] !== undefined) continue;
+    if (!key || skip.has(key) || process.env[key] !== undefined) continue;
     let value = trimmed.slice(eq + 1).trim();
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
@@ -51,7 +55,9 @@ function loadDotEnv(): void {
   }
 }
 
-loadDotEnv();
+// A test process never gets a real credential, whatever flags started it: the guard blanks
+// them before `.env` is read, and the read leaves them out. Outside a test run this is a no-op.
+loadDotEnv(new Set(guardTestCredentials() ? TEST_GUARDED_VARIABLES : []));
 
 // A 1Password reference that `op run` did not resolve would go out as a credential.
 // Stop here, before anything reads a variable. The message names the variable, never a value.
