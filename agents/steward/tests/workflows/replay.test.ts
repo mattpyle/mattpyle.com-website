@@ -293,6 +293,11 @@ test(
  * **Verified able to fail**: a `wf.sleep('1 second')` injected after the
  * verdict condition failed both with a nondeterminism error. The probe was
  * reverted and both re-run green.
+ *
+ * They are also the proof that the `discord` verdict source carries no marker:
+ * the source decides whether `writeFindingVerdict` is scheduled, and these are
+ * the two values a history recorded before it can hold. The CLI one must still
+ * schedule the write and the file one must still schedule nothing.
  */
 const findingCliHistoryPath = fileURLToPath(new URL('../fixtures/histories/finding-verdict-cli.json', import.meta.url));
 const findingFileHistoryPath = fileURLToPath(new URL('../fixtures/histories/finding-verdict-file.json', import.meta.url));

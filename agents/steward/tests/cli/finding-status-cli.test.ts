@@ -119,3 +119,17 @@ test('a failed run prints the failure message on one line', async () => {
     assert.equal(lines[3], '  last state:');
   });
 });
+
+test('a verdict taken in Discord is shown with its source', async () => {
+  await withWorker(async () => {
+    await start('discord-one', {
+      mode: 'open',
+      step: 'waiting-fix',
+      gate: 'done',
+      verdict: { status: 'approved', reason: 'Approved in Discord.', source: 'discord', at: '2026-11-21T18:00:00.000Z' },
+    });
+    const lines = await status('discord-one');
+    assert.ok(lines.includes('  verdict: approved (source discord, at 2026-11-21T18:00:00.000Z)'), lines.join('\n'));
+    assert.ok(lines.includes('  reason: Approved in Discord.'));
+  });
+});

@@ -150,6 +150,15 @@ test('the write changes the four verdict fields and the index line, and nothing 
   assert.ok(gh.repos.every((repo) => repo === REPO));
 });
 
+test('a discord verdict is written with verdict_source discord', async () => {
+  const gh = seed();
+  const result = await writeFindingVerdict(input({ status: 'approved', reason: 'Real.', source: 'discord' }));
+  const { data } = parseFrontmatter(gh.file('main', FINDING)!.text);
+  assert.equal(data.status, 'approved');
+  assert.equal(data.verdict_source, 'discord');
+  assert.ok(result.findingCommitSha && result.indexCommitSha);
+});
+
 test('a second write of the same verdict makes no commit', async () => {
   const gh = seed();
   await writeFindingVerdict(input());

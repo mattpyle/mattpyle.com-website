@@ -1,6 +1,6 @@
 import { defaultPayloadConverter } from '@temporalio/common';
 import type { History } from '@temporalio/common/proto-utils';
-import { parseIssueUrl, parsePrUrl, type FindingVerdict } from './findings.js';
+import { isFindingVerdict, parseIssueUrl, parsePrUrl, type FindingVerdict } from './findings.js';
 
 /**
  * `steward finding report`: one row per `findingWorkflow` run that received a
@@ -100,18 +100,6 @@ function first(payloads: Payloads): unknown {
   return payload ? defaultPayloadConverter.fromPayload(payload) : undefined;
 }
 
-function isVerdict(value: unknown): value is FindingVerdict {
-  const v = value as FindingVerdict;
-  return (
-    typeof v === 'object' &&
-    v !== null &&
-    (v.status === 'approved' || v.status === 'rejected') &&
-    (v.source === 'cli' || v.source === 'file') &&
-    typeof v.reason === 'string' &&
-    typeof v.at === 'string'
-  );
-}
-
 /**
  * The facts of one `findingWorkflow` run, read from its history. Each new fix
  * attempt, an `openFixIssue` or a `fixFindingWorkflow` child, clears the last
@@ -148,7 +136,7 @@ export function readRunHistory(history: History): RunFacts {
     const signal = event.workflowExecutionSignaledEventAttributes;
     if (signal?.signalName === 'verdict' && !facts.verdict) {
       const verdict = first(signal.input);
-      if (isVerdict(verdict)) {
+      if (isFindingVerdict(verdict)) {
         facts.verdict = verdict;
         facts.verdictAt = eventTime(event);
       }

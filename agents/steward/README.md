@@ -46,9 +46,11 @@ that's the property being dogfooded here, on a low-stakes, real target.
   and its index line reads `resolved`, in one commit). It opens no fix. Every run pings the site's `steward-findings-recheck-<site>` check at healthchecks.io; a completed run with a `write failed` or `could not measure` row, or a run that throws, pings `/fail`.
 - **`findingWorkflow`** and **`reconcileFindingsWorkflow`** — the gate for findings filed into a
   separate findings repository by an inspector agent. One `findingWorkflow` per finding
-  (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict came from `steward finding
-  approve|reject` it writes the verdict fields and the index line back through the GitHub Contents
-  API, guarded by the blob sha. Where it ends is read when the verdict is approved, by
+  (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict's source is `cli` (`steward finding
+  approve|reject` and the console) or `discord` (a sender outside Steward) it writes the verdict
+  fields and the index line back through the GitHub Contents API, guarded by the blob sha, and the
+  file's `verdict_source` is the source sent. A `file` verdict is already in the file, and the
+  workflow writes nothing. Where it ends is read when the verdict is approved, by
   `readFindingSettings`: a site whose `config.yaml` says `stop_after: verdict`, or one the worker
   knows no production origin for, completes with the verdict. The input's `stopAfter` decides only
   for a run approved before that read existed. Any other site carries an approved finding the rest

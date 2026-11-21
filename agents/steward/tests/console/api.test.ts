@@ -6,6 +6,7 @@ import { CONSOLE_RESTART_STUBS } from '../helpers/console-options.js';
 import { startConsoleServer, type ConsoleServer } from '../../src/console/server.js';
 import { createFindingsLoader, driftFor, type ConsoleClient, type FindingRunView } from '../../src/console/findings-model.js';
 import { renderFindingBody } from '../../src/console/finding-markdown.js';
+import { buildEvents } from '../../src/console/finding-events.js';
 import { buildFindingVerdict, FindingVerdictError, type FindingVerdictRequest } from '../../src/lib/finding-verdict.js';
 import { buildVerificationSection, type Verification } from '../../src/lib/findings.js';
 
@@ -161,6 +162,17 @@ test('a proposed row has kind and type apart, the short fields it holds, null fo
   assert.equal(r.keyShort, null);
   assert.deepEqual(r.events, [{ kind: 'first-seen', at: '2026-10-27', label: 'First seen by Argus' }]);
   assert.deepEqual(r.sections.map((s: any) => s.heading), ['Who wanted what', 'What happened']);
+});
+
+test('a verdict taken in Discord reads via discord in its event line', () => {
+  const events = buildEvents({
+    data: { verdict_at: '2026-11-21T18:00:00.000Z', verdict_source: 'discord', verdict_reason: 'Not a defect.' },
+    body: '',
+    status: 'rejected',
+    prUrl: null,
+    verification: null,
+  });
+  assert.deepEqual(events, [{ kind: 'verdict', at: '2026-11-21T18:00:00.000Z', label: 'Rejected', detail: 'Not a defect. via discord' }]);
 });
 
 test('a resolved row has its events oldest first', async () => {
