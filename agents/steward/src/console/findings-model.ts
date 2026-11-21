@@ -13,7 +13,7 @@ import {
 } from '../lib/findings.js';
 import { buildEvents, type FindingEvent } from './finding-events.js';
 import { renderFindingBody, type FindingSection } from './finding-markdown.js';
-import { siteAutoFix } from '../activities/findings.js';
+import { siteAutoFix, siteStopAfter } from '../activities/findings.js';
 import { fixOffered, verifyOffered } from '../lib/finding-actions.js';
 import { fixRefusal, parseFindingBody, parsePrUrl } from '../lib/findings.js';
 import { dispatchWorkflowId, waitingSlotLine, type DispatchState } from '../lib/fix-dispatch.js';
@@ -241,12 +241,8 @@ export function assessRow(
   return { drift, quietReason };
 }
 
-/** A site's `stop_after`, read with Steward's one YAML reader; null when the file sets none. */
-export function siteStopAfter(configText: string): string | null {
-  const data = parseFrontmatter(`---\n${configText}\n---\n`).data as Record<string, any>;
-  const value = data.stop_after ?? data.site?.stop_after;
-  return typeof value === 'string' ? value : null;
-}
+// Moved beside `siteAutoFix`, where a finding run's settings read uses it too (STW-645).
+export { siteStopAfter };
 
 /** The H1 of a finding file, the finding in one line. */
 export function findingTitle(body: string): string {

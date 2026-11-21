@@ -21,6 +21,7 @@ import type { RunFindingChecksInput } from '../../src/activities/verify-finding.
 import type { FindingVerdict, VerificationRow } from '../../src/lib/findings.js';
 import type { VerifyCheck } from '../../src/lib/verify-checks.js';
 import { DEFECT_FINDING, DEFECT_KEY, ORIGIN } from '../helpers/finding-fixtures.js';
+import { settings } from '../helpers/verdict-measure.js';
 
 /**
  * The measurement at the approved verdict (STW-589), on the real
@@ -80,7 +81,8 @@ function mocks(scene: Scene) {
       writes.push(input);
       return scene.write ? scene.write(input) : { commitSha: 'm1' };
     },
-    readSiteAutoFix: async () => (note('readSiteAutoFix'), scene.autoFix ?? false),
+    // The stop point before the measurement and the decision after it (STW-645).
+    readFindingSettings: async () => (note('readFindingSettings'), settings({ autoFix: scene.autoFix ?? false })),
     requestFixSlot: async () => (note('requestFixSlot'), { paths: [], dispatched: false }),
     openFixIssue: async (): Promise<FixIssue> => {
       note('openFixIssue');
@@ -157,14 +159,15 @@ test('a failing check is written as the before, and the fix goes on as before', 
   assert.deepEqual(writes[0]?.measure.rows, [ROW(false)]);
   assert.equal(writes[0]?.verification, undefined, 'nothing is resolved');
   assert.equal(writes[0]?.measure.workflowId, `finding/${SITE}/${DEFECT_KEY}-a`);
-  // Measured once, after the verdict write and before the auto-fix read and the slot.
-  assert.deepEqual(called.slice(0, 6), [
+  // Measured once, after the verdict write and the stop point, and before the decision read and the slot.
+  assert.deepEqual(called.slice(0, 7), [
     'writeFindingVerdict',
+    'readFindingSettings',
     'readFinding',
     'readVerifyBlock',
     'runFindingChecks',
     'writeFindingVerdictMeasure',
-    'readSiteAutoFix',
+    'readFindingSettings',
   ]);
   assert.ok(called.includes('openFixIssue'), 'the fix started');
   assert.equal(called.filter((name) => name === 'runFindingChecks').length, 1);
@@ -183,7 +186,8 @@ test('every check passing resolves the finding at the verdict: no slot, no issue
   assert.equal(writes[0]?.verification?.status, 'resolved');
   assert.equal(writes[0]?.verification?.atVerdict, true);
   assert.deepEqual(writes[0]?.verification?.rows, [ROW(true)]);
-  for (const name of ['readSiteAutoFix', 'requestFixSlot', 'openFixIssue']) assert.ok(!called.includes(name), `${name} was not called`);
+  for (const name of ['requestFixSlot', 'openFixIssue']) assert.ok(!called.includes(name), `${name} was not called`);
+  assert.equal(called.filter((name) => name === 'readFindingSettings').length, 1, 'the stop point was read, the decision was not');
 });
 
 test('a finding with no checks records why and goes on to its fix', async () => {

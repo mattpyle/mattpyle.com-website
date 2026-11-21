@@ -48,9 +48,11 @@ that's the property being dogfooded here, on a low-stakes, real target.
   separate findings repository by an inspector agent. One `findingWorkflow` per finding
   (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict came from `steward finding
   approve|reject` it writes the verdict fields and the index line back through the GitHub Contents
-  API, guarded by the blob sha. Its input's `stopAfter` says where it ends. `'verdict'` completes
-  with the verdict. `'resolved'` carries an approved finding the rest of the way in the same
-  execution: it waits for a `fix` signal, runs `fixFindingWorkflow` as a child, polls the PR until
+  API, guarded by the blob sha. Where it ends is read when the verdict is approved, by
+  `readFindingSettings`: a site whose `config.yaml` says `stop_after: verdict`, or one the worker
+  knows no production origin for, completes with the verdict. The input's `stopAfter` decides only
+  for a run approved before that read existed. Any other site carries an approved finding the rest
+  of the way in the same execution: it waits for a `fix` signal, runs `fixFindingWorkflow` as a child, polls the PR until
   it merges or closes (every 5 minutes, up to 30 days), polls GitHub's `Production` deployments until
   production serves a commit containing the merge (every 2 minutes, up to 24 hours), then runs
   `verifyFindingWorkflow` as a child and completes with `resolved`, `reopened` or `unverifiable`. A PR
@@ -59,10 +61,12 @@ that's the property being dogfooded here, on a low-stakes, real target.
   reconciler, which starts a `'resolved'` workflow for each `proposed` or `reopened` finding with
   none open, signals the ones whose file already carries a verdict, and sends `fix` to an approved
   finding of any kind parked at `waiting-fix` with no issue, on a site with `auto_fix: true`, whose
-  file the fixer's gate accepts. A `reopened` finding is back at the verdict gate. A defect or an
-  opportunity attempts the fix at its verdict and the gate decides; a gate refusal parks the run
-  with `lastFixError`. A run started for a direction parks at `waiting-fix` without the automatic
-  attempt, and `steward finding status` says why.
+  file the fixer's gate accepts. A `reopened` finding is back at the verdict gate. At its approved
+  verdict a run reads the site's `auto_fix` and the fixer's gate on the finding file as it stands:
+  with both in favour it attempts the fix, and otherwise it parks at `waiting-fix` with the reason
+  in `lastFixError`. Parked with no issue, it reads them again once a day, attempts when both are in
+  favour, and ends `closed` when the file says `resolved` or `rejected`. A run that has opened an
+  issue waits for `steward finding fix`.
   Right after an approved verdict, at step `measuring`, the run runs the finding's checks on
   production once and writes the values into the finding file as a `## Measured at the verdict`
   section: the before. When every check passes, the same commit resolves the finding and the run

@@ -84,6 +84,25 @@ export function buildFindingsScheduleOptions(params: FindingsScheduleParams): Sc
   };
 }
 
+/**
+ * Runs one reconcile because something just changed: the inspector reports
+ * that a run ended, and its findings should have workflows at once.
+ *
+ * `BUFFER_ONE`, not the `SKIP` that `steward finding sync` uses. With `SKIP` a
+ * call that lands while a reconcile is in flight is dropped, and that
+ * reconcile may have read the index before the commit the call is about, so
+ * the new finding would wait for the next scheduled firing. `BUFFER_ONE`
+ * starts one reconcile as soon as the running one completes, which reads the
+ * index after the call. The buffer holds one, so any number of calls while it
+ * is full cost one reconcile: a caller cannot queue work without bound.
+ *
+ * The caller must make its change (the push to the findings repository)
+ * before it calls. Throws `ScheduleNotFoundError` when the Schedule does not exist.
+ */
+export async function triggerFindingsSync(schedule: Pick<ScorecardScheduleClientLike, 'getHandle'>): Promise<void> {
+  await schedule.getHandle(FINDINGS_SCHEDULE_ID).trigger(ScheduleOverlapPolicy.BUFFER_ONE);
+}
+
 export interface FindingsScheduleOutcome {
   action: FindingsScheduleAction;
   scheduleId: string;

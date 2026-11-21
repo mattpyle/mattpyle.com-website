@@ -4,6 +4,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { WorkflowFailedError } from '@temporalio/client';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { STOPS_AT_VERDICT } from '../helpers/verdict-measure.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import {
   findingStateQuery,
@@ -39,6 +40,8 @@ function mockActivities() {
       writes.push(input);
       return { findingCommitSha: 'c-file', indexCommitSha: 'c-index', commitSha: 'c-index' };
     },
+    // An approved run reads its stop point (STW-645): this site ends at the verdict.
+    readFindingSettings: async () => STOPS_AT_VERDICT,
   };
   return { activities, writes };
 }

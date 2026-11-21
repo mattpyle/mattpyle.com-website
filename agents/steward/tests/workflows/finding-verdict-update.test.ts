@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, WorkflowFailedError, WorkflowUpdateFailedError, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
-import { ApplicationFailure } from '@temporalio/activity';
+import { ApplicationFailure, Context } from '@temporalio/activity';
 import { bounded, createLocalEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
-import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
+import { STOPS_AT_VERDICT, settings, skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import {
   VERDICT_WRITE_FAILED,
   findingStateQuery,
@@ -77,6 +77,9 @@ function mocks(options: { hold?: boolean; fail?: boolean } = {}): Mocks {
     readFinding: async (_repo: string, path: string) => ({ path, text: DEFECT_FINDING, sha: 'sha-1', data: parseFrontmatter(DEFECT_FINDING).data }),
     readVerifyBlock: async () => ({ handoff: null, hasBlock: false, checks: [], source: 'finding' as const }),
     readSiteAutoFix: async () => false,
+    // The stop point each run was started with (STW-645): the site still says the same.
+    readFindingSettings: async () =>
+      stops.get(Context.current().info.workflowExecution?.workflowId ?? '') === 'resolved' ? settings() : STOPS_AT_VERDICT,
     requestFixSlot: async () => ({ paths: [], dispatched: false }),
   });
   return { activities, writes, release: () => release() };
@@ -106,7 +109,11 @@ function input(id: string, stopAfter: 'verdict' | 'resolved' = 'verdict'): Findi
   return { ...base, stopAfter, handoffPath: `sites/${SITE}/handoffs/${DEFECT_KEY}.md`, branch: `fix/finding-${id}`, origin: ORIGIN };
 }
 
+/** The stop point of each started run, by workflow ID, for the settings mock. */
+const stops = new Map<string, 'verdict' | 'resolved'>();
+
 function start(id: string, stopAfter: 'verdict' | 'resolved' = 'verdict') {
+  stops.set(`finding/${SITE}/update-${id}`, stopAfter);
   return client.workflow.start(findingWorkflow, {
     workflowId: `finding/${SITE}/update-${id}`,
     taskQueue: QUEUE,

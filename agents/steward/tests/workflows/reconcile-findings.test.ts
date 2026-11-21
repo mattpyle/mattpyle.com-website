@@ -6,7 +6,7 @@ import { Client, WorkflowNotFoundError } from '@temporalio/client';
 import { ApplicationFailure } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
-import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
+import { STOPS_AT_VERDICT, settings, skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { reconcileFindingsWorkflow } from '../../src/workflows/reconcile-findings.js';
 import { findingStateQuery, type FindingState, type FindingWorkflowResult } from '../../src/workflows/finding.js';
 import { startFindingWorkflow } from '../../src/activities/findings.js';
@@ -81,8 +81,17 @@ function store(initial: Record<string, string>) {
       }
       return open;
     },
-    // Read by a finding run at its verdict and by the reconciler for a parked line.
+    // Read by the reconciler for a parked line.
     readSiteAutoFix: async () => flags.autoFix,
+    // Read by a finding run at its approved verdict and while it is parked (STW-645). Only
+    // mattpyle-com has a production origin, as on the worker; the kind is the index line's,
+    // and the gate refuses a direction, as `fixRefusal` does.
+    readFindingSettings: async (input: { site: string; key: string }) => {
+      if (input.site !== 'mattpyle-com') return STOPS_AT_VERDICT;
+      const kind = parseFindingsIndex(indexes[input.site] ?? '').find((line) => line.key === input.key)?.kind || 'defect';
+      const refusal = kind === 'direction' ? 'its kind is direction, not defect or opportunity' : null;
+      return settings({ autoFix: flags.autoFix, kind, refusal });
+    },
     requestFixSlot: async () => ({ paths: [], dispatched: false }),
     listFixableFindings: async (input: { keys: string[] }) => input.keys.filter((key) => fixable.has(key)),
     openFixIssue: async (input: { key: string }) => {
@@ -355,7 +364,7 @@ test('an opportunity attempts the fix at its verdict with no signal; a direction
     assert.equal(opened.issueUrl, 'https://github.com/o/r/issues/1', 'the opportunity opened its issue at the verdict');
     const parked = await stateWhen(findingWorkflowId('mattpyle-com', 'w-direction'), (st) => st.step === 'waiting-fix');
     assert.equal(parked.fixAttempts, 0);
-    assert.equal(parked.lastFixError, null);
+    assert.equal(parked.lastFixError, 'w-direction does not go to the fixer: its kind is direction, not defect or opportunity.');
     assert.equal(parked.waitsForPerson, true);
     assert.deepEqual([...s.fixIssues].sort(), ['w-defect', 'w-opportunity'], 'openFixIssue ran for the defect and the opportunity, not the direction');
 
@@ -410,7 +419,10 @@ async function completedAtVerdict(site: string, key: string): Promise<void> {
     taskQueue: QUEUE,
     args: [{ site, key, repo: 'mattpyle/argus', findingPath: `sites/${site}/findings/${key}.md`, indexPath: `sites/${site}/findings/INDEX.md`, stopAfter: 'verdict' }],
   });
-  await handle.signal('verdict', { status: 'approved', reason: 'Yes.', source: 'file', at: new Date().toISOString() });
+  // An earlier run of the line, closed. A rejected verdict closes it at the gate: an approved
+  // one would read the site's stop point (STW-645) and, on mattpyle-com, go on. The restart
+  // reads only that the ID has no open run.
+  await handle.signal('verdict', { status: 'rejected', reason: 'An earlier run.', source: 'file', at: new Date().toISOString() });
   await handle.result();
 }
 

@@ -55,6 +55,7 @@ export {
   readVerifyBlock,
   writeFindingVerification,
   readSiteAutoFix,
+  readFindingSettings,
   openFixIssue,
   awaitFixPr,
   awaitFixPrMerge,
