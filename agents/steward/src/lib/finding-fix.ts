@@ -79,15 +79,18 @@ export interface FindingFixDeps {
 
 /**
  * What `steward finding approve` prints after an approved verdict on a run that
- * stays open. `autoFix` is the site's flag, read once at the approve as the
- * workflow reads it at the verdict: with it the run opens the fix issue on its
- * own, and without it the run waits at `waiting-fix` for the fix signal.
+ * may stay open. The run reads the site's stop point, its `auto_fix` flag and
+ * the fixer's gate itself, after it answers (STW-645), so this line says what
+ * may happen, not what will. `autoFix` is the flag as the CLI read it at the
+ * approve: with it the run opens the fix issue on its own when the gate
+ * accepts the finding, and without it the run waits at `waiting-fix`.
  */
 export function approvedNextStep(key: string, autoFix: boolean): string {
   // STW-589: the run measures the checks on production first.
-  const first = 'The run measures the checks on production first, and resolves the finding with no fix if all pass.';
+  const first =
+    'The run reads the site\'s settings now and may go on: it measures the checks on production first, and resolves the finding with no fix if all pass.';
   return autoFix
-    ? `${first} Otherwise it opens the fix issue: the site has auto_fix.`
+    ? `${first} Otherwise it opens the fix issue when the fixer's gate accepts the finding: the site has auto_fix.`
     : `${first} Otherwise it waits for \`steward finding fix ${key}\`.`;
 }
 
@@ -259,8 +262,13 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
 
   const deadline = Date.now() + waitMs;
   let state = await queryState(lifecycle, deadline, pollMs);
-  // `measuring` (STW-589) is the run reading production at the verdict; the loop below waits it out.
-  if (state.step !== 'waiting-verdict' && state.step !== 'measuring' && state.step !== 'waiting-fix') {
+  // `reading-settings` (STW-645) and `measuring` (STW-589) are the run at its verdict; the loop below waits them out.
+  if (
+    state.step !== 'waiting-verdict' &&
+    state.step !== 'reading-settings' &&
+    state.step !== 'measuring' &&
+    state.step !== 'waiting-fix'
+  ) {
     throw new FixRefused(`${id} is ${state.step}, not waiting for a fix.`);
   }
   if (!state.verdict && !started) {

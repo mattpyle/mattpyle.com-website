@@ -92,7 +92,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin` | The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin` | On the settings-at-use path: a site that stops at the verdict, the `closed` ending, an attempt that fails before any issue and its one-day rest, a held run. The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin` | The checks path ending reopened. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin` | All three markers on current code: `listFixableFindings`, the restart start and signal, the close cancel. A reconcile that throws (`reportRunHealth` before the rethrow). |
@@ -822,6 +822,137 @@ test('a lifecycle run parked and approved before the verdict Update replays with
     { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/agent-readiness-verdict-update-fixture--llms-txt',
+  );
+});
+
+/**
+ * A lifecycle run as `findingWorkflow` ran it before settings were read at use
+ * (STW-645), started with `waitsForPerson: true` for an opportunity: a file
+ * approval, the measurement at the verdict (no checks), the `fixer-auto-fix`
+ * marker and `readSiteAutoFix` (on), and the run parked at `waiting-fix` in a
+ * workflow task that issued no command, because the input said so. Then a
+ * `fix` signal from the reconciler, the `fix-dispatch` marker, a slot the
+ * activity granted, the `fixer-action-adapter` marker, `openFixIssue` refused
+ * by the gate, and the run parked again with `fixAttempts` 1. 65 events. It is
+ * the shape of a run the 2026-10-23 to 2026-11-07 starts left parked for an
+ * hour after its verdict.
+ *
+ * New code reads `readFindingSettings` right after an approved verdict and
+ * never reads `waitsForPerson`, so this replays only because
+ * `settings-at-use` sends a history without the marker down the path it took:
+ * the measure marker, the flag read, and the park from the input. The signal
+ * after the park is what gives an early command something to collide with.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at 7275b56, the
+ * worktree before its first edit). The steps, as a script run once from
+ * `agents/steward` with `node --import tsx --import ./tests/helpers/no-real-credentials.ts`:
+ *
+ * 1. `createTestEnv()`, a plain `Client` on its connection, and one worker on
+ *    `steward-findings` with `workflowBundle()` and six mocked activities:
+ *    `readFinding` (a two-line stand-in file), `readVerifyBlock` (no block),
+ *    `writeFindingVerdictMeasure` (no commit), `readSiteAutoFix` (true),
+ *    `requestFixSlot` (`{ paths: [], dispatched: false }`) and `openFixIssue`
+ *    (a non-retryable `FindingNotFixable`).
+ * 2. Start `findingWorkflow` as the ID below with `stopAfter: 'resolved'`, the
+ *    handoff path, the branch, the origin and `waitsForPerson: true`.
+ * 3. Wait for `waiting-verdict`; signal `verdict` (approved, source `file`).
+ * 4. Wait for `waiting-fix` with `waitsForPerson` true and `fixAttempts` 0,
+ *    then half a second more, so the park closes its workflow task.
+ * 5. Signal `fix` (source `reconcile`); wait for `waiting-fix` with
+ *    `fixAttempts` 1 and a `lastFixError`.
+ * 6. `fetchHistory()`, written with `History.encode(...).finish()`. It holds
+ *    no real finding text.
+ *
+ * Probes (2026-11-21), each reverted and re-run green:
+ *
+ * 1. Replacing `wf.patched(SETTINGS_AT_USE_PATCH)` with `true`, so a replayed
+ *    approval reads its settings, made this replay fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ *    for change verdict-measure, but there is no corresponding change command!
+ *    ```
+ *
+ *    Ten other `findingWorkflow` fixtures failed with it, every one that takes
+ *    an approved verdict: `finding-verdict-cli.json`, the approval that stops
+ *    at the verdict, on its `WorkflowExecutionCompleted` event (`Activity
+ *    machine does not handle this event`), the frozen-child one on its child
+ *    start, and the lifecycle ones on their next marker. So that fixture is the
+ *    guard that the read does not fire on a replayed verdict-stop history. The
+ *    other 21 replays passed.
+ * 2. Replacing `input.waitsForPerson === true && fixAttempts === 0` with
+ *    `false` in the wait of a history without the marker, which is the rescue
+ *    applied to a run already parked, made this replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ *    for change fix-dispatch, but there is no corresponding change command!
+ *    ```
+ *
+ *    The other 31 replays passed: no other fixture has the field in its input.
+ *    A run parked this way stays parked until a `fix` signal reaches it.
+ */
+const findingWaitsForPersonParkedPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-waits-for-person-parked-pre.bin', import.meta.url),
+);
+
+test('a lifecycle run parked by waitsForPerson before settings were read at use replays its park and its signalled attempt', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingWaitsForPersonParkedPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/opportunity-waits-for-person-fixture--steward',
+  );
+});
+
+/**
+ * A lifecycle run on the code that reads its settings at use (STW-645): a file
+ * approval, the `settings-at-use` marker and `readFindingSettings` (the stop
+ * point), the measurement at the verdict (no checks), `readFindingSettings`
+ * again (the gate refuses), the park behind a one-day timer, the timer firing,
+ * a third read (the gate accepts), a slot the activity granted, the issue, a
+ * PR wait that fails, and the run parked at `waiting-fix` with its issue. 79
+ * events. The input carries `waitsForPerson: true`, which this path never reads.
+ *
+ * No history from before this change can hold these commands, so this is not
+ * a pre-change fixture: it was recorded from the changed code (the worktree on
+ * 7275b56 with this change applied) and guards the next change to the path.
+ * The steps are those of `finding-waits-for-person-parked-pre.bin` above, with
+ * `readFindingSettings` mocked (a site that fixes findings, `auto_fix` on, an
+ * opportunity, a refusal until the park is seen and none after), `openFixIssue`
+ * opening an issue and `awaitFixPr` failing non-retryably, and one
+ * `env.sleep('25 hours')` in place of the `fix` signal.
+ *
+ * Probes (2026-11-21), each reverted and re-run green:
+ *
+ * 1. A `wf.sleep('1 second')` injected before the `readFindingSettings` of the
+ *    fix wait made this replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Timer machine does not handle this
+ *    event: HistoryEvent(id: 41, ActivityTaskScheduled)
+ *    ```
+ *
+ * 2. Replacing `wf.patched(SETTINGS_AT_USE_PATCH)` with `false` made this
+ *    replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ *    for change settings-at-use, but there is no corresponding change command!
+ *    ```
+ *
+ * The other 32 replays passed both times.
+ */
+const findingSettingsAtUsePath = fileURLToPath(
+  new URL('../fixtures/histories/finding-settings-at-use.bin', import.meta.url),
+);
+
+test('a lifecycle run that read its settings at use replays its park, its daily re-read and its attempt', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingSettingsAtUsePath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/opportunity-settings-at-use-fixture--steward',
   );
 });
 

@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { DEFECT_FINDING, DEFECT_KEY, OPPORTUNITY_FINDING, OPPORTUNITY_KEY } from '../helpers/finding-fixtures.js';
-import { awaitFixPr, openFixIssue, readSiteAutoFix, siteAutoFix } from '../../src/activities/findings.js';
+import {
+  awaitFixPr,
+  openFixIssue,
+  readFindingSettings,
+  readSiteAutoFix,
+  siteAutoFix,
+  siteStopAfter,
+} from '../../src/activities/findings.js';
 import {
   FIX_ISSUE_HEADER,
   fixIssueBody,
@@ -274,6 +281,77 @@ test('auto_fix is the literal true at the top of the site config, and a site wit
   seed(DEFECT_FINDING, { [`sites/${SITE}/config.yaml`]: 'site:\n  name: mattpyle.com\nauto_fix: true\n' });
   assert.equal(await readSiteAutoFix({ repo: REPO, site: SITE }), true);
   assert.equal(await readSiteAutoFix({ repo: REPO, site: 'temporal-io' }), false);
+});
+
+test('readFindingSettings reads the stop point, the flag and the gate from the site config and the finding file as they stand', async () => {
+  assert.equal(siteStopAfter('stop_after: verdict\n'), 'verdict');
+  assert.equal(siteStopAfter('site:\n  name: temporal.io\n  stop_after: verdict\n'), 'verdict', 'nested under site, as temporal-io writes it');
+  assert.equal(siteStopAfter('auto_fix: true\n'), null);
+
+  const config = `sites/${SITE}/config.yaml`;
+  const read = () => readFindingSettings({ repo: REPO, site: SITE, key: DEFECT_KEY, findingPath: FINDING });
+
+  // A site that fixes findings, with the flag on and a defect the gate accepts.
+  seed(DEFECT_FINDING, { [config]: 'site:\n  name: mattpyle.com\nauto_fix: true\n' });
+  assert.deepEqual(await read(), {
+    stopAfter: 'resolved',
+    origin: 'https://www.mattpyle.com',
+    autoFix: true,
+    status: 'approved',
+    kind: 'defect',
+    refusal: null,
+  });
+
+  // The site's own stop point, at either level, ends a run at the verdict; the origin is still known.
+  for (const text of ['auto_fix: true\nstop_after: verdict\n', 'auto_fix: true\nsite:\n  stop_after: verdict\n']) {
+    fake?.restore();
+    seed(DEFECT_FINDING, { [config]: text });
+    const stopped = await read();
+    assert.equal(stopped.stopAfter, 'verdict');
+    assert.equal(stopped.origin, 'https://www.mattpyle.com');
+  }
+
+  // No config.yaml: no flag, and no stop point of the site's own.
+  fake?.restore();
+  seed(DEFECT_FINDING);
+  const bare = await read();
+  assert.equal(bare.autoFix, false);
+  assert.equal(bare.stopAfter, 'resolved');
+
+  // A site the worker knows no production origin for stops at the verdict, whatever its config says.
+  fake?.restore();
+  seed(DEFECT_FINDING, { 'sites/temporal-io/config.yaml': 'auto_fix: true\n', 'sites/temporal-io/findings/x.md': DEFECT_FINDING });
+  const unknown = await readFindingSettings({ repo: REPO, site: 'temporal-io', key: 'x', findingPath: 'sites/temporal-io/findings/x.md' });
+  assert.equal(unknown.stopAfter, 'verdict');
+  assert.equal(unknown.origin, null);
+  assert.equal(unknown.refusal, 'Steward knows no site repository for temporal-io');
+});
+
+test('readFindingSettings returns the gate\'s refusal, and a missing or unparsable finding as a refusal, never a failure', async () => {
+  const read = () => readFindingSettings({ repo: REPO, site: SITE, key: DEFECT_KEY, findingPath: FINDING });
+
+  seed(DEFECT_FINDING.replace('kind: defect', 'kind: direction'));
+  const direction = await read();
+  assert.equal(direction.kind, 'direction');
+  assert.equal(direction.refusal, 'its kind is direction, not defect or opportunity');
+
+  fake?.restore();
+  seed(DEFECT_FINDING.replace('status: approved', 'status: resolved'));
+  const resolved = await read();
+  assert.equal(resolved.status, 'resolved', 'the status a parked run closes on');
+  assert.equal(resolved.refusal, 'its status is resolved, not approved');
+
+  fake?.restore();
+  fake = installFakeGitHub({ defaultBranch: 'main', seed: { 'sites/other.md': 'x' } });
+  const missing = await read();
+  assert.equal(missing.status, null);
+  assert.equal(missing.refusal, `${FINDING} is not in ${REPO}`);
+
+  fake?.restore();
+  seed('---\nstatus: [approved\n---\n\n# Broken\n');
+  const broken = await read();
+  assert.equal(broken.status, null);
+  assert.match(broken.refusal ?? '', /^its file does not parse: /);
 });
 
 test('parseIssueUrl reads an issue URL and nothing else', () => {

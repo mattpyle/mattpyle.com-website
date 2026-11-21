@@ -9,6 +9,7 @@ import {
   FINDINGS_SCHEDULE_CATCHUP_WINDOW,
   buildFindingsScheduleOptions,
   runFindingsScheduleAction,
+  triggerFindingsSync,
 } from '../../src/lib/findings-schedule.js';
 import type { ScorecardScheduleClientLike } from '../../src/lib/scorecard-schedule.js';
 
@@ -180,6 +181,13 @@ test('trigger cannot bypass the SKIP policy, and every verb reports the schedule
   assert.deepEqual(calls, [`trigger:${ScheduleOverlapPolicy.SKIP}`]);
   assert.ok(outcome.lines.some((l) => /actions taken so far: 3/.test(l)));
   assert.ok(outcome.lines.some((l) => /next firings \(America\/Vancouver\)/.test(l)));
+});
+
+test('the run-finished trigger buffers one reconcile behind a running one, where the manual sync skips', async () => {
+  const { schedule, calls } = fakeSchedule();
+  await triggerFindingsSync(schedule);
+  assert.deepEqual(calls, [`trigger:${ScheduleOverlapPolicy.BUFFER_ONE}`], 'one trigger, and nothing read back');
+  assert.notEqual(ScheduleOverlapPolicy.BUFFER_ONE, ScheduleOverlapPolicy.SKIP);
 });
 
 test('describe changes nothing', async () => {

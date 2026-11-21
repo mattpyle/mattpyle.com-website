@@ -558,13 +558,99 @@ export interface ReadSiteAutoFixInput {
 }
 
 /**
- * The site's `auto_fix` flag, read once when an approved verdict lands. A site
- * with no `config.yaml` has no flag. The answer is an activity result, so the
- * workflow's branch on it replays from history.
+ * The site's `auto_fix` flag. A site with no `config.yaml` has no flag. The
+ * answer is an activity result, so the workflow's branch on it replays from
+ * history. A finding run approved before {@link readFindingSettings} existed
+ * read it once, at its verdict, and its history replays that read; the
+ * reconciler and the CLI still read it.
  */
 export async function readSiteAutoFix(input: ReadSiteAutoFixInput): Promise<boolean> {
   const file = await readRepoFile(siteConfigPath(input.site), BRANCH, input.repo);
   return file ? siteAutoFix(file.text) : false;
+}
+
+/** A site's `stop_after`, read with Steward's one YAML reader; null when the file sets none. */
+export function siteStopAfter(configText: string): string | null {
+  const data = parseFrontmatter(`---\n${configText}\n---\n`).data as Record<string, any>;
+  const value = data.stop_after ?? data.site?.stop_after;
+  return typeof value === 'string' ? value : null;
+}
+
+export interface ReadFindingSettingsInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+  key: string;
+  /** `sites/<site>/findings/<key>.md` */
+  findingPath: string;
+}
+
+/** What a finding run reads when it needs its settings (STW-645). */
+export interface FindingSettings {
+  /**
+   * Where an approved run of this site ends. `verdict` when the site's
+   * `config.yaml` says `stop_after: verdict`, or when this worker knows no
+   * production origin for the site: a lifecycle that cannot verify does not start.
+   */
+  stopAfter: FindingStopAfter;
+  /** The production origin every verify check must name; null when the worker knows none. */
+  origin: string | null;
+  /** The site's `auto_fix` flag; false for a site with no `config.yaml`. */
+  autoFix: boolean;
+  /** The finding file's `status`; null when the file is missing or does not parse. */
+  status: string | null;
+  /** The finding file's `kind`; null when the file is missing, does not parse or names none. */
+  kind: string | null;
+  /**
+   * Why {@link openFixIssue} would refuse the finding as it stands, or null
+   * when it would take it: the same {@link fixRefusal} gate, and a site with a
+   * repository to open the issue in.
+   */
+  refusal: string | null;
+}
+
+/**
+ * The settings a finding run acts on, read when it acts (STW-645): at an
+ * approved verdict, and again while the run is parked at `waiting-fix`. One
+ * read of the site's `config.yaml` and one of the finding file. The answer is
+ * an activity result, so the workflow's branch on it replays from history.
+ *
+ * A site with no `config.yaml` has no flag and no stop point of its own. A
+ * finding file that is missing or does not parse is a refusal, not a failure:
+ * the run parks and reads again. Every other failure propagates, and the
+ * workflow's policy retries it; a rejected credential is retried too
+ * ({@link authRetryable}), because a token rotation must not end the read.
+ */
+export async function readFindingSettings(input: ReadFindingSettingsInput): Promise<FindingSettings> {
+  const config = await authRetryable(() => readRepoFile(siteConfigPath(input.site), BRANCH, input.repo));
+  const origin = productionOrigin(input.site) ?? null;
+  const stops = config ? siteStopAfter(config.text) === 'verdict' : false;
+  const settings: FindingSettings = {
+    stopAfter: stops || !origin ? 'verdict' : 'resolved',
+    origin,
+    autoFix: config ? siteAutoFix(config.text) : false,
+    status: null,
+    kind: null,
+    refusal: null,
+  };
+
+  const file = await authRetryable(() => readRepoFile(input.findingPath, BRANCH, input.repo));
+  if (!file) return { ...settings, refusal: `${input.findingPath} is not in ${input.repo}` };
+  let data: Record<string, unknown>;
+  let refusal: string | null;
+  try {
+    data = (parseFrontmatter(file.text).data ?? {}) as Record<string, unknown>;
+    refusal = fixRefusal(data, parseFindingBody(file.text));
+  } catch (err) {
+    return { ...settings, refusal: `its file does not parse: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (refusal === null && !siteRepository(input.site)) refusal = `Steward knows no site repository for ${input.site}`;
+  return {
+    ...settings,
+    status: typeof data.status === 'string' ? data.status : null,
+    kind: typeof data.kind === 'string' ? data.kind : null,
+    refusal,
+  };
 }
 
 export interface OpenFixIssueInput {

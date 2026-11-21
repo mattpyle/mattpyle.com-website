@@ -7,7 +7,7 @@ import { ApplicationFailure } from '@temporalio/activity';
 import { ApplicationFailureCategory } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
-import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
+import { settings, skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import {
   findingStateQuery,
   findingWorkflow,
@@ -21,6 +21,7 @@ import type {
   AwaitFixPrInput,
   AwaitPrPreviewInput,
   AwaitProductionDeployInput,
+  FindingSettings,
   FixIssue,
   FixPr,
   FixPrOutcome,
@@ -118,6 +119,8 @@ function notYet(message: string, type: string): ApplicationFailure {
 interface Script {
   /** The site config's `auto_fix`. */
   autoFix?: boolean;
+  /** What `readFindingSettings` answers, over a site that fixes findings; each read is in `calls`. Absent: the helper's default. */
+  settings?: Partial<FindingSettings>;
   /** Per attempt: how many PR polls answer "not yet" before its PR opens. Default 2. */
   prPolls?: number[];
   /** Per attempt: a non-retryable failure type the PR wait throws instead, or null. */
@@ -182,6 +185,14 @@ function lifecycle(script: Script) {
       calls.push('readSiteAutoFix');
       return script.autoFix ?? false;
     },
+    ...(script.settings
+      ? {
+          readFindingSettings: async () => {
+            calls.push('readFindingSettings');
+            return settings(script.settings);
+          },
+        }
+      : {}),
     openFixIssue: async (input: OpenFixIssueInput): Promise<FixIssue> => {
       calls.push('openFixIssue');
       seen.issues.push(input);
@@ -397,11 +408,11 @@ test('merged, deployed and every check passes: resolved, with one execution carr
     supersedes: null,
   });
   // The verdict measurement's reads (STW-589) come first; `skipVerdictMeasure` leaves it unmeasured.
+  // The `fix` arrived before the fix wait, so the run asks nothing about `auto_fix` (STW-645).
   assert.deepEqual(mocks.calls, [
     'writeFindingVerdict',
     'readFinding',
     'readVerifyBlock',
-    'readSiteAutoFix',
     'openFixIssue',
     'awaitFixPr',
     'writeFindingFix',
@@ -467,13 +478,15 @@ test('without auto_fix the approved run waits at waiting-fix and opens no issue'
   });
 });
 
-test('auto_fix on, kind not a defect: the approved run parks at waiting-fix with no attempt and no issue', async () => {
-  const mocks = lifecycle({ autoFix: true, merge: {} });
+const DIRECTION = { autoFix: true, kind: 'direction', refusal: 'its kind is direction, not defect or opportunity' };
+
+test('auto_fix on, a finding the gate refuses: the approved run parks at waiting-fix with no attempt and no issue', async () => {
+  const mocks = lifecycle({ settings: DIRECTION, merge: {} });
   await withWorkers(mocks, async () => {
     const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-opportunity-parks',
       taskQueue: FINDINGS,
-      args: [{ ...input('opportunity-parks'), waitsForPerson: true }],
+      args: [input('opportunity-parks')],
     });
     await handle.signal(verdictSignal, APPROVE);
     await untilState(handle, (s) => s.step === 'waiting-fix', 'waiting-fix');
@@ -481,20 +494,24 @@ test('auto_fix on, kind not a defect: the approved run parks at waiting-fix with
     const state = await handle.query(findingStateQuery);
     assert.equal(state.step, 'waiting-fix');
     assert.equal(state.fixAttempts, 0);
-    assert.equal(state.lastFixError, null);
+    assert.equal(state.lastFixError, `${DEFECT_KEY} does not go to the fixer: its kind is direction, not defect or opportunity.`);
     assert.equal(state.waitsForPerson, true);
-    assert.deepEqual(mocks.calls, ['writeFindingVerdict', 'readFinding', 'readVerifyBlock', 'readSiteAutoFix'], 'no openFixIssue was scheduled');
+    assert.deepEqual(
+      mocks.calls,
+      ['writeFindingVerdict', 'readFindingSettings', 'readFinding', 'readVerifyBlock', 'readFindingSettings'],
+      'no slot was asked for and no openFixIssue was scheduled',
+    );
     await handle.terminate('test over');
   });
 });
 
-test('a fix signal on the parked opportunity runs the attempt, and the waiting reason clears', async () => {
-  const mocks = lifecycle({ autoFix: true, prPolls: [3], merge: {} });
+test('a fix signal on the parked finding runs the attempt, and the waiting reason clears', async () => {
+  const mocks = lifecycle({ settings: DIRECTION, prPolls: [3], merge: {} });
   await withWorkers(mocks, async () => {
     const handle = await client.workflow.start(findingWorkflow, {
       workflowId: 'finding/mattpyle-com/lifecycle-opportunity-fix-signal',
       taskQueue: FINDINGS,
-      args: [{ ...input('opportunity-fix-signal'), waitsForPerson: true }],
+      args: [input('opportunity-fix-signal')],
     });
     await handle.signal(verdictSignal, APPROVE);
     await untilState(handle, (s) => s.step === 'waiting-fix' && s.waitsForPerson === true, 'parked');
@@ -502,7 +519,7 @@ test('a fix signal on the parked opportunity runs the attempt, and the waiting r
     const fixing = await untilState(handle, (s) => s.step === 'fixing' && Boolean(s.issueUrl), 'fixing with an issue');
     assert.equal(fixing.fixAttempts, 1);
     assert.equal(fixing.waitsForPerson, false);
-    assert.deepEqual(mocks.calls.slice(0, 5), ['writeFindingVerdict', 'readFinding', 'readVerifyBlock', 'readSiteAutoFix', 'openFixIssue']);
+    assert.deepEqual(mocks.calls.slice(0, 6), ['writeFindingVerdict', 'readFindingSettings', 'readFinding', 'readVerifyBlock', 'readFindingSettings', 'openFixIssue']);
     await handle.terminate('test over');
   });
 });
@@ -746,7 +763,7 @@ async function untilState(
   }
 }
 
-test('a fix sent before the verdict is dropped, and a verdict-only run ignores fix entirely', async () => {
+test('a fix sent before the verdict is dropped', async () => {
   const mocks = lifecycle({ merge: {} });
   await withWorkers(mocks, async () => {
     const handle = await client.workflow.start(findingWorkflow, {
@@ -763,17 +780,6 @@ test('a fix sent before the verdict is dropped, and a verdict-only run ignores f
     await untilState(handle, (state) => state.step === 'waiting-fix', 'waiting-fix');
     assert.ok(!mocks.calls.includes('openFixIssue'), 'the early fix started nothing');
     await handle.terminate('test over');
-
-    const verdictOnly = await client.workflow.start(findingWorkflow, {
-      workflowId: 'finding/mattpyle-com/lifecycle-verdict-only',
-      taskQueue: FINDINGS,
-      args: [{ ...input('verdict-only'), stopAfter: 'verdict' }],
-    });
-    await verdictOnly.signal(verdictSignal, APPROVE);
-    await verdictOnly.signal(fixSignal, FIX);
-    const result = await skipResult(verdictOnly);
-    assert.equal(result.outcome, undefined, 'a verdict-only result keeps its old shape');
-    assert.equal(result.verdict.status, 'approved');
   });
 });
 
