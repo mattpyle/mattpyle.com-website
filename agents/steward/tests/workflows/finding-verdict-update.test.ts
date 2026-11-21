@@ -158,6 +158,26 @@ async function eventTypes(handle: Handle): Promise<string[]> {
   return (history.events ?? []).map((event) => Object.keys(event).find((k) => k.endsWith('EventAttributes')) as string);
 }
 
+/**
+ * Waits until a lifecycle run is parked for a fix with its daily re-read timer
+ * started: the last command an approval issues here.
+ *
+ * `step` alone is not that point. The run sets `waiting-fix` and schedules its
+ * second `readFindingSettings` in one workflow task, and starts the timer in a
+ * later one, when that read returns. Nothing in the state changes in between,
+ * so the history is the only place the timer shows.
+ */
+async function parkedForFix(handle: Handle): Promise<string[]> {
+  await until(handle, (s) => s.step === 'waiting-fix', 'waiting-fix');
+  const deadline = Date.now() + 20_000;
+  for (;;) {
+    const types = await eventTypes(handle);
+    if (types.includes('timerStartedEventAttributes')) return types;
+    if (Date.now() > deadline) assert.fail('the run reached waiting-fix and never started its re-read timer');
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 test('a verdict-only run: the Update returns the verdict and the commit after the write, and the run completes', async () => {
   const m = mocks();
   await withWorker(m, async () => {
@@ -382,15 +402,15 @@ test('a verdict by Update issues the commands a verdict by Signal does', async (
     const bySignal = await start('by-signal', 'resolved');
     await until(bySignal, (s) => s.step === 'waiting-verdict', 'the verdict wait');
     await bySignal.signal(verdictSignal, APPROVE);
-    await until(bySignal, (s) => s.step === 'waiting-fix', 'waiting-fix');
+    const signalled = await parkedForFix(bySignal);
 
     const byUpdate = await start('by-update', 'resolved');
     await until(byUpdate, (s) => s.step === 'waiting-verdict', 'the verdict wait');
     await record(byUpdate, APPROVE);
-    await until(byUpdate, (s) => s.step === 'waiting-fix', 'waiting-fix');
+    const updated = await parkedForFix(byUpdate);
 
-    const signalled = await eventTypes(bySignal);
-    const updated = await eventTypes(byUpdate);
+    // Each history is read once its run has started the timer, so neither is
+    // read with the second settings read still in flight and its timer unissued.
     const ownEvents = ['workflowExecutionUpdateAcceptedEventAttributes', 'workflowExecutionUpdateCompletedEventAttributes'];
     assert.deepEqual(
       updated.filter((type) => ownEvents.includes(type)),
@@ -405,6 +425,7 @@ test('a verdict by Update issues the commands a verdict by Signal does', async (
       types.filter((type) => /^(activityTaskScheduled|timerStarted|markerRecorded|startChildWorkflow|signalExternal|workflowExecution(Completed|Failed))/.test(type));
     assert.deepEqual(commands(updated), commands(signalled));
     assert.ok(commands(signalled).includes('activityTaskScheduledEventAttributes'));
+    assert.equal(commands(signalled).at(-1), 'timerStartedEventAttributes', 'both runs are read at the parked wait');
 
     // Everything else in the two histories, apart from how the verdict arrived.
     const rest = (types: string[]) =>
