@@ -34,7 +34,7 @@ test('a *.test.* script run directly marks a test process', () => {
 });
 
 test('a worker or CLI start is not a test process', () => {
-  for (const script of ['src/worker.ts', 'src/worker-hosted.ts', 'src/cli.ts', 'scripts/steward.mjs', 'src/lib/test-credential-guard.ts', 'latest.ts']) {
+  for (const script of ['src/worker.ts', 'src/worker-hosted.ts', 'src/hosted-entry.ts', 'src/cli.ts', 'scripts/steward.mjs', 'src/lib/test-credential-guard.ts', 'latest.ts']) {
     assert.equal(isTestProcess(shape(script, ['--import', 'tsx'], { NODE_ENV: 'production' })), false, script);
   }
   // Flags that only look like the runner's, an empty context and no script at all.
@@ -66,7 +66,7 @@ test('the guard blanks once: a value set after the first call survives the secon
 });
 
 test('the list covers the GitHub, model and preview credentials', () => {
-  for (const name of ['GITHUB_TOKEN', 'GH_TOKEN', 'STEWARD_GITHUB_APP_PRIVATE_KEY', 'ANTHROPIC_API_KEY', 'VERCEL_AUTOMATION_BYPASS_SECRET']) {
+  for (const name of ['GITHUB_TOKEN', 'GH_TOKEN', 'STEWARD_GITHUB_APP_PRIVATE_KEY', 'ANTHROPIC_API_KEY', 'VERCEL_AUTOMATION_BYPASS_SECRET', 'STEWARD_DISCORD_BOT_TOKEN']) {
     assert.ok(TEST_GUARDED_VARIABLES.includes(name), name);
   }
 });

@@ -27,9 +27,17 @@ test('unset, empty and "default" are the default role; "public" is public', () =
   assert.equal(parseWorkerRole({ STEWARD_WORKER_ROLE: 'public' }), 'public');
 });
 
+test('"discord" is the third role, and it is not a worker: neither registry is its', () => {
+  assert.equal(parseWorkerRole({ STEWARD_WORKER_ROLE: 'discord' }), 'discord');
+  // `hosted-entry.ts` loads `discord/main.ts` for it; `tests/discord/role.test.ts` starts both entries.
+  assert.equal(hostedRegistry().length, 3);
+  assert.equal(publicRegistry().length, 2);
+});
+
 test('an unknown role throws rather than falling back to the credentialed one', () => {
-  assert.throws(() => parseWorkerRole({ STEWARD_WORKER_ROLE: 'publc' }), /must be "public" or "default"/);
-  assert.throws(() => parseWorkerRole({ STEWARD_WORKER_ROLE: 'PUBLIC' }), /must be "public" or "default"/);
+  assert.throws(() => parseWorkerRole({ STEWARD_WORKER_ROLE: 'publc' }), /must be "public", "discord" or "default"/);
+  assert.throws(() => parseWorkerRole({ STEWARD_WORKER_ROLE: 'PUBLIC' }), /must be "public", "discord" or "default"/);
+  assert.throws(() => parseWorkerRole({ STEWARD_WORKER_ROLE: 'discrod' }), /must be "public", "discord" or "default"/);
 });
 
 test('the public registry serves the two audit queues and nothing else', () => {
@@ -61,7 +69,7 @@ test('every public-role activity is also in the default role\'s audit map', () =
 
 test('the public role refuses a GitHub credential and names the variable, never the value', () => {
   const secret = ['not', 'a', 'real', 'value'].join('-');
-  for (const name of ['STEWARD_GITHUB_APP_ID', 'STEWARD_GITHUB_APP_PRIVATE_KEY', 'GITHUB_TOKEN', 'GH_TOKEN']) {
+  for (const name of ['STEWARD_GITHUB_APP_ID', 'STEWARD_GITHUB_APP_PRIVATE_KEY', 'GITHUB_TOKEN', 'GH_TOKEN', 'STEWARD_DISCORD_BOT_TOKEN']) {
     assert.throws(
       () => assertPublicRoleEnvironment({ [name]: secret }),
       (err: Error) => err.message.includes(name) && !err.message.includes(secret),

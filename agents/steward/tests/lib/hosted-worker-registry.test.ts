@@ -21,6 +21,10 @@ import { hostedRegistry } from '../../src/hosted-registry.js';
  * tests build the same list the container boots from. A wrong map wired to a
  * queue fails here by queue name.
  *
+ * The image's third role, `STEWARD_WORKER_ROLE=discord`, is not a worker and has
+ * no entry here: `src/hosted-entry.ts` loads `src/discord/main.ts` for it, and
+ * `tests/discord/role.test.ts` holds its start.
+ *
  * The entry point itself cannot be imported: it calls `main()` at module scope,
  * which connects to Temporal and refuses to start without a GitHub App credential. That
  * is why the registry is its own module. Nothing here reads `worker-hosted.ts`
@@ -82,6 +86,7 @@ const FINDINGS_ACTIVITIES = [
   'readRecheckBlock',
   'writeFindingRecheck',
   'writeFindingVerdictMeasure',
+  'resolveFindingIds',
 ];
 
 /** The registry entry for a queue, found by name so a test names the queue it is about. */
@@ -159,7 +164,7 @@ test('each queue registers exactly its own activities, by name', () => {
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
   assert.equal(names(QUEUE_AUDIT).length, 14);
-  assert.equal(names(QUEUE_FINDINGS).length, 29);
+  assert.equal(names(QUEUE_FINDINGS).length, 30);
 });
 
 test('every registered activity is a function', () => {

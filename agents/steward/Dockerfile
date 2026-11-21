@@ -2,7 +2,8 @@
 #
 # One process polling `steward-audit`, `steward-audit-fast` and
 # `steward-findings`, with a browser and no checkout of the site. Runs
-# `src/worker-hosted.ts`; `src/worker.ts` — the local worker `steward up`
+# `src/hosted-entry.ts`, which loads `src/worker-hosted.ts`, or the Discord
+# service for `STEWARD_WORKER_ROLE=discord`; `src/worker.ts` — the local worker `steward up`
 # starts, which serves `steward-light` and `steward-heavy`, and the audit queues
 # only against the local dev server — is deliberately not what this runs.
 #

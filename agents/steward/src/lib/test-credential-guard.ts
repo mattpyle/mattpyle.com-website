@@ -33,6 +33,8 @@ export const TEST_GUARDED_VARIABLES: readonly string[] = [
   'TEMPORAL_API_KEY',
   'TEMPORAL_METRICS_API_KEY',
   'TEMPORAL_READ_ONLY_API_KEY',
+  // The Discord application's bot token: it registers the slash commands.
+  'STEWARD_DISCORD_BOT_TOKEN',
 ];
 
 /** Set once the variables are blanked. A child process inherits it and keeps what its parent test gave it. */
@@ -55,7 +57,7 @@ export interface ProcessShape {
  * 2. `--test` is in `execArgv`: the runner itself, and every test under `--test-isolation=none`.
  * 3. The script is a `*.test.*` file, run directly without `--test`.
  *
- * A worker or CLI start has none of them: its script is `worker.ts`, `worker-hosted.ts` or
+ * A worker or CLI start has none of them: its script is `worker.ts`, `hosted-entry.ts` or
  * `cli.ts`, and nothing in the Dockerfile, the launcher or a workflow sets `NODE_TEST_CONTEXT`.
  * A false yes here would blank a worker's credentials, so each signal is exact, not a pattern
  * over flag names.

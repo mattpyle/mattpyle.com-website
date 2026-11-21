@@ -18,7 +18,7 @@ const shape = (argv1: string, execArgv: string[] = [], env: Record<string, strin
 });
 
 test('the CLI, the workers and the console launcher read the repository root', () => {
-  for (const script of ['src/cli.ts', 'src/worker.ts', 'src/worker-hosted.ts', 'scripts/steward.mjs', '']) {
+  for (const script of ['src/cli.ts', 'src/worker.ts', 'src/worker-hosted.ts', 'src/hosted-entry.ts', 'scripts/steward.mjs', '']) {
     assert.equal(resolveSiteDir(ROOT, shape(script, ['--import', 'tsx'], { NODE_ENV: 'production' })), ROOT, script);
   }
   assert.equal(resolveSiteDir(ROOT, shape('src/cli.ts', [], { NODE_TEST_CONTEXT: '', STEWARD_SITE_DIR: '' })), ROOT);

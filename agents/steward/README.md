@@ -116,7 +116,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow`, `verifyFindingWorkflow`, `recheckFindingsWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **local worker** (`steward up`, `src/worker.ts`)
-polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
+polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container, started through `src/hosted-entry.ts`) registers
 the three queues that depend on nothing local, each with a hand-written activity map: a worker that
 claimed `snapshotDraft` would fail it, because the container has no drafts, and a failed task is
 worse than an unclaimed one. `steward-findings` has the hosted worker alone: with a second poller on
@@ -149,6 +149,59 @@ A public-role deployment needs:
 It must not have any of these, and refuses to start if one is set (the error names the variable, never the value): `STEWARD_GITHUB_APP_ID`, `STEWARD_GITHUB_APP_PRIVATE_KEY`, `STEWARD_GITHUB_APP_INSTALLATION_ID`, `GITHUB_TOKEN`, `GH_TOKEN`, `ANTHROPIC_API_KEY`, `TEMPORAL_METRICS_API_KEY`, `TEMPORAL_READ_ONLY_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET`. `PUBLIC_ROLE_REFUSED_CREDENTIALS` in `src/worker-role.ts` is the list, and a test fails when the code reads a new credential variable that the allowed and refused sets do not name. `STEWARD_HEALTHCHECK_BASE` is a URL, not a credential: the role neither requires it nor warns when it is missing.
 
 **The namespace must allow standalone activities.** The fast tier starts `auditSiteFast` as a standalone activity on `steward-audit-fast` (`src/lib/mcp-fast-standalone.mjs`). If the namespace does not support them, the start fails, the site's function logs `fast-audit-fallback` with the reason, and it runs the fast audit inside the function itself with what is left of the request's time budget. The caller still gets a report, but the audit then runs on the function instead of the worker. The deep tier uses an ordinary workflow start and has no such fallback: it needs a worker polling `steward-audit` in that namespace.
+
+### The Discord role
+
+The same image starts as an HTTP service when `STEWARD_WORKER_ROLE=discord`. It is the Interactions Endpoint of a Discord application, so a verdict typed in Discord reaches a finding's run in seconds. It runs no worker, no workflow and no browser, and holds no GitHub credential: `src/hosted-entry.ts`, which the image starts, loads `src/discord/main.ts` for this role and `src/worker-hosted.ts` for the other two.
+
+| | Discord role |
+|---|---|
+| Listens on | `0.0.0.0:$PORT` (8080 when unset). `POST /discord/interactions` and `GET /healthz` |
+| Checks on every request | Discord's Ed25519 signature over the timestamp and the raw body, and a timestamp within five minutes. A failure answers 401 |
+| Who can act | The one Discord user id in `STEWARD_DISCORD_OWNER_ID`. Anyone else gets a refusal only they see |
+| Commands | `/approve ids:<ids, then words> [reason:<words>]` and `/reject id:<one id> reason:<why>` |
+| What a command does | Calls `sendFindingVerdict`, the `record-verdict` Update that `steward finding approve` and the console send |
+| Ready line | `steward discord service listening`, with `role: "discord"`, the port, the namespace and `github: "none (discord role)"` |
+
+An id is a short id in any case (`MP-121`, `mp121`), a full key, or `site/key`. The words after the ids of an approval, then its `reason` option, become the verdict reason; with neither the reason reads `Approved by Matt via Discord command.` A verdict sent this way carries `verdict_source: cli`, like the console's, and its reason is where it is told apart.
+
+The answer is one line per finding: the short id, the short title and the outcome, such as `MP-121 Hello World description calls it the first post: recorded`. The outcomes are recorded, already recorded, refused with the run's reason, no such finding, no open run, and no worker answered. An approval on a run that goes on to a fix adds the next step to its line. If any id in a command names no finding, nothing is sent for any of them. When no worker takes the verdict in 60 seconds the answer says it is not recorded and may still be taken; the service does not retry or fall back to a Signal.
+
+Discord wants a response within 3 seconds. A command that finishes inside 2 seconds is answered in the response. Otherwise the service acknowledges it as deferred, Discord shows a loading state, and the result replaces it through the interaction's follow-up endpoint, which works for 15 minutes. On a redeploy the service waits up to 20 seconds for answers on their way.
+
+**Ids are resolved by the hosted worker.** A short id is in a finding file's frontmatter and nowhere else, and this service cannot read GitHub. For each command it starts `resolveFindingIds` on `steward-findings` as a standalone activity, one with no workflow around it, and the credentialed hosted worker answers with the site, key, short id, short title and the site's `auto_fix` for each id, or a miss, or the findings an ambiguous id could mean. No file text is returned, and the caller cannot choose the repository. The worker reads the repository's tree in one GitHub call and then only the finding files it has not read: about one after a verdict, and every file once after the worker restarts. The call waits 10 seconds for a worker to take it and 30 seconds in all; past that the answer is "The worker did not answer" and nothing is sent.
+
+**The namespace must allow standalone activities**, as the public audit's namespace must (see The public-audit role). Without them every command answers that the worker could not look the ids up, and the service's log has the start error. There is no fallback to a credential.
+
+**The service's environment is the boundary.** Its Temporal API key can do anything in the namespace, so whoever can set this service's variables can send a verdict. The signature and the owner id guard the endpoint, not the key. The key is its only secret. Keep the service in its own Railway service, with nothing else deployed beside it.
+
+It needs:
+
+1. `STEWARD_WORKER_ROLE=discord`.
+2. `STEWARD_DISCORD_PUBLIC_KEY` and `STEWARD_DISCORD_OWNER_ID`.
+3. `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE` and `TEMPORAL_API_KEY`, for the namespace that holds the finding runs.
+
+It refuses to start without any of those, and beside any of `STEWARD_DISCORD_BOT_TOKEN`, `STEWARD_GITHUB_APP_ID`, `STEWARD_GITHUB_APP_PRIVATE_KEY`, `STEWARD_GITHUB_APP_INSTALLATION_ID`, `GITHUB_TOKEN`, `GH_TOKEN`, `ANTHROPIC_API_KEY`, `VERCEL_AUTOMATION_BYPASS_SECRET`, `STEWARD_WEB_BOT_AUTH_KEY`, `TEMPORAL_METRICS_API_KEY` and `TEMPORAL_READ_ONLY_API_KEY`. Each error names the variable, never the value. `src/discord/role-env.ts` holds both lists.
+
+#### Setting it up
+
+Only the owner can do these. Do them in this order: Discord accepts the endpoint URL only once the service answers its signed `PING`.
+
+1. **Create the Discord application.** In the Discord Developer Portal, create a new application. It must not be the application of a bot that connects through the Gateway: an application receives interactions over the Gateway or over HTTP, never both. From its General Information page note the Application ID and the Public Key. On its Bot page, reset and copy the token; it is used once, in step 5, from your own machine.
+2. **Create the hosted service.** On Railway, add a third service from this repository with the Dockerfile path `agents/steward/Dockerfile` and no start command, as the two workers have. Give it a public domain and set its health check path to `/healthz`.
+3. **Set its variables.** The six in the list above, and no others: `STEWARD_WORKER_ROLE=discord`, the public key from step 1, your own Discord user id (in Discord: Settings, Advanced, Developer Mode on; then right-click your name, Copy User ID), and the findings namespace's three Temporal values. Do not copy the hosted worker's variables across: the service refuses to start beside its GitHub credential. Deploy, and check the log for `steward discord service listening`. The hosted worker must be on a deploy that includes `resolveFindingIds`, and the findings namespace must allow standalone activities; step 6 shows whether both hold.
+4. **Point Discord at it.** On the application's General Information page set the Interactions Endpoint URL to `https://<the service's domain>/discord/interactions` and save. Discord sends a `PING`; the save succeeds only if the service answered it.
+5. **Install the application and register the commands.** Open `https://discord.com/oauth2/authorize?client_id=<Application ID>&scope=applications.commands` and add the application to your server. Then, on your machine, with `STEWARD_DISCORD_APPLICATION_ID` and `STEWARD_DISCORD_BOT_TOKEN` in `agents/steward/.env` (the token as a 1Password reference):
+
+   ```bash
+   steward discord register --guild <server id>           # prints the request, sends nothing
+   steward discord register --guild <server id> --apply   # registers /approve and /reject
+   ```
+
+   The server id is Copy Server ID on the server's name, with Developer Mode on. Guild commands are live at once. Run the same command again after a change to the commands. They are registered as hidden from members who are not administrators; the owner id check is what decides.
+6. **Try an id that does not exist.** In the server, send `/approve ids:MP-999999`. `MP-999999: no such finding` means the whole path works: the signature, your user id, the standalone activity and the worker's read. "The worker could not look the ids up" means the namespace refused the standalone activity or the worker's read failed, and the service's log says which. "The worker did not answer" means no worker took the task: the hosted worker is down or on an older deploy.
+
+To add a command, add an entry to a `SlashCommand` list (`src/discord/verdict-commands.ts` is the pattern) and register again. To take buttons, add an `InteractionHandler` beside `commandHandler` in `src/discord/main.ts`. Neither changes `src/discord/server.ts` or `src/discord/signature.ts`.
 
 ### The publish leg
 
@@ -244,6 +297,7 @@ steward finding recheck --site temporal-io                  # recheck a site's a
 steward finding recheck-schedule create --site temporal-io  # create | describe | pause | unpause | trigger its daily recheck
 steward console                  # findings page on 127.0.0.1: a static page over GET /api/findings that filters and sorts every finding, opens one beside the list, and approves or rejects through POST /api/verdict (JSON only; the page has no form). A header menu shows the running commit and restarts the console onto the checkout's current code (POST /api/restart); `GET /api/commit` answers the commit and token without loading the model; the restart does not pull, `steward update` does. The menu's Sync findings and the panel's Fix and Verify post to `POST /api/run/sync`, `/api/run/fix` and `/api/run/verify`, the functions the `finding sync|fix|verify` verbs call (`src/lib/finding-actions.ts`)
 steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
+steward discord register --guild <id>   # print the slash-command registration for one Discord server; --apply sends it (see The Discord role)
 steward credential rotate temporal-metrics   # issue, store in 1Password, set on Railway, rewrite its .env line, wait for the redeploy, verify, then delete the old key after you confirm; also healthcheck-base; --dry-run prints the plan, --duration sets the lifetime (90d)
 steward update                   # after a merge: pull master in the main checkout, restart the worker
 ```

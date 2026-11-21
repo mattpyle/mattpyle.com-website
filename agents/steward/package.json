@@ -19,7 +19,7 @@
   },
   "scripts": {
     "worker": "tsx src/worker.ts",
-    "worker:hosted": "tsx src/worker-hosted.ts",
+    "worker:hosted": "tsx src/hosted-entry.ts",
     "steward": "tsx src/cli.ts",
     "setup:vale": "node scripts/setup-vale.mjs",
     "test": "node --import tsx --import ./tests/helpers/no-real-credentials.ts --test --test-concurrency=4 --test-timeout=60000 \"tests/**/*.test.ts\"",

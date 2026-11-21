@@ -30,6 +30,7 @@ import {
   writeFindingVerdict,
   writeFindingVerification,
 } from './activities/findings.js';
+import { resolveFindingIds } from './activities/finding-ids.js';
 import { runFindingChecks } from './activities/verify-finding.js';
 import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from './activities/findings-recheck.js';
 import { writeFindingVerdictMeasure } from './activities/findings-verdict-measure.js';
@@ -167,6 +168,7 @@ const findingsActivities = {
   writeFindingRecheck,
   // The measurement at an approved verdict (STW-589): one commit.
   writeFindingVerdictMeasure,
+  resolveFindingIds, // The Discord service's id lookup, started as a standalone activity: GitHub reads.
 };
 
 /**

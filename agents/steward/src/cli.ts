@@ -2396,6 +2396,49 @@ keys
     runKeysGenerate(opts);
   });
 
+const discord = program
+  .command('discord')
+  .description("Steward's Discord application: the slash commands the hosted Discord service answers (src/discord/)");
+
+discord
+  .command('register')
+  .requiredOption('--guild <id>', 'the Discord server id to register the commands in')
+  .option('--apply', 'send the registration; without it the request is printed and nothing is sent')
+  .description(
+    'Register /approve and /reject for one server. Dry run by default. Reads STEWARD_DISCORD_APPLICATION_ID, and STEWARD_DISCORD_BOT_TOKEN to apply',
+  )
+  .action(async (opts: { guild: string; apply?: boolean }) => {
+    const { registerGuildCommands } = await import('./discord/register.js');
+    const { verdictCommandDefinitions } = await import('./discord/verdict-commands.js');
+    const { DISCORD_APPLICATION_ID_ENV, DISCORD_BOT_TOKEN_ENV } = await import('./discord/role-env.js');
+    const applicationId = (process.env[DISCORD_APPLICATION_ID_ENV] ?? '').trim();
+    const botToken = (process.env[DISCORD_BOT_TOKEN_ENV] ?? '').trim();
+    if (!applicationId) fail(`${DISCORD_APPLICATION_ID_ENV} is not set. It is the Application ID on the application's General Information page.`);
+    if (opts.apply && !botToken) fail(`${DISCORD_BOT_TOKEN_ENV} is not set. --apply needs the application's bot token.`);
+    let result;
+    try {
+      result = await registerGuildCommands({
+        applicationId,
+        guildId: opts.guild.trim(),
+        commands: verdictCommandDefinitions(),
+        apply: opts.apply === true,
+        botToken,
+      });
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+    }
+    console.log('');
+    console.log(`  ${result.method} ${result.url}`);
+    console.log(JSON.stringify(result.body, null, 2));
+    console.log('');
+    console.log(
+      result.applied
+        ? `  Registered: ${result.registered.map((name) => `/${name}`).join(', ')}. Guild commands are live at once.`
+        : '  Dry run: nothing was sent. Add --apply to register.',
+    );
+    console.log('');
+  });
+
 const credential = program
   .command('credential')
   .description('Rotate a credential through issue, store, push, verify and retire (src/lib/credential-rotate.ts)');

@@ -1,7 +1,7 @@
 /**
  * Which role the hosted image runs in (STW-610).
  *
- * The image starts in one of two roles, chosen by `STEWARD_WORKER_ROLE`:
+ * The image starts in one of three roles, chosen by `STEWARD_WORKER_ROLE`:
  *
  * - **default** (unset, empty or `default`): the credentialed worker. Three
  *   queues, the scorecard's publish leg, the findings loop.
@@ -11,12 +11,18 @@
  *   to GitHub. A page rendered for a stranger runs in this process, so
  *   everything else the Steward codebase reads as a secret is kept out of its
  *   environment too (STW-609).
+ * - **discord**: no worker at all. An HTTP service that takes Discord's slash
+ *   commands and sends a finding's verdict (`src/discord/main.ts`). Its own
+ *   required and refused variables are in `src/discord/role-env.ts`.
+ *
+ * `src/hosted-entry.ts` reads the role and loads the entry for it, so the
+ * Discord role never loads the worker.
  *
  * This module is pure: no connection, no side effect at import. The entry point
  * and the tests both use it.
  */
 
-export type WorkerRole = 'default' | 'public';
+export type WorkerRole = 'default' | 'public' | 'discord';
 
 export const WORKER_ROLE_ENV = 'STEWARD_WORKER_ROLE';
 
@@ -25,7 +31,8 @@ export function parseWorkerRole(env: Record<string, string | undefined>): Worker
   const raw = (env[WORKER_ROLE_ENV] ?? '').trim();
   if (raw === '' || raw === 'default') return 'default';
   if (raw === 'public') return 'public';
-  throw new Error(`${WORKER_ROLE_ENV} must be "public" or "default" (or unset); got a value that is neither.`);
+  if (raw === 'discord') return 'discord';
+  throw new Error(`${WORKER_ROLE_ENV} must be "public", "discord" or "default" (or unset); got a value that is none of them.`);
 }
 
 /**
@@ -65,6 +72,9 @@ export const PUBLIC_ROLE_REFUSED_CREDENTIALS: readonly string[] = [
   'TEMPORAL_READ_ONLY_API_KEY',
   // Reaches Vercel preview deployments.
   'VERCEL_AUTOMATION_BYPASS_SECRET',
+  // The Discord role's application: its public key, and the token that registers its commands.
+  'STEWARD_DISCORD_PUBLIC_KEY',
+  'STEWARD_DISCORD_BOT_TOKEN',
 ];
 
 /**

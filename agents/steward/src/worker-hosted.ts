@@ -28,6 +28,8 @@ import {
  *
  * `STEWARD_WORKER_ROLE=public` starts the same image as the uncredentialed public-audit
  * worker instead: two queues, one workflow, no GitHub credential (`worker-role.ts`, STW-610).
+ * `hosted-entry.ts` is what the image runs: it loads this file for those two roles, and
+ * `discord/main.ts` for `STEWARD_WORKER_ROLE=discord`.
  *
  * The third queue, `steward-findings` (2026-09-12), follows the second's shape
  * and is described where it is created in `main()`.
@@ -229,6 +231,11 @@ function watchForRecycle(
 async function main() {
   // First, so a mistyped role never starts the credentialed worker by accident.
   const role = parseWorkerRole(process.env);
+  // The Discord role is a different entry (`discord/main.ts`). Started here it would
+  // read as "not public" and become the credentialed worker.
+  if (role === 'discord') {
+    throw new Error('STEWARD_WORKER_ROLE=discord is not a worker. Start the image through src/hosted-entry.ts (`npm run worker:hosted`).');
+  }
   const isPublic = role === 'public';
   // Before the first poll; see the same guard in `worker.ts`.
   const lighthouse = assertLighthouseMatchesLock(REPO_ROOT);

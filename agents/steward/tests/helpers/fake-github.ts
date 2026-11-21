@@ -248,6 +248,28 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     }
 
     // The Git Data path the archive commits through: blob, commit read, tree, commit.
+    // GET /git/trees/{branch}?recursive=1 and GET /git/blobs/{sha}: how the console and the
+    // Discord service list a repository and read a file by its blob sha.
+    const getTree = /^\/git\/trees\/([^/]+)$/.exec(route);
+    if (method === 'GET' && getTree) {
+      const files = branches.get(decodeURIComponent(getTree[1]));
+      if (!files) return response(404, { message: 'Not Found' });
+      return response(200, {
+        truncated: false,
+        tree: [...files].map(([path, file]) => ({ path, type: 'blob', sha: file.sha })),
+      });
+    }
+    const getBlob = /^\/git\/blobs\/([^/]+)$/.exec(route);
+    if (method === 'GET' && getBlob) {
+      for (const files of branches.values()) {
+        for (const file of files.values()) {
+          if (file.sha === getBlob[1]) {
+            return response(200, { sha: file.sha, encoding: 'base64', content: Buffer.from(file.text, 'utf8').toString('base64') });
+          }
+        }
+      }
+      return response(404, { message: 'Not Found' });
+    }
     if (method === 'POST' && route === '/git/blobs') {
       const sha = `blob-${++seq}`;
       blobs.set(sha, Buffer.from(String(body.content), 'base64').toString('utf8'));
