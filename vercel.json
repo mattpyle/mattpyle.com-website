@@ -21,6 +21,7 @@
     {
       "source": "/llms.txt",
       "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" },
         {
           "key": "Accept-Signature",
           "value": "sig1=(\"@authority\" \"signature-agent\";key=\"sig1\");created;expires;keyid;tag=\"web-bot-auth\""
