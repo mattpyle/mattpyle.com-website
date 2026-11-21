@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import proto from '@temporalio/proto';
+import { defaultPayloadConverter } from '@temporalio/common';
 import {
   applyHandVerifies,
   buildReportRow,
@@ -174,6 +175,20 @@ test('an open approved run with no issue reads waiting-fix and the days since ap
   assert.equal(buildReportRow({ events: [] }, none, rejected, now)?.outcome, 'open');
   const closed = { ...parked, outcome: 'terminated', closedAt: '2026-10-15T00:00:00.000Z' };
   assert.equal(buildReportRow({ events: [] }, none, closed, now)?.outcome, 'terminated');
+});
+
+test('a verdict Signal from Discord is read, and one with an unknown source is not', () => {
+  const signal = (eventId: number, source: string) => ({
+    eventId,
+    eventTime: { seconds: 1795284000 + eventId, nanos: 0 },
+    workflowExecutionSignaledEventAttributes: {
+      signalName: 'verdict',
+      input: { payloads: [defaultPayloadConverter.toPayload({ status: 'approved', reason: 'Real.', source, at: '2026-11-21T18:00:00.000Z' })] },
+    },
+  });
+  const facts = readRunHistory({ events: [signal(2, 'slack'), signal(3, 'discord')] } as never);
+  assert.equal(facts.verdict?.source, 'discord');
+  assert.equal(facts.verdictAt, new Date((1795284000 + 3) * 1000).toISOString());
 });
 
 test('a run with no verdict has no row', () => {

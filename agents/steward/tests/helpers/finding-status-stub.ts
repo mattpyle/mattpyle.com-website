@@ -15,12 +15,14 @@ export interface StubInput {
   gate: 'waiting' | 'writing' | 'done';
   result?: { outcome?: string; verifyWorkflowId?: string };
   failure?: string;
+  /** The verdict the `state` query answers with; none when absent. */
+  verdict?: { status: string; reason: string; source: string; at: string };
 }
 
 export async function findingWorkflow(input: StubInput): Promise<unknown> {
   wf.setHandler(
-    wf.defineQuery<{ site: string; key: string; status: string; step: string; stopAfter: string; verdict: null; commitSha: null }>('state'),
-    () => ({ site: 'mattpyle-com', key: 'stub', status: input.gate, step: input.step, stopAfter: 'resolved', verdict: null, commitSha: null }),
+    wf.defineQuery<{ site: string; key: string; status: string; step: string; stopAfter: string; verdict: StubInput['verdict'] | null; commitSha: null }>('state'),
+    () => ({ site: 'mattpyle-com', key: 'stub', status: input.gate, step: input.step, stopAfter: 'resolved', verdict: input.verdict ?? null, commitSha: null }),
   );
   if (input.mode === 'completed') return { site: 'mattpyle-com', key: 'stub', verdict: null, commitSha: null, ...input.result };
   if (input.mode === 'failed') throw wf.ApplicationFailure.nonRetryable(input.failure ?? 'The stub failed.');

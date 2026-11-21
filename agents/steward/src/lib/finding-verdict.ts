@@ -17,8 +17,8 @@ import { VERDICT_WRITE_FAILED, verdictUpdate, type VerdictRecorded } from '../wo
  * polls. The `verdict` Signal stays for the reconciler and `steward finding fix`.
  *
  * The source stays `cli` for both callers: `findingWorkflow` writes the file
- * only for that source, and a `console` source would need a workflow change
- * deployed first. The console's default approve reason names the console.
+ * for `cli` and `discord` only, and a `console` source would need a workflow
+ * change deployed first. The console's default approve reason names the console.
  *
  * Nothing here prints or exits. The caller renders the result, and a refusal
  * is a {@link FindingVerdictError} whose message the operator can act on.

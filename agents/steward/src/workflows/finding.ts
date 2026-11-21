@@ -8,10 +8,12 @@ import {
   findingHandoffPath,
   fixBranch,
   fixWorkflowId,
+  isFindingVerdict,
   parsePrUrl,
   previewResultLine,
   verdictMeasureLine,
   verdictMeasurePassed,
+  verdictSourceWrites,
   verifyWorkflowId,
   type FindingVerdict,
   type VerdictMeasure,
@@ -31,14 +33,26 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * started with `stopAfter: 'resolved'`, carries an approved finding through its
  * fix to `resolved` or `reopened` (fixer-merge-and-verify, decisions 1 to 8).
  *
- * The gate is the `verdict` signal, and it has two senders. `steward finding
- * approve|reject` sends it with source `cli`, and this workflow writes the
- * verdict into the finding file and its index line. The hourly reconciler sends
- * it with source `file` when the verdict is already in the file (Discord through
- * Argus, or an edit in Obsidian), and this workflow writes nothing.
+ * The gate is the `verdict` signal, and it has three sources. `steward finding
+ * approve|reject` and the console send source `cli`, and a sender outside
+ * Steward that took the verdict in Discord sends source `discord`: for both,
+ * this workflow writes the verdict into the finding file and its index line,
+ * and the file's `verdict_source` is the source sent. The hourly reconciler
+ * sends source `file` when the verdict is already in the file (an edit in
+ * Obsidian, or a sender that wrote the file itself), and this workflow writes
+ * nothing. Any other source is a malformed verdict: the Signal is dropped and
+ * the Update refused.
+ *
+ * The `discord` source (STW-646, 2026-11-21) carries no marker. A history
+ * recorded before it holds `cli` or `file`, and both decide the write as they
+ * did: `finding-verdict-cli.json` and `finding-verdict-file.json` are the
+ * proof. Only a `verdict` Signal with source `discord` that the earlier code
+ * dropped as malformed would replay differently, and no sender sent one before
+ * this code took it; an Update refused for its source left no event.
  *
  * **The `record-verdict` Update** (STW-636) is the same gate for a caller that
- * wants the answer: the CLI and the console send it. Its validator refuses a
+ * wants the answer: the CLI, the console and the Discord sender send it. Its
+ * validator refuses a
  * malformed verdict, and one that disagrees with the verdict already taken.
  * Its handler sets the verdict the main body waits on and returns after the
  * write, with the verdict and the commit. The first well-formed verdict by
@@ -731,18 +745,6 @@ const settling = wf.proxyActivities<Pick<typeof activities, 'readFindingSettings
   },
 });
 
-function isVerdict(value: unknown): value is FindingVerdict {
-  const v = value as FindingVerdict;
-  return (
-    typeof v === 'object' &&
-    v !== null &&
-    (v.status === 'approved' || v.status === 'rejected') &&
-    (v.source === 'cli' || v.source === 'file') &&
-    typeof v.reason === 'string' &&
-    typeof v.at === 'string'
-  );
-}
-
 /** An activity that refused because a person or another run moved the finding. */
 function isFindingMoved(err: unknown): boolean {
   return err instanceof wf.ActivityFailure && err.cause instanceof wf.ApplicationFailure && err.cause.type === 'FindingMoved';
@@ -804,7 +806,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   // on a verdict the CLI already delivered, or a second CLI call) is logged and
   // dropped: the record is what was decided first, and a signal cannot reopen it.
   wf.setHandler(verdictSignal, (verdict) => {
-    if (!isVerdict(verdict)) {
+    if (!isFindingVerdict(verdict)) {
       wf.log.warn('ignoring a malformed verdict signal', { key: input.key });
       return;
     }
@@ -903,7 +905,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   await wf.condition(() => state.verdict !== null);
   const verdict = state.verdict as unknown as FindingVerdict;
 
-  if (verdict.source === 'cli') {
+  if (verdictSourceWrites(verdict.source)) {
     state.status = 'writing';
     let written;
     try {
@@ -998,7 +1000,7 @@ interface Retest {
  * taken is accepted, so a retry after a lost reply is harmless.
  */
 function verdictRefusal(state: FindingState, verdict: FindingVerdict): string | null {
-  if (!isVerdict(verdict)) return 'The verdict is malformed.';
+  if (!isFindingVerdict(verdict)) return 'The verdict is malformed.';
   if (state.verdict && state.verdict.status !== verdict.status) {
     return `A verdict is already recorded: ${state.verdict.status} (source ${state.verdict.source}).`;
   }

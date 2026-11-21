@@ -12,12 +12,19 @@
 export type FindingVerdictStatus = 'approved' | 'rejected';
 
 /**
- * Who delivered the verdict. `cli` is `steward finding approve|reject` on
- * matt-pc, and the workflow writes it into the file. `file` is the reconciler
- * carrying a verdict that was already in the file (Discord through Argus, or
- * Obsidian), and the workflow writes nothing.
+ * Who delivered the verdict, and so whether the workflow writes it.
+ *
+ * | Source | Sender | The workflow |
+ * |---|---|---|
+ * | `cli` | `steward finding approve|reject`, and the console's buttons | writes the file and the index line |
+ * | `discord` | a sender outside Steward that took the verdict in Discord | writes the file and the index line |
+ * | `file` | the reconciler, carrying a verdict already in the file (an edit in Obsidian, or a sender that wrote the file itself) | writes nothing |
+ *
+ * The file's `verdict_source` is the value sent, so the record says where a
+ * decision came from. Any other value is a malformed verdict.
  */
-export type FindingVerdictSource = 'cli' | 'file';
+export const FINDING_VERDICT_SOURCES = ['cli', 'discord', 'file'] as const;
+export type FindingVerdictSource = (typeof FINDING_VERDICT_SOURCES)[number];
 
 export interface FindingVerdict {
   status: FindingVerdictStatus;
@@ -25,6 +32,28 @@ export interface FindingVerdict {
   source: FindingVerdictSource;
   /** ISO 8601. Set by the sender: the CLI's clock, or the reconciler's workflow time. */
   at: string;
+}
+
+/**
+ * A well-formed verdict. The one check for the workflow's Signal handler, its
+ * Update validator and the report's history reader, so a source the gate takes
+ * is a source the report reads.
+ */
+export function isFindingVerdict(value: unknown): value is FindingVerdict {
+  const v = value as FindingVerdict;
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    (v.status === 'approved' || v.status === 'rejected') &&
+    (FINDING_VERDICT_SOURCES as readonly unknown[]).includes(v.source) &&
+    typeof v.reason === 'string' &&
+    typeof v.at === 'string'
+  );
+}
+
+/** Whether the workflow writes a verdict from this source into the file. Only `file` is already there. */
+export function verdictSourceWrites(source: FindingVerdictSource): boolean {
+  return source === 'cli' || source === 'discord';
 }
 
 /**

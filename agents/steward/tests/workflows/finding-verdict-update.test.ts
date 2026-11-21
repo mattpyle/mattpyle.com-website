@@ -16,7 +16,7 @@ import {
   type FindingState,
   type FindingWorkflowInput,
 } from '../../src/workflows/finding.js';
-import type { FindingVerdict } from '../../src/lib/findings.js';
+import { setFrontmatterVerdict, type FindingVerdict } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { DEFECT_FINDING, DEFECT_KEY, ORIGIN } from '../helpers/finding-fixtures.js';
 
@@ -41,6 +41,8 @@ const APPROVE: FindingVerdict = { status: 'approved', reason: 'Real.', source: '
 const APPROVE_AGAIN: FindingVerdict = { ...APPROVE, reason: 'Still real.', at: '2026-11-20T18:01:00.000Z' };
 const REJECT: FindingVerdict = { status: 'rejected', reason: 'By design.', source: 'cli', at: '2026-11-20T18:02:00.000Z' };
 const FILE_APPROVE: FindingVerdict = { status: 'approved', reason: 'In the file.', source: 'file', at: '2026-11-20T17:00:00.000Z' };
+const DISCORD_APPROVE: FindingVerdict = { status: 'approved', reason: 'Approved in Discord.', source: 'discord', at: '2026-11-21T18:00:00.000Z' };
+const DISCORD_REJECT: FindingVerdict = { status: 'rejected', reason: 'Rejected in Discord.', source: 'discord', at: '2026-11-21T18:01:00.000Z' };
 
 let env: TestWorkflowEnvironment;
 let client: Client;
@@ -58,6 +60,8 @@ interface Mocks {
   activities: Record<string, unknown>;
   /** One entry per `writeFindingVerdict` call that started. */
   writes: string[];
+  /** The finding file as each of those calls would leave it: the real frontmatter edit on the fixture. */
+  files: string[];
   /** Lets a held write return. */
   release: () => void;
 }
@@ -65,11 +69,13 @@ interface Mocks {
 /** The write, held until `release` when `hold` is set, or failing when `fail` is. */
 function mocks(options: { hold?: boolean; fail?: boolean } = {}): Mocks {
   const writes: string[] = [];
+  const files: string[] = [];
   let release: () => void = () => undefined;
   const held = options.hold ? new Promise<void>((resolve) => (release = resolve)) : Promise.resolve();
   const activities = skipVerdictMeasure({
-    writeFindingVerdict: async (input: { status: string }) => {
+    writeFindingVerdict: async (input: FindingVerdict) => {
       writes.push(input.status);
+      files.push(setFrontmatterVerdict(DEFECT_FINDING, { status: input.status, reason: input.reason, at: input.at, source: input.source }));
       await held;
       if (options.fail) throw ApplicationFailure.nonRetryable('The finding file is gone.', 'FindingMissing');
       return { findingCommitSha: 'c-file', indexCommitSha: 'c-index', commitSha: 'c-index' };
@@ -82,7 +88,7 @@ function mocks(options: { hold?: boolean; fail?: boolean } = {}): Mocks {
       stops.get(Context.current().info.workflowExecution?.workflowId ?? '') === 'resolved' ? settings() : STOPS_AT_VERDICT,
     requestFixSlot: async () => ({ paths: [], dispatched: false }),
   });
-  return { activities, writes, release: () => release() };
+  return { activities, writes, files, release: () => release() };
 }
 
 async function withWorker<T>(m: Mocks, fn: () => Promise<T>): Promise<T> {
@@ -152,6 +158,26 @@ async function eventTypes(handle: Handle): Promise<string[]> {
   return (history.events ?? []).map((event) => Object.keys(event).find((k) => k.endsWith('EventAttributes')) as string);
 }
 
+/**
+ * Waits until a lifecycle run is parked for a fix with its daily re-read timer
+ * started: the last command an approval issues here.
+ *
+ * `step` alone is not that point. The run sets `waiting-fix` and schedules its
+ * second `readFindingSettings` in one workflow task, and starts the timer in a
+ * later one, when that read returns. Nothing in the state changes in between,
+ * so the history is the only place the timer shows.
+ */
+async function parkedForFix(handle: Handle): Promise<string[]> {
+  await until(handle, (s) => s.step === 'waiting-fix', 'waiting-fix');
+  const deadline = Date.now() + 20_000;
+  for (;;) {
+    const types = await eventTypes(handle);
+    if (types.includes('timerStartedEventAttributes')) return types;
+    if (Date.now() > deadline) assert.fail('the run reached waiting-fix and never started its re-read timer');
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 test('a verdict-only run: the Update returns the verdict and the commit after the write, and the run completes', async () => {
   const m = mocks();
   await withWorker(m, async () => {
@@ -203,6 +229,63 @@ test('the validator refuses a malformed verdict, and the run keeps waiting', asy
     assert.equal(state.verdict, null);
     // A refused Update leaves nothing in the history.
     assert.ok(!(await eventTypes(handle)).some((type) => /Update/.test(type)));
+    await handle.terminate('test over');
+  });
+});
+
+test('a discord verdict by Update at the verdict wait: the file reads verdict_source discord, and the Update returns the verdict', async () => {
+  const m = mocks();
+  await withWorker(m, async () => {
+    const handle = await start('discord-update');
+    await until(handle, (s) => s.step === 'waiting-verdict', 'the verdict wait');
+    const recorded = await record(handle, DISCORD_APPROVE);
+    assert.deepEqual(recorded, { verdict: DISCORD_APPROVE, commitSha: 'c-index', first: true, stopAfter: 'verdict' });
+    assert.deepEqual((await handle.result()).verdict, DISCORD_APPROVE);
+    assert.equal(m.files.length, 1);
+    const { data } = parseFrontmatter(m.files[0]);
+    assert.equal(data.status, 'approved');
+    assert.equal(data.verdict_source, 'discord');
+    assert.equal(data.verdict_reason, DISCORD_APPROVE.reason);
+  });
+});
+
+test('a discord verdict by Signal is written like a CLI one, and a Signal with an unknown source is dropped', async () => {
+  const m = mocks();
+  await withWorker(m, async () => {
+    const handle = await start('discord-signal');
+    await until(handle, (s) => s.step === 'waiting-verdict', 'the verdict wait');
+    await handle.signal(verdictSignal, { ...DISCORD_REJECT, source: 'slack' } as never);
+    const refusal = await refusalOf(record(handle, { ...DISCORD_APPROVE, source: 'slack' } as never));
+    assert.equal(refusal.message, 'The verdict is malformed.');
+    // The Query ran after the Signal's task, so the Signal has been handled.
+    const state = await handle.query(findingStateQuery);
+    assert.equal(state.verdict, null);
+    assert.equal(state.status, 'waiting');
+    assert.deepEqual(m.writes, []);
+
+    await handle.signal(verdictSignal, DISCORD_REJECT);
+    const result = await handle.result();
+    assert.deepEqual(result.verdict, DISCORD_REJECT);
+    assert.equal(result.commitSha, 'c-index');
+    assert.deepEqual(m.writes, ['rejected']);
+    assert.equal(parseFrontmatter(m.files[0]).data.verdict_source, 'discord');
+  });
+});
+
+test('the first verdict stands across sources: a discord approval after a CLI one is answered with it, a discord rejection is refused', async () => {
+  const m = mocks();
+  await withWorker(m, async () => {
+    const handle = await start('cli-then-discord', 'resolved');
+    assert.equal((await record(handle, APPROVE)).first, true);
+
+    const same = await record(handle, DISCORD_APPROVE);
+    assert.deepEqual(same, { verdict: APPROVE, commitSha: 'c-index', first: false, stopAfter: 'resolved' });
+    const refusal = await refusalOf(record(handle, DISCORD_REJECT));
+    assert.equal(refusal.message, 'A verdict is already recorded: approved (source cli).');
+
+    assert.deepEqual(m.writes, ['approved'], 'one write, the first');
+    assert.equal(parseFrontmatter(m.files[0]).data.verdict_source, 'cli');
+    assert.deepEqual((await handle.query(findingStateQuery)).verdict, APPROVE);
     await handle.terminate('test over');
   });
 });
@@ -319,15 +402,15 @@ test('a verdict by Update issues the commands a verdict by Signal does', async (
     const bySignal = await start('by-signal', 'resolved');
     await until(bySignal, (s) => s.step === 'waiting-verdict', 'the verdict wait');
     await bySignal.signal(verdictSignal, APPROVE);
-    await until(bySignal, (s) => s.step === 'waiting-fix', 'waiting-fix');
+    const signalled = await parkedForFix(bySignal);
 
     const byUpdate = await start('by-update', 'resolved');
     await until(byUpdate, (s) => s.step === 'waiting-verdict', 'the verdict wait');
     await record(byUpdate, APPROVE);
-    await until(byUpdate, (s) => s.step === 'waiting-fix', 'waiting-fix');
+    const updated = await parkedForFix(byUpdate);
 
-    const signalled = await eventTypes(bySignal);
-    const updated = await eventTypes(byUpdate);
+    // Each history is read once its run has started the timer, so neither is
+    // read with the second settings read still in flight and its timer unissued.
     const ownEvents = ['workflowExecutionUpdateAcceptedEventAttributes', 'workflowExecutionUpdateCompletedEventAttributes'];
     assert.deepEqual(
       updated.filter((type) => ownEvents.includes(type)),
@@ -342,6 +425,7 @@ test('a verdict by Update issues the commands a verdict by Signal does', async (
       types.filter((type) => /^(activityTaskScheduled|timerStarted|markerRecorded|startChildWorkflow|signalExternal|workflowExecution(Completed|Failed))/.test(type));
     assert.deepEqual(commands(updated), commands(signalled));
     assert.ok(commands(signalled).includes('activityTaskScheduledEventAttributes'));
+    assert.equal(commands(signalled).at(-1), 'timerStartedEventAttributes', 'both runs are read at the parked wait');
 
     // Everything else in the two histories, apart from how the verdict arrived.
     const rest = (types: string[]) =>

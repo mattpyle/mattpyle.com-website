@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FINDING_VERDICT_SOURCES,
   findingWorkflowId,
   fixCandidates,
   hasParkedDefect,
   isFindingSlug,
+  isFindingVerdict,
   parseFindingWorkflowId,
   parseFindingsIndex,
   pendingActivityLine,
@@ -17,6 +19,7 @@ import {
   setFrontmatterVerdict,
   setIndexVerdict,
   startsParked,
+  verdictSourceWrites,
   waitingReasonLine,
 } from '../../src/lib/findings.js';
 
@@ -55,6 +58,22 @@ test('a frontmatter block missing a verdict field gets it added before the close
     out,
     '---\nkey: k\nstatus: approved\nverdict_reason: "ok: yes"\nverdict_at: T\nverdict_source: file\n---\nbody\n',
   );
+});
+
+test('a discord verdict is written with its own source, and an unknown source is not a verdict', () => {
+  const text = '---\nstatus: proposed\nverdict_source:\n---\n';
+  const out = setFrontmatterVerdict(text, { status: 'rejected', reason: 'No.', source: 'discord', at: 'T' });
+  assert.equal(out, '---\nstatus: rejected\nverdict_source: discord\nverdict_reason: "No."\nverdict_at: T\n---\n');
+
+  const verdict = { status: 'approved', reason: '', at: 'T' };
+  assert.deepEqual(FINDING_VERDICT_SOURCES, ['cli', 'discord', 'file']);
+  for (const source of FINDING_VERDICT_SOURCES) assert.ok(isFindingVerdict({ ...verdict, source }), source);
+  for (const source of ['console', 'Discord', '', undefined, null, 1]) assert.ok(!isFindingVerdict({ ...verdict, source }), String(source));
+  assert.ok(!isFindingVerdict({ ...verdict, source: 'discord', status: 'maybe' }));
+  assert.ok(!isFindingVerdict(null));
+
+  // Only a verdict that is already in the file is left unwritten.
+  assert.deepEqual(FINDING_VERDICT_SOURCES.filter(verdictSourceWrites), ['cli', 'discord']);
 });
 
 test('CRLF files keep CRLF', () => {
