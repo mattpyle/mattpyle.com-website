@@ -12,8 +12,8 @@ import { fileURLToPath } from 'node:url';
 
 const script = fileURLToPath(new URL('../scripts/route-changes.sh', import.meta.url));
 
-/** The routing outputs for a pull request that changes exactly `file`. */
-function route(file) {
+/** The routing outputs for a pull request that changes exactly `files`. */
+function route(...files) {
   const dir = mkdtempSync(join(tmpdir(), 'route-changes-'));
   const git = (...args) =>
     execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], {
@@ -24,8 +24,10 @@ function route(file) {
   git('init', '-q');
   git('commit', '-q', '--allow-empty', '-m', 'base');
   const base = git('rev-parse', 'HEAD');
-  mkdirSync(dirname(join(dir, file)), { recursive: true });
-  writeFileSync(join(dir, file), 'changed\n');
+  for (const file of files) {
+    mkdirSync(dirname(join(dir, file)), { recursive: true });
+    writeFileSync(join(dir, file), 'changed\n');
+  }
   git('add', '-A');
   git('commit', '-q', '-m', 'change');
   // The script fetches from `origin`; the repository is its own.
@@ -54,6 +56,37 @@ test('markdown that documents the repository builds no preview', () => {
   for (const file of ['README.md', 'CLAUDE.md', 'agents/steward/README.md', 'agents/consultant/README.md']) {
     assert.equal(route(file).site, 'false', file);
   }
+});
+
+const FULL = 'tests/**/*.test.ts';
+
+test('content and data run Steward on the tests the selection script lists, not the full suite', () => {
+  for (const file of ['src/content/changelog/a-fix.md', 'src/content/writing/post.md', 'src/data/scorecard-runs.json', 'src/data/skills/a-skill.md']) {
+    const out = route(file);
+    assert.equal(out.steward, 'true', file);
+    assert.equal(out.site, 'true', file);
+    assert.equal(out.steward_tests, 'select', file);
+    assert.equal(out.browser, 'false', file);
+  }
+});
+
+test('content beside a Steward file, a console file or a page still goes to the selection script', () => {
+  assert.equal(route('src/content/writing/post.md', 'agents/steward/src/lib/findings.ts').steward_tests, 'select');
+  assert.equal(route('src/content/writing/post.md', 'agents/steward/src/console/server.ts').steward_tests, 'select');
+  assert.equal(route('src/data/scorecard-runs.json', 'src/pages/index.astro').steward_tests, 'select');
+});
+
+test('the install, the workflow file and the routing scripts keep the full Steward suite, with content or alone', () => {
+  for (const file of ['package.json', 'package-lock.json', '.github/workflows/ci.yml', 'scripts/route-changes.sh', 'scripts/select-steward-tests.mjs', 'scripts/vercel-ignore.sh']) {
+    assert.equal(route(file).steward_tests, FULL, file);
+    assert.equal(route(file).steward, 'true', file);
+    assert.equal(route('src/content/writing/post.md', file).steward_tests, FULL, `content and ${file}`);
+  }
+});
+
+test('a console-only change keeps the console tests, and a page alone skips Steward', () => {
+  assert.equal(route('agents/steward/src/console/server.ts').steward_tests, 'tests/console/**/*.test.ts');
+  assert.equal(route('src/pages/index.astro').steward, 'false');
 });
 
 const ignoreScript = fileURLToPath(new URL('../scripts/vercel-ignore.sh', import.meta.url));

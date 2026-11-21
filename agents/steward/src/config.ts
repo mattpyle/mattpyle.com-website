@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unresolvedReferenceRefusal } from './lib/env-reference.js';
+import { NO_SITE_DIR, resolveSiteDir } from './lib/site-dir.js';
 import { guardTestCredentials, TEST_GUARDED_VARIABLES } from './lib/test-credential-guard.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -82,10 +83,12 @@ ${unresolved}
  */
 export const REPO_ROOT = path.resolve(STEWARD_DIR, '..', '..');
 
-/** The content tree under review. Overridable so tests/CI can point elsewhere. */
-export const SITE_DIR = process.env.STEWARD_SITE_DIR
-  ? path.resolve(process.env.STEWARD_SITE_DIR)
-  : REPO_ROOT;
+/**
+ * The content tree under review. `STEWARD_SITE_DIR` overrides it. A test process that
+ * sets none gets an empty directory, not the checkout: `resolveSiteDir` says why.
+ */
+export const SITE_DIR = resolveSiteDir(REPO_ROOT);
+if (SITE_DIR === NO_SITE_DIR) fs.mkdirSync(NO_SITE_DIR, { recursive: true });
 
 export const WORKTREE_DIR =
   process.env.STEWARD_WORKTREE_DIR ??

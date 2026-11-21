@@ -41,7 +41,8 @@ name: CI (tests & typecheck)
 #     scripts/route-changes.sh,
 #     scripts/select-steward-tests.mjs,
 #     scripts/vercel-ignore.sh                           yes      yes   yes
-#   src/content/**, src/data/**, package.json            yes      yes   no
+#   package.json                                        yes      yes   no
+#   src/content/**, src/data/**                         yes      yes   no
 #   anything else outside agents/steward/                no       yes   no
 #
 # A fifth output, `consultant`, runs the audit consultant's job. It is set by
@@ -54,7 +55,10 @@ name: CI (tests & typecheck)
 #
 #   Change                                              steward_tests runs
 #   a push to master                                     tests/**
-#   outside agents/steward/ and setting `steward`        tests/**
+#   package.json, package-lock.json, this file, a
+#     routing script                                     tests/**
+#   src/content/** or src/data/**                        the tests that read that folder
+#                                                        (SITE_READERS in the selection script)
 #   agents/steward/tests/helpers/** or tests/fixtures/**,
 #     agents/steward/package.json, any tsconfig,
 #     a non-TypeScript file nothing in a TypeScript
@@ -66,8 +70,9 @@ name: CI (tests & typecheck)
 #   a change no test reaches                             nothing; the typecheck is the check
 #   a change that sets `browser`                         the same, plus the real-Chrome test
 #
-# Why those rows. Steward tests the published content and the scorecard data,
-# so those paths and the shared lockfile and workflow file run it. The site
+# Why those rows. A few Steward tests read the published content and the
+# scorecard data, so those paths run it, on those tests alone. The shared
+# lockfile and workflow file run all of it. The site
 # imports Steward's two export entries (tests/steward-*-packaging.test.mjs), so
 # a change to either entry's graph is a site change. Markdown under src/content/
 # is content, not documentation.
@@ -87,6 +92,17 @@ name: CI (tests & typecheck)
 # install and the compiler options. The replay suite rides with a workflow
 # change because its fixtures guard command sequences, which no import shows.
 # When a selection is empty the test step is skipped and the job log says so.
+#
+# The content and data row. A post has no import to follow, so the script keeps
+# a named list, `SITE_READERS`: the tests that read the real `src/content/` or
+# `src/data/`, by folder. A change under a folder runs its readers and the
+# typecheck, and the log names each test and the changed file that chose it. A
+# test reaches those folders through `agents/steward/tests/helpers/real-site.ts`,
+# which throws for a test the list does not name, and in a test process
+# `SITE_DIR` defaults to an empty directory, so a reader left off the list
+# fails where it is written. The comment beside the list says what that guard
+# cannot see. A push to `master` runs the full suite, so a wrong list is caught
+# one step late, on the merge commit, and only if the change breaks the missed test.
 # Run the same selection locally: the header of the script and "The test suite" in
 # `agents/steward/CLAUDE.md`.
 #
@@ -113,9 +129,10 @@ name: CI (tests & typecheck)
 # installs none.
 #
 # Open decision on scorecard and fixer PRs (card STW-510): the paths answer it.
-# A scorecard PR changes src/data/ and runs both suites. A fixer PR that changes
-# only pages, components or styles under src/ runs the site suite and skips
-# Steward; one that also changes src/content/ or src/data/ runs both.
+# A scorecard PR changes src/data/ and runs the site suite and Steward's data
+# readers. A fixer PR that changes only pages, components or styles under src/
+# runs the site suite and skips Steward; one that also changes src/content/ or
+# src/data/ runs the site suite and the Steward tests that read that folder.
 #
 # A skipped job is skipped by a job-level `if`, not by `on.paths`, so it shows
 # as skipped on the PR instead of vanishing. The only required check on
@@ -238,7 +255,7 @@ jobs:
         run: npm ci
 
       # `steward_tests` from the routing job is the full glob, the console glob, or
-      # `select`. For `select` this runs the graph script on the changed files; its
+      # `select`. For `select` this runs the selection script on the changed files; its
       # reasons print above the answer. The output `tests` is then the glob, a
       # space-separated list, or empty. Browser changes add the real-Chrome test,
       # which a Dockerfile change reaches through no import. A failure of the script
@@ -320,7 +337,7 @@ jobs:
 
       - name: No Steward test reaches this change
         if: steps.select.outputs.tests == ''
-        run: echo "No Steward test imports a file this change touches, so the typecheck above is the whole Steward check."
+        run: echo "No Steward test imports or reads a file this change touches, so the typecheck above is the whole Steward check."
 
   consultant:
     name: Audit consultant tests & tsc

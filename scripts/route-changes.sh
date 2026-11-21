@@ -31,9 +31,9 @@
 # only what master brought, and a site change would lose its preview.
 #
 # `steward_tests` is one of three things:
-#   1. `tests/**/*.test.ts`, the full suite, for a push and for any change that
-#      sets `steward` from outside `agents/steward/` (content, data, the
-#      lockfile, a workflow or routing script). `steward_wide` marks them.
+#   1. `tests/**/*.test.ts`, the full suite, for a push and for a change to
+#      `package.json`, the lockfile, `ci.yml` or a routing script.
+#      `steward_wide` marks them.
 #   2. `tests/console/**/*.test.ts`, when every Steward file changed sits under
 #      `src/console/` or `tests/console/`, assets included. The findings console
 #      is an island: nothing outside it imports it except the `steward console`
@@ -41,7 +41,9 @@
 #      its assets by path. This rule comes first because the graph would add the
 #      CLI tests that reach the console. `steward_nonconsole` marks the changes
 #      that are not console-only.
-#   3. `select`, for any other change confined to `agents/steward/`. The Steward
+#   3. `select`, for any other change under `agents/steward/`, and for a change
+#      under `src/content/` or `src/data/`, which `steward_site` marks: the
+#      script's `SITE_READERS` names the few tests that read those folders. The Steward
 #      job then runs `scripts/select-steward-tests.mjs` on `steward_changed`, the
 #      changed files written here, after its `npm ci`, because the script needs
 #      the installed `typescript`. This script stays free of node so that
@@ -59,9 +61,11 @@ site=false
 steward=false
 browser=false
 consultant=false
-# Set by any change that sets `steward` from outside `agents/steward/`, and by any
+# Set by the install, the workflow file and the routing scripts, and by any
 # event but a pull request; it keeps the full glob.
 steward_wide=false
+# Set by the site's content and data; it hands the choice to the script's list.
+steward_site=false
 # Set by any Steward file outside the console; it hands the choice to the graph.
 steward_nonconsole=false
 if [ "$event_name" != "pull_request" ]; then
@@ -108,7 +112,8 @@ else
       *)
         site=true
         case "$file" in
-          src/content/*|src/data/*|package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
+          src/content/*|src/data/*) steward=true; steward_site=true ;;
+          package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
         esac
         case "$file" in
           package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) browser=true ;;
@@ -125,7 +130,7 @@ else
 fi
 steward_tests='tests/**/*.test.ts'
 if [ "$steward" = true ] && [ "$steward_wide" = false ]; then
-  if [ "$steward_nonconsole" = true ]; then
+  if [ "$steward_nonconsole" = true ] || [ "$steward_site" = true ]; then
     steward_tests=select
   else
     steward_tests='tests/console/**/*.test.ts'

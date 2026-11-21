@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { realSitePath } from '../helpers/real-site.js';
 
 import {
   aggregate,
@@ -268,9 +268,7 @@ test('validateCommentary does not flag "now" or "baseline" as substrings of othe
 });
 
 test('every committed run-log commentary and metric description is timeless', async () => {
-  const jsonPath = fileURLToPath(
-    new URL('../../../../src/data/scorecard-runs.json', import.meta.url),
-  );
+  const jsonPath = realSitePath('src/data/scorecard-runs.json');
   const runs = JSON.parse(await fs.readFile(jsonPath, 'utf8')) as Array<{
     id: string;
     commentary: string;
@@ -369,7 +367,7 @@ test('parsePageCount returns undefined for a scope it cannot read, rather than g
 });
 
 test('the committed run-log\'s newest scope is parseable — the guard has a real baseline', async () => {
-  const jsonPath = fileURLToPath(new URL('../../../../src/data/scorecard-runs.json', import.meta.url));
+  const jsonPath = realSitePath('src/data/scorecard-runs.json');
   const runs = JSON.parse(await fs.readFile(jsonPath, 'utf8')) as Array<{ id: string; scope: string }>;
   const count = parsePageCount(runs[0].scope);
   assert.ok(
