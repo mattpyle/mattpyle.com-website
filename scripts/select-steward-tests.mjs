@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Prints the Steward test files a pull request must run: every test whose
-// imports reach a changed file, and the whole suite when the graph cannot say.
+// imports reach a changed file, every test that reads a changed folder of the
+// site's content or data, and the whole suite when the graph cannot say.
 //
 //   git diff --name-only origin/master | node scripts/select-steward-tests.mjs
 //   node scripts/select-steward-tests.mjs agents/steward/src/lib/findings.ts
@@ -46,6 +47,9 @@
 //      `tests/select-steward-tests.test.mjs` fails when a new one appears.
 //   3. Replay fixtures guard command sequences, which no import shows. A change
 //      under `src/workflows/` therefore adds `tests/workflows/replay.test.ts`.
+//   4. A test that reads the site's real `src/content/` or `src/data/`, which sit
+//      outside `agents/steward/`. `SITE_READERS` names them; a change under one of
+//      those folders selects its readers and nothing else.
 //
 // The full suite runs when the event is not a pull request, when a changed file
 // is one every test process loads or reads (see `FULL_*` below), or when a
@@ -75,9 +79,8 @@ const FULL_EXACT = new Set([
   'scripts/select-steward-tests.mjs',
   'scripts/vercel-ignore.sh',
 ]);
-// Folders every test process loads (helpers, fixtures) or reads as published
-// data (content, scorecard data).
-const FULL_PREFIXES = [`${STEWARD}/tests/helpers/`, `${STEWARD}/tests/fixtures/`, 'src/content/', 'src/data/'];
+// Folders every test process loads (helpers, fixtures).
+const FULL_PREFIXES = [`${STEWARD}/tests/helpers/`, `${STEWARD}/tests/fixtures/`];
 
 // Tests that read a directory of Steward source and so depend on all of it. Paths
 // are relative to `agents/steward/`; a prefix ending in `/` means every file in it.
@@ -86,6 +89,30 @@ export const DIRECTORY_READERS = {
   'tests/workflows/finding-fix-path.test.ts': ['src/'],
   'tests/lib/worker-role.test.ts': ['src/'],
   'tests/workflows/bounded-workers.test.ts': ['tests/'],
+};
+
+// Tests that read the site's real content or data, and the folders each reads
+// (repository-relative). A change under a folder selects the tests that name it.
+//
+// Three things keep the list honest:
+//   1. In a test process `SITE_DIR` is an empty directory unless the test sets
+//      `STEWARD_SITE_DIR` (`resolveSiteDir` in `agents/steward/src/lib/site-dir.ts`),
+//      so a test that reaches real content through Steward source fails.
+//   2. `agents/steward/tests/helpers/real-site.ts` hands out the real root and
+//      throws for a test that is not listed here, or a folder not listed for it.
+//   3. `tests/select-steward-tests.test.mjs` fails when a listed test does not
+//      import that helper, or another test spells a path to these folders.
+// Not seen: a test that builds the repository root itself and reads these
+// folders without the helper, source that reads them through `REPO_ROOT`, and a
+// read through git or a spawned program. The full suite on every push to
+// `master` is the backstop, and it catches a missing entry only when the
+// content change breaks the missed test.
+export const SITE_FOLDERS = ['src/content/', 'src/data/'];
+export const SITE_READERS = {
+  'tests/activities/cspell-published.test.ts': ['src/content/'],
+  'tests/activities/dictionary.test.ts': ['src/content/'],
+  'tests/lib/agent-audit-checks.test.ts': ['src/data/'],
+  'tests/lib/scorecard-aggregate.test.ts': ['src/data/'],
 };
 
 const posix = (p) => p.split(path.sep).join('/');
@@ -224,9 +251,32 @@ export function selectTests(input) {
   return { mode: 'list', files, reasons: [...result.reasons, `${CHROME} runs for a change that sets browser`] };
 }
 
-function selectByGraph({ root, changed, event = 'pull_request', ts }) {
+function selectByGraph(input) {
+  if ((input.event ?? 'pull_request') !== 'pull_request') {
+    return { mode: 'all', files: [], reasons: [`the event is ${input.event}, not a pull request`] };
+  }
+  const graph = selectByImports(input);
+  if (graph.mode === 'all') return graph;
+  // The site's content and data: the tests that read a changed folder.
+  const files = new Set(graph.files);
+  const reasons = graph.mode === 'none' ? [] : [...graph.reasons];
+  const paths = input.changed.map((p) => posix(p.trim())).filter(Boolean);
+  for (const folder of SITE_FOLDERS) {
+    const hit = paths.find((p) => p.startsWith(folder));
+    if (!hit) continue;
+    const readers = Object.keys(SITE_READERS).filter((test) => SITE_READERS[test].includes(folder));
+    for (const test of readers) {
+      files.add(test);
+      reasons.push(`${test} reads ${folder} (changed: ${hit})`);
+    }
+    if (readers.length === 0) reasons.push(`no test reads ${folder} (changed: ${hit})`);
+  }
+  if (files.size === 0) return { mode: 'none', files: [], reasons: [...graph.reasons, ...reasons] };
+  return { mode: 'list', files: [...files].sort(), reasons };
+}
+
+function selectByImports({ root, changed, ts }) {
   const all = (reason) => ({ mode: 'all', files: [], reasons: [reason] });
-  if (event !== 'pull_request') return all(`the event is ${event}, not a pull request`);
 
   const stewardDir = path.join(root, STEWARD);
   const paths = changed.map((p) => posix(p.trim())).filter(Boolean);

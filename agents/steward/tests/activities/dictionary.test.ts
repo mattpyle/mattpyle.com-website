@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { useRealSite } from '../helpers/real-site.js';
 
 // A byte-for-byte copy of the real `cspell.shared.yaml`, not a fixture: these
 // tests exist to prove the curated sections, the attribution comments and the
@@ -24,6 +25,8 @@ const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'steward-dictionary-'));
 const tmpConfig = path.join(tmpDir, 'cspell.shared.yaml');
 await fs.copyFile(REAL_CSPELL_CONFIG, tmpConfig);
 process.env.STEWARD_CSPELL_CONFIG = tmpConfig;
+// The last test spell-checks a real published post, so `SITE_DIR` is the checkout.
+useRealSite();
 
 const { CSPELL_CONFIG } = await import('../../src/config.js');
 const { addWord } = await import('../../src/lib/dictionary.js');

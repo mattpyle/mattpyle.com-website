@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { pathToFileURL } from 'node:url';
+import { realSitePath } from '../helpers/real-site.js';
 import { runFastAudit } from '../../src/lib/agent-audit/checks.js';
 import {
   DECISION_CLASSES,
@@ -366,7 +368,7 @@ test('the /steward page lists exactly the checks this tier runs, in order', asyn
   // `tsc --noEmit` fail with TS7016 on a module that is not its to type. The URL form resolves the
   // path the same way at runtime and leaves the module `any`, which is all this test needs — the
   // shape is what it is asserting.
-  const specifier = new URL('../../../../src/data/steward-audit-checks.mjs', import.meta.url).href;
+  const specifier = pathToFileURL(realSitePath('src/data/steward-audit-checks.mjs')).href;
   const { STEWARD_FAST_CHECKS } = (await import(specifier)) as {
     STEWARD_FAST_CHECKS: { id: string; title: string; category: string; severity: string }[];
   };

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { DIRECTORY_READERS, FULL_GLOB, selectTests } from '../scripts/select-steward-tests.mjs';
+import { DIRECTORY_READERS, FULL_GLOB, SITE_FOLDERS, SITE_READERS, selectTests } from '../scripts/select-steward-tests.mjs';
 
 /**
  * `scripts/select-steward-tests.mjs` on a small Steward tree built in a temp
@@ -104,12 +104,37 @@ test('the full suite runs for the shared files, the config files and a push', ()
     '.github/workflows/ci.yml',
     'scripts/route-changes.sh',
     'scripts/select-steward-tests.mjs',
-    'src/content/writing/post.md',
-    'src/data/scorecard-runs.json',
   ]) {
     assert.equal(pick(changed, `${S}/src/lib/lonely.ts`).mode, 'all', changed);
+    assert.equal(pick(changed, 'src/content/writing/post.md').mode, 'all', `${changed} with content`);
   }
   assert.equal(selectTests({ root, changed: [`${S}/src/lib/a.ts`], event: 'push', ts }).mode, 'all');
+});
+
+const readersOf = (folder) => Object.keys(SITE_READERS).filter((t) => SITE_READERS[t].includes(folder)).sort();
+
+test('a content or data change selects the tests that read that folder, and says why', () => {
+  const content = pick('src/content/changelog/a-fix.md');
+  assert.equal(content.mode, 'list');
+  assert.deepEqual(content.files, readersOf('src/content/'));
+  assert.ok(content.reasons.every((r) => r.includes('reads src/content/ (changed: src/content/changelog/a-fix.md)')), content.reasons.join('; '));
+  assert.equal(content.reasons.length, content.files.length);
+
+  const data = pick('src/data/scorecard-runs.json');
+  assert.deepEqual(data.files, readersOf('src/data/'));
+  assert.ok(readersOf('src/content/').length > 0 && readersOf('src/data/').length > 0);
+  assert.ok(!data.files.some((f) => readersOf('src/content/').includes(f) && !readersOf('src/data/').includes(f)));
+});
+
+test('content beside a Steward file adds its readers to what the graph selects', () => {
+  const both = files('src/content/writing/post.md', `${S}/src/lib/b.ts`);
+  assert.deepEqual(both, [...new Set([...files(`${S}/src/lib/b.ts`), ...readersOf('src/content/')])].sort());
+  // A page beside content adds nothing, and a module no test reaches leaves the readers alone.
+  assert.deepEqual(files('src/content/writing/post.md', 'src/pages/index.astro', `${S}/src/lib/lonely.ts`), readersOf('src/content/'));
+});
+
+test('a push runs everything, content included', () => {
+  assert.equal(selectTests({ root, changed: ['src/content/writing/post.md'], event: 'push', ts }).mode, 'all');
 });
 
 test('a script in a folder of TypeScript counts as a change to that folder', () => {
@@ -139,6 +164,7 @@ test('the command line prints the glob, a list or an empty line, and reads stand
   assert.equal(run('', `${S}/src/lib/a.ts`), 'tests/lib/a.test.ts tests/lib/b.test.ts tests/lib/steward-update.test.ts tests/workflows/flow.test.ts\n');
   assert.equal(run(`${S}/src/lib/lonely.ts\r\n${S}/README.md\r\n`), '\n');
   assert.equal(run('', '--event', 'push', `${S}/src/lib/a.ts`), `${FULL_GLOB}\n`);
+  assert.equal(run('src/data/scorecard-runs.json\n'), `${readersOf('src/data/').join(' ')}\n`);
   assert.equal(run('', '--browser', `${S}/Dockerfile`), 'tests/lib/agent-audit-deep-chrome.test.ts' + String.fromCharCode(10));
 });
 
@@ -174,4 +200,39 @@ test('the real tree: a test that reads a source directory is named in DIRECTORY_
   };
   walk(path.join(repo, S, 'tests'));
   assert.deepEqual(found.sort(), [...Object.keys(DIRECTORY_READERS), ...outsideSrc].sort());
+});
+
+test('the real tree: SITE_READERS names the tests that read the real src/content/ and src/data/', () => {
+  // A test reaches the site's real folders through tests/helpers/real-site.ts, which
+  // throws for a test that SITE_READERS does not name. So the list and the helper's
+  // importers must be the same set, and no test may spell its own path to the folders.
+  // When this fails, add the test to SITE_READERS in the script and take the path from
+  // the helper. Not seen here: a test that builds the repository root from pieces.
+  const stewardDir = path.join(repo, S);
+  const importers = [];
+  const spelled = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.ts')) {
+        const text = fs.readFileSync(full, 'utf8');
+        const rel = path.relative(stewardDir, full).split(path.sep).join('/');
+        if (/from '\.\.\/helpers\/real-site\.js'|import\('\.\.\/helpers\/real-site\.js'\)/.test(text)) importers.push(rel);
+        if (/(?:\.\.\/){3,}src\/(?:content|data)\b/.test(text)) spelled.push(rel);
+      }
+    }
+  };
+  walk(path.join(stewardDir, 'tests'));
+  assert.deepEqual(importers.sort(), Object.keys(SITE_READERS).sort());
+  assert.deepEqual(spelled, [], 'a path to the real folders goes through tests/helpers/real-site.ts');
+  for (const [test, folders] of Object.entries(SITE_READERS)) {
+    assert.ok(fs.existsSync(path.join(stewardDir, test)), `${test} is in SITE_READERS and does not exist`);
+    assert.ok(folders.length > 0 && folders.every((f) => SITE_FOLDERS.includes(f)), `${test} names a folder outside ${SITE_FOLDERS.join(', ')}`);
+  }
+});
+
+test('the real tree: a content change and a data change each run their readers', () => {
+  assert.deepEqual(real('src/content/changelog/agent-reading-budget.md'), ['tests/activities/cspell-published.test.ts', 'tests/activities/dictionary.test.ts']);
+  assert.deepEqual(real('src/data/scorecard-runs.json'), ['tests/lib/agent-audit-checks.test.ts', 'tests/lib/scorecard-aggregate.test.ts']);
 });

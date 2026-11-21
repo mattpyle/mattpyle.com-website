@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
+import { useRealSite } from '../helpers/real-site.js';
 
 /**
  * Zero-false-positive regression test (spec §8.2, build-log recommendation 6).
@@ -26,9 +26,9 @@ import matter from 'gray-matter';
 
 // Deliberately NOT redirected to tests/fixtures: this test is about the real
 // content tree. Each `node --test` file runs in its own process, so this does
-// not collide with cspell.test.ts's fixture redirection.
-const SITE_DIR = path.resolve(fileURLToPath(new URL('../../', import.meta.url)), '..', '..');
-process.env.STEWARD_SITE_DIR = SITE_DIR;
+// not collide with cspell.test.ts's fixture redirection. The helper checks that
+// this file is on the list of tests a content change runs.
+const SITE_DIR = useRealSite();
 
 const { runCspell } = await import('../../src/activities/cspell.js');
 
