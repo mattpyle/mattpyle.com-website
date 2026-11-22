@@ -30,7 +30,7 @@ import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
  * open run are queried, about 15, plus one dispatcher query for a site with a
  * run at `waiting-slot`. A `proposed` or `reopened` row with an open run is at
  * `waiting-verdict` by construction. A `resolved` or `rejected` row has no run
- * to ask unless one is still open, which the reconciler is about to close, and
+ * to ask unless one is still open, which ends itself at its next daily read, and
  * then the step says whether it will. At 20 refreshes a day that is about 9,000 actions a month, or
  * $0.45 (findings-dashboard design, 2026-10-31).
  *
@@ -156,8 +156,12 @@ export interface DriftContext {
 
 export const QUIET_NO_FIXER = 'no fixer for this site';
 
-/** What a `resolved` or `rejected` row says while its open run waits for the reconciler to cancel it. */
-export const QUIET_RUN_CLOSING = 'Run closing on the next reconcile.';
+/**
+ * What a `resolved` or `rejected` row says while its run is still parked at `waiting-fix`: the run
+ * reads its file once a day and ends `closed`. A run that took its verdict before settings were
+ * read at use never reads; if the line stays, cancel that run.
+ */
+export const QUIET_RUN_CLOSING = 'Its run ends itself at its next daily read.';
 
 /** What an approved row says while its run measures the checks at the verdict (STW-589). */
 export const HOLD_MEASURING = 'Steward is measuring its checks on production, before any fix.';
@@ -180,7 +184,7 @@ export function holdLineFor(input: { status: string; run: FindingRunView; refusa
   if (!run.open) return input.autoFix ? 'Waits for the hourly reconcile to start it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
   if (run.lastFixError) return `The last fix attempt failed: ${run.lastFixError}`;
   if (run.issueUrl) return 'Its fix issue ended without a merged PR; Fix retries it.';
-  return input.autoFix ? 'Waits for the fixer; the next hourly reconcile sends it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
+  return input.autoFix ? 'Waits for the fixer; its run reads its settings again within a day.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
 }
 
 /**
@@ -225,10 +229,12 @@ export function assessRow(
       else if (run.step === 'done') drift.push(`${status}, but the run is done`);
       break;
     case 'done':
-      // The reconciler cancels a run parked at `waiting-fix` behind a decided line (a `rejected` line's run at
-      // `waiting-verdict` takes the verdict instead and ends too). Any other open run is still drift.
+      // A run parked at `waiting-fix` behind a decided line ends itself at its daily read. A run still
+      // at `waiting-verdict` was never told: the file was edited by hand, and nothing carries that
+      // edit to the run, so it is drift. Any other open run is drift too.
       if (run.open) {
-        if (run.step === 'waiting-fix' || (status === 'rejected' && run.step === 'waiting-verdict')) quietReason = QUIET_RUN_CLOSING;
+        if (run.step === 'waiting-fix') quietReason = QUIET_RUN_CLOSING;
+        else if (run.step === 'waiting-verdict') drift.push(`${status}, but the run still waits for a verdict`);
         // The measurement's own commit resolves the row a moment before its run ends.
         else if (status === 'resolved' && run.step === 'measuring') quietReason = QUIET_RESOLVED_AT_VERDICT;
         else drift.push(`${status} with an open run`);

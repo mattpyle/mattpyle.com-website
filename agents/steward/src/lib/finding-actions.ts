@@ -79,7 +79,38 @@ export class SyncError extends Error {
   }
 }
 
+/** Whether a result came from a pass on the start-only rule; one recorded before it holds the earlier counts. */
+function startsOnly(sites: ReconcileFindingsResult): boolean {
+  return Object.values(sites).some((counts) => counts.running !== undefined);
+}
+
+/**
+ * The counts summed over every site. For a pass on the start-only rule the key
+ * lists are joined, each key as `site/key`; for a result recorded before it,
+ * the earlier counts, as they always were.
+ */
 export function totalCounts(sites: ReconcileFindingsResult): SiteReconcileCounts {
+  if (startsOnly(sites)) {
+    const total = {
+      started: 0,
+      running: 0,
+      skipped: 0,
+      unchanged: 0,
+      startedKeys: [] as string[],
+      blocked: [] as string[],
+      failed: [] as Array<{ key: string; error: string }>,
+    };
+    for (const [site, counts] of Object.entries(sites)) {
+      total.started += counts.started ?? 0;
+      total.running += counts.running ?? 0;
+      total.skipped += counts.skipped ?? 0;
+      total.unchanged += counts.unchanged ?? 0;
+      total.startedKeys.push(...(counts.startedKeys ?? []).map((key) => `${site}/${key}`));
+      total.blocked.push(...(counts.blocked ?? []).map((key) => `${site}/${key}`));
+      total.failed.push(...(counts.failed ?? []).map((f) => ({ key: `${site}/${f.key}`, error: f.error })));
+    }
+    return total;
+  }
   const total = { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 };
   for (const counts of Object.values(sites)) {
     total.started += counts.started ?? 0;
@@ -90,6 +121,20 @@ export function totalCounts(sites: ReconcileFindingsResult): SiteReconcileCounts
     total.unchanged += counts.unchanged ?? 0;
   }
   return total;
+}
+
+/** One site's counts in a line, for `steward finding sync`. */
+export function siteCountsLine(counts: SiteReconcileCounts): string {
+  if (counts.running === undefined) {
+    return `started ${counts.started}, signalled ${counts.signalled ?? 0}, fixed ${counts.fixed ?? 0}, restarted ${counts.restarted ?? 0}, closed ${counts.closed ?? 0}, unchanged ${counts.unchanged}`;
+  }
+  const keys = (list: string[]) => (list.length > 0 ? ` (${list.join(', ')})` : '');
+  const blocked = counts.blocked ?? [];
+  const failed = (counts.failed ?? []).map((f) => `${f.key}: ${f.error}`);
+  return (
+    `started ${counts.started}${keys(counts.startedKeys ?? [])}, running ${counts.running}, skipped ${counts.skipped ?? 0}, ` +
+    `blocked ${blocked.length}${keys(blocked)}, failed ${failed.length}${keys(failed)}, unchanged ${counts.unchanged}`
+  );
 }
 
 /**
@@ -149,7 +194,15 @@ export function syncSummary(result: SyncResult): string {
   if (!result.triggered) return 'A reconcile is already running, so none was started.';
   if (!result.total) return 'The reconcile is running and has not finished. Refresh in a minute.';
   const t = result.total;
-  return `Started ${t.started}, signalled ${t.signalled}, fixed ${t.fixed}, restarted ${t.restarted ?? 0}, closed ${t.closed ?? 0}, unchanged ${t.unchanged}.`;
+  if (t.running === undefined) {
+    return `Started ${t.started}, signalled ${t.signalled ?? 0}, fixed ${t.fixed ?? 0}, restarted ${t.restarted ?? 0}, closed ${t.closed ?? 0}, unchanged ${t.unchanged}.`;
+  }
+  const blocked = t.blocked ?? [];
+  const failed = t.failed ?? [];
+  const attention =
+    (blocked.length > 0 ? ` No workflow, and none could be started, for ${blocked.join(', ')}: its last run completed.` : '') +
+    (failed.length > 0 ? ` Not checked: ${failed.map((f) => `${f.key} (${f.error})`).join(', ')}.` : '');
+  return `Started ${t.started}, already running ${t.running}, skipped ${t.skipped ?? 0}, unchanged ${t.unchanged}.${attention}`;
 }
 
 // ---------------------------------------------------------------------------

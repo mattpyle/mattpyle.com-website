@@ -92,10 +92,10 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin` | On the settings-at-use path: a site that stops at the verdict, the `closed` ending, an attempt that fails before any issue and its one-day rest, a held run. The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin`, `finding-parked-with-issue-pre.bin`, `finding-parked-issue-reread.bin` | A run started with a verdict in its input. On the settings-at-use path: a site that stops at the verdict, the `closed` ending of a run with no issue, an attempt that fails before any issue and its one-day rest, a held run. The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. The merge-timeout, deploy-timeout and verify-failed endings. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin` | The checks path ending reopened. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
- * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin` | All three markers on current code: `listFixableFindings`, the restart start and signal, the close cancel. A reconcile that throws (`reportRunHealth` before the rethrow). |
+ * | `reconcileFindingsWorkflow` | `reconcile-parked-defect-pre.bin`, `reconcile-restart-approved-pre.bin`, `reconcile-close-parked-pre.bin`, `reconcile-all-rules-pre.bin`, `reconcile-start-only.bin` | A reconcile that throws (`reportRunHealth` before the rethrow). A start-only pass with a blocked or failed line: the commands are the same, and only the ping's shape differs. |
  * | `fixDispatchWorkflow` | `fix-dispatch-grant-after-release.bin` | The hourly sweep (`runningWorkflowIds`). A grant whose signal fails. A re-sent request for a held ticket. The idle close. The continue-as-new rollover is a test in `fix-dispatch.test.ts`, not a replay. |
  * | `recheckFindingsWorkflow` | `recheck-findings-pre-heartbeat.bin` | A recheck that throws (`reportRunHealth` before the rethrow). A site with no approved finding. |
  *
@@ -962,6 +962,101 @@ test('a lifecycle run that read its settings at use replays its park, its daily 
 });
 
 /**
+ * A lifecycle run that read its settings at use and parked at `waiting-fix`
+ * with an issue, before such a run read its file again: a file approval, the
+ * settings and the measurement, an attempt whose issue 101 got no PR, the park,
+ * a `fix` signal, a second attempt whose issue 102 got no PR, and the park
+ * again. 87 events. Between the first park and the `fix` signal the history
+ * holds no timer and no read. New code waits there behind a one-day timer and
+ * reads the file, so this replays only because the `parked-issue-reread` patch
+ * sends a history without the marker down the plain wait for `fix`.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at b262bd4, the
+ * worktree before its first edit) against the time-skipping server with
+ * mocked activities, so it holds no real finding text.
+ *
+ * Probes (2026-11-22), each reverted and re-run green:
+ *
+ * 1. A `wf.sleep('1 second')` injected before the plain wait for `fix` made
+ *    this replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Timer machine does not handle this
+ *    event: HistoryEvent(id: 67, ActivityTaskScheduled)
+ *    ```
+ *
+ * 2. Deleting the `wf.patched(PARKED_ISSUE_REREAD_PATCH)` guard, so every park
+ *    with an issue takes the daily read, left this replay green. The read's
+ *    timer is started at the park and cancelled by the `fix` signal in the next
+ *    workflow task, before any event of the history has to match it, and the
+ *    replayer lets such a timer go. So this fixture guards the plain wait, and
+ *    it does not prove the marker is needed for a park that ends with `fix`.
+ *    The marker stays: the read adds a command at the park, and determinism
+ *    rule 4 does not rest on what the replayer happens to let pass.
+ *    `finding-parked-issue-reread.bin` below is the fixture that fails without
+ *    the guard's other side.
+ */
+const findingParkedWithIssuePath = fileURLToPath(
+  new URL('../fixtures/histories/finding-parked-with-issue-pre.bin', import.meta.url),
+);
+
+test('a lifecycle run parked with an issue before the daily read replays its plain wait for fix', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingParkedWithIssuePath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/defect-parked-with-issue-fixture--steward',
+  );
+});
+
+/**
+ * A lifecycle run parked at `waiting-fix` with an issue on the code that reads
+ * its file there: the first attempt's issue got no PR, the park records the
+ * `parked-issue-reread` marker and a one-day timer, the read finds the file
+ * still approved, a second timer, a read that finds it `resolved`, and the run
+ * ends `closed`. 87 events.
+ *
+ * No history from before this change can hold these commands, so this is not a
+ * pre-change fixture: it was recorded from the changed code (the worktree on
+ * b262bd4 with this change applied) and guards the next change to the path.
+ * The steps are those of `finding-parked-with-issue-pre.bin` above, with one
+ * `env.sleep('25 hours')` and a time-skipping `result()` in place of the `fix`
+ * signal.
+ *
+ * Probes (2026-11-22), each reverted and re-run green:
+ *
+ * 1. Replacing `wf.patched(PARKED_ISSUE_REREAD_PATCH)` with `false` made this
+ *    replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ *    for change parked-issue-reread, but there is no corresponding change command!
+ *    ```
+ *
+ * 2. A `wf.sleep('1 second')` injected before the daily `readFindingSettings`
+ *    made this replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Timer machine does not handle this
+ *    event: HistoryEvent(id: 70, ActivityTaskScheduled)
+ *    ```
+ *
+ * The other 36 replays passed both times.
+ */
+const findingParkedIssueRereadPath = fileURLToPath(
+  new URL('../fixtures/histories/finding-parked-issue-reread.bin', import.meta.url),
+);
+
+test('a lifecycle run parked with an issue replays its daily read and its close', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingParkedIssueRereadPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/defect-parked-issue-reread-fixture--steward',
+  );
+});
+
+/**
  * A reconcile run as `reconcileFindingsWorkflow` ran it before the kind-blind
  * `fix` rule: one site, a parked approved defect on an `auto_fix` site (the
  * `readSiteAutoFix` read and the `fix` signal), a parked approved opportunity
@@ -1071,6 +1166,92 @@ test('a reconcile run recorded before the close rule replays without a cancel', 
     { workflowBundle: await workflowBundle() },
     history,
     'reconcile-fixture-5',
+  );
+});
+
+/**
+ * A reconcile run as `reconcileFindingsWorkflow` ran it with all three of the
+ * markers above, before the start-only rule: one site with `auto_fix` on, a new
+ * proposed defect (one `startFindingWorkflow`), an approved defect parked at
+ * `waiting-fix` with no issue (`readSiteAutoFix`, `listFixableFindings`, the
+ * `fix` signal), an approved opportunity with no run (the restart: a start and
+ * the `verdict` signal) and a `resolved` line whose run is parked (the cancel).
+ * 74 events. New code lists no workflow and sends no signal, so this replays
+ * only because the `reconcile-start-only` patch sends a history without the
+ * marker down the earlier body, kept whole in `reconcileBeforeStartOnly`.
+ *
+ * Recorded from the pre-change `reconcile-findings.ts` (origin/master at
+ * b262bd4, the worktree before its first edit) against the time-skipping
+ * server with mocked activities and real finding runs, so it holds no real
+ * finding text.
+ *
+ * Probe (2026-11-22): replacing `wf.patched(RECONCILE_START_ONLY_PATCH)` with
+ * `true`, so every run takes the start-only rule, made this replay and the
+ * three older reconcile fixtures fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'listOpenFindingWorkflows' does not match activity type of activity command
+ * 'startMissingFindingRuns'
+ * ```
+ *
+ * `reconcile-start-only.bin` failed too, for its unmatched marker. The other 32
+ * replays stayed green. The guard was restored and all 37 re-ran green.
+ */
+const reconcileAllRulesPath = fileURLToPath(
+  new URL('../fixtures/histories/reconcile-all-rules-pre.bin', import.meta.url),
+);
+
+test('a reconcile run recorded with every earlier rule replays down the earlier body', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileAllRulesPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'reconcile-fixture-6',
+  );
+});
+
+/**
+ * A reconcile run on the start-only rule: the `reconcile-start-only` marker,
+ * `listSites`, one `startMissingFindingRuns` for the site (two lines started,
+ * one running, one that needs no run) and the health ping. 25 events, and no
+ * list, query, signal or cancel among them.
+ *
+ * No history from before this change can hold these commands, so this is not a
+ * pre-change fixture: it was recorded from the changed code (the worktree on
+ * b262bd4 with this change applied) and guards the next change to the path.
+ * Mocked index and real finding runs, so it holds no real finding text.
+ *
+ * Probes (2026-11-22), each reverted and re-run green:
+ *
+ * 1. Replacing `wf.patched(RECONCILE_START_ONLY_PATCH)` with `false` made this
+ *    replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ *    for change reconcile-start-only, but there is no corresponding change command!
+ *    ```
+ *
+ * 2. A `wf.sleep('1 second')` injected before `startMissingFindingRuns` made
+ *    this replay alone fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Timer machine does not handle this
+ *    event: HistoryEvent(id: 13, ActivityTaskScheduled)
+ *    ```
+ *
+ * The other 36 replays passed both times.
+ */
+const reconcileStartOnlyPath = fileURLToPath(
+  new URL('../fixtures/histories/reconcile-start-only.bin', import.meta.url),
+);
+
+test('a reconcile run on the start-only rule replays its one activity per site', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(reconcileStartOnlyPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'reconcile-fixture-7',
   );
 });
 

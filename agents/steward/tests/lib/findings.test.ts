@@ -11,6 +11,7 @@ import {
   parseFindingsIndex,
   pendingActivityLine,
   planReconcile,
+  runNeeds,
   readsRunState,
   restartCandidates,
   type OpenFindingWorkflow,
@@ -383,4 +384,28 @@ test('the plan is identical when runs behind lines that read no state carry a nu
 test('only approved, rejected and resolved lines read a run state', () => {
   for (const status of ['approved', 'rejected', 'resolved']) assert.ok(readsRunState(status), status);
   for (const status of ['proposed', 'reopened', 'wontfix', '']) assert.ok(!readsRunState(status), status);
+});
+
+test('runNeeds: proposed and reopened need a run everywhere, approved only on a site that goes past the verdict', () => {
+  const index = parseFindingsIndex(
+    [
+      'Format: `key | status | kind | title | verdict reason`.',
+      'a-new | proposed | defect | T | ',
+      'a-back | reopened | defect | T | ',
+      'a-yes | approved | opportunity | T | Yes.',
+      'a-flight | fixing | defect | T | Yes.',
+      'a-done | resolved | defect | T | Yes.',
+      'a-no | rejected | defect | T | No.',
+      'a-hold | on-hold | defect | T | ',
+    ].join('\n'),
+  );
+  const goes = runNeeds(index, false);
+  assert.deepEqual(goes.starts.map((line) => line.key), ['a-new', 'a-back', 'a-yes']);
+  assert.deepEqual(goes.skipped, []);
+  assert.equal(goes.unchanged, 4, 'fixing, resolved, rejected and an unknown status need no start');
+
+  const stops = runNeeds(index, true);
+  assert.deepEqual(stops.starts.map((line) => line.key), ['a-new', 'a-back']);
+  assert.deepEqual(stops.skipped.map((line) => line.key), ['a-yes']);
+  assert.equal(stops.unchanged, 4);
 });

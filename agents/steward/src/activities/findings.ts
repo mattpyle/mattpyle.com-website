@@ -26,6 +26,8 @@ import {
   parsePrUrl,
   previewChecksComment,
   readsRunState,
+  runNeeds,
+  startsParked,
   type PreviewDraftAction,
   type PreviewEarlierResult,
   findingsIndexPath,
@@ -37,6 +39,7 @@ import {
   setIndexStatus,
   setIndexVerdict,
   siteConfigPath,
+  type FindingVerdict,
   type FindingVerdictSource,
   type FindingVerdictStatus,
   type FindingsIndexLine,
@@ -1384,6 +1387,11 @@ export interface StartFindingWorkflowInput {
   indexStatus?: 'proposed' | 'reopened' | 'approved';
   /** The index line's kind is not `defect`. Passed on to the workflow's input as it is. */
   waitsForPerson?: boolean;
+  /**
+   * The verdict already in the file, for an `approved` line: it rides in the
+   * new run's input, so the run does not wait for a verdict nobody will send.
+   */
+  verdict?: FindingVerdict;
 }
 
 /**
@@ -1422,7 +1430,8 @@ function productionOrigin(site: string): string | undefined {
  * new run starts from. An `approved` line on a site with no production origin returns
  * `already-started` without starting anything. A lifecycle run that closes
  * leaves its file `fixing`, `resolved` or `reopened`, never `approved`, so a
- * restart does not repeat hourly.
+ * restart does not repeat hourly. {@link startMissingFindingRuns} passes the
+ * line's verdict as `verdict`, and it rides in the new run's input.
  *
  * The line's status rides in the memo, so `steward finding list` names a
  * reopened finding without a query per workflow.
@@ -1430,7 +1439,11 @@ function productionOrigin(site: string): string | undefined {
 export async function startFindingWorkflow(
   input: StartFindingWorkflowInput,
 ): Promise<'started' | 'already-started'> {
-  const client = Context.current().client;
+  return startFindingRun(Context.current().client, input);
+}
+
+/** {@link startFindingWorkflow} on a given client: the one start, for the single activity and the batch. */
+async function startFindingRun(client: Client, input: StartFindingWorkflowInput): Promise<'started' | 'already-started'> {
   const { indexStatus = 'proposed', ...rest } = input;
   let args: FindingWorkflowInput = { ...rest };
   if (input.stopAfter === 'resolved') {
@@ -1458,6 +1471,154 @@ export async function startFindingWorkflow(
     if (err instanceof WorkflowExecutionAlreadyStartedError) return 'already-started';
     throw err;
   }
+}
+
+export interface StartMissingFindingRunsInput {
+  /** `owner/name` of the findings repository. */
+  repo: string;
+  site: string;
+}
+
+/** One site's pass of {@link startMissingFindingRuns}. Keys, not counts, wherever a person may need to act. */
+export interface StartMissingFindingRunsResult {
+  /** Lines that had no running workflow and got one. */
+  started: string[];
+  /** Lines whose workflow was already running. */
+  running: number;
+  /** `approved` lines on a site that stops at the verdict: no run by design, and no call was made. */
+  skipped: number;
+  /**
+   * Lines with no running workflow that the server would not start one for:
+   * a `proposed` line whose last run completed, which the reuse policy protects.
+   * A person decides: the line is stale, or the finding should be `reopened`.
+   */
+  blocked: string[];
+  /** Lines whose describe or start failed, with the reason. The pass went on to the next line. */
+  failed: Array<{ key: string; error: string }>;
+  /** Lines that need no workflow. */
+  unchanged: number;
+}
+
+/** What {@link startMissingFindingRuns} reads, so a test can stand in for GitHub. */
+export interface StartMissingFindingRunsDeps {
+  readIndex(repo: string, site: string): Promise<FindingsIndexLine[]>;
+  /** Whether a run of this site ends at its verdict, as {@link readFindingSettings} decides it. */
+  siteStops(repo: string, site: string): Promise<boolean>;
+  /** The client the lookups and starts go through; the worker's own when absent. */
+  client?: Client;
+}
+
+/**
+ * Whether a finding run of this site ends at its verdict: `stop_after: verdict`
+ * in its `config.yaml`, or no production origin on this worker. The same two
+ * tests {@link readFindingSettings} applies when a run reads its stop point.
+ */
+export async function siteStopsAtVerdict(repo: string, site: string): Promise<boolean> {
+  if (!productionOrigin(site)) return true;
+  const config = await readRepoFile(siteConfigPath(site), BRANCH, repo);
+  return config ? siteStopAfter(config.text) === 'verdict' : false;
+}
+
+/**
+ * The reconciler's one rule: every line of a site's index that should have a
+ * running workflow ({@link runNeeds}) has one after this call, or is named in
+ * the result.
+ *
+ * **By ID, not through Visibility.** Each line's workflow is looked up with
+ * `DescribeWorkflowExecution` and, when it is not running, started. Both are
+ * strongly consistent, where a list of running workflows is a search index that
+ * can lag. The start is the authority: a run another caller started between the
+ * describe and the start answers `already-started`, and the line counts as
+ * running. The describe is there so that the one case a start cannot tell apart
+ * is seen: the server gives the same answer for "running" and for "closed, and
+ * the reuse policy refuses a new one". Such a line is `blocked`.
+ *
+ * Neither call is a billed Action when the workflow is already running: a
+ * describe is a read, and a start that fails records none.
+ *
+ * **One line never fails the pass.** A describe or start that throws is
+ * recorded under `failed` with its reason and the next line is tried. Only the
+ * reads at the top (the index, the site's config) throw, before any start, so
+ * a retry of this activity repeats no start.
+ *
+ * **The policies** are {@link startFindingWorkflow}'s, by the line's status.
+ * An `approved` line's run gets the line's verdict in its input, source `file`:
+ * the verdict is already in the file, so the run writes nothing and goes
+ * straight to its settings read. Such a run stays open while its line says
+ * `approved` (it parks at `waiting-fix` and reads its settings daily, or
+ * carries the fix), so the next pass finds it running.
+ *
+ * The site's stop point is read only when the index has an `approved` line.
+ */
+export async function startMissingFindingRuns(
+  input: StartMissingFindingRunsInput,
+  deps: StartMissingFindingRunsDeps = { readIndex: readFindingsIndex, siteStops: siteStopsAtVerdict },
+): Promise<StartMissingFindingRunsResult> {
+  const client = deps.client ?? Context.current().client;
+  const index = await deps.readIndex(input.repo, input.site);
+  const stops = index.some((line) => line.status === 'approved') ? await deps.siteStops(input.repo, input.site) : false;
+  const needs = runNeeds(index, stops);
+  const result: StartMissingFindingRunsResult = {
+    started: [],
+    running: 0,
+    skipped: needs.skipped.length,
+    blocked: [],
+    failed: [],
+    unchanged: needs.unchanged,
+  };
+
+  const isRunning = async (id: string): Promise<boolean> => {
+    try {
+      return (await client.workflow.getHandle(id).describe()).status.name === 'RUNNING';
+    } catch (err) {
+      if (err instanceof WorkflowNotFoundError) return false;
+      throw err;
+    }
+  };
+
+  for (const line of needs.starts) {
+    const id = findingWorkflowId(input.site, line.key);
+    try {
+      if (await isRunning(id)) {
+        result.running++;
+        continue;
+      }
+      const approved = line.status === 'approved';
+      const outcome = await startFindingRun(client, {
+        site: input.site,
+        key: line.key,
+        repo: input.repo,
+        findingPath: findingPath(input.site, line.key),
+        indexPath: findingsIndexPath(input.site),
+        stopAfter: 'resolved',
+        indexStatus: approved ? 'approved' : line.status === 'reopened' ? 'reopened' : 'proposed',
+        ...(!approved && startsParked(line) ? { waitsForPerson: true } : {}),
+        ...(approved
+          ? { verdict: { status: 'approved' as const, reason: line.reason, source: 'file' as const, at: new Date().toISOString() } }
+          : {}),
+      });
+      if (outcome === 'started') result.started.push(line.key);
+      // Refused: another caller started it since the describe, or its last run is closed and protected.
+      else if (await isRunning(id)) result.running++;
+      else result.blocked.push(line.key);
+    } catch (err) {
+      result.failed.push({ key: line.key, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  log.info(
+    {
+      activity: 'startMissingFindingRuns',
+      site: input.site,
+      started: result.started,
+      running: result.running,
+      skipped: result.skipped,
+      blocked: result.blocked,
+      failed: result.failed,
+    },
+    'finding runs checked',
+  );
+  return result;
 }
 
 /**

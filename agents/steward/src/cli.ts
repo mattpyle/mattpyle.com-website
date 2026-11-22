@@ -78,6 +78,7 @@ import {
   requestFindingFix,
   startVerify,
   syncFindings,
+  siteCountsLine,
   syncSummary,
 } from './lib/finding-actions.js';
 import {
@@ -2225,7 +2226,7 @@ finding
       console.log('');
       if (result.workflowId) console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(result.workflowId)}`);
       for (const [site, counts] of Object.entries(result.sites ?? {})) {
-        console.log(`  ${site}: started ${counts.started}, signalled ${counts.signalled}, fixed ${counts.fixed}, restarted ${counts.restarted ?? 0}, closed ${counts.closed ?? 0}, unchanged ${counts.unchanged}`);
+        console.log(`  ${site}: ${siteCountsLine(counts)}`);
       }
       console.log(`  ${syncSummary(result)}`);
       console.log('');

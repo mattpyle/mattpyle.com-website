@@ -18,7 +18,7 @@ export type FindingVerdictStatus = 'approved' | 'rejected';
  * |---|---|---|
  * | `cli` | `steward finding approve|reject`, and the console's buttons | writes the file and the index line |
  * | `discord` | a sender outside Steward that took the verdict in Discord | writes the file and the index line |
- * | `file` | the reconciler, carrying a verdict already in the file (an edit in Obsidian, or a sender that wrote the file itself) | writes nothing |
+ * | `file` | a start that carries the verdict already in the file (the reconciler's start of an approved line with no run, and `steward finding fix`) | writes nothing |
  *
  * The file's `verdict_source` is the value sent, so the record says where a
  * decision came from. Any other value is a malformed verdict.
@@ -426,6 +426,41 @@ export function planReconcile(
     else plan.unchanged++;
   }
   return plan;
+}
+
+/** What {@link runNeeds} decides for one site's index. */
+export interface RunNeeds {
+  /** Lines that should have a running workflow: each gets a start by ID. */
+  starts: FindingsIndexLine[];
+  /** `approved` lines on a site that stops at the verdict: their runs ended there by design. */
+  skipped: FindingsIndexLine[];
+  /** Every other line: decided, `fixing`, or a status this rule does not know. */
+  unchanged: number;
+}
+
+/**
+ * Which lines of a site's index should have a running workflow: the
+ * reconciler's one rule since it stopped listing workflows.
+ *
+ * | Status | Should have a running workflow |
+ * |---|---|
+ * | `proposed`, `reopened` | on every site: it waits at the verdict gate |
+ * | `approved` | only on a site that goes past the verdict: the run parks at `waiting-fix` or carries the fix |
+ * | anything else | no. A `fixing` line with no run is a person's, and `steward finding verify` closes it |
+ *
+ * `siteStops` is the site's stop point as a finding run reads it: its
+ * `config.yaml` says `stop_after: verdict`, or the worker knows no production
+ * origin for it. A run there ends at its verdict, so an approved line has none
+ * by design, and a start would end at once and be started again on every pass.
+ */
+export function runNeeds(index: FindingsIndexLine[], siteStops: boolean): RunNeeds {
+  const needs: RunNeeds = { starts: [], skipped: [], unchanged: 0 };
+  for (const line of index) {
+    if (line.status === 'proposed' || line.status === 'reopened') needs.starts.push(line);
+    else if (line.status === 'approved') (siteStops ? needs.skipped : needs.starts).push(line);
+    else needs.unchanged++;
+  }
+  return needs;
 }
 
 // ---------------------------------------------------------------------------

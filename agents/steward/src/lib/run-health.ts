@@ -28,7 +28,7 @@
  * | `nightly-scorecard` | a good nightly scorecard run happened | the scheduled run, success and failure both |
  * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
  * | `run-shape` | a completed run's record is right (success) or wrong (fail); no period | a manual scorecard run, and any deep audit, healthy or bad |
- * | `findings-reconcile` | the hourly findings reconciler ran | `reconcileFindingsWorkflow`, success and failure both |
+ * | `findings-reconcile` | the hourly findings reconciler ran, and left no line without a workflow that it could not start or check | `reconcileFindingsWorkflow`, success and failure both |
  * | `findings-recheck:<site>` | the daily recheck of that site's approved findings ran | `recheckFindingsWorkflow`, success and failure both |
  *
  * The first two, `findings-reconcile` and each `findings-recheck:<site>` carry the dead-man's half: a worker that never runs sends

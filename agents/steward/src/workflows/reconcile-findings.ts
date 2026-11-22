@@ -15,12 +15,78 @@ import {
 import { fixSignal, verdictSignal } from './finding.js';
 
 /**
- * `reconcileFindingsWorkflow`: the findings store's one poller (findings-loop
+ * `reconcileFindingsWorkflow`: the findings store's safety net (findings-loop
  * design, decision 17). A Schedule runs it hourly on `steward-findings`, and
  * `steward finding sync` triggers the same Schedule on demand.
  *
- * For every site folder in the findings repository it reads `INDEX.md` and
- * compares it with the running finding workflows:
+ * **One rule** (STW-645, 2026-11-22). For every site folder in the findings
+ * repository, every line of `INDEX.md` that should have a running workflow has
+ * one after the pass, or is named in the result. `startMissingFindingRuns` does
+ * a site in one activity: it reads the index, looks each such line's workflow
+ * up by ID and starts the ones that are not running. `runNeeds` in
+ * `lib/findings.ts` is the rule:
+ *
+ * - a `proposed` or `reopened` line, on every site. Its run waits at
+ *   `waiting-verdict`;
+ * - an `approved` line, on a site that goes past the verdict. Its run gets the
+ *   line's verdict in its input (source `file`, so the run writes nothing),
+ *   reads its settings and measures, then attempts the fix or parks at
+ *   `waiting-fix`. Every such line gets a run, whatever `auto_fix` and the
+ *   fixer's gate say: the run reads both itself, at once and then daily;
+ * - an `approved` line on a site that stops at the verdict (`stop_after:
+ *   verdict`, or no production origin on the worker) is skipped: its run ended
+ *   there by design;
+ * - every other line needs no workflow.
+ *
+ * The workflow lists no workflow through Visibility and sends no query, signal
+ * or cancel. What the earlier rules did is done elsewhere, or not at all:
+ *
+ * | Earlier rule | Now |
+ * |---|---|
+ * | The `verdict` signal for a verdict found in a file | Retired. A verdict reaches a run by its `record-verdict` Update, and the run writes the file. A file edited by hand is not a verdict; `steward finding fix` still carries a file's approval to its run. |
+ * | The `fix` signal for an approved run parked with no issue | The run reads its settings daily and attempts when `auto_fix` is on and the gate accepts (`findingWorkflow`, "Settings are read when they are used"). |
+ * | The restart of an approved line with no run | The start rule, with the verdict in the input in place of a signal after the start. |
+ * | The cancel of a run parked behind a `resolved` or `rejected` line | The run reads its file daily and ends `closed`, with an issue or without. |
+ *
+ * A run that took its approved verdict before `settings-at-use` shipped
+ * (2026-11-21) reads nothing while it is parked: only a person's `fix`, or a
+ * cancel, moves it. `steward finding status <key>` shows such a run's step and
+ * its verdict's time.
+ *
+ * **The recheck and a parked run.** `recheckFindingsWorkflow` measures an
+ * approved finding only when no run is open on it. On a site that goes past
+ * the verdict every approved line now has an open run, so the daily recheck
+ * skips them all there. What resolves such a finding in its file is its own
+ * fix, or the inspector's verify; the parked run then reads `resolved` and
+ * closes itself.
+ *
+ * **Nothing silent.** The result names the keys: `startedKeys` had no running
+ * workflow until this pass, `blocked` have none and could not be given one (a
+ * `proposed` line whose last run completed), and `failed` are the lines whose
+ * lookup or start threw. One line never fails the pass. A pass with a `blocked`
+ * or `failed` line pings `findings-reconcile` as failed, with the keys in the
+ * summary; the same summary is the log line, and `steward finding sync` prints
+ * the counts and the keys.
+ *
+ * A second run straight after the first starts nothing, which is the property
+ * the design needs from a pass that runs every hour forever.
+ *
+ * **`reconcile-start-only`** (2026-11-22). The one rule replaces the list, the
+ * index reads, the flag and gate reads, the per-line starts, the signals and
+ * the cancels with one activity per site, so a run in flight when this shipped
+ * would replay a different command sequence. A history without the marker
+ * replays {@link reconcileBeforeStartOnly}, the earlier body kept whole. Only a
+ * run in flight at the deploy is such a history: every run comes from the
+ * Schedule, under its 15-minute execution timeout. `reconcile-all-rules-pre.bin`
+ * in `tests/workflows/replay.test.ts` is one, recorded from `b262bd4`, and
+ * `reconcile-start-only.bin` is a run with the marker; their docblocks hold the
+ * probes. The earlier body, its three markers and their fixtures can be deleted
+ * once no such run is open.
+ *
+ * The rest of this docblock describes the earlier body.
+ *
+ * For every site folder it read `INDEX.md` and compared it with the running
+ * finding workflows:
  *
  * - a `proposed` or `reopened` line with no open workflow gets one started,
  *   with `stopAfter: 'resolved'`, so it runs gate, fix and verify in one
@@ -147,11 +213,27 @@ export interface ReconcileFindingsInput {
   repo: string;
 }
 
+/**
+ * One site's counts. A pass on the start-only rule fills `started`, `running`,
+ * `skipped`, `unchanged` and the three key lists. A result recorded before it
+ * holds `signalled`, `fixed`, `restarted` and `closed` in their place.
+ */
 export interface SiteReconcileCounts {
   started: number;
-  signalled: number;
-  /** Parked approved findings sent the `fix` signal. */
-  fixed: number;
+  /** Lines whose workflow was already running. Absent from a result recorded before the start-only rule. */
+  running?: number;
+  /** Approved lines on a site that stops at the verdict. Absent from a result recorded before the start-only rule. */
+  skipped?: number;
+  /** The keys behind `started`. */
+  startedKeys?: string[];
+  /** Lines with no running workflow that could not be given one: a `proposed` line whose last run completed. */
+  blocked?: string[];
+  /** Lines whose lookup or start failed, with the reason. */
+  failed?: Array<{ key: string; error: string }>;
+  /** The earlier body: verdicts sent from the file. */
+  signalled?: number;
+  /** The earlier body: parked approved findings sent the `fix` signal. */
+  fixed?: number;
   /**
    * Approved findings with no open run that got a new run and the `verdict` signal.
    * Absent from a result recorded before the restart existed.
@@ -166,6 +248,9 @@ export interface SiteReconcileCounts {
 }
 
 export type ReconcileFindingsResult = Record<string, SiteReconcileCounts>;
+
+/** A reconcile run recorded without this marker replays the earlier body: the list, the signals and the cancels. */
+export const RECONCILE_START_ONLY_PATCH = 'reconcile-start-only';
 
 /** A reconcile run recorded without this marker keeps the defect-only `fix` rule. */
 export const RECONCILE_FIX_ANY_KIND_PATCH = 'reconcile-fix-any-kind';
@@ -184,6 +269,15 @@ const reading = wf.proxyActivities<
 >({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
+  retry: { maximumAttempts: 3, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'StoreLayout'] },
+});
+
+// One site's pass: an index read, then a describe and at most a start per line that
+// should have a run, about 175 calls on today's stores. Five minutes is room for a slow
+// server; a retry repeats no start, because a line that was started reads as running.
+const starting = wf.proxyActivities<Pick<typeof activities, 'startMissingFindingRuns'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '5 minutes',
   retry: { maximumAttempts: 3, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'StoreLayout'] },
 });
 
@@ -210,7 +304,65 @@ function isGone(err: unknown): boolean {
   return err instanceof Error && /not found|already completed|WorkflowNotFound/i.test(`${err.name} ${err.message}`);
 }
 
-async function reconcile(input: ReconcileFindingsInput): Promise<{ result: ReconcileFindingsResult; stats: ListingStats }> {
+/** The start-only pass: one activity per site, and nothing else. */
+async function startOnly(input: ReconcileFindingsInput): Promise<ReconcileFindingsResult> {
+  const sites = await reading.listSites(input.repo);
+  const result: ReconcileFindingsResult = {};
+  for (const site of sites) {
+    const pass = await starting.startMissingFindingRuns({ repo: input.repo, site });
+    result[site] = {
+      started: pass.started.length,
+      running: pass.running,
+      skipped: pass.skipped,
+      unchanged: pass.unchanged,
+      startedKeys: pass.started,
+      blocked: pass.blocked,
+      failed: pass.failed,
+    };
+  }
+  return result;
+}
+
+/** At most this many keys are named per list in a summary; the result holds them all. */
+const SUMMARY_KEYS = 10;
+
+function named(keys: string[]): string {
+  if (keys.length === 0) return '';
+  const shown = keys.slice(0, SUMMARY_KEYS).join(', ');
+  return ` (${shown}${keys.length > SUMMARY_KEYS ? `, and ${keys.length - SUMMARY_KEYS} more` : ''})`;
+}
+
+/** Whether a start-only pass left a line with no workflow, or could not tell. */
+export function reconcileNeedsAttention(result: ReconcileFindingsResult): boolean {
+  return Object.values(result).some((c) => (c.blocked?.length ?? 0) > 0 || (c.failed?.length ?? 0) > 0);
+}
+
+/** The one line a start-only pass leaves in the log and the health ping. */
+export function summariseStartOnly(result: ReconcileFindingsResult): string {
+  const sites = Object.entries(result);
+  if (sites.length === 0) return 'Findings reconcile: no site folders.';
+  const parts = sites.map(([site, c]) => {
+    const blocked = c.blocked ?? [];
+    const failed = c.failed ?? [];
+    return (
+      `${site} started ${c.started}${named(c.startedKeys ?? [])}, running ${c.running ?? 0}, skipped ${c.skipped ?? 0}, ` +
+      `blocked ${blocked.length}${named(blocked)}, failed ${failed.length}${named(failed.map((f) => `${f.key}: ${f.error}`))}, ` +
+      `unchanged ${c.unchanged}`
+    );
+  });
+  const attention = reconcileNeedsAttention(result)
+    ? ' A blocked line has no running workflow and its last run completed: reopen the finding or correct the line. ' +
+      'A failed line was not checked: the next pass tries it again.'
+    : '';
+  return `Findings reconcile: ${parts.join('; ')}.${attention}`;
+}
+
+/**
+ * The body before the start-only rule, kept whole for a run in flight when it
+ * shipped. Nothing here is changed: `reconcile-all-rules-pre.bin` and the three
+ * older fixtures replay through it.
+ */
+async function reconcileBeforeStartOnly(input: ReconcileFindingsInput): Promise<{ result: ReconcileFindingsResult; stats: ListingStats }> {
   const sites = await reading.listSites(input.repo);
   const listing = await reading.listOpenFindingWorkflows({ repo: input.repo, sites });
   const open = listedRuns(listing);
@@ -243,7 +395,7 @@ async function reconcile(input: ReconcileFindingsInput): Promise<{ result: Recon
       autoFix = await reading.readSiteAutoFix({ repo: input.repo, site });
     }
     const plan = planReconcile(site, index, open, autoFix, fixable, closeParked);
-    const counts: Required<SiteReconcileCounts> = { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: plan.unchanged };
+    const counts = { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: plan.unchanged };
 
     for (const line of plan.start) {
       const outcome = await reading.startFindingWorkflow({
@@ -345,35 +497,48 @@ function summarise(result: ReconcileFindingsResult, stats: ListingStats): string
   const sites = Object.entries(result);
   if (sites.length === 0) return `Findings reconcile: no site folders. ${cost}`;
   const parts = sites.map(
-    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled}, fixed ${c.fixed}, restarted ${c.restarted ?? 0}, closed ${c.closed ?? 0}, unchanged ${c.unchanged}`,
+    ([site, c]) => `${site} started ${c.started}, signalled ${c.signalled ?? 0}, fixed ${c.fixed ?? 0}, restarted ${c.restarted ?? 0}, closed ${c.closed ?? 0}, unchanged ${c.unchanged}`,
   );
   return `Findings reconcile: ${parts.join('; ')}. ${cost}`;
 }
 
 export async function reconcileFindingsWorkflow(input: ReconcileFindingsInput): Promise<ReconcileFindingsResult> {
-  let outcome: { result: ReconcileFindingsResult; stats: ListingStats };
+  const startsOnly = wf.patched(RECONCILE_START_ONLY_PATCH);
+  let result: ReconcileFindingsResult;
+  let summary: string;
   try {
-    outcome = await reconcile(input);
+    if (startsOnly) {
+      result = await startOnly(input);
+      summary = summariseStartOnly(result);
+    } else {
+      const outcome = await reconcileBeforeStartOnly(input);
+      result = outcome.result;
+      summary = summarise(outcome.result, outcome.stats);
+    }
   } catch (err) {
     await alerting.reportRunHealth({
       signal: 'findings-reconcile',
       shape: {
         ok: false,
-        summary:
-          `Findings reconcile against ${input.repo} failed: ${describeError(err)}. No finding ` +
-          'workflow was started or signalled after the failure point, so a verdict given in ' +
-          'Discord or Obsidian waits for the next good run. The workflow history in Temporal ' +
-          'Cloud names the failing step.',
+        summary: startsOnly
+          ? `Findings reconcile against ${input.repo} failed: ${describeError(err)}. The sites after the ` +
+            'failure point were not checked, so a finding filed since the last good run may have no ' +
+            'workflow until the next one. The workflow history in Temporal Cloud names the failing step.'
+          : `Findings reconcile against ${input.repo} failed: ${describeError(err)}. No finding ` +
+            'workflow was started or signalled after the failure point, so a verdict given in ' +
+            'Discord or Obsidian waits for the next good run. The workflow history in Temporal ' +
+            'Cloud names the failing step.',
       },
     });
     throw err;
   }
 
-  const { result, stats } = outcome;
-  const summary = summarise(result, stats);
-  // The one-line plan counts, not the result object: this runs hourly, and the
+  // The one-line counts, not the result object: this runs hourly, and the
   // result stays in the return value. A log line is not a command, so no marker.
   wf.log.info(summary);
-  await alerting.reportRunHealth({ signal: 'findings-reconcile', shape: { ok: true, summary } });
+  // A blocked or failed line is a finding with no workflow, or one nobody could check: the
+  // ping fails so the alerting service says so, and the run itself completes with the keys.
+  const ok = !(startsOnly && reconcileNeedsAttention(result));
+  await alerting.reportRunHealth({ signal: 'findings-reconcile', shape: { ok, summary } });
   return result;
 }
