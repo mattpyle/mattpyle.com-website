@@ -37,11 +37,13 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * approve|reject` and the console send source `cli`, and a sender outside
  * Steward that took the verdict in Discord sends source `discord`: for both,
  * this workflow writes the verdict into the finding file and its index line,
- * and the file's `verdict_source` is the source sent. The hourly reconciler
- * sends source `file` when the verdict is already in the file (an edit in
- * Obsidian, or a sender that wrote the file itself), and this workflow writes
- * nothing. Any other source is a malformed verdict: the Signal is dropped and
- * the Update refused.
+ * and the file's `verdict_source` is the source sent. Source `file` is a
+ * verdict already in the file, and this workflow writes nothing for it: it
+ * arrives in the input of a run the reconciler starts behind an `approved`
+ * line, and by Signal from `steward finding fix`. Until 2026-11-22 the hourly
+ * reconciler also sent it by Signal for a verdict it found in a file, and
+ * histories hold those signals. Any other source is a malformed verdict: the
+ * Signal is dropped and the Update refused.
  *
  * The `discord` source (STW-646, 2026-11-21) carries no marker. A history
  * recorded before it holds `cli` or `file`, and both decide the write as they
@@ -82,9 +84,17 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *    attempts when `auto_fix` is on and the gate accepts, so a flag set after
  *    the verdict, or a finding edited until it passes, needs no signal. It ends
  *    `closed` when the file says `resolved` or `rejected`. The close applies at
- *    `waiting-fix` only, and only to a run that holds no slot and has opened no
- *    issue (and so no PR). A run that has opened an issue reads nothing and
- *    waits for a person's `fix`: the re-read never opens a second issue.
+ *    `waiting-fix` only, to a run that holds no slot.
+ * 5. Parked with an issue (an Action that opened no PR, or a PR closed
+ *    unmerged), the run never attempts on its own: the re-read opens no second
+ *    issue, and a person's `fix` is the retry. Since 2026-11-22 it reads the
+ *    settings once a day all the same, only to end `closed` when the file says
+ *    `resolved` or `rejected`: the inspector's verify, or a person, decided the
+ *    finding, and nothing else would end the run. A stale open run would answer
+ *    a later verdict on a `reopened` line with its old one. The close leaves
+ *    the issue open and untouched and names it in the result's note; the
+ *    attempt's PR, if it had one, is already closed. A run in its merge wait
+ *    holds an open PR and is never closed by this.
  *
  * A read that fails is retried for up to 30 days ({@link settling}); the run
  * makes no attempt and does not end on a guess while it waits.
@@ -99,6 +109,27 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * marker. The fixtures are `finding-waits-for-person-parked-pre.bin` (the old
  * path) and `finding-settings-at-use.bin` (the new one) in
  * `tests/workflows/replay.test.ts`.
+ *
+ * {@link PARKED_ISSUE_REREAD_PATCH} (2026-11-22) is read each time a run with
+ * the settings marker parks at `waiting-fix` with an issue. The daily read adds
+ * a timer and an activity to that wait, so a park recorded before it has no
+ * marker and replays the plain wait for `fix`; the same run's next park, on
+ * this code, records it. A run without the settings marker never reaches the
+ * read. The fixtures are `finding-parked-with-issue-pre.bin` (a park before the
+ * marker, then a `fix`) and `finding-parked-issue-reread.bin` (the read and the
+ * close).
+ *
+ * **A verdict in the input** (STW-645, 2026-11-22). The reconciler starts a
+ * run for an `approved` line that has none, and the line's verdict rides in
+ * the input as `verdict`, source `file`. It is the run's first verdict: the
+ * wait at the gate is over before it starts, nothing is written (the file
+ * holds it), and the run goes on to its settings read. A later Update of the
+ * same status is answered with it, one of the other status is refused, and a
+ * later Signal is dropped, as for any first verdict. The field carries no
+ * marker: an input without it leaves the verdict null and the run waits, which
+ * is what every history recorded before the field did, and no command is
+ * added, removed or moved. Rollback: a run started with the field cannot
+ * replay on code that does not read it.
  *
  * **`stopAfter`** is where a run without that marker ends.
  *
@@ -142,8 +173,9 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * with `waitsForPerson` (a direction, which the gate never accepts) parks at
  * `waiting-fix` with `fixAttempts` 0 and waits for a `fix` signal. Any other
  * run attempts at the verdict and the gate in `openFixIssue` decides: a refusal
- * sets `lastFixError` and parks the run, and the hourly reconciler sends `fix`
- * once the finding passes (a run with no issue is the test, not no attempt).
+ * sets `lastFixError` and parks the run. Until 2026-11-22 the hourly
+ * reconciler sent such a run `fix` once the finding passed; since then only a
+ * person's `fix` moves a run on this earlier path.
  *
  * **`waitsForPerson` carries no marker** (2026-10-23). It is a new optional input
  * field read as `=== true`, so a history recorded without it takes the branch it
@@ -297,8 +329,9 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *    passed and the write failed: a fix would act on a problem just measured
  *    as gone. The run parks at `waiting-fix` with the reason in `lastFixError`.
  *    A `fix` signal that arrived during `measuring` is dropped then; a person's
- *    later `fix` starts the attempt, and the reconciler closes the run behind a
- *    `resolved` or `rejected` line.
+ *    later `fix` starts the attempt, and a run that reads its settings at use
+ *    ends `closed` at its daily read once the file says `resolved` or
+ *    `rejected`.
  *
  * It runs once per run, not once per fix attempt: a second attempt after a PR
  * closed unmerged does not measure again. Its activities run on
@@ -342,7 +375,13 @@ export const VERDICT_MEASURE_PATCH = 'verdict-measure';
  */
 export const SETTINGS_AT_USE_PATCH = 'settings-at-use';
 
-/** How often a run parked at `waiting-fix` with no issue reads its settings again. */
+/**
+ * The `patched` marker of the daily read of a run parked at `waiting-fix` with
+ * an issue (STW-645): it ends `closed` when its file is decided elsewhere.
+ */
+export const PARKED_ISSUE_REREAD_PATCH = 'parked-issue-reread';
+
+/** How often a run parked at `waiting-fix` reads its settings again. */
 const PARKED_REREAD = '1 day';
 
 /**
@@ -402,7 +441,18 @@ export interface FindingWorkflowInput {
    * by a history without the marker: a run with it asks the gate at the verdict.
    */
   waitsForPerson?: boolean;
+  /**
+   * The verdict already in the finding file, for a run started behind an
+   * `approved` line that had none (STW-645). The run takes it as its first
+   * verdict and does not wait at the gate. Read only when it is a well-formed
+   * verdict: an input without it waits for a Signal or an Update, as every
+   * history recorded before the field does.
+   */
+  verdict?: FindingVerdict;
 }
+
+/** What the lifecycle reads from the input: every field but the start verdict, which the gate has consumed. */
+type LifecycleInput = Required<Omit<FindingWorkflowInput, 'verdict'>>;
 
 /**
  * How a run ended. `verdict` and `rejected` end at the gate. The verify
@@ -790,7 +840,8 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     site: input.site,
     key: input.key,
     status: 'waiting',
-    verdict: null,
+    // A verdict in the input is the first one, set before any handler can take another.
+    verdict: input.verdict !== undefined && isFindingVerdict(input.verdict) ? input.verdict : null,
     commitSha: null,
     stopAfter: input.stopAfter,
     step: 'waiting-verdict',
@@ -954,7 +1005,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
       state.step = 'done';
       return base;
     }
-    const atUse: Required<FindingWorkflowInput> = {
+    const atUse: LifecycleInput = {
       ...input,
       stopAfter: 'resolved',
       origin: settings.origin,
@@ -979,7 +1030,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     return base;
   }
 
-  return await lifecycle(input as Required<FindingWorkflowInput>, state, base, fix, slot, retest, false);
+  return await lifecycle(input as LifecycleInput, state, base, fix, slot, retest, false);
 }
 
 /**
@@ -1054,7 +1105,7 @@ interface Slot {
  * conflicts.
  */
 async function lifecycle(
-  input: Required<FindingWorkflowInput>,
+  input: LifecycleInput,
   state: FindingState,
   base: Pick<FindingWorkflowResult, 'site' | 'key' | 'verdict' | 'commitSha'>,
   fix: { requested: boolean },
@@ -1293,10 +1344,16 @@ async function lifecycle(
    * A person's `fix` starts an attempt at once, and the gate in `openFixIssue`
    * decides, as it always did.
    *
-   * **A run that has opened an issue** waits for that `fix` and nothing else.
-   * Its issue, and the PR it may have, are a person's to retry or close, so the
-   * run reads nothing, attempts nothing on its own and is never closed here:
-   * no second issue is opened behind the first.
+   * **A run that has opened an issue** attempts nothing on its own: its issue
+   * is a person's to retry, so no second issue is opened behind the first. It
+   * waits for that `fix`, and with the {@link PARKED_ISSUE_REREAD_PATCH} marker
+   * it also reads the settings every {@link PARKED_REREAD}, for one purpose: to
+   * end `closed` when the file says `resolved` or `rejected`. The first read
+   * comes a day after the park. Closing touches nothing on GitHub: the issue
+   * stays open, with whatever a person wrote on it, and the result's note
+   * names it. A PR of that attempt is already closed, or the run would be in
+   * its merge wait and not here. A park recorded without the marker waits for
+   * `fix` alone.
    *
    * **A run with no issue** reads `readFindingSettings` and then again every
    * {@link PARKED_REREAD}. It holds no slot here: every exit from an attempt
@@ -1314,6 +1371,26 @@ async function lifecycle(
   const waitAtUse = async (held: boolean): Promise<FindingWorkflowResult | null> => {
     if (fix.requested) return null;
     if (state.issueUrl || slot.active) {
+      // Read at each park with an issue. A park recorded before the marker waits for `fix` alone.
+      if (state.issueUrl && !slot.active && wf.patched(PARKED_ISSUE_REREAD_PATCH)) {
+        for (;;) {
+          if (await wf.condition(() => fix.requested, PARKED_REREAD)) return null;
+          const settings = await settling.readFindingSettings({
+            repo: input.repo,
+            site: input.site,
+            key: input.key,
+            findingPath: input.findingPath,
+          });
+          if (settings.status === 'resolved' || settings.status === 'rejected') {
+            return end(
+              'closed',
+              `Closed while it waited for a fix: the finding file says ${settings.status}. ` +
+                `Its fix issue ${state.issueUrl} is left as it is.`,
+            );
+          }
+          if (fix.requested) return null;
+        }
+      }
       await wf.condition(() => fix.requested);
       return null;
     }
@@ -1386,7 +1463,7 @@ async function lifecycle(
       } else if (!recut) {
         const parked = input.waitsForPerson === true && fixAttempts === 0;
         if (parked) state.waitsForPerson = true;
-        // A finding held at the verdict waits for a person, or for the reconciler to close the run.
+        // A finding held at the verdict waits for a person.
         const held = heldAtVerdict && fixAttempts === 0;
         if (parked || held || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
       }

@@ -60,15 +60,19 @@ that's the property being dogfooded here, on a low-stakes, real target.
   `verifyFindingWorkflow` as a child and completes with `resolved`, `reopened` or `unverifiable`. A PR
   closed unmerged writes `status: approved` back with a note, and the run waits for the next `fix`.
   Either wait timing out ends the run with the finding still `fixing`. An hourly Schedule runs the
-  reconciler, which starts a `'resolved'` workflow for each `proposed` or `reopened` finding with
-  none open, signals the ones whose file already carries a verdict, and sends `fix` to an approved
-  finding of any kind parked at `waiting-fix` with no issue, on a site with `auto_fix: true`, whose
-  file the fixer's gate accepts. A `reopened` finding is back at the verdict gate. At its approved
+  reconciler, which has one rule: every index line that should have a running workflow has one
+  after the pass. That is a `proposed` or `reopened` line on every site, and an `approved` line on
+  a site that goes past the verdict, whose new run carries the file's verdict in its input. One
+  activity per site looks each workflow up by ID and starts the ones not running; it lists no
+  workflow and sends no signal. Its result names the lines it started, the ones it could not
+  start and the ones it could not check, and the last two fail the health ping. A verdict edited
+  into a file by hand is not carried to a run. A `reopened` finding is back at the verdict gate. At its approved
   verdict a run reads the site's `auto_fix` and the fixer's gate on the finding file as it stands:
   with both in favour it attempts the fix, and otherwise it parks at `waiting-fix` with the reason
   in `lastFixError`. Parked with no issue, it reads them again once a day, attempts when both are in
   favour, and ends `closed` when the file says `resolved` or `rejected`. A run that has opened an
-  issue waits for `steward finding fix`.
+  issue waits for `steward finding fix` and never attempts on its own; it reads the file once a
+  day all the same, and ends `closed` when the file is decided, leaving the issue as it is.
   Right after an approved verdict, at step `measuring`, the run runs the finding's checks on
   production once and writes the values into the finding file as a `## Measured at the verdict`
   section: the before. When every check passes, the same commit resolves the finding and the run

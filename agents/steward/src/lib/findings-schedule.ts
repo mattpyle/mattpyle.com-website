@@ -38,7 +38,7 @@ export const FINDINGS_SCHEDULE_MINUTE = 5;
 /**
  * Shorter than the firing interval, so a firing missed during a Cloud outage is
  * taken late within the same hour or dropped, and two are never outstanding at
- * once. Dropping one costs an hour's delay on a file-path verdict and nothing else.
+ * once. Dropping one costs a new finding an hour's wait for its workflow and nothing else.
  */
 export const FINDINGS_SCHEDULE_CATCHUP_WINDOW = '30 minutes';
 
@@ -78,7 +78,7 @@ export function buildFindingsScheduleOptions(params: FindingsScheduleParams): Sc
       overlap: ScheduleOverlapPolicy.SKIP,
       catchupWindow: FINDINGS_SCHEDULE_CATCHUP_WINDOW,
       // Off for the scorecard's reason: a reconciler that pauses itself on one
-      // GitHub error stops carrying every later verdict. The health ping is the alarm.
+      // GitHub error stops starting every later finding's workflow. The health ping is the alarm.
       pauseOnFailure: false,
     },
   };

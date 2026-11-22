@@ -68,6 +68,7 @@ export {
   listOpenFindingWorkflows,
   listFixableFindings,
   startFindingWorkflow,
+  startMissingFindingRuns,
   // The fix dispatcher (fix-dispatch-by-surface): a slot request and the
   // sweep through the worker's client, and the conflicting PR's close.
   requestFixSlot,

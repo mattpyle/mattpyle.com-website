@@ -9,6 +9,7 @@ import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { STOPS_AT_VERDICT, settings } from '../helpers/verdict-measure.js';
 import {
+  PARKED_ISSUE_REREAD_PATCH,
   SETTINGS_AT_USE_PATCH,
   findingStateQuery,
   findingWorkflow,
@@ -257,7 +258,7 @@ test('a parked run with no issue ends closed when its file is resolved or reject
   assert.ok(!called.includes('requestFixSlot') && !called.includes('openFixIssue'));
 });
 
-test('a parked run that has opened an issue is never closed or re-attempted by the re-read', async () => {
+test('a parked run that has opened an issue reads its file daily and is never re-attempted by the read', async () => {
   // The Action opened no PR: the run is back at waiting-fix with its issue.
   const scene: Scene = { now: settings({ autoFix: true }), prFail: 'NoPr' };
   const { count, out } = await run(scene, async (m, start) => {
@@ -265,20 +266,96 @@ test('a parked run that has opened an issue is never closed or re-attempted by t
     await handle.signal(verdictSignal, APPROVE);
     await until(handle, (s) => s.step === 'waiting-fix' && s.fixAttempts === 1 && Boolean(s.issueUrl), 'waiting-fix with an issue');
     const reads = m.count('readFindingSettings');
-    // The file is decided elsewhere, and the gate would still accept: neither moves this run.
-    scene.now = settings({ autoFix: true, status: 'resolved' });
-    await env.sleep('3 days');
+    const seen = await markers(handle);
+    // The file stays approved and the gate would accept: three daily reads, and no attempt.
+    await env.sleep('73 hours');
+    await until(handle, () => m.count('readFindingSettings') === reads + 3, 'three daily reads');
     const state = await handle.query(findingStateQuery);
     const status = (await handle.describe()).status.name;
     await handle.terminate('test over');
-    return { state, status, reads };
+    return { state, status, reads, seen };
   });
-  assert.equal(out.status, 'RUNNING', 'the run is not closed');
+  assert.equal(out.reads, 2, 'no read before the first day is over');
+  assert.ok(out.seen.some((marker) => marker.includes(PARKED_ISSUE_REREAD_PATCH)), 'the park records its marker');
+  assert.equal(out.status, 'RUNNING', 'an approved file does not close the run');
   assert.equal(out.state.step, 'waiting-fix');
   assert.equal(out.state.issueUrl, ISSUE);
+  assert.equal(out.state.fixAttempts, 1);
   assert.equal(count('openFixIssue'), 1, 'no second issue');
-  assert.equal(count('readFindingSettings'), out.reads, 'a run with an issue reads nothing while it waits');
-  assert.equal(out.reads, 2);
+});
+
+test('a parked run that has opened an issue ends closed when its file is decided elsewhere, and leaves the issue as it is', async () => {
+  const scene: Scene = { now: settings({ autoFix: true }), prFail: 'NoPr' };
+  const { called, count, out } = await run(scene, async (m, start) => {
+    const handle = await start('has-issue-closed');
+    await handle.signal(verdictSignal, APPROVE);
+    await until(handle, (s) => s.step === 'waiting-fix' && s.fixAttempts === 1 && Boolean(s.issueUrl), 'waiting-fix with an issue');
+    assert.equal(m.count('readFindingSettings'), 2);
+    // The inspector's verify resolved the finding in its file.
+    scene.now = settings({ autoFix: true, status: 'resolved', refusal: 'its status is resolved, not approved' });
+    return (await skipResult(handle)) as FindingWorkflowResult;
+  });
+  assert.equal(out.outcome, 'closed');
+  assert.equal(out.note, `Closed while it waited for a fix: the finding file says resolved. Its fix issue ${ISSUE} is left as it is.`);
+  assert.equal(out.fixAttempts, 1);
+  assert.equal(count('readFindingSettings'), 3, 'one read, a day after the park');
+  assert.equal(count('openFixIssue'), 1);
+  // Nothing on GitHub is touched by the close: the last activity is the read.
+  assert.equal(called[called.length - 1], 'readFindingSettings');
+});
+
+test('a person\'s fix still starts the next attempt of a run parked with an issue, at once', async () => {
+  const scene: Scene = { now: settings({ autoFix: true }), prFail: 'NoPr' };
+  const { count, out } = await run(scene, async (m, start) => {
+    const handle = await start('has-issue-fix');
+    await handle.signal(verdictSignal, APPROVE);
+    await until(handle, (s) => s.step === 'waiting-fix' && s.fixAttempts === 1 && Boolean(s.issueUrl), 'waiting-fix with an issue');
+    await handle.signal(fixSignal, FIX);
+    const state = await until(handle, (s) => s.step === 'waiting-fix' && s.fixAttempts === 2, 'the second attempt');
+    const reads = m.count('readFindingSettings');
+    await handle.terminate('test over');
+    return { state, reads };
+  });
+  assert.equal(count('openFixIssue'), 2);
+  assert.equal(out.reads, 2, 'the fix did not wait for a read');
+});
+
+test('a run started with a verdict in its input does not wait at the gate, writes nothing, and keeps it as the first verdict', async () => {
+  const scene: Scene = { now: settings({ autoFix: true }) };
+  const { called, out } = await run(scene, async (_m, start) => {
+    const handle = await start('input-verdict', input('input-verdict', { verdict: APPROVE }));
+    // No Signal and no Update: the input is the verdict.
+    const state = await until(handle, (s) => s.step === 'waiting-merge', 'the merge wait');
+    const again = await handle.executeUpdate(verdictUpdate, { args: [{ ...APPROVE, source: 'cli', reason: 'Again.' }] });
+    let refused = '';
+    try {
+      await handle.executeUpdate(verdictUpdate, { args: [{ ...REJECT, source: 'cli' }] });
+    } catch (err) {
+      refused = String(((err as Error).cause as Error | undefined)?.message ?? err);
+    }
+    await handle.terminate('test over');
+    return { state, again, refused };
+  });
+  assert.equal(out.state.verdict?.source, 'file');
+  assert.equal(out.state.verdict?.reason, 'In the file.');
+  assert.equal(out.state.commitSha, null);
+  assert.ok(!called.includes('writeFindingVerdict'), 'the verdict is already in the file');
+  assert.equal(out.again.first, false, 'a later verdict of the same status is answered with the first');
+  assert.equal(out.again.verdict.reason, 'In the file.');
+  assert.match(out.refused, /A verdict is already recorded: approved \(source file\)/);
+});
+
+test('a malformed verdict in the input is not a verdict: the run waits at the gate', async () => {
+  const scene: Scene = { now: settings() };
+  const { out } = await run(scene, async (_m, start) => {
+    const bad = { status: 'approved', reason: 'No source.', at: '2026-11-22T09:00:00.000Z' } as unknown as FindingVerdict;
+    const handle = await start('input-bad', input('input-bad', { verdict: bad }));
+    const state = await until(handle, (s) => s.step === 'waiting-verdict', 'the gate');
+    await handle.terminate('test over');
+    return state;
+  });
+  assert.equal(out.verdict, null);
+  assert.equal(out.status, 'waiting');
 });
 
 test('a run in its merge wait holds a slot and a PR: a decided file does not close it', async () => {

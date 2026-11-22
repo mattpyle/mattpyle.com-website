@@ -9,6 +9,7 @@ import {
   SyncError,
   fixOffered,
   syncFindings,
+  siteCountsLine,
   syncSummary,
   totalCounts,
   verifyOffered,
@@ -102,6 +103,31 @@ test('a successful sync leaves no timer behind: its process exits within seconds
   const elapsed = Date.now() - started;
   assert.deepEqual(JSON.parse(stdout), { triggered: true, total: { started: 1, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 2 } });
   assert.ok(elapsed < 20_000, `the process took ${elapsed} ms to exit; a timer is holding it`);
+});
+
+test('a pass on the start-only rule sums its counts, joins its keys by site, and says what has no workflow', () => {
+  const sites = {
+    'mattpyle-com': { started: 1, running: 54, skipped: 0, unchanged: 120, startedKeys: ['new-one'], blocked: ['stale-one'], failed: [] },
+    'temporal-io': { started: 0, running: 119, skipped: 19, unchanged: 11, startedKeys: [], blocked: [], failed: [{ key: 'odd-one', error: 'boom' }] },
+  };
+  const total = totalCounts(sites);
+  assert.deepEqual(total, {
+    started: 1,
+    running: 173,
+    skipped: 19,
+    unchanged: 131,
+    startedKeys: ['mattpyle-com/new-one'],
+    blocked: ['mattpyle-com/stale-one'],
+    failed: [{ key: 'temporal-io/odd-one', error: 'boom' }],
+  });
+  assert.equal(
+    syncSummary({ triggered: true, workflowId: 'w', sites, total }),
+    'Started 1, already running 173, skipped 19, unchanged 131. No workflow, and none could be started, for mattpyle-com/stale-one: its last run completed. Not checked: temporal-io/odd-one (boom).',
+  );
+  assert.equal(siteCountsLine(sites['mattpyle-com']), 'started 1 (new-one), running 54, skipped 0, blocked 1 (stale-one), failed 0, unchanged 120');
+  assert.equal(siteCountsLine({ started: 1, signalled: 2, fixed: 0, unchanged: 7 }), 'started 1, signalled 2, fixed 0, restarted 0, closed 0, unchanged 7');
+  const quiet = { 'site-a': { started: 0, running: 2, skipped: 0, unchanged: 1, startedKeys: [], blocked: [], failed: [] } };
+  assert.equal(syncSummary({ triggered: true, workflowId: 'w', sites: quiet, total: totalCounts(quiet) }), 'Started 0, already running 2, skipped 0, unchanged 1.');
 });
 
 test('totalCounts sums every site', () => {

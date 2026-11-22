@@ -110,7 +110,7 @@ test('an approved row at waiting-fix says what holds it: the gate, else the last
   const rows = await load(true);
   assert.equal(rows.refused.holdLine, "The fixer's gate refuses it: it names more than one page (/about, /contact), so its fix is not one change.");
   assert.equal(rows.failed.holdLine, 'The last fix attempt failed: GitHub rejected the credential (403).');
-  assert.equal(rows.waiting.holdLine, 'Waits for the fixer; the next hourly reconcile sends it.');
+  assert.equal(rows.waiting.holdLine, 'Waits for the fixer; its run reads its settings again within a day.');
   assert.equal(rows.issued.holdLine, 'Its fix issue ended without a merged PR; Fix retries it.');
 });
 
@@ -149,7 +149,7 @@ test('holdLineFor says nothing for a row that is not approved, or whose run is p
   assert.equal(holdLineFor({ status: 'proposed', run: { ...run, open: false }, refusal: null, autoFix: true }), null);
 });
 
-test('a resolved or rejected row whose run is still open says the run is closing, not drift, when the reconciler will cancel it', async () => {
+test('a resolved or rejected row whose run is parked says the run ends itself; one whose run still waits for a verdict is drift', async () => {
   const closed: Record<string, [string, string]> = {
     'done-parked': ['resolved', 'waiting-fix'],
     'no-go-parked': ['rejected', 'waiting-fix'],
@@ -171,12 +171,15 @@ test('a resolved or rejected row whose run is still open says the run is closing
   const loader = createFindingsLoader({ repo: REPO, ghJson: fakeGitHub(store), client: fakeClient(states), now: () => new Date('2026-11-07T12:00:00Z') });
   const rows = Object.fromEntries((await loader.load()).sites[0].rows.map((row) => [row.key, row]));
 
-  for (const key of ['done-parked', 'no-go-parked', 'no-go-verdict']) {
+  for (const key of ['done-parked', 'no-go-parked']) {
     assert.deepEqual(rows[key].drift, [], `${key} is not drift`);
-    assert.equal(rows[key].quietReason, 'Run closing on the next reconcile.');
-    assert.equal(rows[key].holdLine, 'Run closing on the next reconcile.', 'the page renders the hold line');
+    assert.equal(rows[key].quietReason, 'Its run ends itself at its next daily read.');
+    assert.equal(rows[key].holdLine, 'Its run ends itself at its next daily read.', 'the page renders the hold line');
   }
-  assert.deepEqual(rows['done-fixing'].drift, ['resolved with an open run'], 'a run the reconciler will not close is still drift');
+  // A file rejected by hand: nothing carries the edit to the run, so the row says so.
+  assert.deepEqual(rows['no-go-verdict'].drift, ['rejected, but the run still waits for a verdict']);
+  assert.equal(rows['no-go-verdict'].quietReason, null);
+  assert.deepEqual(rows['done-fixing'].drift, ['resolved with an open run'], 'a run that will not end itself is still drift');
   assert.equal(rows['done-fixing'].quietReason, null);
   assert.deepEqual(rows['done-idle'].drift, []);
   assert.equal(rows['done-idle'].holdLine, null);
