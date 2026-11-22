@@ -255,7 +255,7 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
       claim in two places, and a change to either is a change to both. The header also has
       middleware.ts to keep in sync (CLAUDE.md), which this element does not.
     */}
-    <link rel="describedby" type="text/markdown" href={new URL('/llms.txt', Astro.site)} />
+    <link rel="describedby" href={new URL('/llms.txt', Astro.site)} />
     {/*
       Agentic Resource Discovery (agenticresourcediscovery.org, spec v0.91) §5.1: a consumer
       resolving this domain's entries MUST fetch /.well-known/ard.json and MUST honour a

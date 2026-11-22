@@ -100,7 +100,7 @@ console.log(
  * same pass: it is the relation the two recommendations share, it predates this check, and a
  * regression in it would otherwise be invisible until an agent went looking for a markdown copy.
  */
-const describedby = `<link rel="describedby" type="text/markdown" href="${SITE_ORIGIN}/llms.txt">`;
+const describedby = `<link rel="describedby" href="${SITE_ORIGIN}/llms.txt">`;
 const failures = [];
 let withSibling = 0;
 
