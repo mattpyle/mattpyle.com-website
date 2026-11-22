@@ -13,6 +13,7 @@ mattpyle.com is a personal site and a testbed for emerging web standards (WebMCP
 - A new private path goes into `.gitignore` and the `private-paths` job of `.github/workflows/security-scan.yml` in one change.
 - PR bodies and commit messages are public and short: what changed, why in the code's own terms, the check evidence. No references to private files, no process narrative.
 - A session that needs to build another commit gets its own git worktree with its own `npm ci`. Never junction or symlink `node_modules` from one checkout into another, and never `git worktree remove --force` a tree that holds one: the removal follows the link and deletes the other checkout's files, gitignored ones included.
+- The findings loop is not bypassed. A fix that needs changing is steered on its own pull request, by a comment that tags `@claude`; do not close it and open a replacement by hand, and do not send a signal by hand to clear a backlog. When the loop cannot do what is needed, change the loop.
 - Temporal code: use the Temporal skills and the temporal-docs MCP. `agents/steward/CLAUDE.md` holds Steward's own determinism rules; where it disagrees with the docs, say so and check which is current.
 
 ## Repo map
