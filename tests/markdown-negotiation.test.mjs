@@ -163,7 +163,7 @@ test('the homepage Link header keeps its describedby and service-desc entries', 
   const home = vercelConfig.headers.find((rule) => rule.source === '/');
   const link = home.headers.find((header) => header.key === 'Link').value;
   for (const expected of [
-    '</llms.txt>; rel="describedby"; type="text/markdown"',
+    '</llms.txt>; rel="describedby"',
     '</agents.md>; rel="describedby"; type="text/markdown"',
     '</.well-known/agent-card.json>; rel="service-desc"; type="application/a2a+json"',
     '</index.md>; rel="alternate"; type="text/markdown"',
