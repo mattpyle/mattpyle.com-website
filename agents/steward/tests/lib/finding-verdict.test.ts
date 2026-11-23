@@ -125,14 +125,18 @@ test('no open run: nothing is sent', async () => {
   const closed = fakeClient(async () => assert.fail('no Update goes to a closed run'), 'COMPLETED');
   await assert.rejects(
     sendFindingVerdict(REQUEST, { client: closed.client }),
-    (err: unknown) => err instanceof FindingVerdictError && err.kind === 'no-run' && /^No open workflow /.test(err.message),
+    (err: unknown) =>
+      err instanceof FindingVerdictError &&
+      err.kind === 'no-run' &&
+      /^No open workflow /.test(err.message) &&
+      /Argus starts a finding's workflow/.test(err.message),
   );
   assert.deepEqual(closed.sent, []);
   // The run closed between the look and the Update.
   const message = await refused(async () => {
     throw new WorkflowNotFoundError('gone', findingWorkflowId(SITE, KEY), undefined);
   }, 'no-run');
-  assert.match(message, /^No open workflow /);
+  assert.match(message, /^No open workflow .*Argus starts a finding's workflow when it files the finding/);
 });
 
 test("the validator's refusal is the error, and it says nothing was recorded", async () => {

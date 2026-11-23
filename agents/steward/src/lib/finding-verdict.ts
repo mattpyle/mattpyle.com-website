@@ -14,7 +14,8 @@ import { VERDICT_WRITE_FAILED, verdictUpdate, type VerdictRecorded } from '../wo
  * The verdict goes as the `record-verdict` Update (STW-636). The run's
  * validator refuses a verdict it cannot take, and the Update returns after the
  * run has written the verdict, so one call carries the answer and nothing here
- * polls. The `verdict` Signal stays for the reconciler and `steward finding fix`.
+ * polls. The `verdict` Signal stays for `steward finding fix` and for the
+ * histories that hold it.
  *
  * The source stays `cli` for both callers: `findingWorkflow` writes the file
  * for `cli` and `discord` only, and a `console` source would need a workflow
@@ -111,6 +112,11 @@ export function buildFindingVerdict(
   return { status, reason, source: 'cli', at: at.toISOString() };
 }
 
+/** What a `no-run` refusal tells the sender: who starts a finding's run, and where to look. */
+const NO_RUN_NEXT =
+  " Argus starts a finding's workflow when it files the finding, and starts a missing one when it sends a verdict. " +
+  '`steward finding list` shows the open ones.';
+
 /**
  * The open workflow for one finding, or a refusal. A closed or missing
  * workflow is the same answer to the operator: there is nothing to send a
@@ -126,7 +132,7 @@ async function openFindingHandle(client: VerdictClient, site: string, key: strin
     if (!(err instanceof WorkflowNotFoundError)) throw err;
   }
   if (!running) {
-    throw new FindingVerdictError('no-run', `No open workflow ${id}. \`steward finding list\` shows the open ones.`);
+    throw new FindingVerdictError('no-run', `No open workflow ${id}.${NO_RUN_NEXT}`);
   }
   return handle;
 }
@@ -174,7 +180,7 @@ export async function sendFindingVerdict(
   // the validator's, or the SDK's for a run with no handler.
   const refusal = (err: unknown): unknown => {
     if (err instanceof WorkflowNotFoundError) {
-      return new FindingVerdictError('no-run', `No open workflow ${handle.workflowId}. \`steward finding list\` shows the open ones.`);
+      return new FindingVerdictError('no-run', `No open workflow ${handle.workflowId}.${NO_RUN_NEXT}`);
     }
     if (!(err instanceof WorkflowUpdateFailedError)) return err;
     const { message, type } = updateFailure(err);

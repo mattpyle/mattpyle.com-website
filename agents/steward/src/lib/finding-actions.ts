@@ -1,9 +1,7 @@
 import type { Client } from '@temporalio/client';
-import { ScheduleOverlapPolicy } from '@temporalio/client';
 import {
   ARGUS_REPO,
   FINDINGS_DEFAULT_SITE,
-  FINDINGS_SCHEDULE_ID,
   NAMESPACE,
   PROD_ORIGIN,
   QUEUE_FINDINGS,
@@ -23,12 +21,11 @@ import {
   verifyRefusal,
   verifyWorkflowId,
 } from './findings.js';
-import type { ReconcileFindingsResult, SiteReconcileCounts } from '../workflows/reconcile-findings.js';
 import { verifyFindingWorkflow, type VerifyFindingResult } from '../workflows/verify-finding.js';
 
 /**
- * The three verbs the console runs from its page beside the CLI: `steward finding
- * sync`, `fix` and `verify`. Each verb and its button call the functions here, so
+ * The two verbs the console runs from its page beside the CLI: `steward finding
+ * fix` and `verify`. Each verb and its button call the functions here, so
  * the two cannot drift. The pattern is `finding-verdict.ts`: nothing here prints
  * or exits, and a refusal is an error whose message the operator can act on.
  *
@@ -37,174 +34,7 @@ import { verifyFindingWorkflow, type VerifyFindingResult } from '../workflows/ve
  * offers what the CLI would refuse.
  */
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 const runLink = (workflowId: string) => `${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(workflowId)}`;
-
-// ---------------------------------------------------------------------------
-// sync
-// ---------------------------------------------------------------------------
-
-/** The slice of the Schedule handle `sync` uses. `client.schedule.getHandle(...)` satisfies it. */
-export interface SyncScheduleHandle {
-  describe(): Promise<{
-    info: {
-      numActionsTaken: number;
-      numActionsSkippedOverlap: number;
-      recentActions: { action: { type: string; workflow?: { workflowId: string; firstExecutionRunId: string } } }[];
-    };
-  }>;
-  trigger(overlap?: ScheduleOverlapPolicy): Promise<void>;
-}
-
-export interface SyncClient {
-  schedule: { getHandle(scheduleId: string): SyncScheduleHandle };
-  workflow: { getHandle(workflowId: string, runId?: string): { result(): Promise<unknown> } };
-}
-
-export interface SyncResult {
-  /** False when a reconcile was already running, so the trigger started none. */
-  triggered: boolean;
-  /** The reconcile run's workflow id; null when none was started. */
-  workflowId: string | null;
-  /** The plan counts per site; null when the run did not finish in the wait. */
-  sites: ReconcileFindingsResult | null;
-  /** The counts summed over every site. */
-  total: SiteReconcileCounts | null;
-}
-
-export class SyncError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SyncError';
-  }
-}
-
-/** Whether a result came from a pass on the start-only rule; one recorded before it holds the earlier counts. */
-function startsOnly(sites: ReconcileFindingsResult): boolean {
-  return Object.values(sites).some((counts) => counts.running !== undefined);
-}
-
-/**
- * The counts summed over every site. For a pass on the start-only rule the key
- * lists are joined, each key as `site/key`; for a result recorded before it,
- * the earlier counts, as they always were.
- */
-export function totalCounts(sites: ReconcileFindingsResult): SiteReconcileCounts {
-  if (startsOnly(sites)) {
-    const total = {
-      started: 0,
-      running: 0,
-      skipped: 0,
-      unchanged: 0,
-      startedKeys: [] as string[],
-      blocked: [] as string[],
-      failed: [] as Array<{ key: string; error: string }>,
-    };
-    for (const [site, counts] of Object.entries(sites)) {
-      total.started += counts.started ?? 0;
-      total.running += counts.running ?? 0;
-      total.skipped += counts.skipped ?? 0;
-      total.unchanged += counts.unchanged ?? 0;
-      total.startedKeys.push(...(counts.startedKeys ?? []).map((key) => `${site}/${key}`));
-      total.blocked.push(...(counts.blocked ?? []).map((key) => `${site}/${key}`));
-      total.failed.push(...(counts.failed ?? []).map((f) => ({ key: `${site}/${f.key}`, error: f.error })));
-    }
-    return total;
-  }
-  const total = { started: 0, signalled: 0, fixed: 0, restarted: 0, closed: 0, unchanged: 0 };
-  for (const counts of Object.values(sites)) {
-    total.started += counts.started ?? 0;
-    total.signalled += counts.signalled ?? 0;
-    total.fixed += counts.fixed ?? 0;
-    total.restarted += counts.restarted ?? 0;
-    total.closed += counts.closed ?? 0;
-    total.unchanged += counts.unchanged ?? 0;
-  }
-  return total;
-}
-
-/** One site's counts in a line, for `steward finding sync`. */
-export function siteCountsLine(counts: SiteReconcileCounts): string {
-  if (counts.running === undefined) {
-    return `started ${counts.started}, signalled ${counts.signalled ?? 0}, fixed ${counts.fixed ?? 0}, restarted ${counts.restarted ?? 0}, closed ${counts.closed ?? 0}, unchanged ${counts.unchanged}`;
-  }
-  const keys = (list: string[]) => (list.length > 0 ? ` (${list.join(', ')})` : '');
-  const blocked = counts.blocked ?? [];
-  const failed = (counts.failed ?? []).map((f) => `${f.key}: ${f.error}`);
-  return (
-    `started ${counts.started}${keys(counts.startedKeys ?? [])}, running ${counts.running}, skipped ${counts.skipped ?? 0}, ` +
-    `blocked ${blocked.length}${keys(blocked)}, failed ${failed.length}${keys(failed)}, unchanged ${counts.unchanged}`
-  );
-}
-
-/**
- * Runs the findings reconcile now and waits for its plan counts. The trigger is
- * the Schedule's own, with overlap SKIP: a reconcile already in flight is left
- * alone and `triggered` is false. The schedule's description names the run the
- * trigger started, so the counts are that run's own result.
- */
-export async function syncFindings(
-  client: SyncClient,
-  options: { pickUpMs?: number; resultMs?: number; pollMs?: number } = {},
-): Promise<SyncResult> {
-  const pickUpMs = options.pickUpMs ?? 15_000;
-  const resultMs = options.resultMs ?? 90_000;
-  const pollMs = options.pollMs ?? 500;
-  const schedule = client.schedule.getHandle(FINDINGS_SCHEDULE_ID);
-  const before = (await schedule.describe()).info;
-  await schedule.trigger(ScheduleOverlapPolicy.SKIP);
-
-  const deadline = Date.now() + pickUpMs;
-  let started: { workflowId: string; runId: string } | null = null;
-  for (;;) {
-    const { info } = await schedule.describe();
-    if (info.numActionsTaken > before.numActionsTaken) {
-      const action = info.recentActions[info.recentActions.length - 1]?.action;
-      if (action?.workflow) started = { workflowId: action.workflow.workflowId, runId: action.workflow.firstExecutionRunId };
-      break;
-    }
-    if (info.numActionsSkippedOverlap > before.numActionsSkippedOverlap) {
-      return { triggered: false, workflowId: null, sites: null, total: null };
-    }
-    if (Date.now() > deadline) {
-      throw new SyncError(`The schedule did not report a run within ${pickUpMs / 1000}s. Is the Schedule paused or missing? \`steward finding schedule describe\` shows it.`);
-    }
-    await sleep(pollMs);
-  }
-  if (!started) throw new SyncError('The schedule started a run but did not name it.');
-
-  const handle = client.workflow.getHandle(started.workflowId, started.runId);
-  // The losing timer is cleared on both outcomes: a referenced timer left to run
-  // holds the CLI process open for the whole wait after the counts have arrived.
-  let timer: NodeJS.Timeout | undefined;
-  const timedOut = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), resultMs);
-  });
-  let sites: ReconcileFindingsResult | null;
-  try {
-    sites = await Promise.race([handle.result() as Promise<ReconcileFindingsResult>, timedOut]);
-  } finally {
-    clearTimeout(timer);
-  }
-  return { triggered: true, workflowId: started.workflowId, sites, total: sites ? totalCounts(sites) : null };
-}
-
-/** The one sentence for a sync's counts. */
-export function syncSummary(result: SyncResult): string {
-  if (!result.triggered) return 'A reconcile is already running, so none was started.';
-  if (!result.total) return 'The reconcile is running and has not finished. Refresh in a minute.';
-  const t = result.total;
-  if (t.running === undefined) {
-    return `Started ${t.started}, signalled ${t.signalled ?? 0}, fixed ${t.fixed ?? 0}, restarted ${t.restarted ?? 0}, closed ${t.closed ?? 0}, unchanged ${t.unchanged}.`;
-  }
-  const blocked = t.blocked ?? [];
-  const failed = t.failed ?? [];
-  const attention =
-    (blocked.length > 0 ? ` No workflow, and none could be started, for ${blocked.join(', ')}: its last run completed.` : '') +
-    (failed.length > 0 ? ` Not checked: ${failed.map((f) => `${f.key} (${f.error})`).join(', ')}.` : '');
-  return `Started ${t.started}, already running ${t.running}, skipped ${t.skipped ?? 0}, unchanged ${t.unchanged}.${attention}`;
-}
 
 // ---------------------------------------------------------------------------
 // fix

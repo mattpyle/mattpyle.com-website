@@ -310,7 +310,7 @@ async function main() {
   const worker = await createWorker(audit);
   // The public MCP endpoint's queue: no workflows, no browser, its own budget.
   const fastWorker = await createWorker(fast);
-  // The findings gate's queue: `findingWorkflow`, `reconcileFindingsWorkflow` and
+  // The findings gate's queue: `findingWorkflow`, the workflows it starts and
   // their activities, with its own `Worker` so a verdict write never waits
   // behind a page render. The public role has no such queue.
   const findingsWorker = findings ? await createWorker(findings) : undefined;

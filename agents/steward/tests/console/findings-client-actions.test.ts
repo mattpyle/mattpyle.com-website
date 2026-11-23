@@ -5,8 +5,8 @@ import vm from 'node:vm';
 import type { FindingRow, FindingsModel } from '../../src/console/findings-model.js';
 
 /**
- * The buttons the page adds for the verbs it runs: Sync findings in the menu, Fix and Verify in the
- * panel foot, and the drift box's two remedies. Same harness as findings-client.test.ts: the script's
+ * The buttons the page adds for the verbs it runs: Fix and Verify in the panel foot, and the drift
+ * box's Fix. Same harness as findings-client.test.ts: the script's
  * pure half in a Node vm. A button shows only in its state; the server decides `actions`.
  */
 
@@ -134,29 +134,17 @@ test('buttons are disabled while a request is out', () => {
   assert.match(foot, /data-act="fix"[^>]*disabled/);
 });
 
-test('the drift box offers Sync on "proposed with no open run" and Fix on "approved with no open run" when Fix is accepted', () => {
-  assert.match(open('proposed-orphan').doc, /<li>proposed with no open run<button class="btn" type="button" data-act="sync"[^>]*>Sync<\/button><\/li>/);
+test('the drift box offers Fix on "approved with no open run" when Fix is accepted, and no button on "proposed with no open run"', () => {
+  assert.match(open('proposed-orphan').doc, /<li>proposed with no open run<\/li>/);
+  assert.doesNotMatch(open('proposed-orphan').doc, /data-act="sync"/);
   assert.match(open('approved-fixable').doc, /<li>approved with no open run<button class="btn" type="button" data-act="fix"/);
   assert.doesNotMatch(open('approved-refused').doc, /data-act="fix"/);
 });
 
-test('the drift Sync shows its result in place of the button once it ran', () => {
-  const doc = open('proposed-orphan', { sync: { text: 'Started 1, signalled 0, fixed 0, unchanged 4.' } }).doc;
-  assert.match(doc, /Started 1, signalled 0, fixed 0, unchanged 4\./);
-  assert.doesNotMatch(doc, /data-act="sync"/);
-  assert.match(open('proposed-orphan', { sync: 'running' }).doc, /data-act="sync" disabled>Syncing</);
-});
-
-test('the menu lists Sync findings above Restart console, and shows the counts a run returned', () => {
+test('the menu holds Restart console and no Sync', () => {
   const state = F.createState();
   state.appMenu = true;
   const html = F.menuHtml(MODEL, state);
-  assert.ok(html.indexOf('data-act="sync"') > 0 && html.indexOf('data-act="sync"') < html.indexOf('data-act="restart"'));
-  assert.match(html, />Sync findings</);
-  state.sync = 'running';
-  assert.match(F.menuHtml(MODEL, state), /data-act="sync" disabled><span>Syncing findings</);
-  state.sync = { text: 'Started 0, signalled 1, fixed 0, unchanged 9.' };
-  assert.match(F.menuHtml(MODEL, state), /role="status">Started 0, signalled 1, fixed 0, unchanged 9\.<\/p>/);
-  state.sync = { error: 'The schedule did not report a run.' };
-  assert.match(F.menuHtml(MODEL, state), /menu-error" role="alert">The schedule did not report a run\./);
+  assert.match(html, /data-act="restart"/);
+  assert.doesNotMatch(html, /data-act="sync"|Sync findings/);
 });

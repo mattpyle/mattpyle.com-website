@@ -248,9 +248,9 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
       origin: deps.origin,
     };
     try {
-      // ALLOW_DUPLICATE, unlike the reconciler's FAILED_ONLY: the file was just
-      // read as approved, so a completed run before this one is history, not a
-      // decision to protect.
+      // ALLOW_DUPLICATE, unlike Argus's FAILED_ONLY: the file was just read as
+      // approved, so a completed run before this one is history, not a decision
+      // to protect.
       lifecycle = await deps.client.workflow.start('findingWorkflow', {
         workflowId: id,
         taskQueue: deps.taskQueue,
@@ -260,7 +260,7 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
       started = true;
     } catch (err) {
       if (!(err instanceof WorkflowExecutionAlreadyStartedError)) throw err;
-      // The reconciler started one between the read and the start.
+      // Another caller started one between the read and the start.
       lifecycle = deps.client.workflow.getHandle(id);
     }
     await lifecycle.signal(verdictSignal, prepared.verdict);
@@ -280,8 +280,8 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
     throw new FixRefused(`${id} is ${state.step}, not waiting for a fix.`);
   }
   if (!state.verdict && !started) {
-    // An open lifecycle run the reconciler has not caught up with: the file's
-    // verdict is the one the reconciler would send.
+    // An open lifecycle run with no verdict yet, though the file holds one:
+    // the file's verdict is the run's to take.
     const prepared = await prepareFromFile(deps, site, key);
     returnedFrom = prepared.returnedFrom;
     await lifecycle.signal(verdictSignal, prepared.verdict);

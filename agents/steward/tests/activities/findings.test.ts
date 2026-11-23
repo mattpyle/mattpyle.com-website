@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import {
-  listSites,
   readFinding,
   readFindingsIndex,
   writeFindingVerdict,
@@ -89,12 +88,6 @@ function input(overrides: Partial<WriteFindingVerdictInput> = {}): WriteFindingV
     ...overrides,
   };
 }
-
-test('listSites names the site folders and skips files', async () => {
-  const gh = seed();
-  assert.deepEqual(await listSites(REPO), ['mattpyle-com', 'temporal-io']);
-  assert.ok(gh.repos.every((repo) => repo === REPO), 'every read addressed the findings repository');
-});
 
 test('readFindingsIndex parses key and status by position, and a skeleton site has none', async () => {
   seed();

@@ -4,8 +4,9 @@
  *
  * No imports, no clock, no environment, so the workflow sandbox, the activities,
  * the CLI and the tests all hold the same object. The ID in particular has to be
- * one function: the reconciler starts `finding/<site>/<key>` and the CLI signals
- * it, and two spellings of that string would be two gates that never meet.
+ * one function: Argus starts `finding/<site>/<key>` and the CLI and the console
+ * reach it by the same ID, and two spellings of that string would be two gates
+ * that never meet.
  */
 
 /** A verdict on a finding. `approved` and `rejected` are the only two the gate records. */
@@ -18,7 +19,7 @@ export type FindingVerdictStatus = 'approved' | 'rejected';
  * |---|---|---|
  * | `cli` | `steward finding approve|reject`, and the console's buttons | writes the file and the index line |
  * | `discord` | a sender outside Steward that took the verdict in Discord | writes the file and the index line |
- * | `file` | a start that carries the verdict already in the file (the reconciler's start of an approved line with no run, and `steward finding fix`) | writes nothing |
+ * | `file` | a verdict already in the file: `steward finding fix` for an approved finding with no run, and the input of a run the reconciler once started behind an approved line | writes nothing |
  *
  * The file's `verdict_source` is the value sent, so the record says where a
  * decision came from. Any other value is a malformed verdict.
@@ -30,7 +31,7 @@ export interface FindingVerdict {
   status: FindingVerdictStatus;
   reason: string;
   source: FindingVerdictSource;
-  /** ISO 8601. Set by the sender: the CLI's clock, or the reconciler's workflow time. */
+  /** ISO 8601. Set by the sender's clock. */
   at: string;
 }
 
@@ -228,14 +229,14 @@ export function setFrontmatterVerdict(text: string, verdict: FindingVerdict): st
 }
 
 // ---------------------------------------------------------------------------
-// The reconciler's decision
+// The open finding runs
 // ---------------------------------------------------------------------------
 
 /**
- * One running `findingWorkflow` as the reconciler sees it: its ID, and where
- * its `state` query says it is. `step` and `fixAttempts` are null when the
- * query gave no answer, and for a bare ID, which is what the list returned
- * before it carried them.
+ * One running `findingWorkflow` as `listOpenFindingWorkflows` lists it: its ID,
+ * and where its `state` query says it is. `step` and `fixAttempts` are null
+ * when the query gave no answer, and for a bare ID, which is what the list
+ * returned before it carried them.
  */
 export interface OpenFindingWorkflow {
   workflowId: string;
@@ -255,21 +256,11 @@ export interface OpenFindingWorkflow {
 }
 
 /**
- * The index statuses whose decision reads a run's `step`, `fixAttempts` or
- * `issueUrl` (see {@link planReconcile}): `approved` and `rejected` (a verdict
- * goes to a run at `waiting-verdict`; `approved` also feeds `fix`), and
- * `resolved` (`close`). Every other status reads only whether a run exists.
- * A run behind one of these must be queried: a null step reads as "awaiting a
- * verdict", so a skipped `approved` or `rejected` run would be signalled.
- */
-export function readsRunState(status: string): boolean {
-  return status === 'approved' || status === 'rejected' || status === 'resolved';
-}
-
-/**
- * What `listOpenFindingWorkflows` returns when the reconciler asks it to prune:
- * the runs, how many it queried, and how many index files it read to decide.
- * The other modes return the bare array.
+ * What `listOpenFindingWorkflows` returned in the pruning form the findings
+ * reconciler asked for: the runs, how many it queried, and how many index
+ * files it read to decide. The reconciler is gone and nothing asks for this
+ * form now; the type stays because {@link listedRuns}, which the recheck
+ * workflow imports, names it, and that workflow's code is left as it replays.
  */
 export interface OpenFindingListing {
   runs: OpenFindingWorkflow[];
@@ -280,187 +271,6 @@ export interface OpenFindingListing {
 /** The runs of either return shape; a history recorded before the listing existed holds an array. */
 export function listedRuns(listing: OpenFindingWorkflow[] | OpenFindingListing): OpenFindingWorkflow[] {
   return Array.isArray(listing) ? listing : listing.runs;
-}
-
-export interface ReconcilePlan {
-  /** `proposed` and `reopened` lines with no open workflow. */
-  start: FindingsIndexLine[];
-  /** `approved`/`rejected` lines whose workflow is open and still waits for its verdict. */
-  signal: FindingsIndexLine[];
-  /**
-   * Approved lines parked at `waiting-fix` on an `auto_fix` site: with a `fixable`
-   * set, every kind whose run opened no issue and whose file the gate accepts;
-   * without one, defects with no attempt (the rule before the gate joined the plan).
-   */
-  fix: FindingsIndexLine[];
-  /**
-   * Approved lines with no open run, on an `auto_fix` site, whose file the gate
-   * accepts: each gets a new lifecycle run carrying the file's verdict. Empty
-   * without a `fixable` set, and a key only reaches the set through
-   * {@link restartCandidates}.
-   */
-  restart: FindingsIndexLine[];
-  /**
-   * `resolved` and `rejected` lines whose run is still open at `waiting-fix`: the
-   * file is decided and nothing will unpark the run. Empty unless the caller asks
-   * for it; see {@link planReconcile}.
-   */
-  close: FindingsIndexLine[];
-  /** Everything else. */
-  unchanged: number;
-}
-
-function openById(open: (OpenFindingWorkflow | string)[]): Map<string, OpenFindingWorkflow> {
-  return new Map(
-    open.map((o) => (typeof o === 'string' ? { workflowId: o, step: null, fixAttempts: null } : o)).map((o) => [o.workflowId, o]),
-  );
-}
-
-/**
- * Whether a started run should park without the automatic fix attempt: a
- * direction, which the fixer's gate never accepts. A defect and an opportunity
- * attempt at the verdict and the gate decides, so a gate refusal parks the run
- * with `lastFixError` set. A line that names no kind (an index with no kind
- * column) starts as it always did.
- */
-export function startsParked(line: FindingsIndexLine): boolean {
-  return line.kind !== '' && line.kind !== 'defect' && line.kind !== 'opportunity';
-}
-
-function parkedDefect(line: FindingsIndexLine, run: OpenFindingWorkflow | undefined): boolean {
-  return line.status === 'approved' && line.kind === 'defect' && run?.step === 'waiting-fix' && run.fixAttempts === 0;
-}
-
-/**
- * Whether the site has an approved defect whose run waits at `waiting-fix`
- * with no attempt. The rule before the gate joined the plan: a reconcile
- * history recorded without the `reconcile-fix-any-kind` marker replays through
- * it, so it stays. See {@link fixCandidates} for the rule the plan uses now.
- */
-export function hasParkedDefect(site: string, index: FindingsIndexLine[], open: (OpenFindingWorkflow | string)[]): boolean {
-  const runs = openById(open);
-  return index.some((line) => parkedDefect(line, runs.get(findingWorkflowId(site, line.key))));
-}
-
-/**
- * The approved lines whose run waits at `waiting-fix` and has opened no issue,
- * of any kind: the ones the fixer might take. A run with an issue is past the
- * gate, and its failed Action is a person's retry. The reconciler reads the
- * site's `auto_fix` flag only when this list is not empty, and asks the gate
- * about these keys alone.
- */
-export function fixCandidates(site: string, index: FindingsIndexLine[], open: (OpenFindingWorkflow | string)[]): FindingsIndexLine[] {
-  const runs = openById(open);
-  return index.filter((line) => {
-    const run = runs.get(findingWorkflowId(site, line.key));
-    return line.status === 'approved' && run?.step === 'waiting-fix' && !run.issueUrl;
-  });
-}
-
-/**
- * The approved lines with no open run: the ones the reconciler might start a
- * run for. A line's run stopped at its verdict, or was cancelled, and nothing
- * else will start another. The reconciler reads the site's `auto_fix` flag when
- * this list or {@link fixCandidates} is not empty, and asks the gate about these
- * keys with theirs.
- */
-export function restartCandidates(site: string, index: FindingsIndexLine[], open: (OpenFindingWorkflow | string)[]): FindingsIndexLine[] {
-  const runs = openById(open);
-  return index.filter((line) => line.status === 'approved' && !runs.has(findingWorkflowId(site, line.key)));
-}
-
-/**
- * What one site's index asks for, given the open finding workflows and the
- * site's `auto_fix` flag. Pure so the reconciler's whole decision is a unit
- * test; the workflow only carries it out.
- *
- * A `reopened` line is a `proposed` one again (design decision 29): its fix
- * failed on production, so it goes back to the verdict gate.
- *
- * A verdict goes only to a run still at `waiting-verdict`, or one whose step
- * is unknown; a run past its verdict would drop it.
- *
- * `fix` is the parked case (design decision 31): a run reads `auto_fix` once,
- * at its verdict, so one that passed it before the flag was set waits for a
- * `fix` nobody sends. A run also parks when the gate refused its attempt at
- * the verdict, and the finding may have changed since.
- *
- * `fixable` is the set of keys the gate accepts, which the caller reads from
- * the finding files. With it, `fix` holds every {@link fixCandidates} line in
- * the set, of any kind, on an `auto_fix` site: "no issue" replaces "no
- * attempt", so a gate refusal is retried once the gate accepts and a run
- * whose Action failed keeps its issue and stays a person's retry. `restart`
- * holds the {@link restartCandidates} the set accepts, on an `auto_fix` site:
- * a set built from {@link fixCandidates} alone leaves it empty. Without it
- * (a history recorded before the marker), `fix` holds approved defects with no
- * attempt, as it did.
- *
- * `close` holds a `resolved` or `rejected` line whose run waits at `waiting-fix`:
- * verify, or a verdict given outside the fixer's path, decided the file and left
- * the run parked. It needs `closeParked`, which the caller passes when its
- * history carries the close marker; without it such a line is unchanged, as it
- * was. A `rejected` line at `waiting-verdict` stays in `signal`, and an
- * `approved` line's parked run is the fixer's business, so neither is in `close`.
- */
-export function planReconcile(
-  site: string,
-  index: FindingsIndexLine[],
-  open: (OpenFindingWorkflow | string)[],
-  autoFix = false,
-  fixable?: ReadonlySet<string>,
-  closeParked = false,
-): ReconcilePlan {
-  const runs = openById(open);
-  const plan: ReconcilePlan = { start: [], signal: [], fix: [], restart: [], close: [], unchanged: 0 };
-  const candidates = new Set(fixable ? fixCandidates(site, index, open).map((line) => line.key) : []);
-  const restarts = new Set(fixable ? restartCandidates(site, index, open).map((line) => line.key) : []);
-  for (const line of index) {
-    const run = runs.get(findingWorkflowId(site, line.key));
-    const awaitingVerdict = run !== undefined && (run.step === null || run.step === 'waiting-verdict');
-    const takesFix = fixable ? candidates.has(line.key) && fixable.has(line.key) : parkedDefect(line, run);
-    if ((line.status === 'proposed' || line.status === 'reopened') && !run) plan.start.push(line);
-    else if ((line.status === 'approved' || line.status === 'rejected') && awaitingVerdict) plan.signal.push(line);
-    else if (autoFix && takesFix) plan.fix.push(line);
-    else if (autoFix && fixable && restarts.has(line.key) && fixable.has(line.key)) plan.restart.push(line);
-    else if (closeParked && (line.status === 'resolved' || line.status === 'rejected') && run?.step === 'waiting-fix') plan.close.push(line);
-    else plan.unchanged++;
-  }
-  return plan;
-}
-
-/** What {@link runNeeds} decides for one site's index. */
-export interface RunNeeds {
-  /** Lines that should have a running workflow: each gets a start by ID. */
-  starts: FindingsIndexLine[];
-  /** `approved` lines on a site that stops at the verdict: their runs ended there by design. */
-  skipped: FindingsIndexLine[];
-  /** Every other line: decided, `fixing`, or a status this rule does not know. */
-  unchanged: number;
-}
-
-/**
- * Which lines of a site's index should have a running workflow: the
- * reconciler's one rule since it stopped listing workflows.
- *
- * | Status | Should have a running workflow |
- * |---|---|
- * | `proposed`, `reopened` | on every site: it waits at the verdict gate |
- * | `approved` | only on a site that goes past the verdict: the run parks at `waiting-fix` or carries the fix |
- * | anything else | no. A `fixing` line with no run is a person's, and `steward finding verify` closes it |
- *
- * `siteStops` is the site's stop point as a finding run reads it: its
- * `config.yaml` says `stop_after: verdict`, or the worker knows no production
- * origin for it. A run there ends at its verdict, so an approved line has none
- * by design, and a start would end at once and be started again on every pass.
- */
-export function runNeeds(index: FindingsIndexLine[], siteStops: boolean): RunNeeds {
-  const needs: RunNeeds = { starts: [], skipped: [], unchanged: 0 };
-  for (const line of index) {
-    if (line.status === 'proposed' || line.status === 'reopened') needs.starts.push(line);
-    else if (line.status === 'approved') (siteStops ? needs.skipped : needs.starts).push(line);
-    else needs.unchanged++;
-  }
-  return needs;
 }
 
 // ---------------------------------------------------------------------------

@@ -31,7 +31,6 @@ test('the narrow bundle holds the audit workflow and none of the others', { time
     'reviewPostWorkflow',
     'scorecardAuditWorkflow',
     'findingWorkflow',
-    'reconcileFindingsWorkflow',
     'verifyFindingWorkflow',
     'recheckFindingsWorkflow',
   ]) {
