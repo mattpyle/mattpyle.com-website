@@ -17,6 +17,7 @@ import {
   fixIssueTitle,
   failedChecks,
   fixPrBranchPrefix,
+  fixPrUrl,
   fixRefusal,
   isFindingSlug,
   liveDeployment,
@@ -32,6 +33,7 @@ import {
   type PreviewEarlierResult,
   findingsIndexPath,
   PREVIEW_CHECKS_MARKER,
+  setFindingFixAttempt,
   setFindingReturned,
   setFindingVerification,
   setFrontmatterFix,
@@ -105,6 +107,16 @@ export async function readFindingsIndex(repo: string, site: string): Promise<Fin
   return parseFindingsIndex(file.text);
 }
 
+/** The verify child's slow phase (STW-653): a rejected credential is retried, not final. */
+export interface RetryAuth {
+  retryAuth?: boolean;
+}
+
+/** `call`, through {@link authRetryable} when `retryAuth` is set. */
+function withAuth<T>(options: RetryAuth | undefined, call: () => Promise<T>): Promise<T> {
+  return options?.retryAuth === true ? authRetryable(call) : call();
+}
+
 export interface FindingFile {
   path: string;
   text: string;
@@ -114,8 +126,14 @@ export interface FindingFile {
   data: Record<string, unknown>;
 }
 
-export async function readFinding(repo: string, path: string): Promise<FindingFile> {
-  const file = await readRepoFile(path, BRANCH, repo);
+/**
+ * The finding file. `options.retryAuth` makes a rejected credential retryable
+ * ({@link authRetryable}): the verify child sets it in its slow phase only
+ * (STW-653), where a token rotation must not park the run. Every other caller
+ * keeps `AuthError` permanent, as before.
+ */
+export async function readFinding(repo: string, path: string, options: RetryAuth = {}): Promise<FindingFile> {
+  const file = await withAuth(options, () => readRepoFile(path, BRANCH, repo));
   if (!file) {
     throw ApplicationFailure.nonRetryable(`${path} is not in ${repo} at ${BRANCH}.`, 'FindingMissing');
   }
@@ -251,6 +269,13 @@ export interface WriteFindingFixInput {
   findingPath: string;
   indexPath: string;
   prUrl: string;
+  /**
+   * A new attempt after a merged fix that did not pass on production
+   * (STW-653): that PR, and one line for the file's `## Fix attempts`. With it
+   * the write also moves a `reopened` finding, the status a failed
+   * verification leaves. Absent on every other attempt.
+   */
+  earlier?: { prUrl: string; at: string; note: string } | null;
 }
 
 export interface WriteFindingFixResult {
@@ -270,7 +295,9 @@ export interface WriteFindingFixResult {
  * an unchanged file is skipped.
  *
  * **It moves a finding from `approved` only.** A finding that is already
- * `fixing` is the retry case and passes. Any other status means somebody else
+ * `fixing` is the retry case and passes. A new attempt after a merged fix
+ * (`earlier`, STW-653) also moves a `reopened` finding whose `links.pr` is
+ * that fix, and records the earlier PR under `## Fix attempts`. Any other status means somebody else
  * moved it while the fixer ran (Argus setting `resolved`, a rejection), and the
  * write refuses rather than overrule them; the PR stays open for Matt.
  */
@@ -285,7 +312,8 @@ export async function writeFindingFix(input: WriteFindingFixInput): Promise<Writ
     );
   }
   const before = parseFrontmatter(finding.text).data as Record<string, unknown>;
-  if (before.status !== 'approved' && before.status !== 'fixing') {
+  const reattempt = !!input.earlier && before.status === 'reopened' && fixPrUrl(before) === input.earlier.prUrl;
+  if (before.status !== 'approved' && before.status !== 'fixing' && !reattempt) {
     throw ApplicationFailure.nonRetryable(
       `${input.findingPath} is ${String(before.status)}, not approved, so it is not marked fixing. The PR is ${input.prUrl}.`,
       'FindingMoved',
@@ -294,6 +322,7 @@ export async function writeFindingFix(input: WriteFindingFixInput): Promise<Writ
   let findingText: string;
   try {
     findingText = setFrontmatterFix(finding.text, input.prUrl);
+    if (input.earlier) findingText = setFindingFixAttempt(findingText, input.earlier.at, input.earlier.note);
   } catch (err) {
     throw ApplicationFailure.nonRetryable(
       `${input.findingPath}: ${err instanceof Error ? err.message : String(err)}`,
@@ -367,10 +396,10 @@ export interface FixPrState {
  * fix that is not merged cannot be there: without this read, a `fixing`
  * finding whose PR is still open would be measured, fail and be reopened.
  */
-export async function readFixPr(prUrl: string): Promise<FixPrState> {
+export async function readFixPr(prUrl: string, options: RetryAuth = {}): Promise<FixPrState> {
   const pr = parsePrUrl(prUrl);
   if (!pr) throw ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
-  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  const data = await withAuth(options, () => gh(`/repos/${pr.repo}/pulls/${pr.number}`));
   return { prUrl, merged: data.merged === true, mergedAt: (data.merged_at as string | null) ?? null };
 }
 
@@ -536,6 +565,36 @@ export async function closeConflictingFixPr(prUrl: string): Promise<CloseConflic
   return { closed: true, siblings, files };
 }
 
+export interface CommentOnFixPrInput {
+  prUrl: string;
+  /** The hidden line that tells this comment from every other: {@link parkCommentMarker}. */
+  marker: string;
+  body: string;
+}
+
+/**
+ * One comment on a fix PR from a run that parked, or whose merge or deploy
+ * wait first ran out (STW-653). Safe to retry: a comment already carrying
+ * `marker` is left alone and nothing is posted.
+ */
+export async function commentOnFixPr(input: CommentOnFixPrInput): Promise<{ posted: boolean }> {
+  const pr = parsePrUrl(input.prUrl);
+  if (!pr) throw ApplicationFailure.nonRetryable(`${input.prUrl} is not a pull request URL.`, 'FindingMalformed');
+  for (let page = 1; ; page++) {
+    const comments = (await gh(`/repos/${pr.repo}/issues/${pr.number}/comments?per_page=100&page=${page}`)) as {
+      body?: string | null;
+    }[];
+    if (comments.some((c) => (c.body ?? '').includes(input.marker))) return { posted: false };
+    if (comments.length < 100) break;
+  }
+  await gh(`/repos/${pr.repo}/issues/${pr.number}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body: `${input.body}\n\n${input.marker}` }),
+  });
+  log.info({ activity: 'commentOnFixPr', pr: input.prUrl }, 'park comment posted');
+  return { posted: true };
+}
+
 /**
  * The site repository a site's fix issues go to, or undefined for a site this
  * worker does not know. One site today, as {@link productionOrigin} says.
@@ -668,6 +727,13 @@ export interface OpenFixIssueInput {
    * so before the new one opens. Null on a first attempt.
    */
   supersedes?: { url: string; reason: string } | null;
+  /**
+   * A new attempt a person asked for from a run parked after its fix PR
+   * (STW-653): the gate reads a `reopened` or `fixing` file whose `links.pr`
+   * is this PR as approved, since that status is the earlier fix's, not a
+   * person's decision. Absent on every other attempt.
+   */
+  afterPr?: string | null;
 }
 
 export interface FixIssue {
@@ -721,7 +787,11 @@ export async function openFixIssue(input: OpenFixIssueInput): Promise<FixIssue> 
     throw ApplicationFailure.nonRetryable(`Steward knows no site repository for ${input.site}.`, 'UnknownSite');
   }
   const finding = await readFinding(input.repo, input.findingPath);
-  const refusal = fixRefusal(finding.data, parseFindingBody(finding.text));
+  const reattempt =
+    !!input.afterPr &&
+    (finding.data.status === 'reopened' || finding.data.status === 'fixing') &&
+    fixPrUrl(finding.data) === input.afterPr;
+  const refusal = fixRefusal(reattempt ? { ...finding.data, status: 'approved' } : finding.data, parseFindingBody(finding.text));
   if (refusal) {
     throw ApplicationFailure.nonRetryable(`${input.key} does not go to the fixer: ${refusal}.`, 'FindingNotFixable');
   }
@@ -869,11 +939,18 @@ async function readLive(
   };
 }
 
-export interface ReadProductionDeployInput {
+export interface ReadProductionDeployInput extends RetryAuth {
   /** The fix PR, from the finding's `links.pr`. */
   prUrl: string;
   /** The GitHub deployment environment Vercel posts production to. */
   environment: string;
+  /**
+   * Set by the verify child in its two retry phases (STW-653): a production
+   * that does not yet contain the fix is a retryable `FixNotLive`, so the
+   * child retries a deploy that lags instead of failing on it. Absent, the
+   * read answers `contains: false` as before.
+   */
+  requireLive?: boolean;
 }
 
 export interface ProductionRead {
@@ -896,19 +973,25 @@ export interface ProductionRead {
  * PR's merge commit, then {@link awaitProductionDeploy}'s read and compare,
  * one attempt. Not contained is an answer, not a retry: the verify has no
  * "not yet" to wait out, since the lifecycle's deploy wait or the operator
- * already decided the fix is live.
+ * already decided the fix is live. Except with `requireLive` (STW-653): the
+ * lifecycle's child retries a deploy that lags in its two phases, so there it
+ * is a retryable `FixNotLive`.
  */
 export async function readProductionDeploy(input: ReadProductionDeployInput): Promise<ProductionRead> {
   const pr = parsePrUrl(input.prUrl);
   if (!pr) throw ApplicationFailure.nonRetryable(`${input.prUrl} is not a pull request URL.`, 'FindingMalformed');
-  const data = await gh(`/repos/${pr.repo}/pulls/${pr.number}`);
+  const data = await withAuth(input, () => gh(`/repos/${pr.repo}/pulls/${pr.number}`));
   const mergeSha = (data.merge_commit_sha as string | null) ?? null;
   const readAt = new Date().toISOString();
   const none = { prUrl: input.prUrl, mergeSha, liveSha: null, deploymentId: null, contains: false, readAt };
   if (data.merged !== true || !mergeSha) {
+    if (input.requireLive === true) throw ApplicationFailure.retryable(`${input.prUrl} has no merge commit on GitHub yet.`, 'FixNotLive');
     return { ...none, why: `${input.prUrl} has no merge commit on GitHub.` };
   }
-  const read = await readLive({ repo: pr.repo, mergeSha, environment: input.environment });
+  const read = await withAuth(input, () => readLive({ repo: pr.repo, mergeSha, environment: input.environment }));
+  if (input.requireLive === true && !read.contains) {
+    throw ApplicationFailure.retryable(`Production does not contain ${mergeSha.slice(0, 7)} yet: ${read.why}`, 'FixNotLive');
+  }
   log.info(
     { activity: 'readProductionDeploy', prUrl: input.prUrl, mergeSha, liveSha: read.live?.sha, contains: read.contains },
     'production read for a blockless verify',
@@ -1107,7 +1190,7 @@ export async function reportPreviewChecks(input: ReportPreviewChecksInput): Prom
   return { posted, failed, draft, readied };
 }
 
-export interface WriteFindingReturnedInput {
+export interface WriteFindingReturnedInput extends RetryAuth {
   repo: string;
   site: string;
   key: string;
@@ -1136,6 +1219,11 @@ export interface WriteFindingReturnedResult {
  * PR's note is the retry case.
  */
 export async function writeFindingReturned(input: WriteFindingReturnedInput): Promise<WriteFindingReturnedResult> {
+  // The lifecycle's slow phase retries a rejected credential (STW-653); see {@link readFinding}.
+  return withAuth(input, () => writeReturnedOnce(input));
+}
+
+async function writeReturnedOnce(input: WriteFindingReturnedInput): Promise<WriteFindingReturnedResult> {
   const message = `returned ${input.key}: ${input.prUrl} closed unmerged`;
 
   const finding = await readRepoFile(input.findingPath, BRANCH, input.repo);
@@ -1260,7 +1348,7 @@ export async function readVerifyBlock(input: ReadVerifyBlockInput): Promise<Read
   return { handoff: null, hasBlock: true, checks, source: 'finding' };
 }
 
-export interface WriteFindingVerificationInput {
+export interface WriteFindingVerificationInput extends RetryAuth {
   repo: string;
   site: string;
   key: string;
@@ -1291,6 +1379,11 @@ export interface WriteFindingVerificationResult {
 export async function writeFindingVerification(
   input: WriteFindingVerificationInput,
 ): Promise<WriteFindingVerificationResult> {
+  // The slow phase's rejected credential is retried (STW-653); see {@link readFinding}.
+  return withAuth(input, () => writeVerificationOnce(input));
+}
+
+async function writeVerificationOnce(input: WriteFindingVerificationInput): Promise<WriteFindingVerificationResult> {
   const { status } = input.verification;
   const message = `verify ${input.key}: ${status}`;
 
@@ -1420,8 +1513,11 @@ function productionOrigin(site: string): string | undefined {
  * `ALLOW_DUPLICATE_FAILED_ONLY` for a `proposed` line: a finding whose workflow
  * completed at a verdict is never reopened by a stale index line, while one
  * that failed or was terminated can be started again. `ALLOW_DUPLICATE` for a
- * `reopened` line: its last run completed by writing `reopened`, so that run
- * is history, and the new one returns the finding to the verdict gate. A
+ * `reopened` line whose run is closed: a run recorded before STW-653 completed
+ * by writing `reopened`, so that run is history, and the new one returns the
+ * finding to the verdict gate. Since STW-653 the run that wrote `reopened`
+ * stays open, parked, so the describe above finds it running and nothing
+ * starts. A
  * retry after a start that landed returns `already-started`, so the activity
  * is safe to retry.
  *

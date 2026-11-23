@@ -1,6 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
-import type { AwaitFixPrMergeOptions, FixIssue, FixPrOutcome } from '../activities/findings.js';
+import type { AwaitFixPrMergeOptions, FixIssue, FixPrOutcome, ProductionDeploy } from '../activities/findings.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
 // same objects the reconciler and the CLI hold.
 import {
@@ -9,12 +9,21 @@ import {
   fixBranch,
   fixWorkflowId,
   isFindingVerdict,
+  parkComment,
+  parkCommentMarker,
+  parkLine,
+  parkMoves,
+  parkTakesFix,
   parsePrUrl,
   previewResultLine,
+  waitExpiredComment,
   verdictMeasureLine,
   verdictMeasurePassed,
   verdictSourceWrites,
   verifyWorkflowId,
+  type FindingPark,
+  type FindingParkKind,
+  type FindingParkStage,
   type FindingVerdict,
   type VerdictMeasure,
   type Verification,
@@ -23,6 +32,7 @@ import {
   type VerifyOutcome,
 } from '../lib/findings.js';
 import { dispatchWorkflowId } from '../lib/fix-dispatch.js';
+import { SLOW_INTERVAL, slowPhaseFor } from '../lib/retry-phases.js';
 import { fixFindingWorkflow } from './fix-finding.js';
 import { releaseSlotSignal, slotGrantSignal } from './fix-dispatch.js';
 import { verifyFindingWorkflow } from './verify-finding.js';
@@ -160,9 +170,81 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *
  * **The two waits** are Temporal's infrequent-polling pattern (decision 7): an
  * activity that fails with a retryable error until it is done, retried at a
- * fixed interval. Retries are not history events. Either wait timing out ends
- * the run with the finding still `fixing` (decision 8), and the result says
- * which; `steward finding verify` closes it by hand.
+ * fixed interval. Retries are not history events. Before STW-653 either wait
+ * timing out ended the run with the finding still `fixing` (decision 8);
+ * "Open until verified" below says what a run does now.
+ *
+ * **Open until verified** (STW-653, 2026-11-22). After its fix PR, no ending
+ * leaves a finding undecided. Each case that ended the run, or failed it with
+ * a rethrown activity failure (SDK 1.25.0 fails the execution on any thrown
+ * `TemporalFailure`), now does one of three things:
+ *
+ * 1. **A failure that passes by itself goes on, and nobody is told.** The
+ *    merge and deploy waits keep polling once their first bound runs out: the
+ *    merge wait every 5 minutes with no bound, the deploy wait every
+ *    {@link DEPLOY_REWAIT} with no bound (production unserved for a day waits
+ *    on a person fixing the deploy, so 720 reads a day buy nothing). Each says
+ *    so once on the PR, `state.waitNote` holds it, and the memo's `waitsFor`
+ *    carries it to `steward finding list`. A returned write whose fast retries
+ *    are used up on a retryable failure, or that met a rejected credential, is
+ *    run again every {@link SLOW_INTERVAL} with no attempt limit: Temporal's
+ *    Fast/Slow Retries. The verify child does the same for its own activities
+ *    (`slowRetry`, in `verify-finding.ts`).
+ * 2. **A failure that needs a person parks the run** at step `parked`, with
+ *    `state.parked` saying what happened, at which stage, since when, and the
+ *    messages that move it: Temporal's Resumable Activity pattern. A check
+ *    that ran and failed leaves the file `reopened` (the child wrote it). A
+ *    broken or invalid check, and every other non-retryable failure (the merge
+ *    or deploy wait's own, a returned write), leave the
+ *    file as it was. The slot is released first. One comment goes on the PR
+ *    per park; a park of the same kind at the same stage in the same attempt
+ *    adds none once one was posted (`parkCommentMarker`), and one that failed
+ *    is tried again at that next park. Nothing runs on a clock while parked.
+ *    `state.waitNote`, `state.parked` and the memo's `waitsFor` change
+ *    together: back into a wait the wait's line returns, into a new attempt
+ *    both go.
+ * 3. **A file decided elsewhere ends the run `closed`.** When the verify child
+ *    refuses with `FindingNotVerifiable`, or a write with `FindingMoved`, the
+ *    run reads `readFindingSettings` once; `resolved` or `rejected` ends it.
+ *    A parked run learns this only from a message: `steward finding verify`
+ *    and the console's Verify send `resume` to a parked run.
+ *
+ * Three messages move a parked run, each with a read-only validator whose
+ * refusal reaches its sender. Each validator refuses while another of the
+ * three is asked for, so no accepted Update goes unanswered:
+ *
+ * - `resume` runs the stage again: the verify (a new child with a new `at`),
+ *   the merge wait, the deploy wait or the returned write. Its handler only
+ *   sets a flag.
+ * - `request-fix` starts a new attempt in the same run, at every stage but an
+ *   unmerged PR's. It is accepted only where the run honours it: at a park,
+ *   and at `waiting-fix`. The `fix` Signal keeps its old acceptance for older
+ *   callers. The attempt's issue supersedes the last one, its gate reads the
+ *   earlier PR's `reopened` or `fixing` file as approved (`afterPr`), and
+ *   `writeFindingFix` records the earlier PR under `## Fix attempts`
+ *   (`earlier`). The run never opens a second fix by itself.
+ * - A `rejected` verdict by `record-verdict`, in place of the approval: the
+ *   park writes it with `writeFindingVerdict` and the run ends `rejected`, as
+ *   at the gate, so a person can drop a finding whose fix failed. Only a park
+ *   takes it; everywhere else the other status is refused as before, and a
+ *   repeated `approved` stays a no-op. The `verdict` Signal is unchanged.
+ *
+ * **Versioned with `patched`.** {@link OPEN_UNTIL_VERIFIED_PATCH} is read only
+ * where a path leaves the old one: after a wait's bound ran out (and after its
+ * slot release, which is unchanged), after a non-timeout wait failure, after a
+ * returned write failed, after a `reopened` child, and after a failed child.
+ * A history without it takes the old ending. The marker is needed although no
+ * open run holds those endings (each shares a workflow task with the run's
+ * completion, or follows it by one release signal): a closed run is replayed
+ * too, whenever its state is queried, and new commands where its history
+ * completed fail that replay. The fixtures are `finding-reopened-pre.bin`,
+ * `finding-verify-failed-pre.bin`, `finding-merge-timeout-pre.bin` and
+ * `finding-deploy-timeout-pre.bin` in `tests/workflows/replay.test.ts`, with
+ * the probe. The two Update handlers issue no command. Rollback: a run with
+ * the marker cannot replay on code without it.
+ *
+ * No Continue-As-New: nothing here loops on a clock, so a run's history grows
+ * only with a person's messages and each wait's one expiry.
  *
  * **A PR closed unmerged** writes `status: approved` back with a note, and the
  * run waits for the next `fix`. So does a fix that fails, and an issue with no
@@ -381,6 +463,20 @@ export const SETTINGS_AT_USE_PATCH = 'settings-at-use';
  */
 export const PARKED_ISSUE_REREAD_PATCH = 'parked-issue-reread';
 
+/**
+ * The `patched` marker of the post-PR endings that keep the run open (STW-653):
+ * a wait that runs out waits on, and a failure parks the run.
+ */
+export const OPEN_UNTIL_VERIFIED_PATCH = 'open-until-verified';
+
+/**
+ * The deploy wait's interval once its first 24 hours ran out (STW-653). The
+ * first day polls every 2 minutes because a Vercel build takes about three;
+ * past that, production waits on a person fixing the deploy, which takes
+ * hours, so a quarter of an hour is prompt enough at 96 reads a day.
+ */
+const DEPLOY_REWAIT = '15 minutes';
+
 /** How often a run parked at `waiting-fix` reads its settings again. */
 const PARKED_REREAD = '1 day';
 
@@ -459,8 +555,10 @@ type LifecycleInput = Required<Omit<FindingWorkflowInput, 'verdict'>>;
  * outcomes end the lifecycle: `resolved`, `reopened`, and `confirmed` for a
  * finding with no checks resolved by its deploy (decision 30). `unverifiable`
  * is a run recorded before that. The two timeouts and `verify-failed` end it
- * with the finding still `fixing`. `closed` is a run parked at `waiting-fix`
- * with no issue whose file was decided elsewhere (STW-645).
+ * with the finding still `fixing`; since STW-653 only a run recorded before
+ * {@link OPEN_UNTIL_VERIFIED_PATCH} ends with them, or with `reopened`.
+ * `closed` is a run whose file was decided elsewhere: parked at `waiting-fix`
+ * with no issue (STW-645), or after its fix PR (STW-653).
  */
 export type FindingOutcome =
   | 'verdict'
@@ -507,6 +605,7 @@ export type FindingStep =
   | 'waiting-merge'
   | 'waiting-deploy'
   | 'verifying'
+  | 'parked'
   | 'done';
 
 export interface FindingState {
@@ -560,6 +659,12 @@ export interface FindingState {
    * line, with the reason when nothing was measured. Absent before STW-589.
    */
   verdictMeasure?: string | null;
+  /** At step `parked`: what happened, where, since when, and what moves the run (STW-653). */
+  parked?: FindingPark | null;
+  /** Set while a merge or deploy wait goes on past its first bound (STW-653). */
+  waitNote?: string | null;
+  /** The verify child of the current or last verify (STW-653), so `steward finding status` can describe it. */
+  verifyWorkflowId?: string | null;
 }
 
 /** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
@@ -604,6 +709,31 @@ export interface VerdictRecorded {
   stopAfter: FindingStopAfter;
 }
 
+/** The `resume` Update's payload (STW-653): who asked, and when. */
+export interface ResumeRequest {
+  source: 'cli' | 'console';
+  /** ISO 8601, the sender's clock. */
+  at: string;
+}
+
+/** What an accepted `resume` returns: the stage the run runs again, in the attempt it is in. */
+export interface ResumeAccepted {
+  stage: FindingParkStage;
+  attempt: number;
+}
+
+/** The `request-fix` Update's payload (STW-653): who asked, and when. */
+export interface FixUpdateRequest {
+  source: 'cli' | 'console';
+  /** ISO 8601, the sender's clock. */
+  at: string;
+}
+
+/** What an accepted `request-fix` returns: the number the attempt it starts will have. */
+export interface FixAccepted {
+  attempt: number;
+}
+
 /** The failure type of a `record-verdict` Update whose write failed or was cancelled. */
 export const VERDICT_WRITE_FAILED = 'VerdictWriteFailed';
 const VERDICT_CANCELLED = 'The run was cancelled before the verdict was written.';
@@ -618,6 +748,10 @@ export const verdictSignal = wf.defineSignal<[FindingVerdict]>('verdict');
 export const verdictUpdate = wf.defineUpdate<VerdictRecorded, [FindingVerdict]>('record-verdict');
 export const retestUpdate = wf.defineUpdate<RetestAccepted, [RetestRequest]>('retest');
 export const fixSignal = wf.defineSignal<[FixRequest]>('fix');
+/** A parked run runs its stage again (STW-653). */
+export const resumeUpdate = wf.defineUpdate<ResumeAccepted, [ResumeRequest]>('resume');
+/** A new fix attempt in the same run, answered at once with a reason when refused (STW-653). */
+export const requestFixUpdate = wf.defineUpdate<FixAccepted, [FixUpdateRequest]>('request-fix');
 export const findingStateQuery = wf.defineQuery<FindingState>('state');
 
 /**
@@ -653,6 +787,7 @@ const writing = wf.proxyActivities<
     | 'requestFixSlot'
     | 'closeConflictingFixPr'
     | 'writeFindingVerdictMeasure'
+    | 'commentOnFixPr'
   >
 >({
   taskQueue: QUEUE_FINDINGS,
@@ -778,6 +913,43 @@ const deploying = wf.proxyActivities<Pick<typeof activities, 'awaitProductionDep
   },
 });
 
+// The merge wait once its first 30 days ran out (STW-653): the same poll, with
+// no bound. It ends on a merge, a close, a conflict or a permanent failure.
+const mergingOn = wf.proxyActivities<Pick<typeof activities, 'awaitFixPrMerge'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: {
+    initialInterval: '5 minutes',
+    backoffCoefficient: 1,
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT_FOR_WAITS, 'FindingMalformed'],
+  },
+});
+
+// The deploy wait once its first 24 hours ran out (STW-653): every
+// DEPLOY_REWAIT, with no bound.
+const deployingOn = wf.proxyActivities<Pick<typeof activities, 'awaitProductionDeploy'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: {
+    initialInterval: DEPLOY_REWAIT,
+    backoffCoefficient: 1,
+    nonRetryableErrorTypes: GITHUB_PERMANENT_FOR_WAITS,
+  },
+});
+
+// The returned write's slow phase (STW-653): Fast/Slow Retries. `writing` is
+// the fast phase; this runs once its five attempts are used up on a retryable
+// failure, or on a rejected credential, which the call passes `retryAuth` for.
+const slowWriting = wf.proxyActivities<Pick<typeof activities, 'writeFindingReturned'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: {
+    initialInterval: SLOW_INTERVAL,
+    backoffCoefficient: 1,
+    nonRetryableErrorTypes: [...GITHUB_PERMANENT_FOR_WAITS, 'FindingMissing', 'FindingMalformed', 'FindingMoved'],
+  },
+});
+
 // The settings read (STW-645): the stop point, `auto_fix` and the gate, from the
 // findings repository. It is a wait, not a write: a run that cannot read its
 // settings makes no guess, so the read retries with backoff up to a quarter of
@@ -803,6 +975,16 @@ function isFindingMoved(err: unknown): boolean {
 /** A wait that ran out its schedule-to-close bound, rather than failing outright. */
 function isTimeout(err: unknown): boolean {
   return err instanceof wf.ActivityFailure && (err.retryState === 'TIMEOUT' || err.cause instanceof wf.TimeoutFailure);
+}
+
+/** The first application failure type in a failure chain: a child's, or its activity's. */
+function failureType(err: unknown): string | null {
+  let current: unknown = err;
+  for (let depth = 0; current instanceof Error && depth < 6; depth++) {
+    if (current instanceof wf.ApplicationFailure && current.type) return current.type;
+    current = (current as Error).cause;
+  }
+  return null;
 }
 
 /** The innermost specific message of a failure chain. */
@@ -917,6 +1099,42 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
   );
 
+  // The two Updates of a parked run (STW-653). Each validator is read-only and
+  // its refusal reaches the sender; each handler only sets the flag the park's
+  // wait reads, so neither issues a command.
+  // At most one of the three messages a park takes is accepted (`resume`,
+  // `request-fix`, a `rejected` verdict): each validator refuses while
+  // another is asked for, so no accepted Update goes unanswered.
+  const resume = { requested: false };
+  const rejection: ParkRejection = { verdict: null, done: false, failed: null };
+  const asks: ParkAsks = { resume, fix, rejection };
+  wf.setHandler(
+    resumeUpdate,
+    (): ResumeAccepted => {
+      resume.requested = true;
+      return { stage: (state.parked as FindingPark).stage, attempt: state.fixAttempts ?? 0 };
+    },
+    {
+      validator: (request: ResumeRequest): void => {
+        const refusal = resumeRefusal(state, asks, request);
+        if (refusal) throw new Error(refusal);
+      },
+    },
+  );
+  wf.setHandler(
+    requestFixUpdate,
+    (): FixAccepted => {
+      fix.requested = true;
+      return { attempt: (state.fixAttempts ?? 0) + 1 };
+    },
+    {
+      validator: (request: FixUpdateRequest): void => {
+        const refusal = requestFixRefusal(state, asks, request);
+        if (refusal) throw new Error(refusal);
+      },
+    },
+  );
+
   // The verdict as an Update (STW-636). One rule for a verdict by either
   // path: the first well-formed one to reach the run stands. A later one of
   // the same status is answered with the first; a later one of the other
@@ -931,6 +1149,21 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   wf.setHandler(
     verdictUpdate,
     async (verdict): Promise<VerdictRecorded> => {
+      // A `rejected` verdict on a run parked after its fix PR (STW-653): the
+      // park writes it and ends the run as a rejection; this returns after the write.
+      if (rejectsAtPark(state, verdict)) {
+        rejection.verdict = verdict;
+        rejection.done = false;
+        rejection.failed = null;
+        try {
+          await wf.condition(() => rejection.done || rejection.failed !== null);
+        } catch (err) {
+          if (!wf.isCancellation(err)) throw err;
+          throw wf.ApplicationFailure.nonRetryable(VERDICT_CANCELLED, VERDICT_WRITE_FAILED);
+        }
+        if (!rejection.done) throw wf.ApplicationFailure.nonRetryable(String((rejection as ParkRejection).failed), VERDICT_WRITE_FAILED);
+        return { verdict, commitSha: state.commitSha, first: true, stopAfter: input.stopAfter ?? 'resolved' };
+      }
       const first = state.verdict === null;
       if (first) state.verdict = verdict;
       try {
@@ -947,7 +1180,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
     {
       validator: (verdict: FindingVerdict): void => {
-        const refusal = verdictRefusal(state, verdict);
+        const refusal = verdictRefusal(state, verdict, asks);
         if (refusal) throw new Error(refusal);
       },
     },
@@ -1013,7 +1246,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
       branch: input.branch ?? fixBranch(input.key),
       waitsForPerson: false,
     };
-    return await lifecycle(atUse, state, base, fix, slot, retest, true);
+    return await lifecycle(atUse, state, base, fix, slot, retest, resume, rejection, true);
   }
 
   if (input.stopAfter === 'verdict') {
@@ -1030,7 +1263,92 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     return base;
   }
 
-  return await lifecycle(input as LifecycleInput, state, base, fix, slot, retest, false);
+  return await lifecycle(input as LifecycleInput, state, base, fix, slot, retest, resume, rejection, false);
+}
+
+/** A `rejected` verdict a parked run has accepted (STW-653), until the park writes it. */
+interface ParkRejection {
+  verdict: FindingVerdict | null;
+  done: boolean;
+  failed: string | null;
+}
+
+/** The flags of the three messages a park takes, for the validators to see each other's. */
+interface ParkAsks {
+  resume: { requested: boolean };
+  fix: { requested: boolean };
+  rejection: ParkRejection;
+}
+
+/** True for a `rejected` verdict that a run parked after its fix PR takes in place of its approval (STW-653). */
+function rejectsAtPark(state: FindingState, verdict: FindingVerdict): boolean {
+  return state.step === 'parked' && verdict.status === 'rejected' && state.verdict?.status === 'approved';
+}
+
+/** Why a park refuses a message because another is already asked for; null when none is. */
+function otherAsk(asks: ParkAsks, mine: 'resume' | 'fix' | 'reject'): string | null {
+  if (mine !== 'resume' && asks.resume.requested) return 'A resume is already asked for: the run runs its stage again first.';
+  if (mine !== 'fix' && asks.fix.requested) return 'A new fix attempt is already asked for.';
+  if (mine !== 'reject' && asks.rejection.verdict) return 'A rejection is already being written: the run ends with it.';
+  return null;
+}
+
+/**
+ * Why a `resume` Update is refused, in a sentence the CLI prints, or null to
+ * accept it (STW-653). Read-only.
+ */
+function resumeRefusal(state: FindingState, asks: ParkAsks, request: ResumeRequest): string | null {
+  if (!request || (request.source !== 'cli' && request.source !== 'console') || typeof request.at !== 'string') {
+    return 'The resume request is malformed.';
+  }
+  if (state.step !== 'parked' || !state.parked) return `The run is not parked: it is at ${state.step ?? 'an unknown step'}.`;
+  if (asks.resume.requested) return 'A resume is already asked for.';
+  return otherAsk(asks, 'resume');
+}
+
+/**
+ * Why a `request-fix` Update is refused, in a sentence the CLI prints, or null
+ * to accept it (STW-653). Read-only. It accepts only where the run honours
+ * it: at `waiting-fix`, and at a park whose PR merged or closed. The `fix`
+ * Signal keeps its wider acceptance for older callers, which promised nothing.
+ */
+function requestFixRefusal(state: FindingState, asks: ParkAsks, request: FixUpdateRequest): string | null {
+  if (!request || (request.source !== 'cli' && request.source !== 'console') || typeof request.at !== 'string') {
+    return 'The fix request is malformed.';
+  }
+  if (state.stopAfter !== 'resolved') return 'This run ends at the verdict, so it opens no fix.';
+  if (!state.verdict) return 'The run has no verdict yet: approve the finding first.';
+  if (state.verdict.status !== 'approved') return 'The verdict is rejected, so there is nothing to fix.';
+  if (asks.fix.requested) return 'A fix is already asked for.';
+  const pr = state.prUrl ?? 'the fix PR';
+  switch (state.step) {
+    case 'waiting-fix':
+      return null;
+    case 'parked':
+      if (state.parked && !parkTakesFix(state.parked.stage)) {
+        return `${pr} is not merged and may still be open: close it, then send resume so the run reads it closed.`;
+      }
+      return otherAsk(asks, 'fix');
+    case 'waiting-verdict':
+    case 'reading-settings':
+      return 'The run is taking its verdict now: ask again once it waits for a fix.';
+    case 'measuring':
+      return 'The run is measuring the checks at its verdict: ask again once it waits for a fix.';
+    case 'testing-preview':
+    case 'waiting-merge':
+      return `${pr} is open: close it, and the run goes back to waiting for a fix.`;
+    case 'waiting-deploy':
+      return `${pr} is merged, and the run waits for production to serve it.`;
+    case 'verifying':
+      return `The run is verifying ${pr} on production now.`;
+    case 'waiting-slot':
+    case 'fixing':
+      return `A fix is in flight: the run is at ${state.step}${state.issueUrl ? ` with ${state.issueUrl}` : ''}.`;
+    case 'done':
+      return 'The run has ended.';
+    default:
+      return `The run is at ${state.step ?? 'an unknown step'}, not waiting for a fix.`;
+  }
 }
 
 /**
@@ -1050,8 +1368,10 @@ interface Retest {
  * null to accept it. Read-only. A verdict that agrees with the one already
  * taken is accepted, so a retry after a lost reply is harmless.
  */
-function verdictRefusal(state: FindingState, verdict: FindingVerdict): string | null {
+function verdictRefusal(state: FindingState, verdict: FindingVerdict, asks: ParkAsks): string | null {
   if (!isFindingVerdict(verdict)) return 'The verdict is malformed.';
+  // A run parked after its fix PR takes a rejection in place of its approval (STW-653).
+  if (rejectsAtPark(state, verdict)) return otherAsk(asks, 'reject');
   if (state.verdict && state.verdict.status !== verdict.status) {
     return `A verdict is already recorded: ${state.verdict.status} (source ${state.verdict.source}).`;
   }
@@ -1111,6 +1431,10 @@ async function lifecycle(
   fix: { requested: boolean },
   slot: Slot,
   retest: Retest,
+  /** Set by an accepted `resume` Update (STW-653). */
+  resume: { requested: boolean },
+  /** A `rejected` verdict a park accepted (STW-653). */
+  rejection: ParkRejection,
   /** True for a run that took the {@link SETTINGS_AT_USE_PATCH} marker at its verdict. */
   atUse: boolean,
 ): Promise<FindingWorkflowResult> {
@@ -1242,12 +1566,17 @@ async function lifecycle(
    * `retest` Update in one cancellation scope. The loser is cancelled: the
    * condition silently, the poll with a `RequestCancelActivityTask` when the
    * Update wins. Each loser's rejection is caught here, so none goes unhandled.
+   * `unbounded` is the re-wait after the first 30 days ran out (STW-653).
    */
-  const mergeOrRetest = async (prUrl: string, options: AwaitFixPrMergeOptions): Promise<FixPrOutcome | 'retest'> => {
+  const mergeOrRetest = async (
+    prUrl: string,
+    options: AwaitFixPrMergeOptions,
+    unbounded: boolean,
+  ): Promise<FixPrOutcome | 'retest'> => {
     retest.open = true;
     try {
       return await wf.CancellationScope.cancellable(async () => {
-        const merge = merging.awaitFixPrMerge(prUrl, options);
+        const merge = (unbounded ? mergingOn : merging).awaitFixPrMerge(prUrl, options);
         const asked = wf.condition(() => retest.requested).then(() => 'retest' as const);
         try {
           return await Promise.race([merge, asked]);
@@ -1420,6 +1749,173 @@ async function lifecycle(
     }
   };
 
+  // ---- Open until verified (STW-653) --------------------------------------
+
+  /** The PR comments posted in this run, by marker, so a repeat schedules nothing. */
+  const told = new Set<string>();
+  /** A person's new attempt from a park: the earlier PR, for the gate and the file's `## Fix attempts`. */
+  let reattempt: { prUrl: string; at: string; note: string } | null = null;
+
+  /**
+   * One comment on the current PR, once per `what` in this attempt. Never
+   * throws but for cancellation: the reason it was not posted is returned.
+   */
+  const tell = async (what: string, body: string): Promise<string | null> => {
+    const marker = parkCommentMarker(input.site, input.key, fixAttempts, what);
+    if (told.has(marker) || !state.prUrl) return null;
+    try {
+      await writing.commentOnFixPr({ prUrl: state.prUrl, marker, body });
+      // Told only once posted: a comment that failed is tried again at the next park of its kind.
+      told.add(marker);
+      return null;
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      wf.log.warn('the PR comment was not posted', { key: input.key, what, error: describeError(err) });
+      return describeError(err);
+    }
+  };
+
+  /**
+   * The memo's `waitsFor`, kept to what the state says: a park's line, else a
+   * wait past its bound, else nothing. An upsert only when the line changes,
+   * so a run that never parks or waits past a bound issues none.
+   */
+  let memoLine: string | undefined;
+  let waitLine: string | undefined;
+  const syncMemo = (): void => {
+    const line = state.step === 'parked' && state.parked ? parkLine(state.parked) : state.waitNote ? waitLine : undefined;
+    if (line === memoLine) return;
+    memoLine = line;
+    wf.upsertMemo({ waitsFor: line });
+  };
+
+  /** A merge or deploy wait whose first bound ran out: said once on the PR and in the memo, then the wait goes on. */
+  const waitExpired = async (wait: 'merge' | 'deploy', note: string): Promise<void> => {
+    state.waitNote = `${note} Waiting on since ${nowIso()}.`;
+    waitLine = `waiting on the ${wait} past its first bound: ${note}`;
+    syncMemo();
+    await tell(`${wait}-wait`, waitExpiredComment(wait, note, workflowId));
+  };
+
+  /** The end of a wait, or the way into a new attempt: the note and the memo line go together. */
+  const endWaitNote = (): void => {
+    state.waitNote = null;
+    syncMemo();
+  };
+
+  /**
+   * Parks the run until a person's `resume`, `request-fix` or `rejected`
+   * verdict: Temporal's Resumable Activity pattern. The slot goes back first,
+   * the PR gets one comment, and the memo carries the line `steward finding
+   * list` prints. Nothing runs on a clock while parked. A rejection is written
+   * here and ends the run, as a rejection at the gate does; a write that fails
+   * answers the Update with the failure and the run stays parked.
+   */
+  const park = async (p: { kind: FindingParkKind; stage: FindingParkStage; reason: string }): Promise<'resume' | 'fix' | FindingWorkflowResult> => {
+    await release(`parked at ${p.stage}`);
+    const parked: FindingPark = { ...p, since: nowIso(), moves: parkMoves(input.key, p.stage), prUrl: state.prUrl ?? null, commentError: null };
+    resume.requested = false;
+    state.parked = parked;
+    state.step = 'parked';
+    syncMemo();
+    parked.commentError = await tell(`park-${p.kind}-${p.stage}`, parkComment(parked, workflowId));
+    wf.log.info('parked', { key: input.key, kind: p.kind, stage: p.stage });
+    for (;;) {
+      await wf.condition(() => resume.requested || fix.requested || rejection.verdict !== null);
+      if (rejection.verdict) {
+        const rejected = await rejectAtPark(rejection.verdict);
+        if (rejected) return rejected;
+        continue;
+      }
+      break;
+    }
+    const moved = fix.requested ? 'fix' : 'resume';
+    resume.requested = false;
+    state.parked = null;
+    // Into a new attempt, a wait's note goes with the park; back into the wait, it stays.
+    if (moved === 'fix') state.waitNote = null;
+    syncMemo();
+    return moved;
+  };
+
+  /** Writes a `rejected` verdict a park accepted; the run's result, or null when the write failed. */
+  const rejectAtPark = async (verdict: FindingVerdict): Promise<FindingWorkflowResult | null> => {
+    let commitSha: string | null = null;
+    try {
+      if (verdictSourceWrites(verdict.source)) {
+        commitSha = (
+          await writing.writeFindingVerdict({
+            repo: input.repo,
+            site: input.site,
+            key: input.key,
+            findingPath: input.findingPath,
+            indexPath: input.indexPath,
+            status: verdict.status,
+            reason: verdict.reason,
+            at: verdict.at,
+            source: verdict.source,
+          })
+        ).commitSha;
+      }
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      rejection.failed = `The rejection was not written: ${describeError(err)}`;
+      rejection.verdict = null;
+      return null;
+    }
+    state.verdict = verdict;
+    state.commitSha = commitSha;
+    state.parked = null;
+    state.waitNote = null;
+    rejection.done = true;
+    rejection.verdict = null;
+    // The waiting Update returns before the run closes.
+    await wf.condition(wf.allHandlersFinished);
+    return end('rejected', `Rejected after its fix PR ${state.prUrl ?? ''}, where it was parked.`, { verdict, commitSha });
+  };
+
+  /** A file decided elsewhere ends the run `closed`; null when it is not decided. */
+  const decidedElsewhere = async (): Promise<FindingWorkflowResult | null> => {
+    const settings = await settling.readFindingSettings({
+      repo: input.repo,
+      site: input.site,
+      key: input.key,
+      findingPath: input.findingPath,
+    });
+    if (settings.status !== 'resolved' && settings.status !== 'rejected') return null;
+    return end('closed', `Closed after its fix PR ${state.prUrl ?? ''}: the finding file says ${settings.status}.`);
+  };
+
+  /**
+   * After a write's fast phase failed: Temporal's Fast/Slow Retries when the
+   * failure passes by itself, else a park. `done` when the slow phase wrote;
+   * the run's result when the file was decided elsewhere; else the message
+   * that moved the park.
+   */
+  const slowOrPark = async (
+    stage: FindingParkStage,
+    err: unknown,
+    slow: () => Promise<unknown>,
+    what: string,
+  ): Promise<'done' | 'resume' | 'fix' | FindingWorkflowResult> => {
+    let failure = err;
+    if (slowPhaseFor(err)) {
+      wf.log.warn('fast retries used up; switching to the slow phase', { key: input.key, stage, interval: SLOW_INTERVAL });
+      try {
+        await slow();
+        return 'done';
+      } catch (slowErr) {
+        if (wf.isCancellation(slowErr)) throw slowErr;
+        failure = slowErr;
+      }
+    }
+    if (failureType(failure) === 'FindingMoved') {
+      const closed = await decidedElsewhere();
+      if (closed) return closed;
+    }
+    return await park({ kind: 'error', stage, reason: `${what}: ${describeError(failure)}.` });
+  };
+
   try {
     return await fixLoop();
   } finally {
@@ -1452,11 +1948,18 @@ async function lifecycle(
 
     // The last attempt's issue, and why it ended: the next attempt closes it with that.
     let lastIssue: { url: string; reason: string } | null = null;
+    /** A person's `request-fix` from a park (STW-653): the next attempt names why the last one ended. */
+    const askedAgain = (prUrl: string, why: string): void => {
+      if (lastIssue) lastIssue.reason = why;
+      reattempt = { prUrl, at: nowIso(), note: `${why} A new fix was asked for.` };
+    };
     // Set when a conflicting PR was closed: the next attempt starts without a `fix`.
     let recut = false;
 
-    for (;;) {
+    attempts: for (;;) {
       state.step = 'waiting-fix';
+      // Into a new attempt, no wait note or park line survives (STW-653); no command when there was none.
+      if (state.waitNote) endWaitNote();
       if (!recut && atUse) {
         const closed = await waitAtUse(heldAtVerdict && fixAttempts === 0);
         if (closed) return closed;
@@ -1491,6 +1994,8 @@ async function lifecycle(
             key: input.key,
             findingPath: input.findingPath,
             supersedes: lastIssue,
+            // A person's new attempt from a park (STW-653): the earlier PR's file passes the gate.
+            ...(reattempt ? { afterPr: reattempt.prUrl } : {}),
           });
           state.issueUrl = issue.url;
           lastIssue = { url: issue.url, reason: '' };
@@ -1508,8 +2013,10 @@ async function lifecycle(
             findingPath: input.findingPath,
             indexPath: input.indexPath,
             prUrl,
+            ...(reattempt ? { earlier: reattempt } : {}),
           });
-          // From here the only way back to the fix wait is the PR closing unmerged.
+          reattempt = null;
+          // From here the only way back to the fix wait is the PR closing unmerged, or a park.
           lastIssue.reason = `${prUrl} closed unmerged`;
         } else {
           const fixed = await wf.executeChild(fixFindingWorkflow, {
@@ -1549,54 +2056,74 @@ async function lifecycle(
       if (viaIssue && wf.patched(PREVIEW_TEST_PATCH)) tested = await testOnPreview(prUrl, earlier);
 
       state.step = 'waiting-merge';
-      let merge;
+      let merge!: FixPrOutcome;
       let reportConflict = dispatched;
-      try {
-        for (;;) {
-          // The retest (STW-587): only after a test that found checks. No
-          // marker; the docblock's "The retest" says why.
-          if (tested?.hasChecks) {
-            retest.prUrl = prUrl;
-            retest.testedSha = tested.sha;
-            retest.requested = false;
-            const waited = await mergeOrRetest(prUrl, {
-              ...(reportConflict ? { reportConflict: true } : {}),
-              ...(tested.sha ? { retestAfter: tested.sha } : {}),
-            });
-            if (waited === 'retest' || waited.state === 'pushed') {
-              earlier.push({ sha: tested.sha, line: tested.line });
-              tested = await testOnPreview(prUrl, earlier);
-              state.step = 'waiting-merge';
+      // Set once the first 30 days ran out (STW-653): the wait goes on with no bound.
+      let mergeExpired = false;
+      mergeWait: for (;;) {
+        state.step = 'waiting-merge';
+        try {
+          for (;;) {
+            // The retest (STW-587): only after a test that found checks. No
+            // marker; the docblock's "The retest" says why.
+            if (tested?.hasChecks) {
+              retest.prUrl = prUrl;
+              retest.testedSha = tested.sha;
+              retest.requested = false;
+              const waited = await mergeOrRetest(
+                prUrl,
+                {
+                  ...(reportConflict ? { reportConflict: true } : {}),
+                  ...(tested.sha ? { retestAfter: tested.sha } : {}),
+                },
+                mergeExpired,
+              );
+              if (waited === 'retest' || waited.state === 'pushed') {
+                earlier.push({ sha: tested.sha, line: tested.line });
+                tested = await testOnPreview(prUrl, earlier);
+                state.step = 'waiting-merge';
+                continue;
+              }
+              merge = waited;
+            } else {
+              const wait = mergeExpired ? mergingOn : merging;
+              merge = reportConflict ? await wait.awaitFixPrMerge(prUrl, { reportConflict: true }) : await wait.awaitFixPrMerge(prUrl);
+            }
+            if (merge.state !== 'conflicting') break;
+            let closed;
+            try {
+              closed = await writing.closeConflictingFixPr(prUrl);
+            } catch (err) {
+              if (wf.isCancellation(err)) throw err;
+              // It could not be closed: leave it to a person, and wait on it as before.
+              state.lastFixError = `${prUrl} conflicts and could not be closed: ${describeError(err)}`;
+              reportConflict = false;
               continue;
             }
-            merge = waited;
-          } else {
-            merge = reportConflict ? await merging.awaitFixPrMerge(prUrl, { reportConflict: true }) : await merging.awaitFixPrMerge(prUrl);
+            // Merged or closed since the read: the next read says which.
+            if (!closed.closed) continue;
+            const sibling = closed.siblings.length > 0 ? ` with ${closed.siblings.join(', ')}` : '';
+            if (lastIssue) lastIssue.reason = `${prUrl} conflicted${sibling} and was closed; the fix is re-cut from the new master`;
+            break;
           }
-          if (merge.state !== 'conflicting') break;
-          let closed;
-          try {
-            closed = await writing.closeConflictingFixPr(prUrl);
-          } catch (err) {
-            if (wf.isCancellation(err)) throw err;
-            // It could not be closed: leave it to a person, and wait on it as before.
-            state.lastFixError = `${prUrl} conflicts and could not be closed: ${describeError(err)}`;
-            reportConflict = false;
+          break;
+        } catch (err) {
+          if (isTimeout(err)) {
+            await release('merge timeout');
+            if (!wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) {
+              return end('merge-timeout', `${prUrl} was not merged or closed within 30 days. The finding is still fixing.`);
+            }
+            mergeExpired = true;
+            await waitExpired('merge', `${prUrl} was not merged or closed within 30 days.`);
             continue;
           }
-          // Merged or closed since the read: the next read says which.
-          if (!closed.closed) continue;
-          const sibling = closed.siblings.length > 0 ? ` with ${closed.siblings.join(', ')}` : '';
-          if (lastIssue) lastIssue.reason = `${prUrl} conflicted${sibling} and was closed; the fix is re-cut from the new master`;
-          break;
+          if (wf.isCancellation(err) || !wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) throw err;
+          // A request-fix is refused at this stage, so a resume moves it (the wait runs again), or a rejection ends it.
+          const moved = await park({ kind: 'error', stage: 'merge', reason: `The merge wait on ${prUrl} failed: ${describeError(err)}.` });
+          if (typeof moved === 'object') return moved;
         }
-      } catch (err) {
-        if (isTimeout(err)) {
-          await release('merge timeout');
-          return end('merge-timeout', `${prUrl} was not merged or closed within 30 days. The finding is still fixing.`);
-        }
-        throw err;
       }
+      endWaitNote();
 
       if (merge.state === 'conflicting') {
         await release('conflict');
@@ -1606,7 +2133,7 @@ async function lifecycle(
 
       if (merge.state === 'closed') {
         await release('closed unmerged');
-        await writing.writeFindingReturned({
+        const returned = {
           repo: input.repo,
           site: input.site,
           key: input.key,
@@ -1614,82 +2141,164 @@ async function lifecycle(
           indexPath: input.indexPath,
           prUrl,
           at: nowIso(),
-        });
+        };
+        for (;;) {
+          state.step = 'waiting-merge';
+          try {
+            await writing.writeFindingReturned(returned);
+            break;
+          } catch (err) {
+            if (wf.isCancellation(err) || !wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) throw err;
+            const settled = await slowOrPark(
+              'returned',
+              err,
+              () => slowWriting.writeFindingReturned({ ...returned, retryAuth: true }),
+              `${prUrl} closed unmerged, and the finding was not written back to approved`,
+            );
+            if (settled === 'done') break;
+            if (settled === 'fix') {
+              askedAgain(prUrl, `${prUrl} closed unmerged, and the finding was not written back to approved.`);
+              continue attempts;
+            }
+            if (settled !== 'resume') return settled;
+          }
+        }
         continue;
       }
 
       const mergeSha = merge.mergeSha as string;
       const pr = parsePrUrl(prUrl);
+      // Nothing reaches this throw: the URL came from `awaitFixPr`, which matches
+      // GitHub's own PR list, or from the frozen fixer's child. It stays the old
+      // failure, with no park (STW-653).
       if (!pr) throw wf.ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
 
-      state.step = 'waiting-deploy';
-      let deploy;
-      try {
-        deploy = await deploying.awaitProductionDeploy({ repo: pr.repo, mergeSha, environment: PRODUCTION_ENVIRONMENT });
-      } catch (err) {
-        if (isTimeout(err)) {
-          await release('deploy timeout');
-          return end(
-            'deploy-timeout',
-            `Production did not serve ${mergeSha.slice(0, 7)} within 24 hours. The finding is still fixing.`,
-            { mergeSha },
-          );
+      let deploy!: ProductionDeploy;
+      // Set once the first 24 hours ran out (STW-653): the wait goes on every DEPLOY_REWAIT.
+      let deployExpired = false;
+      for (;;) {
+        state.step = 'waiting-deploy';
+        try {
+          deploy = await (deployExpired ? deployingOn : deploying).awaitProductionDeploy({
+            repo: pr.repo,
+            mergeSha,
+            environment: PRODUCTION_ENVIRONMENT,
+          });
+          break;
+        } catch (err) {
+          if (isTimeout(err)) {
+            await release('deploy timeout');
+            if (!wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) {
+              return end(
+                'deploy-timeout',
+                `Production did not serve ${mergeSha.slice(0, 7)} within 24 hours. The finding is still fixing.`,
+                { mergeSha },
+              );
+            }
+            deployExpired = true;
+            await waitExpired('deploy', `Production did not serve ${mergeSha.slice(0, 7)} within 24 hours of the merge.`);
+            continue;
+          }
+          if (wf.isCancellation(err) || !wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) throw err;
+          const reason = `The deploy wait for ${mergeSha.slice(0, 7)} failed: ${describeError(err)}.`;
+          const moved = await park({ kind: 'error', stage: 'deploy', reason });
+          if (typeof moved === 'object') return moved;
+          if (moved === 'fix') {
+            askedAgain(prUrl, `${prUrl} merged at ${mergeSha.slice(0, 7)}; ${reason}`);
+            continue attempts;
+          }
         }
-        throw err;
       }
+      endWaitNote();
       // Live: the next fix on these paths can be cut from this master.
       await release('live');
 
-      state.step = 'verifying';
-      const at = nowIso();
-      const verifyId = verifyWorkflowId(input.site, input.key, at);
-      const verifyQueue = wf.patched(VERIFIER_HOSTED_PATCH) ? QUEUE_FINDINGS : QUEUE_HEAVY;
       // A merge over a failed last preview test: the Verification section says so.
       const previewAtMerge = tested?.failed ? `${tested.line}, at ${tested.sha ? tested.sha.slice(0, 7) : 'no commit'}` : null;
-      try {
-        const verified = await wf.executeChild(verifyFindingWorkflow, {
-          workflowId: verifyId,
-          taskQueue: verifyQueue,
-          args: [
-            {
-              site: input.site,
-              key: input.key,
-              repo: input.repo,
-              findingPath: input.findingPath,
-              indexPath: input.indexPath,
-              handoffPath: input.handoffPath,
-              origin: input.origin,
-              at,
-              ...(previewAtMerge ? { previewAtMerge } : {}),
-            },
-          ],
-        });
-        const live = { mergeSha, liveSha: deploy.liveSha, verifyWorkflowId: verifyId };
-        if (verified.outcome === 'confirmed') {
-          return end(
-            'confirmed',
-            `Confirmed by its deploy: production serves ${(verified.deploy?.liveSha ?? deploy.liveSha).slice(0, 7)}, which contains ${mergeSha.slice(0, 7)}. No check could measure the fix.`,
-            live,
-          );
+      for (;;) {
+        state.step = 'verifying';
+        const at = nowIso();
+        const verifyId = verifyWorkflowId(input.site, input.key, at);
+        const verifyQueue = wf.patched(VERIFIER_HOSTED_PATCH) ? QUEUE_FINDINGS : QUEUE_HEAVY;
+        state.verifyWorkflowId = verifyId;
+        let parkAs: { kind: FindingParkKind; reason: string };
+        try {
+          const verified = await wf.executeChild(verifyFindingWorkflow, {
+            workflowId: verifyId,
+            taskQueue: verifyQueue,
+            args: [
+              {
+                site: input.site,
+                key: input.key,
+                repo: input.repo,
+                findingPath: input.findingPath,
+                indexPath: input.indexPath,
+                handoffPath: input.handoffPath,
+                origin: input.origin,
+                at,
+                // The child's slow phase (STW-653): an input field, so no command of this run moves.
+                slowRetry: true,
+                ...(previewAtMerge ? { previewAtMerge } : {}),
+              },
+            ],
+          });
+          const live = { mergeSha, liveSha: deploy.liveSha, verifyWorkflowId: verifyId };
+          if (verified.outcome === 'confirmed') {
+            return end(
+              'confirmed',
+              `Confirmed by its deploy: production serves ${(verified.deploy?.liveSha ?? deploy.liveSha).slice(0, 7)}, which contains ${mergeSha.slice(0, 7)}. No check could measure the fix.`,
+              live,
+            );
+          }
+          // A child recorded before decision 30 ended here; nothing produces it now.
+          if (verified.outcome === 'unverifiable') {
+            const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
+            return end(
+              'unverifiable',
+              `Live at ${deploy.liveSha.slice(0, 7)}, but unverifiable: the finding ${why}, so no check ran. The finding is still fixing.`,
+              live,
+            );
+          }
+          if (verified.outcome !== 'reopened' || !wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) {
+            return end(verified.outcome, `Verified on production at ${deploy.liveSha.slice(0, 7)}: ${verified.outcome}.`, live);
+          }
+          parkAs = { kind: 'checks-failed', reason: failedChecksLine(verified.checks, deploy.liveSha) };
+        } catch (err) {
+          if (wf.isCancellation(err)) throw err;
+          if (!wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) {
+            return end('verify-failed', `The verify failed: ${describeError(err)}. The finding is still fixing.`, {
+              mergeSha,
+              liveSha: deploy.liveSha,
+              verifyWorkflowId: verifyId,
+            });
+          }
+          const type = failureType(err);
+          if (type === 'FindingNotVerifiable' || type === 'FindingMoved') {
+            const closed = await decidedElsewhere();
+            if (closed) return closed;
+          }
+          parkAs = {
+            kind: type === 'VerifyCheckBroken' || type === 'VerifyBlockInvalid' ? 'checks-broken' : 'error',
+            reason: `The verify ${verifyId} failed: ${describeError(err)}.`,
+          };
         }
-        // A child recorded before decision 30 ended here; nothing produces it now.
-        if (verified.outcome === 'unverifiable') {
-          const why = verified.hasBlock === false ? 'has no verify block' : 'has an empty verify block';
-          return end(
-            'unverifiable',
-            `Live at ${deploy.liveSha.slice(0, 7)}, but unverifiable: the finding ${why}, so no check ran. The finding is still fixing.`,
-            live,
-          );
+        const moved = await park({ ...parkAs, stage: 'verify' });
+        if (typeof moved === 'object') return moved;
+        if (moved === 'fix') {
+          askedAgain(prUrl, `${prUrl} merged at ${mergeSha.slice(0, 7)}, and ${parkAs.reason}`);
+          continue attempts;
         }
-        return end(verified.outcome, `Verified on production at ${deploy.liveSha.slice(0, 7)}: ${verified.outcome}.`, live);
-      } catch (err) {
-        if (wf.isCancellation(err)) throw err;
-        return end('verify-failed', `The verify failed: ${describeError(err)}. The finding is still fixing.`, {
-          mergeSha,
-          liveSha: deploy.liveSha,
-          verifyWorkflowId: verifyId,
-        });
       }
     }
   }
+}
+
+/** What a verify that ran found wrong, in one sentence for the park and the PR comment (STW-653). */
+function failedChecksLine(checks: { n: number; url: string | string[]; kind: string; pass: boolean; expected: string; measured: string }[], liveSha: string): string {
+  const failed = checks.filter((check) => !check.pass);
+  const rows = failed.map((check) => {
+    const url = Array.isArray(check.url) ? check.url.join(', ') : check.url;
+    return `check ${check.n} (${check.kind} on ${url}) expected ${check.expected} and measured ${check.measured}`;
+  });
+  return `Production at ${liveSha.slice(0, 7)} failed ${rows.length > 0 ? rows.join('; ') : 'its checks'}. The finding is reopened.`;
 }

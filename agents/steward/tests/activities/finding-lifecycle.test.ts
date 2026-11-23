@@ -242,6 +242,22 @@ test('a live commit that does not contain the merge, or no live deployment, is a
   assert.match(open.why, /pull\/312 has no merge commit/);
 });
 
+test('with requireLive, a production that does not contain the merge is a retryable FixNotLive (STW-653)', async () => {
+  scriptGitHub({
+    [PR_312]: mergedPr,
+    [DEPLOYS]: [{ id: 6, sha: 'old' }],
+    [status(6)]: [{ state: 'success' }],
+    [`/repos/${SITE_REPO}/compare/m1...old`]: { status: 'behind' },
+  });
+  await assert.rejects(readProductionDeploy({ prUrl: FIX_PR, environment: 'Production', requireLive: true }), (err: unknown) => {
+    assert.ok(err instanceof ApplicationFailure, String(err));
+    assert.equal(err.type, 'FixNotLive');
+    assert.equal(err.nonRetryable, false, 'the verify child retries it in its two phases');
+    assert.match(err.message, /does not contain m1 yet: .*serves old/);
+    return true;
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The closed-PR write back
 // ---------------------------------------------------------------------------

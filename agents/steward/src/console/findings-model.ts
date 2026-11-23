@@ -15,7 +15,7 @@ import { buildEvents, type FindingEvent } from './finding-events.js';
 import { renderFindingBody, type FindingSection } from './finding-markdown.js';
 import { siteAutoFix, siteStopAfter } from '../activities/findings.js';
 import { fixOffered, verifyOffered } from '../lib/finding-actions.js';
-import { fixRefusal, parseFindingBody, parsePrUrl } from '../lib/findings.js';
+import { fixRefusal, parkTakesFix, parseFindingBody, parsePrUrl, type FindingPark } from '../lib/findings.js';
 import { dispatchWorkflowId, waitingSlotLine, type DispatchState } from '../lib/fix-dispatch.js';
 import { findingStateQuery, type FindingState } from '../workflows/finding.js';
 import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
@@ -40,7 +40,8 @@ import { dispatchStateQuery } from '../workflows/fix-dispatch.js';
  * the token's 5,000 an hour.
  */
 
-export const STATE_QUERIED_STATUSES = ['approved', 'fixing', 'resolved', 'rejected'] as const;
+// `reopened` since STW-653: a run that verified a failed fix stays open, parked, behind a reopened line.
+export const STATE_QUERIED_STATUSES = ['approved', 'fixing', 'reopened', 'resolved', 'rejected'] as const;
 
 /** How the page groups a row, by its file status. */
 export type RowGroup = 'verdict' | 'flight' | 'done' | 'other';
@@ -67,6 +68,18 @@ export interface FindingRunView {
   lastFixError: string | null;
   /** At `waiting-slot`: what holds the slot, from the site's dispatcher. */
   slotLine: string | null;
+  /** At `parked` (STW-653): what happened, where, and what moves the run. */
+  parked?: FindingPark | null;
+  /** A merge or deploy wait gone past its first bound (STW-653). */
+  waitNote?: string | null;
+}
+
+/** The hold line of a run parked after its fix PR, or waiting past a bound (STW-653); null for any other run. */
+export function parkHoldLine(run: Pick<FindingRunView, 'open' | 'step' | 'parked' | 'waitNote'>): string | null {
+  if (!run.open) return null;
+  if (run.step === 'parked' && run.parked) return `Parked at ${run.parked.stage}: ${run.parked.reason} ${run.parked.moves}`;
+  if (run.waitNote) return `Waiting past its bound: ${run.waitNote}`;
+  return null;
 }
 
 export interface FindingRow {
@@ -460,6 +473,8 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
             row.run.issueUrl = state.issueUrl ?? null;
             row.run.previewResult = state.previewResult ?? null;
             row.run.lastFixError = state.lastFixError ?? null;
+            row.run.parked = state.parked ?? null;
+            row.run.waitNote = state.waitNote ?? null;
             if (!row.prUrl && state.prUrl) row.prUrl = state.prUrl;
           } catch (err) {
             row.run.queryError = errorLine(err);
@@ -496,6 +511,7 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
               status: row.status,
               runOpen: row.run.open,
               runStep: row.run.step,
+              parkTakesFix: row.run.parked ? parkTakesFix(row.run.parked.stage) : false,
               issueUrl: row.run.issueUrl,
               stopAfter,
               data: gate.data,
@@ -505,6 +521,11 @@ export function createFindingsLoader(sources: FindingsSources): { load(): Promis
           }
           // The page renders the hold line, not the quiet reason, so a row about to lose its run says so there.
           if (assessed.quietReason === QUIET_RUN_CLOSING) row.holdLine = QUIET_RUN_CLOSING;
+          // A run parked after its fix PR, whatever the file says (STW-653): the page says where, and
+          // its Verify resumes the run rather than starting a verify beside it.
+          const parked = parkHoldLine(row.run);
+          if (parked) row.holdLine = parked;
+          if (row.run.open && row.run.step === 'parked' && row.run.parked?.stage === 'verify') row.actions.verify = true;
           if (row.fileMissing) row.drift.unshift('no finding file');
         }
 
