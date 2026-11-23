@@ -1598,7 +1598,10 @@ for (const { ending, path } of preOpenUntilVerified) {
  *    the four `*-pre.bin` histories above fail with `[TMPRL1100]
  *    Nondeterminism error: ModifyWorkflowPropertiesMachine does not handle
  *    HistoryEvent(id: 131, WorkflowExecutionCompleted)` (id 125 for the merge
- *    timeout), and left the other 37 replays green.
+ *    timeout), and left the other 37 replays green. Re-run on 2026-11-23 with
+ *    `finding-returned-failed-pre.bin` added: those five failed, the three
+ *    `findingWorkflow` histories above failed too (they hold the marker, which
+ *    the probe no longer records), and the other 38 passed.
  */
 const openUntilVerified = [
   { file: 'finding-park-resume-resolved.bin', id: 'finding/mattpyle-com/lifecycle-reopened', what: 'a run parked at verify, resumed twice and resolved' },
@@ -1615,3 +1618,33 @@ for (const { file, id, what } of openUntilVerified) {
     await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, id);
   });
 }
+
+/**
+ * A closed run that FAILED on the code before STW-653:
+ * `finding-returned-failed-pre.bin`. Its PR closed unmerged, and
+ * `writeFindingReturned` failed non-retryably (`FindingMissing`); the rethrown
+ * `ActivityFailure` failed the execution. 96 events, the last
+ * `WorkflowExecutionFailed`. New code reaches `patched(OPEN_UNTIL_VERIFIED_PATCH)`
+ * there, which a history without the marker answers false, so the run rethrows
+ * as before. It stands for the other closed failures that now pass a
+ * `patched()` call (a merge or deploy wait's own failure).
+ *
+ * Recorded from the workflow code of f390896 (the three workflow files checked
+ * out over the branch, then restored) by a one-off script like the one above:
+ * `skipVerdictMeasure` over mocks, a `verdict` and a `fix` Signal, a merge
+ * wait that answered `closed`, and the returned write throwing.
+ *
+ * Probe (2026-11-23): replacing every `wf.patched(OPEN_UNTIL_VERIFIED_PATCH)`
+ * with `true` made it fail with `[TMPRL1100] Nondeterminism error`; reverted
+ * and re-run green.
+ */
+test('a lifecycle run that FAILED on its returned write before STW-653 still replays to that failure', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(
+    await fs.readFile(fileURLToPath(new URL('../fixtures/histories/finding-returned-failed-pre.bin', import.meta.url))),
+  );
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});
