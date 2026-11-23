@@ -543,10 +543,12 @@ test('the /a2a route passes the read limiter, from the same function and the sam
 // What stays as it was
 // ---------------------------------------------------------------------------------------------
 
-test('the /steward limits table does not list the read tier', () => {
+test('the /steward limits table lists the read tier, from the limiter\'s own resolver', () => {
   const page = read('../src/pages/steward.astro');
-  assert.doesNotMatch(page, /readReadLimits|DEFAULT_READ_|tier: 'Read/);
-  assert.equal((page.match(/\{ tier: '/g) ?? []).length, 6, 'six rows: fast, deep and session, twice each');
+  assert.match(page, /readReadLimits\(process\.env\)/);
+  assert.match(page, /tier: 'Read \(get_audit\)'/);
+  assert.doesNotMatch(page, /DEFAULT_READ_/);
+  assert.equal((page.match(/\{ tier: '/g) ?? []).length, 7, 'seven rows: fast, deep and session twice each, and read');
 });
 
 test('the consultant skill waits for a reply without asking the read limiter', () => {
