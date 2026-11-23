@@ -363,8 +363,9 @@ const GUARANTEES = [
             relay with an honest User-Agent. The deep limits are two orders of magnitude smaller because a deep
             audit spends minutes of browser time on a machine somebody pays for. The counters hold a
             keyed hash of the caller's address with a lifetime no longer than the window, never the
-            address itself. There is no key and no way to ask for more. <code>get_audit</code> is
-            free: it reads a run you already paid for and makes no request at anybody's origin.
+            address itself. There is no key and no way to ask for more. <code>get_audit</code>
+            spends no audit allowance and makes no request at anybody's origin, but reads are
+            capped per caller per minute, shared by /mcp and /a2a.
           </p>
         </div>
       </div>

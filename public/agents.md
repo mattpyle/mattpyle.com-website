@@ -189,7 +189,7 @@ This site runs a public MCP server. It audits any site for agent-readiness, on t
 
 **What one call costs you.** Both tiers are capped per caller and across all callers, on a budget shared with the A2A endpoint — a slot spent on either protocol is spent on both. The fast tier is capped per hour and per UTC day, the deep tier per UTC day and far lower, because a deep audit spends minutes of browser time on a machine somebody pays for where a fast one spends seconds inside the function that answered you. **The caps in force are on [/steward](https://www.mattpyle.com/steward)**, which renders them from the environment this deployment actually enforces; a number written out here would be a copy that can drift, and one already had.
 
-A refusal is a JSON-RPC error with a `Retry-After` header naming which limit was hit and how long to wait. There is no key, no account, and no way to ask for more. `get_audit` is free: it reads a run you already paid for and makes no request at anybody's origin. The counters hold a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself.
+A refusal is a JSON-RPC error with a `Retry-After` header naming which limit was hit and how long to wait. There is no key, no account, and no way to ask for more. `get_audit` spends no audit allowance and makes no request at anybody's origin, but reads are capped per caller per minute, shared by /mcp and /a2a. The counters hold a keyed hash of the caller's address with a lifetime no longer than the window, never the address itself.
 
 A minimal call:
 
