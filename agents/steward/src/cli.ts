@@ -2005,7 +2005,7 @@ finding
           timeStyle: 'short',
           hour12: false,
         }).format(row.startTime);
-        // A start may put the index line's status in the memo.
+        // Argus's start puts the index line's status in the memo as `indexStatus`.
         const reopened = row.memo?.indexStatus === 'reopened' ? '  reopened' : '';
         const dispatch = dispatchers.get(row.workflowId.split('/')[1] ?? '');
         const blocker = dispatch ? slotBlocker(dispatch, row.workflowId) : null;

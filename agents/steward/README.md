@@ -45,9 +45,11 @@ that's the property being dogfooded here, on a low-stakes, real target.
   `live_on` is set to the America/Vancouver day and `live_by` to `check`) or resolved (its Verification section is written
   and its index line reads `resolved`, in one commit). It opens no fix. Every run pings the site's `steward-findings-recheck-<site>` check at healthchecks.io; a completed run with a `write failed` or `could not measure` row, or a run that throws, pings `/fail`.
 - **`findingWorkflow`** — the gate for findings filed into a separate findings repository by an
-  inspector agent, Argus. One `findingWorkflow` per finding (`finding/<site>/<key>`), started by
-  Argus when it files the finding and again when a verdict finds no run, waits for a verdict;
-  when the verdict's source is `cli` (`steward finding approve|reject` and the console) or `discord` (a sender outside Steward) it writes the verdict
+  inspector agent, Argus. One `findingWorkflow` per finding (`finding/<site>/<key>`) waits for a
+  verdict. Argus starts it when it files the finding, and starts a missing one at its next run or
+  when a verdict sent through it finds none; it starts nothing when the finding's last run
+  completed, and `steward finding fix` starts one for an approved finding. When the
+  verdict's source is `cli` (`steward finding approve|reject` and the console) or `discord` (a sender outside Steward) it writes the verdict
   fields and the index line back through the GitHub Contents API, guarded by the blob sha, and the
   file's `verdict_source` is the source sent. A `file` verdict is already in the file, and the
   workflow writes nothing. Where it ends is read when the verdict is approved, by
@@ -68,7 +70,9 @@ that's the property being dogfooded here, on a low-stakes, real target.
   stage again, and `steward finding fix <key>` starts a new attempt in the same run, recorded under
   the file's `## Fix attempts`. Nothing runs on a clock while parked. Steward starts no finding's
   run by scanning an index: an `approved` finding with no run gets one from `steward finding fix`. A verdict edited
-  into a file by hand is not carried to a run. A `reopened` finding is back at the verdict gate. At its approved
+  into a file by hand is not carried to a run. A finding whose fix failed its verification keeps its
+  own run, parked after the fix PR; a `reopened` line with no open run gets one from Argus unless its
+  last run completed, and nothing in Steward returns a finding to the verdict gate. At its approved
   verdict a run reads the site's `auto_fix` and the fixer's gate on the finding file as it stands:
   with both in favour it attempts the fix, and otherwise it parks at `waiting-fix` with the reason
   in `lastFixError`. Parked with no issue, it reads them again once a day, attempts when both are in

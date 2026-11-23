@@ -112,10 +112,10 @@ export function buildFindingVerdict(
   return { status, reason, source: 'cli', at: at.toISOString() };
 }
 
-/** What a `no-run` refusal tells the sender: who starts a finding's run, and where to look. */
+/** What a `no-run` refusal tells the sender: who starts a finding's run, and what they can do. */
 const NO_RUN_NEXT =
-  " Argus starts a finding's workflow when it files the finding, and starts a missing one when it sends a verdict. " +
-  '`steward finding list` shows the open ones.';
+  " Argus starts a finding's workflow when it files it, and a missing one at its next run; a verdict sent through Argus starts one at once. " +
+  'For an approved finding, `steward finding fix` starts one. None starts when the last run completed.';
 
 /**
  * The open workflow for one finding, or a refusal. A closed or missing

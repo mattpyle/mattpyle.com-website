@@ -12,7 +12,7 @@ import type { ScorecardScheduleClientLike } from './scorecard-schedule.js';
  * The daily Temporal Schedule that runs `recheckFindingsWorkflow` for one site
  * (STW-543). One Schedule per site, since the site is frozen into its action.
  *
- * A sibling of `findings-schedule.ts`, with the same shape: a calendar spec,
+ * A sibling of `scorecard-schedule.ts`, with the same shape: a calendar spec,
  * `overlap: SKIP`, frozen arguments and a `trigger` that cannot bypass SKIP.
  * Client-side only: nothing here runs in a workflow.
  */

@@ -86,6 +86,12 @@ import { ResumeRefused, parkedRun, requestResume } from '../../src/lib/finding-r
  * plain `client`, in real time. A test whose run needs a timer to reach a state
  * it asserts on spends its one await on the run's result; a test that must see
  * two time-separated states scripts the run with no timers.
+ *
+ * **A plain client, not `env.client`.** The time-skipping client unlocks time
+ * while it waits on a result, and the test server's default execution timeout
+ * is ten years, so a wait on a run idle at a signal jumps the clock past it and
+ * the run reads back `TIMED_OUT`. The starts, signals and state polls here go
+ * through a plain `Client` on `env.connection`, which never unlocks time.
  */
 
 const FINDINGS = 'steward-findings';

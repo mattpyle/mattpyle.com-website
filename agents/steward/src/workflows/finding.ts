@@ -53,8 +53,8 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * `approved` line, and arrives by Signal from `steward finding fix`. Until
  * 2026-11-22 the hourly reconciler also sent it by Signal for a verdict it
  * found in a file, and histories hold those signals. The reconciler was
- * removed on 2026-11-23 (STW-656); Argus starts a finding's run. Any other source is a malformed verdict: the
- * Signal is dropped and the Update refused.
+ * removed on 2026-11-23 (STW-656); Argus starts a finding's run. Any other
+ * source is a malformed verdict: the Signal is dropped and the Update refused.
  *
  * The `discord` source (STW-646, 2026-11-21) carries no marker. A history
  * recorded before it holds `cli` or `file`, and both decide the write as they
