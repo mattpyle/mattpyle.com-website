@@ -71,16 +71,12 @@ import { RetestRefused, requestRetest } from './lib/finding-retest.js';
 import { ResumeRefused, parkedElsewhereLine, parkedRun, requestResume, resumedLine } from './lib/finding-resume.js';
 import {
   FIX_NEXT_STEP,
-  SyncError,
   finishVerify,
   fixStarted,
   launchVerify,
   readPrState,
   requestFindingFix,
   startVerify,
-  syncFindings,
-  siteCountsLine,
-  syncSummary,
 } from './lib/finding-actions.js';
 import {
   CLI_APPROVE_REASON,
@@ -137,12 +133,6 @@ import {
   verifyFindingStateQuery,
   type VerifyFindingResult,
 } from './workflows/verify-finding.js';
-import {
-  FINDINGS_SCHEDULE_ACTIONS,
-  buildFindingsScheduleOptions,
-  isFindingsScheduleAction,
-  runFindingsScheduleAction,
-} from './lib/findings-schedule.js';
 import {
   RECHECK_SCHEDULE_ACTIONS,
   buildRecheckScheduleOptions,
@@ -2015,7 +2005,7 @@ finding
           timeStyle: 'short',
           hour12: false,
         }).format(row.startTime);
-        // The reconciler's start puts the index line's status in the memo.
+        // Argus's start puts the index line's status in the memo as `indexStatus`.
         const reopened = row.memo?.indexStatus === 'reopened' ? '  reopened' : '';
         const dispatch = dispatchers.get(row.workflowId.split('/')[1] ?? '');
         const blocker = dispatch ? slotBlocker(dispatch, row.workflowId) : null;
@@ -2180,71 +2170,6 @@ finding
   .action(async (key: string, opts: { site: string; reason: string }) => {
     if (!opts.reason.trim()) fail('--reason must say why.');
     await sendFindingVerdict(opts.site, key, 'rejected', opts.reason);
-  });
-
-async function runFindingsSchedule(action: string, note?: string) {
-  if (!isFindingsScheduleAction(action)) {
-    fail(`Unknown action "${action}". Expected one of: ${FINDINGS_SCHEDULE_ACTIONS.join(', ')}.`);
-  }
-  if (note !== undefined && action !== 'pause' && action !== 'unpause') {
-    fail('--note applies to `pause` and `unpause` only.');
-  }
-  const options =
-    action === 'create'
-      ? buildFindingsScheduleOptions({ taskQueue: QUEUE_FINDINGS, input: { repo: ARGUS_REPO } })
-      : undefined;
-  const c = await client();
-  try {
-    const outcome = await runFindingsScheduleAction(action, {
-      schedule: c.schedule,
-      options,
-      note,
-      timeZone: STEWARD_TIMEZONE,
-    });
-    console.log('');
-    console.log(`  ${outcome.scheduleId}`);
-    for (const line of outcome.lines) console.log(`  ${line}`);
-    console.log('');
-  } finally {
-    await c.connection.close();
-  }
-}
-
-finding
-  .command('schedule')
-  .argument('<action>', `one of: ${FINDINGS_SCHEDULE_ACTIONS.join(' | ')}`)
-  .option('--note <text>', 'pause/unpause only — note recorded on the schedule')
-  .description('Manage the hourly findings reconcile Schedule')
-  .action(async (action: string, opts: { note?: string }) => {
-    await runFindingsSchedule(action, opts.note);
-  });
-
-finding
-  .command('sync')
-  .description('Run the findings reconcile now and print its plan counts (`finding schedule trigger` only starts it)')
-  .action(async () => {
-    const c = await client();
-    try {
-      let result;
-      try {
-        result = await syncFindings(c);
-      } catch (err) {
-        if (err instanceof SyncError) {
-          await c.connection.close();
-          fail(err.message);
-        }
-        throw err;
-      }
-      console.log('');
-      if (result.workflowId) console.log(`  ${WEB_UI}/namespaces/${NAMESPACE}/workflows/${encodeURIComponent(result.workflowId)}`);
-      for (const [site, counts] of Object.entries(result.sites ?? {})) {
-        console.log(`  ${site}: ${siteCountsLine(counts)}`);
-      }
-      console.log(`  ${syncSummary(result)}`);
-      console.log('');
-    } finally {
-      await c.connection.close();
-    }
   });
 
 finding
@@ -2569,7 +2494,6 @@ program
       port,
       loadFindings: () => loader.load(),
       sendVerdict: (request: Parameters<typeof sendVerdict>[0]) => sendVerdict(request, { client: c }),
-      runSync: () => syncFindings(c),
       runFix: async (site: string, key: string) => fixStarted(await requestFindingFix(c, site, key, () => {}, 'console')),
       runVerify: (site: string, key: string) =>
         launchVerify(c, site, key, ({ workflowId, finished, error }) => {

@@ -97,7 +97,7 @@ const writing = wf.proxyActivities<Pick<typeof activities, 'writeFindingRecheck'
   retry: { maximumAttempts: 5, nonRetryableErrorTypes: ['AuthError', 'FindingMoved', 'FindingMissing', 'FindingMalformed', 'BadInput'] },
 });
 
-// Same shape as the reconciler's alerting proxy: the activity retries the HTTP
+// Same shape as the scorecard's alerting proxy: the activity retries the HTTP
 // call itself and never throws.
 const alerting = wf.proxyActivities<Pick<typeof activities, 'reportRunHealth'>>({
   taskQueue: QUEUE_FINDINGS,

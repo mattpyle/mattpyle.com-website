@@ -140,17 +140,13 @@ export const GITHUB_REPO = process.env.STEWARD_GITHUB_REPO ?? 'mattpyle/mattpyle
  * folder (`sites/<site>/findings/`). The same GitHub App installation reaches it, which
  * is why the app is installed on both repositories.
  *
- * Read by the CLI and frozen into the reconcile Schedule's input, never read by
- * workflow code (design rule 10): the repository rides in each finding
- * workflow's input.
+ * Read by the CLI and its libraries, never by workflow code (design rule
+ * 10): the repository rides in each finding workflow's input.
  */
 export const ARGUS_REPO = process.env.ARGUS_REPO ?? 'mattpyle/argus';
 
 /** The site a `steward finding` verb means when `--site` is not given. */
 export const FINDINGS_DEFAULT_SITE = 'mattpyle-com';
-
-/** The Schedule that runs `reconcileFindingsWorkflow` hourly (`lib/findings-schedule.ts`). */
-export const FINDINGS_SCHEDULE_ID = 'steward-findings-reconcile';
 
 /**
  * Where run-health signals are sent: the project ping base of the external
@@ -279,7 +275,7 @@ export const QUEUE_LIGHT = 'steward-light';
 export const QUEUE_HEAVY = 'steward-heavy';
 
 /**
- * The findings gate's queue: `findingWorkflow`, `reconcileFindingsWorkflow` and
+ * The findings gate's queue: `findingWorkflow`, the workflows it starts and
  * their activities. Its own queue on the hosted worker so a verdict write never
  * waits behind a page render on `steward-audit`, whose cap is one.
  */
@@ -386,7 +382,7 @@ export const HOSTED_FAST_ACTIVITY_CONCURRENCY = 4;
  *
  * Every findings activity is a GitHub or Temporal API call, so nothing here is
  * unsafe to run concurrently. The number is kept low because the work is low:
- * one reconcile an hour and a verdict when Matt gives one. Bounded rather than
+ * a verdict when Matt gives one, a run's daily settings read and the daily recheck. Bounded rather than
  * the SDK's 100 for the same reason the fast queue is: this container also holds
  * a Lighthouse run's memory.
  */

@@ -46,7 +46,6 @@ export {
 // The findings gate, on `steward-findings`: GitHub API calls against the
 // findings repository and one Temporal visibility list, nothing local.
 export {
-  listSites,
   readFindingsIndex,
   readFinding,
   writeFindingVerdict,
@@ -66,9 +65,6 @@ export {
   reportPreviewChecks,
   writeFindingReturned,
   listOpenFindingWorkflows,
-  listFixableFindings,
-  startFindingWorkflow,
-  startMissingFindingRuns,
   // The fix dispatcher (fix-dispatch-by-surface): a slot request and the
   // sweep through the worker's client, and the conflicting PR's close.
   requestFixSlot,

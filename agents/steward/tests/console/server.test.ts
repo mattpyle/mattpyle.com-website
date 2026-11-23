@@ -64,7 +64,7 @@ before(async () => {
     timeZone: 'America/Vancouver',
     webUi: 'https://web.example',
     namespace: 'ns.test',
-    ...{ runSync: CONSOLE_RESTART_STUBS.runSync, runFix: CONSOLE_RESTART_STUBS.runFix, runVerify: CONSOLE_RESTART_STUBS.runVerify },
+    ...{ runFix: CONSOLE_RESTART_STUBS.runFix, runVerify: CONSOLE_RESTART_STUBS.runVerify },
     commit: 'abc1234',
     behindMaster: true,
     spawnReplacement: (port) => {

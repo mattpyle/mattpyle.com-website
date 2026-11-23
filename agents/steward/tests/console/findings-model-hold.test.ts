@@ -120,10 +120,10 @@ test('a site without auto_fix says the wait is the person\'s', async () => {
   assert.equal(rows.waiting.holdLine, 'Waits for you: the site has no auto_fix, so Fix starts it.');
 });
 
-test('an approved row with no open run says the hourly reconcile starts it, or that the gate refuses it', async () => {
+test('an approved row with no open run says Fix starts it, or that the gate refuses it', async () => {
   const rows = await load(true);
   assert.equal(rows.idle.run.open, false);
-  assert.equal(rows.idle.holdLine, 'Waits for the hourly reconcile to start it.');
+  assert.equal(rows.idle.holdLine, 'Waits for you: Fix starts it.');
   assert.equal(rows.idle.quietReason, null, 'an opportunity with no run is no longer quiet');
   assert.deepEqual(rows.idle.drift, ['approved with no open run']);
   assert.equal(rows['idle-refused'].holdLine, "The fixer's gate refuses it: it names more than one page (/about, /contact), so its fix is not one change.");
@@ -146,7 +146,7 @@ test('holdLineFor says nothing for a row that is not approved, or whose run is p
   const run: FindingRunView = { open: true, since: null, step: 'waiting-fix', queried: true, queryError: null, prUrl: null, issueUrl: null, previewResult: null, lastFixError: null, slotLine: null };
   assert.equal(holdLineFor({ status: 'fixing', run, refusal: null, autoFix: true }), null);
   assert.equal(holdLineFor({ status: 'approved', run: { ...run, step: 'waiting-merge' }, refusal: null, autoFix: true }), null);
-  assert.equal(holdLineFor({ status: 'approved', run: { ...run, open: false }, refusal: null, autoFix: true }), 'Waits for the hourly reconcile to start it.');
+  assert.equal(holdLineFor({ status: 'approved', run: { ...run, open: false }, refusal: null, autoFix: true }), 'Waits for you: Fix starts it.');
   assert.equal(holdLineFor({ status: 'proposed', run: { ...run, open: false }, refusal: null, autoFix: true }), null);
 });
 

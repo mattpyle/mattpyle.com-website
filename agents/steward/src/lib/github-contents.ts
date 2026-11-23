@@ -96,34 +96,6 @@ export async function readRepoFile(
   return { text: await res.text(), sha: meta.sha as string };
 }
 
-export interface RepoDirEntry {
-  name: string;
-  path: string;
-  type: 'file' | 'dir' | 'symlink' | 'submodule';
-}
-
-/**
- * Lists one directory at one ref, or `undefined` if it is not there. The same
- * Contents route as {@link readRepoFile}; a directory answers with an array.
- */
-export async function listRepoDirectory(
-  path: string,
-  ref: string,
-  repo: string = GITHUB_REPO,
-): Promise<RepoDirEntry[] | undefined> {
-  let meta: any;
-  try {
-    meta = await gh(`/repos/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`);
-  } catch (err) {
-    if (err instanceof ApplicationFailure && err.type === 'NotFound') return undefined;
-    throw err;
-  }
-  if (!Array.isArray(meta)) {
-    throw ApplicationFailure.nonRetryable(`${path} at ${ref} is a file, not a directory.`, 'NotADirectory');
-  }
-  return meta.map((entry: any) => ({ name: entry.name, path: entry.path, type: entry.type }));
-}
-
 /**
  * Points `branch` at `sha`, creating it if it does not exist.
  *

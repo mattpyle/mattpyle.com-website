@@ -44,10 +44,12 @@ that's the property being dogfooded here, on a low-stakes, real target.
   with no open finding workflow gets one outcome: no checks, could not measure, still present (its
   `live_on` is set to the America/Vancouver day and `live_by` to `check`) or resolved (its Verification section is written
   and its index line reads `resolved`, in one commit). It opens no fix. Every run pings the site's `steward-findings-recheck-<site>` check at healthchecks.io; a completed run with a `write failed` or `could not measure` row, or a run that throws, pings `/fail`.
-- **`findingWorkflow`** and **`reconcileFindingsWorkflow`** — the gate for findings filed into a
-  separate findings repository by an inspector agent. One `findingWorkflow` per finding
-  (`finding/<site>/<key>`) waits for a `verdict` signal; when the verdict's source is `cli` (`steward finding
-  approve|reject` and the console) or `discord` (a sender outside Steward) it writes the verdict
+- **`findingWorkflow`** — the gate for findings filed into a separate findings repository by an
+  inspector agent, Argus. One `findingWorkflow` per finding (`finding/<site>/<key>`) waits for a
+  verdict. Argus starts it when it files the finding, and starts a missing one at its next run or
+  when a verdict sent through it finds none; it starts nothing when the finding's last run
+  completed, and `steward finding fix` starts one for an approved finding. When the
+  verdict's source is `cli` (`steward finding approve|reject` and the console) or `discord` (a sender outside Steward) it writes the verdict
   fields and the index line back through the GitHub Contents API, guarded by the blob sha, and the
   file's `verdict_source` is the source sent. A `file` verdict is already in the file, and the
   workflow writes nothing. Where it ends is read when the verdict is approved, by
@@ -66,14 +68,11 @@ that's the property being dogfooded here, on a low-stakes, real target.
   `reopened`), a broken check, or any other failure a retry does not mend parks the run at step
   `parked`, releases its slot and comments once on the PR; `steward finding resume <key>` runs the
   stage again, and `steward finding fix <key>` starts a new attempt in the same run, recorded under
-  the file's `## Fix attempts`. Nothing runs on a clock while parked. An hourly Schedule runs the
-  reconciler, which has one rule: every index line that should have a running workflow has one
-  after the pass. That is a `proposed` or `reopened` line on every site, and an `approved` line on
-  a site that goes past the verdict, whose new run carries the file's verdict in its input. One
-  activity per site looks each workflow up by ID and starts the ones not running; it lists no
-  workflow and sends no signal. Its result names the lines it started, the ones it could not
-  start and the ones it could not check, and the last two fail the health ping. A verdict edited
-  into a file by hand is not carried to a run. A `reopened` finding is back at the verdict gate. At its approved
+  the file's `## Fix attempts`. Nothing runs on a clock while parked. Steward starts no finding's
+  run by scanning an index: an `approved` finding with no run gets one from `steward finding fix`. A verdict edited
+  into a file by hand is not carried to a run. A finding whose fix failed its verification keeps its
+  own run, parked after the fix PR; a `reopened` line with no open run gets one from Argus unless its
+  last run completed, and nothing in Steward returns a finding to the verdict gate. At its approved
   verdict a run reads the site's `auto_fix` and the fixer's gate on the finding file as it stands:
   with both in favour it attempts the fix, and otherwise it parks at `waiting-fix` with the reason
   in `lastFixError`. Parked with no issue, it reads them again once a day, attempts when both are in
@@ -130,7 +129,7 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-heavy` | `buildAndAuditDraft`, and the frozen custom fixer: `fixFindingWorkflow` with its activities, which only a lifecycle run that started that child before the issue path replays, and a `verifyFindingWorkflow` child started before the verifier moved to `steward-findings` | Same working copy, plus a browser; the fixer also needs this machine's Claude Code login and git credentials |
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
-| `steward-findings` | `findingWorkflow`, `reconcileFindingsWorkflow`, `verifyFindingWorkflow`, `recheckFindingsWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
+| `steward-findings` | `findingWorkflow`, `verifyFindingWorkflow`, `recheckFindingsWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
 
 Two workers claim them, and never compete. The **local worker** (`steward up`, `src/worker.ts`)
 polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
@@ -256,11 +255,9 @@ steward finding resume <key>     # a run parked after its fix PR runs its stage 
 steward finding retest <key>     # test the open fix PR's head on its preview again (a Workflow Update; refused with the reason when there is no open fix PR)
 steward finding verify <key>     # fixing or reopened finding to resolved or reopened, measured on production; a parked run is resumed instead, so it verifies inside itself
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
-steward finding sync             # run the findings reconcile now
-steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
 steward finding recheck --site temporal-io                  # recheck a site's approved findings now and print each outcome
 steward finding recheck-schedule create --site temporal-io  # create | describe | pause | unpause | trigger its daily recheck
-steward console                  # findings page on 127.0.0.1: a static page over GET /api/findings that filters and sorts every finding, opens one beside the list, and approves or rejects through POST /api/verdict (JSON only; the page has no form). A header menu shows the running commit and restarts the console onto the checkout's current code (POST /api/restart); `GET /api/commit` answers the commit and token without loading the model; the restart does not pull, `steward update` does. The menu's Sync findings and the panel's Fix and Verify post to `POST /api/run/sync`, `/api/run/fix` and `/api/run/verify`, the functions the `finding sync|fix|verify` verbs call (`src/lib/finding-actions.ts`)
+steward console                  # findings page on 127.0.0.1: a static page over GET /api/findings that filters and sorts every finding, opens one beside the list, and approves or rejects through POST /api/verdict (JSON only; the page has no form). A header menu shows the running commit and restarts the console onto the checkout's current code (POST /api/restart); `GET /api/commit` answers the commit and token without loading the model; the restart does not pull, `steward update` does. The panel's Fix and Verify post to `POST /api/run/fix` and `/api/run/verify`, the functions the `finding fix|verify` verbs call (`src/lib/finding-actions.ts`)
 steward keys generate            # print a new Web Bot Auth key pair as JWK; writes nothing
 steward credential rotate temporal-metrics   # issue, store in 1Password, set on Railway, rewrite its .env line, wait for the redeploy, verify, then delete the old key after you confirm; also healthcheck-base; --dry-run prints the plan, --duration sets the lifetime (90d)
 steward update                   # after a merge: pull master in the main checkout, restart the worker

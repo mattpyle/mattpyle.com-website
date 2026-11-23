@@ -7,10 +7,12 @@ import type { VerifyFindingInput } from '../workflows/verify-finding.js';
  * `confirmed`: the finding's open lifecycle run, `finding/<site>/<key>`, is
  * cancelled.
  *
- * A `reopened` finding gets a fresh lifecycle run from the reconciler, parked
- * at its verdict. When a corrected check then resolves the finding by hand,
- * that run has nothing left to do, and `steward finding approve` on it would
- * open a fix issue for a fix that is already live. A `fixing` finding's run,
+ * A `reopened` finding can have an open lifecycle run: its own run, parked
+ * after the fix PR when the fix failed its verification (step `parked`, kind
+ * `checks-failed`), or a run Argus started for a `reopened` line that had
+ * none. When a corrected check then resolves the finding by hand, that run has
+ * nothing left to do, and a fix asked of it would be for a fix that is already
+ * live. A `fixing` finding's run,
  * still waiting on the merge or the deploy, would run its own verify against a
  * finding that is no longer `fixing`. Either way the run is cancelled.
  *

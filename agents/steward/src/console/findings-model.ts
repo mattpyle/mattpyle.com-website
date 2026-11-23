@@ -185,8 +185,8 @@ export const QUIET_RESOLVED_AT_VERDICT = 'Resolved at the verdict; the run is en
 /**
  * What holds an approved row, in one line: the gate's refusal as the file
  * stands now, else (for a run at `waiting-fix`) the run's last failure, else the
- * wait itself. An approved row with no open run waits for the hourly reconcile
- * to start one, or for a person on a site with no `auto_fix`. Null for any other row.
+ * wait itself. An approved row with no open run waits for a person: Fix starts
+ * its run. Null for any other row.
  */
 export function holdLineFor(input: { status: string; run: FindingRunView; refusal: string | null; autoFix: boolean }): string | null {
   const { run } = input;
@@ -194,7 +194,7 @@ export function holdLineFor(input: { status: string; run: FindingRunView; refusa
   if (run.open && run.step === 'measuring') return HOLD_MEASURING;
   if (run.open && run.step !== 'waiting-fix') return null;
   if (input.refusal) return `The fixer's gate refuses it: ${input.refusal}.`;
-  if (!run.open) return input.autoFix ? 'Waits for the hourly reconcile to start it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
+  if (!run.open) return input.autoFix ? 'Waits for you: Fix starts it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
   if (run.lastFixError) return `The last fix attempt failed: ${run.lastFixError}`;
   if (run.issueUrl) return 'Its fix issue ended without a merged PR; Fix retries it.';
   return input.autoFix ? 'Waits for the fixer; its run reads its settings again within a day.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
@@ -215,8 +215,8 @@ export function driftFor(
 
 /**
  * Drift plus the quiet reason. An approved row with no run is designed, not
- * drift, on a site that stops at the verdict. Elsewhere the reconciler starts
- * its run, and the hold line says what waits.
+ * drift, on a site that stops at the verdict. Elsewhere Fix starts its run,
+ * and the hold line says so.
  */
 export function assessRow(
   status: string,

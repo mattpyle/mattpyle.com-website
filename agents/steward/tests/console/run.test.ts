@@ -8,9 +8,9 @@ import { VerifyRefused } from '../../src/lib/finding-verify.js';
 import type { FindingsModel } from '../../src/console/findings-model.js';
 
 /**
- * `POST /api/run/sync|fix|verify` over real sockets with recording doubles for the three functions the
- * CLI shares: the guards run first and a refused request never reaches a verb; sync answers counts, fix
- * and verify answer the workflow id, and a refusal the CLI would print comes back as 409.
+ * `POST /api/run/fix|verify` over real sockets with recording doubles for the two functions the CLI
+ * shares: the guards run first and a refused request never reaches a verb; fix and verify answer the
+ * workflow id, and a refusal the CLI would print comes back as 409.
  */
 
 const MODEL: FindingsModel = {
@@ -32,16 +32,6 @@ before(async () => {
     loadFindings: async () => MODEL,
     sendVerdict: async () => {
       throw new Error('no verdict in this test');
-    },
-    runSync: async () => {
-      calls.push('sync');
-      if (refuse) throw refuse;
-      return {
-        triggered: true,
-        workflowId: 'steward-findings-reconcile-scheduled-2026-11-01',
-        sites: { 'mattpyle-com': { started: 1, signalled: 2, fixed: 0, unchanged: 7 } },
-        total: { started: 1, signalled: 2, fixed: 0, unchanged: 7 },
-      };
     },
     runFix: async (site, key) => {
       calls.push(`fix ${site}/${key}`);
@@ -80,7 +70,7 @@ const post = (verb: string, json: Record<string, unknown>, extra: { origin?: str
 const FIELDS = { site: 'mattpyle-com', key: 'ux-thing--about' };
 
 test('each run route refuses a foreign Origin, a missing Origin and a missing or wrong token, before the verb runs', async () => {
-  for (const verb of ['sync', 'fix', 'verify']) {
+  for (const verb of ['fix', 'verify']) {
     const foreign = await post(verb, { token: server.token, ...FIELDS }, { origin: 'http://evil.example' });
     assert.equal(foreign.status, 403, verb);
     const none = await post(verb, { token: server.token, ...FIELDS }, { origin: null });
@@ -94,21 +84,17 @@ test('each run route refuses a foreign Origin, a missing Origin and a missing or
 });
 
 test('a run route takes POST only, and JSON only', async () => {
-  const get = await consoleRequest({ port: server.port, path: '/api/run/sync' });
+  const get = await consoleRequest({ port: server.port, path: '/api/run/fix' });
   assert.equal(get.status, 405);
-  const form = await consoleRequest({ port: server.port, path: '/api/run/sync', method: 'POST', origin: origin(), form: { token: server.token } });
+  const form = await consoleRequest({ port: server.port, path: '/api/run/fix', method: 'POST', origin: origin(), form: { token: server.token } });
   assert.equal(form.status, 415);
   assert.deepEqual(calls, []);
 });
 
-test('sync answers the reconcile counts and a one-line summary', async () => {
+test('there is no sync route: Steward starts no finding workflow by scanning an index', async () => {
   const res = await post('sync', { token: server.token });
-  assert.equal(res.status, 200, res.body);
-  const body = JSON.parse(res.body);
-  assert.deepEqual(body.total, { started: 1, signalled: 2, fixed: 0, unchanged: 7 });
-  assert.equal(body.sites['mattpyle-com'].signalled, 2);
-  assert.equal(body.summary, 'Started 1, signalled 2, fixed 0, restarted 0, closed 0, unchanged 7.');
-  assert.deepEqual(calls, ['sync']);
+  assert.equal(res.status, 404, res.body);
+  assert.deepEqual(calls, []);
 });
 
 test('fix and verify answer the workflow id and the next step', async () => {
@@ -138,7 +124,7 @@ test('fix and verify refuse a site or key that is not a finding slug, and an une
   assert.equal(missing.status, 400);
   assert.deepEqual(calls, []);
   refuse = new Error('Temporal is down: secret detail');
-  const failed = await post('sync', { token: server.token });
+  const failed = await post('fix', { token: server.token, ...FIELDS });
   assert.equal(failed.status, 502);
   assert.doesNotMatch(failed.body, /secret detail/);
 });

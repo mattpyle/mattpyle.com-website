@@ -53,7 +53,6 @@ const AUDIT_ACTIVITIES = [
 ];
 
 const FINDINGS_ACTIVITIES = [
-  'listSites',
   'readFindingsIndex',
   'readFinding',
   'writeFindingVerdict',
@@ -68,9 +67,6 @@ const FINDINGS_ACTIVITIES = [
   'awaitProductionDeploy',
   'readProductionDeploy',
   'listOpenFindingWorkflows',
-  'listFixableFindings',
-  'startFindingWorkflow',
-  'startMissingFindingRuns',
   'readFixPr',
   'readVerifyBlock',
   'runFindingChecks',
@@ -162,7 +158,7 @@ test('each queue registers exactly its own activities, by name', () => {
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
   assert.equal(names(QUEUE_AUDIT).length, 14);
-  assert.equal(names(QUEUE_FINDINGS).length, 32);
+  assert.equal(names(QUEUE_FINDINGS).length, 28);
 });
 
 test('every registered activity is a function', () => {

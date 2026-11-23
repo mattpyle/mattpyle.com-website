@@ -8,7 +8,6 @@ export const CONSOLE_RESTART_STUBS = {
   behindMaster: false,
   spawnReplacement: (): void => {},
   exitProcess: (): void => {},
-  runSync: unused('sync'),
   runFix: unused('fix'),
   runVerify: unused('verify'),
 };

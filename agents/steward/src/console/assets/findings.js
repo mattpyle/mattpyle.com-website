@@ -86,7 +86,6 @@
       status: 'proposed', site: 'all', pri: 'all', sort: 'priority', drift: false, q: '', menu: null,
       appMenu: false, // the header's menu
       restart: null, // null, 'restarting', or the sentence a failed restart left
-      sync: null, // null, 'running', { text } or { error }: the last Sync findings
       ran: {}, // id -> { verb, workflowId, nextStep } or { verb, error }: Fix or Verify started from the page since it opened
       current: null, // the open row's id, site/key
       decided: {}, // id -> { status, reason, at, result }: verdicts sent from this page since the last load
@@ -342,13 +341,9 @@
 
   // ---------- The verbs run from the page ----------
 
-  // The line "proposed with no open run" offers Sync, and "approved with no open run" offers Fix: the same buttons the menu and the foot hold.
+  // The line "approved with no open run" offers Fix: the same button the foot holds. A proposed finding with no
+  // open run has no button: Argus starts its workflow, and starts a missing one when it sends a verdict.
   function driftRemedy(r, line, state) {
-    if (line === 'proposed with no open run') {
-      if (state.sync === 'running') return '<button class="btn" type="button" data-act="sync" disabled>Syncing</button>';
-      const said = state.sync && (state.sync.error || state.sync.text);
-      return said ? `<span class="drift-run" role="status">${esc(said)}</span>` : '<button class="btn" type="button" data-act="sync" title="Runs the findings reconcile now">Sync</button>';
-    }
     const ran = state.ran[idOf(r)];
     if (line === 'approved with no open run' && r.actions && r.actions.fix && !(ran && ran.workflowId)) {
       return `<button class="btn" type="button" data-act="fix" title="Opens the fix issue and waits for its PR"${state.foot.sending ? ' disabled' : ''}>Fix</button>`;
@@ -424,12 +419,9 @@
     if (!state.appMenu) return '';
     const commit = model && model.commit ? model.commit : 'unknown';
     const note = model && model.behindMaster ? '<p class="menu-note">master has moved on. Restart does not pull: run <code>steward update</code> first.</p>' : '';
-    const syncing = state.sync === 'running';
-    const synced = state.sync && !syncing ? state.sync : null;
-    const sync = `<button class="menu-item" type="button" role="menuitem" data-act="sync"${syncing ? ' disabled' : ''}><span>${syncing ? 'Syncing findings' : 'Sync findings'}</span></button>${synced ? `<p class="menu-note${synced.error ? ' menu-error' : ''}" role="${synced.error ? 'alert' : 'status'}">${esc(synced.error || synced.text)}</p>` : ''}`;
     const action = state.restart === 'restarting'
       ? '<p class="menu-note" role="status">Restarting</p>'
-      : `${sync}<button class="menu-item" type="button" role="menuitem" data-act="restart"><span>Restart console</span></button>${state.restart ? `<p class="menu-note menu-error" role="alert">${esc(state.restart)}</p>` : ''}`;
+      : `<button class="menu-item" type="button" role="menuitem" data-act="restart"><span>Restart console</span></button>${state.restart ? `<p class="menu-note menu-error" role="alert">${esc(state.restart)}</p>` : ''}`;
     return `<div class="menu menu-app" role="menu"><p class="menu-note">Running commit <code>${esc(commit)}</code></p>${note}${action}</div>`;
   }
 
@@ -576,7 +568,7 @@
     }
   }
 
-  // Sync findings, Fix and Verify post to /api/run/<verb>: the CLI's own functions, answered as JSON.
+  // Fix and Verify post to /api/run/<verb>: the CLI's own functions, answered as JSON.
   async function runPost(verb, fields) {
     const res = await fetch(`/api/run/${verb}`, {
       method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ token, ...fields }),
@@ -590,20 +582,6 @@
     const top = el.doc.scrollTop;
     paint(parts);
     el.doc.scrollTop = top;
-  }
-  async function runSync() {
-    if (state.sync === 'running') return;
-    state.sync = 'running';
-    repaint(['menu', 'doc']);
-    try {
-      const data = await runPost('sync', {});
-      state.sync = { text: data.summary };
-      repaint(['menu', 'doc']);
-      await load();
-    } catch (err) {
-      state.sync = { error: err.message };
-      repaint(['menu', 'doc']);
-    }
   }
   async function runRow(verb) {
     const r = model && rowsOf(model).find((x) => idOf(x) === state.current);
@@ -726,10 +704,9 @@
   el.menuBtn.addEventListener('click', () => setAppMenu(!state.appMenu));
   el.menuPop.addEventListener('click', (e) => {
     if (e.target.closest('[data-act="restart"]')) restart();
-    else if (e.target.closest('[data-act="sync"]')) runSync();
   });
   document.addEventListener('click', (e) => {
-    // The path, not `e.target`: Sync repaints the menu inside its own click, which detaches the button before this runs.
+    // The path, not `e.target`: a click that repaints the menu detaches its button before this runs.
     const inside = e.composedPath().some((n) => n.classList && n.classList.contains('app-menu'));
     if (state.appMenu && state.restart !== 'restarting' && !inside) setAppMenu(false);
   });
@@ -762,8 +739,7 @@
   el.doc.addEventListener('click', (e) => {
     const btn = e.target.closest('.drift-lines [data-act]');
     if (!btn || btn.disabled) return;
-    if (btn.dataset.act === 'sync') runSync();
-    else if (btn.dataset.act === 'fix') runRow('fix');
+    if (btn.dataset.act === 'fix') runRow('fix');
   });
   el.foot.addEventListener('input', (e) => {
     if (!e.target.matches('textarea') || !e.target.value.trim() || !state.foot.reasonError) return;

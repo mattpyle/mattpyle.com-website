@@ -270,7 +270,6 @@ test('every signal has a distinct slug', () => {
 test('the recheck signal is per site and its slug names the site', () => {
   assert.equal(findingsRecheckSignal('temporal-io'), 'findings-recheck:temporal-io');
   assert.equal(healthCheckSlug(findingsRecheckSignal('temporal-io')), 'steward-findings-recheck-temporal-io');
-  assert.equal(healthCheckSlug('findings-reconcile'), 'steward-findings-reconcile');
   const base = 'https://hc-ping.com/KEY';
   assert.equal(
     healthPingUrl(base, findingsRecheckSignal('temporal-io'), true),

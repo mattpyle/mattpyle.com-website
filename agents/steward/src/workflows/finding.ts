@@ -2,7 +2,7 @@ import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 import type { AwaitFixPrMergeOptions, FixIssue, FixPrOutcome, ProductionDeploy } from '../activities/findings.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
-// same objects the reconciler and the CLI hold.
+// same objects the activities and the CLI hold.
 import {
   PREVIEW_SKIPPED_LINE,
   findingHandoffPath,
@@ -49,11 +49,12 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * this workflow writes the verdict into the finding file and its index line,
  * and the file's `verdict_source` is the source sent. Source `file` is a
  * verdict already in the file, and this workflow writes nothing for it: it
- * arrives in the input of a run the reconciler starts behind an `approved`
- * line, and by Signal from `steward finding fix`. Until 2026-11-22 the hourly
- * reconciler also sent it by Signal for a verdict it found in a file, and
- * histories hold those signals. Any other source is a malformed verdict: the
- * Signal is dropped and the Update refused.
+ * arrived in the input of a run the findings reconciler started behind an
+ * `approved` line, and arrives by Signal from `steward finding fix`. Until
+ * 2026-11-22 the hourly reconciler also sent it by Signal for a verdict it
+ * found in a file, and histories hold those signals. The reconciler was
+ * removed on 2026-11-23 (STW-656); Argus starts a finding's run. Any other
+ * source is a malformed verdict: the Signal is dropped and the Update refused.
  *
  * The `discord` source (STW-646, 2026-11-21) carries no marker. A history
  * recorded before it holds `cli` or `file`, and both decide the write as they
@@ -129,9 +130,10 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * marker, then a `fix`) and `finding-parked-issue-reread.bin` (the read and the
  * close).
  *
- * **A verdict in the input** (STW-645, 2026-11-22). The reconciler starts a
- * run for an `approved` line that has none, and the line's verdict rides in
- * the input as `verdict`, source `file`. It is the run's first verdict: the
+ * **A verdict in the input** (STW-645, 2026-11-22). The findings reconciler
+ * started a run for an `approved` line that had none, and the line's verdict
+ * rode in the input as `verdict`, source `file`. Runs it started may still be
+ * open, and nothing starts one this way now. It is the run's first verdict: the
  * wait at the gate is over before it starts, nothing is written (the file
  * holds it), and the run goes on to its settings read. A later Update of the
  * same status is answered with it, one of the other status is refused, and a
@@ -530,7 +532,7 @@ export interface FindingWorkflowInput {
    */
   origin?: string;
   /**
-   * Set by the reconciler when the index line's kind is not `defect`: the
+   * Set by the starter when the index line's kind is not `defect`: the
    * fixer's gate refuses such a finding, so the run parks at `waiting-fix`
    * without the automatic attempt. Read as `=== true` (determinism rule 3):
    * a history recorded before the field existed made that attempt. Read only
@@ -667,7 +669,11 @@ export interface FindingState {
   verifyWorkflowId?: string | null;
 }
 
-/** The `fix` signal's payload: who asked, and when. `reconcile` is the hourly pass unparking a run (decision 31). */
+/**
+ * The `fix` signal's payload: who asked, and when. `reconcile` was the hourly
+ * findings reconciler unparking a run (decision 31); it is kept because
+ * histories hold such signals, and nothing sends it now.
+ */
 export interface FixRequest {
   source: 'cli' | 'reconcile';
   /** ISO 8601, the sender's clock. */
@@ -1035,8 +1041,8 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
 
   wf.setHandler(findingStateQuery, () => state);
 
-  // The first well-formed verdict wins. A later one (the reconciler catching up
-  // on a verdict the CLI already delivered, or a second CLI call) is logged and
+  // The first well-formed verdict wins. A later one (`steward finding fix`
+  // sending the file's verdict to a run that has one, or a second call) is logged and
   // dropped: the record is what was decided first, and a signal cannot reopen it.
   wf.setHandler(verdictSignal, (verdict) => {
     if (!isFindingVerdict(verdict)) {
