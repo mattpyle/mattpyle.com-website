@@ -226,7 +226,13 @@ test('auto_fix turned on after the park: the daily re-read starts the attempt wi
   const { called, count, out } = await run(scene, async (m, start) => {
     const handle = await start('flag-later');
     await handle.signal(verdictSignal, APPROVE);
-    await until(handle, (s) => s.step === 'waiting-fix' && m.count('readFindingSettings') === 2, 'the park');
+    // The read is counted when the activity is called; `waitsForPerson` is set once its result is
+    // applied, and only then does the run start the one-day timer the sleep below must find.
+    await until(
+      handle,
+      (s) => s.step === 'waiting-fix' && m.count('readFindingSettings') === 2 && s.waitsForPerson === false,
+      'the park',
+    );
     assert.equal((await handle.query(findingStateQuery)).lastFixError, null, 'a site without auto_fix is no refusal');
     assert.ok(!m.called.includes('openFixIssue'));
     scene.now = settings({ autoFix: true });

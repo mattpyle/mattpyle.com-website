@@ -1317,7 +1317,8 @@ test('a park comment that failed is posted at the next park of its kind, and one
   };
   await withWorkers(mocks, async () => {
     const handle = await startApproved('comment-retry');
-    const first = await untilState(handle, (s) => s.step === 'parked', 'parked');
+    // The run sets step `parked` before its comment activity runs, and `commentError` after it returns.
+    const first = await untilState(handle, (s) => s.step === 'parked' && Boolean(s.parked?.commentError), 'parked, the comment failed');
     assert.match(first.parked?.commentError ?? '', /401/);
     await handle.executeUpdate(resumeUpdate, { args: [{ source: 'cli', at: '2026-10-14T09:00:00Z' }] });
     await untilState(handle, (s) => s.step === 'parked' && comments === 2, 'parked again, the comment posted');
