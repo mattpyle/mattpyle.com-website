@@ -4,6 +4,7 @@ import { ApplicationFailure } from '@temporalio/activity';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { DEFECT_FINDING, DEFECT_KEY } from '../helpers/finding-fixtures.js';
 import { commentOnFixPr, openFixIssue, readFinding, writeFindingFix } from '../../src/activities/findings.js';
+import { parkedElsewhereLine } from '../../src/lib/finding-resume.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import {
   parkComment,
@@ -134,4 +135,20 @@ test('a park says what moves it, and only an unmerged PR\'s park refuses a new f
   assert.equal(parkLine({ kind: 'checks-broken', stage: 'verify', reason: 'Check 1 does not parse.' }), 'parked at verify (a check is broken): Check 1 does not parse.');
   const comment = parkComment({ kind: 'error', stage: 'deploy', reason: 'The deploy wait failed.', moves: parkMoves('k', 'deploy') }, 'finding/mattpyle-com/k');
   assert.match(comment, /^Steward stopped following this fix\.\n\nThe deploy wait failed\.\n\nThe finding's run `finding\/mattpyle-com\/k` is parked and stays open\. Nothing happens on a clock: /);
+});
+
+test('verify of a run parked away from its verify names the commands that move it, and verifies nothing', () => {
+  const state = {
+    site: SITE,
+    key: 'k',
+    status: 'done' as const,
+    verdict: null,
+    commitSha: null,
+    step: 'parked' as const,
+    parked: { kind: 'error' as const, stage: 'merge' as const, reason: 'The merge wait failed.', since: '2026-11-22T00:00:00.000Z', moves: parkMoves('k', 'merge'), prUrl: OLD_PR },
+  };
+  assert.equal(
+    parkedElsewhereLine('k', state),
+    "k's run is parked at its merge, not its verify, so there is nothing to verify yet: `steward finding resume k` waits on the merge again.",
+  );
 });

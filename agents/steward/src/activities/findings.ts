@@ -944,6 +944,13 @@ export interface ReadProductionDeployInput extends RetryAuth {
   prUrl: string;
   /** The GitHub deployment environment Vercel posts production to. */
   environment: string;
+  /**
+   * Set by the verify child in its two retry phases (STW-653): a production
+   * that does not yet contain the fix is a retryable `FixNotLive`, so the
+   * child retries a deploy that lags instead of failing on it. Absent, the
+   * read answers `contains: false` as before.
+   */
+  requireLive?: boolean;
 }
 
 export interface ProductionRead {
@@ -966,7 +973,9 @@ export interface ProductionRead {
  * PR's merge commit, then {@link awaitProductionDeploy}'s read and compare,
  * one attempt. Not contained is an answer, not a retry: the verify has no
  * "not yet" to wait out, since the lifecycle's deploy wait or the operator
- * already decided the fix is live.
+ * already decided the fix is live. Except with `requireLive` (STW-653): the
+ * lifecycle's child retries a deploy that lags in its two phases, so there it
+ * is a retryable `FixNotLive`.
  */
 export async function readProductionDeploy(input: ReadProductionDeployInput): Promise<ProductionRead> {
   const pr = parsePrUrl(input.prUrl);
@@ -976,9 +985,13 @@ export async function readProductionDeploy(input: ReadProductionDeployInput): Pr
   const readAt = new Date().toISOString();
   const none = { prUrl: input.prUrl, mergeSha, liveSha: null, deploymentId: null, contains: false, readAt };
   if (data.merged !== true || !mergeSha) {
+    if (input.requireLive === true) throw ApplicationFailure.retryable(`${input.prUrl} has no merge commit on GitHub yet.`, 'FixNotLive');
     return { ...none, why: `${input.prUrl} has no merge commit on GitHub.` };
   }
   const read = await withAuth(input, () => readLive({ repo: pr.repo, mergeSha, environment: input.environment }));
+  if (input.requireLive === true && !read.contains) {
+    throw ApplicationFailure.retryable(`Production does not contain ${mergeSha.slice(0, 7)} yet: ${read.why}`, 'FixNotLive');
+  }
   log.info(
     { activity: 'readProductionDeploy', prUrl: input.prUrl, mergeSha, liveSha: read.live?.sha, contains: read.contains },
     'production read for a blockless verify',

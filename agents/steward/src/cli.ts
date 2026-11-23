@@ -68,7 +68,7 @@ import {
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
 import { FixRefused, followFix } from './lib/finding-fix.js';
 import { RetestRefused, requestRetest } from './lib/finding-retest.js';
-import { ResumeRefused, parkedRun, requestResume, resumedLine } from './lib/finding-resume.js';
+import { ResumeRefused, parkedElsewhereLine, parkedRun, requestResume, resumedLine } from './lib/finding-resume.js';
 import {
   FIX_NEXT_STEP,
   SyncError,
@@ -2834,7 +2834,10 @@ finding
         try {
           // A run parked after its fix PR verifies inside itself (STW-653): a
           // verify beside it would decide the file without telling the run.
-          if (!opts.root && !opts.pr && (await parkedRun(c, opts.site, one))) {
+          const parked = !opts.root && !opts.pr ? await parkedRun(c, opts.site, one) : null;
+          if (parked) {
+            // Only a park at its verify is a verify; any other names the command that moves it.
+            if (parked.parked?.stage !== 'verify') throw new Error(parkedElsewhereLine(one, parked));
             const accepted = await requestResume(c, opts.site, one, new Date().toISOString());
             console.log(`\n  ${one} is parked in ${accepted.workflowId}, so the run verifies it.\n  ${resumedLine(one, accepted)}\n`);
             outcomes.push({ key: one, outcome: 'resumed in its run' });

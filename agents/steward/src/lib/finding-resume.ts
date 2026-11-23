@@ -79,6 +79,16 @@ export async function requestResume(
   }
 }
 
+/**
+ * What `verify` says of a run parked at a stage other than its verify: a
+ * verify would not run there, so it names the commands that move the run.
+ */
+export function parkedElsewhereLine(key: string, state: FindingState): string {
+  const park = state.parked;
+  if (!park) return `${key}'s run is parked; \`steward finding status ${key}\` says where.`;
+  return `${key}'s run is parked at its ${park.stage}, not its verify, so there is nothing to verify yet: ${park.moves}`;
+}
+
 /** What the CLI and the console say after an accepted resume. */
 export function resumedLine(key: string, accepted: ResumeAccepted): string {
   const what =

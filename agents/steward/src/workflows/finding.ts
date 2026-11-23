@@ -32,6 +32,7 @@ import {
   type VerifyOutcome,
 } from '../lib/findings.js';
 import { dispatchWorkflowId } from '../lib/fix-dispatch.js';
+import { SLOW_INTERVAL, slowPhaseFor } from '../lib/retry-phases.js';
 import { fixFindingWorkflow } from './fix-finding.js';
 import { releaseSlotSignal, slotGrantSignal } from './fix-dispatch.js';
 import { verifyFindingWorkflow } from './verify-finding.js';
@@ -194,27 +195,39 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *    messages that move it: Temporal's Resumable Activity pattern. A check
  *    that ran and failed leaves the file `reopened` (the child wrote it). A
  *    broken or invalid check, and every other non-retryable failure (the merge
- *    or deploy wait's own, a returned write, a malformed PR URL), leave the
+ *    or deploy wait's own, a returned write), leave the
  *    file as it was. The slot is released first. One comment goes on the PR
  *    per park; a park of the same kind at the same stage in the same attempt
- *    adds none (`parkCommentMarker`). Nothing runs on a clock while parked.
+ *    adds none once one was posted (`parkCommentMarker`), and one that failed
+ *    is tried again at that next park. Nothing runs on a clock while parked.
+ *    `state.waitNote`, `state.parked` and the memo's `waitsFor` change
+ *    together: back into a wait the wait's line returns, into a new attempt
+ *    both go.
  * 3. **A file decided elsewhere ends the run `closed`.** When the verify child
  *    refuses with `FindingNotVerifiable`, or a write with `FindingMoved`, the
  *    run reads `readFindingSettings` once; `resolved` or `rejected` ends it.
  *    A parked run learns this only from a message: `steward finding verify`
  *    and the console's Verify send `resume` to a parked run.
  *
- * Two Updates move a parked run, each with a read-only validator whose refusal
- * reaches its sender, and a handler that only sets a flag:
+ * Three messages move a parked run, each with a read-only validator whose
+ * refusal reaches its sender. Each validator refuses while another of the
+ * three is asked for, so no accepted Update goes unanswered:
  *
  * - `resume` runs the stage again: the verify (a new child with a new `at`),
- *   the merge wait, the deploy wait or the returned write.
+ *   the merge wait, the deploy wait or the returned write. Its handler only
+ *   sets a flag.
  * - `request-fix` starts a new attempt in the same run, at every stage but an
- *   unmerged PR's. It is accepted wherever the `fix` Signal is too, and that
- *   Signal stays for older callers. The attempt's issue supersedes the last
- *   one, its gate reads the earlier PR's `reopened` or `fixing` file as
- *   approved (`afterPr`), and `writeFindingFix` records the earlier PR under
- *   `## Fix attempts` (`earlier`). The run never opens a second fix by itself.
+ *   unmerged PR's. It is accepted only where the run honours it: at a park,
+ *   and at `waiting-fix`. The `fix` Signal keeps its old acceptance for older
+ *   callers. The attempt's issue supersedes the last one, its gate reads the
+ *   earlier PR's `reopened` or `fixing` file as approved (`afterPr`), and
+ *   `writeFindingFix` records the earlier PR under `## Fix attempts`
+ *   (`earlier`). The run never opens a second fix by itself.
+ * - A `rejected` verdict by `record-verdict`, in place of the approval: the
+ *   park writes it with `writeFindingVerdict` and the run ends `rejected`, as
+ *   at the gate, so a person can drop a finding whose fix failed. Only a park
+ *   takes it; everywhere else the other status is refused as before, and a
+ *   repeated `approved` stays a no-op. The `verdict` Signal is unchanged.
  *
  * **Versioned with `patched`.** {@link OPEN_UNTIL_VERIFIED_PATCH} is read only
  * where a path leaves the old one: after a wait's bound ran out (and after its
@@ -455,12 +468,6 @@ export const PARKED_ISSUE_REREAD_PATCH = 'parked-issue-reread';
  * a wait that runs out waits on, and a failure parks the run.
  */
 export const OPEN_UNTIL_VERIFIED_PATCH = 'open-until-verified';
-
-/**
- * The slow phase's fixed interval (STW-653), as the verify child's: the top of
- * the documented 1 to 15 minutes for Fast/Slow Retries.
- */
-const SLOW_INTERVAL = '15 minutes';
 
 /**
  * The deploy wait's interval once its first 24 hours ran out (STW-653). The
@@ -970,16 +977,6 @@ function isTimeout(err: unknown): boolean {
   return err instanceof wf.ActivityFailure && (err.retryState === 'TIMEOUT' || err.cause instanceof wf.TimeoutFailure);
 }
 
-/**
- * A fast phase that ended on a failure the slow phase is for (STW-653): its
- * attempts used up on a retryable failure, or a rejected credential.
- */
-function slowPhaseFor(err: unknown): boolean {
-  if (!(err instanceof wf.ActivityFailure)) return false;
-  if (err.retryState === 'MAXIMUM_ATTEMPTS_REACHED' || err.retryState === 'TIMEOUT') return true;
-  return err.cause instanceof wf.ApplicationFailure && err.cause.type === 'AuthError';
-}
-
 /** The first application failure type in a failure chain: a child's, or its activity's. */
 function failureType(err: unknown): string | null {
   let current: unknown = err;
@@ -1105,7 +1102,12 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   // The two Updates of a parked run (STW-653). Each validator is read-only and
   // its refusal reaches the sender; each handler only sets the flag the park's
   // wait reads, so neither issues a command.
+  // At most one of the three messages a park takes is accepted (`resume`,
+  // `request-fix`, a `rejected` verdict): each validator refuses while
+  // another is asked for, so no accepted Update goes unanswered.
   const resume = { requested: false };
+  const rejection: ParkRejection = { verdict: null, done: false, failed: null };
+  const asks: ParkAsks = { resume, fix, rejection };
   wf.setHandler(
     resumeUpdate,
     (): ResumeAccepted => {
@@ -1114,7 +1116,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
     {
       validator: (request: ResumeRequest): void => {
-        const refusal = resumeRefusal(state, resume, request);
+        const refusal = resumeRefusal(state, asks, request);
         if (refusal) throw new Error(refusal);
       },
     },
@@ -1127,7 +1129,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
     {
       validator: (request: FixUpdateRequest): void => {
-        const refusal = requestFixRefusal(state, fix, request);
+        const refusal = requestFixRefusal(state, asks, request);
         if (refusal) throw new Error(refusal);
       },
     },
@@ -1147,6 +1149,21 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   wf.setHandler(
     verdictUpdate,
     async (verdict): Promise<VerdictRecorded> => {
+      // A `rejected` verdict on a run parked after its fix PR (STW-653): the
+      // park writes it and ends the run as a rejection; this returns after the write.
+      if (rejectsAtPark(state, verdict)) {
+        rejection.verdict = verdict;
+        rejection.done = false;
+        rejection.failed = null;
+        try {
+          await wf.condition(() => rejection.done || rejection.failed !== null);
+        } catch (err) {
+          if (!wf.isCancellation(err)) throw err;
+          throw wf.ApplicationFailure.nonRetryable(VERDICT_CANCELLED, VERDICT_WRITE_FAILED);
+        }
+        if (!rejection.done) throw wf.ApplicationFailure.nonRetryable(String((rejection as ParkRejection).failed), VERDICT_WRITE_FAILED);
+        return { verdict, commitSha: state.commitSha, first: true, stopAfter: input.stopAfter ?? 'resolved' };
+      }
       const first = state.verdict === null;
       if (first) state.verdict = verdict;
       try {
@@ -1163,7 +1180,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
     {
       validator: (verdict: FindingVerdict): void => {
-        const refusal = verdictRefusal(state, verdict);
+        const refusal = verdictRefusal(state, verdict, asks);
         if (refusal) throw new Error(refusal);
       },
     },
@@ -1229,7 +1246,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
       branch: input.branch ?? fixBranch(input.key),
       waitsForPerson: false,
     };
-    return await lifecycle(atUse, state, base, fix, slot, retest, resume, true);
+    return await lifecycle(atUse, state, base, fix, slot, retest, resume, rejection, true);
   }
 
   if (input.stopAfter === 'verdict') {
@@ -1246,46 +1263,77 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     return base;
   }
 
-  return await lifecycle(input as LifecycleInput, state, base, fix, slot, retest, resume, false);
+  return await lifecycle(input as LifecycleInput, state, base, fix, slot, retest, resume, rejection, false);
+}
+
+/** A `rejected` verdict a parked run has accepted (STW-653), until the park writes it. */
+interface ParkRejection {
+  verdict: FindingVerdict | null;
+  done: boolean;
+  failed: string | null;
+}
+
+/** The flags of the three messages a park takes, for the validators to see each other's. */
+interface ParkAsks {
+  resume: { requested: boolean };
+  fix: { requested: boolean };
+  rejection: ParkRejection;
+}
+
+/** True for a `rejected` verdict that a run parked after its fix PR takes in place of its approval (STW-653). */
+function rejectsAtPark(state: FindingState, verdict: FindingVerdict): boolean {
+  return state.step === 'parked' && verdict.status === 'rejected' && state.verdict?.status === 'approved';
+}
+
+/** Why a park refuses a message because another is already asked for; null when none is. */
+function otherAsk(asks: ParkAsks, mine: 'resume' | 'fix' | 'reject'): string | null {
+  if (mine !== 'resume' && asks.resume.requested) return 'A resume is already asked for: the run runs its stage again first.';
+  if (mine !== 'fix' && asks.fix.requested) return 'A new fix attempt is already asked for.';
+  if (mine !== 'reject' && asks.rejection.verdict) return 'A rejection is already being written: the run ends with it.';
+  return null;
 }
 
 /**
  * Why a `resume` Update is refused, in a sentence the CLI prints, or null to
  * accept it (STW-653). Read-only.
  */
-function resumeRefusal(state: FindingState, resume: { requested: boolean }, request: ResumeRequest): string | null {
+function resumeRefusal(state: FindingState, asks: ParkAsks, request: ResumeRequest): string | null {
   if (!request || (request.source !== 'cli' && request.source !== 'console') || typeof request.at !== 'string') {
     return 'The resume request is malformed.';
   }
   if (state.step !== 'parked' || !state.parked) return `The run is not parked: it is at ${state.step ?? 'an unknown step'}.`;
-  if (resume.requested) return 'A resume is already asked for.';
-  return null;
+  if (asks.resume.requested) return 'A resume is already asked for.';
+  return otherAsk(asks, 'resume');
 }
 
 /**
  * Why a `request-fix` Update is refused, in a sentence the CLI prints, or null
- * to accept it (STW-653). Read-only. It accepts wherever the `fix` Signal
- * does, and at a park whose PR merged or closed.
+ * to accept it (STW-653). Read-only. It accepts only where the run honours
+ * it: at `waiting-fix`, and at a park whose PR merged or closed. The `fix`
+ * Signal keeps its wider acceptance for older callers, which promised nothing.
  */
-function requestFixRefusal(state: FindingState, fix: { requested: boolean }, request: FixUpdateRequest): string | null {
+function requestFixRefusal(state: FindingState, asks: ParkAsks, request: FixUpdateRequest): string | null {
   if (!request || (request.source !== 'cli' && request.source !== 'console') || typeof request.at !== 'string') {
     return 'The fix request is malformed.';
   }
   if (state.stopAfter !== 'resolved') return 'This run ends at the verdict, so it opens no fix.';
   if (!state.verdict) return 'The run has no verdict yet: approve the finding first.';
   if (state.verdict.status !== 'approved') return 'The verdict is rejected, so there is nothing to fix.';
-  if (fix.requested) return 'A fix is already asked for.';
+  if (asks.fix.requested) return 'A fix is already asked for.';
   const pr = state.prUrl ?? 'the fix PR';
   switch (state.step) {
-    case 'waiting-verdict':
-    case 'reading-settings':
-    case 'measuring':
     case 'waiting-fix':
       return null;
     case 'parked':
-      return state.parked && !parkTakesFix(state.parked.stage)
-        ? `${pr} is not merged and may still be open: close it, then send resume so the run reads it closed.`
-        : null;
+      if (state.parked && !parkTakesFix(state.parked.stage)) {
+        return `${pr} is not merged and may still be open: close it, then send resume so the run reads it closed.`;
+      }
+      return otherAsk(asks, 'fix');
+    case 'waiting-verdict':
+    case 'reading-settings':
+      return 'The run is taking its verdict now: ask again once it waits for a fix.';
+    case 'measuring':
+      return 'The run is measuring the checks at its verdict: ask again once it waits for a fix.';
     case 'testing-preview':
     case 'waiting-merge':
       return `${pr} is open: close it, and the run goes back to waiting for a fix.`;
@@ -1320,8 +1368,10 @@ interface Retest {
  * null to accept it. Read-only. A verdict that agrees with the one already
  * taken is accepted, so a retry after a lost reply is harmless.
  */
-function verdictRefusal(state: FindingState, verdict: FindingVerdict): string | null {
+function verdictRefusal(state: FindingState, verdict: FindingVerdict, asks: ParkAsks): string | null {
   if (!isFindingVerdict(verdict)) return 'The verdict is malformed.';
+  // A run parked after its fix PR takes a rejection in place of its approval (STW-653).
+  if (rejectsAtPark(state, verdict)) return otherAsk(asks, 'reject');
   if (state.verdict && state.verdict.status !== verdict.status) {
     return `A verdict is already recorded: ${state.verdict.status} (source ${state.verdict.source}).`;
   }
@@ -1383,6 +1433,8 @@ async function lifecycle(
   retest: Retest,
   /** Set by an accepted `resume` Update (STW-653). */
   resume: { requested: boolean },
+  /** A `rejected` verdict a park accepted (STW-653). */
+  rejection: ParkRejection,
   /** True for a run that took the {@link SETTINGS_AT_USE_PATCH} marker at its verdict. */
   atUse: boolean,
 ): Promise<FindingWorkflowResult> {
@@ -1711,9 +1763,10 @@ async function lifecycle(
   const tell = async (what: string, body: string): Promise<string | null> => {
     const marker = parkCommentMarker(input.site, input.key, fixAttempts, what);
     if (told.has(marker) || !state.prUrl) return null;
-    told.add(marker);
     try {
       await writing.commentOnFixPr({ prUrl: state.prUrl, marker, body });
+      // Told only once posted: a comment that failed is tried again at the next park of its kind.
+      told.add(marker);
       return null;
     } catch (err) {
       if (wf.isCancellation(err)) throw err;
@@ -1722,41 +1775,103 @@ async function lifecycle(
     }
   };
 
+  /**
+   * The memo's `waitsFor`, kept to what the state says: a park's line, else a
+   * wait past its bound, else nothing. An upsert only when the line changes,
+   * so a run that never parks or waits past a bound issues none.
+   */
+  let memoLine: string | undefined;
+  let waitLine: string | undefined;
+  const syncMemo = (): void => {
+    const line = state.step === 'parked' && state.parked ? parkLine(state.parked) : state.waitNote ? waitLine : undefined;
+    if (line === memoLine) return;
+    memoLine = line;
+    wf.upsertMemo({ waitsFor: line });
+  };
+
   /** A merge or deploy wait whose first bound ran out: said once on the PR and in the memo, then the wait goes on. */
   const waitExpired = async (wait: 'merge' | 'deploy', note: string): Promise<void> => {
     state.waitNote = `${note} Waiting on since ${nowIso()}.`;
-    wf.upsertMemo({ waitsFor: `waiting on the ${wait} past its first bound: ${note}` });
+    waitLine = `waiting on the ${wait} past its first bound: ${note}`;
+    syncMemo();
     await tell(`${wait}-wait`, waitExpiredComment(wait, note, workflowId));
   };
 
-  /** The end of a wait that went past its bound: the note and the memo line go. */
+  /** The end of a wait, or the way into a new attempt: the note and the memo line go together. */
   const endWaitNote = (): void => {
-    if (!state.waitNote) return;
     state.waitNote = null;
-    wf.upsertMemo({ waitsFor: undefined });
+    syncMemo();
   };
 
   /**
-   * Parks the run until a person's `resume` or `request-fix`: Temporal's
-   * Resumable Activity pattern. The slot goes back first, the PR gets one
-   * comment, and the memo carries the line `steward finding list` prints.
-   * Nothing runs on a clock while parked.
+   * Parks the run until a person's `resume`, `request-fix` or `rejected`
+   * verdict: Temporal's Resumable Activity pattern. The slot goes back first,
+   * the PR gets one comment, and the memo carries the line `steward finding
+   * list` prints. Nothing runs on a clock while parked. A rejection is written
+   * here and ends the run, as a rejection at the gate does; a write that fails
+   * answers the Update with the failure and the run stays parked.
    */
-  const park = async (p: { kind: FindingParkKind; stage: FindingParkStage; reason: string }): Promise<'resume' | 'fix'> => {
+  const park = async (p: { kind: FindingParkKind; stage: FindingParkStage; reason: string }): Promise<'resume' | 'fix' | FindingWorkflowResult> => {
     await release(`parked at ${p.stage}`);
     const parked: FindingPark = { ...p, since: nowIso(), moves: parkMoves(input.key, p.stage), prUrl: state.prUrl ?? null, commentError: null };
     resume.requested = false;
     state.parked = parked;
     state.step = 'parked';
-    wf.upsertMemo({ waitsFor: parkLine(parked) });
+    syncMemo();
     parked.commentError = await tell(`park-${p.kind}-${p.stage}`, parkComment(parked, workflowId));
     wf.log.info('parked', { key: input.key, kind: p.kind, stage: p.stage });
-    await wf.condition(() => resume.requested || fix.requested);
+    for (;;) {
+      await wf.condition(() => resume.requested || fix.requested || rejection.verdict !== null);
+      if (rejection.verdict) {
+        const rejected = await rejectAtPark(rejection.verdict);
+        if (rejected) return rejected;
+        continue;
+      }
+      break;
+    }
     const moved = fix.requested ? 'fix' : 'resume';
     resume.requested = false;
     state.parked = null;
-    wf.upsertMemo({ waitsFor: undefined });
+    // Into a new attempt, a wait's note goes with the park; back into the wait, it stays.
+    if (moved === 'fix') state.waitNote = null;
+    syncMemo();
     return moved;
+  };
+
+  /** Writes a `rejected` verdict a park accepted; the run's result, or null when the write failed. */
+  const rejectAtPark = async (verdict: FindingVerdict): Promise<FindingWorkflowResult | null> => {
+    let commitSha: string | null = null;
+    try {
+      if (verdictSourceWrites(verdict.source)) {
+        commitSha = (
+          await writing.writeFindingVerdict({
+            repo: input.repo,
+            site: input.site,
+            key: input.key,
+            findingPath: input.findingPath,
+            indexPath: input.indexPath,
+            status: verdict.status,
+            reason: verdict.reason,
+            at: verdict.at,
+            source: verdict.source,
+          })
+        ).commitSha;
+      }
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      rejection.failed = `The rejection was not written: ${describeError(err)}`;
+      rejection.verdict = null;
+      return null;
+    }
+    state.verdict = verdict;
+    state.commitSha = commitSha;
+    state.parked = null;
+    state.waitNote = null;
+    rejection.done = true;
+    rejection.verdict = null;
+    // The waiting Update returns before the run closes.
+    await wf.condition(wf.allHandlersFinished);
+    return end('rejected', `Rejected after its fix PR ${state.prUrl ?? ''}, where it was parked.`, { verdict, commitSha });
   };
 
   /** A file decided elsewhere ends the run `closed`; null when it is not decided. */
@@ -1843,6 +1958,8 @@ async function lifecycle(
 
     attempts: for (;;) {
       state.step = 'waiting-fix';
+      // Into a new attempt, no wait note or park line survives (STW-653); no command when there was none.
+      if (state.waitNote) endWaitNote();
       if (!recut && atUse) {
         const closed = await waitAtUse(heldAtVerdict && fixAttempts === 0);
         if (closed) return closed;
@@ -2001,8 +2118,9 @@ async function lifecycle(
             continue;
           }
           if (wf.isCancellation(err) || !wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) throw err;
-          // A request-fix is refused at this stage, so only a resume moves it: the wait runs again.
-          await park({ kind: 'error', stage: 'merge', reason: `The merge wait on ${prUrl} failed: ${describeError(err)}.` });
+          // A request-fix is refused at this stage, so a resume moves it (the wait runs again), or a rejection ends it.
+          const moved = await park({ kind: 'error', stage: 'merge', reason: `The merge wait on ${prUrl} failed: ${describeError(err)}.` });
+          if (typeof moved === 'object') return moved;
         }
       }
       endWaitNote();
@@ -2050,14 +2168,10 @@ async function lifecycle(
 
       const mergeSha = merge.mergeSha as string;
       const pr = parsePrUrl(prUrl);
-      if (!pr) {
-        const malformed = wf.ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
-        if (!wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) throw malformed;
-        // Nothing a resume mends, so the run parks again until a person asks for a new fix.
-        while ((await park({ kind: 'error', stage: 'deploy', reason: `${prUrl} is not a pull request URL.` })) !== 'fix');
-        askedAgain(prUrl, `${prUrl} is not a pull request URL.`);
-        continue;
-      }
+      // Nothing reaches this throw: the URL came from `awaitFixPr`, which matches
+      // GitHub's own PR list, or from the frozen fixer's child. It stays the old
+      // failure, with no park (STW-653).
+      if (!pr) throw wf.ApplicationFailure.nonRetryable(`${prUrl} is not a pull request URL.`, 'FindingMalformed');
 
       let deploy!: ProductionDeploy;
       // Set once the first 24 hours ran out (STW-653): the wait goes on every DEPLOY_REWAIT.
@@ -2087,7 +2201,9 @@ async function lifecycle(
           }
           if (wf.isCancellation(err) || !wf.patched(OPEN_UNTIL_VERIFIED_PATCH)) throw err;
           const reason = `The deploy wait for ${mergeSha.slice(0, 7)} failed: ${describeError(err)}.`;
-          if ((await park({ kind: 'error', stage: 'deploy', reason })) === 'fix') {
+          const moved = await park({ kind: 'error', stage: 'deploy', reason });
+          if (typeof moved === 'object') return moved;
+          if (moved === 'fix') {
             askedAgain(prUrl, `${prUrl} merged at ${mergeSha.slice(0, 7)}; ${reason}`);
             continue attempts;
           }
@@ -2166,7 +2282,9 @@ async function lifecycle(
             reason: `The verify ${verifyId} failed: ${describeError(err)}.`,
           };
         }
-        if ((await park({ ...parkAs, stage: 'verify' })) === 'fix') {
+        const moved = await park({ ...parkAs, stage: 'verify' });
+        if (typeof moved === 'object') return moved;
+        if (moved === 'fix') {
           askedAgain(prUrl, `${prUrl} merged at ${mergeSha.slice(0, 7)}, and ${parkAs.reason}`);
           continue attempts;
         }

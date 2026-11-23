@@ -8,6 +8,7 @@ import {
   type VerifyBlockSource,
   type VerifyOutcome,
 } from '../lib/findings.js';
+import { SLOW_INTERVAL, slowPhaseFor } from '../lib/retry-phases.js';
 
 /**
  * `verifyFindingWorkflow`: one execution per verify run,
@@ -62,7 +63,7 @@ import {
  * 1. The fast phase is each activity's policy as it was: three attempts in
  *    about 75 seconds for the checks, three for a read, five for the write.
  * 2. When an activity's fast attempts are used up on a retryable failure (a
- *    5xx, no answer, a deploy that lags, a 409), the same activity is run again
+ *    5xx, no answer, a 409), the same activity is run again
  *    with a fixed {@link SLOW_INTERVAL} and no attempt limit. Temporal owns the
  *    wait between attempts, so it adds no history event; nobody is told.
  * 3. A rejected credential takes the slow phase too, though the fast phase
@@ -72,7 +73,12 @@ import {
  *    which turns the `AuthError` the GitHub client throws non-retryable into a
  *    retryable one; the fast call passes nothing, so every other caller of
  *    these activities keeps `AuthError` final.
- * 4. Any other non-retryable failure (`VerifyCheckBroken`,
+ * 4. A deploy that lags behind the fix, for a finding with no checks: with
+ *    `slowRetry` the production read asks `requireLive`, and an answer that
+ *    production does not contain the fix's merge is a retryable `FixNotLive`
+ *    from the activity, so it takes both phases like an outage. Without it the
+ *    read answers and the child fails, as before.
+ * 5. Any other non-retryable failure (`VerifyCheckBroken`,
  *    `VerifyBlockInvalid`, `FindingMoved`, `NotFound`) is not retried: the
  *    child fails, and the parent parks where a person can act.
  *
@@ -92,16 +98,6 @@ const QUEUE_FINDINGS = 'steward-findings';
 
 /** The `patched` marker of the blockless verify's production read in place of `unverifiable` (decision 30). */
 export const BLOCKLESS_CONFIRM_PATCH = 'verify-blockless-confirm';
-
-/**
- * The slow phase's fixed interval (STW-653). The top of the documented range
- * for Fast/Slow Retries ("1–15 minutes: long enough to avoid hammering a down
- * system; short enough to recover promptly"). An unreachable production costs
- * up to 30 seconds a check, so a twelve-check block holds one of the hosted
- * worker's two findings slots for up to six minutes; at a quarter of an hour
- * a stuck verify holds at most about 40 per cent of one slot.
- */
-export const SLOW_INTERVAL = '15 minutes';
 
 /** The GitHub deployment environment Vercel's integration posts production to, as in `finding.ts`. */
 const PRODUCTION_ENVIRONMENT = 'Production';
@@ -248,16 +244,6 @@ const slowWriting = wf.proxyActivities<Pick<typeof activities, 'writeFindingVeri
   },
 });
 
-/**
- * True for a fast phase that ended on a failure the slow phase is for: its
- * attempts used up on a retryable failure, or a rejected credential.
- */
-function slowPhaseFor(err: unknown): boolean {
-  if (!(err instanceof wf.ActivityFailure)) return false;
-  if (err.retryState === 'MAXIMUM_ATTEMPTS_REACHED' || err.retryState === 'TIMEOUT') return true;
-  return err.cause instanceof wf.ApplicationFailure && err.cause.type === 'AuthError';
-}
-
 export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<VerifyFindingResult> {
   const state: VerifyFindingState = { site: input.site, key: input.key, step: 'reading' };
   wf.setHandler(verifyFindingStateQuery, () => state);
@@ -370,10 +356,12 @@ async function confirmByDeploy(
   phases: <T>(name: string, fast: () => Promise<T>, slow: () => Promise<T>) => Promise<T>,
 ): Promise<VerifyFindingResult> {
   state.step = 'checking';
+  // With `slowRetry`, a fix production does not yet serve is a retryable failure of the read (STW-653).
+  const requireLive = input.slowRetry === true ? { requireLive: true } : {};
   const live = await phases(
     'readProductionDeploy',
-    () => reading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT }),
-    () => slowReading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT, retryAuth: true }),
+    () => reading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT, ...requireLive }),
+    () => slowReading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT, ...requireLive, retryAuth: true }),
   );
   if (!live.contains || !live.mergeSha || !live.liveSha) {
     throw wf.ApplicationFailure.nonRetryable(

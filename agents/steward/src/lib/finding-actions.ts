@@ -11,7 +11,7 @@ import {
 } from '../config.js';
 import { readFinding, writeFindingReturned } from '../activities/findings.js';
 import { FixRefused, requestFix, type FixRequested } from './finding-fix.js';
-import { ResumeRefused, parkedRun, requestResume, resumedLine } from './finding-resume.js';
+import { ResumeRefused, parkedElsewhereLine, parkedRun, requestResume, resumedLine } from './finding-resume.js';
 import { LIFECYCLE_CANCEL_WAIT_MS, VerifyRefused, buildVerifyInput, cancelLifecycleRun, verifyFindingPaths, type LifecycleRunClosed } from './finding-verify.js';
 import { gh } from './github.js';
 import {
@@ -395,7 +395,10 @@ export async function launchVerify(
 ): Promise<VerifyLaunched> {
   // A run parked after its fix PR verifies inside itself (STW-653): a verify
   // beside it would decide the file without telling the run.
-  if (await parkedRun(client, site, key)) {
+  const parked = await parkedRun(client, site, key);
+  if (parked) {
+    // Only a park at its verify is a verify; any other names the command that moves it.
+    if (parked.parked?.stage !== 'verify') throw new VerifyRefused(parkedElsewhereLine(key, parked));
     try {
       const accepted = await requestResume(client, site, key, new Date().toISOString(), 'console');
       return { workflowId: accepted.workflowId, webUrl: runLink(accepted.workflowId), nextStep: resumedLine(key, accepted) };
