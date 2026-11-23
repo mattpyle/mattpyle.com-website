@@ -27,7 +27,9 @@ import { fixSignal, verdictSignal } from './finding.js';
  * `lib/findings.ts` is the rule:
  *
  * - a `proposed` or `reopened` line, on every site. Its run waits at
- *   `waiting-verdict`;
+ *   `waiting-verdict`. A `reopened` line whose fix failed its verification
+ *   since STW-653 already has its run, parked after the fix PR, so the pass
+ *   finds it running and starts nothing;
  * - an `approved` line, on a site that goes past the verdict. Its run gets the
  *   line's verdict in its input (source `file`, so the run writes nothing),
  *   reads its settings and measures, then attempts the fix or parks at

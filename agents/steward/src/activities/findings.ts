@@ -1500,8 +1500,11 @@ function productionOrigin(site: string): string | undefined {
  * `ALLOW_DUPLICATE_FAILED_ONLY` for a `proposed` line: a finding whose workflow
  * completed at a verdict is never reopened by a stale index line, while one
  * that failed or was terminated can be started again. `ALLOW_DUPLICATE` for a
- * `reopened` line: its last run completed by writing `reopened`, so that run
- * is history, and the new one returns the finding to the verdict gate. A
+ * `reopened` line whose run is closed: a run recorded before STW-653 completed
+ * by writing `reopened`, so that run is history, and the new one returns the
+ * finding to the verdict gate. Since STW-653 the run that wrote `reopened`
+ * stays open, parked, so the describe above finds it running and nothing
+ * starts. A
  * retry after a start that landed returns `already-started`, so the activity
  * is safe to retry.
  *

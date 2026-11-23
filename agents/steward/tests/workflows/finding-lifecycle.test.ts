@@ -53,6 +53,7 @@ import {
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import type { VerifyCheck } from '../../src/lib/verify-checks.js';
 import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
+import { ResumeRefused, parkedRun, requestResume } from '../../src/lib/finding-resume.js';
 
 /**
  * `findingWorkflow` started with `stopAfter: 'resolved'`, end to end on the
@@ -577,7 +578,11 @@ test('a check fails on production: the run parks at verify, says so once on the 
 
     // The check is corrected (or production fixed): the next resume passes.
     script.passes = true;
-    await handle.executeUpdate(resumeUpdate, { args: [{ source: 'cli', at: '2026-10-15T09:00:00Z' }] });
+    // `steward finding resume` and the console's Verify find the parked run and send the same Update.
+    const key = handle.workflowId.split('/')[2];
+    assert.equal((await parkedRun(client, 'mattpyle-com', key))?.parked?.stage, 'verify');
+    const resumed = await requestResume(client, 'mattpyle-com', key, '2026-10-15T09:00:00Z');
+    assert.equal(resumed.workflowId, handle.workflowId);
     return (await handle.result()) as FindingWorkflowResult;
   });
 
@@ -1141,6 +1146,11 @@ test('the Updates refuse a run that is not parked, each with its reason', async 
     );
     await assert.rejects(handle.executeUpdate(requestFixUpdate, { args: [{ source: 'cli', at: '2026-10-14T09:00:00Z' }] }), (err) =>
       /^The run has no verdict yet: approve the finding first\.$/.test(why(err)),
+    );
+    assert.equal(await parkedRun(client, 'mattpyle-com', 'lifecycle-not-parked'), null);
+    await assert.rejects(
+      requestResume(client, 'mattpyle-com', 'lifecycle-not-parked', '2026-10-14T09:00:00Z'),
+      (err) => err instanceof ResumeRefused && err.message === 'Steward did not resume lifecycle-not-parked: The run is not parked: it is at waiting-verdict.',
     );
     await handle.terminate('test over');
   });

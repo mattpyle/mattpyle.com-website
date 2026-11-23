@@ -11,6 +11,7 @@ import {
 } from '../config.js';
 import { readFinding, writeFindingReturned } from '../activities/findings.js';
 import { FixRefused, requestFix, type FixRequested } from './finding-fix.js';
+import { ResumeRefused, parkedRun, requestResume, resumedLine } from './finding-resume.js';
 import { LIFECYCLE_CANCEL_WAIT_MS, VerifyRefused, buildVerifyInput, cancelLifecycleRun, verifyFindingPaths, type LifecycleRunClosed } from './finding-verify.js';
 import { gh } from './github.js';
 import {
@@ -221,10 +222,17 @@ export async function readPrState(prUrl: string): Promise<'open' | 'merged' | 'c
  * `fix`. It returns once the signal is sent; {@link FixRefused} carries a refusal.
  * `say` receives the lines the CLI prints as the request proceeds.
  */
-export function requestFindingFix(client: Client, site: string, key: string, say: (line: string) => void): Promise<FixRequested> {
+export function requestFindingFix(
+  client: Client,
+  site: string,
+  key: string,
+  say: (line: string) => void,
+  source: 'cli' | 'console' = 'cli',
+): Promise<FixRequested> {
   return requestFix(
     {
       client,
+      source,
       repo: ARGUS_REPO,
       taskQueue: QUEUE_FINDINGS,
       origin: site === FINDINGS_DEFAULT_SITE ? PROD_ORIGIN : undefined,
@@ -258,7 +266,10 @@ export function fixStarted(requested: FixRequested): FixStarted {
  * absent or parked. A parked run is open at `waiting-fix` with no issue: it
  * waits for a `fix` signal, which `requestFix` sends. A run with an issue is
  * past the gate and mid-fix, or its fix ended and `steward finding fix`
- * retries it; the page leaves that one to the CLI as it always did.
+ * retries it; the page leaves that one to the CLI as it always did. A run
+ * parked after its fix PR (STW-653) is offered Fix whatever the file's status,
+ * at every stage but an unmerged PR's: the run's own `request-fix` validator
+ * decides, and its refusal comes back to the page.
  */
 export function fixOffered(input: {
   site: string;
@@ -266,12 +277,15 @@ export function fixOffered(input: {
   runOpen: boolean;
   /** The open run's `state.step`, when the loader asked. */
   runStep?: string | null;
+  /** At `parked`: whether the park takes a new fix (STW-653). */
+  parkTakesFix?: boolean;
   /** The open run's fix issue, when the loader asked. */
   issueUrl?: string | null;
   stopAfter: string | null;
   data: Record<string, unknown>;
   text: string;
 }): boolean {
+  if (input.runOpen && input.runStep === 'parked') return input.parkTakesFix === true;
   if (input.status !== 'approved') return false;
   if (input.runOpen && !(input.runStep === 'waiting-fix' && !input.issueUrl)) return false;
   if (input.site !== FINDINGS_DEFAULT_SITE || input.stopAfter === 'verdict') return false;
@@ -379,6 +393,17 @@ export async function launchVerify(
   key: string,
   onDone: (outcome: { workflowId: string; finished?: VerifyFinished; error?: unknown }) => void,
 ): Promise<VerifyLaunched> {
+  // A run parked after its fix PR verifies inside itself (STW-653): a verify
+  // beside it would decide the file without telling the run.
+  if (await parkedRun(client, site, key)) {
+    try {
+      const accepted = await requestResume(client, site, key, new Date().toISOString(), 'console');
+      return { workflowId: accepted.workflowId, webUrl: runLink(accepted.workflowId), nextStep: resumedLine(key, accepted) };
+    } catch (err) {
+      if (err instanceof ResumeRefused) throw new VerifyRefused(err.message);
+      throw err;
+    }
+  }
   const started = await startVerify(client, site, key);
   finishVerify(client, site, key, started).then(
     (finished) => onDone({ workflowId: started.workflowId, finished }),

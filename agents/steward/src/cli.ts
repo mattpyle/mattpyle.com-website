@@ -68,6 +68,7 @@ import {
 import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
 import { FixRefused, followFix } from './lib/finding-fix.js';
 import { RetestRefused, requestRetest } from './lib/finding-retest.js';
+import { ResumeRefused, parkedRun, requestResume, resumedLine } from './lib/finding-resume.js';
 import {
   FIX_NEXT_STEP,
   SyncError,
@@ -2019,7 +2020,9 @@ finding
         const dispatch = dispatchers.get(row.workflowId.split('/')[1] ?? '');
         const blocker = dispatch ? slotBlocker(dispatch, row.workflowId) : null;
         const slot = blocker ? `  waiting-slot (${blocker.path}, behind ${blocker.key})` : '';
-        console.log(`  ${row.workflowId}  since ${since}${reopened}${slot}`);
+        // A run parked or waiting past a bound after its fix PR says what it waits for (STW-653).
+        const waitsFor = typeof row.memo?.waitsFor === 'string' ? `\n    ${row.memo.waitsFor}` : '';
+        console.log(`  ${row.workflowId}  since ${since}${reopened}${slot}${waitsFor}`);
       }
       console.log('');
     } finally {
@@ -2084,6 +2087,15 @@ finding
         console.log(`${at}${waitingSlotLine(await readDispatchState(c, opts.site), id, state.slotPaths)}`);
       }
       if (state.lastFixError) console.log(`${at}last fix failed: ${state.lastFixError}`);
+      if (state.parked) {
+        console.log(`${at}parked at ${state.parked.stage} since ${state.parked.since} (${state.parked.kind}): ${state.parked.reason}`);
+        console.log(`${at}moves it: ${state.parked.moves}`);
+        if (state.parked.commentError) console.log(`${at}the PR comment was not posted: ${state.parked.commentError}`);
+      }
+      if (state.waitNote) console.log(`${at}waiting past its bound: ${state.waitNote}`);
+      if (state.verifyWorkflowId && (state.step === 'verifying' || state.step === 'parked')) {
+        console.log(`${at}verify: ${state.verifyWorkflowId}`);
+      }
       if (state.verdict) {
         console.log(`${at}verdict: ${state.verdict.status} (source ${state.verdict.source}, at ${state.verdict.at})`);
         if (state.verdict.reason) console.log(`${at}reason: ${state.verdict.reason}`);
@@ -2385,6 +2397,34 @@ finding
     }
   });
 
+finding
+  .command('resume')
+  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .description(
+    'Run a parked finding run\'s stage again: the verify after a failed or broken check, or the wait or write that failed. `steward finding status` says where it is parked',
+  )
+  .action(async (key: string, opts: { site: string }) => {
+    const c = await client();
+    try {
+      let accepted;
+      try {
+        accepted = await requestResume(c, opts.site, key, new Date().toISOString());
+      } catch (err) {
+        if (err instanceof ResumeRefused) {
+          await c.connection.close();
+          fail(err.message);
+        }
+        throw err;
+      }
+      console.log('');
+      console.log(`  ${accepted.workflowId}: ${resumedLine(key, accepted)}`);
+      console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
 const keys = program
   .command('keys')
   .description("Steward's Web Bot Auth signing key (src/lib/agent-audit/request-signing.ts)");
@@ -2530,7 +2570,7 @@ program
       loadFindings: () => loader.load(),
       sendVerdict: (request: Parameters<typeof sendVerdict>[0]) => sendVerdict(request, { client: c }),
       runSync: () => syncFindings(c),
-      runFix: async (site: string, key: string) => fixStarted(await requestFindingFix(c, site, key, () => {})),
+      runFix: async (site: string, key: string) => fixStarted(await requestFindingFix(c, site, key, () => {}, 'console')),
       runVerify: (site: string, key: string) =>
         launchVerify(c, site, key, ({ workflowId, finished, error }) => {
           if (error) console.error('steward console: verify %s failed:', workflowId, error);
@@ -2792,6 +2832,14 @@ finding
     try {
       for (const one of keys) {
         try {
+          // A run parked after its fix PR verifies inside itself (STW-653): a
+          // verify beside it would decide the file without telling the run.
+          if (!opts.root && !opts.pr && (await parkedRun(c, opts.site, one))) {
+            const accepted = await requestResume(c, opts.site, one, new Date().toISOString());
+            console.log(`\n  ${one} is parked in ${accepted.workflowId}, so the run verifies it.\n  ${resumedLine(one, accepted)}\n`);
+            outcomes.push({ key: one, outcome: 'resumed in its run' });
+            continue;
+          }
           outcomes.push({ key: one, outcome: (await verifyOneFinding(c, opts.site, one, opts.reason?.trim(), opts.root)).outcome });
         } catch (err) {
           if (!opts.allFixing) throw err;

@@ -1,6 +1,7 @@
 import {
   WorkflowExecutionAlreadyStartedError,
   WorkflowNotFoundError,
+  WorkflowUpdateFailedError,
   type Client,
   type WorkflowHandle,
 } from '@temporalio/client';
@@ -18,7 +19,7 @@ import {
 } from './findings.js';
 import {
   findingStateQuery,
-  fixSignal,
+  requestFixUpdate,
   verdictSignal,
   type FindingState,
   type FindingWorkflowInput,
@@ -43,7 +44,11 @@ import {
  *    adoption batch cancelled the backlog's, and a `'resolved'` run replaces it.
  * 4. A new run gets the file's verdict with source `file`, so it writes nothing.
  * 5. `fix` is sent only once the run reports `waiting-fix`, so it never races
- *    the verdict (finding-early-fix-signal).
+ *    the verdict (finding-early-fix-signal). A run parked after its fix PR
+ *    (STW-653) takes it at once, for a new attempt in the same run.
+ * 6. Since STW-653 the request is the `request-fix` Update, not the `fix`
+ *    Signal: a run that refuses it says why, and {@link FixRefused} carries
+ *    that sentence. The Signal stays in the workflow for older callers.
  *
  * {@link followFix} only watches the run's state.
  */
@@ -72,6 +77,8 @@ export interface FindingFixDeps {
   }) => Promise<{ commitSha: string | null }>;
   /** One line of operator output. */
   say: (line: string) => void;
+  /** Who asks: the CLI, or the console's Fix. Default `cli`. */
+  source?: 'cli' | 'console';
   /** How long to wait for a run to reach `waiting-fix`. */
   waitMs?: number;
   pollMs?: number;
@@ -267,7 +274,8 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
     state.step !== 'waiting-verdict' &&
     state.step !== 'reading-settings' &&
     state.step !== 'measuring' &&
-    state.step !== 'waiting-fix'
+    state.step !== 'waiting-fix' &&
+    state.step !== 'parked'
   ) {
     throw new FixRefused(`${id} is ${state.step}, not waiting for a fix.`);
   }
@@ -278,7 +286,7 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
     returnedFrom = prepared.returnedFrom;
     await lifecycle.signal(verdictSignal, prepared.verdict);
   }
-  while (state.step !== 'waiting-fix') {
+  while (state.step !== 'waiting-fix' && state.step !== 'parked') {
     if (state.step === 'done' && state.verdict?.status === 'approved' && state.verdictMeasure) {
       // STW-589: every check passed at the verdict, and the run resolved the finding.
       throw new FixRefused(`${id} resolved the finding at its verdict (${state.verdictMeasure}), so there is nothing to fix.`);
@@ -297,8 +305,15 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
     state = await queryState(lifecycle, deadline, pollMs);
   }
 
-  await lifecycle.signal(fixSignal, { source: 'cli', at: new Date().toISOString() });
-  deps.say(`fix signal sent to ${id}`);
+  try {
+    await lifecycle.executeUpdate(requestFixUpdate, { args: [{ source: deps.source ?? 'cli', at: new Date().toISOString() }] });
+  } catch (err) {
+    if (err instanceof WorkflowUpdateFailedError) {
+      throw new FixRefused(`${id} refused the fix: ${err.cause instanceof Error ? err.cause.message : err.message}`);
+    }
+    throw err;
+  }
+  deps.say(`fix request accepted by ${id}`);
   return {
     lifecycle,
     started,

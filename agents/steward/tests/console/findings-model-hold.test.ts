@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { HOLD_MEASURING, QUIET_RESOLVED_AT_VERDICT, assessRow, createFindingsLoader, holdLineFor, type ConsoleClient, type FindingRunView, type FindingRow } from '../../src/console/findings-model.js';
+import { HOLD_MEASURING, QUIET_RESOLVED_AT_VERDICT, STATE_QUERIED_STATUSES, assessRow, createFindingsLoader, holdLineFor, parkHoldLine, type ConsoleClient, type FindingRunView, type FindingRow } from '../../src/console/findings-model.js';
+import { fixOffered } from '../../src/lib/finding-actions.js';
 import { findingWorkflowId } from '../../src/lib/findings.js';
 import type { FindingState } from '../../src/workflows/finding.js';
 
@@ -191,4 +192,24 @@ test('a run measuring its checks at the verdict shows a hold line, and its resol
   assert.deepEqual(assessRow('approved', 'approved', run), { drift: [], quietReason: null });
   // The measurement's commit resolves the row a moment before the run ends.
   assert.deepEqual(assessRow('resolved', 'resolved', run), { drift: [], quietReason: QUIET_RESOLVED_AT_VERDICT });
+});
+
+test('a run parked after its fix PR holds its row with where it parked and what moves it, whatever the file says (STW-653)', () => {
+  const parked = {
+    kind: 'checks-failed' as const,
+    stage: 'verify' as const,
+    reason: 'Production at m1 failed check 1.',
+    since: '2026-11-22T20:00:00.000Z',
+    moves: '`steward finding resume k` verifies again; `steward finding fix k` starts a new fix attempt.',
+    prUrl: null,
+  };
+  const run: FindingRunView = { open: true, since: null, step: 'parked', queried: true, queryError: null, prUrl: null, issueUrl: null, previewResult: null, lastFixError: null, slotLine: null, parked };
+  assert.equal(parkHoldLine(run), `Parked at verify: Production at m1 failed check 1. ${parked.moves}`);
+  assert.equal(parkHoldLine({ ...run, step: 'waiting-merge', parked: null, waitNote: 'PR was not merged within 30 days.' }), 'Waiting past its bound: PR was not merged within 30 days.');
+  assert.equal(parkHoldLine({ ...run, open: false }), null);
+  // Fix is offered on a parked reopened row, but not at an unmerged PR's park.
+  const offer = { site: 'mattpyle-com', status: 'reopened', runOpen: true, runStep: 'parked', stopAfter: null, data: {}, text: '' };
+  assert.equal(fixOffered({ ...offer, parkTakesFix: true }), true);
+  assert.equal(fixOffered({ ...offer, parkTakesFix: false }), false);
+  assert.ok((STATE_QUERIED_STATUSES as readonly string[]).includes('reopened'), 'a reopened row is queried, so its park is seen');
 });

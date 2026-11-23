@@ -57,9 +57,16 @@ that's the property being dogfooded here, on a low-stakes, real target.
   of the way in the same execution: it waits for a `fix` signal, runs `fixFindingWorkflow` as a child, polls the PR until
   it merges or closes (every 5 minutes, up to 30 days), polls GitHub's `Production` deployments until
   production serves a commit containing the merge (every 2 minutes, up to 24 hours), then runs
-  `verifyFindingWorkflow` as a child and completes with `resolved`, `reopened` or `unverifiable`. A PR
+  `verifyFindingWorkflow` as a child and completes with `resolved` or `confirmed`. A PR
   closed unmerged writes `status: approved` back with a note, and the run waits for the next `fix`.
-  Either wait timing out ends the run with the finding still `fixing`. An hourly Schedule runs the
+  After its fix PR a run does not end with the finding undecided (STW-653). A merge or deploy wait
+  that runs out its bound says so once on the PR and keeps waiting (the deploy wait every 15 minutes).
+  A write or a verify that cannot reach GitHub or production retries every 15 minutes once its
+  fast retries are used up, and tells nobody. A check that fails on production (the file says
+  `reopened`), a broken check, or any other failure a retry does not mend parks the run at step
+  `parked`, releases its slot and comments once on the PR; `steward finding resume <key>` runs the
+  stage again, and `steward finding fix <key>` starts a new attempt in the same run, recorded under
+  the file's `## Fix attempts`. Nothing runs on a clock while parked. An hourly Schedule runs the
   reconciler, which has one rule: every index line that should have a running workflow has one
   after the pass. That is a `proposed` or `reopened` line on every site, and an `approved` line on
   a site that goes past the verdict, whose new run carries the file's verdict in its input. One
@@ -240,13 +247,14 @@ steward cleanup my-draft-slug    # after the merge: drop the local draft twin an
 steward inbox                    # every review waiting on you, across every slug
 steward audit-url example.com    # agent-readiness checks against any site
 steward mcp-serve                # serve the audit over MCP, backed by local Temporal
-steward finding list             # open finding workflows, one per line; a run waiting for a fix slot is tagged
+steward finding list             # open finding workflows, one per line; a run waiting for a fix slot is tagged, and a parked run says what it waits for
 steward finding status <key>     # opens with `run: open`, or how and when a closed run ended (and its outcome); a closed run's step, gate and verdict follow under `last state:`
 steward finding approve <key>    # send the verdict as an Update; the workflow writes it into the file and answers
 steward finding reject <key> --reason "why"
-steward finding fix <key>        # signal the finding's lifecycle, or start the fixer alone for an older finding
+steward finding fix <key>        # ask the finding's lifecycle for a fix attempt (a `request-fix` Update; refused with the reason), or start it for an approved finding
+steward finding resume <key>     # a run parked after its fix PR runs its stage again: the verify, the merge or deploy wait, or the returned write
 steward finding retest <key>     # test the open fix PR's head on its preview again (a Workflow Update; refused with the reason when there is no open fix PR)
-steward finding verify <key>     # fixing or reopened finding to resolved or reopened, measured on production
+steward finding verify <key>     # fixing or reopened finding to resolved or reopened, measured on production; a parked run is resumed instead, so it verifies inside itself
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost
 steward finding sync             # run the findings reconcile now
 steward finding schedule create  # create | describe | pause | unpause | trigger the hourly reconcile
