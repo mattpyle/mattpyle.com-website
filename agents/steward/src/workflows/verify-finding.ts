@@ -53,6 +53,36 @@ import {
  * **Versioned with `patched`.** A blockless run recorded before decision 30
  * has no {@link BLOCKLESS_CONFIRM_PATCH} marker and replays to its old
  * `unverifiable` ending, which writes nothing.
+ *
+ * **Two retry phases** (STW-653), Temporal's Fast/Slow Retries pattern, for a
+ * verify that cannot reach production or GitHub. They apply only when the
+ * input sets `slowRetry`, which `findingWorkflow` does: a person who started a
+ * verify from the CLI is watching it, and gets the failure at once as before.
+ *
+ * 1. The fast phase is each activity's policy as it was: three attempts in
+ *    about 75 seconds for the checks, three for a read, five for the write.
+ * 2. When an activity's fast attempts are used up on a retryable failure (a
+ *    5xx, no answer, a deploy that lags, a 409), the same activity is run again
+ *    with a fixed {@link SLOW_INTERVAL} and no attempt limit. Temporal owns the
+ *    wait between attempts, so it adds no history event; nobody is told.
+ * 3. A rejected credential takes the slow phase too, though the fast phase
+ *    treats it as permanent. A token rotation passes by itself, so it is the
+ *    case the slow phase is for, as `readFindingSettings` already decides
+ *    (`authRetryable` in `lib/github.ts`). The slow call passes `retryAuth`,
+ *    which turns the `AuthError` the GitHub client throws non-retryable into a
+ *    retryable one; the fast call passes nothing, so every other caller of
+ *    these activities keeps `AuthError` final.
+ * 4. Any other non-retryable failure (`VerifyCheckBroken`,
+ *    `VerifyBlockInvalid`, `FindingMoved`, `NotFound`) is not retried: the
+ *    child fails, and the parent parks where a person can act.
+ *
+ * **No marker.** `slowRetry` is a new optional input field read as `=== true`
+ * (determinism rule 3): a history recorded without it took the fast phase
+ * alone, and replays it. With it, the commands are the same until a fast
+ * phase fails, which is where the slow activity is the new command. The
+ * fixtures `verify-finding-blockless.bin` and
+ * `verify-finding-checks-pre-heartbeat.bin` replay green as the proof, and
+ * `verify-finding-slow-phase.bin` replays the slow phase itself.
  */
 
 // Duplicated rather than imported from config.ts, as in the sibling workflows.
@@ -62,6 +92,16 @@ const QUEUE_FINDINGS = 'steward-findings';
 
 /** The `patched` marker of the blockless verify's production read in place of `unverifiable` (decision 30). */
 export const BLOCKLESS_CONFIRM_PATCH = 'verify-blockless-confirm';
+
+/**
+ * The slow phase's fixed interval (STW-653). The top of the documented range
+ * for Fast/Slow Retries ("1–15 minutes: long enough to avoid hammering a down
+ * system; short enough to recover promptly"). An unreachable production costs
+ * up to 30 seconds a check, so a twelve-check block holds one of the hosted
+ * worker's two findings slots for up to six minutes; at a quarter of an hour
+ * a stuck verify holds at most about 40 per cent of one slot.
+ */
+export const SLOW_INTERVAL = '15 minutes';
 
 /** The GitHub deployment environment Vercel's integration posts production to, as in `finding.ts`. */
 const PRODUCTION_ENVIRONMENT = 'Production';
@@ -83,6 +123,13 @@ export interface VerifyFindingInput {
   at: string;
   /** `steward finding verify --reason`: one line for the Verification section. Absent from the lifecycle's child. */
   reason?: string;
+  /**
+   * Set by `findingWorkflow` (STW-653): an activity whose fast retries are used
+   * up on a retryable failure, or on a rejected credential, is run again in a
+   * slow phase with no attempt limit. Read as `=== true`; absent, the verify
+   * fails as it always did.
+   */
+  slowRetry?: boolean;
   /**
    * The lifecycle's last preview test, set only when its fix PR merged while
    * that test failed (STW-587). The Verification section says so beside the
@@ -172,16 +219,74 @@ const writing = wf.proxyActivities<Pick<typeof activities, 'writeFindingVerifica
   },
 });
 
+// The slow phase (STW-653): the same activities and timeouts, a fixed interval
+// and no attempt limit. `AuthError` is left out of each list: the slow call
+// passes `retryAuth`, so a rejected credential reaches here as retryable.
+const slowRetry = { initialInterval: SLOW_INTERVAL, backoffCoefficient: 1 } as const;
+const slowReading = wf.proxyActivities<
+  Pick<typeof activities, 'readFinding' | 'readFixPr' | 'readVerifyBlock' | 'readProductionDeploy'>
+>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: {
+    ...slowRetry,
+    nonRetryableErrorTypes: ['NotFound', 'UnprocessableRequest', 'FindingMissing', 'FindingMalformed', 'VerifyBlockInvalid'],
+  },
+});
+const slowChecking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '5 minutes',
+  heartbeatTimeout: '30 seconds',
+  retry: { ...slowRetry, nonRetryableErrorTypes: ['VerifyCheckBroken'] },
+});
+const slowWriting = wf.proxyActivities<Pick<typeof activities, 'writeFindingVerification'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: {
+    ...slowRetry,
+    nonRetryableErrorTypes: ['NotFound', 'UnprocessableRequest', 'FindingMissing', 'FindingMalformed', 'FindingMoved'],
+  },
+});
+
+/**
+ * True for a fast phase that ended on a failure the slow phase is for: its
+ * attempts used up on a retryable failure, or a rejected credential.
+ */
+function slowPhaseFor(err: unknown): boolean {
+  if (!(err instanceof wf.ActivityFailure)) return false;
+  if (err.retryState === 'MAXIMUM_ATTEMPTS_REACHED' || err.retryState === 'TIMEOUT') return true;
+  return err.cause instanceof wf.ApplicationFailure && err.cause.type === 'AuthError';
+}
+
 export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<VerifyFindingResult> {
   const state: VerifyFindingState = { site: input.site, key: input.key, step: 'reading' };
   wf.setHandler(verifyFindingStateQuery, () => state);
 
-  const finding = await reading.readFinding(input.repo, input.findingPath);
+  /** The fast call, then, on `slowRetry` and a failure {@link slowPhaseFor} takes, the slow one. */
+  const phases = async <T>(name: string, fast: () => Promise<T>, slow: () => Promise<T>): Promise<T> => {
+    try {
+      return await fast();
+    } catch (err) {
+      if (input.slowRetry !== true || !slowPhaseFor(err)) throw err;
+      wf.log.warn('fast retries used up; switching to the slow phase', { key: input.key, activity: name, interval: SLOW_INTERVAL });
+      return await slow();
+    }
+  };
+
+  const finding = await phases(
+    'readFinding',
+    () => reading.readFinding(input.repo, input.findingPath),
+    () => slowReading.readFinding(input.repo, input.findingPath, { retryAuth: true }),
+  );
   const refusal = verifyRefusal(finding.data);
   if (refusal) {
     throw wf.ApplicationFailure.nonRetryable(`${input.key} is not verified: ${refusal}.`, 'FindingNotVerifiable');
   }
-  const pr = await reading.readFixPr(fixPrUrl(finding.data));
+  const pr = await phases(
+    'readFixPr',
+    () => reading.readFixPr(fixPrUrl(finding.data)),
+    () => slowReading.readFixPr(fixPrUrl(finding.data), { retryAuth: true }),
+  );
   if (!pr.merged) {
     throw wf.ApplicationFailure.nonRetryable(
       `${input.key} is not verified: ${pr.prUrl} is not merged, so the fix is not on production.`,
@@ -189,12 +294,12 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
     );
   }
 
-  const read = await reading.readVerifyBlock({
-    repo: input.repo,
-    findingPath: input.findingPath,
-    findingText: finding.text,
-    origin: input.origin,
-  });
+  const blockInput = { repo: input.repo, findingPath: input.findingPath, findingText: finding.text, origin: input.origin };
+  const read = await phases(
+    'readVerifyBlock',
+    () => reading.readVerifyBlock(blockInput),
+    () => slowReading.readVerifyBlock(blockInput),
+  );
   // `finding` since decision 29. A result recorded before then may lack it.
   const source: VerifyBlockSource = read.source ?? 'handoff';
   const block = read.checks;
@@ -215,15 +320,19 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
       state.step = 'done';
       return result;
     }
-    return await confirmByDeploy(input, state, result, pr.prUrl);
+    return await confirmByDeploy(input, state, result, pr.prUrl, phases);
   }
 
   state.step = 'checking';
-  const run = await checking.runFindingChecks({ key: input.key, checks: block });
-  const outcome = run.passed ? 'resolved' : 'reopened';
+  const run = await phases(
+    'runFindingChecks',
+    () => checking.runFindingChecks({ key: input.key, checks: block }),
+    () => slowChecking.runFindingChecks({ key: input.key, checks: block }),
+  );
+  const outcome: 'resolved' | 'reopened' = run.passed ? 'resolved' : 'reopened';
 
   state.step = 'writing';
-  const written = await writing.writeFindingVerification({
+  const writeInput = {
     repo: input.repo,
     site: input.site,
     key: input.key,
@@ -238,7 +347,12 @@ export async function verifyFindingWorkflow(input: VerifyFindingInput): Promise<
       ...(input.reason ? { reason: input.reason } : {}),
       ...(input.previewAtMerge ? { previewAtMerge: input.previewAtMerge } : {}),
     },
-  });
+  };
+  const written = await phases(
+    'writeFindingVerification',
+    () => writing.writeFindingVerification(writeInput),
+    () => slowWriting.writeFindingVerification({ ...writeInput, retryAuth: true }),
+  );
 
   state.step = 'done';
   return { ...result, outcome, checks: run.results, findingCommitSha: written.commitSha, ranAt: run.ranAt };
@@ -253,9 +367,14 @@ async function confirmByDeploy(
   state: VerifyFindingState,
   result: VerifyFindingResult,
   prUrl: string,
+  phases: <T>(name: string, fast: () => Promise<T>, slow: () => Promise<T>) => Promise<T>,
 ): Promise<VerifyFindingResult> {
   state.step = 'checking';
-  const live = await reading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT });
+  const live = await phases(
+    'readProductionDeploy',
+    () => reading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT }),
+    () => slowReading.readProductionDeploy({ prUrl, environment: PRODUCTION_ENVIRONMENT, retryAuth: true }),
+  );
   if (!live.contains || !live.mergeSha || !live.liveSha) {
     throw wf.ApplicationFailure.nonRetryable(
       `${input.key} has no check, and its fix could not be confirmed by the deploy: ${live.why} The finding is unchanged.`,
@@ -265,14 +384,14 @@ async function confirmByDeploy(
   const deploy = { prUrl, mergeSha: live.mergeSha, liveSha: live.liveSha };
 
   state.step = 'writing';
-  const written = await writing.writeFindingVerification({
+  const writeInput = {
     repo: input.repo,
     site: input.site,
     key: input.key,
     findingPath: input.findingPath,
     indexPath: input.indexPath,
     verification: {
-      status: 'resolved',
+      status: 'resolved' as const,
       at: live.readAt,
       workflowId: verifyWorkflowId(input.site, input.key, input.at),
       source: result.source,
@@ -281,7 +400,12 @@ async function confirmByDeploy(
       ...(input.reason ? { reason: input.reason } : {}),
       ...(input.previewAtMerge ? { previewAtMerge: input.previewAtMerge } : {}),
     },
-  });
+  };
+  const written = await phases(
+    'writeFindingVerification',
+    () => writing.writeFindingVerification(writeInput),
+    () => slowWriting.writeFindingVerification({ ...writeInput, retryAuth: true }),
+  );
 
   state.step = 'done';
   return {

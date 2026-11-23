@@ -72,10 +72,11 @@ for (const [relPath, activity] of BROWSER_ACTIVITIES) {
  * `runFindingChecks` drives a browser too, and several workflows schedule it:
  * `findingWorkflow` has two stubs for it. Every one carries the package's 30
  * seconds. `check-heartbeat-retry.test.ts` shows what the timeout does to an
- * attempt that stops beating.
+ * attempt that stops beating. `verifyFindingWorkflow` has two since STW-653:
+ * the fast phase and the slow one.
  */
 const CHECK_STUBS = [
-  ['../../src/workflows/verify-finding.ts', 1],
+  ['../../src/workflows/verify-finding.ts', 2],
   ['../../src/workflows/recheck-findings.ts', 1],
   ['../../src/workflows/finding.ts', 2],
 ] as const;

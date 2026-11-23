@@ -514,7 +514,7 @@ test('a PR merged over a failed last test hands that result to the verify child'
     await until(handle, 'the first test', merging(1));
     gh.pulls[0].merged = true;
     gh.pulls[0].mergeSha = 'merge-501';
-    await until(handle, 'the end', (s) => s.step === 'done');
+    await until(handle, 'the end of the verify', (s) => s.step === 'done' || s.step === 'parked');
     const history = await handle.fetchHistory();
     const start = history.events?.find((e) => e.startChildWorkflowExecutionInitiatedEventAttributes)
       ?.startChildWorkflowExecutionInitiatedEventAttributes;
@@ -569,7 +569,7 @@ test('a merge and a retest in the same workflow task: the merge wins', async () 
               'the second worker',
               25_000,
               (async () => {
-                const end = await until(handle, 'the end', (s) => s.step === 'done');
+                const end = await until(handle, 'the end of the verify', (s) => s.step === 'done' || s.step === 'parked');
                 assert.equal(end.previewTests, 1, 'no second test ran');
                 const history = await handle.fetchHistory();
                 const types = (history.events ?? [])

@@ -11,6 +11,7 @@ import {
   awaitPrPreview,
   awaitProductionDeploy,
   closeConflictingFixPr,
+  commentOnFixPr,
   readProductionDeploy,
   listFixableFindings,
   listOpenFindingWorkflows,
@@ -164,6 +165,7 @@ const findingsActivities = {
   requestFixSlot,
   runningWorkflowIds,
   closeConflictingFixPr,
+  commentOnFixPr,
   reportRunHealth,
   // The recheck (STW-543): GitHub reads and one commit per changed finding.
   readSiteHosts,

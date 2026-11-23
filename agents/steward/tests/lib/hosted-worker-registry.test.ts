@@ -79,6 +79,7 @@ const FINDINGS_ACTIVITIES = [
   'requestFixSlot',
   'runningWorkflowIds',
   'closeConflictingFixPr',
+  'commentOnFixPr',
   'reportRunHealth',
   'readSiteHosts',
   'readRecheckBlock',
@@ -161,7 +162,7 @@ test('each queue registers exactly its own activities, by name', () => {
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
   assert.equal(names(QUEUE_AUDIT).length, 14);
-  assert.equal(names(QUEUE_FINDINGS).length, 31);
+  assert.equal(names(QUEUE_FINDINGS).length, 32);
 });
 
 test('every registered activity is a function', () => {
@@ -189,7 +190,8 @@ test('every activity the verifier schedules is on steward-findings and registere
   const proxied = [...verifier.matchAll(/Pick<typeof activities, ([^>]*)>/g)].flatMap((m) =>
     [...m[1].matchAll(/'(\w+)'/g)].map((name) => name[1]),
   );
-  assert.deepEqual(proxied.sort(), [
+  // Each activity twice since STW-653: the fast phase's stub and the slow phase's.
+  assert.deepEqual([...new Set(proxied)].sort(), [
     'readFinding',
     'readFixPr',
     'readProductionDeploy',
@@ -197,9 +199,10 @@ test('every activity the verifier schedules is on steward-findings and registere
     'runFindingChecks',
     'writeFindingVerification',
   ]);
+  assert.equal(proxied.length, 12);
   const registered = names(QUEUE_FINDINGS);
   for (const name of proxied) assert.ok(registered.includes(name), `${name} is not registered on ${QUEUE_FINDINGS}`);
-  assert.deepEqual([...verifier.matchAll(/taskQueue: (\w+)/g)].map((m) => m[1]), Array(3).fill('QUEUE_FINDINGS'));
+  assert.deepEqual([...verifier.matchAll(/taskQueue: (\w+)/g)].map((m) => m[1]), Array(6).fill('QUEUE_FINDINGS'));
   assert.match(verifier, /const QUEUE_FINDINGS = 'steward-findings';/);
 });
 

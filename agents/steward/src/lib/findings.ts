@@ -1358,20 +1358,122 @@ export function setFindingReturned(text: string, prUrl: string, at: string): str
   if (statusAt < 0) throw new Error('the finding has no status field');
   lines[statusAt] = 'status: approved';
 
-  const note = `- ${at}: ${prUrl} closed unmerged. The finding is approved again.`;
-  if (lines.includes(note)) return lines.join(eol);
+  return addFixAttemptLine(lines, close, `- ${at}: ${prUrl} closed unmerged. The finding is approved again.`).join(eol);
+}
 
+/**
+ * The finding file with one more line under `## Fix attempts`, every other
+ * byte kept, for a new attempt after a merged fix that did not pass on
+ * production (STW-653). The section is the one {@link setFindingReturned}
+ * writes; a line already there is not added twice.
+ */
+export function setFindingFixAttempt(text: string, at: string, note: string): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== '---') throw new Error('the finding has no frontmatter block');
+  const close = lines.indexOf('---', 1);
+  if (close < 0) throw new Error("the finding's frontmatter block is not closed");
+  return addFixAttemptLine(lines, close, `- ${at}: ${note}`).join(eol);
+}
+
+/** `note` appended to the `## Fix attempts` section below the frontmatter's `close`, made when missing. */
+function addFixAttemptLine(lines: string[], close: number, note: string): string[] {
+  if (lines.includes(note)) return lines;
   const sectionAt = lines.findIndex((line, i) => i > close && /^##\s+Fix attempts\s*$/.test(line));
   if (sectionAt >= 0) {
     let end = lines.findIndex((line, i) => i > sectionAt && /^##\s/.test(line));
     if (end < 0) end = lines.length;
     while (end > sectionAt + 1 && lines[end - 1].trim() === '') end--;
     lines.splice(end, 0, note);
-    return lines.join(eol);
+    return lines;
   }
   while (lines.length > close + 1 && lines[lines.length - 1].trim() === '') lines.pop();
   lines.push('', '## Fix attempts', '', note, '');
-  return lines.join(eol);
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// A run parked after its fix PR (STW-653)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a run is parked: a check ran on production and failed, a check is
+ * broken or invalid, or any other failure a retry does not mend.
+ */
+export type FindingParkKind = 'checks-failed' | 'checks-broken' | 'error';
+
+/** The step a parked run runs again on `resume`. */
+export type FindingParkStage = 'merge' | 'returned' | 'deploy' | 'verify';
+
+/** A parked run's own account of itself, in its `state` query. */
+export interface FindingPark {
+  kind: FindingParkKind;
+  stage: FindingParkStage;
+  /** One sentence: what happened. */
+  reason: string;
+  /** ISO 8601, when the run parked. */
+  since: string;
+  /** One sentence: the messages that move the run. */
+  moves: string;
+  /** The fix PR the park is about. */
+  prUrl: string | null;
+  /** Why the park's PR comment was not posted, when it was not. */
+  commentError?: string | null;
+}
+
+/** True when a parked run at this stage takes a `request-fix`: every stage but an unmerged PR's. */
+export function parkTakesFix(stage: FindingParkStage): boolean {
+  return stage !== 'merge';
+}
+
+/** The sentence a park's `moves` holds, naming the CLI verbs that send each Update. */
+export function parkMoves(key: string, stage: FindingParkStage): string {
+  const resume =
+    stage === 'verify'
+      ? `\`steward finding resume ${key}\` verifies again`
+      : stage === 'merge'
+        ? `\`steward finding resume ${key}\` waits on the merge again`
+        : stage === 'deploy'
+          ? `\`steward finding resume ${key}\` waits on the deploy again`
+          : `\`steward finding resume ${key}\` writes the closed PR back again`;
+  return parkTakesFix(stage) ? `${resume}; \`steward finding fix ${key}\` starts a new fix attempt.` : `${resume}.`;
+}
+
+/** The one line `steward finding list` prints for a parked run, kept in its memo as `waitsFor`. */
+export function parkLine(park: Pick<FindingPark, 'kind' | 'stage' | 'reason'>): string {
+  const what = park.kind === 'checks-failed' ? 'checks failed' : park.kind === 'checks-broken' ? 'a check is broken' : 'error';
+  return `parked at ${park.stage} (${what}): ${park.reason}`;
+}
+
+/** The hidden line that tells a park's PR comment from every other, so a retried post is not doubled. */
+export function parkCommentMarker(site: string, key: string, attempt: number, what: string): string {
+  return `<!-- steward-finding-park ${site}/${key} attempt-${attempt} ${what} -->`;
+}
+
+/** The PR comment a parked run posts once. */
+export function parkComment(park: Pick<FindingPark, 'kind' | 'stage' | 'reason' | 'moves'>, workflowId: string): string {
+  const head =
+    park.kind === 'checks-failed'
+      ? 'Steward verified this fix on production, and a check failed.'
+      : park.kind === 'checks-broken'
+        ? 'Steward could not verify this fix: a check of the finding is broken or invalid.'
+        : 'Steward stopped following this fix.';
+  return [
+    head,
+    '',
+    park.reason,
+    '',
+    `The finding's run \`${workflowId}\` is parked and stays open. Nothing happens on a clock: ${park.moves}`,
+  ].join('\n');
+}
+
+/** The PR comment a run posts once when its merge or deploy wait first runs out its bound and goes on waiting. */
+export function waitExpiredComment(wait: 'merge' | 'deploy', note: string, workflowId: string): string {
+  const goesOn =
+    wait === 'merge'
+      ? 'The run keeps waiting: it goes on when this PR is merged or closed.'
+      : 'The run keeps waiting, now every 15 minutes: it goes on when production serves this merge.';
+  return [note, '', `${goesOn} The finding's run is \`${workflowId}\`.`].join('\n');
 }
 
 /** One GitHub deployment with its newest status, as the deploy wait reads them. */
