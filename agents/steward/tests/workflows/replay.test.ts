@@ -1507,3 +1507,54 @@ test('a recheck that ran its checks before the heartbeat timeout replays with it
   const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(recheckPreHeartbeatPath));
   await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'recheck/temporal-io/test');
 });
+
+/**
+ * Four closed lifecycle runs, one for each ending after the merge that left the
+ * finding undecided before STW-653 (`open-until-verified`):
+ *
+ * - `finding-reopened-pre.bin`: merged, live, and the verify child's check
+ *   failed: the run ended `reopened`. 131 events.
+ * - `finding-verify-failed-pre.bin`: merged, live, and the verify child threw
+ *   `VerifyCheckBroken`: the run ended `verify-failed`. 131 events.
+ * - `finding-merge-timeout-pre.bin`: a dispatched attempt whose PR passed its
+ *   preview test and was never merged; the merge wait, raced against the
+ *   `retest` Update, ran out its 30 days, the slot release was signalled, and
+ *   the run ended `merge-timeout`. 125 events.
+ * - `finding-deploy-timeout-pre.bin`: a dispatched attempt, merged, whose
+ *   deploy wait ran out its 24 hours; the release was signalled and the run
+ *   ended `deploy-timeout`. 131 events.
+ *
+ * Each history is closed, and a closed history is still replayed: a query on a
+ * closed run (`steward finding status` reads the state of one) replays it from
+ * the start. The run's completion shares a workflow task with the event that
+ * ended it, so no open run holds these endings; the closed ones are what new
+ * code must replay.
+ *
+ * Recorded from the pre-change code (origin/master at f390896, the worktree
+ * before its first edit) against the time-skipping server, with every activity
+ * mocked by a one-off script run from `agents/steward` with
+ * `node --import tsx --import ./tests/helpers/no-real-credentials.ts`: one
+ * worker on `steward-findings` with `workflowBundle()` and
+ * `skipVerdictMeasure` over mocks of the lifecycle's activities; a start with
+ * `stopAfter: 'resolved'`, a `verdict` Signal (approved, source `cli`) and a
+ * `fix` Signal; for the two timeouts `requestFixSlot` answered
+ * `dispatched: true` and the script sent `slot-grant` with ticket 1 once the
+ * run reported `waiting-slot`; then the run's result through the time-skipping
+ * client and `fetchHistory()`, written with `History.encode(...).finish()`.
+ * They hold no real finding text.
+ */
+const preOpenUntilVerified = ['reopened', 'verify-failed', 'merge-timeout', 'deploy-timeout'].map((ending) => ({
+  ending,
+  path: fileURLToPath(new URL(`../fixtures/histories/finding-${ending}-pre.bin`, import.meta.url)),
+}));
+
+for (const { ending, path } of preOpenUntilVerified) {
+  test(`a lifecycle run that ended ${ending} before STW-653 still replays to that ending`, { timeout: 120_000 }, async () => {
+    const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(path));
+    await Worker.runReplayHistory(
+      { workflowBundle: await workflowBundle() },
+      history,
+      'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+    );
+  });
+}

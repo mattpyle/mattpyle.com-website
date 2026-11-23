@@ -907,3 +907,22 @@ test('the preview test: a worker without the bypass secret records the step as u
   assert.equal(mocks.seen.reports[0].sha, 'head-sha-1');
   assert.equal(result.outcome, 'resolved');
 });
+
+test('a returned write that fails for good after a PR closed unmerged: what the run does with the rethrown failure', async () => {
+  // SDK 1.25.0 fails the Workflow Execution, not the task, when the workflow
+  // function throws a TemporalFailure (`handleWorkflowFailure` in
+  // `@temporalio/workflow/src/internals.ts`); a rethrown ActivityFailure is one.
+  const mocks = lifecycle({
+    prPolls: [0],
+    merge: { [PR_1]: { openPolls: 0, outcome: { prUrl: PR_1, state: 'closed', mergeSha: null, at: '2026-10-13T19:00:00Z' } } },
+  });
+  mocks.findings.writeFindingReturned = async () => {
+    throw ApplicationFailure.nonRetryable('sites/mattpyle-com/findings/x.md is resolved, not fixing.', 'FindingMoved');
+  };
+  const status = await withWorkers(mocks, async () => {
+    const handle = await startApproved('returned-fails');
+    await handle.result().catch(() => undefined);
+    return (await handle.describe()).status.name;
+  });
+  assert.equal(status, 'FAILED', 'the rethrown ActivityFailure failed the execution');
+});
