@@ -155,12 +155,20 @@ export function findPattern(aim) {
  * @param {string} aim
  */
 export function stripMarkup(aim) {
-  return aim
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/<\/?[A-Za-z][^<>]*>/g, '')
-    .replace(/`/g, '')
-    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '$1')
-    .replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1$2');
+  // Repeated until nothing changes: one pass over nested input (`<scr<b>ipt>`, `[[a](b)](c)`,
+  // `****x****`) leaves a tag, a link or emphasis behind that the same rule would remove.
+  let text = aim;
+  let before;
+  do {
+    before = text;
+    text = text
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/<\/?[A-Za-z][^<>]*>/g, '')
+      .replace(/`/g, '')
+      .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '$1')
+      .replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1$2');
+  } while (text !== before);
+  return text;
 }
 
 /**

@@ -156,3 +156,15 @@ test('an aim with no markup is unchanged, underscores survive, and a join stays 
   }
   assert.doesNotMatch('get_auditspends no audit allowance', findPattern(stripMarkup('`get_audit` spends no audit allowance')));
 });
+
+test('stripMarkup leaves no tag, link or emphasis behind, however the input nests them', () => {
+  assert.equal(stripMarkup('<scr<b>ipt>x</scr</b>ipt>'), 'x');
+  assert.equal(stripMarkup('<<b>b>bold<</b>/b>'), 'bold');
+  assert.equal(stripMarkup('[[A2A](/x)](/a2a/)'), 'A2A');
+  assert.equal(stripMarkup('****x****'), 'x');
+  for (const aim of ['<scr<b>ipt>x</scr</b>ipt>', '<<i>i>a<</i>/i> and [[b](c)](d) and `e`']) {
+    const out = stripMarkup(aim);
+    assert.equal(stripMarkup(out), out, `${aim} is stable after one call`);
+    assert.doesNotMatch(out, /<\/?[A-Za-z][^<>]*>/, `${aim} keeps no tag`);
+  }
+});
