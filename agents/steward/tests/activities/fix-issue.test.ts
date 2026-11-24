@@ -93,14 +93,17 @@ test('a partial approval reaches the Action word for word, as the line under the
   assert.equal(FIX_ISSUE_HEADER.split('\n').length - 1, 6, 'the header keeps its six lines');
 });
 
-test('the header widens the fix to every place that states the fact, and makes a look at the built page part of done', () => {
+test('the header widens the fix to every place that states the fact and nothing else, says where facts hide, and makes an aimed look part of done', () => {
   const rules = FIX_ISSUE_HEADER.split('\n')[2];
-  assert.match(rules, /The fix covers every place that states the fact, unless the Verdict line below rejects it; the finding's Fix may not name them all\./);
+  assert.match(rules, /The fix covers every place that states the fact, unless the Verdict line below rejects it; the finding's Fix may not name them all,/);
   assert.ok(!rules.includes('no adjacent tidying'), 'the old narrowing sentence is gone');
   assert.ok(!rules.includes('Change only what the finding needs'), 'the old narrowing sentence is gone');
-  assert.match(rules, /Done is the "How to measure" check passing on the Vercel preview and a look with `npm run look` at every page your change reaches/);
-  assert.match(rules, /for a file with no page such as `agents\.md`, a read of the served file/);
-  assert.match(rules, /the PR says what you looked at and at which widths\./);
+  assert.match(rules, /the row "A changed fact about the site or its author" in `CHANGE-KINDS\.md` lists where facts hide\./);
+  assert.match(rules, /Change nothing that is not this fact\./);
+  assert.match(rules, /Done is the "How to measure" check passing on the Vercel preview and a look with `npm run look` at every page your change reaches, aimed with `--find` at the changed text/);
+  assert.match(rules, /for every change read the text, the rendered HTML and the markdown twin it leaves, and the pictures when the change touches layout or style/);
+  assert.match(rules, /for a file with no page such as `agents\.md`, read the served file\./);
+  assert.match(rules, /The PR says what you looked at and at which widths\./);
   assert.equal(FIX_ISSUE_HEADER.split('\n').length - 1, 6, 'still six lines');
 });
 

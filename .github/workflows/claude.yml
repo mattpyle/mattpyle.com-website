@@ -88,8 +88,23 @@ jobs:
           allowed_bots: steward-mattpyle
 
           # Claude may run the repository's own checks, look at the built pages and open the PR
-          # itself. Nothing else on the shell: the allowlist is the fence, as it is for the Steward
-          # fixer. `npm run look` holds its own fence: site paths only, no other origin, no drafts.
+          # itself. Nothing else on the shell is allowed. What is fenced: `npm run look`'s browser
+          # loads site paths from the local build only, reaches no other origin and sees no drafts.
+          # What is not: `npm run look` builds the site, and `npm test` runs the test suite, and
+          # both run repository code the fixer may have edited, with the job's network. That was
+          # already true of `npm test`.
           claude_args: |
             --allowedTools "Bash(npm test:*),Bash(npm run check:*),Bash(npm run look:*),Bash(gh pr create:*),Bash(git log:*)"
-            --append-system-prompt "Before you push, run npm test and npm run check and leave both passing, then run npm run look -- with every page your change reaches and read the pictures and text it leaves. On a round where npm is refused, push, read the CI result, and say in the pull request that you could not look. When the fix is pushed, open the pull request yourself with gh pr create against master. The PR body is public and short: what changed, why, and the evidence. When you push a commit to a pull request that Steward has tested, Steward tests the new commit on its preview by itself and clears a draft it set, so do not tell anyone to run a retest or to mark the pull request ready."
+            --append-system-prompt "Look before and after, text first. Before your first edit, run npm run look -- --label before, with each page your change will reach and --find with the text you will change. Before you push, run npm test and npm run check and leave both passing, then run npm run look -- --label after with the same pages and --find with the changed text. For every change, read the text, the rendered HTML and the markdown twin each look leaves: most faults a fix causes show there. Read the pictures too when the change touches layout or style, which only a picture shows. This run keeps the .look folder as an artefact at ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}: link it in the pull request, and say which pages you looked at, at which widths, before and after. On a round where npm is refused, push, read the CI result, and say in the pull request that you could not look. When the fix is pushed, open the pull request yourself with gh pr create against master. The PR body is public and short: what changed, why, and the evidence. When you push a commit to a pull request that Steward has tested, Steward tests the new commit on its preview by itself and clears a draft it set, so do not tell anyone to run a retest or to mark the pull request ready."
+
+      # The pictures the fixer took, before and after its edit, kept with the run so its pull
+      # request can link them and a reader can check what it says it looked at. Hidden-file
+      # inclusion because `.look/` starts with a dot.
+      - name: Keep the look pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: look-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .look/
+          include-hidden-files: true
+          if-no-files-found: ignore

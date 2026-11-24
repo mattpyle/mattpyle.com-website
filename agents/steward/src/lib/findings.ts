@@ -561,13 +561,16 @@ const ISSUE_TITLE_MAX = 256;
  * The six lines above the finding in a fix issue. `@claude` is what starts
  * `claude-code-action` (`claude.yml`'s `if`). The scope is the fact, not the
  * one line the finding's Fix names: every place that states it, less what the
- * Verdict line rejects. Done includes a look at the built page through
- * `npm run look`, the one command in `claude.yml`'s allowlist that renders one.
+ * Verdict line rejects, and nothing else. `CHANGE-KINDS.md` lists where facts
+ * hide. Done includes a look at the built page through `npm run look`, aimed
+ * at the changed text: the one command in `claude.yml`'s allowlist that
+ * renders a page. Text and HTML come first: most faults a fix has caused were
+ * in the text or the markup, and a picture adds what only layout shows.
  */
 export const FIX_ISSUE_HEADER = [
   '@claude Fix the approved finding below.',
   '',
-  'Rules: one finding, one fix, one PR. The fix covers every place that states the fact, unless the Verdict line below rejects it; the finding\'s Fix may not name them all. The Verdict line below is the scope: a part it rejects is out of scope. Run `npm test` and `npm run check` before you push and leave both passing. Open the PR yourself. Keep the PR body short: what changed, why, and the evidence. Done is the "How to measure" check passing on the Vercel preview and a look with `npm run look` at every page your change reaches, or, for a file with no page such as `agents.md`, a read of the served file; the PR says what you looked at and at which widths.',
+  'Rules: one finding, one fix, one PR. The fix covers every place that states the fact, unless the Verdict line below rejects it; the finding\'s Fix may not name them all, and the row "A changed fact about the site or its author" in `CHANGE-KINDS.md` lists where facts hide. Change nothing that is not this fact. The Verdict line below is the scope: a part it rejects is out of scope. Run `npm test` and `npm run check` before you push and leave both passing. Open the PR yourself. Keep the PR body short: what changed, why, and the evidence. Done is the "How to measure" check passing on the Vercel preview and a look with `npm run look` at every page your change reaches, aimed with `--find` at the changed text: for every change read the text, the rendered HTML and the markdown twin it leaves, and the pictures when the change touches layout or style; for a file with no page such as `agents.md`, read the served file. The PR says what you looked at and at which widths.',
   '',
   '---',
   '',
