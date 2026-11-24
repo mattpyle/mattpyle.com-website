@@ -105,6 +105,7 @@ test('the header widens the fix to every place that states the fact and nothing 
   assert.match(rules, /for every change read the text, the rendered HTML, the markdown twin and the two aimed pictures it leaves;/);
   assert.ok(!rules.includes('layout or style'), 'the pictures are read on every change');
   assert.match(rules, /for a file with no page such as `agents\.md`, read the served file\./);
+  assert.ok(rules.includes('Aim `--find` with the whole sentence you wrote, including the words on both sides of any code, link or emphasis: a join between two words is caught only when the aim crosses it.'), 'aim across every seam');
   assert.match(rules, /The PR says what you looked at and at which widths\./);
   assert.equal(FIX_ISSUE_HEADER.split('\n').length - 1, 6, 'still six lines');
 });
