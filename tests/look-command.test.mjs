@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findRefusal, labelRefusal, parseArgs, pathRefusal, readableHtml, slugFor } from '../scripts/look.mjs';
+import { findPattern, findRefusal, labelRefusal, parseArgs, pathRefusal, readableHtml, slugFor } from '../scripts/look.mjs';
 
 test('a site path is accepted, with or without a fragment or a query', () => {
   for (const path of ['/', '/steward/', '/agents.md', '/writing/x/#section', '/audit?url=x']) {
@@ -103,4 +103,30 @@ test('pre, script and style content is copied untouched', () => {
   assert.equal(readableHtml(`<div>${pre}</div>`), `<div>\n${pre}\n</div>`);
   const script = '<script>if (a>b) x = "<p></p><div>";</script>';
   assert.equal(readableHtml(script), script);
+});
+
+test('--find matches the text as a reader types it: quotes, dashes and ellipses in either form', () => {
+  // What this site's markdown renders from the source a fixer types.
+  assert.match('but it\u2019d happily pass', findPattern("but it'd happily pass"), 'apostrophe');
+  assert.match("but it'd happily pass", findPattern('but it\u2019d happily pass'), 'and back');
+  assert.match('the \u201cdouble\u201d word', findPattern('the "double" word'), 'quote');
+  assert.match('the \u2018single\u2019 word', findPattern("the 'single' word"), 'single quotes');
+  assert.match('two\u2013hyphens', findPattern('two--hyphens'), '-- and an en dash');
+  assert.match('three\u2014hyphens', findPattern('three---hyphens'), '--- and an em dash');
+  assert.match('a\u2014b', findPattern('a-b'), 'a hyphen and an em dash');
+  assert.match('a-b', findPattern('a\u2013b'), 'an en dash and a hyphen');
+  assert.match('dots\u2026 here', findPattern('dots... here'), 'ellipsis');
+  assert.match('dots... here', findPattern('dots\u2026 here'), 'and back');
+  assert.match('one \n  two', findPattern(' one two '), 'whitespace runs match as one');
+});
+
+test('--find never matches across a joined word, and its text is never a pattern', () => {
+  assert.doesNotMatch('get_auditspends no audit allowance', findPattern('get_audit spends no audit allowance'));
+  assert.match('get_audit spends no audit allowance', findPattern('get_audit spends no audit allowance'));
+  assert.doesNotMatch('anything at all', findPattern('.*'));
+  assert.match('a .* b', findPattern('.*'));
+  assert.doesNotMatch('call x)', findPattern('call (x)'));
+  assert.match('call (x)', findPattern('call (x)'));
+  assert.doesNotMatch('a', findPattern('[a]'));
+  assert.match('$1 or ^x|y\\z', findPattern('$1 or ^x|y\\z'));
 });

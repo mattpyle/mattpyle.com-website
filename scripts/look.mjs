@@ -24,7 +24,8 @@
  *
  * - A path starts with a single `/` and is resolved against the local server only. A full URL, a
  *   protocol-relative `//host` or a backslash is refused.
- * - `--find` text is only ever matched against the page's text (Playwright's `getByText`). It
+ * - `--find` text is only ever matched against the page's text (Playwright's `getByText`, with
+ *   the pattern `findPattern` builds from the escaped text, so the text cannot carry a pattern). It
  *   never becomes a URL, a selector source or a script, and it is refused if empty, over 200
  *   characters, or holding control characters.
  * - The browser aborts every request to any other origin, so a page cannot pull in, or send text
@@ -104,6 +105,46 @@ export function findRefusal(text) {
   if (text.length > FIND_MAX) return `--find text must be at most ${FIND_MAX} characters`;
   if (/[\u0000-\u001f\u007f]/.test(text)) return '--find text must not hold control characters';
   return null;
+}
+
+/**
+ * The pattern `--find` text is matched with, so it matches the text as a reader would type it.
+ * This site's markdown (Astro's Sätteri) turns `'` into ‘ or ’, `"` into “ or ”, `--` into an en
+ * dash, `---` into an em dash and `...` into …, and leaves a single hyphen alone. So each of
+ * those, in either form, matches the other: quotes with quotes, any dash with any dash (a hyphen,
+ * `--`, `---`, – and —), and `...` with …. A run of whitespace matches any run of whitespace, but
+ * never none, so an aim that crosses two words still fails on a page where they are joined. Every
+ * other character is escaped and matched as itself, case aside, as `getByText` does with a string.
+ * @param {string} aim
+ */
+export function findPattern(aim) {
+  const text = aim.trim();
+  let source = '';
+  for (let i = 0; i < text.length; ) {
+    const rest = text.slice(i);
+    const space = /^\s+/.exec(rest);
+    const dashes = /^(?:-{1,3}|[\u2013\u2014])/.exec(rest);
+    if (space) {
+      source += '\\s+';
+      i += space[0].length;
+    } else if (rest.startsWith('...') || rest[0] === '\u2026') {
+      source += '(?:\\.\\.\\.|\u2026)';
+      i += rest[0] === '\u2026' ? 1 : 3;
+    } else if (dashes) {
+      source += '(?:---|--|[-\u2013\u2014])';
+      i += dashes[0].length;
+    } else if ("'\u2018\u2019".includes(rest[0])) {
+      source += "['\u2018\u2019]";
+      i += 1;
+    } else if ('"\u201c\u201d'.includes(rest[0])) {
+      source += '["\u201c\u201d]';
+      i += 1;
+    } else {
+      source += rest[0].replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&');
+      i += 1;
+    }
+  }
+  return new RegExp(source, 'i');
 }
 
 /**
@@ -318,9 +359,10 @@ async function settle(page) {
  */
 async function aimPage(page, url, find, width) {
   if (find !== null) {
-    const visible = page.getByText(find).filter({ visible: true }).first();
+    const pattern = findPattern(find);
+    const visible = page.getByText(pattern).filter({ visible: true }).first();
     if ((await visible.count()) === 0) {
-      const anywhere = await page.getByText(find).count();
+      const anywhere = await page.getByText(pattern).count();
       return anywhere > 0
         ? { note: `--find text is on the page but not visible at ${width} px; picture of the top` }
         : {
