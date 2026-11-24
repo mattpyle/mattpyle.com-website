@@ -31,6 +31,7 @@
     "brand:assets": "node scripts/generate-brand-assets.mjs",
     "pretest": "npm run generate",
     "test": "node --test tests/*.test.mjs",
+    "posttest": "node scripts/check-updated-date.mjs",
     "test:steward": "npm test --workspace @mattpyle/steward",
     "check:steward": "npm run typecheck --workspace @mattpyle/steward",
     "validate:sitemap": "node scripts/validate-sitemap.mjs",
