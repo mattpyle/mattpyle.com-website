@@ -46,6 +46,30 @@ jobs:
       - name: Generate content collection types
         run: npx astro sync
 
+      # `npm run look` opens the built pages in Playwright's Chromium. The browser is cached by
+      # the resolved @playwright/test version, as in .github/actions/serve-built-site; the
+      # system libraries land in /usr/lib and are not ours to cache, so a hit installs those alone.
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        env:
+          BROWSER_CACHED: ${{ steps.playwright-cache.outputs.cache-hit }}
+        run: |
+          if [ "$BROWSER_CACHED" = 'true' ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -63,8 +87,9 @@ jobs:
           # is allowed.
           allowed_bots: steward-mattpyle
 
-          # Claude may run the repository's own checks and open the PR itself. Nothing else
-          # on the shell: the allowlist is the fence, as it is for the Steward fixer.
+          # Claude may run the repository's own checks, look at the built pages and open the PR
+          # itself. Nothing else on the shell: the allowlist is the fence, as it is for the Steward
+          # fixer. `npm run look` holds its own fence: site paths only, no other origin, no drafts.
           claude_args: |
-            --allowedTools "Bash(npm test:*),Bash(npm run check:*),Bash(gh pr create:*),Bash(git log:*)"
-            --append-system-prompt "Before you push, run npm test and npm run check and leave both passing. When the fix is pushed, open the pull request yourself with gh pr create against master. The PR body is public and short: what changed, why, and the evidence. When you push a commit to a pull request that Steward has tested, Steward tests the new commit on its preview by itself and clears a draft it set, so do not tell anyone to run a retest or to mark the pull request ready."
+            --allowedTools "Bash(npm test:*),Bash(npm run check:*),Bash(npm run look:*),Bash(gh pr create:*),Bash(git log:*)"
+            --append-system-prompt "Before you push, run npm test and npm run check and leave both passing, then run npm run look -- with every page your change reaches and read the pictures and text it leaves. On a round where npm is refused, push, read the CI result, and say in the pull request that you could not look. When the fix is pushed, open the pull request yourself with gh pr create against master. The PR body is public and short: what changed, why, and the evidence. When you push a commit to a pull request that Steward has tested, Steward tests the new commit on its preview by itself and clears a draft it set, so do not tell anyone to run a retest or to mark the pull request ready."

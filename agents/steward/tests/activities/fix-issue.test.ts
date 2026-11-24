@@ -93,6 +93,17 @@ test('a partial approval reaches the Action word for word, as the line under the
   assert.equal(FIX_ISSUE_HEADER.split('\n').length - 1, 6, 'the header keeps its six lines');
 });
 
+test('the header widens the fix to every place that states the fact, and makes a look at the built page part of done', () => {
+  const rules = FIX_ISSUE_HEADER.split('\n')[2];
+  assert.match(rules, /The fix covers every place that states the fact, unless the Verdict line below rejects it; the finding's Fix may not name them all\./);
+  assert.ok(!rules.includes('no adjacent tidying'), 'the old narrowing sentence is gone');
+  assert.ok(!rules.includes('Change only what the finding needs'), 'the old narrowing sentence is gone');
+  assert.match(rules, /Done is the "How to measure" check passing on the Vercel preview and a look with `npm run look` at every page your change reaches/);
+  assert.match(rules, /for a file with no page such as `agents\.md`, a read of the served file/);
+  assert.match(rules, /the PR says what you looked at and at which widths\./);
+  assert.equal(FIX_ISSUE_HEADER.split('\n').length - 1, 6, 'still six lines');
+});
+
 test('openFixIssue opens an issue for an approved one-page opportunity, with its verdict reason as the scope', async () => {
   const key = 'content-reading-budget-study-uncited--changelog-agent-reading-budget';
   const finding = [
