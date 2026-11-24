@@ -59,10 +59,16 @@ name: CI (tests & typecheck)
 #     routing script                                     tests/**
 #   src/content/** or src/data/**                        the tests that read that folder
 #                                                        (SITE_READERS in the selection script)
+#   agents/steward/reviews/_scorecard/**                 nothing: no test reads the scorecard
+#                                                        archive from disk (UNREAD_FOLDERS). The
+#                                                        nightly scorecard PR, this and
+#                                                        src/data/scorecard-runs.json, runs the
+#                                                        two readers of src/data/
 #   agents/steward/tests/helpers/** or tests/fixtures/**,
 #     agents/steward/package.json, any tsconfig,
 #     a non-TypeScript file nothing in a TypeScript
-#     folder owns (a rubric, a Vale style, a script)     tests/**
+#     folder owns (a rubric, a Vale style, a script),
+#     other than the scorecard archive above             tests/**
 #   only under agents/steward/src/console/ or
 #     agents/steward/tests/console/, assets included     tests/console/**
 #   any other file under agents/steward/                 the test files whose imports reach it

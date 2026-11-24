@@ -54,7 +54,9 @@
 // The full suite runs when the event is not a pull request, when a changed file
 // is one every test process loads or reads (see `FULL_*` below), or when a
 // changed file under `agents/steward/` is not TypeScript and no TypeScript folder
-// owns it: the graph cannot say who reads a rubric, a Vale style or a script. A
+// owns it: the graph cannot say who reads a rubric, a Vale style or a script.
+// The exception is a folder in `UNREAD_FOLDERS`, the scorecard archive, which
+// no test reads from disk: a change there selects nothing. A
 // file in a folder of TypeScript, such as `src/console/assets/findings.js`, counts
 // as a change to that folder's modules. A change to this file runs the
 // suite, like every routing script. The header of `ci.yml` has the table.
@@ -81,6 +83,21 @@ const FULL_EXACT = new Set([
 ]);
 // Folders every test process loads (helpers, fixtures).
 const FULL_PREFIXES = [`${STEWARD}/tests/helpers/`, `${STEWARD}/tests/fixtures/`];
+
+// Folders under `agents/steward/` that hold data no test reads from disk. A
+// change confined to one selects no test for it, and says so; any other
+// non-TypeScript file under `agents/steward/` still runs the full suite.
+//
+// The scorecard archive. The nightly scorecard pull request changes
+// `src/data/scorecard-runs.json` and adds one record here. Steward writes the
+// folder through the GitHub API (`SCORECARD_ARCHIVE_REL` in
+// `src/activities/scorecard.ts`), and every test that names it hands the path
+// to the fake GitHub or asserts on it as a string. `collectStats` and the study
+// read other folders of `reviews/`. To re-check, read every hit of
+//   git grep -n -e _scorecard -e SCORECARD_ARCHIVE_REL -- agents/steward/src agents/steward/tests ':!*.bin'
+// and of `REVIEWS_DIR` in `agents/steward/src/`: none may read the folder from
+// disk. A test that starts to must take this entry out.
+export const UNREAD_FOLDERS = [`${STEWARD}/reviews/_scorecard/`];
 
 // Tests that read a directory of Steward source and so depend on all of it. Paths
 // are relative to `agents/steward/`; a prefix ending in `/` means every file in it.
@@ -259,7 +276,7 @@ function selectByGraph(input) {
   if (graph.mode === 'all') return graph;
   // The site's content and data: the tests that read a changed folder.
   const files = new Set(graph.files);
-  const reasons = graph.mode === 'none' ? [] : [...graph.reasons];
+  const reasons = [...(graph.mode === 'none' ? [] : graph.reasons), ...graph.notes];
   const paths = input.changed.map((p) => posix(p.trim())).filter(Boolean);
   for (const folder of SITE_FOLDERS) {
     const hit = paths.find((p) => p.startsWith(folder));
@@ -281,12 +298,18 @@ function selectByImports({ root, changed, ts }) {
   const stewardDir = path.join(root, STEWARD);
   const paths = changed.map((p) => posix(p.trim())).filter(Boolean);
   const changedSteward = [];
+  const notes = [];
   for (const p of paths) {
     const base = path.posix.basename(p);
     if (FULL_EXACT.has(p)) return all(`${p} is shared by every test`);
     if (/^tsconfig.*\.json$/.test(base)) return all(`${p} sets the compiler options`);
     const prefix = FULL_PREFIXES.find((x) => p.startsWith(x));
     if (prefix) return all(`${p} is under ${prefix}, which every test loads or reads`);
+    const unread = UNREAD_FOLDERS.find((x) => p.startsWith(x));
+    if (unread) {
+      notes.push(`no test reads ${unread} from disk (changed: ${p})`);
+      continue;
+    }
     if (!p.startsWith(`${STEWARD}/`)) continue;
     const inner = p.slice(STEWARD.length + 1);
     if (inner.endsWith('.ts') && !inner.endsWith('.d.ts')) changedSteward.push(inner);
@@ -298,7 +321,7 @@ function selectByImports({ root, changed, ts }) {
       changedSteward.push(inner, ...owners);
     }
   }
-  if (changedSteward.length === 0) return { mode: 'none', files: [], reasons: ['no changed file is Steward TypeScript'] };
+  if (changedSteward.length === 0) return { mode: 'none', files: [], reasons: ['no changed file is Steward TypeScript'], notes };
 
   const tests = walk(path.join(stewardDir, 'tests'), (n) => n.endsWith('.test.ts')).map((f) => posix(path.relative(stewardDir, f)));
   tests.sort();
@@ -351,8 +374,8 @@ function selectByImports({ root, changed, ts }) {
   }
   selected.sort();
   return selected.length === 0
-    ? { mode: 'none', files: [], reasons: ['no test imports a changed file'] }
-    : { mode: 'list', files: selected, reasons };
+    ? { mode: 'none', files: [], reasons: ['no test imports a changed file'], notes }
+    : { mode: 'list', files: selected, reasons, notes };
 }
 
 async function main() {

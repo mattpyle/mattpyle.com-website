@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { DIRECTORY_READERS, FULL_GLOB, SITE_FOLDERS, SITE_READERS, selectTests } from '../scripts/select-steward-tests.mjs';
+import { DIRECTORY_READERS, FULL_GLOB, SITE_FOLDERS, SITE_READERS, UNREAD_FOLDERS, selectTests } from '../scripts/select-steward-tests.mjs';
 
 /**
  * `scripts/select-steward-tests.mjs` on a small Steward tree built in a temp
@@ -235,4 +235,19 @@ test('the real tree: SITE_READERS names the tests that read the real src/content
 test('the real tree: a content change and a data change each run their readers', () => {
   assert.deepEqual(real('src/content/changelog/agent-reading-budget.md'), ['tests/activities/cspell-published.test.ts', 'tests/activities/dictionary.test.ts']);
   assert.deepEqual(real('src/data/scorecard-runs.json'), ['tests/lib/agent-audit-checks.test.ts', 'tests/lib/scorecard-aggregate.test.ts']);
+});
+
+test('the real tree: the nightly scorecard pull request runs the readers of src/data/ and nothing else', () => {
+  const archive = `${S}/reviews/_scorecard/2026-11-24.json`;
+  const nightly = selectTests({ root: repo, changed: ['src/data/scorecard-runs.json', archive], ts });
+  assert.equal(nightly.mode, 'list');
+  assert.deepEqual(nightly.files, ['tests/lib/agent-audit-checks.test.ts', 'tests/lib/scorecard-aggregate.test.ts']);
+  assert.ok(nightly.reasons.includes(`no test reads ${S}/reviews/_scorecard/ from disk (changed: ${archive})`), 'the log says why the archive adds nothing');
+  assert.deepEqual(UNREAD_FOLDERS, [`${S}/reviews/_scorecard/`]);
+  // The archive alone selects nothing; the rest of reviews/ and other data under agents/steward still run everything.
+  assert.equal(selectTests({ root: repo, changed: [archive], ts }).mode, 'none');
+  assert.equal(selectTests({ root: repo, changed: [`${S}/reviews/writing/x/latest.json`], ts }).mode, 'all');
+  assert.equal(selectTests({ root: repo, changed: [`${S}/reviews/_scorecard/2026-11-24.json`, `${S}/src/rubrics/ai-tells.md`], ts }).mode, 'all');
+  // A push still runs the whole suite.
+  assert.equal(selectTests({ root: repo, changed: ['src/data/scorecard-runs.json', archive], ts, event: 'push' }).mode, 'all');
 });
