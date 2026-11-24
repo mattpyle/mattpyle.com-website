@@ -94,6 +94,8 @@ __pycache__/
 # tests/a11y/__snapshots__/, which are a checked-in fixture, not output.
 /test-results/
 /playwright-report/
+# `npm run look` output: pictures, text and twins of built pages, one folder per run.
+/.look/
 /blob-report/
 /.playwright/
 
