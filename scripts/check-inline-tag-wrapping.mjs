@@ -17,10 +17,10 @@
 // `prop={value}` per line is indistinguishable from prose by line shape, and that pattern is
 // everywhere in this repo: the check drowned in 130 false positives. Watch for it by hand.
 //
-// Advisory and standalone — run it after editing prose in an .astro template:
+// `npm test` runs it over every `.astro` file under `src/` (tests/inline-tag-wrapping-tree.test.mjs)
+// and fails naming the file and line. To run it alone:
 //   node scripts/check-inline-tag-wrapping.mjs
-//
-// Exit code 1 when a boundary is found, so it can join a check chain later if it earns it.
+// Exit code 1 when a boundary is found.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -106,16 +106,26 @@ export function findOffences(text) {
   return found;
 }
 
-function main() {
-  let offences = 0;
-
-  for (const file of astroFiles(src)) {
+/**
+ * Every offence in the `.astro` files under a directory, each with its path relative to the repo.
+ * @param {string} [dir]
+ * @returns {{ file: string, line: number, previous: string, current: string }[]}
+ */
+export function scanTree(dir = src) {
+  const found = [];
+  for (const file of astroFiles(dir).sort()) {
     const where = relative(root, file).split(sep).join('/');
-    for (const { line, previous, current } of findOffences(readFileSync(file, 'utf8'))) {
-      offences += 1;
-      console.error(`${where}:${line}\n    ${previous}\n    ${current}\n`);
-    }
+    for (const offence of findOffences(readFileSync(file, 'utf8'))) found.push({ file: where, ...offence });
   }
+  return found;
+}
+
+function main() {
+  const found = scanTree();
+  for (const { file, line, previous, current } of found) {
+    console.error(`${file}:${line}\n    ${previous}\n    ${current}\n`);
+  }
+  const offences = found.length;
 
   if (offences > 0) {
     console.error(
