@@ -220,6 +220,26 @@ function beforeDeadline<T>(promise: Promise<T>, deadline: number): Promise<T | t
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 }
 
+type HistoryEvent = proto.temporal.api.history.v1.IHistoryEvent;
+const TASK_EVENTS: number[] = [
+  EventType.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+];
+
+/**
+ * The open workflow task in `events`, if any: the last workflow task event,
+ * when it is SCHEDULED or STARTED with no COMPLETED, FAILED or TIMED_OUT after it.
+ */
+function openTask(events: HistoryEvent[]): HistoryEvent | undefined {
+  const last = events.findLast((e) => TASK_EVENTS.includes(e.eventType as number));
+  return last?.eventType === EventType.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED || last?.eventType === EventType.EVENT_TYPE_WORKFLOW_TASK_STARTED
+    ? last
+    : undefined;
+}
+
 /**
  * What the server holds for a stalled run, for the failure message: the
  * pending workflow task, the pending activities, and the run's whole history
@@ -270,25 +290,12 @@ async function stallReport(handle: WorkflowHandle): Promise<string> {
       ].filter(Boolean);
       return `  ${e.eventId} ${name} ${at(e.eventTime)}${extra.length ? ` (${extra.join(', ')})` : ''}`;
     });
-    // The last workflow task event says whether one is open: SCHEDULED or
-    // STARTED with no COMPLETED, FAILED or TIMED_OUT after it.
-    const T = EventType;
-    const lastTask = events.findLast((e) =>
-      [
-        T.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-        T.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-        T.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-        T.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-        T.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
-      ].includes(e.eventType as number),
-    );
-    const open =
-      lastTask?.eventType === T.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED || lastTask?.eventType === T.EVENT_TYPE_WORKFLOW_TASK_STARTED;
+    const open = openTask(events);
     const task = described.raw.pendingWorkflowTask;
     const pending = task
       ? `pending workflow task (describe): ${TaskState[task.state ?? 0]}, attempt ${task.attempt}`
       : open
-        ? `pending workflow task (history): ${EventType[lastTask?.eventType ?? 0]?.replace('EVENT_TYPE_', '')} at event ${lastTask?.eventId}, ${at(lastTask?.eventTime)}`
+        ? `pending workflow task (history): ${EventType[open.eventType ?? 0]?.replace('EVENT_TYPE_', '')} at event ${open.eventId}, ${at(open.eventTime)}`
         : 'pending workflow task: none';
     const activities = (described.raw.pendingActivities ?? []).map(
       (a) => `pending activity: ${a.activityType?.name}, attempt ${a.attempt}, ${ActivityState[a.state ?? 0]}`,
@@ -382,6 +389,47 @@ async function mergeHeld(handle: WorkflowHandle, limitMs = 10_000): Promise<void
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(`the server did not hold the merge poll's result within ${limitMs / 1000} s\n${await stallReport(handle)}`);
+}
+
+/**
+ * Waits until the history holds the merge poll's ActivityTaskScheduled and no
+ * open workflow task, so a workflow worker stopped now holds nothing (STW-659).
+ * The limit stays under the 10-second workflow task timeout: a longer one would
+ * hide a worker that stopped holding a task.
+ *
+ * Why not the `state` query alone. Two faults, each proven by a probe with
+ * `@temporalio/worker` 1.25.0 and the dev server it downloads (Server 1.32.2):
+ *
+ * 1. The query can answer from a workflow task that has not completed. With
+ *    `maxCachedWorkflows: 0` a query is answered by a replay of the history the
+ *    server sends with it, and that history can already hold an activity result
+ *    no completed workflow task has processed. Probe: queries one after another
+ *    from the run's start. 2 runs of 34 had `waiting-merge` answered while the
+ *    history held no scheduled `awaitFixPrMerge`: 1 of 22 on an idle machine,
+ *    1 of 12 with every core busy. In the second, a workflow task was STARTED,
+ *    and the query was sent 227 ms before `reportPreviewChecks` completed and
+ *    answered 264 ms after.
+ * 2. A worker that stops while its workflow task poll is in flight loses the
+ *    task. The server marks it started; Core, on a server that does not
+ *    advertise `workerPollCompleteOnShutdown` (the dev server does not), drops
+ *    the in-flight poll at shutdown, and the task times out after 10 s. The
+ *    worker reaches STOPPED in about 2 ms. Probe: the first phase ended 0 to 5
+ *    ms after `reportPreviewChecks` returned; 7 runs of 7 timed out the next
+ *    workflow task, as on CI on 2026-11-24, and 3 of 3 at 10 to 40 ms passed.
+ *    With this wait after the same early end, 10 runs of 10 passed.
+ */
+async function pollSettled(handle: WorkflowHandle, limitMs = 5_000): Promise<void> {
+  const deadline = Date.now() + limitMs;
+  while (Date.now() < deadline) {
+    const history = await beforeDeadline(handle.fetchHistory(), deadline);
+    if (history !== STALLED) {
+      const events = history.events ?? [];
+      const polled = events.some((e) => e.activityTaskScheduledEventAttributes?.activityType?.name === 'awaitFixPrMerge');
+      if (polled && !openTask(events)) return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`the history did not hold a scheduled merge poll and no open workflow task within ${limitMs / 1000} s\n${await stallReport(handle)}`);
 }
 
 const merging = (n: number) => (s: FindingState) => s.step === 'waiting-merge' && s.previewTests === n;
@@ -552,6 +600,7 @@ test('a merge and a retest in the same workflow task: the merge wins', async () 
                 await handle.signal(verdictSignal, APPROVE);
                 await handle.signal(fixSignal, { source: 'cli', at: '2026-11-10T18:05:00Z' });
                 await until(handle, 'the first test', merging(1));
+                await pollSettled(handle);
               })(),
             ),
           );

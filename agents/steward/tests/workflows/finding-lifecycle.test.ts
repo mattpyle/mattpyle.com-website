@@ -5,6 +5,7 @@ import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { ApplicationFailureCategory } from '@temporalio/common';
+import proto from '@temporalio/proto';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { settings, skipVerdictMeasure } from '../helpers/verdict-measure.js';
@@ -1211,6 +1212,95 @@ function parksAtVerify(): Script {
   };
 }
 
+const EventType = proto.temporal.api.enums.v1.EventType;
+const TASK_EVENTS: number[] = [
+  EventType.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+  EventType.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+];
+
+/**
+ * Waits until the history holds no open workflow task and no activity without
+ * its result, so a worker stopped now holds nothing (STW-659). A `state` query
+ * says `parked` before the park's comment activity runs: `park()` sets the step
+ * first. The time-skipping server leaves `pendingWorkflowTask` empty in
+ * `describe`, so both are read from the history.
+ *
+ * Probe: the history read at the moment the query first answered `parked`
+ * ended in WORKFLOW_TASK_STARTED in 6 runs of 12, so the first worker would
+ * have stopped holding an open task. A worker that stops with its task poll in
+ * flight loses the task until its timeout; `finding-retest.test.ts`,
+ * `pollSettled`, records that probe.
+ */
+async function idle(handle: WorkflowHandle, limitMs = 5_000): Promise<void> {
+  const deadline = Date.now() + limitMs;
+  let last = 'no history read';
+  while (Date.now() < deadline) {
+    const events = (await handle.fetchHistory()).events ?? [];
+    const lastTask = events.findLast((e) => TASK_EVENTS.includes(e.eventType as number));
+    const taskOpen =
+      lastTask?.eventType === EventType.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED || lastTask?.eventType === EventType.EVENT_TYPE_WORKFLOW_TASK_STARTED;
+    const closed = new Set(
+      events
+        .map(
+          (e) =>
+            (
+              e.activityTaskCompletedEventAttributes ??
+              e.activityTaskFailedEventAttributes ??
+              e.activityTaskTimedOutEventAttributes ??
+              e.activityTaskCanceledEventAttributes
+            )?.scheduledEventId,
+        )
+        .filter((n) => n != null)
+        .map(String),
+    );
+    const open = events.filter((e) => e.activityTaskScheduledEventAttributes && !closed.has(String(e.eventId)));
+    if (!taskOpen && open.length === 0) return;
+    last = `${taskOpen ? `workflow task open at event ${lastTask?.eventId}` : 'no open workflow task'}; activities without a result: ${open.map((e) => e.activityTaskScheduledEventAttributes?.activityType?.name).join(', ') || 'none'}`;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail(`the run did not settle within ${limitMs / 1000} s: ${last}`);
+}
+
+/**
+ * Waits until the server has admitted each Update in `updateIds` (STW-659):
+ * `PollWorkflowExecutionUpdate` at the ADMITTED stage answers once the server
+ * holds it and fails with NotFound before. Each poll has a 1-second deadline,
+ * so an Update the server never takes ends the wait at `limitMs`.
+ *
+ * Why not the 1500 ms sleep it replaces. Probe, on the time-skipping server:
+ * with the request-fix send delayed 1.6 s, the sleep started the second worker
+ * before that Update was sent, and the test still passed, so it could not see
+ * the two Updates reach different workflow tasks. This wait started the second
+ * worker 27 ms after the delayed send. An Update ID never sent stayed
+ * unadmitted for the whole 2-second limit given.
+ */
+async function admitted(workflowId: string, updateIds: string[], limitMs = 10_000): Promise<void> {
+  const deadline = Date.now() + limitMs;
+  const waiting = new Set(updateIds);
+  while (waiting.size > 0 && Date.now() < deadline) {
+    for (const updateId of [...waiting]) {
+      try {
+        await client.connection.withDeadline(Date.now() + 1_000, () =>
+          client.workflowService.pollWorkflowExecutionUpdate({
+            namespace: client.options.namespace,
+            updateRef: { workflowExecution: { workflowId }, updateId },
+            identity: 'finding-lifecycle test',
+            waitPolicy: { lifecycleStage: proto.temporal.api.enums.v1.UpdateWorkflowExecutionLifecycleStage.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED },
+          }),
+        );
+        waiting.delete(updateId);
+      } catch {
+        // Not admitted yet.
+      }
+    }
+    if (waiting.size > 0) await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  if (waiting.size > 0) assert.fail(`the server did not admit ${[...waiting].join(', ')} within ${limitMs / 1000} s`);
+}
+
 /** The sentence an Update's refusal carries to its sender. */
 const refusalOf = (err: unknown) => String((err as { cause?: Error }).cause?.message ?? (err as Error).message);
 
@@ -1378,16 +1468,17 @@ test('resume and request-fix sent to one park in the same workflow task: one is 
         await handle.signal(verdictSignal, APPROVE);
         await handle.signal(fixSignal, FIX);
         await untilState(handle, (s) => s.step === 'parked', 'parked');
+        await idle(handle);
       })(),
     ),
   );
   // No worker now: both Updates wait at the server, and the next worker reads them in one task.
   const sent = [
-    handle.executeUpdate(resumeUpdate, { args: [{ source: 'console', at: '2026-10-14T09:00:00Z' }] }),
-    handle.executeUpdate(requestFixUpdate, { args: [{ source: 'cli', at: '2026-10-14T09:00:00Z' }] }),
+    handle.executeUpdate(resumeUpdate, { args: [{ source: 'console', at: '2026-10-14T09:00:00Z' }], updateId: 'two-updates-resume' }),
+    handle.executeUpdate(requestFixUpdate, { args: [{ source: 'cli', at: '2026-10-14T09:00:00Z' }], updateId: 'two-updates-fix' }),
   ];
   for (const one of sent) one.catch(() => undefined);
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await admitted(id, ['two-updates-resume', 'two-updates-fix']);
   const settled = await (await worker()).runUntil(
     bounded(
       (async () => {
