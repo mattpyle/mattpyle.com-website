@@ -31,7 +31,7 @@ mattpyle.com is a personal site and a testbed for emerging web standards (WebMCP
 | `npm run dev` | Dev server. Iterate layout here; fonts, images and CSS inlining differ from prod, layout does not. |
 | `SHOW_DRAFTS=true npm run build`, then `npm run serve` | Production build and a server that renders the on-demand pages (`/activity` and `/audit`, with their `.md` and `.json` siblings) per request. A static server 404s them. `/scorecard` is prerendered. |
 | `npm run generate` | Writes the gitignored `src/data/a2a-digest.json`, `agent-skills-index.json` and `page-paths.mjs`. `pretest`, `precheck`, `predev` and `prebuild` run it. On a pull request, the CI job summary shows their diff against the base. |
-| `npm test` | The site test suite. CI runs it on every PR, and the fix Action runs it before it pushes. |
+| `npm test` | The site test suite. CI runs it on every PR, and the fix Action runs it before it pushes. Afterwards it warns, without failing, when a post or changelog body changed and its `updated:` did not. |
 | `npm run check` | The Astro and TypeScript check. CI runs it on every PR, and the fix Action runs it before it pushes. |
 | `npm run new-post -- "Title"` | Scaffold a draft with correct frontmatter; a build fails if a published post still holds one of its `REPLACE:` placeholders. |
 | `npm run a11y` | Playwright suite for the manual WCAG checks. Advisory. Regenerate one golden with `--update-snapshots --grep <template>`, never `--update-snapshots=all`. |

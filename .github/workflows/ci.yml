@@ -205,7 +205,20 @@ jobs:
       - name: Typecheck (astro check)
         run: npm run --silent check
 
+      # `posttest` runs scripts/check-updated-date.mjs, which warns, as an
+      # annotation on the pull request, when a post's body changed and its
+      # `updated:` date did not. It compares against the base commit, so the
+      # shallow checkout fetches it first. On a push there is no base and the
+      # check prints one line saying it did not run.
+      - name: Fetch the pull request's base commit
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --no-tags --depth=1 origin "$BASE_SHA"
+
       - name: Run site tests
+        env:
+          UPDATED_CHECK_BASE: ${{ github.event.pull_request.base.sha }}
         run: npm test
 
       # `src/data/a2a-digest.json`, `agent-skills-index.json` and `page-paths.mjs`
