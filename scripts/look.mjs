@@ -9,14 +9,12 @@
  *
  * - a phone (390 px) and a desktop (1280 px) picture, one screen each, scrolled so the `--find`
  *   text sits mid-screen, or to the path's `#fragment`, or at the top when neither is given;
- * - one small picture of the whole page per width, for overall layout and not for reading (a long
- *   page at full size is scaled down by a reader until its text cannot be read, so the pictures
- *   to read are the aimed ones);
  * - the page's visible text and its rendered HTML, both taken at desktop width, and its markdown
- *   twin. The HTML is the document as the browser holds it once the page has loaded and settled,
- *   with a line break between adjacent tags so it can be searched: attributes, meta tags,
- *   structured data and accessibility labels are in it and not in the text. It is a reading copy,
- *   not a byte-for-byte one.
+ *   twin. The HTML is the document as the browser holds it once the page has loaded and settled:
+ *   attributes, meta tags, structured data and accessibility labels are in it and not in the text.
+ *   Lines break only between block-level elements, where whitespace changes nothing on the page;
+ *   inside a paragraph the markup is exactly the browser's, so `</code>spends` and
+ *   `</code> spends` stay different.
  *
  * The folder is the last line of the output: `.look/<time>` or, with `--label`, `.look/<time>-<label>`,
  * so a look taken before an edit and one taken after can be told apart.
@@ -37,9 +35,13 @@
  *
  * The build itself runs the repository's code, as `npm test` does; the fence is the browser's.
  *
- * Text that is not on the page, a fragment with no target, a path that is not an HTML page
- * (`/agents.md`) or has no twin are reported and are not failures. Exit 1 only when the build or
- * the server fails, or an argument is refused, or a path does not resolve.
+ * An aim that misses fails: `--find` text that is not on the page as written, or a `#fragment`
+ * with no target, is reported, its pictures are of the top, the other paths still run, and the
+ * command exits 1. A fixer that aims at the sentence it has just written learns this way that the
+ * sentence did not render as written, the joined word a picture can hide. Text that is on the page
+ * but hidden at one width is a note. So are a path that is not an HTML page (`/agents.md`) and one
+ * with no twin. Exit 1 also when the build or the server fails, an argument is refused, or a path
+ * does not resolve.
  */
 
 import { spawn } from 'node:child_process';
@@ -51,14 +53,10 @@ import { markdownSiblingFor } from '../src/lib/markdown-negotiation.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
-/**
- * Phone and desktop widths; each height is the common screen for its width. `wholeScale` is the
- * device scale of the small whole-page picture: about 200 to 320 pixels wide, enough to see the
- * layout, not to read.
- */
+/** Phone and desktop widths; each height is the common screen for its width. */
 const WIDTHS = [
-  { width: 390, height: 844, wholeScale: 0.5 },
-  { width: 1280, height: 800, wholeScale: 0.25 },
+  { width: 390, height: 844 },
+  { width: 1280, height: 800 },
 ];
 
 /** The width the text and HTML files are taken at. */
@@ -183,13 +181,61 @@ export function slugFor(path) {
 }
 
 /**
- * The rendered HTML with a line break between adjacent tags, so a search for an attribute or a
- * label lands on one element's line. Text that runs against a tag (`<code>get_audit</code>spends`)
- * stays on its line, which is what shows a seam between two words.
+ * Elements whose edges are block boundaries in the site's layout, document-level elements and
+ * table parts included. Whitespace beside one of these renders as nothing, so a line break there
+ * changes nothing on the page.
+ */
+const BLOCK_TAGS = new Set([
+  'address', 'article', 'aside', 'base', 'blockquote', 'body', 'caption', 'col', 'colgroup', 'dd',
+  'details', 'dialog', 'div', 'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hgroup', 'hr', 'html', 'li', 'link',
+  'main', 'meta', 'nav', 'noscript', 'ol', 'p', 'pre', 'script', 'section', 'style', 'summary',
+  'table', 'tbody', 'td', 'template', 'tfoot', 'th', 'thead', 'title', 'tr', 'ul',
+]);
+
+/** Elements whose content is copied as it is: code, scripts and styles. */
+const RAW_TAGS = new Set(['pre', 'script', 'style', 'textarea']);
+
+/** A tag, with quoted attribute values that may hold `>`. */
+const TAG = /<(?:[^>"']|"[^"]*"|'[^']*')*>/g;
+
+/**
+ * The rendered HTML with line breaks between block-level elements, so a search for an attribute
+ * or a label lands on a short line. A gap between two tags gets a line break only where it changes
+ * nothing on the page: an empty gap between two block tags, or a whitespace gap beside one. Every
+ * other byte is the browser's, so inline markup keeps its whitespace exactly (`</a> <a>` against
+ * `</a><a>`, `</code> spends` against `</code>spends`), and `pre`, `script`, `style` and
+ * `textarea` content is copied untouched.
  * @param {string} html
  */
 export function readableHtml(html) {
-  return html.replace(/>\s*</g, '>\n<');
+  let out = '';
+  let at = 0;
+  let afterTag = false;
+  let afterBlock = false;
+  const lower = html.toLowerCase();
+  TAG.lastIndex = 0;
+  for (let match = TAG.exec(html); match; match = TAG.exec(html)) {
+    const tag = match[0];
+    const gap = html.slice(at, match.index);
+    const name = /^<\/?([a-zA-Z][a-zA-Z0-9-]*)/.exec(tag)?.[1].toLowerCase() ?? null;
+    const block = name ? BLOCK_TAGS.has(name) : /^<!doctype/i.test(tag);
+    const breakable = afterTag && /^\s*$/.test(gap) && (gap === '' ? afterBlock && block : afterBlock || block);
+    out += breakable ? '\n' : gap;
+    out += tag;
+    at = TAG.lastIndex;
+    afterTag = true;
+    afterBlock = block;
+    if (name && RAW_TAGS.has(name) && !tag.startsWith('</') && !tag.endsWith('/>')) {
+      const close = lower.indexOf(`</${name}`, at);
+      const end = close < 0 ? html.length : close;
+      out += html.slice(at, end);
+      at = end;
+      TAG.lastIndex = end;
+      afterTag = false;
+    }
+  }
+  return out + html.slice(at);
 }
 
 function freePort() {
@@ -266,8 +312,9 @@ async function settle(page) {
 }
 
 /**
- * Scroll the page to what the aim names. Returns null when it got there, or a note saying why the
- * picture is of the top.
+ * Scroll the page to what the aim names. Returns null when it got there, `{ miss }` when the aim is
+ * not on the page at all (a failure), or `{ note }` when it is there but hidden at this width.
+ * Either way the picture is then of the top.
  */
 async function aimPage(page, url, find, width) {
   if (find !== null) {
@@ -275,8 +322,10 @@ async function aimPage(page, url, find, width) {
     if ((await visible.count()) === 0) {
       const anywhere = await page.getByText(find).count();
       return anywhere > 0
-        ? `--find text is on the page but not visible at ${width} px; picture of the top`
-        : `--find text is not on the page; picture of the top`;
+        ? { note: `--find text is on the page but not visible at ${width} px; picture of the top` }
+        : {
+            miss: 'the --find text is not on the page as written. If you wrote it, check for a joined word or a part that did not render.',
+          };
     }
     await visible.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
     return null;
@@ -289,7 +338,7 @@ async function aimPage(page, url, find, width) {
       target.scrollIntoView({ block: 'start', behavior: 'instant' });
       return true;
     }, url.hash);
-    return found ? null : `${url.hash} is not on the page; picture of the top`;
+    return found ? null : { miss: `${url.hash} has no target on the page. Check the id it points at.` };
   }
   return null;
 }
@@ -402,8 +451,9 @@ async function main() {
       await probe.close();
 
       const aimed = [];
-      const whole = [];
       const notes = new Set();
+      /** Why the aim failed, when it is not on the page at all. */
+      let miss = null;
       /** The widths whose picture is of the top because the aim was not found there. */
       const missed = [];
       for (const size of WIDTHS) {
@@ -414,9 +464,10 @@ async function main() {
           const page = await context.newPage();
           await page.goto(url.href, { waitUntil: 'networkidle' });
           await settle(page);
-          const note = await aimPage(page, url, find, size.width);
-          if (note) {
-            notes.add(note);
+          const aim = await aimPage(page, url, find, size.width);
+          if (aim) {
+            if (aim.miss) miss = aim.miss;
+            else notes.add(aim.note);
             missed.push(size.width);
           }
           await settle(page);
@@ -430,18 +481,6 @@ async function main() {
         } finally {
           await context.close();
         }
-
-        const small = await fencedContext(browser, origin, { viewport, deviceScaleFactor: size.wholeScale });
-        try {
-          const page = await small.newPage();
-          await page.goto(url.href, { waitUntil: 'networkidle' });
-          await settle(page);
-          const file = `${slug}-${size.width}-whole.png`;
-          await page.screenshot({ path: join(folder, file), fullPage: true, scale: 'device' });
-          whole.push(file);
-        } finally {
-          await small.close();
-        }
       }
 
       const aimedAt = find !== null ? 'at the --find text' : url.hash ? `at ${url.hash}` : 'at the top';
@@ -451,7 +490,6 @@ async function main() {
         : `${aimedAt}, except at ${missed.join(' and ')} px, at the top`;
       const parts = [
         `${aimed.join(', ')} (one screen each, ${where})`,
-        `${whole.join(', ')} (whole page, small, for layout only)`,
         `${slug}.txt and ${slug}.html (visible text and rendered HTML, at desktop width, ${TEXT_WIDTH} px)`,
       ];
       const twin = markdownSiblingFor(url.pathname);
@@ -467,6 +505,10 @@ async function main() {
         }
       }
       console.log(`${heading}: ${parts.join('; ')}${notes.size ? `. Note: ${[...notes].join('; ')}` : ''}.`);
+      if (miss) {
+        console.log(`${heading}: FAILED, ${miss}`);
+        failed = true;
+      }
     }
   } finally {
     await browser?.close();

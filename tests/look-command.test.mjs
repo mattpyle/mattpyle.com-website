@@ -77,9 +77,30 @@ test('file names come from the path and its fragment', () => {
   assert.equal(slugFor('/writing/x/#webmcp-gotchas'), 'writing-x-webmcp-gotchas');
 });
 
-test('the saved HTML puts adjacent tags on their own lines and keeps text against a tag on its line', () => {
+test('the saved HTML keeps inline whitespace exactly, so a joined word still shows', () => {
+  for (const inline of [
+    '<p>Read <code>get_audit</code>spends no allowance.</p>',
+    '<p>Read <code>get_audit</code> spends no allowance.</p>',
+    '<p><a href="/a">one</a><a href="/b">two</a></p>',
+    '<p><a href="/a">one</a> <a href="/b">two</a></p>',
+  ]) {
+    assert.equal(readableHtml(inline), inline);
+  }
+  assert.notEqual(readableHtml('<p><a>x</a> <a>y</a></p>'), readableHtml('<p><a>x</a><a>y</a></p>'));
+});
+
+test('the saved HTML breaks lines only between block-level elements', () => {
   assert.equal(
-    readableHtml('<main> <p>Read <code>get_audit</code>spends</p><meta name="x" content="y"></main>'),
-    '<main>\n<p>Read <code>get_audit</code>spends</p>\n<meta name="x" content="y">\n</main>',
+    readableHtml('<html><head><meta charset="utf-8"><title>T</title></head><body><main><p>One <em>two</em></p> <p>Three</p></main></body></html>'),
+    '<html>\n<head>\n<meta charset="utf-8">\n<title>T</title>\n</head>\n<body>\n<main>\n<p>One <em>two</em></p>\n<p>Three</p>\n</main>\n</body>\n</html>',
   );
+  assert.equal(readableHtml('<div><span>a</span><span>b</span></div>'), '<div><span>a</span><span>b</span></div>', 'no break between two inline tags, even at a block edge with no gap');
+  assert.equal(readableHtml('<div attr="a>b"><p>x</p></div>'), '<div attr="a>b">\n<p>x</p>\n</div>', 'a > inside an attribute value is not a tag end');
+});
+
+test('pre, script and style content is copied untouched', () => {
+  const pre = '<pre><code><span>a</span>\n  <span>b</span></code></pre>';
+  assert.equal(readableHtml(`<div>${pre}</div>`), `<div>\n${pre}\n</div>`);
+  const script = '<script>if (a>b) x = "<p></p><div>";</script>';
+  assert.equal(readableHtml(script), script);
 });
