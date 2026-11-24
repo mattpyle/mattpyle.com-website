@@ -558,13 +558,18 @@ export function setFrontmatterFix(text: string, prUrl: string): string {
 const ISSUE_TITLE_MAX = 256;
 
 /**
- * The six lines above the finding in a fix issue, as the spike's issue 358 was
- * written. `@claude` is what starts `claude-code-action` (`claude.yml`'s `if`).
+ * The six lines above the finding in a fix issue. `@claude` is what starts
+ * `claude-code-action` (`claude.yml`'s `if`). The scope is the fact, not the
+ * one line the finding's Fix names: every place that states it, less what the
+ * Verdict line rejects, and nothing else. `CHANGE-KINDS.md` lists where facts
+ * hide, as a start; the fixer searches the whole tree for the old words. Done includes a look at the built page through `npm run look`, aimed
+ * at the changed text: the one command in `claude.yml`'s allowlist that
+ * renders a page. Every look is read whole: text, HTML, twin and both pictures.
  */
 export const FIX_ISSUE_HEADER = [
   '@claude Fix the approved finding below.',
   '',
-  'Rules: one finding, one fix, one PR. Change only what the finding needs; no adjacent tidying. The Verdict line below is the scope: a part it rejects is out of scope. Run `npm test` and `npm run check` before you push and leave both passing. Open the PR yourself. Keep the PR body short: what changed, why, and the evidence. The PR is done when the "How to measure" check passes on the Vercel preview.',
+  'Rules: one finding, one fix, one PR. The fix covers every place that states the fact, unless the Verdict line below rejects it; the finding\'s Fix may not name them all. The row "A changed fact about the site or its author" in `CHANGE-KINDS.md` lists where facts hide. Search the whole tree for the old words; the list says where to start. Change nothing that is not this fact. The Verdict line below is the scope: a part it rejects is out of scope. Run `npm test` and `npm run check` before you push and leave both passing. Open the PR yourself. Keep the PR body short: what changed, why, and the evidence. Done is the "How to measure" check passing on the Vercel preview and a look with `npm run look` at every page your change reaches, aimed with `--find` at the changed text: for every change read the text, the rendered HTML, the markdown twin and the two aimed pictures it leaves; for a file with no page such as `agents.md`, read the served file. Aim `--find` with the sentence as it reads on the page, with no backticks, asterisks, link targets or tags, and with the words on both sides of any code, link or emphasis, because a join between two words is caught only when the aim crosses it; if the sentence is over 200 characters, aim with the clause that crosses the join. The PR says what you looked at and at which widths.',
   '',
   '---',
   '',
