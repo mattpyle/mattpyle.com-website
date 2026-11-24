@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findPattern, findRefusal, labelRefusal, parseArgs, pathRefusal, readableHtml, slugFor } from '../scripts/look.mjs';
+import { findPattern, findRefusal, stripMarkup, labelRefusal, parseArgs, pathRefusal, readableHtml, slugFor } from '../scripts/look.mjs';
 
 test('a site path is accepted, with or without a fragment or a query', () => {
   for (const path of ['/', '/steward/', '/agents.md', '/writing/x/#section', '/audit?url=x']) {
@@ -129,4 +129,30 @@ test('--find never matches across a joined word, and its text is never a pattern
   assert.match('call (x)', findPattern('call (x)'));
   assert.doesNotMatch('a', findPattern('[a]'));
   assert.match('$1 or ^x|y\\z', findPattern('$1 or ^x|y\\z'));
+});
+
+test('a straight apostrophe in the aim matches a straight one on the page, as a template writes it', () => {
+  assert.match("but it'd be capped", findPattern("but it'd be capped"));
+});
+
+test('the second try removes source markup from an aim and leaves the page text', () => {
+  const page = 'Read get_audit spends no audit allowance, but it\u2019d be capped. Use the A2A endpoint.';
+  for (const [aim, plain] of [
+    ['`get_audit` spends no audit allowance', 'get_audit spends no audit allowance'],
+    ['<code>get_audit</code> spends no audit allowance', 'get_audit spends no audit allowance'],
+    ['Use the [A2A endpoint](/a2a/).', 'Use the A2A endpoint.'],
+    ['Read **get_audit** spends', 'Read get_audit spends'],
+  ]) {
+    assert.equal(stripMarkup(aim), plain, aim);
+    assert.doesNotMatch(page, findPattern(aim), `${aim} does not match as written`);
+    assert.match(page, findPattern(stripMarkup(aim)), `${aim} matches without its markup`);
+  }
+  assert.equal(stripMarkup('Read *get_audit* spends'), 'Read get_audit spends', 'single-asterisk emphasis');
+});
+
+test('an aim with no markup is unchanged, underscores survive, and a join stays a join', () => {
+  for (const aim of ["but it'd be capped", 'get_audit spends', 'snake_case_name and __init__', '4 * 5 = 20']) {
+    assert.equal(stripMarkup(aim), aim);
+  }
+  assert.doesNotMatch('get_auditspends no audit allowance', findPattern(stripMarkup('`get_audit` spends no audit allowance')));
 });

@@ -36,9 +36,10 @@
  *
  * The build itself runs the repository's code, as `npm test` does; the fence is the browser's.
  *
- * An aim that misses fails: `--find` text that is not on the page as written, or a `#fragment`
- * with no target, is reported, its pictures are of the top, the other paths still run, and the
- * command exits 1. A fixer that aims at the sentence it has just written learns this way that the
+ * An aim is tried as written, then once more with source markup removed (`stripMarkup`), and the
+ * output says when only the second matched. An aim that misses both fails: `--find` text that is
+ * not on the page, or a `#fragment` with no target, is reported, its pictures are of the top, the
+ * other paths still run, and the command exits 1. A fixer that aims at the sentence it has just written learns this way that the
  * sentence did not render as written, the joined word a picture can hide. Text that is on the page
  * but hidden at one width is a note. So are a path that is not an HTML page (`/agents.md`) and one
  * with no twin. Exit 1 also when the build or the server fails, an argument is refused, or a path
@@ -145,6 +146,21 @@ export function findPattern(aim) {
     }
   }
   return new RegExp(source, 'i');
+}
+
+/**
+ * The aim with source markup removed, for the second try at a match: backticks, `**` and `*` used
+ * for emphasis, a markdown link reduced to its text, and HTML tags. Underscores stay, because code
+ * names such as `get_audit` hold them. Whitespace is left as it is, so a join stays a join.
+ * @param {string} aim
+ */
+export function stripMarkup(aim) {
+  return aim
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<\/?[A-Za-z][^<>]*>/g, '')
+    .replace(/`/g, '')
+    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '$1')
+    .replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1$2');
 }
 
 /**
@@ -353,24 +369,37 @@ async function settle(page) {
 }
 
 /**
- * Scroll the page to what the aim names. Returns null when it got there, `{ miss }` when the aim is
- * not on the page at all (a failure), or `{ note }` when it is there but hidden at this width.
- * Either way the picture is then of the top.
+ * Scroll the page to what the aim names. Returns null when it got there as written; otherwise an
+ * object with any of: `miss`, when the aim is not on the page at all (a failure); `note`, when it
+ * is there but hidden at this width (the picture is then of the top); `markup`, the aim with its
+ * markup removed, when only that form matched.
+ *
+ * The aim is tried as written first, because some pages show tags and backticks as visible text,
+ * and an honest aim at such a sentence must match as it is. Only when nothing on the page matches
+ * it is the aim tried once more without markup (`stripMarkup`), for a fixer that copied its
+ * sentence from the source.
  */
 async function aimPage(page, url, find, width) {
   if (find !== null) {
-    const pattern = findPattern(find);
+    let pattern = findPattern(find);
+    let markup = null;
+    if ((await page.getByText(pattern).count()) === 0) {
+      const stripped = stripMarkup(find);
+      const second = stripped.trim() && stripped !== find ? findPattern(stripped) : null;
+      if (!second || (await page.getByText(second).count()) === 0) {
+        return {
+          miss: 'the --find text is not on the page as written. If you wrote it, check for a joined word, a part that did not render, or markup the aim still holds.',
+        };
+      }
+      pattern = second;
+      markup = stripped;
+    }
     const visible = page.getByText(pattern).filter({ visible: true }).first();
     if ((await visible.count()) === 0) {
-      const anywhere = await page.getByText(pattern).count();
-      return anywhere > 0
-        ? { note: `--find text is on the page but not visible at ${width} px; picture of the top` }
-        : {
-            miss: 'the --find text is not on the page as written. If you wrote it, check for a joined word or a part that did not render.',
-          };
+      return { markup, note: `--find text is on the page but not visible at ${width} px; picture of the top` };
     }
     await visible.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
-    return null;
+    return markup === null ? null : { markup };
   }
   if (url.hash) {
     const found = await page.evaluate((hash) => {
@@ -507,11 +536,12 @@ async function main() {
           await page.goto(url.href, { waitUntil: 'networkidle' });
           await settle(page);
           const aim = await aimPage(page, url, find, size.width);
-          if (aim) {
-            if (aim.miss) miss = aim.miss;
-            else notes.add(aim.note);
-            missed.push(size.width);
+          if (aim?.miss) miss = aim.miss;
+          if (aim?.markup) {
+            notes.add(`the aim held markup; it matched with the markup removed, as ${JSON.stringify(aim.markup)}. Aim with the sentence as it reads on the page`);
           }
+          if (aim?.note) notes.add(aim.note);
+          if (aim?.miss || aim?.note) missed.push(size.width);
           await settle(page);
           const file = `${slug}-${size.width}.png`;
           await page.screenshot({ path: join(folder, file) });
