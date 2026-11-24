@@ -149,6 +149,35 @@ export function findPattern(aim) {
 }
 
 /**
+ * The text with every tag removed: `<`, an optional `/`, a letter, then anything up to the next
+ * `>` with no `<` or `>` between. Anything that only looks like the start of a tag (`<b` with no
+ * `>`, a lone `<` or `>`, `< b>`) stays. A scan over the characters rather than a regular
+ * expression, so it reads as what it is: removing source markup from an aim, not sanitising HTML.
+ * @param {string} text
+ */
+function removeTags(text) {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '<') {
+      let j = i + 1;
+      if (text[j] === '/') j += 1;
+      if (j < text.length && /[A-Za-z]/.test(text[j])) {
+        let k = j + 1;
+        while (k < text.length && text[k] !== '<' && text[k] !== '>') k += 1;
+        if (text[k] === '>') {
+          i = k + 1;
+          continue;
+        }
+      }
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
+}
+
+/**
  * The aim with source markup removed, for the second try at a match: backticks, `**` and `*` used
  * for emphasis, a markdown link reduced to its text, and HTML tags. Underscores stay, because code
  * names such as `get_audit` hold them. Whitespace is left as it is, so a join stays a join.
@@ -163,7 +192,7 @@ export function stripMarkup(aim) {
   do {
     before = text;
     text = text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1');
-    text = text.replace(/<\/?[A-Za-z][^<>]*>/g, '');
+    text = removeTags(text);
     text = text.replace(/`/g, '');
     text = text.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '$1');
     text = text.replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1$2');

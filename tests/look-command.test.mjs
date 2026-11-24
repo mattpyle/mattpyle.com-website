@@ -168,3 +168,10 @@ test('stripMarkup leaves no tag, link or emphasis behind, however the input nest
     assert.doesNotMatch(out, /<\/?[A-Za-z][^<>]*>/, `${aim} keeps no tag`);
   }
 });
+
+test('stripMarkup keeps what only looks like the start of a tag', () => {
+  for (const aim of ['an unclosed <b tag', 'a lone < here', 'a lone > here', '1 < 2 and 3 > 2', 'a < b> spaced', '<>', '</>', '<1a>']) {
+    assert.equal(stripMarkup(aim), aim, aim);
+  }
+  assert.equal(stripMarkup('x <b and <i>y</i>'), 'x <b and y', 'an unclosed tag before a real one');
+});
