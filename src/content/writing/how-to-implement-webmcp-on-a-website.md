@@ -206,7 +206,7 @@ The Site Tools feature launch has put significant visibility and momentum behind
 
 ### WebMCP origin trial tokens expire
 
-Every token for this trial expires on 2027-03-30. That is the token's deadline, not the feature's. Chrome may ship WebMCP to everyone, extend the trial with a renewal, or end it. If it is extended, you get an email and must deploy a new token, because Chrome ignores expired tokens and the tools stop registering without an error. Put the date in your calendar.
+Every token for this trial expires on 2027-03-30. That is the token's cutoff, not the feature's. Chrome may ship WebMCP to everyone, extend the trial with a renewal, or end it. If it is extended, you get an email and must deploy a new token, because Chrome ignores expired tokens and the tools stop registering without an error. Put the date in your calendar.
 
 ### WebMCP tools only reach agents inside a browser
 
