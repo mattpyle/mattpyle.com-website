@@ -133,3 +133,31 @@ test('a verdict taken in Discord is shown with its source', async () => {
     assert.ok(lines.includes('  reason: Approved in Discord.'));
   });
 });
+
+test('a watching run says it watches production, not where it stops (stage 4)', async () => {
+  await withWorker(async () => {
+    await start('watching-one', { mode: 'open', step: 'watching', gate: 'done' });
+    const lines = await status('watching-one');
+    assert.equal(lines[2], '  step: watching  (measures production daily until the fix is live)');
+  });
+});
+
+test('measure-now through the CLI refuses a finding with no run, and a run that does not take it, with the reason', async () => {
+  const measure = (key: string) =>
+    exec(process.execPath, ['--import', 'tsx', CLI, 'finding', 'measure-now', key, '--site', SITE], {
+      cwd: STEWARD,
+      env: { ...process.env, TEMPORAL_ADDRESS: env.address, TEMPORAL_NAMESPACE: env.namespace ?? 'default', TEMPORAL_API_KEY: '' },
+    }).then(
+      () => assert.fail('measure-now succeeded'),
+      (err: { code?: number; stderr?: string; stdout?: string }) => err,
+    );
+  const none = await measure('nobody');
+  assert.notEqual(none.code, 0);
+  assert.match(`${none.stderr}${none.stdout}`, new RegExp(`No run finding/${SITE}/nobody, so nobody has nothing to measure[.]`));
+  await withWorker(async () => {
+    await start('not-watching', { mode: 'open', step: 'waiting-fix', gate: 'done' });
+    const refused = await measure('not-watching');
+    assert.notEqual(refused.code, 0);
+    assert.match(`${refused.stderr}${refused.stdout}`, /Steward did not measure not-watching:/);
+  });
+});

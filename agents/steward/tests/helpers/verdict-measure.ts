@@ -6,7 +6,7 @@ import type { FindingSettings } from '../../src/activities/findings.js';
  * `auto_fix` off and a finding the gate accepts. A test names what differs.
  */
 export function settings(over: Partial<FindingSettings> = {}): FindingSettings {
-  return { stopAfter: 'resolved', origin: 'https://www.mattpyle.com', autoFix: false, status: 'approved', kind: 'defect', refusal: null, ...over };
+  return { stopAfter: 'resolved', origin: 'https://www.mattpyle.com', autoFix: false, watch: false, status: 'approved', kind: 'defect', refusal: null, ...over };
 }
 
 /** A site whose runs end at the verdict: `stop_after: verdict`, or no production origin on the worker. */

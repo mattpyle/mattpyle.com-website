@@ -7,9 +7,11 @@ import {
   HOSTED_ACTIVITY_CONCURRENCY,
   HOSTED_FAST_ACTIVITY_CONCURRENCY,
   HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
+  HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY,
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
   QUEUE_FINDINGS,
+  QUEUE_FINDINGS_WATCH,
 } from '../../src/config.js';
 import { hostedRegistry } from '../../src/hosted-registry.js';
 
@@ -114,8 +116,10 @@ test('each queue takes its own cap from the registry, never the SDK default of 1
       [QUEUE_AUDIT, HOSTED_ACTIVITY_CONCURRENCY],
       [QUEUE_AUDIT_FAST, HOSTED_FAST_ACTIVITY_CONCURRENCY],
       [QUEUE_FINDINGS, HOSTED_FINDINGS_ACTIVITY_CONCURRENCY],
+      [QUEUE_FINDINGS_WATCH, HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY],
     ],
   );
+  assert.equal(HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY, 1, 'one watch attempt at a time: each can launch Chromium');
 });
 
 test('the local worker serves two queues on Cloud, four on the local dev server, never steward-findings', async () => {
@@ -139,12 +143,22 @@ test('the local worker serves two queues on Cloud, four on the local dev server,
   assert.doesNotMatch(local, /QUEUE_FINDINGS/, 'the ready line lists the queues the local worker serves');
 });
 
-test('the registry serves three distinct queues, audit then fast then findings', () => {
+test('the registry serves four distinct queues, audit then fast then findings then watch', () => {
   assert.deepEqual(
     hostedRegistry().map((each) => each.taskQueue),
-    [QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS],
+    [QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS, QUEUE_FINDINGS_WATCH],
   );
-  assert.equal(new Set([QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS]).size, 3, 'sharing a queue would be sharing the cap');
+  assert.equal(new Set([QUEUE_AUDIT, QUEUE_AUDIT_FAST, QUEUE_FINDINGS, QUEUE_FINDINGS_WATCH]).size, 4, 'sharing a queue would be sharing the cap');
+});
+
+test('the watch queue registers watchFinding alone, the queue the workflow names, and the recycle policy counts it', async () => {
+  assert.deepEqual(names(QUEUE_FINDINGS_WATCH), ['watchFinding']);
+  assert.ok(!names(QUEUE_FINDINGS).includes('watchFinding'), 'a watch attempt on steward-findings would hold a verdict write\'s slot');
+  // Determinism rule 9: the workflow duplicates the queue name; a typo there would schedule onto a queue nobody polls.
+  const workflow = await fs.readFile(path.join(SRC, 'workflows', 'finding.ts'), 'utf8');
+  assert.match(workflow, new RegExp(`const QUEUE_FINDINGS_WATCH = '${QUEUE_FINDINGS_WATCH}';`));
+  const { BROWSER_ACTIVITY_TYPES } = await import('../../src/lib/recycle-policy.js');
+  assert.ok(BROWSER_ACTIVITY_TYPES.has('watchFinding'), 'an activity that can launch Chromium arms the recycle');
 });
 
 test('each queue registers exactly its own activities, by name', () => {
@@ -176,6 +190,7 @@ test('the audit and findings queues carry the workflow bundle; the fast queue ne
       [QUEUE_AUDIT, true],
       [QUEUE_AUDIT_FAST, false],
       [QUEUE_FINDINGS, true],
+      [QUEUE_FINDINGS_WATCH, false],
     ],
     'the fast queue is activities only, so it can never be given a deep audit',
   );

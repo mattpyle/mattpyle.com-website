@@ -179,6 +179,12 @@ export const QUIET_RUN_CLOSING = 'Its run ends itself at its next daily read.';
 /** What an approved row says while its run measures the checks at the verdict (STW-589). */
 export const HOLD_MEASURING = 'Steward is measuring its checks on production, before any fix.';
 
+/** What an approved row says while its run watches production (stage 4). */
+export const HOLD_WATCHING = 'Steward measures it on production once a day until the fix is live.';
+
+/** What a `resolved` row says while its run, which resolved it by its watch, ends (stage 4). */
+export const QUIET_RESOLVED_BY_WATCH = 'Resolved by its own watch; the run is ending.';
+
 /** What a `resolved` row says while its run, which resolved it at the verdict, ends. */
 export const QUIET_RESOLVED_AT_VERDICT = 'Resolved at the verdict; the run is ending.';
 
@@ -192,6 +198,7 @@ export function holdLineFor(input: { status: string; run: FindingRunView; refusa
   const { run } = input;
   if (input.status !== 'approved') return null;
   if (run.open && run.step === 'measuring') return HOLD_MEASURING;
+  if (run.open && run.step === 'watching') return HOLD_WATCHING;
   if (run.open && run.step !== 'waiting-fix') return null;
   if (input.refusal) return `The fixer's gate refuses it: ${input.refusal}.`;
   if (!run.open) return input.autoFix ? 'Waits for you: Fix starts it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
@@ -250,6 +257,8 @@ export function assessRow(
         else if (run.step === 'waiting-verdict') drift.push(`${status}, but the run still waits for a verdict`);
         // The measurement's own commit resolves the row a moment before its run ends.
         else if (status === 'resolved' && run.step === 'measuring') quietReason = QUIET_RESOLVED_AT_VERDICT;
+        // So does the watch's (stage 4).
+        else if (status === 'resolved' && run.step === 'watching') quietReason = QUIET_RESOLVED_BY_WATCH;
         else drift.push(`${status} with an open run`);
       }
       break;

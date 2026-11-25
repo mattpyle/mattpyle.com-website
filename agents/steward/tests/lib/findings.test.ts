@@ -8,6 +8,8 @@ import {
   parseFindingWorkflowId,
   parseFindingsIndex,
   pendingActivityLine,
+  nextMeasurementLine,
+  stepLine,
   runStateLines,
   setFrontmatterVerdict,
   setIndexVerdict,
@@ -117,4 +119,19 @@ test('a completed run prints its outcome, the verify workflow where there is one
   assert.equal(runStateLines({ status: 'COMPLETED', closeTime, result: { outcome: 'rejected' } }).lines[1], 'outcome: rejected');
   assert.equal(runStateLines({ status: 'COMPLETED', closeTime, result: {} }).lines[1], 'outcome: verdict');
   assert.equal(runStateLines({ status: 'COMPLETED', closeTime }).lines.length, 1, 'no result read, no outcome line');
+});
+
+test('status says a watching run watches, and when it measures next (stage 4)', () => {
+  assert.equal(stepLine({ step: 'waiting-fix', stopAfter: 'resolved' }), 'step: waiting-fix  (stop after resolved)');
+  assert.equal(stepLine({ step: 'done' }), 'step: done  (stop after verdict)');
+  assert.equal(
+    stepLine({ step: 'watching', stopAfter: 'verdict', watchingSince: '2026-11-25T08:00:00.000Z' }),
+    'step: watching  (measures production daily until the fix is live, since 2026-11-25T08:00:00.000Z)',
+  );
+  assert.equal(stepLine({}), null);
+  const next = { activityType: { name: 'watchFinding' }, nextAttemptScheduleTime: { seconds: Date.UTC(2026, 10, 26, 13, 31) / 1000 } };
+  assert.equal(nextMeasurementLine(next), 'next measurement: 2026-11-26T13:31:00.000Z');
+  assert.equal(nextMeasurementLine({ ...next, nextAttemptScheduleTime: { seconds: { toNumber: () => 0 } } }), 'next measurement: 1970-01-01T00:00:00.000Z');
+  assert.equal(nextMeasurementLine({ activityType: { name: 'watchFinding' } }), null, 'running now');
+  assert.equal(nextMeasurementLine({ ...next, activityType: { name: 'awaitFixPrMerge' } }), null);
 });

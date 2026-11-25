@@ -118,6 +118,12 @@ export interface WriteFindingRecheckInput {
   liveOn?: string;
   /** Set for a finding whose checks all passed: `status: 'resolved'`. */
   verification?: Verification;
+  /**
+   * The finding run that measured, when its own run writes (stage 4's
+   * `watchFinding`): the commit message then reads `watch <key>: ... (<run>)`,
+   * so the file's history names the run. Absent for the recheck.
+   */
+  by?: string;
 }
 
 export interface WriteFindingRecheckResult {
@@ -161,7 +167,7 @@ export async function writeFindingRecheck(input: WriteFindingRecheckInput): Prom
     }
     const text = setFrontmatterLiveOn(finding.text, input.liveOn);
     if (text !== finding.text) files.push({ path, text });
-    message = `recheck ${input.key}: live on ${input.liveOn}`;
+    message = input.by ? `watch ${input.key}: live on ${input.liveOn} (${input.by})` : `recheck ${input.key}: live on ${input.liveOn}`;
   } else {
     const verification = input.verification!;
     const retry = before.status === 'resolved' && finding.text.includes(verification.workflowId);
@@ -178,7 +184,7 @@ export async function writeFindingRecheck(input: WriteFindingRecheckInput): Prom
     if (!index) throw ApplicationFailure.nonRetryable(`${indexPath} is not in ${input.repo} at ${BRANCH}.`, 'FindingMissing');
     const indexText = setIndexStatus(index.text, input.key, 'resolved');
     if (indexText !== index.text) files.push({ path: indexPath, text: indexText });
-    message = `recheck ${input.key}: resolved`;
+    message = input.by ? `watch ${input.key}: resolved (${input.by})` : `recheck ${input.key}: resolved`;
   }
 
   if (files.length === 0) return { commitSha: null };

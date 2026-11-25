@@ -64,6 +64,8 @@ export const BROWSER_ACTIVITY_TYPES: ReadonlySet<string> = new Set([
   'auditRenderedPage',
   'auditLiveUrl',
   'runFindingChecks',
+  // Stage 4: a watching finding run's daily measurement, which runs the checks.
+  'watchFinding',
 ]);
 
 /**

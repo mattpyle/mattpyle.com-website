@@ -1315,6 +1315,37 @@ export function pendingActivityLine(info: PendingActivitySummary): string | null
 }
 
 /**
+ * The step line of `steward finding status`. A watching run (stage 4) ends at
+ * no verdict, so it says what it watches rather than "stop after verdict".
+ */
+export function stepLine(state: { step?: string; stopAfter?: string; watchingSince?: string | null }): string | null {
+  if (!state.step) return null;
+  if (state.step === 'watching') {
+    const since = state.watchingSince ? `, since ${state.watchingSince}` : '';
+    return `step: watching  (measures production daily until the fix is live${since})`;
+  }
+  return `step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`;
+}
+
+/** A pending activity's next attempt, as the server's describe gives it. */
+export interface PendingNextAttempt {
+  activityType?: { name?: string | null } | null;
+  nextAttemptScheduleTime?: { seconds?: number | { toNumber(): number } | null } | null;
+}
+
+/**
+ * When a watching run measures next (stage 4): the pending `watchFinding`'s
+ * next attempt, or null when it is running now or is another activity.
+ */
+export function nextMeasurementLine(info: PendingNextAttempt): string | null {
+  if (info.activityType?.name !== 'watchFinding') return null;
+  const raw = info.nextAttemptScheduleTime?.seconds;
+  if (raw === undefined || raw === null) return null;
+  const seconds = typeof raw === 'number' ? raw : raw.toNumber();
+  return `next measurement: ${new Date(seconds * 1000).toISOString()}`;
+}
+
+/**
  * What the server says about a finding run's execution, the slice
  * `steward finding status` prints. `status` is `describe().status.name`;
  * `result` is the workflow's return value when the run completed, and

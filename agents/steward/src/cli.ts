@@ -69,6 +69,7 @@ import { scorecardAuditWorkflow } from './workflows/scorecard-audit.js';
 import { FixRefused, followFix } from './lib/finding-fix.js';
 import { RetestRefused, requestRetest } from './lib/finding-retest.js';
 import { ResumeRefused, parkedElsewhereLine, parkedRun, requestResume, resumedLine } from './lib/finding-resume.js';
+import { MeasureNowRefused, measuredNowLine, requestMeasureNow } from './lib/finding-measure-now.js';
 import {
   FIX_NEXT_STEP,
   finishVerify,
@@ -117,6 +118,8 @@ import {
   isFindingSlug,
   parsePrUrl,
   pendingActivityLine,
+  nextMeasurementLine,
+  stepLine,
   runStateLines,
   verifySourceLabel,
   verifyStamp,
@@ -2051,11 +2054,14 @@ finding
       // A closed run's state is history, not a wait.
       if (run.closed) console.log('  last state:');
       const at = run.closed ? '    ' : '  ';
-      if (state.step) console.log(`${at}step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`);
+      const step = stepLine(state);
+      if (step) console.log(`${at}${step}`);
       console.log(`${at}gate: ${state.status}`);
       for (const activity of pending) {
         const line = pendingActivityLine(activity);
         if (line) console.log(`${at}retrying: ${line}`);
+        const next = nextMeasurementLine(activity);
+        if (next) console.log(`${at}${next}`);
       }
       if (state.step === 'fixing' && state.issueUrl) {
         console.log(`${at}issue: ${state.issueUrl}  (waiting for the PR)`);
@@ -2344,6 +2350,34 @@ finding
       }
       console.log('');
       console.log(`  ${accepted.workflowId}: ${resumedLine(key, accepted)}`);
+      console.log('');
+    } finally {
+      await c.connection.close();
+    }
+  });
+
+finding
+  .command('measure-now')
+  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .option('--site <site>', 'site slug', parseFindingSlug('site'), 'temporal-io')
+  .description(
+    'Measure a watching finding run on production now, instead of at its next daily window. Only a site with no fixer watches, so --site defaults to temporal-io. `steward finding status` shows the result',
+  )
+  .action(async (key: string, opts: { site: string }) => {
+    const c = await client();
+    try {
+      let accepted;
+      try {
+        accepted = await requestMeasureNow(c, opts.site, key, new Date().toISOString());
+      } catch (err) {
+        if (err instanceof MeasureNowRefused) {
+          await c.connection.close();
+          fail(err.message);
+        }
+        throw err;
+      }
+      console.log('');
+      console.log(`  ${accepted.workflowId}: ${measuredNowLine(key)}`);
       console.log('');
     } finally {
       await c.connection.close();

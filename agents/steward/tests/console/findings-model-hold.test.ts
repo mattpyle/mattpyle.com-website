@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { HOLD_MEASURING, QUIET_RESOLVED_AT_VERDICT, STATE_QUERIED_STATUSES, assessRow, createFindingsLoader, holdLineFor, parkHoldLine, type ConsoleClient, type FindingRunView, type FindingRow } from '../../src/console/findings-model.js';
+import { HOLD_MEASURING, HOLD_WATCHING, QUIET_NO_FIXER, QUIET_RESOLVED_AT_VERDICT, QUIET_RESOLVED_BY_WATCH, STATE_QUERIED_STATUSES, assessRow, createFindingsLoader, holdLineFor, parkHoldLine, type ConsoleClient, type FindingRunView, type FindingRow } from '../../src/console/findings-model.js';
 import { fixOffered } from '../../src/lib/finding-actions.js';
 import { findingWorkflowId } from '../../src/lib/findings.js';
 import type { FindingState } from '../../src/workflows/finding.js';
@@ -192,6 +192,16 @@ test('a run measuring its checks at the verdict shows a hold line, and its resol
   assert.deepEqual(assessRow('approved', 'approved', run), { drift: [], quietReason: null });
   // The measurement's commit resolves the row a moment before the run ends.
   assert.deepEqual(assessRow('resolved', 'resolved', run), { drift: [], quietReason: QUIET_RESOLVED_AT_VERDICT });
+});
+
+test('a watching run shows as watching, not as no fixer, and its resolve is not drift (stage 4)', () => {
+  const run: FindingRunView = { open: true, since: null, step: 'watching', queried: true, queryError: null, prUrl: null, issueUrl: null, previewResult: null, lastFixError: null, slotLine: null };
+  assert.equal(holdLineFor({ status: 'approved', run, refusal: 'Steward knows no site repository for temporal-io', autoFix: false }), HOLD_WATCHING);
+  const approved = assessRow('approved', 'approved', run, { stopAfter: 'verdict' });
+  assert.deepEqual(approved, { drift: [], quietReason: null });
+  assert.notEqual(approved.quietReason, QUIET_NO_FIXER);
+  // The watch's own commit resolves the row a moment before the run ends.
+  assert.deepEqual(assessRow('resolved', 'resolved', run, { stopAfter: 'verdict' }), { drift: [], quietReason: QUIET_RESOLVED_BY_WATCH });
 });
 
 test('a run parked after its fix PR holds its row with where it parked and what moves it, whatever the file says (STW-653)', () => {

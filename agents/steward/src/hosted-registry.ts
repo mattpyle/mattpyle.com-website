@@ -32,6 +32,7 @@ import {
 import { runFindingChecks } from './activities/verify-finding.js';
 import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from './activities/findings-recheck.js';
 import { writeFindingVerdictMeasure } from './activities/findings-verdict-measure.js';
+import { watchFinding } from './activities/findings-watch.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -46,9 +47,11 @@ import {
   HOSTED_ACTIVITY_CONCURRENCY,
   HOSTED_FAST_ACTIVITY_CONCURRENCY,
   HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
+  HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY,
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
   QUEUE_FINDINGS,
+  QUEUE_FINDINGS_WATCH,
 } from './config.js';
 
 /**
@@ -168,8 +171,16 @@ const findingsActivities = {
 };
 
 /**
- * The three queues, in the order the ready line lists them: audit, fast,
- * findings. A fresh object each call, so a caller cannot mutate the shared one.
+ * The watch queue's whole registry (stage 4): one activity, `watchFinding`,
+ * which a watching `findingWorkflow` schedules. GitHub API calls against the
+ * findings repository and the verifier's checks on production, as
+ * `runFindingChecks` makes them, so the "nothing local" rule holds.
+ */
+const watchActivities = { watchFinding };
+
+/**
+ * The four queues, in the order the ready line lists them: audit, fast,
+ * findings, watch. A fresh object each call, so a caller cannot mutate the shared one.
  *
  * The audit queue's cap of one is a correctness rule about Lighthouse
  * (`config.ts`'s `HOSTED_ACTIVITY_CONCURRENCY`); the fast queue's four is a
@@ -177,9 +188,11 @@ const findingsActivities = {
  * Chrome. The findings queue carries the workflow bundle because both its
  * workflows run on it, and a verdict write must not wait behind a 90-second page
  * render on the audit queue. The fast queue carries none, so it can never be
- * given a deep audit.
+ * given a deep audit. The watch queue carries none either: its one activity
+ * can launch Chromium, so its cap of one keeps a burst of watchers off the
+ * findings queue's two slots.
  */
-export function hostedRegistry(): readonly [HostedQueue, HostedQueue, HostedQueue] {
+export function hostedRegistry(): readonly [HostedQueue, HostedQueue, HostedQueue, HostedQueue] {
   return [
     {
       taskQueue: QUEUE_AUDIT,
@@ -198,6 +211,12 @@ export function hostedRegistry(): readonly [HostedQueue, HostedQueue, HostedQueu
       activities: findingsActivities,
       carriesWorkflows: true,
       maxConcurrentActivityTaskExecutions: HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
+    },
+    {
+      taskQueue: QUEUE_FINDINGS_WATCH,
+      activities: watchActivities,
+      carriesWorkflows: false,
+      maxConcurrentActivityTaskExecutions: HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY,
     },
   ];
 }
