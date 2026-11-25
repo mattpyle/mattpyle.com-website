@@ -398,27 +398,37 @@ function pagePath(raw: string): string | null {
   return trimmed === '' ? '/' : trimmed;
 }
 
+/** The pages the URLs of a finding's `verify` checks name, as distinct paths, in order. */
+function verifyPages(data: Record<string, unknown>): string[] {
+  const pages = new Set<string>();
+  if (Array.isArray(data.verify)) {
+    for (const check of data.verify) {
+      const url = check && typeof check === 'object' ? (check as { url?: unknown }).url : undefined;
+      for (const one of Array.isArray(url) ? url : [url]) {
+        if (typeof one !== 'string') continue;
+        const path = pagePath(one);
+        if (path) pages.add(path);
+      }
+    }
+  }
+  return [...pages];
+}
+
 /**
  * The pages a finding's fix is about, as distinct paths: the URLs of its
- * `verify` checks, or, when that block is empty, the URLs and the leading-slash
- * paths in the body's "What would serve them". A source path such as
- * `src/content/x.md` has a letter before its slash and is not a page.
+ * `verify` checks, or, when no check names a readable page, the URLs and the
+ * leading-slash paths in the body's "What would serve them". A source path such
+ * as `src/content/x.md` has a letter before its slash and is not a page.
  */
 export function findingPages(data: Record<string, unknown>, parsed: ParsedFinding): string[] {
+  const fromChecks = verifyPages(data);
+  if (fromChecks.length > 0) return fromChecks;
+
   const pages = new Set<string>();
   const add = (raw: string) => {
     const path = pagePath(raw);
     if (path) pages.add(path);
   };
-
-  if (Array.isArray(data.verify)) {
-    for (const check of data.verify) {
-      const url = check && typeof check === 'object' ? (check as { url?: unknown }).url : undefined;
-      for (const one of Array.isArray(url) ? url : [url]) if (typeof one === 'string') add(one);
-    }
-  }
-  if (pages.size > 0) return [...pages];
-
   const serve = parsed.sections['what would serve them'] ?? '';
   const bare = serve.replace(/https?:\/\/[^\s)\]>"'`,;]+/g, (url) => {
     add(url.replace(/[.:]+$/, ''));
@@ -428,71 +438,22 @@ export function findingPages(data: Record<string, unknown>, parsed: ParsedFindin
   return [...pages];
 }
 
-/** A value as JSON with object keys sorted, so two equal values read as one string whatever their key order. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record)
-      .filter((key) => record[key] !== undefined)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
-}
-
-/**
- * Whether a finding's `verify` block is one measure taken on several pages: it
- * has at least one check, and every check is the same check apart from its
- * `url`. That is the same `kind`, a deep-equal `expect`, and the same
- * `viewport` and `status` (both absent counts as the same). Every check's
- * `url` must be readable, one URL or a list. The checks' URLs, read as page
- * paths, then make up the finding's pages ({@link findingPages}), so they
- * cover them by construction.
- *
- * A `text` check with a URL list passes, and so do three `js` checks that
- * differ only in `url`: `validateVerifyBlock` refuses a list on `selector` and
- * `js`, so a fact measured by one of those on several pages is several checks.
- * Order, trailing slashes and repeats do not matter. One check is the same as
- * itself, so a single-page block passes.
- */
-export function verifyChecksAreOneChange(data: Record<string, unknown>): boolean {
-  if (!Array.isArray(data.verify) || data.verify.length === 0) return false;
-  let first: string | null = null;
-  for (const check of data.verify) {
-    if (!check || typeof check !== 'object') return false;
-    const { url, ...rest } = check as Record<string, unknown>;
-    for (const one of Array.isArray(url) ? url : [url]) {
-      if (typeof one !== 'string' || pagePath(one) === null) return false;
-    }
-    if (Array.isArray(url) && url.length === 0) return false;
-    const shape = canonical(rest);
-    if (first === null) first = shape;
-    else if (shape !== first) return false;
-  }
-  return true;
-}
-
 /**
  * Why a finding cannot go to the fixer, or null when it can: approved, with a
  * title and a measure to verify against, and either
  *
  * 1. a defect that names its cause in the source, or
- * 2. an opportunity whose fix is one change. That is one page, told by
- *    {@link findingPages}, or several pages when the `verify` block is one
- *    check repeated ({@link verifyChecksAreOneChange}): every check has the
- *    same `kind`, the same `expect` (deep equal) and the same `viewport` and
- *    `status`, and differs only in its `url`, so together their URLs cover the
- *    finding's pages. One fact measured the same way on each page is one
- *    change. A `text` check with a URL list satisfies this, and so do three
- *    `js` checks that differ only in `url` (a list is refused on `selector`
- *    and `js`). Checks that differ in kind or expect are several changes and
- *    stay refused, as do pages told only from the prose, which have no check.
- *    A cause is not asked of an opportunity: it has none.
+ * 2. an opportunity that names at least one page, told by {@link findingPages}.
+ *    A fact that lives in several places is one change, so several pages pass
+ *    whatever the shape of the `verify` checks that name them: the verdict is
+ *    the check on scope, and a check on each place is the guard on the fix.
+ *    Pages told only from "What would serve them", with no `verify` check that
+ *    names a page, are the exception. No preview test can fail on them, so
+ *    several of them stay refused. A cause is not asked of an opportunity: it
+ *    has none.
  *
- * Directions, and opportunities that name no page or several pages that are
- * not one repeated check, stay a person's.
+ * Directions, opportunities that name no page, and opportunities that name
+ * several pages only in prose, stay a person's.
  */
 export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding): string | null {
   if (data.kind !== 'opportunity') {
@@ -508,8 +469,8 @@ export function fixRefusal(data: Record<string, unknown>, parsed: ParsedFinding)
   if (pages.length === 0) {
     return 'it names no page: its verify block has no URL and "What would serve them" gives no page path';
   }
-  if (pages.length > 1 && !verifyChecksAreOneChange(data)) {
-    return `it names more than one page (${pages.join(', ')}), so its fix is not one change`;
+  if (pages.length > 1 && verifyPages(data).length === 0) {
+    return `it names more than one page (${pages.join(', ')}) in "What would serve them" and no verify check names a page, so no preview test can fail on its fix`;
   }
   return null;
 }
