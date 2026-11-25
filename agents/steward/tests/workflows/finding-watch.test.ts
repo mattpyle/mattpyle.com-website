@@ -248,3 +248,41 @@ test('a rejected verdict while it watches is written, answered, and ends the run
   assert.equal(out.result.verdict.status, 'rejected');
   assert.ok(called.includes('writeFindingVerdict'));
 });
+
+test('the 30-day bound ends a watch held by its daily delay, and the run issues it again instead of failing', async () => {
+  const { out } = await run({ watch: ['still'] }, async (m, start) => {
+    const handle = await start('bound');
+    await until(handle, (s) => s.step === 'watching', 'watching');
+    await waitFor(() => m.attempts() === 1, 'the first attempt');
+    // The one time-skipping await: past the 30-day schedule-to-close bound.
+    await env.sleep('32 days');
+    const state = await until(handle, (s) => (s.watchIssues ?? 0) >= 2, 'the second issue');
+    // The second watch's first attempt runs at once and fails, so its pending attempt is 2.
+    const deadline = Date.now() + 30_000;
+    let pending = (await handle.describe()).raw.pendingActivities ?? [];
+    while (!((pending[0]?.attempt ?? 0) >= 2)) {
+      if (Date.now() > deadline) assert.fail('the second watch never ran an attempt');
+      await new Promise((r) => setTimeout(r, 50));
+      pending = (await handle.describe()).raw.pendingActivities ?? [];
+    }
+    const status = (await handle.describe()).status.name;
+    const history = await handle.fetchHistory();
+    await handle.terminate('test over');
+    return { state, status, pending, history };
+  });
+  assert.equal(out.status, 'RUNNING', 'the run did not fail on the bound');
+  assert.equal(out.state.step, 'watching');
+  assert.equal(out.state.watchIssues, 2);
+  assert.equal(out.pending[0]?.activityType?.name, 'watchFinding');
+  const events = out.history.events ?? [];
+  assert.equal(events.filter((e) => e.activityTaskScheduledEventAttributes?.activityType?.name === 'watchFinding').length, 2);
+  // The shape the server gives the bound when a delay would cross it: the last
+  // attempt's own failure with retry state TIMEOUT, not a TimeoutFailure.
+  // `isTimeout` in finding.ts reads the retry state, so both shapes re-issue.
+  // Probe (2026-11-25): an `isTimeout` that read only a TimeoutFailure cause left the
+  // run failing its first watch, and this test failed at the second issue; reverted.
+  const close = events.find((e) => e.activityTaskFailedEventAttributes || e.activityTaskTimedOutEventAttributes);
+  assert.ok(close?.activityTaskFailedEventAttributes, 'the first watch closed as ActivityTaskFailed');
+  assert.equal(close.activityTaskFailedEventAttributes.retryState, 3, 'RETRY_STATE_TIMEOUT');
+  assert.equal(close.activityTaskFailedEventAttributes.failure?.applicationFailureInfo?.type, 'StillPresent');
+});
