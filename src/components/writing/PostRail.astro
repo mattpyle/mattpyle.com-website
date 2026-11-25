@@ -84,9 +84,11 @@ const contents = headings.filter(heading => heading.depth === 2);
       */}
       <summary>On this page ({contents.length})</summary>
       <nav class="rail-contents" aria-label="On this page">
-        {contents.map(heading => (
-          <a href={`#${heading.slug}`}>{heading.text}</a>
-        ))}
+        <ol>
+          {contents.map(heading => (
+            <li><a href={`#${heading.slug}`}>{heading.text}</a></li>
+          ))}
+        </ol>
       </nav>
     </details>
   )}
@@ -318,13 +320,19 @@ const contents = headings.filter(heading => heading.depth === 2);
     }
   }
 
-  .rail-contents {
+  /* The list is real markup so a screen reader announces its length; the reset
+     keeps it looking like the bare column of links it replaced. */
+  .rail-contents ol {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
 
   .rail-contents a {
+    display: block;
     font-size: 17px;
     line-height: 1.4;
     color: var(--ink-5);
@@ -412,7 +420,7 @@ const contents = headings.filter(heading => heading.depth === 2);
       gap: 0 24px;
     }
 
-    .rail-contents {
+    .rail-contents ol {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 4px 24px;
@@ -420,10 +428,16 @@ const contents = headings.filter(heading => heading.depth === 2);
 
     /* 44px tap targets on every small link, per the mobile spec. */
     .rail-author,
-    .rail-contents a,
     .rail-action {
       min-height: 44px;
       display: inline-flex;
+      align-items: center;
+    }
+
+    /* Block-level, so the whole row is the link inside its li. */
+    .rail-contents a {
+      min-height: 44px;
+      display: flex;
       align-items: center;
     }
   }
