@@ -332,6 +332,7 @@ const contents = headings.filter(heading => heading.depth === 2);
   }
 
   .rail-contents a {
+    display: block;
     font-size: 17px;
     line-height: 1.4;
     color: var(--ink-5);
@@ -427,10 +428,16 @@ const contents = headings.filter(heading => heading.depth === 2);
 
     /* 44px tap targets on every small link, per the mobile spec. */
     .rail-author,
-    .rail-contents a,
     .rail-action {
       min-height: 44px;
       display: inline-flex;
+      align-items: center;
+    }
+
+    /* Block-level, so the whole row is the link inside its li. */
+    .rail-contents a {
+      min-height: 44px;
+      display: flex;
       align-items: center;
     }
   }
