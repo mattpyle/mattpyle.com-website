@@ -10,7 +10,6 @@ import {
   parseFindingBody,
   setFrontmatterFix,
   setIndexStatus,
-  verifyChecksAreOneChange,
 } from '../../src/lib/findings.js';
 import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import { DEFECT_FINDING, DEFECT_KEY, OPPORTUNITY_FINDING } from '../helpers/finding-fixtures.js';
@@ -126,19 +125,26 @@ test('an opportunity with no verify block is judged on the page path in "What wo
   assert.deepEqual(findingPages(data(sentence), parseFindingBody(sentence)), ['/llms.txt']);
 });
 
-test('an opportunity that names several pages, or none, is refused with the reason', () => {
-  const several = ONE_PAGE.replace(
-    '      contains: "peec.ai"\n---',
-    '      contains: "peec.ai"\n  - url: "https://www.mattpyle.com/about/"\n    kind: text\n    expect:\n      contains: "x"\n---',
-  );
-  assert.match(fixRefusal(data(several), parseFindingBody(several)) ?? '', /names more than one page \(\/changelog\/agent-reading-budget, \/about\)/);
-
+test('an opportunity that names no page is refused; one that names several only in prose is refused with the reason', () => {
   const body = withoutVerify('Link it from `/about/` and from `/writing/`.');
-  assert.match(fixRefusal(data(body), parseFindingBody(body)) ?? '', /names more than one page/);
+  assert.match(
+    fixRefusal(data(body), parseFindingBody(body)) ?? '',
+    /names more than one page \(\/about, \/writing\) in "What would serve them" and no verify check names a page/,
+  );
 
   const none = withoutVerify('A styled feed, or one line that says what to do with the link.');
   assert.match(fixRefusal(data(none), parseFindingBody(none)) ?? '', /names no page/);
   assert.match(fixRefusal(data(OPPORTUNITY_FINDING), parseFindingBody(OPPORTUNITY_FINDING)) ?? '', /names no page/);
+});
+
+test('an opportunity whose checks name a page and agents.md passes the gate', () => {
+  const two = ONE_PAGE.replace(
+    '      contains: "peec.ai"\n---',
+    '      contains: "peec.ai"\n  - url: "https://www.mattpyle.com/agents.md"\n    kind: markdown\n    expect:\n      contains: "x"\n---',
+  );
+  const parsed = parseFindingBody(two);
+  assert.deepEqual(findingPages(data(two), parsed), ['/changelog/agent-reading-budget', '/agents.md']);
+  assert.equal(fixRefusal(data(two), parsed), null);
 });
 
 interface TestCheck {
@@ -171,64 +177,55 @@ const jsCheck = (path: string, expression = 'document.title.length > 0'): TestCh
 });
 const refused = (text: string) => fixRefusal(data(text), parseFindingBody(text)) ?? '';
 
-test('one list check over three pages is one change: the gate accepts it', () => {
+test('one list check over three pages passes the gate', () => {
   const list = withChecks([`${O}/a/`, `${O}/b`, `${O}/c`]);
   const parsed = parseFindingBody(list);
   assert.deepEqual(findingPages(data(list), parsed), ['/a', '/b', '/c'], 'findingPages still lists every page, in order');
-  assert.equal(verifyChecksAreOneChange(data(list)), true);
   assert.equal(fixRefusal(data(list), parsed), null);
 });
 
-test('several list checks over the same set are one change, whatever the order, slash or repeat', () => {
+test('several list checks over the same set pass, whatever the order, slash or repeat', () => {
   const same = withChecks([`${O}/a`, `${O}/b`], [`${O}/b/`, `${O}/a`, `${O}/a`]);
   assert.equal(fixRefusal(data(same), parseFindingBody(same)), null);
 });
 
-test('a list check plus a single-page check of the same kind and expect is still one repeated check', () => {
+test('a list check plus a single-page check of the same kind and expect passes', () => {
   const mixed = withChecks([`${O}/a`, `${O}/b`, `${O}/c`], `${O}/a`);
   assert.equal(fixRefusal(data(mixed), parseFindingBody(mixed)), null);
   const two = withChecks(`${O}/a`, `${O}/b`);
-  assert.equal(verifyChecksAreOneChange(data(two)), true);
   assert.equal(fixRefusal(data(two), parseFindingBody(two)), null);
 });
 
-test('three js checks identical apart from url pass: a list is refused on js, so the pages are three checks', () => {
+test('three js checks identical apart from url pass', () => {
   const js = withChecks(jsCheck('/a'), jsCheck('/b'), jsCheck('/c'));
   const parsed = parseFindingBody(js);
   assert.deepEqual(findingPages(data(js), parsed), ['/a', '/b', '/c']);
   assert.equal(fixRefusal(data(js), parsed), null);
 });
 
-test('two js checks with different expressions are refused', () => {
+test('two js checks with different expressions pass: the pages are named by checks', () => {
   const js = withChecks(jsCheck('/a', 'document.title.length > 0'), jsCheck('/b', 'document.body.scrollWidth <= innerWidth'));
-  assert.match(refused(js), /names more than one page \(\/a, \/b\), so its fix is not one change/);
+  assert.equal(fixRefusal(data(js), parseFindingBody(js)), null);
 });
 
-test('checks that differ in kind, expect, viewport or status are several changes and stay refused', () => {
+test('checks that differ in kind, expect, viewport or status pass', () => {
   const kind = withChecks(
     { url: `${O}/a`, kind: 'markdown', expect: ['      contains: "og:image"'] },
     { url: `${O}/b`, kind: 'text', expect: ['      contains: "og:image"'] },
   );
-  assert.match(refused(kind), /names more than one page/);
+  assert.equal(refused(kind), '');
   const expect = withChecks([`${O}/a`, `${O}/b`], { url: `${O}/c`, expect: ['      contains: "og:title"'] });
-  assert.match(refused(expect), /names more than one page \(\/a, \/b, \/c\)/);
+  assert.equal(refused(expect), '');
   const viewport = withChecks(
     { ...jsCheck('/a'), extra: ['    viewport: "390x844"'] },
     { ...jsCheck('/b'), extra: ['    viewport: "1280x800"'] },
   );
-  assert.match(refused(viewport), /names more than one page/);
-  const noViewport = withChecks({ ...jsCheck('/a'), extra: ['    viewport: "390x844"'] }, jsCheck('/b'));
-  assert.match(refused(noViewport), /names more than one page/);
+  assert.equal(refused(viewport), '');
   const status = withChecks(
     { url: `${O}/a`, extra: ['    status: 404'] },
     { url: `${O}/b`, extra: ['    status: 200'] },
   );
-  assert.match(refused(status), /names more than one page/);
-  const sameViewport = withChecks(
-    { ...jsCheck('/a'), extra: ['    viewport: "390x844"'] },
-    { ...jsCheck('/b'), extra: ['    viewport: "390x844"'] },
-  );
-  assert.equal(fixRefusal(data(sameViewport), parseFindingBody(sameViewport)), null);
+  assert.equal(refused(status), '');
 });
 
 test('a deep-equal expect passes whatever its key order', () => {
@@ -239,17 +236,23 @@ test('a deep-equal expect passes whatever its key order', () => {
   assert.equal(fixRefusal(data(a), parseFindingBody(a)), null);
 });
 
-test('pages told from the prose, with no verify check, are never one repeated check', () => {
+test('pages told from the prose, with no verify check, stay refused', () => {
   const prose = withoutVerify('Link it from `/about/` and from `/writing/`.');
-  assert.equal(verifyChecksAreOneChange(data(prose)), false);
-  assert.equal(verifyChecksAreOneChange({ verify: [] }), false);
-  assert.equal(verifyChecksAreOneChange({ verify: [{ url: 42, kind: 'text', expect: {} }] }), false);
-  assert.equal(verifyChecksAreOneChange({ verify: [{ url: [], kind: 'text', expect: {} }] }), false);
-  assert.match(refused(prose), /names more than one page/);
+  const parsed = parseFindingBody(prose);
+  assert.deepEqual(findingPages(data(prose), parsed), ['/about', '/writing']);
+  assert.match(refused(prose), /^it names more than one page \(\/about, \/writing\) in "What would serve them" and no verify check names a page/);
+});
+
+test('a verify block whose checks name no readable page leaves the pages to the prose, and several stay refused', () => {
+  const prose = withoutVerify('Link it from `/about/` and from `/writing/`.');
+  for (const verify of [[{ url: 42, kind: 'text', expect: {} }], [{ url: [], kind: 'text', expect: {} }], []]) {
+    const unreadable = { ...data(prose), verify };
+    assert.deepEqual(findingPages(unreadable, parseFindingBody(prose)), ['/about', '/writing']);
+    assert.match(fixRefusal(unreadable, parseFindingBody(prose)) ?? '', /^it names more than one page \(\/about, \/writing\) in "What would serve them" and no verify check names a page/);
+  }
 });
 
 test('a single-page opportunity passes as before', () => {
-  assert.equal(verifyChecksAreOneChange(data(ONE_PAGE)), true);
   assert.equal(fixRefusal(data(ONE_PAGE), parseFindingBody(ONE_PAGE)), null);
 });
 

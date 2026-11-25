@@ -207,7 +207,7 @@ test('a run started with waitsForPerson for an opportunity attempts its fix at t
 });
 
 test('a finding the gate refuses parks with no attempt, no slot request and the reason', async () => {
-  const scene: Scene = { now: settings({ autoFix: true, kind: 'opportunity', refusal: 'it names more than one page (/a, /b), so its fix is not one change' }) };
+  const scene: Scene = { now: settings({ autoFix: true, kind: 'opportunity', refusal: 'it names more than one page (/a, /b) in "What would serve them" and no verify check names a page, so no preview test can fail on its fix' }) };
   const { called, out } = await run(scene, async (_m, start) => {
     const handle = await start('refused');
     await handle.signal(verdictSignal, APPROVE);
@@ -216,7 +216,7 @@ test('a finding the gate refuses parks with no attempt, no slot request and the 
     return state;
   });
   assert.equal(out.fixAttempts, 0);
-  assert.equal(out.lastFixError, `${DEFECT_KEY} does not go to the fixer: it names more than one page (/a, /b), so its fix is not one change.`);
+  assert.equal(out.lastFixError, `${DEFECT_KEY} does not go to the fixer: it names more than one page (/a, /b) in "What would serve them" and no verify check names a page, so no preview test can fail on its fix.`);
   assert.equal(out.waitsForPerson, false, 'an opportunity is not a finding only a person can take');
   assert.ok(!called.includes('requestFixSlot') && !called.includes('openFixIssue'));
 });

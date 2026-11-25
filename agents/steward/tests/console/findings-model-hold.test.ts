@@ -109,7 +109,7 @@ async function load(autoFix: boolean): Promise<Record<string, FindingRow>> {
 
 test('an approved row at waiting-fix says what holds it: the gate, else the last failure, else the wait', async () => {
   const rows = await load(true);
-  assert.equal(rows.refused.holdLine, "The fixer's gate refuses it: it names more than one page (/about, /contact), so its fix is not one change.");
+  assert.equal(rows.refused.holdLine, "The fixer's gate refuses it: it names more than one page (/about, /contact) in \"What would serve them\" and no verify check names a page, so no preview test can fail on its fix.");
   assert.equal(rows.failed.holdLine, 'The last fix attempt failed: GitHub rejected the credential (403).');
   assert.equal(rows.waiting.holdLine, 'Waits for the fixer; its run reads its settings again within a day.');
   assert.equal(rows.issued.holdLine, 'Its fix issue ended without a merged PR; Fix retries it.');
@@ -126,7 +126,7 @@ test('an approved row with no open run says Fix starts it, or that the gate refu
   assert.equal(rows.idle.holdLine, 'Waits for you: Fix starts it.');
   assert.equal(rows.idle.quietReason, null, 'an opportunity with no run is no longer quiet');
   assert.deepEqual(rows.idle.drift, ['approved with no open run']);
-  assert.equal(rows['idle-refused'].holdLine, "The fixer's gate refuses it: it names more than one page (/about, /contact), so its fix is not one change.");
+  assert.equal(rows['idle-refused'].holdLine, "The fixer's gate refuses it: it names more than one page (/about, /contact) in \"What would serve them\" and no verify check names a page, so no preview test can fail on its fix.");
 });
 
 test('an approved row with no open run on a site without auto_fix waits for the person', async () => {
