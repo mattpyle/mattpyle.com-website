@@ -83,3 +83,5 @@ export { runFindingChecks } from './verify-finding.js';
 export { readSiteHosts, readRecheckBlock, writeFindingRecheck } from './findings-recheck.js';
 // The measurement at an approved verdict (STW-589), on `steward-findings`: one commit.
 export { writeFindingVerdictMeasure } from './findings-verdict-measure.js';
+// Stage 4: a finding run on a site with no fixer watches production, on its own queue.
+export { watchFinding } from './findings-watch.js';

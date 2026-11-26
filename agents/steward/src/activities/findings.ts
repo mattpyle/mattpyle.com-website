@@ -607,6 +607,27 @@ export function siteStopAfter(configText: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+/**
+ * Whether a site's `config.yaml` says `after_verdict: watch` (stage 4), at the
+ * top level or under `site:`, as `stop_after` is read. Only the literal
+ * `watch` counts, so a missing file or key never turns watching on.
+ */
+export function siteWatches(configText: string): boolean {
+  const data = parseFrontmatter(`---
+${configText}
+---
+`).data as Record<string, any>;
+  return (data?.after_verdict ?? data?.site?.after_verdict) === 'watch';
+}
+
+/**
+ * The whole watch rule, for `readFindingSettings` and for each `watchFinding`
+ * attempt: the key is set and the site has no fix repository on this worker.
+ */
+export function watchesAfterVerdict(site: string, configText: string | null): boolean {
+  return configText !== null && siteWatches(configText) && !siteRepository(site);
+}
+
 export interface ReadFindingSettingsInput {
   /** `owner/name` of the findings repository. */
   repo: string;
@@ -628,6 +649,16 @@ export interface FindingSettings {
   origin: string | null;
   /** The site's `auto_fix` flag; false for a site with no `config.yaml`. */
   autoFix: boolean;
+  /**
+   * True when an approved run watches production after its verdict instead of
+   * ending there (stage 4): the site's `config.yaml` says `after_verdict:
+   * watch`, and the site has no fix repository on this worker. A site with a
+   * fixer never watches, whatever its config says. `after_verdict: watch`
+   * beside `stop_after: verdict` means watch. Removing the key is the
+   * rollback: each watching run reads it again at its next attempt. Absent from
+   * a result recorded before stage 4, which the workflow reads as false.
+   */
+  watch: boolean;
   /** The finding file's `status`; null when the file is missing or does not parse. */
   status: string | null;
   /** The finding file's `kind`; null when the file is missing, does not parse or names none. */
@@ -660,6 +691,7 @@ export async function readFindingSettings(input: ReadFindingSettingsInput): Prom
     stopAfter: stops || !origin ? 'verdict' : 'resolved',
     origin,
     autoFix: config ? siteAutoFix(config.text) : false,
+    watch: watchesAfterVerdict(input.site, config?.text ?? null),
     status: null,
     kind: null,
     refusal: null,

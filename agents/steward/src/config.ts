@@ -282,6 +282,16 @@ export const QUEUE_HEAVY = 'steward-heavy';
 export const QUEUE_FINDINGS = 'steward-findings';
 
 /**
+ * `watchFinding`'s own queue (stage 4): a finding run on a site with no fixer
+ * measures production here, about once a day per approved finding. A queue of
+ * its own, capped at {@link HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY}, so a
+ * burst of watchers can never hold the findings queue's slots, which a verdict
+ * write and a fix's waits need. No workflow bundle: `findingWorkflow` runs on
+ * `steward-findings` and schedules the activity here.
+ */
+export const QUEUE_FINDINGS_WATCH = 'steward-findings-watch';
+
+/**
  * The agent-readiness audit's own queue (always-on-audit-worker card).
  *
  * The split is by **locality**, which is what task queues are for. `reviewPost`
@@ -387,6 +397,14 @@ export const HOSTED_FAST_ACTIVITY_CONCURRENCY = 4;
  * a Lighthouse run's memory.
  */
 export const HOSTED_FINDINGS_ACTIVITY_CONCURRENCY = 2;
+
+/**
+ * How many `watchFinding` attempts the hosted worker runs at once. One: each
+ * can launch Chromium, and the attempts are bunched at one daily window, so one
+ * slot keeps a burst from holding the container's memory, and the queue's
+ * backlog is the jitter.
+ */
+export const HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY = 1;
 
 /**
  * The exact line the worker logs once both queues are polling. `steward up`

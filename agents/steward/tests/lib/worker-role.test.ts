@@ -51,7 +51,7 @@ test('the public registry keeps the default role\'s caps, and the default regist
   const pub = caps(publicRegistry());
   assert.equal(pub[QUEUE_AUDIT], hosted[QUEUE_AUDIT]);
   assert.equal(pub[QUEUE_AUDIT_FAST], hosted[QUEUE_AUDIT_FAST]);
-  assert.equal(hostedRegistry().length, 3);
+  assert.equal(hostedRegistry().length, 4, 'audit, fast, findings and, since stage 4, the watch queue');
 });
 
 test('every public-role activity is also in the default role\'s audit map', () => {

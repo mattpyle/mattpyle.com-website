@@ -92,7 +92,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin`, `finding-parked-with-issue-pre.bin`, `finding-parked-issue-reread.bin`, `finding-reopened-pre.bin`, `finding-verify-failed-pre.bin`, `finding-merge-timeout-pre.bin`, `finding-deploy-timeout-pre.bin`, `finding-park-resume-resolved.bin`, `finding-park-request-fix.bin`, `finding-merge-rewait.bin` | A run started with a verdict in its input. On the settings-at-use path: a site that stops at the verdict, the `closed` ending of a run with no issue, an attempt that fails before any issue and its one-day rest, a held run. The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. On the STW-653 paths: the deploy re-wait, a park at `merge`, `returned` or `deploy`, the returned write's slow phase, and a `closed` ending after the PR. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin`, `finding-parked-with-issue-pre.bin`, `finding-parked-issue-reread.bin`, `finding-reopened-pre.bin`, `finding-verify-failed-pre.bin`, `finding-merge-timeout-pre.bin`, `finding-deploy-timeout-pre.bin`, `finding-park-resume-resolved.bin`, `finding-park-request-fix.bin`, `finding-merge-rewait.bin`, `finding-watch-stop-pre.bin`, `finding-watching.bin`, `finding-watch-resolved.bin` | On the settings-at-use path: the `closed` ending of a run with no issue, an attempt that fails before any issue and its one-day rest, a held run. The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. On the STW-653 paths: the deploy re-wait, a park at `merge`, `returned` or `deploy`, the returned write's slow phase, and a `closed` ending after the PR. Stage 4: a watch re-issued after `measure-now` or its 30-day bound, a rejection at `watching`, and the `closed` and `stopped` endings of a watch. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin`, `verify-finding-slow-phase.bin` | The checks path ending reopened. The slow phase of the blockless read and of the write. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `fixDispatchWorkflow` | `fix-dispatch-grant-after-release.bin` | The hourly sweep (`runningWorkflowIds`). A grant whose signal fails. A re-sent request for a held ticket. The idle close. The continue-as-new rollover is a test in `fix-dispatch.test.ts`, not a replay. |
@@ -1446,5 +1446,97 @@ test('a lifecycle run that FAILED on its returned write before STW-653 still rep
     { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/content-perfect-score-labelled-fail--scorecard',
+  );
+});
+
+/**
+ * A run on the settings-at-use path that ends at its verdict, started with the
+ * verdict in its input: `finding-watch-stop-pre.bin`. Site `temporal-io`, an
+ * identity-only input with an approved `file` verdict, so the run skips the
+ * gate's wait, writes nothing, takes the `settings-at-use` marker, reads
+ * `readFindingSettings` (a site that stops at the verdict, recorded without a
+ * `watch` field) and completes with the verdict. 13 events.
+ *
+ * Recorded from the code before stage 4 (origin/master at 93f64b2, before the
+ * worktree's first edit) against the time-skipping server with mocked
+ * activities, by a one-off script: `client.workflow.start`, then
+ * `fetchHistory()`, written with `History.encode(...).finish()`. It covers two
+ * branches the matrix listed as uncovered: a run started with a verdict in its
+ * input, and a site that stops at the verdict on the settings-at-use path. It
+ * is the path every closed temporal.io run took, and the stage 4 change reads
+ * `watch` from this same recorded result, so it must replay to the same
+ * `return base`.
+ *
+ * Probe (2026-11-25), on the pre-change code: a `wf.sleep('1 second')`
+ * injected before the `readFindingSettings` of the verdict made this replay
+ * fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Timer machine does not handle this
+ *    event: HistoryEvent(id: 7, ActivityTaskScheduled)
+ *    ```
+ *
+ * Reverted and re-run green.
+ */
+test('a run started with its verdict on a site that stops at the verdict replays to its end', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(
+    await fs.readFile(fileURLToPath(new URL('../fixtures/histories/finding-watch-stop-pre.bin', import.meta.url))),
+  );
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/temporal-io/watch-fixture--sitewide',
+  );
+});
+
+/**
+ * Stage 4: a run that watches production, `finding-watching.bin`. Site
+ * `temporal-io`, started with an approved `file` verdict in its input (the
+ * path Argus starts its approved lines on), the `settings-at-use` marker,
+ * `readFindingSettings` answering `watch: true`, and `watchFinding`
+ * scheduled on `steward-findings-watch`. Its first attempt failed
+ * `StillPresent` with a delay of a day, so the history ends at the pending
+ * activity's `ActivityTaskScheduled`: a retry is not a history event. 13
+ * events. The run was terminated after the history was read.
+ *
+ * `finding-watch-resolved.bin` is the same start with `watchFinding`
+ * returning `resolved` on its first attempt, and the run completing
+ * `resolved`. 19 events.
+ *
+ * Both were recorded from the changed code (this branch, before its first
+ * commit of workflow code) against the time-skipping server with mocked
+ * activities, by a one-off script: `client.workflow.start`, then
+ * `fetchHistory()`, written with `History.encode(...).finish()`. No history
+ * from before stage 4 can hold these commands, so they guard the next change
+ * to the path.
+ *
+ * Probes (2026-11-25), each reverted and re-run green:
+ *
+ * 1. A `wf.sleep('1 second')` injected before the `watchFinding` call made
+ *    both replays fail with `[TMPRL1100] Nondeterminism error: Timer machine
+ *    does not handle this event: HistoryEvent(id: 13, ActivityTaskScheduled)`.
+ * 2. Testing `settings.watch === false` in place of `=== true` made both fail
+ *    with `[TMPRL1100] Nondeterminism error: Complete workflow machine does not
+ *    handle this event: HistoryEvent(id: 13, ActivityTaskScheduled)`.
+ */
+test('a run watching production replays to its pending watch', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(
+    await fs.readFile(fileURLToPath(new URL('../fixtures/histories/finding-watching.bin', import.meta.url))),
+  );
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/temporal-io/watch-fixture-watching--sitewide',
+  );
+});
+
+test('a run its own watch resolved replays to resolved', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(
+    await fs.readFile(fileURLToPath(new URL('../fixtures/histories/finding-watch-resolved.bin', import.meta.url))),
+  );
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/temporal-io/watch-fixture-resolved--sitewide',
   );
 });

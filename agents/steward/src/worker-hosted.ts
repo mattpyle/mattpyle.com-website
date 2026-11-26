@@ -24,13 +24,15 @@ import {
 } from './lib/recycle-policy.js';
 
 /**
- * The **hosted** worker: one process, three queues, no checkout.
+ * The **hosted** worker: one process, four queues, no checkout.
  *
  * `STEWARD_WORKER_ROLE=public` starts the same image as the uncredentialed public-audit
  * worker instead: two queues, one workflow, no GitHub credential (`worker-role.ts`, STW-610).
  *
  * The third queue, `steward-findings` (2026-09-12), follows the second's shape
  * and is described where it is created in `main()`.
+ * The fourth, `steward-findings-watch` (stage 4, 2026-11-25), runs `watchFinding`
+ * alone with a cap of one and no workflow bundle.
  *
  * This is the entry the Railway container runs (always-on-audit-worker card,
  * leg 2b). `worker.ts` is unchanged in shape and is still what `steward up`
@@ -252,7 +254,7 @@ async function main() {
   const tracker = new ActivityTracker();
 
   const entries: HostedQueue[] = isPublic ? [...publicRegistry()] : [...hostedRegistry()];
-  const [audit, fast, findings] = entries;
+  const [audit, fast, findings, watch] = entries;
   const queues = () => entries.map((entry) => entry.taskQueue);
 
   /**
@@ -283,7 +285,7 @@ async function main() {
    * policy needs to know when a browser activity ran and when the last activity
    * finished, and the activities themselves are shared with the local worker,
    * which must never recycle. Observing from out here keeps them ignorant of
-   * hosting. All three share one tracker because one process exits once, and the
+   * hosting. All four share one tracker because one process exits once, and the
    * in-flight count has to see every queue or it would exit mid-activity.
    */
   const createWorker = (entry: HostedQueue) =>
@@ -314,6 +316,9 @@ async function main() {
   // their activities, with its own `Worker` so a verdict write never waits
   // behind a page render. The public role has no such queue.
   const findingsWorker = findings ? await createWorker(findings) : undefined;
+  // The watch queue (stage 4): `watchFinding` alone, capped at one, with no
+  // workflow bundle. The public role has none.
+  const watchWorker = watch ? await createWorker(watch) : undefined;
 
   const common = {
     // Both roles say which they are, so a log reader never infers it from the queue list.
@@ -341,6 +346,7 @@ async function main() {
           ...common,
           findingsActivities: Object.keys(findings.activities),
           findingsActivityConcurrency: findings.maxConcurrentActivityTaskExecutions,
+          ...(watch ? { watchActivityConcurrency: watch.maxConcurrentActivityTaskExecutions } : {}),
           // In the ready line because the operator reads this line after every
           // deploy, and "alerting is off" is precisely the fact a deploy can change
           // by accident (a variable dropped from the Variables tab) and that nothing
@@ -352,11 +358,11 @@ async function main() {
     WORKER_READY_LOG,
   );
 
-  // All three, and the process lives exactly as long as the set. `Promise.all`
+  // All of them, and the process lives exactly as long as the set. `Promise.all`
   // rather than a race: a worker that stops on its own (a SIGTERM from a deploy,
   // a fatal error) has to take the other one down with it, or the container
   // would sit half-serving a queue with nobody watching.
-  const workers = findingsWorker ? [worker, fastWorker, findingsWorker] : [worker, fastWorker];
+  const workers = [worker, fastWorker, findingsWorker, watchWorker].filter((each): each is Worker => each !== undefined);
   const running = Promise.all(workers.map((each) => each.run()));
   const stopAll = () => {
     for (const each of workers) if (each.getState() === 'RUNNING') each.shutdown();

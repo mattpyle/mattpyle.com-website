@@ -1,6 +1,7 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
 import type { AwaitFixPrMergeOptions, FixIssue, FixPrOutcome, ProductionDeploy } from '../activities/findings.js';
+import type { WatchFindingResult } from '../activities/findings-watch.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
 // same objects the activities and the CLI hold.
 import {
@@ -427,12 +428,66 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * `fixer-auto-fix` marker and `readSiteAutoFix` next, so it replays straight
  * to them. The fixture is `finding-approved-before-verdict-measure.bin` in
  * `tests/workflows/replay.test.ts`; its docblock holds the probe.
+ *
+ * **Watching after the verdict** (stage 4, 2026-11-25). A site with no fixer
+ * whose `config.yaml` says `after_verdict: watch` keeps an approved run open
+ * until production shows the fix. `after_verdict: watch` beside
+ * `stop_after: verdict` means watch. `readFindingSettings` is the one place
+ * that decides it: its `watch` field is true only when the key is set and the
+ * site has no fix repository, so a site with a fixer never watches, whatever
+ * its config says. The run tests that one field on the path that ends at the
+ * verdict today, and enters the step `watching` instead of ending.
+ *
+ * At `watching` it issues one activity, `watchFinding`, on its own queue
+ * {@link QUEUE_FINDINGS_WATCH}, with the finding's identity alone, and waits for
+ * it in a cancellation scope beside its messages. It asks for no gate, slot,
+ * issue or verify child, and writes nothing itself. The activity reads the
+ * config, the file and the checks again on every attempt, writes `live_on` or
+ * `resolved` itself, and fails each day the finding is still present, retried
+ * at the next daily window by `nextRetryDelay` (Temporal's Infrequent
+ * Polling). Its result ends the run: `resolved`, `closed` for a file decided
+ * elsewhere (any status but `approved`, a `resolved_run`, a missing file),
+ * or the verdict-stop result for a site that no longer watches. The activity's
+ * schedule-to-close bound of 30 days ends a pending attempt, and the run issues
+ * it again, so a deploy's new options reach a long wait (as `mergingOn` does).
+ *
+ * Two messages move a watching run:
+ *
+ * 1. A `rejected` verdict by `record-verdict`, as at a park: the scope is
+ *    cancelled, the verdict is written, and the run ends `rejected` once the
+ *    Update is answered. When the activity's result and the rejection arrive
+ *    in one workflow task, the result wins, as in the retest's race: the run
+ *    ends with the result and the Update is answered with a failure. A run
+ *    that no longer watches writes the rejection all the same.
+ * 2. `measure-now` cancels the pending attempt and issues the activity again,
+ *    so a measurement need not wait for the window. Its handler sets a flag and
+ *    answers at once. Its validator refuses away from `watching` and while a
+ *    rejection or another `measure-now` is asked for.
+ *
+ * The cancellation type is the default, `TRY_CANCEL`. It is safe because every
+ * write the activity makes is a compare-and-swap on the branch head, and the
+ * next attempt reads the file again. A running attempt hears the cancel at its
+ * next heartbeat.
+ *
+ * **No `patched` marker.** The branch reads `settings.watch` from the
+ * recorded result of `readFindingSettings`, which every run on the
+ * settings-at-use path already holds (determinism rules 1 and 5). A result
+ * recorded before stage 4 has no `watch` field, so the test (`=== true`)
+ * fails, and the run takes the `return base` it took. No command is added,
+ * removed or moved on any recorded path, and the new Update handler issues
+ * none. The fixtures are `finding-watch-stop-pre.bin` (before the change),
+ * `finding-watching.bin` and `finding-watch-resolved.bin` in
+ * `tests/workflows/replay.test.ts`. Rollback: remove the key from the site's
+ * config, and each watching run ends at its next attempt; a run that is
+ * watching cannot replay on code from before this change.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
 // scorecard-audit.ts gives: config.ts touches `node:path` and `process.env`.
 const QUEUE_FINDINGS = 'steward-findings';
 const QUEUE_HEAVY = 'steward-heavy';
+/** `watchFinding`'s own queue (stage 4), capped at one, so a verdict write never waits behind a page render. */
+const QUEUE_FINDINGS_WATCH = 'steward-findings-watch';
 
 /** The `patched` marker of the issue path in place of the fix child (decision 26). */
 export const ACTION_ADAPTER_PATCH = 'fixer-action-adapter';
@@ -608,6 +663,7 @@ export type FindingStep =
   | 'waiting-deploy'
   | 'verifying'
   | 'parked'
+  | 'watching'
   | 'done';
 
 export interface FindingState {
@@ -667,6 +723,10 @@ export interface FindingState {
   waitNote?: string | null;
   /** The verify child of the current or last verify (STW-653), so `steward finding status` can describe it. */
   verifyWorkflowId?: string | null;
+  /** At step `watching` (stage 4): when the run began to watch production. */
+  watchingSince?: string | null;
+  /** How many times the run has issued `watchFinding`: once, then once per `measure-now` and per 30-day bound. */
+  watchIssues?: number;
 }
 
 /**
@@ -740,6 +800,23 @@ export interface FixAccepted {
   attempt: number;
 }
 
+/** The `measure-now` Update's payload (stage 4): who asked, and when. */
+export interface MeasureNowRequest {
+  source: 'cli' | 'console';
+  /** ISO 8601, the sender's clock. */
+  at: string;
+}
+
+/**
+ * What an accepted `measure-now` returns. The workflow does not know when the
+ * last attempt ran (the server does), so it answers with the run and the fact
+ * that the activity is issued again.
+ */
+export interface MeasureNowAccepted {
+  workflowId: string;
+  issued: 'again';
+}
+
 /** The failure type of a `record-verdict` Update whose write failed or was cancelled. */
 export const VERDICT_WRITE_FAILED = 'VerdictWriteFailed';
 const VERDICT_CANCELLED = 'The run was cancelled before the verdict was written.';
@@ -758,6 +835,8 @@ export const fixSignal = wf.defineSignal<[FixRequest]>('fix');
 export const resumeUpdate = wf.defineUpdate<ResumeAccepted, [ResumeRequest]>('resume');
 /** A new fix attempt in the same run, answered at once with a reason when refused (STW-653). */
 export const requestFixUpdate = wf.defineUpdate<FixAccepted, [FixUpdateRequest]>('request-fix');
+/** A watching run measures at once (stage 4). */
+export const measureNowUpdate = wf.defineUpdate<MeasureNowAccepted, [MeasureNowRequest]>('measure-now');
 export const findingStateQuery = wf.defineQuery<FindingState>('state');
 
 /**
@@ -973,6 +1052,26 @@ const settling = wf.proxyActivities<Pick<typeof activities, 'readFindingSettings
   },
 });
 
+// The watch (stage 4): Temporal's Infrequent Polling. One attempt reads, measures
+// and writes in under a quarter of an hour, under a heartbeat. A finding still
+// present fails with `nextRetryDelay` to the next daily window; a failure that
+// passes by itself retries every 15 minutes, the top of the slow phase on
+// `/design-patterns/fast-slow-retries`. No attempt limit. The 30-day bound
+// refreshes these options on a long wait: the run issues the activity again.
+// `maximumInterval` is set so the server's default cap (100 times the initial
+// interval) cannot cut the daily delay.
+const watching = wf.proxyActivities<Pick<typeof activities, 'watchFinding'>>({
+  taskQueue: QUEUE_FINDINGS_WATCH,
+  startToCloseTimeout: '15 minutes',
+  heartbeatTimeout: '30 seconds',
+  scheduleToCloseTimeout: '30 days',
+  retry: {
+    initialInterval: '15 minutes',
+    backoffCoefficient: 1,
+    maximumInterval: '2 days',
+  },
+});
+
 /** An activity that refused because a person or another run moved the finding. */
 function isFindingMoved(err: unknown): boolean {
   return err instanceof wf.ActivityFailure && err.cause instanceof wf.ApplicationFailure && err.cause.type === 'FindingMoved';
@@ -1141,6 +1240,23 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
   );
 
+  // A watching run measures at once (stage 4). The handler only sets the flag
+  // the watch's wait reads, so it issues no command and answers at once.
+  const measure = { requested: false };
+  wf.setHandler(
+    measureNowUpdate,
+    (): MeasureNowAccepted => {
+      measure.requested = true;
+      return { workflowId: wf.workflowInfo().workflowId, issued: 'again' };
+    },
+    {
+      validator: (request: MeasureNowRequest): void => {
+        const refusal = measureNowRefusal(state, measure, rejection, request);
+        if (refusal) throw new Error(refusal);
+      },
+    },
+  );
+
   // The verdict as an Update (STW-636). One rule for a verdict by either
   // path: the first well-formed one to reach the run stands. A later one of
   // the same status is answered with the first; a later one of the other
@@ -1241,6 +1357,9 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     });
     state.stopAfter = settings.stopAfter;
     if (settings.stopAfter !== 'resolved' || !settings.origin) {
+      // Stage 4: a site with no fixer that watches. Absent from a result
+      // recorded before it, which then ends here as it did.
+      if (settings.watch === true) return await watchProduction(input, state, base, rejection, measure);
       state.step = 'done';
       return base;
     }
@@ -1286,9 +1405,131 @@ interface ParkAsks {
   rejection: ParkRejection;
 }
 
-/** True for a `rejected` verdict that a run parked after its fix PR takes in place of its approval (STW-653). */
+/**
+ * True for a `rejected` verdict that a run takes in place of its approval: one
+ * parked after its fix PR (STW-653), or one watching production (stage 4).
+ */
 function rejectsAtPark(state: FindingState, verdict: FindingVerdict): boolean {
-  return state.step === 'parked' && verdict.status === 'rejected' && state.verdict?.status === 'approved';
+  return (state.step === 'parked' || state.step === 'watching') && verdict.status === 'rejected' && state.verdict?.status === 'approved';
+}
+
+/**
+ * Why a `measure-now` Update is refused, in a sentence the CLI prints, or null
+ * to accept it (stage 4). Read-only.
+ */
+function measureNowRefusal(
+  state: FindingState,
+  measure: { requested: boolean },
+  rejection: ParkRejection,
+  request: MeasureNowRequest,
+): string | null {
+  if (!request || (request.source !== 'cli' && request.source !== 'console') || typeof request.at !== 'string') {
+    return 'The measure-now request is malformed.';
+  }
+  if (state.step !== 'watching') return `The run is not watching production: it is at ${state.step ?? 'an unknown step'}.`;
+  if (rejection.verdict) return 'A rejection is being written: the run ends with it.';
+  if (measure.requested) return 'A measurement is already asked for.';
+  return null;
+}
+
+/**
+ * Step `watching` (stage 4): `watchFinding` until production shows the fix,
+ * the file is decided elsewhere, or the site stops watching. See "Watching
+ * after the verdict" in the module docblock.
+ */
+async function watchProduction(
+  input: FindingWorkflowInput,
+  state: FindingState,
+  base: Pick<FindingWorkflowResult, 'site' | 'key' | 'verdict' | 'commitSha'>,
+  rejection: ParkRejection,
+  measure: { requested: boolean },
+): Promise<FindingWorkflowResult> {
+  state.step = 'watching';
+  state.watchingSince = nowIso();
+  state.watchIssues = 0;
+  const identity = { repo: input.repo, site: input.site, key: input.key, findingPath: input.findingPath };
+  const finish = async (result: FindingWorkflowResult): Promise<FindingWorkflowResult> => {
+    state.step = 'done';
+    // A waiting Update is answered before the run closes.
+    await wf.condition(wf.allHandlersFinished);
+    return result;
+  };
+
+  for (;;) {
+    measure.requested = false;
+    state.watchIssues = (state.watchIssues ?? 0) + 1;
+    const settled = await wf.CancellationScope.cancellable(async (): Promise<WatchFindingResult | 'measure' | 'reject' | 'timeout'> => {
+      const watch = watching.watchFinding(identity);
+      const asked = wf
+        .condition(() => measure.requested || rejection.verdict !== null)
+        .then(() => (rejection.verdict ? ('reject' as const) : ('measure' as const)));
+      try {
+        return await Promise.race([watch, asked]);
+      } catch (err) {
+        // The 30-day bound ran out: issue the activity again.
+        if (isTimeout(err)) return 'timeout';
+        throw err;
+      } finally {
+        watch.catch(() => undefined);
+        asked.catch(() => undefined);
+        wf.CancellationScope.current().cancel();
+      }
+    });
+
+    if (settled === 'timeout' || settled === 'measure') continue;
+    if (settled === 'reject' || (settled.outcome === 'stopped' && rejection.verdict)) {
+      const verdict = rejection.verdict as FindingVerdict;
+      let commitSha: string | null = null;
+      try {
+        if (verdictSourceWrites(verdict.source)) {
+          commitSha = (
+            await writing.writeFindingVerdict({
+              repo: input.repo,
+              site: input.site,
+              key: input.key,
+              findingPath: input.findingPath,
+              indexPath: input.indexPath,
+              status: verdict.status,
+              reason: verdict.reason,
+              at: verdict.at,
+              source: verdict.source,
+            })
+          ).commitSha;
+        }
+      } catch (err) {
+        if (wf.isCancellation(err)) throw err;
+        rejection.failed = `The rejection was not written: ${describeError(err)}`;
+        rejection.verdict = null;
+        if (settled !== 'reject') return await finish(base);
+        continue;
+      }
+      state.verdict = verdict;
+      state.commitSha = commitSha;
+      rejection.done = true;
+      rejection.verdict = null;
+      return await finish({ ...base, verdict, commitSha, outcome: 'rejected', note: 'Rejected while it watched production.' });
+    }
+
+    // The result won a race with a rejection accepted in the same task: the run
+    // ends with the result, and the Update is answered with a failure.
+    if (rejection.verdict) {
+      rejection.failed = `The finding was ${settled.outcome === 'resolved' ? 'resolved' : 'decided'} before the rejection was written.`;
+      rejection.verdict = null;
+    }
+    if (settled.outcome === 'resolved') {
+      const commit = settled.commitSha ? ` (commit ${settled.commitSha.slice(0, 7)})` : '';
+      return await finish({ ...base, outcome: 'resolved', note: `Resolved by its own watch: every check passed on production${commit}.` });
+    }
+    if (settled.outcome === 'decided') {
+      return await finish({
+        ...base,
+        outcome: 'closed',
+        note: `Closed while it watched production: the finding file ${settled.status ? `says ${settled.status}` : 'is missing or decided'}.`,
+      });
+    }
+    // The site no longer watches: the end a run that stops at the verdict has.
+    return await finish(base);
+  }
 }
 
 /** Why a park refuses a message because another is already asked for; null when none is. */

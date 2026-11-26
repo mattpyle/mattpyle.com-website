@@ -10,6 +10,7 @@ import {
   readSiteAutoFix,
   siteAutoFix,
   siteStopAfter,
+  siteWatches,
 } from '../../src/activities/findings.js';
 import {
   FIX_ISSUE_HEADER,
@@ -315,6 +316,7 @@ test('readFindingSettings reads the stop point, the flag and the gate from the s
     stopAfter: 'resolved',
     origin: 'https://www.mattpyle.com',
     autoFix: true,
+    watch: false,
     status: 'approved',
     kind: 'defect',
     refusal: null,
@@ -343,6 +345,32 @@ test('readFindingSettings reads the stop point, the flag and the gate from the s
   assert.equal(unknown.stopAfter, 'verdict');
   assert.equal(unknown.origin, null);
   assert.equal(unknown.refusal, 'Steward knows no site repository for temporal-io');
+});
+
+test('readFindingSettings answers watch only for a site with the after_verdict key and no fixer', async () => {
+  assert.equal(siteWatches('after_verdict: watch\n'), true);
+  assert.equal(siteWatches('site:\n  stop_after: verdict\n  after_verdict: watch\n'), true, 'nested under site, beside stop_after');
+  assert.equal(siteWatches('after_verdict: stop\n'), false);
+  assert.equal(siteWatches('stop_after: verdict\n'), false);
+
+  const temporal = (config?: string) => {
+    fake?.restore();
+    seed(DEFECT_FINDING, { 'sites/temporal-io/findings/x.md': DEFECT_FINDING, ...(config ? { 'sites/temporal-io/config.yaml': config } : {}) });
+    return readFindingSettings({ repo: REPO, site: 'temporal-io', key: 'x', findingPath: 'sites/temporal-io/findings/x.md' });
+  };
+  // A site with no fixer: the key turns watching on, beside stop_after or alone.
+  assert.equal((await temporal('site:\n  stop_after: verdict\n  after_verdict: watch\n')).watch, true);
+  assert.equal((await temporal('after_verdict: watch\n')).watch, true);
+  // Without the key, or with no config at all, nothing changes.
+  assert.equal((await temporal('site:\n  stop_after: verdict\n')).watch, false);
+  assert.equal((await temporal()).watch, false);
+
+  // A site with a fixer never watches, whatever its config says.
+  fake?.restore();
+  seed(DEFECT_FINDING, { [`sites/${SITE}/config.yaml`]: 'auto_fix: true\nafter_verdict: watch\n' });
+  const fixer = await readFindingSettings({ repo: REPO, site: SITE, key: DEFECT_KEY, findingPath: FINDING });
+  assert.equal(fixer.watch, false);
+  assert.equal(fixer.stopAfter, 'resolved');
 });
 
 test('readFindingSettings returns the gate\'s refusal, and a missing or unparsable finding as a refusal, never a failure', async () => {

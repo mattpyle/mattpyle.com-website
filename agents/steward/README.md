@@ -54,7 +54,12 @@ that's the property being dogfooded here, on a low-stakes, real target.
   file's `verdict_source` is the source sent. A `file` verdict is already in the file, and the
   workflow writes nothing. Where it ends is read when the verdict is approved, by
   `readFindingSettings`: a site whose `config.yaml` says `stop_after: verdict`, or one the worker
-  knows no production origin for, completes with the verdict. The input's `stopAfter` decides only
+  knows no production origin for, completes with the verdict, unless its config also says
+  `after_verdict: watch` and it has no fixer: then the run stays open at step `watching` and
+  `watchFinding`, on `steward-findings-watch`, measures the finding on production once a day at
+  13:20 UTC plus a per-finding offset, writing `live_on` while it is still present and resolving it
+  when every check passes; `steward finding measure-now <key>` measures at once, and a `rejected`
+  verdict ends it. The input's `stopAfter` decides only
   for a run approved before that read existed. Any other site carries an approved finding the rest
   of the way in the same execution: it waits for a `fix` signal, runs `fixFindingWorkflow` as a child, polls the PR until
   it merges or closes (every 5 minutes, up to 30 days), polls GitHub's `Production` deployments until
@@ -121,7 +126,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
 
 ### Task queues and workers
 
-Five queues, split by **locality** — which worker is allowed to do the work, not how heavy it is:
+Six queues, split by **locality** — which worker is allowed to do the work, not how heavy it is:
 
 | Queue | Carries | Why it is where it is |
 |---|---|---|
@@ -130,10 +135,11 @@ Five queues, split by **locality** — which worker is allowed to do the work, n
 | `steward-audit` | `auditSiteWorkflow` and `scorecardAuditWorkflow`, with all of their activities | Depends on nothing local: it reaches the site over HTTP and the repository over the GitHub API |
 | `steward-audit-fast` | `auditSiteFast` alone, started as a standalone activity by the public audit tool | Nothing local, and its own dispatch budget so a caller never waits behind a page render |
 | `steward-findings` | `findingWorkflow`, `verifyFindingWorkflow`, `recheckFindingsWorkflow` and `fixDispatchWorkflow`, with their activities, including the lifecycle's merge and deploy waits and the verify checks. Hosted only | Nothing local: the findings repository, the fixer's PR and the site's deployments over the GitHub API, production over HTTP and the image's Chromium, and Temporal through the worker's client |
+| `steward-findings-watch` | `watchFinding` alone, the daily measurement of a watching finding run, one at a time. Hosted only | Nothing local, as `steward-findings`; its own cap of one so a burst of watchers never holds the slots a verdict write needs |
 
 Two workers claim them, and never compete. The **local worker** (`steward up`, `src/worker.ts`)
 polls `steward-light` and `steward-heavy` on Temporal Cloud, and the two audit queues as well only against the local dev server, where no hosted worker exists. It never polls `steward-findings`. The **hosted worker** (`src/worker-hosted.ts`, the Railway container) registers
-the three queues that depend on nothing local, each with a hand-written activity map: a worker that
+the four queues that depend on nothing local, each with a hand-written activity map: a worker that
 claimed `snapshotDraft` would fail it, because the container has no drafts, and a failed task is
 worse than an unclaimed one. `steward-findings` has the hosted worker alone: with a second poller on
 matt-pc, an old-code local worker could take a hosted run's workflow task after a merge and fail it
