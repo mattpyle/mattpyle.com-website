@@ -5,6 +5,7 @@ import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { DEFECT_FINDING, DEFECT_KEY, OPPORTUNITY_FINDING, OPPORTUNITY_KEY } from '../helpers/finding-fixtures.js';
 import {
   awaitFixPr,
+  SUPERSEDED_MARKER,
   openFixIssue,
   readFindingSettings,
   readSiteAutoFix,
@@ -234,7 +235,7 @@ test('a closed issue is never reused, and the second attempt closes the first wi
   assert.equal(gh.issues[0].state, 'closed');
   assert.equal(gh.issues[0].stateReason, 'not_planned');
   assert.deepEqual(gh.issues[0].comments, [
-    `Closed by Steward: ${prUrl} closed unmerged. The next fix attempt opens a new issue.`,
+    `Closed by Steward: ${prUrl} closed unmerged. The next fix attempt opens a new issue.\n\n${SUPERSEDED_MARKER}`,
   ]);
   assert.equal(gh.issues[1].state, 'open');
 
@@ -242,6 +243,28 @@ test('a closed issue is never reused, and the second attempt closes the first wi
   const retry = await open({ url: first.url, reason: `${prUrl} closed unmerged` });
   assert.equal(retry.number, second.number);
   assert.equal(retry.reused, true);
+  assert.equal(gh.issues[0].comments.length, 1);
+});
+
+test('a close that fails after the comment leaves one comment, however many times the activity runs', async () => {
+  const gh = seed();
+  const first = await open();
+  const fakeFetch = globalThis.fetch;
+  let refused = 0;
+  globalThis.fetch = (async (req: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === 'PATCH' && refused < 2) {
+      refused++;
+      return new Response(JSON.stringify({ message: 'Server Error' }), { status: 500 });
+    }
+    return fakeFetch(req, init);
+  }) as typeof fetch;
+  const supersedes = { url: first.url, reason: 'No PR within 60 minutes' };
+
+  await assert.rejects(open(supersedes), /GitHub 500/);
+  await assert.rejects(open(supersedes), /GitHub 500/);
+  await open(supersedes);
+
+  assert.equal(gh.issues[0].state, 'closed');
   assert.equal(gh.issues[0].comments.length, 1);
 });
 

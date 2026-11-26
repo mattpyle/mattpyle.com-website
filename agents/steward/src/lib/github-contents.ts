@@ -1,6 +1,6 @@
 import { ApplicationFailure } from '@temporalio/activity';
 import { GITHUB_REPO } from '../config.js';
-import { gh } from './github.js';
+import { fetchGitHub, gh, rateLimitFailure } from './github.js';
 
 /**
  * The repo-write primitives the Scorecard's persistence runs on, over the
@@ -89,11 +89,15 @@ export async function readRepoFile(
     return { text: Buffer.from(meta.content, 'base64').toString('utf8'), sha: meta.sha as string };
   }
 
-  const res = await fetch(meta.download_url as string);
+  // Named by path: the download URL of a private repository carries a token.
+  const what = `${path} at ${ref} from download_url`;
+  const res = await fetchGitHub(meta.download_url as string, {}, what);
+  const limited = rateLimitFailure(res, what);
+  if (limited) throw limited;
   if (!res.ok) {
-    throw new Error(`fetching ${path} at ${ref} from download_url failed: ${res.status}`);
+    throw new Error(`fetching ${what} failed: ${res.status}`);
   }
-  return { text: await res.text(), sha: meta.sha as string };
+  return { text: res.text, sha: meta.sha as string };
 }
 
 /**

@@ -72,6 +72,116 @@ function describeInstallation(installation: any): string {
   return `${installation?.account?.login ?? 'unknown account'} (id ${installation?.id})`;
 }
 
+/**
+ * How long one GitHub call may take, headers and body together, before it is
+ * aborted. No findings activity heartbeats and the findings queue has two
+ * slots, so a connection that hangs would otherwise hold one until `fetch`
+ * gave up on its own. `log` is for {@link ghText} alone: an Actions job log is
+ * large and comes from a storage host that can be slow.
+ *
+ * An object so that a test can shorten the waits.
+ */
+export const GITHUB_TIMEOUTS = { call: 20_000, log: 45_000 };
+
+/** The shortest and the longest wait a `RateLimited` failure asks Temporal for. */
+export const RATE_LIMIT_MIN_DELAY_MS = 60_000;
+export const RATE_LIMIT_MAX_DELAY_MS = 60 * 60_000;
+
+/** How much of a body that is not JSON goes into an error message. */
+const SNIPPET_CHARS = 200;
+
+/** One answer from GitHub, read to the end. */
+export interface GitHubAnswer {
+  status: number;
+  ok: boolean;
+  headers: Headers;
+  text: string;
+}
+
+/**
+ * `fetch`, with the body read inside the same time limit. A call that runs out
+ * of time throws a plain `Error`, so the retry policy applies. `what` names the
+ * call in that message, and must never be a URL that carries a token.
+ */
+export async function fetchGitHub(
+  url: string,
+  init: RequestInit,
+  what: string,
+  timeoutMs: number = GITHUB_TIMEOUTS.call,
+): Promise<GitHubAnswer> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal });
+    const text = await res.text();
+    return { status: res.status, ok: res.ok, headers: res.headers, text };
+  } catch (err) {
+    if (!signal.aborted) throw err;
+    throw new Error(`GitHub call timed out after ${timeoutMs / 1000} s: ${what}`, { cause: err });
+  }
+}
+
+/** A body that may not be JSON: what it parses to, and the words to put in a message. */
+function readBody(text: string): { json: boolean; body: any; message: string } {
+  try {
+    const body = text ? JSON.parse(text) : {};
+    return { json: true, body, message: String(body?.message ?? text) };
+  } catch {
+    const flat = text.replace(/\s+/g, ' ').trim();
+    const message = flat.length > SNIPPET_CHARS ? `${flat.slice(0, SNIPPET_CHARS)}...` : flat;
+    return { json: false, body: { message }, message };
+  }
+}
+
+/**
+ * The `RateLimited` failure for a 403 or 429 that is GitHub saying "slow
+ * down", or undefined for anything else. Tested in this order:
+ *
+ * 1. `retry-after` (secondary limit): wait that many seconds.
+ * 2. `x-ratelimit-remaining: 0` (primary limit): wait until `x-ratelimit-reset`,
+ *    which is in epoch seconds.
+ * 3. A 403 whose message names a secondary rate limit, and any other 429: wait
+ *    one minute.
+ *
+ * The failure is retryable by itself and no workflow names its type.
+ * `nextRetryDelay` replaces the policy's interval, because requests made while
+ * limited can get an integration banned. It is held between one minute and one
+ * hour, which also covers a header that does not parse.
+ */
+export function rateLimitFailure(
+  answer: GitHubAnswer,
+  what: string,
+  now: number = Date.now(),
+): ApplicationFailure | undefined {
+  const { status, headers } = answer;
+  if (status !== 403 && status !== 429) return undefined;
+  const { message } = readBody(answer.text);
+  const retryAfter = headers.get('retry-after');
+  let kind: string;
+  let asked = RATE_LIMIT_MIN_DELAY_MS;
+  if (retryAfter !== null) {
+    kind = `secondary, ${status}`;
+    asked = Number(retryAfter) * 1000;
+  } else if (headers.get('x-ratelimit-remaining') === '0') {
+    kind = `primary, ${status}`;
+    asked = Number(headers.get('x-ratelimit-reset') ?? Number.NaN) * 1000 - now;
+  } else if (/secondary rate limit/i.test(message)) {
+    kind = `secondary, ${status}`;
+  } else if (status === 429) {
+    kind = '429';
+  } else {
+    return undefined;
+  }
+  const delay = Number.isFinite(asked)
+    ? Math.min(RATE_LIMIT_MAX_DELAY_MS, Math.max(RATE_LIMIT_MIN_DELAY_MS, Math.ceil(asked)))
+    : RATE_LIMIT_MIN_DELAY_MS;
+  return ApplicationFailure.create({
+    message: `GitHub rate limit (${kind}) for ${what}: ${message}. Retry in ${Math.ceil(delay / 1000)} s.`,
+    type: 'RateLimited',
+    nonRetryable: false,
+    nextRetryDelay: delay,
+  });
+}
+
 function parseJson(text: string): any {
   if (!text) return {};
   try {
@@ -123,17 +233,23 @@ export class GitHubAppTokenProvider {
   }
 
   private async appCall(pathname: string, method: 'GET' | 'POST'): Promise<any> {
-    const res = await fetch(`${API}${pathname}`, {
-      method,
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${this.jwt()}`,
-        'X-GitHub-Api-Version': API_VERSION,
+    const res = await fetchGitHub(
+      `${API}${pathname}`,
+      {
+        method,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${this.jwt()}`,
+          'X-GitHub-Api-Version': API_VERSION,
+        },
       },
-    });
-    const text = await res.text();
-    const body = parseJson(text);
+      `${method} ${pathname}`,
+    );
+    const limited = rateLimitFailure(res, pathname);
+    if (limited) throw limited;
+    const body = parseJson(res.text);
     if (res.ok) return body;
+    const text = readBody(res.text).message;
     if (res.status === 401 || res.status === 403 || res.status === 404) {
       throw authError(
         `GitHub rejected the app credential (${res.status}) for ${pathname}: ${body.message ?? text}. ` +
@@ -268,7 +384,8 @@ export interface GitHubBoot {
 
 /**
  * {@link resolveGitHubApp} for a worker's boot, with the one tolerance a boot
- * needs. A credential GitHub rejects (an `AuthError`: 401, 403, 404, an unusable
+ * needs. A rate limit is tolerated too: a worker that restarted in a loop would
+ * send more requests. A credential GitHub rejects (an `AuthError`: 401, 403, 404, an unusable
  * key, missing values, the wrong installation count) throws, so the deploy stops
  * where someone sees it. A transport error or a 5xx does not: the worker
  * recycles itself after heavy work, and a GitHub blip at that moment must not
@@ -298,18 +415,31 @@ export function describeGitHubBoot(boot: GitHubBoot): string {
  * the request is made once more with a new one. A second 401 is the caller's
  * to handle.
  */
-async function authedFetch(pathname: string, init: RequestInit, headers: Record<string, string>): Promise<Response> {
-  const send = async () =>
-    fetch(`${API}${pathname}`, {
-      ...init,
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${await installationToken()}`,
-        'X-GitHub-Api-Version': API_VERSION,
-        ...headers,
-        ...((init.headers as Record<string, string> | undefined) ?? {}),
+async function authedFetch(
+  pathname: string,
+  init: RequestInit,
+  headers: Record<string, string>,
+  timeoutMs?: number,
+): Promise<GitHubAnswer> {
+  const send = async () => {
+    // The token first: its mint has a time limit of its own.
+    const token = await installationToken();
+    return fetchGitHub(
+      `${API}${pathname}`,
+      {
+        ...init,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'X-GitHub-Api-Version': API_VERSION,
+          ...headers,
+          ...((init.headers as Record<string, string> | undefined) ?? {}),
+        },
       },
-    });
+      `${init.method ?? 'GET'} ${pathname}`,
+      timeoutMs,
+    );
+  };
   const first = await send();
   if (first.status !== 401) return first;
   dropInstallationToken();
@@ -321,18 +451,26 @@ async function authedFetch(pathname: string, init: RequestInit, headers: Record<
  * backwards is expensive in both directions: a retried auth failure burns ten
  * attempts against a credential that will never work, and a non-retried 502
  * fails a publish that would have succeeded a second later.
+ *
+ * The status and headers are read before the body. A rate limit
+ * ({@link rateLimitFailure}) is tested first, because GitHub sends one as a 403.
+ * An error page that is not JSON keeps its status in the message.
  */
 export async function gh(pathname: string, init?: RequestInit): Promise<any> {
   const res = await authedFetch(pathname, init ?? {}, { 'Content-Type': 'application/json' });
 
-  const text = await res.text();
-  const body = text ? JSON.parse(text) : {};
+  const limited = rateLimitFailure(res, pathname);
+  if (limited) throw limited;
+  const { json, body, message } = readBody(res.text);
 
-  if (res.ok) return body;
+  if (res.ok) {
+    if (json) return body;
+    throw new Error(`GitHub ${res.status} for ${pathname}: the body is not JSON: ${message}`);
+  }
 
   if (res.status === 401 || res.status === 403) {
     throw ApplicationFailure.nonRetryable(
-      `GitHub rejected the credential (${res.status}): ${body.message ?? text}. Check the GitHub App's permissions (contents, pull requests and issues read and write) and that it is installed on the repository.`,
+      `GitHub rejected the credential (${res.status}): ${message}. Check the GitHub App's permissions (contents, pull requests and issues read and write) and that it is installed on the repository.`,
       'AuthError',
     );
   }
@@ -346,13 +484,13 @@ export async function gh(pathname: string, init?: RequestInit): Promise<any> {
   }
   if (res.status === 422) {
     throw ApplicationFailure.nonRetryable(
-      `GitHub rejected the request as unprocessable (422): ${body.message ?? text}. ${JSON.stringify(body.errors ?? [])}`,
+      `GitHub rejected the request as unprocessable (422): ${message}. ${JSON.stringify(body.errors ?? [])}`,
       'UnprocessableRequest',
     );
   }
-  // Everything else — 5xx, rate limits, transport hiccups — is retryable, and
+  // Everything else — 5xx, a 409, transport hiccups — is retryable, and
   // deliberately a plain Error so the default retry policy applies.
-  throw new Error(`GitHub ${res.status} for ${pathname}: ${body.message ?? text}`);
+  throw new Error(`GitHub ${res.status} for ${pathname}: ${message}`);
 }
 
 /**
@@ -361,28 +499,24 @@ export async function gh(pathname: string, init?: RequestInit): Promise<any> {
  * run-log pull request uses it, because a ruleset refusal arrives as 403, 405 or
  * 409 and {@link gh} would turn each into an error that hides which. It shares
  * {@link authedFetch}, so the installation token and its one 401 refresh are the
- * same. A second 401 and any 5xx still throw, as `gh` throws them: neither is a
- * refusal the caller can act on.
+ * same. A second 401, a rate limit and any 5xx still throw, as `gh` throws them:
+ * none is a refusal the caller can act on.
  */
 export async function ghResponse(
   pathname: string,
   init?: RequestInit,
 ): Promise<{ status: number; ok: boolean; body: any }> {
   const res = await authedFetch(pathname, init ?? {}, { 'Content-Type': 'application/json' });
-  const text = await res.text();
-  let body: any = {};
-  try {
-    body = text ? JSON.parse(text) : {};
-  } catch {
-    body = { message: text };
-  }
+  const limited = rateLimitFailure(res, pathname);
+  if (limited) throw limited;
+  const { body, message } = readBody(res.text);
   if (res.status === 401) {
     throw ApplicationFailure.nonRetryable(
-      `GitHub rejected the credential (401): ${body.message ?? text}. Check the GitHub App's permissions and installation.`,
+      `GitHub rejected the credential (401): ${message}. Check the GitHub App's permissions and installation.`,
       'AuthError',
     );
   }
-  if (res.status >= 500) throw new Error(`GitHub ${res.status} for ${pathname}: ${body.message ?? text}`);
+  if (res.status >= 500) throw new Error(`GitHub ${res.status} for ${pathname}: ${message}`);
   return { status: res.status, ok: res.ok, body };
 }
 
@@ -424,10 +558,12 @@ export async function authRetryable<T>(call: () => Promise<T>): Promise<T> {
  * log past its retention. Any other failure throws, as {@link gh} does.
  */
 export async function ghText(pathname: string): Promise<string | null> {
-  const res = await authedFetch(pathname, {}, {});
-  if (res.ok) return await res.text();
+  const res = await authedFetch(pathname, {}, {}, GITHUB_TIMEOUTS.log);
+  if (res.ok) return res.text;
   if (res.status === 404 || res.status === 410) return null;
-  throw new Error(`GitHub ${res.status} for ${pathname}: ${await res.text()}`);
+  const limited = rateLimitFailure(res, pathname);
+  if (limited) throw limited;
+  throw new Error(`GitHub ${res.status} for ${pathname}: ${readBody(res.text).message}`);
 }
 
 /**

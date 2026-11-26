@@ -418,6 +418,9 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       const issue = issues.find((i) => i.number === Number(issueRoute[1]));
       if (!issue) return response(404, { message: 'Not Found' });
       if (method === 'GET' && !issueRoute[2]) return response(200, { number: issue.number, state: issue.state });
+      if (method === 'GET' && issueRoute[2]) {
+        return response(200, issue.comments.map((text, i) => ({ id: issue.number * 1000 + i, body: text })));
+      }
       if (method === 'POST' && issueRoute[2]) {
         issue.comments.push(String(body.body));
         return response(201, {});

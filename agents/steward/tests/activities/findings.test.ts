@@ -221,3 +221,77 @@ test('an index with no line for the key is a non-retryable failure', async () =>
     return true;
   });
 });
+
+// ---------------------------------------------------------------------------
+// A file decided since the verdict was sent
+// ---------------------------------------------------------------------------
+
+/** The finding as a file holds it once a verdict has been written, at `status`. */
+function decided(status: string, source: string, at: string): string {
+  return FINDING_TEXT.replace('status: proposed', `status: ${status}`)
+    .replace('verdict_reason:', 'verdict_reason: "Earlier."')
+    .replace('verdict_at:', `verdict_at: ${at}`)
+    .replace('verdict_source:', `verdict_source: ${source}`);
+}
+
+async function assertMoved(file: string, overrides: Partial<WriteFindingVerdictInput>): Promise<void> {
+  const gh = seed({ [FINDING]: file });
+  await assert.rejects(writeFindingVerdict(input(overrides)), (err: unknown) => {
+    assert.ok(err instanceof ApplicationFailure, String(err));
+    assert.equal(err.type, 'FindingMoved');
+    assert.equal(err.nonRetryable, true);
+    return true;
+  });
+  assert.equal(gh.file('main', FINDING)!.text, file);
+  assert.equal(gh.file('main', INDEX)!.text, INDEX_TEXT);
+  fake?.restore();
+}
+
+test('a resolved file is not written over', async () => {
+  await assertMoved(decided('resolved', 'cli', '2026-09-12T17:00:00.000Z'), {});
+  await assertMoved(FINDING_TEXT.replace('status: proposed', 'status: resolved'), { status: 'approved' });
+});
+
+test('the other verdict from another source, dated later, is not written over', async () => {
+  const later = '2026-09-13T09:00:00.000Z';
+  await assertMoved(decided('rejected', 'discord', later), { status: 'approved' });
+  await assertMoved(decided('approved', 'discord', later), { status: 'rejected' });
+  await assertMoved(decided('fixing', 'discord', later), { status: 'rejected' });
+  await assertMoved(decided('reopened', 'discord', later), { status: 'rejected' });
+  // YAML reads a quoted time as text and an unquoted one as a date.
+  await assertMoved(decided('rejected', 'discord', `'${later}'`), { status: 'approved' });
+});
+
+test('an approval by discord, then a later rejection by cli, is written', async () => {
+  for (const status of ['approved', 'fixing', 'reopened']) {
+    const gh = seed({ [FINDING]: decided(status, 'discord', '2026-09-12T17:00:00.000Z') });
+    const result = await writeFindingVerdict(input());
+    const { data } = parseFrontmatter(gh.file('main', FINDING)!.text);
+    assert.equal(data.status, 'rejected', status);
+    assert.equal(data.verdict_source, 'cli');
+    assert.ok(result.findingCommitSha && result.indexCommitSha);
+    fake?.restore();
+  }
+});
+
+test('a file past this verdict is a success that touches neither file', async () => {
+  for (const status of ['fixing', 'reopened', 'resolved']) {
+    const file = decided(status, 'cli', input().at);
+    const gh = seed({ [FINDING]: file });
+    const result = await writeFindingVerdict(input({ status: 'approved', reason: 'Real.' }));
+    assert.deepEqual(result, { findingCommitSha: null, indexCommitSha: null, commitSha: null }, status);
+    assert.equal(gh.file('main', FINDING)!.text, file);
+    assert.equal(gh.file('main', INDEX)!.text, INDEX_TEXT);
+    assert.ok(!gh.calls.some((c) => c.startsWith('PUT')));
+    fake?.restore();
+  }
+});
+
+test('a retry that finds its own verdict in the file still completes the index', async () => {
+  const gh = seed();
+  await writeFindingVerdict(input());
+  gh.branches.get('main')!.set(INDEX, { text: INDEX_TEXT, sha: 'sha-index-unwritten' });
+  const again = await writeFindingVerdict(input());
+  assert.equal(again.findingCommitSha, null);
+  assert.ok(again.indexCommitSha);
+});
