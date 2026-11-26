@@ -1393,9 +1393,10 @@ async function checkNegotiation(
  * of an agent's first 8,000 characters that is the page's main content, as text and
  * as markdown. The source is Peec AI's Deep Research study of June 2026, which gives
  * bands (about 78% of the window on pages with under 20 links, about 33% at 60 or
- * more) and no target, so **this check never fails**: `pass` means both figures were
- * taken, `error` means the page could not be read, and the figures are in `observed`
- * and in `metric`. A threshold, if one is ever adopted, goes here with its source
+ * more) and no target, so **this check never fails and never passes**: `not-applicable`
+ * means both figures were taken, so the row is a measurement and counts toward neither
+ * Passed nor Checked, `error` means the page could not be read, and the figures are in
+ * `observed` and in `metric`. A threshold, if one is ever adopted, goes here with its source
  * named in a `fix` text.
  *
  * Severity is `medium` because that is the weight of the subject, not because a
@@ -1495,7 +1496,9 @@ function checkReadingBudget(
     });
   }
 
-  const check = result(spec, 'pass', `${textLine}; ${mdLine}`, evidence);
+  // `not-applicable`, not `pass`: a figure is not a verdict, so the row counts as neither
+  // passed nor checked, and the figure is in `observed` and `metric`.
+  const check = result(spec, 'not-applicable', `${textLine}; ${mdLine}`, evidence);
   check.metric = { label: READING_BUDGET_LABELS[spec.id] ?? 'First read', value: text.share, unit: 'score' };
   return check;
 }

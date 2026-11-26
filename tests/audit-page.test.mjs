@@ -552,7 +552,7 @@ test('the counts, the headline and the fix list all come from one tally', () => 
   const view = reportView(fixtureAudit({ now, minutesAgo: 3 }), now);
 
   assert.equal(view.total, 15);
-  assert.equal(view.passed, 7);
+  assert.equal(view.passed, 5);
 
   // Checked is the applicable count, exactly as Steward's own report uses it, so Failed is
   // Checked minus Passed and the two reports cannot disagree about what a column means.

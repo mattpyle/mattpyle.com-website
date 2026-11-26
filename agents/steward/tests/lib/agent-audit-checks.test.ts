@@ -339,7 +339,10 @@ function check(result: AuditResult, id: string): CheckResult {
 
 test('a fully agent-ready site passes every check', async (t) => {
   const result = await audit(t);
-  const failed = result.checks.filter((c) => c.status !== 'pass');
+  // The reading-budget rows are figures, never verdicts, so they are `not-applicable` here.
+  const failed = result.checks.filter(
+    (c) => c.status !== 'pass' && !c.id.startsWith('reading-budget-'),
+  );
   assert.deepEqual(
     failed.map((c) => `${c.id}: ${c.observed}`),
     [],
@@ -788,7 +791,7 @@ test('the reading budget is measured for the homepage and the content page from 
 
   for (const id of ['reading-budget-home', 'reading-budget-content']) {
     const row = check(result, id);
-    assert.equal(row.status, 'pass', row.observed);
+    assert.equal(row.status, 'not-applicable', row.observed);
     // The mock pages are short, so the whole page is the window and the line says so.
     assert.match(row.observed, /^text: \d+% of all \d+ characters \(the whole page, shorter than 8,000\) is content \(the main element\); markdown: \d+% of all \d+ characters/);
     assert.equal(row.metric?.unit, 'score');
@@ -816,7 +819,7 @@ test('a page named past the origin gets its own row, and sixty links show up in 
   assert.equal(result.target.origin, mock.origin, 'the audited unit is still the site');
   const named = check(result, 'reading-budget-page');
   const home = check(result, 'reading-budget-home');
-  assert.equal(named.status, 'pass', named.observed);
+  assert.equal(named.status, 'not-applicable', named.observed);
   assert.ok(named.metric && home.metric && named.metric.value < home.metric.value, `${named.metric?.value} vs ${home.metric?.value}`);
   assert.match(named.observed, /markdown: \d+% of all/);
   assert.match(named.evidence[1].note ?? '', /1 navigation list set aside/);
@@ -853,7 +856,7 @@ test('a page with no main or article measures as no content, and says so', async
     policy: { allowedPrivateHosts: ['127.0.0.1'], totalBudgetMs: 30_000 },
   });
   const row = check(result, 'reading-budget-page');
-  assert.equal(row.status, 'pass');
+  assert.equal(row.status, 'not-applicable');
   assert.match(row.observed, /^text: no main or article element/);
   assert.equal(row.metric?.value, 0);
 });
