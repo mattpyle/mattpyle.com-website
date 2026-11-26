@@ -121,8 +121,48 @@ export interface WriteFindingVerdictInput {
   source: FindingVerdictSource;
 }
 
+/** The statuses a finding moves on to once its verdict has been acted on. */
+const PAST_THE_VERDICT = ['fixing', 'reopened', 'resolved'];
+
+/** A `verdict_at` as a time. YAML reads an unquoted timestamp as a `Date`. NaN when there is none. */
+function verdictTime(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  return typeof value === 'string' ? Date.parse(value) : Number.NaN;
+}
+
+/**
+ * Where a finding file stands against a verdict about to be written.
+ *
+ * 1. `past`: the file carries this verdict (same `verdict_source` and
+ *    `verdict_at`) and has moved on to `fixing`, `reopened` or `resolved`.
+ *    Writing it would drag the status back.
+ * 2. `moved`: the file is `resolved` by another route, or holds the other
+ *    verdict from another source, dated after this one. The date matters: a
+ *    parked run's rejection of an approval from another sender is a newer
+ *    decision and is written.
+ * 3. `open`: anything else is written.
+ */
+function verdictStanding(
+  data: Record<string, unknown>,
+  input: Pick<WriteFindingVerdictInput, 'status' | 'source' | 'at'>,
+): { kind: 'open' } | { kind: 'past' } | { kind: 'moved'; reason: string } {
+  const status = typeof data.status === 'string' ? data.status : '';
+  const at = verdictTime(data.verdict_at);
+  const same = data.verdict_source === input.source && at === verdictTime(input.at);
+  if (same && PAST_THE_VERDICT.includes(status)) return { kind: 'past' };
+  if (status === 'resolved') return { kind: 'moved', reason: 'is resolved' };
+
+  const approved = status === 'approved' || status === 'fixing' || status === 'reopened';
+  const held = status === 'rejected' ? 'rejected' : approved ? 'approved' : null;
+  const otherSender = !!data.verdict_source && data.verdict_source !== input.source;
+  if (held !== null && held !== input.status && otherSender && at > verdictTime(input.at)) {
+    return { kind: 'moved', reason: `was ${held} later by ${String(data.verdict_source)}` };
+  }
+  return { kind: 'open' };
+}
+
 export interface WriteFindingVerdictResult {
-  /** The commit that changed the finding file, or null when it already carried the verdict. */
+  /** The commit that changed the finding file, or null when it already carried the verdict or was past it. */
   findingCommitSha: string | null;
   /** The commit that changed the index line, or null when it already carried the verdict. */
   indexCommitSha: string | null;
@@ -144,6 +184,12 @@ export interface WriteFindingVerdictResult {
  * index write failed reads a file that already carries the verdict, skips that
  * write, and goes on to the index. An unchanged write is skipped rather than sent
  * because a Contents PUT with identical content still makes a commit.
+ *
+ * **It refuses a file that was decided since.** A write retried for hours can
+ * land on a finding that Argus or a person has moved. {@link verdictStanding}
+ * says when the answer is a permanent `FindingMoved`, with nothing written, and
+ * when the file is already past this very verdict, which is a success that
+ * touches neither file.
  *
  * Commit author is the token's identity: the Contents API uses it when no
  * `committer` is sent.
@@ -182,6 +228,18 @@ export async function writeFindingVerdict(input: WriteFindingVerdictInput): Prom
       `${input.findingPath} carries key ${String(readBack.key)}, not ${input.key}.`,
       'FindingMalformed',
     );
+  }
+
+  const standing = verdictStanding(parseFrontmatter(finding.text).data as Record<string, unknown>, input);
+  if (standing.kind === 'moved') {
+    throw ApplicationFailure.nonRetryable(
+      `${input.findingPath} ${standing.reason}, so the ${input.status} verdict from ${input.source} is not written.`,
+      'FindingMoved',
+    );
+  }
+  if (standing.kind === 'past') {
+    log.info({ activity: 'writeFindingVerdict', key: input.key, status: input.status }, 'the finding is past this verdict');
+    return { findingCommitSha: null, indexCommitSha: null, commitSha: null };
   }
 
   let findingCommitSha: string | null = null;
@@ -761,6 +819,24 @@ async function findOpenIssue(repo: string, marker: string): Promise<{ number: nu
   }
 }
 
+/** The hidden marker on the closing comment of a superseded fix issue, so a retry does not post it twice. */
+export const SUPERSEDED_MARKER = '<!-- steward:superseded -->';
+
+/** Posts the closing comment on a superseded issue, unless a comment already carries the marker. */
+async function commentSuperseded(repo: string, number: number, reason: string): Promise<void> {
+  for (let page = 1; ; page++) {
+    const comments = (await gh(`/repos/${repo}/issues/${number}/comments?per_page=100&page=${page}`)) as {
+      body?: string | null;
+    }[];
+    if (comments.some((c) => (c.body ?? '').includes(SUPERSEDED_MARKER))) return;
+    if (comments.length < 100) break;
+  }
+  await gh(`/repos/${repo}/issues/${number}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body: `${fixIssueClosingComment(reason)}\n\n${SUPERSEDED_MARKER}` }),
+  });
+}
+
 /**
  * Hands an approved finding to `claude-code-action` (design decisions 26 and
  * 27): one issue in the site repository, the finding file as its body under
@@ -776,7 +852,9 @@ async function findOpenIssue(repo: string, marker: string): Promise<{ number: nu
  * **Idempotent on the finding key.** The body ends with a hidden marker naming
  * the finding, and an open issue that carries it is returned instead of a
  * second one. Only open issues count (the card's rule 2), so after
- * `supersedes` closes the last attempt's issue a new one opens.
+ * `supersedes` closes the last attempt's issue a new one opens. The comment on
+ * that closed issue carries {@link SUPERSEDED_MARKER}, so it is posted once
+ * however many times the activity runs.
  *
  * Created with the worker's installation token, so the issue's author is the
  * GitHub App's bot login. The Action's write-access check passes a `[bot]`
@@ -803,10 +881,7 @@ export async function openFixIssue(input: OpenFixIssueInput): Promise<FixIssue> 
     if (!old) throw ApplicationFailure.nonRetryable(`${input.supersedes.url} is not an issue URL.`, 'FindingMalformed');
     const current = await gh(`/repos/${old.repo}/issues/${old.number}`);
     if (current.state === 'open') {
-      await gh(`/repos/${old.repo}/issues/${old.number}/comments`, {
-        method: 'POST',
-        body: JSON.stringify({ body: fixIssueClosingComment(input.supersedes.reason) }),
-      });
+      await commentSuperseded(old.repo, old.number, input.supersedes.reason);
       await gh(`/repos/${old.repo}/issues/${old.number}`, {
         method: 'PATCH',
         body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }),
