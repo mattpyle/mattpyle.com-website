@@ -1567,6 +1567,8 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
           // A file decided elsewhere ends the run `closed`, as `decidedElsewhere` does after a PR.
           const settings = await settingsAtGate();
           if (settings.status === 'resolved' || settings.status === 'rejected') {
+            // The last state reads as held and unwritten, not as a write in flight.
+            state.status = 'held';
             state.step = 'done';
             await wf.condition(wf.allHandlersFinished);
             return {

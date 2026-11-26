@@ -211,10 +211,13 @@ test('a verdict write that meets a file decided elsewhere ends the run closed, w
       const handle = await start('verdict-moved');
       const update = await handle.startUpdate(verdictUpdate, { args: [APPROVE], waitForStage: WorkflowUpdateStage.ACCEPTED });
       const answered = await refusal(update.result());
-      return { answered, result: await skipResult(handle) };
+      const result = await skipResult(handle);
+      return { answered, result, last: await handle.query(findingStateQuery) };
     },
   );
   assert.match(out.answered, /the finding file says resolved/);
+  assert.equal(out.last.status, 'held', 'the closed run reads as held and unwritten');
+  assert.equal(out.last.commitSha, null);
   assert.equal(out.result.outcome, 'closed');
   assert.equal(out.result.commitSha, null);
   assert.match(out.result.note ?? '', /Closed at its verdict: the finding file says resolved/);
