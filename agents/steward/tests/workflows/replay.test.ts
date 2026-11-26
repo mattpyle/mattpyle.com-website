@@ -92,7 +92,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin`, `finding-parked-with-issue-pre.bin`, `finding-parked-issue-reread.bin`, `finding-reopened-pre.bin`, `finding-verify-failed-pre.bin`, `finding-merge-timeout-pre.bin`, `finding-deploy-timeout-pre.bin`, `finding-park-resume-resolved.bin`, `finding-park-request-fix.bin`, `finding-merge-rewait.bin`, `finding-watch-stop-pre.bin`, `finding-watching.bin`, `finding-watch-resolved.bin` | On the settings-at-use path: the `closed` ending of a run with no issue, an attempt that fails before any issue and its one-day rest, a held run. The measurement at the verdict itself (`writeFindingVerdictMeasure`, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. On the STW-653 paths: the deploy re-wait, a park at `merge`, `returned` or `deploy`, the returned write's slow phase, and a `closed` ending after the PR. Stage 4: a watch re-issued after `measure-now` or its 30-day bound, a rejection at `watching`, and the `closed` and `stopped` endings of a watch. |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin`, `finding-parked-with-issue-pre.bin`, `finding-parked-issue-reread.bin`, `finding-reopened-pre.bin`, `finding-verify-failed-pre.bin`, `finding-merge-timeout-pre.bin`, `finding-deploy-timeout-pre.bin`, `finding-park-resume-resolved.bin`, `finding-park-request-fix.bin`, `finding-merge-rewait.bin`, `finding-watch-stop-pre.bin`, `finding-watching.bin`, `finding-watch-resolved.bin`, `finding-writes-exhausted-pre.bin` | On the settings-at-use path: the `closed` ending of a run with no issue, the one-day rest after an attempt that failed before any issue, run to its end, a held run. The measurement at the verdict itself (a measured result, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. On the STW-653 paths: the deploy re-wait, a park at `merge`, `returned` or `deploy`, and a `closed` ending after the PR. Stage 4: a watch re-issued after `measure-now` or its 30-day bound, a rejection at `watching`, and the `closed` and `stopped` endings of a watch. |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin`, `verify-finding-slow-phase.bin` | The checks path ending reopened. The slow phase of the blockless read and of the write. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `fixDispatchWorkflow` | `fix-dispatch-grant-after-release.bin` | The hourly sweep (`runningWorkflowIds`). A grant whose signal fails. A re-sent request for a held ticket. The idle close. The continue-as-new rollover is a test in `fix-dispatch.test.ts`, not a replay. |
@@ -1607,3 +1607,36 @@ test('a recheck of a watch site replays with the watch reads', { timeout: 120_00
   await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'recheck/temporal-io/test');
 });
 
+/**
+ * ## Writes that ran out of retries (STW-680)
+ *
+ * `finding-writes-exhausted-pre.bin`: an open run on the settings-at-use path
+ * whose GitHub calls used up their bounded retries. The measurement's
+ * `readFinding` failed three times, so the finding went unmeasured. Attempt 1:
+ * `openFixIssue` failed five times. Attempt 2: `writeFindingFix` failed five
+ * times. Attempt 3: the PR closed unmerged, `writeFindingReturned` failed five
+ * times, and `slowWriting` wrote it. The run waits at `waiting-fix`. 159 events.
+ *
+ * Recorded from origin/master at 40890d7, before the durable retry policies,
+ * on a dev server with mocked activities, so it holds no real finding text.
+ * The failures' stack traces were then emptied, as they held local paths. Its
+ * recorded failures say `MAXIMUM_ATTEMPTS_REACHED`, which today's policies no
+ * longer produce for these writes, so every catch and `slowOrPark` must still
+ * take the branch the history records.
+ *
+ * Probe (2026-11-25, on 40890d7): `await wf.sleep('1 second')` before
+ * `writing.openFixIssue` made it fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 57, ActivityTaskScheduled)
+ * ```
+ *
+ * The sleep was removed and it re-ran green.
+ */
+test('a run whose writes ran out of retries replays to its next fix wait', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(
+    await fs.readFile(fileURLToPath(new URL('../fixtures/histories/finding-writes-exhausted-pre.bin', import.meta.url))),
+  );
+  await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'finding/mattpyle-com/writes-exhausted-fixture');
+});
