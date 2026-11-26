@@ -80,7 +80,7 @@ export { generateHandoff, generateVerifyBlock, readFixChecks, runFixer, reviewFi
 export { runFindingChecks } from './verify-finding.js';
 // The recheck (STW-543), on `steward-findings`: a site's hosts, one block read
 // against them, and one commit per changed finding.
-export { readSiteHosts, readRecheckBlock, writeFindingRecheck } from './findings-recheck.js';
+export { readSiteHosts, readRecheckBlock, readWatchRun, writeFindingRecheck } from './findings-recheck.js';
 // The measurement at an approved verdict (STW-589), on `steward-findings`: one commit.
 export { writeFindingVerdictMeasure } from './findings-verdict-measure.js';
 // Stage 4: a finding run on a site with no fixer watches production, on its own queue.

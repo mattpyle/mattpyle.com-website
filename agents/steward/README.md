@@ -43,7 +43,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
   any host the site declares in `site.hosts` of its `config.yaml`, over https. Each approved finding
   with no open finding workflow gets one outcome: no checks, could not measure, still present (its
   `live_on` is set to the America/Vancouver day and `live_by` to `check`) or resolved (its Verification section is written
-  and its index line reads `resolved`, in one commit). It opens no fix. Every run pings the site's `steward-findings-recheck-<site>` check at healthchecks.io; a completed run with a `write failed` or `could not measure` row, or a run that throws, pings `/fail`.
+  and its index line reads `resolved`, in one commit). It opens no fix. On a site whose `config.yaml` says `after_verdict: watch`, each finding's own run measures it, so the recheck measures and writes nothing: it reads each approved finding's run by ID and reports `watching`, `watch stale`, `watch broken`, `not watching` or `no run`. Every run pings the site's `steward-findings-recheck-<site>` check at healthchecks.io; a completed run with a `write failed`, `could not measure`, `watch stale`, `watch broken`, `not watching` or `no run` row, or a run that throws, pings `/fail`.
 - **`findingWorkflow`** — the gate for findings filed into a separate findings repository by an
   inspector agent, Argus. One `findingWorkflow` per finding (`finding/<site>/<key>`) waits for a
   verdict. Argus starts it when it files the finding, and starts a missing one at its next run or

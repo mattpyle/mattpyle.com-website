@@ -30,7 +30,7 @@ import {
   writeFindingVerification,
 } from './activities/findings.js';
 import { runFindingChecks } from './activities/verify-finding.js';
-import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from './activities/findings-recheck.js';
+import { readRecheckBlock, readSiteHosts, readWatchRun, writeFindingRecheck } from './activities/findings-recheck.js';
 import { writeFindingVerdictMeasure } from './activities/findings-verdict-measure.js';
 import { watchFinding } from './activities/findings-watch.js';
 import {
@@ -166,6 +166,8 @@ const findingsActivities = {
   readSiteHosts,
   readRecheckBlock,
   writeFindingRecheck,
+  // The recheck on a site that watches: one describe of a finding's run.
+  readWatchRun,
   // The measurement at an approved verdict (STW-589): one commit.
   writeFindingVerdictMeasure,
 };

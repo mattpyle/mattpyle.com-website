@@ -13,7 +13,7 @@ import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from '../../src/
 import type { RunFindingChecksInput, RunFindingChecksResult } from '../../src/activities/verify-finding.js';
 import { findingWorkflowId, parseFindingsIndex, type OpenFindingWorkflow } from '../../src/lib/findings.js';
 import { checkUrls } from '../../src/lib/verify-checks.js';
-import { summariseRecheck } from '../../src/lib/findings-recheck.js';
+import { judgeWatch, summariseRecheck, WATCH_STALE_AFTER_MS, type PendingWatch, type WatchRun } from '../../src/lib/findings-recheck.js';
 
 /**
  * `recheckFindingsWorkflow` against the real test server, on a fixture store:
@@ -291,3 +291,169 @@ test('a finding with an open finding workflow is reported and left alone, even w
   const index = parseFindingsIndex(github.branches.get('main')!.get(`${DIR}/INDEX.md`)!.text);
   assert.equal(index.find((line) => line.key === 'fixed-on-site')?.status, 'approved');
 });
+
+// A site that watches (STW-678): the recheck reads each run and measures nothing.
+
+const WATCH_CONFIG = `${CONFIG}after_verdict: watch\n`;
+
+function watchSeed(keys: string[]): Record<string, string> {
+  return { ...seed(keys), [`sites/${SITE}/config.yaml`]: WATCH_CONFIG };
+}
+
+const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+
+/** A pending `watchFinding` waiting for its next window, its last attempt `hours` old. */
+function waiting(hours: number, failureType: string | null = 'StillPresent', failureMessage = 'check 1: status 404'): WatchRun {
+  return {
+    state: 'open',
+    step: null,
+    pending: { attempt: 2, lastStartedAt: null, lastCompletedAt: ago(hours), scheduledAt: ago(hours - 24), failureType, failureMessage: failureType ? failureMessage : null },
+  };
+}
+
+/** A `readWatchRun` that answers each key from its list, the last answer repeating. */
+function watchReads(answers: Record<string, WatchRun[]>) {
+  const reads: string[] = [];
+  return {
+    reads,
+    readWatchRun: async ({ workflowId }: { workflowId: string }): Promise<WatchRun> => {
+      const key = workflowId.slice(`finding/${SITE}/`.length);
+      const nth = reads.filter((each) => each === key).length;
+      reads.push(key);
+      const list = answers[key] ?? [{ state: 'no run' }];
+      return list[Math.min(nth, list.length - 1)]!;
+    },
+  };
+}
+
+test('a watch site whose runs all measured in time pings healthy, and the recheck writes and measures nothing', async () => {
+  const keys = ['fixed-on-site', 'live-on-docs', 'no-block'];
+  github = installFakeGitHub({ seed: watchSeed(keys), defaultBranch: 'main' });
+  const watch = watchReads({
+    'fixed-on-site': [waiting(23)],
+    'live-on-docs': [{ state: 'open', step: null, pending: { attempt: 1, lastStartedAt: null, lastCompletedAt: null, scheduledAt: ago(1), failureType: null, failureMessage: null } }],
+    'no-block': [waiting(2, 'NoChecks', 'no checks')],
+  });
+  const { activities: acts, ran, pings } = activities([], {
+    readWatchRun: watch.readWatchRun,
+    listOpenFindingWorkflows: async () => assert.fail('a watch site reads each run by ID, not the list'),
+  });
+  const result = await run(acts);
+
+  assert.deepEqual(result.rows.map((row) => row.outcome), ['watching', 'watching', 'watching']);
+  assert.deepEqual(pings.map((ping) => ping.shape), [{ ok: true, summary: summariseRecheck(result) }]);
+  assert.equal(summariseRecheck(result), 'Findings recheck of temporal-io: 3 approved, watching 3.');
+  assert.deepEqual(ran, []);
+  assert.equal(github.refUpdates.length, 0);
+});
+
+test('a stale, a broken and a missing watch each fail the ping, with what to do', async () => {
+  const keys = ['fixed-on-site', 'live-on-docs', 'no-block', 'empty-block'];
+  const files = watchSeed(keys);
+  // Resolved after the index was read: its closed run is not a missing one.
+  files[`${DIR}/empty-block.md`] = files[`${DIR}/empty-block.md`]!.replace('status: approved', 'status: resolved');
+  github = installFakeGitHub({ seed: files, defaultBranch: 'main' });
+  const watch = watchReads({
+    'fixed-on-site': [waiting(27)],
+    'live-on-docs': [waiting(1, 'ChecksUnreadable', 'The verify block was refused: off host')],
+  });
+  const { activities: acts, pings } = activities([], { readWatchRun: watch.readWatchRun });
+  const result = await run(acts);
+
+  assert.deepEqual(
+    result.rows.map((row) => [row.key, row.outcome]),
+    [['fixed-on-site', 'watch stale'], ['live-on-docs', 'watch broken'], ['no-block', 'no run'], ['empty-block', 'skipped']],
+  );
+  assert.equal(result.rows[1]!.detail, 'ChecksUnreadable: The verify block was refused: off host');
+  assert.equal(result.rows[2]!.keyShort, 'TI-3');
+  assert.equal(pings.length, 1);
+  assert.equal(pings[0]!.shape.ok, false);
+  const body = pings[0]!.shape.summary;
+  assert.ok(body.startsWith('Findings recheck of temporal-io: 4 approved, watch stale 1, watch broken 1, no run 1, skipped 1. 3 of 4 finding(s) are not watched'), body);
+  assert.match(body, /fixed-on-site watch stale \(last attempt .*\); live-on-docs watch broken \(ChecksUnreadable: .*\); no-block no run/);
+  assert.match(body, /steward finding measure-now <key>/);
+  assert.match(body, /Argus starts a missing run\./);
+  assert.doesNotMatch(body, /steward finding status/);
+  assert.equal(github.refUpdates.length, 0);
+});
+
+test('a run with no pending watch is read again after a wait, and named by its step if it still has none', async () => {
+  const keys = ['fixed-on-site', 'live-on-docs', 'no-block'];
+  github = installFakeGitHub({ seed: watchSeed(keys), defaultBranch: 'main' });
+  const idle = (step: string): WatchRun => ({ state: 'open', step, pending: null });
+  const watch = watchReads({
+    'fixed-on-site': [idle('waiting-fix')],
+    'live-on-docs': [idle('watching'), waiting(1)],
+    'no-block': [idle('done'), { state: 'no run' }],
+  });
+  const { activities: acts, pings } = activities([], { readWatchRun: watch.readWatchRun });
+  // The time-skipping client, so the second read's wait passes at once.
+  const worker = await Worker.create({
+    connection: env.nativeConnection,
+    workflowBundle: await workflowBundle(),
+    activities: acts,
+    taskQueue: QUEUE,
+  });
+  const result = await worker.runUntil(
+    bounded(
+      env.client.workflow.execute(recheckFindingsWorkflow, {
+        workflowId: `recheck/${SITE}/test`,
+        taskQueue: QUEUE,
+        args: [{ repo: REPO, site: SITE }],
+      }),
+    ),
+  );
+
+  assert.deepEqual(result.rows.map((row) => row.outcome), ['not watching', 'watching', 'no run']);
+  assert.equal(result.rows[0]!.detail, 'the run is open at waiting-fix with no pending watchFinding');
+  assert.deepEqual(watch.reads, ['fixed-on-site', 'live-on-docs', 'no-block', 'fixed-on-site', 'live-on-docs', 'no-block']);
+  assert.equal(pings[0]!.shape.ok, false);
+  assert.match(pings[0]!.shape.summary, /fixed-on-site not watching .*steward finding status <key>/);
+});
+
+test('a site without the key schedules the activities it always did', async () => {
+  const keys = ['fixed-on-site', 'live-on-docs', 'no-block', 'has-run'];
+  github = installFakeGitHub({ seed: seed(keys), defaultBranch: 'main' });
+  const { activities: acts } = activities([findingWorkflowId(SITE, 'has-run')], {
+    readWatchRun: async () => assert.fail('a site without the key reads no run'),
+  });
+  await run(acts);
+
+  const history = await client.workflow.getHandle(`recheck/${SITE}/test`).fetchHistory();
+  const commands = history.events!.flatMap((event) => {
+    if (event.activityTaskScheduledEventAttributes) return [event.activityTaskScheduledEventAttributes.activityType!.name!];
+    return event.timerStartedEventAttributes ? ['timer'] : [];
+  });
+  assert.deepEqual(commands, [
+    'readSiteHosts',
+    'readFindingsIndex',
+    'listOpenFindingWorkflows',
+    'readRecheckBlock',
+    'runFindingChecks',
+    'writeFindingRecheck',
+    'readRecheckBlock',
+    'runFindingChecks',
+    'writeFindingRecheck',
+    'readRecheckBlock',
+    'reportRunHealth',
+  ]);
+});
+
+test('a watch is aged by its last attempt, and a stale one is stale whatever it last failed as', () => {
+  const now = Date.parse('2026-11-25T13:20:00.000Z');
+  const at = (ms: number) => new Date(now - ms).toISOString();
+  const base: PendingWatch = { attempt: 2, lastStartedAt: null, lastCompletedAt: null, scheduledAt: null, failureType: 'StillPresent', failureMessage: 'm' };
+  const judge = (pending: Partial<PendingWatch>) => judgeWatch({ ...base, ...pending }, now).outcome;
+
+  assert.equal(judge({ lastCompletedAt: at(WATCH_STALE_AFTER_MS - 1) }), 'watching');
+  assert.equal(judge({ lastCompletedAt: at(WATCH_STALE_AFTER_MS) }), 'watch stale');
+  // A running attempt is aged by its start, not by the attempt before it.
+  assert.equal(judge({ lastStartedAt: at(60_000), lastCompletedAt: at(WATCH_STALE_AFTER_MS) }), 'watching');
+  // A first attempt that never started is aged by when it was scheduled.
+  assert.equal(judge({ attempt: 1, scheduledAt: at(WATCH_STALE_AFTER_MS), failureType: null }), 'watch stale');
+  // A later attempt's scheduled time is the next one, so with no other time it is not trusted.
+  assert.equal(judge({ scheduledAt: at(-3_600_000) }), 'watch stale');
+  assert.equal(judge({ lastCompletedAt: at(60_000), failureType: 'Timeout' }), 'watch broken');
+  assert.equal(judge({ lastCompletedAt: at(WATCH_STALE_AFTER_MS), failureType: 'ChecksUnreadable' }), 'watch stale');
+});
+
