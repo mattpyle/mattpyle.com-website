@@ -368,15 +368,19 @@ test('Update then Update: in flight and recorded, the same status is answered wi
   });
 });
 
-test('a write that fails: the waiting Update fails with the reason, and the run fails', async () => {
+test('a write that fails: the waiting Update fails with the reason, and the run parks at verdict (STW-689)', async () => {
   const m = mocks({ fail: true });
   await withWorker(m, async () => {
     const handle = await start('write-fails');
     const failure = await refusalOf(record(handle, APPROVE));
     assert.equal(failure.type, VERDICT_WRITE_FAILED);
     assert.equal(failure.message, 'The verdict was not written: The finding file is gone.');
-    await assert.rejects(handle.result(), (err: unknown) => err instanceof WorkflowFailedError);
-    assert.equal((await handle.describe()).status.name, 'FAILED');
+    // Before STW-689 the run failed here. `finding-failure-parks.test.ts` covers the park itself.
+    const parked = await until(handle, (s) => s.step === 'parked', 'the park at verdict');
+    assert.equal(parked.parked?.stage, 'verdict');
+    assert.equal(parked.status, 'held');
+    assert.equal((await handle.describe()).status.name, 'RUNNING');
+    await handle.terminate('test over');
   });
 });
 

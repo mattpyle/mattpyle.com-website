@@ -1179,7 +1179,11 @@ function addFixAttemptLine(lines: string[], close: number, note: string): string
 export type FindingParkKind = 'checks-failed' | 'checks-broken' | 'error';
 
 /** The step a parked run runs again on `resume`. */
-export type FindingParkStage = 'merge' | 'returned' | 'deploy' | 'verify';
+/**
+ * Where a parked run stopped. `verdict` and `settings` (STW-689) are a verdict
+ * write and a settings read that failed in a way no retry mends.
+ */
+export type FindingParkStage = 'merge' | 'returned' | 'deploy' | 'verify' | 'verdict' | 'settings';
 
 /** A parked run's own account of itself, in its `state` query. */
 export interface FindingPark {
@@ -1197,13 +1201,20 @@ export interface FindingPark {
   commentError?: string | null;
 }
 
-/** True when a parked run at this stage takes a `request-fix`: every stage but an unmerged PR's. */
+/**
+ * True when a parked run at this stage takes a `request-fix`: every stage but
+ * an unmerged PR's, an unwritten verdict's and an unread settings file's.
+ */
 export function parkTakesFix(stage: FindingParkStage): boolean {
-  return stage !== 'merge';
+  return stage !== 'merge' && stage !== 'verdict' && stage !== 'settings';
 }
 
 /** The sentence a park's `moves` holds, naming the CLI verbs that send each Update. */
 export function parkMoves(key: string, stage: FindingParkStage): string {
+  if (stage === 'verdict') {
+    return `\`steward finding resume ${key}\` writes the verdict again; a new \`steward finding approve ${key}\` or \`steward finding reject ${key}\` replaces it.`;
+  }
+  if (stage === 'settings') return `\`steward finding resume ${key}\` reads the site's settings again.`;
   const resume =
     stage === 'verify'
       ? `\`steward finding resume ${key}\` verifies again`

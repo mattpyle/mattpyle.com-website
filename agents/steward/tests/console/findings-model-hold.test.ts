@@ -217,6 +217,11 @@ test('a run parked after its fix PR holds its row with where it parked and what 
   assert.equal(parkHoldLine(run), `Parked at verify: Production at m1 failed check 1. ${parked.moves}`);
   assert.equal(parkHoldLine({ ...run, step: 'waiting-merge', parked: null, waitNote: 'PR was not merged within 30 days.' }), 'Waiting past its bound: PR was not merged within 30 days.');
   assert.equal(parkHoldLine({ ...run, open: false }), null);
+  // The two parks before the lifecycle (STW-689) name what is held.
+  const atVerdict = { ...parked, stage: 'verdict' as const, reason: 'The approved verdict was not written: GitHub refused the credential.', moves: 'resume writes it again.' };
+  assert.equal(parkHoldLine({ ...run, parked: atVerdict }), `Parked before its verdict was written: ${atVerdict.reason} ${atVerdict.moves}`);
+  const atSettings = { ...parked, stage: 'settings' as const, reason: "The site's settings could not be read: 404.", moves: 'resume reads them again.' };
+  assert.equal(parkHoldLine({ ...run, parked: atSettings }), `Parked at the site's settings read: ${atSettings.reason} ${atSettings.moves}`);
   // Fix is offered on a parked reopened row, but not at an unmerged PR's park.
   const offer = { site: 'mattpyle-com', status: 'reopened', runOpen: true, runStep: 'parked', stopAfter: null, data: {}, text: '' };
   assert.equal(fixOffered({ ...offer, parkTakesFix: true }), true);
