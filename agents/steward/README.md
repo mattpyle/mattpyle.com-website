@@ -148,6 +148,10 @@ local worker.
 
 Both workers log through pino. A Temporal Runtime logger passes the SDK's workflow, activity and worker entries to pino, one JSON line each. Core logs at WARN.
 
+### The long-retry alarm
+
+In its default role the hosted worker pings the `steward-long-retry` check at healthchecks.io: `/fail` when an activity has been failing for two hours, and success when it recovers. For a polling wait the two hours are a streak of failures, kept in the process, so its "not yet" answers do not count. It does not see an attempt that hangs to its timeout, or a dead worker. `src/lib/long-retry.ts` holds the rules; the ready line's `longRetryAlarm` field names the queues that carry it.
+
 ### The public-audit role
 
 The same image starts as a second worker when `STEWARD_WORKER_ROLE=public`. It serves the public audits and nothing else, and holds no credential that writes to GitHub. A deep audit renders a page that a stranger chose, so this role keeps that browser away from the findings loop's secrets. Unset, empty or `default` gives the worker described above; any other value stops the start.

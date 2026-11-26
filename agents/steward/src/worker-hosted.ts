@@ -15,6 +15,7 @@ import { assertPublicRoleEnvironment, parseWorkerRole } from './worker-role.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { APP_ID_ENV, APP_KEY_ENV, describeGitHubBoot, resolveGitHubAppForBoot } from './lib/github.js';
 import { log } from './lib/logger.js';
+import { longRetryAlarm } from './lib/long-retry.js';
 import { installTemporalRuntime, sdkMetricsState } from './lib/temporal-logger.js';
 import {
   ActivityTracker,
@@ -252,6 +253,11 @@ async function main() {
   const connection = await NativeConnection.connect(temporalConnectionOptions());
 
   const tracker = new ActivityTracker();
+  // One for the process, so all its workers share the waits' streaks. The public
+  // role has none: it renders strangers' pages and has no use for the ping key.
+  const longRetry = isPublic ? undefined : longRetryAlarm();
+  // The queues whose worker got it, for the ready line.
+  const alarmedQueues: string[] = [];
 
   const entries: HostedQueue[] = isPublic ? [...publicRegistry()] : [...hostedRegistry()];
   const [audit, fast, findings, watch] = entries;
@@ -281,15 +287,17 @@ async function main() {
    * platform's own kill deadline, and the restart reads as a crash rather than
    * a deploy.
    *
-   * The interceptor is the only reason these workers have one: the recycle
-   * policy needs to know when a browser activity ran and when the last activity
-   * finished, and the activities themselves are shared with the local worker,
-   * which must never recycle. Observing from out here keeps them ignorant of
+   * Two interceptors. The long-retry alarm (`lib/long-retry.ts`, default role
+   * only) pings when an activity has been failing for two hours. The tracker is
+   * there because the recycle policy needs to know when a browser activity ran
+   * and when the last activity finished, and the activities themselves are
+   * shared with the local worker, which must never recycle. Observing from out here keeps them ignorant of
    * hosting. All four share one tracker because one process exits once, and the
    * in-flight count has to see every queue or it would exit mid-activity.
    */
-  const createWorker = (entry: HostedQueue) =>
-    Worker.create({
+  const createWorker = (entry: HostedQueue) => {
+    if (longRetry) alarmedQueues.push(entry.taskQueue);
+    return Worker.create({
       connection,
       namespace: NAMESPACE,
       ...(entry.carriesWorkflows ? { workflowsPath: isPublic ? publicWorkflowsPath : workflowsPath } : {}),
@@ -304,8 +312,9 @@ async function main() {
       maxConcurrentActivityTaskExecutions: entry.maxConcurrentActivityTaskExecutions,
       shutdownGraceTime: '20 seconds',
       shutdownForceTime: '40 seconds',
-      interceptors: { activity: [trackActivityExecution(tracker)] },
+      interceptors: { activity: [trackActivityExecution(tracker), ...(longRetry ? [longRetry] : [])] },
     });
+  };
 
   // The audit queue: the serial one, and the workflow bundle for the audit and
   // scorecard workflows.
@@ -331,6 +340,8 @@ async function main() {
     activities: Object.keys(audit.activities),
     fastActivities: Object.keys(fast.activities),
     hosted: true,
+    // Which queues' workers carry the long-retry alarm.
+    longRetryAlarm: alarmedQueues,
     // Which app and installation the credential resolved to: the line a
     // deploy is checked against after the app's values change. The bot login
     // is `<slug>[bot]`.

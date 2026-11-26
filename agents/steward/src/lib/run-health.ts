@@ -17,7 +17,7 @@
  * result. So the signal is read off the run's own record, which already knows
  * both facts and costs nothing to consult.
  *
- * ## Three fixed signals, one per-site family, one transport
+ * ## Four fixed signals, one per-site family, one transport
  *
  * The transport is an external dead-man's-switch service (healthchecks.io),
  * authorised on the card 2026-08-15, because nothing else in this stack can send
@@ -28,6 +28,7 @@
  * | `nightly-scorecard` | a good nightly scorecard run happened | the scheduled run, success and failure both |
  * | `action-usage` | the namespace is not burning Temporal Cloud actions at a runaway rate | the scheduled run |
  * | `run-shape` | a completed run's record is right (success) or wrong (fail); no period | a manual scorecard run, and any deep audit, healthy or bad |
+ * | `long-retry` | an activity on the hosted worker has been failing for two hours (fail), or has recovered (success); no period | the interceptor in `lib/long-retry.ts` |
  * | `findings-recheck:<site>` | the daily recheck of that site's approved findings ran | `recheckFindingsWorkflow`, success and failure both |
  *
  * The first two and each `findings-recheck:<site>` carry the dead-man's half: a worker that never runs sends
@@ -38,6 +39,7 @@
  * healthy run sends a success ping, so the next good run clears a fail ping
  * instead of leaving the check down until an operator resumes it. A manual run
  * never pings `nightly-scorecard`, so this cannot hold the dead-man's switch down.
+ * `long-retry` has no period either, and is fail-and-recover the same way.
  */
 
 import type { ActionUsageSample } from './action-usage.js';
@@ -49,7 +51,8 @@ import { summariseRecheck, type RecheckFindingsResult, type RecheckOutcome, type
 export type FixedHealthSignal =
   | 'nightly-scorecard'
   | 'action-usage'
-  | 'run-shape';
+  | 'run-shape'
+  | 'long-retry';
 
 /** The family key in `HEALTH_CHECK_SLUGS` for the per-site recheck checks. */
 const RECHECK_FAMILY = 'findings-recheck';
@@ -85,6 +88,7 @@ export const HEALTH_CHECK_SLUGS: Record<FixedHealthSignal | typeof RECHECK_FAMIL
   'nightly-scorecard': 'steward-nightly-scorecard',
   'action-usage': 'steward-action-usage',
   'run-shape': 'steward-run-shape',
+  'long-retry': 'steward-long-retry',
   // Daily, from `recheckFindingsWorkflow`, one check per site (period 1 day,
   // grace 1 hour). The site is appended: `steward-findings-recheck-temporal-io`.
   [RECHECK_FAMILY]: 'steward-findings-recheck',
