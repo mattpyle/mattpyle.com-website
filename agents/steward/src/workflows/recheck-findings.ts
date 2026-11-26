@@ -3,11 +3,13 @@ import type * as activities from '../activities/index.js';
 import { findingWorkflowId, listedRuns, type Verification } from '../lib/findings.js';
 import { findingsRecheckSignal, recheckShape } from '../lib/run-health.js';
 import {
+  judgeWatch,
   summariseRecheck,
   vancouverDay,
   type RecheckFindingsInput,
   type RecheckFindingsResult,
   type RecheckRow,
+  type WatchRun,
 } from '../lib/findings-recheck.js';
 
 export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/findings-recheck.js';
@@ -39,15 +41,39 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * serves and nothing else. A write that fails is reported as `write failed`
  * and the run goes on, so one finding cannot stop the site's recheck.
  *
+ * **A site that watches (STW-678).** There each approved finding's own run
+ * measures it (`watchFinding`), and the recheck is the alarm for those runs.
+ * It measures nothing and writes nothing. `readSiteHosts` says whether the site
+ * watches; then each approved line's workflow is read by ID (`readWatchRun`):
+ *
+ * - **watching**: the last attempt is under 26 hours old, and its failure, if
+ *   any, is `StillPresent` or `NoChecks`;
+ * - **watch stale**: it is 26 hours old or more (`judgeWatch` says how an
+ *   attempt is aged);
+ * - **watch broken**: the last failure is any other type;
+ * - **not watching**: the run is open with no pending `watchFinding`, still so
+ *   when read again after {@link WATCH_SECOND_READ_DELAY}. The row names the
+ *   run's step. One wait covers every such run;
+ * - **no run**: no open run, and the file still reads approved and unresolved;
+ * - **skipped**: no open run, and it does not. A run that resolved its finding
+ *   after the index was read is not a missing one.
+ *
+ * **How late the alarm is.** A watch window opens at 13:20 UTC, spread over 20
+ * minutes. The daily recheck starts at 06:20 America/Vancouver: 13:20 UTC while
+ * Vancouver is at UTC-7, 14:20 UTC at UTC-8. At the recheck on the day a window
+ * is missed, the last attempt is at most about 25 hours old and reads as
+ * `watching`. The next day's recheck reports it, about a day after the miss.
+ *
  * **Replay.** A new workflow type: no run recorded before it exists, so it
  * carries no `patched` marker.
  *
  * **Health (STW-549).** Every run pings `findings-recheck:<site>`, so a recheck
  * that stops running goes late at the alerting service (period 1 day, grace 1
  * hour). A run that throws pings `/fail` with the reason. A run that completes
- * pings what `recheckShape` decides: `/fail` when any row is `write failed` or
- * `could not measure`, success otherwise, the run's one-line summary as the
- * body either way.
+ * pings what `recheckShape` decides: `/fail` when any row is `write failed`,
+ * `could not measure`, `watch stale`, `watch broken`, `not watching` or
+ * `no run`, success otherwise, the run's one-line summary starting the body
+ * either way.
  * The check for a site is created by hand at the service under the slug
  * `steward-findings-recheck-<site>`.
  *
@@ -64,14 +90,23 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * not yet issued its last command. The ping is one activity call after the
  * last command such a history holds, so the history ends before it and the new
  * call is simply the next command. The log line is not a command. An open
- * scheduled run therefore replays without a `patched` marker. No replay
- * fixture exists for this workflow.
+ * scheduled run therefore replays without a `patched` marker.
+ *
+ * **Replay of the watch read (STW-678).** No marker. The new path is taken only
+ * when the recorded result of `readSiteHosts` says `watch: true`. A result
+ * recorded before it has no field and reads as false, so such a run issues the
+ * commands it issued before, whatever the site's config says now
+ * (determinism rules 1, 3 and 5). `recheck-findings-watch-pre.bin` holds that
+ * case, and `recheck-findings-watching.bin` the new path.
  */
 
 const QUEUE_FINDINGS = 'steward-findings';
 
+/** How long a watch site's run with no pending `watchFinding` gets before its second read. */
+const WATCH_SECOND_READ_DELAY = '30 seconds';
+
 const reading = wf.proxyActivities<
-  Pick<typeof activities, 'readSiteHosts' | 'readFindingsIndex' | 'listOpenFindingWorkflows' | 'readRecheckBlock'>
+  Pick<typeof activities, 'readSiteHosts' | 'readFindingsIndex' | 'listOpenFindingWorkflows' | 'readRecheckBlock' | 'readWatchRun'>
 >({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -141,14 +176,16 @@ export async function recheckFindingsWorkflow(input: RecheckFindingsInput): Prom
 async function recheck(input: RecheckFindingsInput): Promise<RecheckFindingsResult> {
   const at = new Date(Date.now()).toISOString();
   const { workflowId } = wf.workflowInfo();
-  const { origin, hosts } = await reading.readSiteHosts({ repo: input.repo, site: input.site });
+  const { origin, hosts, watch } = await reading.readSiteHosts({ repo: input.repo, site: input.site });
   const index = await reading.readFindingsIndex(input.repo, input.site);
+  const approved = index.filter((entry) => entry.status === 'approved').map((entry) => entry.key);
+  // `=== true`: a result recorded before the field has none.
+  if (watch === true) return { site: input.site, at, rows: await readWatches(input, approved, { origin, hosts }) };
   // Only the IDs are read, so no `state` query is worth its cost.
   const open = new Set(listedRuns(await reading.listOpenFindingWorkflows({ idsOnly: true })).map((run) => (typeof run === 'string' ? run : run.workflowId)));
 
   const rows: RecheckRow[] = [];
-  for (const line of index.filter((entry) => entry.status === 'approved')) {
-    const key = line.key;
+  for (const key of approved) {
     if (open.has(findingWorkflowId(input.site, key))) {
       rows.push({ key, outcome: 'has an open run', detail: `${findingWorkflowId(input.site, key)} owns the file` });
       continue;
@@ -199,4 +236,45 @@ async function recheck(input: RecheckFindingsInput): Promise<RecheckFindingsResu
   }
 
   return { site: input.site, at, rows };
+}
+
+/** The rows of a site that watches: each approved finding's run, read from Temporal by ID. */
+async function readWatches(
+  input: RecheckFindingsInput,
+  keys: string[],
+  site: { origin: string; hosts: string[] },
+): Promise<RecheckRow[]> {
+  const read = (key: string) => reading.readWatchRun({ workflowId: findingWorkflowId(input.site, key) });
+  const runs = new Map<string, WatchRun>();
+  for (const key of keys) runs.set(key, await read(key));
+
+  const unsure = keys.filter((key) => {
+    const run = runs.get(key)!;
+    return run.state === 'open' && !run.pending;
+  });
+  if (unsure.length > 0) {
+    await wf.sleep(WATCH_SECOND_READ_DELAY);
+    for (const key of unsure) runs.set(key, await read(key));
+  }
+
+  const rows: RecheckRow[] = [];
+  for (const key of keys) {
+    const run = runs.get(key)!;
+    if (run.state === 'open') {
+      rows.push(
+        run.pending
+          ? { key, ...judgeWatch(run.pending, Date.now()) }
+          : { key, outcome: 'not watching', detail: `the run is open at ${run.step ?? 'an unknown step'} with no pending watchFinding` },
+      );
+      continue;
+    }
+    const block = await reading.readRecheckBlock({ repo: input.repo, site: input.site, key, ...site });
+    const short = block.keyShort ? { keyShort: block.keyShort } : {};
+    rows.push(
+      block.state === 'skip'
+        ? { key, ...short, outcome: 'skipped', detail: block.reason }
+        : { key, ...short, outcome: 'no run', detail: `no open ${findingWorkflowId(input.site, key)}` },
+    );
+  }
+  return rows;
 }

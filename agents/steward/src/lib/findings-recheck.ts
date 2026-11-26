@@ -20,7 +20,17 @@ export type RecheckOutcome =
   /** The file no longer reads approved and unresolved, though the index line does. Nothing measured. */
   | 'skipped'
   /** The checks ran, but writing their result failed. */
-  | 'write failed';
+  | 'write failed'
+  /** Watch site: the run's `watchFinding` is current and failing as expected. */
+  | 'watching'
+  /** Watch site: no attempt of `watchFinding` for {@link WATCH_STALE_AFTER_MS}. */
+  | 'watch stale'
+  /** Watch site: the last attempt failed as something other than a measurement. */
+  | 'watch broken'
+  /** Watch site: the run is open and holds no pending `watchFinding`. */
+  | 'not watching'
+  /** Watch site: an approved, unresolved finding with no open run. */
+  | 'no run';
 
 export interface RecheckRow {
   key: string;
@@ -45,6 +55,59 @@ export interface RecheckFindingsResult {
   /** ISO 8601, when the run started, by the workflow clock. */
   at: string;
   rows: RecheckRow[];
+}
+
+/**
+ * How old a watching run's last attempt may be: one daily window, the
+ * 20-minute offset and room for a worker recycle.
+ */
+export const WATCH_STALE_AFTER_MS = 26 * 60 * 60 * 1000;
+
+/** The `watchFinding` failures that are a measurement, not a broken watch. */
+const EXPECTED_WATCH_FAILURES: readonly string[] = ['StillPresent', 'NoChecks'];
+
+/** A run's pending `watchFinding`, as `readWatchRun` reads it from the server. Times are ISO 8601. */
+export interface PendingWatch {
+  attempt: number;
+  /** Set while an attempt runs; empty while a retry waits. */
+  lastStartedAt: string | null;
+  lastCompletedAt: string | null;
+  /** While a retry waits, the time of the next attempt, not of the last. */
+  scheduledAt: string | null;
+  /** The last failure's type: an application failure's, else the kind of failure. Null when none. */
+  failureType: string | null;
+  failureMessage: string | null;
+}
+
+/** What Temporal says about one finding's workflow ID. */
+export type WatchRun =
+  /** Temporal does not know the ID, or its latest run is closed. */
+  | { state: 'no run' }
+  /** `step` is read only when there is no pending `watchFinding`; null when the query fails. */
+  | { state: 'open'; pending: PendingWatch | null; step: string | null };
+
+/**
+ * One pending `watchFinding`, judged at `nowMs`.
+ *
+ * The age is of the last attempt: its start while it runs, else its completion,
+ * else, for a first attempt that never started, the time it was scheduled.
+ * A waiting retry carries no start time and its scheduled time is in the
+ * future, so the completion time is what ages it. That was measured on the
+ * dev server of SDK 1.25.0, not on Temporal Cloud. A later attempt with
+ * neither a start nor a completion time reads as stale, so a server that omits
+ * them cannot read as watching for ever.
+ */
+export function judgeWatch(pending: PendingWatch, nowMs: number): { outcome: 'watching' | 'watch stale' | 'watch broken'; detail: string } {
+  const last = pending.lastStartedAt ?? pending.lastCompletedAt ?? (pending.attempt <= 1 ? pending.scheduledAt : null);
+  const failure = pending.failureType ? `${pending.failureType}: ${pending.failureMessage ?? 'no message'}` : null;
+  if (!last || nowMs - Date.parse(last) >= WATCH_STALE_AFTER_MS) {
+    const when = last ? `last attempt ${last}` : `attempt ${pending.attempt} has no time of a last attempt`;
+    return { outcome: 'watch stale', detail: failure ? `${when}; ${failure}` : when };
+  }
+  if (pending.failureType && !EXPECTED_WATCH_FAILURES.includes(pending.failureType)) {
+    return { outcome: 'watch broken', detail: failure! };
+  }
+  return { outcome: 'watching', detail: `last attempt ${last}${pending.failureType ? `, ${pending.failureType}` : ''}` };
 }
 
 /** The day an instant falls on in America/Vancouver, `YYYY-MM-DD`: the date `live_on` carries. */

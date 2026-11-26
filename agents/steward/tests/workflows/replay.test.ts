@@ -96,7 +96,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin`, `verify-finding-slow-phase.bin` | The checks path ending reopened. The slow phase of the blockless read and of the write. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `fixDispatchWorkflow` | `fix-dispatch-grant-after-release.bin` | The hourly sweep (`runningWorkflowIds`). A grant whose signal fails. A re-sent request for a held ticket. The idle close. The continue-as-new rollover is a test in `fix-dispatch.test.ts`, not a replay. |
- * | `recheckFindingsWorkflow` | `recheck-findings-pre-heartbeat.bin` | A recheck that throws (`reportRunHealth` before the rethrow). A site with no approved finding. |
+ * | `recheckFindingsWorkflow` | `recheck-findings-pre-heartbeat.bin`, `recheck-findings-watch-pre.bin`, `recheck-findings-watching.bin` | A recheck that throws (`reportRunHealth` before the rethrow). A site with no approved finding. On a watch site, a `skipped` row (the same commands as `no run`). |
  *
  * `tests/lib/finding-report.test.ts` also reads `finding-resolved-action.bin`.
  * It reports on that history and does not replay it.
@@ -1540,3 +1540,70 @@ test('a run its own watch resolved replays to resolved', { timeout: 120_000 }, a
     'finding/temporal-io/watch-fixture-resolved--sitewide',
   );
 });
+
+/**
+ * ## The recheck before it read a watch (STW-678)
+ *
+ * `recheck-findings-watch-pre.bin`: one recheck of four approved findings on a
+ * site whose `config.yaml` already says `after_verdict: watch`, one with an
+ * open run (`has an open run`), one still present, one with no checks and one
+ * resolved, then the health ping. 71 events. Recorded from origin/master at
+ * b9023e0, before the recheck's first edit, against the time-skipping server
+ * with mocked activities and a fake GitHub, so it holds no real finding text.
+ *
+ * Its recorded `readSiteHosts` result has no `watch` field, so it must take the
+ * path that lists the open runs and measures, whatever the config says.
+ *
+ * Probe (2026-11-25, on b9023e0): `await wf.sleep('1 second')` before
+ * `reading.listOpenFindingWorkflows` made it fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 17, ActivityTaskScheduled)
+ * ```
+ *
+ * The sleep was removed and it re-ran green.
+ *
+ * Second probe, on the change's code: reading an absent `watch` as true
+ * (`watch !== false`) made it and `recheck-findings-pre-heartbeat.bin` fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'listOpenFindingWorkflows' does not match activity type of activity command
+ * 'readWatchRun'
+ * ```
+ *
+ * Reverted, and both re-ran green.
+ */
+const recheckWatchPrePath = fileURLToPath(new URL('../fixtures/histories/recheck-findings-watch-pre.bin', import.meta.url));
+
+test('a recheck recorded before it read a watch replays with it', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(recheckWatchPrePath));
+  await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'recheck/temporal-io/test');
+});
+
+/**
+ * `recheck-findings-watching.bin`: one recheck on a watch site (STW-678), four
+ * approved findings read by ID: `watching`, `watch stale`, one with no pending
+ * `watchFinding` that waits for its second read and stays `not watching`, and
+ * `no run` after a `readRecheckBlock`. 64 events, with the timer between the
+ * reads. Recorded on the change's code against the time-skipping server with a
+ * mocked `readWatchRun` and a fake GitHub.
+ *
+ * Probe (2026-11-25): `await wf.sleep('1 second')` before
+ * `reading.readRecheckBlock` in `readWatches` made it fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 52, ActivityTaskScheduled)
+ * ```
+ *
+ * The sleep was removed and it re-ran green.
+ */
+const recheckWatchingPath = fileURLToPath(new URL('../fixtures/histories/recheck-findings-watching.bin', import.meta.url));
+
+test('a recheck of a watch site replays with the watch reads', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(recheckWatchingPath));
+  await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'recheck/temporal-io/test');
+});
+

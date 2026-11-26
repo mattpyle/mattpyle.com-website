@@ -43,7 +43,7 @@
 import type { ActionUsageSample } from './action-usage.js';
 import { lighthouseVersionCounts } from './scorecard-aggregate.js';
 import { renderedNothing } from './agent-audit/report-shape.js';
-import { summariseRecheck, type RecheckFindingsResult } from './findings-recheck.js';
+import { summariseRecheck, type RecheckFindingsResult, type RecheckOutcome, type RecheckRow } from './findings-recheck.js';
 
 /** The signals with one check each, fixed in code. */
 export type FixedHealthSignal =
@@ -257,11 +257,17 @@ function pagesShape(input: ScorecardShapeInput): RunShape {
  * reports success. `no checks`, `has an open run` and `skipped` are not
  * failures: nothing was owed on those rows.
  *
+ * On a site that watches, the run is the alarm for the watchers: any
+ * `watch stale`, `watch broken`, `not watching` or `no run` row is a bad shape,
+ * and the body says what to do about each kind it holds. `watching` is not.
+ *
  * The body starts with the run's one-line summary and then names the rows, up to
  * five, so the email reads without opening Temporal.
  */
 export function recheckShape(result: RecheckFindingsResult): RunShape {
   const base = summariseRecheck(result);
+  const unwatched = result.rows.filter((row) => row.outcome in WATCH_ACTIONS);
+  if (unwatched.length > 0) return unwatchedShape(base, result.rows.length, unwatched);
   const bad = result.rows.filter((row) => row.outcome === 'write failed' || row.outcome === 'could not measure');
   if (bad.length === 0) return { ok: true, summary: base };
   const named = bad.slice(0, 5).map((row) => `${row.keyShort ?? row.key} ${row.outcome}${row.detail ? ` (${row.detail})` : ''}`);
@@ -273,6 +279,29 @@ export function recheckShape(result: RecheckFindingsResult): RunShape {
       `${named.join('; ')}${rest}. The run finished, so nothing else will report this. ` +
       "Each of these left the finding's file as it was, so its live_on may be stale. " +
       "Check the hosted worker's logs for the GitHub write or the browser check that failed.",
+  };
+}
+
+/** The watch outcomes that fail the ping, each with what to do about it. */
+const WATCH_ACTIONS: Partial<Record<RecheckOutcome, string>> = {
+  'watch stale': 'For a stale watch, run `steward finding measure-now <key>`, and check the hosted worker if it stays stale.',
+  'watch broken': 'For a broken watch, mend what the failure in brackets names; the next attempt reads it again.',
+  'not watching': 'For a run that is not watching, `steward finding status <key>` says where it is.',
+  'no run': 'Argus starts a missing run.',
+};
+
+/** By key, not `keyShort`: the commands take the key. */
+function unwatchedShape(base: string, total: number, rows: RecheckRow[]): RunShape {
+  const named = rows.slice(0, 5).map((row) => `${row.key} ${row.outcome}${row.detail ? ` (${row.detail})` : ''}`);
+  const rest = rows.length > named.length ? `, and ${rows.length - named.length} more` : '';
+  const todo = Object.entries(WATCH_ACTIONS)
+    .filter(([outcome]) => rows.some((row) => row.outcome === outcome))
+    .map(([, action]) => action);
+  return {
+    ok: false,
+    summary:
+      `${base} ${rows.length} of ${total} finding(s) are not watched as they should be: ` +
+      `${named.join('; ')}${rest}. The run finished, so nothing else will report this. ${todo.join(' ')}`,
   };
 }
 

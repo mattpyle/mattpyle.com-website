@@ -1,4 +1,5 @@
-import { ApplicationFailure } from '@temporalio/activity';
+import { ApplicationFailure, Context } from '@temporalio/activity';
+import { WorkflowNotFoundError } from '@temporalio/client';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { branchSha, commitFiles, fastForwardBranch, readRepoFile } from '../lib/github-contents.js';
 import { log } from '../lib/logger.js';
@@ -10,8 +11,10 @@ import {
   siteConfigPath,
   type Verification,
 } from '../lib/findings.js';
-import { setFrontmatterLiveOn } from '../lib/findings-recheck.js';
+import type { FindingState } from '../workflows/finding.js';
+import { setFrontmatterLiveOn, type PendingWatch, type WatchRun } from '../lib/findings-recheck.js';
 import { validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
+import { watchesAfterVerdict } from './findings.js';
 
 /**
  * The recheck's activities (STW-543): a site's origin and declared hosts, one
@@ -21,6 +24,10 @@ import { validateVerifyBlock, type VerifyCheck } from '../lib/verify-checks.js';
  * findings repository and open no local file, so the hosted worker registers
  * them on `steward-findings`. The checks themselves run through
  * `runFindingChecks`, which the verifier already registers there.
+ *
+ * `readWatchRun` reads Temporal instead, through the worker's own client: on a
+ * site that watches, the recheck measures nothing and asks whether each
+ * finding's run still does.
  */
 
 const BRANCH = 'main';
@@ -67,11 +74,78 @@ export interface ReadSiteHostsInput {
   site: string;
 }
 
-export async function readSiteHosts(input: ReadSiteHostsInput): Promise<SiteHosts> {
+export interface ReadSiteHostsResult extends SiteHosts {
+  /**
+   * Whether the site watches, by `readFindingSettings`'s rule. Absent from a
+   * result recorded before the recheck read it, which the workflow reads as false.
+   */
+  watch?: boolean;
+}
+
+export async function readSiteHosts(input: ReadSiteHostsInput): Promise<ReadSiteHostsResult> {
   const path = siteConfigPath(input.site);
   const file = await readRepoFile(path, BRANCH, input.repo);
   if (!file) throw ApplicationFailure.nonRetryable(`${path} is not in ${input.repo} at ${BRANCH}.`, 'FindingMissing');
-  return siteHosts(file.text, path);
+  return { ...siteHosts(file.text, path), watch: watchesAfterVerdict(input.site, file.text) };
+}
+
+export interface ReadWatchRunInput {
+  /** `finding/<site>/<key>` */
+  workflowId: string;
+}
+
+/**
+ * One finding's workflow, asked for by ID, not found in a list, which can lag.
+ * The pending `watchFinding` is the one not being cancelled: after a
+ * `measure-now` the old attempt can stay listed until its worker hears the
+ * cancel. With none pending, the run's `state` query names its step.
+ */
+export async function readWatchRun(input: ReadWatchRunInput): Promise<WatchRun> {
+  const client = Context.current().client;
+  let described;
+  try {
+    described = await client.workflow.getHandle(input.workflowId).describe();
+  } catch (err) {
+    if (err instanceof WorkflowNotFoundError) return { state: 'no run' };
+    throw err;
+  }
+  if (described.status.name !== 'RUNNING') return { state: 'no run' };
+
+  const info = (described.raw.pendingActivities ?? []).find(
+    (activity) => activity.activityType?.name === 'watchFinding' && activity.state !== PENDING_CANCEL_REQUESTED,
+  );
+  if (info) {
+    const failure = info.lastFailure;
+    const pending: PendingWatch = {
+      attempt: info.attempt ?? 1,
+      lastStartedAt: isoOf(info.lastStartedTime),
+      lastCompletedAt: isoOf(info.lastAttemptCompleteTime),
+      scheduledAt: isoOf(info.scheduledTime),
+      failureType: failure ? failure.applicationFailureInfo?.type || (failure.timeoutFailureInfo ? 'Timeout' : 'Failure') : null,
+      failureMessage: failure?.message ?? null,
+    };
+    return { state: 'open', pending, step: null };
+  }
+
+  let step: string | null = null;
+  try {
+    // By name: importing `findingStateQuery` would load the workflow module here.
+    step = (await client.workflow.getHandle(input.workflowId, described.runId).query<FindingState>('state')).step ?? null;
+  } catch (err) {
+    log.warn({ activity: 'readWatchRun', workflowId: input.workflowId, error: err instanceof Error ? err.message : String(err) }, 'state query failed');
+  }
+  return { state: 'open', pending: null, step };
+}
+
+/** `PENDING_ACTIVITY_STATE_CANCEL_REQUESTED` in the server's enum. */
+const PENDING_CANCEL_REQUESTED = 3;
+
+/** A server timestamp as ISO 8601, or null when the server sent none. */
+function isoOf(time: { seconds?: number | { toNumber(): number } | null; nanos?: number | null } | null | undefined): string | null {
+  const raw = time?.seconds;
+  if (raw === undefined || raw === null) return null;
+  const seconds = typeof raw === 'number' ? raw : raw.toNumber();
+  return new Date(seconds * 1000 + Math.floor((time?.nanos ?? 0) / 1e6)).toISOString();
 }
 
 export interface ReadRecheckBlockInput {
