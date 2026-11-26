@@ -266,7 +266,7 @@ export function createAuditMcpServer(client: Client): McpServer {
         url: z
           .string()
           .min(1)
-          .describe('The site to audit: https://example.com, or just example.com. Any path is ignored — the unit audited is a site.'),
+          .describe('The site to audit: https://example.com, or just example.com. A path names one extra page, measured in the reading-budget-page row; the unit audited is a site.'),
         fast: z
           .boolean()
           .optional()

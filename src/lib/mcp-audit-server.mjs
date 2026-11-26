@@ -405,7 +405,8 @@ const TOOL_DESCRIPTION =
   'nothing to poll and no second request to make. Takes seconds. structuredContent carries the ' +
   'canonical JSON, one entry per check with evidence and a fix; the text content is the same ' +
   'report as a markdown summary, ready to read to a person. The unit audited is a site, not a ' +
-  'page: any path in the URL is ignored. One result per site per clock hour (UTC) is shared with ' +
+  'page: a path in the URL names one extra page, whose first 8,000 characters are measured for ' +
+  'content share in the reading-budget-page row. One result per site per clock hour (UTC) is shared with ' +
   'other callers, so asking about a site somebody just asked about costs that site no second ' +
   'visit; pass fresh: true to force an audit of your own. The report says which it was in ' +
   'tool.path.';
@@ -552,8 +553,8 @@ export function createAuditServer({
           .string()
           .min(1)
           .describe(
-            'The site to audit: https://example.com, or just example.com. Any path is ignored — ' +
-              'the unit audited is a site.',
+            'The site to audit: https://example.com, or just example.com. A path names one extra ' +
+              'page, measured in the reading-budget-page row; the unit audited is a site.',
           ),
         fresh: z
           .boolean()
@@ -625,8 +626,8 @@ function registerDeepTools(server, deep, normaliseTarget) {
           .string()
           .min(1)
           .describe(
-            'The site to audit: https://example.com, or just example.com. Any path is ignored — ' +
-              'the unit audited is a site.',
+            'The site to audit: https://example.com, or just example.com. A path names one extra ' +
+              'page, measured in the reading-budget-page row; the unit audited is a site.',
           ),
       }),
       outputSchema: z.object({

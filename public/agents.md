@@ -198,7 +198,7 @@ curl -sS https://www.mattpyle.com/mcp   -H 'Content-Type: application/json'   -H
        "params":{"name":"audit_site","arguments":{"url":"example.com"}}}'
 ```
 
-A `GET` returns `405` with that example rather than a bare status. The unit audited is a site, not a page: any path in the URL is ignored. Only `http` and `https` targets are accepted, and addresses on private networks are refused before a connection is opened.
+A `GET` returns `405` with that example rather than a bare status. The unit audited is a site, not a page: a path in the URL names one extra page, whose first 8,000 characters are measured for content share in the `reading-budget-page` row. Only `http` and `https` targets are accepted, and addresses on private networks are refused before a connection is opened.
 
 ## WebMCP tools (experimental)
 
