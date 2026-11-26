@@ -55,8 +55,8 @@ const OUTCOMES = {
   'a2a-agent-card': 'error',
   'markdown-negotiation-home': 'pass',
   'markdown-negotiation-content': 'error',
-  'reading-budget-home': 'pass',
-  'reading-budget-content': 'pass',
+  'reading-budget-home': 'not-applicable',
+  'reading-budget-content': 'not-applicable',
   'link-headers': 'pass',
 };
 
