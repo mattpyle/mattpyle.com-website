@@ -39,8 +39,8 @@ export const FIXTURE_ORIGIN = 'https://example.com';
 /**
  * What each check did in the fixture run.
  *
- * `pass` seven, `fail` four across all three severities, `not-applicable` two and `error` two —
- * the last four all print as N/A, which is the merge worth having a fixture prove.
+ * `pass` five, `fail` four across all three severities, `not-applicable` four and `error` two —
+ * the last six all print as N/A, which is the merge worth having a fixture prove.
  */
 const OUTCOMES = {
   'robots-txt': 'pass',

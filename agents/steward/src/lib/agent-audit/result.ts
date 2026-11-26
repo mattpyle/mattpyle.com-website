@@ -40,7 +40,9 @@ export const SCHEMA_VERSION = 2;
  * - `not-applicable` — the check could not apply, and that is not the site's
  *   fault: robots.txt disallows the path, or a prerequisite surface (a sitemap
  *   to pick a content page from) is missing and already reported by its own
- *   check. Never counted against a site.
+ *   check. Never counted against a site. It is also the status of a row that is
+ *   a measurement with no verdict: the `reading-budget-*` rows report a figure
+ *   and have no target to pass or fail.
  * - `error` — the auditor could not reach a verdict: a transport failure, a
  *   refused target, the time budget. A statement about the run, not the site.
  */
