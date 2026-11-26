@@ -69,7 +69,10 @@ that's the property being dogfooded here, on a low-stakes, real target.
   After its fix PR a run does not end with the finding undecided (STW-653). A merge or deploy wait
   that runs out its bound says so once on the PR and keeps waiting (the deploy wait every 15 minutes).
   A write that cannot reach GitHub retries with backoff up to every 15 minutes for up to 7 days
-  (STW-680), and so does the verdict measurement's read; a verify retries every 15 minutes once its
+  (STW-680), and so does the verdict measurement's read; at 7 days the run issues it again
+  (STW-689). A verdict write or settings read that fails in a way no retry mends parks the run at
+  `verdict` or `settings` instead of failing it, and `steward finding resume <key>` tries again; a
+  new verdict replaces one parked at `verdict`. A verify retries every 15 minutes once its
   fast retries are used up. None posts a comment; the long-retry alarm below reports one. A check that fails on production (the file says
   `reopened`), a broken check, or any other failure a retry does not mend parks the run at step
   `parked`, releases its slot and comments once on the PR; `steward finding resume <key>` runs the
@@ -262,7 +265,7 @@ steward finding status <key>     # opens with `run: open`, or how and when a clo
 steward finding approve <key>    # send the verdict as an Update; the workflow writes it into the file and answers
 steward finding reject <key> --reason "why"
 steward finding fix <key>        # ask the finding's lifecycle for a fix attempt (a `request-fix` Update; refused with the reason), or start it for an approved finding
-steward finding resume <key>     # a run parked after its fix PR runs its stage again: the verify, the merge or deploy wait, or the returned write
+steward finding resume <key>     # a parked run runs its stage again: the verdict write, the settings read, the verify, the merge or deploy wait, or the returned write
 steward finding retest <key>     # test the open fix PR's head on its preview again (a Workflow Update; refused with the reason when there is no open fix PR)
 steward finding verify <key>     # fixing or reopened finding to resolved or reopened, measured on production; a parked run is resumed instead, so it verifies inside itself
 steward finding report           # one row per run with a verdict: minutes per step, PR comments, Action cost

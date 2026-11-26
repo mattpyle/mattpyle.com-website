@@ -161,3 +161,31 @@ test('measure-now through the CLI refuses a finding with no run, and a run that 
     assert.match(`${refused.stderr}${refused.stdout}`, /Steward did not measure not-watching:/);
   });
 });
+
+test('a run parked at its verdict says the gate holds a verdict that is not written (STW-689)', async () => {
+  await withWorker(async () => {
+    await start('held-one', {
+      mode: 'open',
+      step: 'parked',
+      gate: 'held',
+      verdict: { status: 'approved', reason: 'Real.', source: 'cli', at: '2026-11-25T18:00:00Z' },
+    });
+    const lines = await status('held-one');
+    assert.ok(lines.includes('  gate: held (the approved verdict is not written)'), lines.join('\n'));
+  });
+});
+
+test('a run whose fix record is still being written says its PR is open, not that it waits for one (STW-689)', async () => {
+  const pr = 'https://github.com/mattpyle/mattpyle.com-website/pull/402';
+  const issue = 'https://github.com/mattpyle/mattpyle.com-website/issues/102';
+  await withWorker(async () => {
+    await start('recording-one', { mode: 'open', step: 'fixing', gate: 'done', prUrl: pr, issueUrl: issue, pendingWrite: true });
+    const recording = await status('recording-one');
+    assert.ok(recording.includes(`  PR: ${pr}  (open; its record is being written)`), recording.join('\n'));
+    assert.ok(!recording.some((l) => l.includes('waiting for the PR') || l.includes('last PR:')), recording.join('\n'));
+    await start('waiting-one', { mode: 'open', step: 'fixing', gate: 'done', prUrl: pr, issueUrl: issue });
+    const waiting = await status('waiting-one');
+    assert.ok(waiting.includes(`  issue: ${issue}  (waiting for the PR)`), waiting.join('\n'));
+    assert.ok(waiting.includes(`  last PR: ${pr}`), waiting.join('\n'));
+  });
+});

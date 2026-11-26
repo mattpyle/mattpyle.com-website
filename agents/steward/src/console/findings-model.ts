@@ -74,10 +74,19 @@ export interface FindingRunView {
   waitNote?: string | null;
 }
 
-/** The hold line of a run parked after its fix PR, or waiting past a bound (STW-653); null for any other run. */
+/** The hold line of a parked run (STW-653, STW-689), or one waiting past a bound; null for any other run. */
 export function parkHoldLine(run: Pick<FindingRunView, 'open' | 'step' | 'parked' | 'waitNote'>): string | null {
   if (!run.open) return null;
-  if (run.step === 'parked' && run.parked) return `Parked at ${run.parked.stage}: ${run.parked.reason} ${run.parked.moves}`;
+  if (run.step === 'parked' && run.parked) {
+    // The two parks before the lifecycle (STW-689) name what is held, not a stage of the fix.
+    const where =
+      run.parked.stage === 'verdict'
+        ? 'Parked before its verdict was written'
+        : run.parked.stage === 'settings'
+          ? "Parked at the site's settings read"
+          : `Parked at ${run.parked.stage}`;
+    return `${where}: ${run.parked.reason} ${run.parked.moves}`;
+  }
   if (run.waitNote) return `Waiting past its bound: ${run.waitNote}`;
   return null;
 }

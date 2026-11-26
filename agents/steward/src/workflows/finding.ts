@@ -1,6 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities/index.js';
-import type { AwaitFixPrMergeOptions, FixIssue, FixPrOutcome, ProductionDeploy } from '../activities/findings.js';
+import type { AwaitFixPrMergeOptions, FindingSettings, FixIssue, FixPrOutcome, ProductionDeploy } from '../activities/findings.js';
 import type { WatchFindingResult } from '../activities/findings-watch.js';
 // Pure, no imports of its own: the ID, the paths and the verdict types are the
 // same objects the activities and the CLI hold.
@@ -494,13 +494,12 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * its own bounded proxy, `commenting`: a park awaits its comment before it
  * takes a message. The preview test's reads and waits are unchanged.
  *
- * At the 7-day bound the failure reaches the catch of its call site, as an
- * exhausted retry did. A returned write then takes `slowWriting`, as it does
- * on a rejected credential. Any other permanent failure of it parks.
+ * At the 7-day bound a returned write takes `slowWriting`, as it does on a
+ * rejected credential, and any other permanent failure of it parks. Every
+ * other durable call is issued again at its bound since STW-689 (below).
  *
  * A rejection at a park or a watch is in flight for as long as its write
- * retries. A second rejection is accepted in that window and overwrites the
- * first, so the window is now as long as the outage.
+ * retries. Since STW-689 a second rejection is refused in that window.
  *
  * `state.prUrl` is set before `writeFindingFix` is awaited, so a run never
  * holds an open PR it does not know.
@@ -512,6 +511,58 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * 5). The fixture is `finding-writes-exhausted-pre.bin` in
  * `tests/workflows/replay.test.ts`. An activity scheduled before the deploy
  * keeps its old policy on every attempt.
+ *
+ * **A permanent failure parks** (STW-689, 2026-11-25). Three failures no
+ * longer fail the run.
+ *
+ * 1. **The gate's verdict write** fails on a permanent type, or on the attempt
+ *    limit of a write scheduled before STW-680. The waiting Update is
+ *    answered `VerdictWriteFailed`, and the run parks at stage `verdict`
+ *    (`holdAtGate`, its own function: `park()` is a closure of the lifecycle).
+ *    `state.status` is `held` and `commitSha` stays null, so a reader tells a
+ *    held verdict from a written one. It posts nothing and holds no slot; the
+ *    memo carries the park's line. `resume` writes the held verdict again. A
+ *    `record-verdict` of either status replaces it and is written; that
+ *    Update's handler clears the failure before the write. `request-fix` is
+ *    refused. A rejection that is written ends the run `rejected` through the
+ *    gate's own ending, which awaits `allHandlersFinished`. A `FindingMoved`
+ *    reads the settings first, and a file that says `resolved` or `rejected`
+ *    ends the run `closed`.
+ * 2. **A settings read** fails on a permanent type: the run parks at stage
+ *    `settings`, and `resume` reads again. At the gate (`settingsAtGate`) it
+ *    takes `resume` only: the approval is written, and a rejection is refused
+ *    until the read lands. That is a known limit. In the lifecycle
+ *    (`settingsAtUse`) it is a `park()` that posts no PR comment, since
+ *    `state.prUrl` can be an earlier, closed PR, and takes a rejection as every
+ *    lifecycle park does.
+ * 3. **A durable call ends on its schedule-to-close bound** (`retryState`
+ *    `TIMEOUT` alone, not `isTimeout`): {@link durable} issues it again, so a
+ *    later policy reaches a long outage. This covers `writing` but the
+ *    returned write, `readingAtVerdict` and `settling`.
+ *
+ * **Versioned with `patched`.** {@link FAILURE_PARKS_PATCH} is read only in a
+ * catch, and only once the failure is one the new branch handles: a permanent
+ * type or the attempt limit at the verdict write or a settings read
+ * (`gaveUp`), or the bound on a wrapped call (`endedOnBound`). Any other
+ * failure never reaches it: an old `MAXIMUM_ATTEMPTS_REACHED` on a fix-loop
+ * write goes to its catch as before. A history without the marker takes the
+ * old branch at every site: the verdict write and the settings read fail the
+ * run, and the bound rethrows. So the runs that failed before this change
+ * replay unchanged when `steward finding status` queries them. The fixture is
+ * `finding-verdict-write-failed-pre.bin`.
+ *
+ * A run may pass one of these sites on old code, stay open, and record the
+ * marker later at another. On replay, `patched()` in this SDK answers false at
+ * a site in a workflow task before the one that recorded the marker:
+ * `tests/workflows/patched-replay.test.ts` is the proof. And no open run can
+ * hold such a pass: a verdict write or settings read that gave up ended the
+ * run, and the durable bound is 7 days from STW-680's deploy (2026-11-26 04:38
+ * UTC) and 30 days for `settling` (bounded since STW-645, 2026-11-21), so no
+ * bound of either has run out on any history recorded before this change.
+ *
+ * The validators change without a marker: a validator does not run on replay.
+ * Rollback: a run that parked, or issued a call again, cannot replay on code
+ * without the marker.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -557,6 +608,15 @@ export const PARKED_ISSUE_REREAD_PATCH = 'parked-issue-reread';
  * a wait that runs out waits on, and a failure parks the run.
  */
 export const OPEN_UNTIL_VERIFIED_PATCH = 'open-until-verified';
+
+/**
+ * The `patched` marker of a failure no retry mends (STW-689): the gate's
+ * verdict write and a settings read park the run in place of failing it, and a
+ * durable call that ends on its schedule-to-close bound is issued again. Read
+ * only once a failure is known to be one of those; see "A permanent failure
+ * parks" in the module docblock.
+ */
+export const FAILURE_PARKS_PATCH = 'failure-parks';
 
 /**
  * The deploy wait's interval once its first 24 hours ran out (STW-653). The
@@ -704,8 +764,10 @@ export interface FindingState {
   /**
    * The verdict gate's own state: `done` once the verdict is recorded and
    * written. A `'resolved'` run is still open then; `step` says where.
+   * `held` while the run is parked at stage `verdict` (STW-689): `verdict`
+   * holds a verdict that is not written, and `commitSha` stays null.
    */
-  status: 'waiting' | 'writing' | 'done';
+  status: 'waiting' | 'writing' | 'held' | 'done';
   verdict: FindingVerdict | null;
   commitSha: string | null;
   /**
@@ -1096,7 +1158,8 @@ const slowWriting = wf.proxyActivities<Pick<typeof activities, 'writeFindingRetu
 // findings repository. It is a wait, not a write: a run that cannot read its
 // settings makes no guess, so the read retries with backoff up to a quarter of
 // an hour apart for up to 30 days, a rejected credential included, and the
-// pending activity shows in `steward finding status`. Only then does the run fail.
+// pending activity shows in `steward finding status`. At the bound the read is
+// issued again, and a permanent failure parks the run at `settings` (STW-689).
 const settling = wf.proxyActivities<Pick<typeof activities, 'readFindingSettings'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -1137,6 +1200,42 @@ function isFindingMoved(err: unknown): boolean {
 /** A wait that ran out its schedule-to-close bound, rather than failing outright. */
 function isTimeout(err: unknown): boolean {
   return err instanceof wf.ActivityFailure && (err.retryState === 'TIMEOUT' || err.cause instanceof wf.TimeoutFailure);
+}
+
+/**
+ * A durable call that ran out its schedule-to-close bound (STW-689). The retry
+ * state alone: a `TimeoutFailure` cause is also what a last attempt that hit
+ * its start-to-close leaves, and that is not the bound.
+ */
+function endedOnBound(err: unknown): boolean {
+  return err instanceof wf.ActivityFailure && err.retryState === 'TIMEOUT';
+}
+
+/**
+ * A failure no retry mends (STW-689): a permanent type, or the attempt limit of
+ * an activity scheduled before the durable policies. Not the bound, which
+ * {@link durable} issues again, and not a cancellation.
+ */
+function gaveUp(err: unknown): boolean {
+  return err instanceof wf.ActivityFailure && (err.retryState === 'NON_RETRYABLE_FAILURE' || err.retryState === 'MAXIMUM_ATTEMPTS_REACHED');
+}
+
+/**
+ * Runs a durable call, and issues it again when it ends on its bound, so a
+ * later policy reaches a long outage (STW-689). The marker is read only on
+ * that branch: every other failure is rethrown to the call site's own catch,
+ * an old `MAXIMUM_ATTEMPTS_REACHED` included. A history without the marker
+ * rethrows the bound too, as it did.
+ */
+async function durable<T>(call: () => Promise<T>): Promise<T> {
+  for (;;) {
+    try {
+      return await call();
+    } catch (err) {
+      if (!endedOnBound(err) || !wf.patched(FAILURE_PARKS_PATCH)) throw err;
+      wf.log.warn('a durable call ran out its bound; issuing it again', { error: describeError(err) });
+    }
+  }
 }
 
 /** The first application failure type in a failure chain: a child's, or its activity's. */
@@ -1269,7 +1368,9 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   // another is asked for, so no accepted Update goes unanswered.
   const resume = { requested: false };
   const rejection: ParkRejection = { verdict: null, done: false, failed: null };
-  const asks: ParkAsks = { resume, fix, rejection };
+  // A park before the lifecycle (STW-689): at the verdict write or the settings read after it.
+  const gate: GatePark = { open: false, replaced: false };
+  const asks: ParkAsks = { resume, fix, rejection, gate };
   wf.setHandler(
     resumeUpdate,
     (): ResumeAccepted => {
@@ -1328,6 +1429,22 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   wf.setHandler(
     verdictUpdate,
     async (verdict): Promise<VerdictRecorded> => {
+      // A verdict at a park at `verdict` (STW-689) replaces the held one. The
+      // failure that parked the run is cleared here: every Update that waited
+      // on the failed write was answered when the run parked.
+      if (gate.open && state.parked?.stage === 'verdict') {
+        state.verdict = verdict;
+        write.failed = null;
+        gate.replaced = true;
+        try {
+          await wf.condition(() => state.status === 'done' || write.failed !== null);
+        } catch (err) {
+          if (!wf.isCancellation(err)) throw err;
+          throw wf.ApplicationFailure.nonRetryable(VERDICT_CANCELLED, VERDICT_WRITE_FAILED);
+        }
+        if (state.status !== 'done') throw wf.ApplicationFailure.nonRetryable(String(write.failed), VERDICT_WRITE_FAILED);
+        return { verdict, commitSha: state.commitSha, first: true, stopAfter: input.stopAfter ?? 'resolved' };
+      }
       // A `rejected` verdict on a run parked after its fix PR (STW-653): the
       // park writes it and ends the run as a rejection; this returns after the write.
       if (rejectsAtPark(state, verdict)) {
@@ -1365,33 +1482,114 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
   );
 
+  /**
+   * Parks the run before its lifecycle (STW-689), at the verdict write or the
+   * settings read after it: Temporal's Resumable Activity pattern, as `park()`
+   * in the lifecycle, which this cannot call. There is no slot and no PR, so
+   * it posts nothing; the memo carries the line `steward finding list` prints.
+   * It returns when a `resume`, or at `verdict` a new verdict, moves it. Every
+   * Update that waited on the failure was answered before this is called.
+   */
+  const holdAtGate = async (stage: 'verdict' | 'settings', reason: string): Promise<void> => {
+    const back = state.step;
+    resume.requested = false;
+    gate.replaced = false;
+    gate.open = true;
+    const parked: FindingPark = { kind: 'error', stage, reason, since: nowIso(), moves: parkMoves(input.key, stage), prUrl: null, commentError: null };
+    state.parked = parked;
+    state.step = 'parked';
+    // Held and not written: a reader tells it from a recorded verdict by this.
+    if (stage === 'verdict') state.status = 'held';
+    wf.upsertMemo({ waitsFor: parkLine(parked) });
+    wf.log.info('parked', { key: input.key, kind: parked.kind, stage });
+    await wf.condition(() => resume.requested || gate.replaced);
+    resume.requested = false;
+    gate.replaced = false;
+    gate.open = false;
+    write.failed = null;
+    state.parked = null;
+    state.step = back;
+    wf.upsertMemo({ waitsFor: undefined });
+  };
+
+  /**
+   * The settings read at the gate. A failure no retry mends parks the run at
+   * `settings` and `resume` reads again (STW-689); a history without the marker
+   * fails the run, as it did.
+   */
+  const settingsAtGate = async () => {
+    for (;;) {
+      try {
+        return await durable(() =>
+          settling.readFindingSettings({ repo: input.repo, site: input.site, key: input.key, findingPath: input.findingPath }),
+        );
+      } catch (err) {
+        if (!gaveUp(err) || !wf.patched(FAILURE_PARKS_PATCH)) throw err;
+        await holdAtGate('settings', `The site's settings could not be read: ${describeError(err)}.`);
+      }
+    }
+  };
+
   await wf.condition(() => state.verdict !== null);
-  const verdict = state.verdict as unknown as FindingVerdict;
+  let verdict = state.verdict as unknown as FindingVerdict;
 
   if (verdictSourceWrites(verdict.source)) {
-    state.status = 'writing';
-    let written;
-    try {
-      written = await writing.writeFindingVerdict({
-        repo: input.repo,
-        site: input.site,
-        key: input.key,
-        findingPath: input.findingPath,
-        indexPath: input.indexPath,
-        status: verdict.status,
-        reason: verdict.reason,
-        at: verdict.at,
-        source: verdict.source,
-      });
-    } catch (err) {
-      // A waiting Update is answered before the run ends on the failure.
-      write.failed = wf.isCancellation(err)
-        ? VERDICT_CANCELLED
-        : `The verdict was not written: ${describeError(err)}`;
-      await wf.CancellationScope.nonCancellable(() => wf.condition(wf.allHandlersFinished));
-      throw err;
+    for (;;) {
+      state.status = 'writing';
+      let written;
+      try {
+        const writes = verdict;
+        written = await durable(() =>
+          writing.writeFindingVerdict({
+            repo: input.repo,
+            site: input.site,
+            key: input.key,
+            findingPath: input.findingPath,
+            indexPath: input.indexPath,
+            status: writes.status,
+            reason: writes.reason,
+            at: writes.at,
+            source: writes.source,
+          }),
+        );
+      } catch (err) {
+        // A waiting Update is answered before the run ends on the failure, or parks.
+        write.failed = wf.isCancellation(err)
+          ? VERDICT_CANCELLED
+          : `The verdict was not written: ${describeError(err)}`;
+        // The marker is read only for a failure the park handles. A history
+        // without it fails the run here, as every run before STW-689 did.
+        if (wf.isCancellation(err) || !gaveUp(err) || !wf.patched(FAILURE_PARKS_PATCH)) {
+          await wf.CancellationScope.nonCancellable(() => wf.condition(wf.allHandlersFinished));
+          throw err;
+        }
+        if (isFindingMoved(err)) {
+          // A file decided elsewhere ends the run `closed`, as `decidedElsewhere` does after a PR.
+          const settings = await settingsAtGate();
+          if (settings.status === 'resolved' || settings.status === 'rejected') {
+            // The last state reads as held and unwritten, not as a write in flight.
+            state.status = 'held';
+            state.step = 'done';
+            await wf.condition(wf.allHandlersFinished);
+            return {
+              site: input.site,
+              key: input.key,
+              verdict,
+              commitSha: null,
+              outcome: 'closed',
+              note: `Closed at its verdict: the finding file says ${settings.status}, so the ${verdict.status} verdict was not written.`,
+            };
+          }
+        }
+        await holdAtGate('verdict', `The ${verdict.status} verdict was not written: ${describeError(err)}.`);
+        verdict = state.verdict as FindingVerdict;
+        // A replacing verdict from the file is already written there.
+        if (!verdictSourceWrites(verdict.source)) break;
+        continue;
+      }
+      state.commitSha = written.commitSha;
+      break;
     }
-    state.commitSha = written.commitSha;
   }
   state.status = 'done';
   // A waiting Update returns before the run can close on the next lines.
@@ -1406,12 +1604,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   // records no marker.
   if (verdict.status === 'approved' && wf.patched(SETTINGS_AT_USE_PATCH)) {
     state.step = 'reading-settings';
-    const settings = await settling.readFindingSettings({
-      repo: input.repo,
-      site: input.site,
-      key: input.key,
-      findingPath: input.findingPath,
-    });
+    const settings = await settingsAtGate();
     state.stopAfter = settings.stopAfter;
     if (settings.stopAfter !== 'resolved' || !settings.origin) {
       // Stage 4: a site with no fixer that watches. Absent from a result
@@ -1455,11 +1648,22 @@ interface ParkRejection {
   failed: string | null;
 }
 
-/** The flags of the three messages a park takes, for the validators to see each other's. */
+/**
+ * A park before the lifecycle (STW-689). `open` while the run is parked at the
+ * verdict write or the settings read after it; `replaced` once a new verdict
+ * is accepted there.
+ */
+interface GatePark {
+  open: boolean;
+  replaced: boolean;
+}
+
+/** The flags of the messages a park takes, for the validators to see each other's. */
 interface ParkAsks {
   resume: { requested: boolean };
   fix: { requested: boolean };
   rejection: ParkRejection;
+  gate: GatePark;
 }
 
 /**
@@ -1467,7 +1671,9 @@ interface ParkAsks {
  * parked after its fix PR (STW-653), or one watching production (stage 4).
  */
 function rejectsAtPark(state: FindingState, verdict: FindingVerdict): boolean {
-  return (state.step === 'parked' || state.step === 'watching') && verdict.status === 'rejected' && state.verdict?.status === 'approved';
+  // A park before the lifecycle (STW-689) is not one: its verdict is held, or written and not yet acted on.
+  const atPark = state.step === 'parked' && state.parked?.stage !== 'verdict';
+  return (atPark || state.step === 'watching') && verdict.status === 'rejected' && state.verdict?.status === 'approved';
 }
 
 /**
@@ -1540,17 +1746,19 @@ async function watchProduction(
       try {
         if (verdictSourceWrites(verdict.source)) {
           commitSha = (
-            await writing.writeFindingVerdict({
-              repo: input.repo,
-              site: input.site,
-              key: input.key,
-              findingPath: input.findingPath,
-              indexPath: input.indexPath,
-              status: verdict.status,
-              reason: verdict.reason,
-              at: verdict.at,
-              source: verdict.source,
-            })
+            await durable(() =>
+              writing.writeFindingVerdict({
+                repo: input.repo,
+                site: input.site,
+                key: input.key,
+                findingPath: input.findingPath,
+                indexPath: input.indexPath,
+                status: verdict.status,
+                reason: verdict.reason,
+                at: verdict.at,
+                source: verdict.source,
+              }),
+            )
           ).commitSha;
         }
       } catch (err) {
@@ -1590,8 +1798,9 @@ async function watchProduction(
 }
 
 /** Why a park refuses a message because another is already asked for; null when none is. */
-function otherAsk(asks: ParkAsks, mine: 'resume' | 'fix' | 'reject'): string | null {
+function otherAsk(asks: ParkAsks, mine: 'resume' | 'fix' | 'reject' | 'verdict'): string | null {
   if (mine !== 'resume' && asks.resume.requested) return 'A resume is already asked for: the run runs its stage again first.';
+  if (asks.gate.replaced) return 'A new verdict is already asked for: the run writes it first.';
   if (mine !== 'fix' && asks.fix.requested) return 'A new fix attempt is already asked for.';
   if (mine !== 'reject' && asks.rejection.verdict) return 'A rejection is already being written: the run ends with it.';
   return null;
@@ -1607,6 +1816,7 @@ function resumeRefusal(state: FindingState, asks: ParkAsks, request: ResumeReque
   }
   if (state.step !== 'parked' || !state.parked) return `The run is not parked: it is at ${state.step ?? 'an unknown step'}.`;
   if (asks.resume.requested) return 'A resume is already asked for.';
+  // At a park before the lifecycle (STW-689), a resume is the only message besides a new verdict.
   return otherAsk(asks, 'resume');
 }
 
@@ -1620,6 +1830,12 @@ function requestFixRefusal(state: FindingState, asks: ParkAsks, request: FixUpda
   if (!request || (request.source !== 'cli' && request.source !== 'console') || typeof request.at !== 'string') {
     return 'The fix request is malformed.';
   }
+  // A park before the lifecycle (STW-689): nothing to fix until the gate is through.
+  if (asks.gate.open) {
+    return state.parked?.stage === 'verdict'
+      ? 'The verdict is not written yet: send resume, or a new verdict.'
+      : "The run cannot read its site's settings yet: send resume so it reads them again.";
+  }
   if (state.stopAfter !== 'resolved') return 'This run ends at the verdict, so it opens no fix.';
   if (!state.verdict) return 'The run has no verdict yet: approve the finding first.';
   if (state.verdict.status !== 'approved') return 'The verdict is rejected, so there is nothing to fix.';
@@ -1629,6 +1845,7 @@ function requestFixRefusal(state: FindingState, asks: ParkAsks, request: FixUpda
     case 'waiting-fix':
       return null;
     case 'parked':
+      if (state.parked?.stage === 'settings') return "The run cannot read its site's settings: send resume so it reads them again.";
       if (state.parked && !parkTakesFix(state.parked.stage)) {
         return `${pr} is not merged and may still be open: close it, then send resume so the run reads it closed.`;
       }
@@ -1674,8 +1891,22 @@ interface Retest {
  */
 function verdictRefusal(state: FindingState, verdict: FindingVerdict, asks: ParkAsks): string | null {
   if (!isFindingVerdict(verdict)) return 'The verdict is malformed.';
+  // A park before the lifecycle (STW-689). At `verdict` a verdict of either
+  // status replaces the held one. At `settings` the verdict is written, and
+  // the other status waits for the read: resume first.
+  if (asks.gate.open) {
+    if (state.parked?.stage === 'verdict') return otherAsk(asks, 'verdict');
+    if (state.verdict && state.verdict.status !== verdict.status) {
+      return `The run cannot read its site's settings: send resume first, then the ${verdict.status} verdict once it reads them.`;
+    }
+    return null;
+  }
   // A run parked after its fix PR takes a rejection in place of its approval (STW-653).
-  if (rejectsAtPark(state, verdict)) return otherAsk(asks, 'reject');
+  if (rejectsAtPark(state, verdict)) {
+    // One rejection at a time (STW-689): a second would overwrite the one being written.
+    if (asks.rejection.verdict) return 'A rejection is already being written: the run ends with it.';
+    return otherAsk(asks, 'reject');
+  }
   if (state.verdict && state.verdict.status !== verdict.status) {
     return `A verdict is already recorded: ${state.verdict.status} (source ${state.verdict.source}).`;
   }
@@ -1768,12 +1999,12 @@ async function lifecycle(
       ticket,
       at: nowIso(),
     };
-    const requested = await writing.requestFixSlot(request);
+    const requested = await durable(() => writing.requestFixSlot(request));
     state.slotPaths = requested.paths;
     if (!requested.dispatched) return;
     slot.dispatched = true;
     while (!(await wf.condition(() => slot.granted, SLOT_RESEND))) {
-      const again = await writing.requestFixSlot({ ...request, at: nowIso() });
+      const again = await durable(() => writing.requestFixSlot({ ...request, at: nowIso() }));
       // The cause no longer names a path: nothing to wait for.
       if (!again.dispatched) return;
     }
@@ -1909,14 +2140,16 @@ async function lifecycle(
     let measure: VerdictMeasure | null = null;
     let checks;
     try {
-      const finding = await readingAtVerdict.readFinding(input.repo, input.findingPath);
+      const finding = await durable(() => readingAtVerdict.readFinding(input.repo, input.findingPath));
       checks = (
-        await readingAtVerdict.readVerifyBlock({
-          repo: input.repo,
-          findingPath: input.findingPath,
-          findingText: finding.text,
-          origin: input.origin,
-        })
+        await durable(() =>
+          readingAtVerdict.readVerifyBlock({
+            repo: input.repo,
+            findingPath: input.findingPath,
+            findingText: finding.text,
+            origin: input.origin,
+          }),
+        )
       ).checks;
     } catch (err) {
       if (wf.isCancellation(err)) throw err;
@@ -1942,14 +2175,16 @@ async function lifecycle(
       ? { status: 'resolved', at: taken.at, workflowId, source: 'finding', rows: taken.rows ?? [], atVerdict: true }
       : null;
     try {
-      await writing.writeFindingVerdictMeasure({
-        repo: input.repo,
-        key: input.key,
-        findingPath: input.findingPath,
-        indexPath: input.indexPath,
-        measure: taken,
-        ...(verification ? { verification } : {}),
-      });
+      await durable(() =>
+        writing.writeFindingVerdictMeasure({
+          repo: input.repo,
+          key: input.key,
+          findingPath: input.findingPath,
+          indexPath: input.indexPath,
+          measure: taken,
+          ...(verification ? { verification } : {}),
+        }),
+      );
     } catch (err) {
       if (wf.isCancellation(err)) throw err;
       if (isFindingMoved(err)) {
@@ -2008,12 +2243,9 @@ async function lifecycle(
       if (state.issueUrl && !slot.active && wf.patched(PARKED_ISSUE_REREAD_PATCH)) {
         for (;;) {
           if (await wf.condition(() => fix.requested, PARKED_REREAD)) return null;
-          const settings = await settling.readFindingSettings({
-            repo: input.repo,
-            site: input.site,
-            key: input.key,
-            findingPath: input.findingPath,
-          });
+          const read = await settingsAtUse();
+          if (!('settings' in read)) return read.ended;
+          const { settings } = read;
           if (settings.status === 'resolved' || settings.status === 'rejected') {
             return end(
               'closed',
@@ -2030,12 +2262,9 @@ async function lifecycle(
     let rested = fixAttempts === 0;
     for (;;) {
       if (rested) {
-        const settings = await settling.readFindingSettings({
-          repo: input.repo,
-          site: input.site,
-          key: input.key,
-          findingPath: input.findingPath,
-        });
+        const read = await settingsAtUse();
+        if (!('settings' in read)) return read.ended;
+        const { settings } = read;
         if (settings.status === 'resolved' || settings.status === 'rejected') {
           return end('closed', `Closed while it waited for a fix: the finding file says ${settings.status}.`);
         }
@@ -2122,7 +2351,8 @@ async function lifecycle(
     state.parked = parked;
     state.step = 'parked';
     syncMemo();
-    parked.commentError = await tell(`park-${p.kind}-${p.stage}`, parkComment(parked, workflowId));
+    // A settings park is about the findings repository, not the PR: `state.prUrl` can be an earlier, closed one (STW-689).
+    if (p.stage !== 'settings') parked.commentError = await tell(`park-${p.kind}-${p.stage}`, parkComment(parked, workflowId));
     wf.log.info('parked', { key: input.key, kind: p.kind, stage: p.stage });
     for (;;) {
       await wf.condition(() => resume.requested || fix.requested || rejection.verdict !== null);
@@ -2148,17 +2378,19 @@ async function lifecycle(
     try {
       if (verdictSourceWrites(verdict.source)) {
         commitSha = (
-          await writing.writeFindingVerdict({
-            repo: input.repo,
-            site: input.site,
-            key: input.key,
-            findingPath: input.findingPath,
-            indexPath: input.indexPath,
-            status: verdict.status,
-            reason: verdict.reason,
-            at: verdict.at,
-            source: verdict.source,
-          })
+          await durable(() =>
+            writing.writeFindingVerdict({
+              repo: input.repo,
+              site: input.site,
+              key: input.key,
+              findingPath: input.findingPath,
+              indexPath: input.indexPath,
+              status: verdict.status,
+              reason: verdict.reason,
+              at: verdict.at,
+              source: verdict.source,
+            }),
+          )
         ).commitSha;
       }
     } catch (err) {
@@ -2178,14 +2410,39 @@ async function lifecycle(
     return end('rejected', `Rejected after its fix PR ${state.prUrl ?? ''}, where it was parked.`, { verdict, commitSha });
   };
 
+  /**
+   * The settings read in the lifecycle (STW-689). A failure no retry mends
+   * parks the run at `settings`, with no PR comment, and `resume` reads again.
+   * `ended` holds the run's result when a rejection at the park ended it, or
+   * null when a `fix` that arrived before the park moved it: the caller then
+   * goes on as if the read had found nothing new. A history without the marker
+   * fails the run, as it did.
+   */
+  const settingsAtUse = async (): Promise<{ settings: FindingSettings } | { ended: FindingWorkflowResult | null }> => {
+    for (;;) {
+      try {
+        return {
+          settings: await durable(() =>
+            settling.readFindingSettings({ repo: input.repo, site: input.site, key: input.key, findingPath: input.findingPath }),
+          ),
+        };
+      } catch (err) {
+        if (!gaveUp(err) || !wf.patched(FAILURE_PARKS_PATCH)) throw err;
+        // The step the read ran at, for the run to go back to: `park()` leaves `parked`.
+        const back = state.step;
+        const moved = await park({ kind: 'error', stage: 'settings', reason: `The site's settings could not be read: ${describeError(err)}.` });
+        if (typeof moved === 'object') return { ended: moved };
+        state.step = back;
+        if (moved === 'fix') return { ended: null };
+      }
+    }
+  };
+
   /** A file decided elsewhere ends the run `closed`; null when it is not decided. */
   const decidedElsewhere = async (): Promise<FindingWorkflowResult | null> => {
-    const settings = await settling.readFindingSettings({
-      repo: input.repo,
-      site: input.site,
-      key: input.key,
-      findingPath: input.findingPath,
-    });
+    const read = await settingsAtUse();
+    if (!('settings' in read)) return read.ended;
+    const { settings } = read;
     if (settings.status !== 'resolved' && settings.status !== 'rejected') return null;
     return end('closed', `Closed after its fix PR ${state.prUrl ?? ''}: the finding file says ${settings.status}.`);
   };
@@ -2247,7 +2504,7 @@ async function lifecycle(
     // A history without the settings marker: the flag is read once, here, and kept.
     let autoFix = false;
     if (!atUse && wf.patched(AUTO_FIX_PATCH)) {
-      autoFix = await writing.readSiteAutoFix({ repo: input.repo, site: input.site });
+      autoFix = await durable(() => writing.readSiteAutoFix({ repo: input.repo, site: input.site }));
     }
 
     // The last attempt's issue, and why it ended: the next attempt closes it with that.
@@ -2292,15 +2549,19 @@ async function lifecycle(
         }
         if (wf.patched(ACTION_ADAPTER_PATCH)) {
           viaIssue = true;
-          const issue: FixIssue = await writing.openFixIssue({
-            repo: input.repo,
-            site: input.site,
-            key: input.key,
-            findingPath: input.findingPath,
-            supersedes: lastIssue,
-            // A person's new attempt from a park (STW-653): the earlier PR's file passes the gate.
-            ...(reattempt ? { afterPr: reattempt.prUrl } : {}),
-          });
+          const supersedes = lastIssue;
+          const afterPr = reattempt ? { afterPr: reattempt.prUrl } : {};
+          const issue: FixIssue = await durable(() =>
+            writing.openFixIssue({
+              repo: input.repo,
+              site: input.site,
+              key: input.key,
+              findingPath: input.findingPath,
+              supersedes,
+              // A person's new attempt from a park (STW-653): the earlier PR's file passes the gate.
+              ...afterPr,
+            }),
+          );
           state.issueUrl = issue.url;
           lastIssue = { url: issue.url, reason: '' };
           try {
@@ -2312,15 +2573,19 @@ async function lifecycle(
           // Known before the write, which can retry for days: the PR is open from here.
           state.prUrl = prUrl;
           // The custom fixer wrote this from inside its child; the Action cannot.
-          await writing.writeFindingFix({
-            repo: input.repo,
-            site: input.site,
-            key: input.key,
-            findingPath: input.findingPath,
-            indexPath: input.indexPath,
-            prUrl,
-            ...(reattempt ? { earlier: reattempt } : {}),
-          });
+          const pr = prUrl;
+          const earlier = reattempt ? { earlier: reattempt } : {};
+          await durable(() =>
+            writing.writeFindingFix({
+              repo: input.repo,
+              site: input.site,
+              key: input.key,
+              findingPath: input.findingPath,
+              indexPath: input.indexPath,
+              prUrl: pr,
+              ...earlier,
+            }),
+          );
           reattempt = null;
           // From here the only way back to the fix wait is the PR closing unmerged, or a park.
           lastIssue.reason = `${prUrl} closed unmerged`;
@@ -2398,7 +2663,7 @@ async function lifecycle(
             if (merge.state !== 'conflicting') break;
             let closed;
             try {
-              closed = await writing.closeConflictingFixPr(prUrl);
+              closed = await durable(() => writing.closeConflictingFixPr(prUrl));
             } catch (err) {
               if (wf.isCancellation(err)) throw err;
               // It could not be closed: leave it to a person, and wait on it as before.

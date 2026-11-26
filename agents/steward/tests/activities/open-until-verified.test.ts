@@ -132,6 +132,14 @@ test('a park says what moves it, and only an unmerged PR\'s park refuses a new f
   assert.equal(parkTakesFix('verify'), true);
   assert.equal(parkMoves('k', 'merge'), '`steward finding resume k` waits on the merge again.');
   assert.equal(parkMoves('k', 'verify'), '`steward finding resume k` verifies again; `steward finding fix k` starts a new fix attempt.');
+  // The two parks before the lifecycle (STW-689) take no fix attempt.
+  assert.equal(parkTakesFix('verdict'), false);
+  assert.equal(parkTakesFix('settings'), false);
+  assert.equal(
+    parkMoves('k', 'verdict'),
+    '`steward finding resume k` writes the verdict again; a new `steward finding approve k` or `steward finding reject k` replaces it.',
+  );
+  assert.equal(parkMoves('k', 'settings'), "`steward finding resume k` reads the site's settings again.");
   assert.equal(parkLine({ kind: 'checks-broken', stage: 'verify', reason: 'Check 1 does not parse.' }), 'parked at verify (a check is broken): Check 1 does not parse.');
   const comment = parkComment({ kind: 'error', stage: 'deploy', reason: 'The deploy wait failed.', moves: parkMoves('k', 'deploy') }, 'finding/mattpyle-com/k');
   assert.match(comment, /^Steward stopped following this fix\.\n\nThe deploy wait failed\.\n\nThe finding's run `finding\/mattpyle-com\/k` is parked and stays open\. Nothing happens on a clock: /);

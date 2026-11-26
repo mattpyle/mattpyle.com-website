@@ -121,6 +121,8 @@ export interface FixRequested {
   priorAttempts: number;
   /** The run's issue before the signal, so a reused one is not reported as new. */
   priorIssueUrl: string | null;
+  /** The run's PR before the signal, so the last attempt's is never taken for this one's. */
+  priorPrUrl?: string | null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -321,6 +323,7 @@ export async function requestFix(deps: FindingFixDeps, site: string, key: string
     replacedVerdictRun: Boolean(verdictRun),
     priorAttempts: state.fixAttempts ?? 0,
     priorIssueUrl: state.issueUrl ?? null,
+    priorPrUrl: state.prUrl ?? null,
   };
 }
 
@@ -334,6 +337,12 @@ export interface FixFollowed {
    * fix is live. `steward finding status` names the path and the fix.
    */
   queued?: boolean;
+  /**
+   * True when the run holds this attempt's PR at `fixing`: the PR is open and
+   * `writeFindingFix` is still writing its record, which can retry for days
+   * (STW-680). The run waits for the merge once the write lands.
+   */
+  recording?: boolean;
 }
 
 /**
@@ -384,6 +393,10 @@ export async function followFix(
       if (state.step !== 'fixing') {
         if (!state.prUrl) throw new Error(`${id} is ${state.step} with no PR.`);
         return { issueUrl: state.issueUrl ?? null, prUrl: state.prUrl };
+      }
+      // This attempt's PR, known before its record is written (STW-680).
+      if (state.prUrl && state.prUrl !== (requested.priorPrUrl ?? null)) {
+        return { issueUrl: state.issueUrl ?? null, prUrl: state.prUrl, recording: true };
       }
     }
     if (Date.now() > deadline) {

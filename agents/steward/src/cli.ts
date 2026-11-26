@@ -2056,14 +2056,25 @@ finding
       const at = run.closed ? '    ' : '  ';
       const step = stepLine(state);
       if (step) console.log(`${at}${step}`);
-      console.log(`${at}gate: ${state.status}`);
+      // Parked at `verdict` (STW-689): the verdict is held, not written.
+      console.log(
+        state.status === 'held'
+          ? `${at}gate: held (the ${state.verdict?.status ?? 'held'} verdict is not written)`
+          : `${at}gate: ${state.status}`,
+      );
       for (const activity of pending) {
         const line = pendingActivityLine(activity);
         if (line) console.log(`${at}retrying: ${line}`);
         const next = nextMeasurementLine(activity);
         if (next) console.log(`${at}${next}`);
       }
-      if (state.step === 'fixing' && state.issueUrl) {
+      // The run knows its PR before `writeFindingFix` lands, and that write can
+      // retry for days (STW-680): while it is pending, the PR is this attempt's.
+      const recordingPr = state.step === 'fixing' && state.prUrl && pending.some((a) => a.activityType?.name === 'writeFindingFix');
+      if (recordingPr) {
+        console.log(`${at}PR: ${state.prUrl}  (open; its record is being written)`);
+        if (state.issueUrl) console.log(`${at}issue: ${state.issueUrl}`);
+      } else if (state.step === 'fixing' && state.issueUrl) {
         console.log(`${at}issue: ${state.issueUrl}  (waiting for the PR)`);
         if (state.prUrl) console.log(`${at}last PR: ${state.prUrl}`);
       } else {
@@ -2291,7 +2302,11 @@ finding
       }
       console.log(`  ${elapsed()}  PR ${fixed.prUrl}`);
       console.log('');
-      console.log(`  ${lifecycleId} now waits for the merge. \`steward finding status ${key}\` shows the step.`);
+      if (fixed.recording) {
+        console.log(`  The PR is open, and its record is being written. \`steward finding status ${key}\` shows the write.`);
+      } else {
+        console.log(`  ${lifecycleId} now waits for the merge. \`steward finding status ${key}\` shows the step.`);
+      }
       console.log('');
     } finally {
       await c.connection.close();
