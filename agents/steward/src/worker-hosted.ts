@@ -15,8 +15,14 @@ import { assertPublicRoleEnvironment, parseWorkerRole } from './worker-role.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { APP_ID_ENV, APP_KEY_ENV, describeGitHubBoot, resolveGitHubAppForBoot } from './lib/github.js';
 import { log } from './lib/logger.js';
+import { sendHealthPing } from './lib/health-ping.js';
 import { longRetryAlarm } from './lib/long-retry.js';
-import { installTemporalRuntime, sdkMetricsState } from './lib/temporal-logger.js';
+import {
+  createLastFailureGauge,
+  installTemporalRuntime,
+  sdkMetricsOptions,
+  sdkMetricsState,
+} from './lib/temporal-logger.js';
 import {
   ActivityTracker,
   RECYCLE_IDLE_MS,
@@ -247,7 +253,7 @@ async function main() {
   // Before the first `NativeConnection` or `Worker`. Without it the SDK writes
   // to stderr, which Railway tags as `error` (STW-549, `lib/temporal-logger.ts`).
   // The kind is the metrics tag that tells the two roles' series apart.
-  installTemporalRuntime(isPublic ? 'public' : 'hosted');
+  const runtime = installTemporalRuntime(isPublic ? 'public' : 'hosted');
   if (!isPublic) warnIfUnmonitored();
 
   const connection = await NativeConnection.connect(temporalConnectionOptions());
@@ -255,7 +261,10 @@ async function main() {
   const tracker = new ActivityTracker();
   // One for the process, so all its workers share the waits' streaks. The public
   // role has none: it renders strangers' pages and has no use for the ping key.
-  const longRetry = isPublic ? undefined : longRetryAlarm();
+  // It also writes the last-failure gauge, when metrics are exported.
+  const lastFailure =
+    !isPublic && sdkMetricsOptions(process.env, 'hosted') ? createLastFailureGauge(runtime.metricMeter) : undefined;
+  const longRetry = isPublic ? undefined : longRetryAlarm(sendHealthPing, lastFailure);
   // The queues whose worker got it, for the ready line.
   const alarmedQueues: string[] = [];
 
@@ -288,7 +297,8 @@ async function main() {
    * a deploy.
    *
    * Two interceptors. The long-retry alarm (`lib/long-retry.ts`, default role
-   * only) pings when an activity has been failing for two hours. The tracker is
+   * only) pings when an activity has been failing for two hours, and records the
+   * time of each counted failure. The tracker is
    * there because the recycle policy needs to know when a browser activity ran
    * and when the last activity finished, and the activities themselves are
    * shared with the local worker, which must never recycle. Observing from out here keeps them ignorant of

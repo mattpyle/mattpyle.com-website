@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,9 +12,11 @@ import {
   NOT_YET_FAILURE_TYPES,
   WAIT_ACTIVITY_TYPES,
   longRetryAlarm,
+  type LastFailureGauge,
   type LongRetryPing,
 } from '../../src/lib/long-retry.js';
 import { healthCheckSlug, type RunShape } from '../../src/lib/run-health.js';
+import { createLastFailureGauge } from '../../src/lib/temporal-logger.js';
 
 /**
  * The long-retry alarm, driven through its interceptor with a fake context and a
@@ -40,7 +42,7 @@ interface Attempt {
   retryPolicy?: { maximumAttempts?: number; nonRetryableErrorTypes?: string[] };
 }
 
-function harness(ping?: LongRetryPing) {
+function harness(ping?: LongRetryPing, gauge?: LastFailureGauge) {
   const pings: RunShape[] = [];
   const factory = longRetryAlarm(
     ping ??
@@ -48,6 +50,7 @@ function harness(ping?: LongRetryPing) {
         assert.equal(signal, 'long-retry');
         pings.push(shape);
       }),
+    gauge,
   );
   /** Runs one attempt. Returns what the interceptor returned or threw. */
   const run = async (a: Attempt): Promise<{ result?: unknown; error?: unknown }> => {
@@ -219,6 +222,103 @@ test('a cancel request or a last attempt drops the streak; a timeout keeps it', 
   await h.run(wait({ at: HOUR, throws: cancelled, cancellationDetails: { timedOut: true } }));
   await h.run(wait({ at: 2 * HOUR, throws: down() }));
   assert.deepEqual(h.kinds(), ['fail']);
+});
+
+// --- the last-failure gauge -------------------------------------------------
+
+function fakeGauge() {
+  const writes: { value: number; labels: unknown }[] = [];
+  const gauge: LastFailureGauge = { set: (value, labels) => void writes.push({ value, labels }) };
+  return { gauge, writes };
+}
+
+test('a counted failure writes the time and the two labels, whether or not it pings', async (t) => {
+  mock.timers.enable({ apis: ['Date'], now: T0 + 999 });
+  t.after(() => mock.timers.reset());
+  const g = fakeGauge();
+  const h = harness(undefined, g.gauge);
+  await h.run({ at: 0, attempt: 1, throws: down() });
+  await h.run({ at: 3 * HOUR, throws: down() });
+  await h.run(wait({ at: 0, attempt: 1, throws: down() }));
+  await h.run(wait({ at: 2 * HOUR, throws: ApplicationFailure.nonRetryable('gone', 'NotFound') }));
+  const call = { value: T0 / 1000, labels: { activity_type: 'writeFindingVerdict', kind: 'call' } };
+  const merge = { value: T0 / 1000, labels: { activity_type: 'awaitFixPrMerge', kind: 'wait' } };
+  assert.deepEqual(g.writes, [call, call, merge, merge]);
+  assert.deepEqual(h.kinds(), ['fail', 'fail']);
+});
+
+test('a success, a cancellation, a benign failure and a "not yet" write nothing', async () => {
+  const g = fakeGauge();
+  const h = harness(undefined, g.gauge);
+  const unwritten: Attempt[] = [
+    { at: 3 * HOUR },
+    { at: 3 * HOUR, throws: new CancelledFailure('CANCELLED') },
+    { at: 3 * HOUR, throws: new Error('fetch aborted'), aborted: true },
+    { at: 3 * HOUR, throws: benign() },
+    ...[...NOT_YET_FAILURE_TYPES].map((type) => ({ at: 3 * HOUR, throws: notYet(type) })),
+  ];
+  for (const attempt of unwritten) {
+    await h.run(attempt);
+    await h.run({ ...attempt, type: 'watchFinding' });
+  }
+  assert.deepEqual(g.writes, []);
+});
+
+test('two failures a second apart write different values', async (t) => {
+  mock.timers.enable({ apis: ['Date'], now: T0 });
+  t.after(() => mock.timers.reset());
+  const g = fakeGauge();
+  const h = harness(undefined, g.gauge);
+  await h.run({ at: 0, throws: down() });
+  mock.timers.tick(1000);
+  await h.run({ at: 0, throws: down() });
+  assert.deepEqual(
+    g.writes.map((w) => w.value),
+    [T0 / 1000, T0 / 1000 + 1],
+  );
+});
+
+test('a gauge or a ping that throws leaves the other and the activity alone', async () => {
+  const broken: LastFailureGauge = {
+    set: () => {
+      throw new Error('meter gone');
+    },
+  };
+  const h = harness(undefined, broken);
+  const error = down();
+  assert.equal((await h.run({ at: 3 * HOUR, throws: error })).error, error);
+  assert.deepEqual(h.kinds(), ['fail']);
+
+  const g = fakeGauge();
+  const silent = harness(() => {
+    throw new Error('threw');
+  }, g.gauge);
+  assert.equal((await silent.run({ at: 3 * HOUR, throws: error })).error, error);
+  assert.equal(g.writes.length, 1);
+});
+
+test('the gauge is an int in seconds with no tags of its own', () => {
+  const made: unknown[][] = [];
+  const gauge = { set: () => {} };
+  const meter = {
+    createGauge: (...args: unknown[]) => {
+      made.push(args.slice(0, 3));
+      return gauge;
+    },
+  };
+  assert.equal(createLastFailureGauge(meter as never), gauge);
+  assert.deepEqual(made, [['steward_activity_last_failure_timestamp', 'int', 'seconds']]);
+});
+
+test('a meter that throws gives no gauge and one warning', () => {
+  const warnings: unknown[] = [];
+  const meter = {
+    createGauge: () => {
+      throw new Error('no meter');
+    },
+  };
+  assert.equal(createLastFailureGauge(meter as never, { warn: (...a: unknown[]) => void warnings.push(a) } as never), undefined);
+  assert.equal(warnings.length, 1);
 });
 
 // --- the lists --------------------------------------------------------------
