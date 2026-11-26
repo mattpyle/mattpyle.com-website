@@ -102,6 +102,7 @@ export const UNREAD_FOLDERS = [`${STEWARD}/reviews/_scorecard/`];
 // Tests that read a directory of Steward source and so depend on all of it. Paths
 // are relative to `agents/steward/`; a prefix ending in `/` means every file in it.
 export const DIRECTORY_READERS = {
+  'tests/lib/long-retry.test.ts': ['src/activities/'],
   'tests/lib/steward-update.test.ts': ['src/workflows/'],
   'tests/workflows/finding-fix-path.test.ts': ['src/'],
   'tests/lib/worker-role.test.ts': ['src/'],
