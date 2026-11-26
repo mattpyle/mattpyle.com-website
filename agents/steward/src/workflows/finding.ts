@@ -188,11 +188,12 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *    {@link DEPLOY_REWAIT} with no bound (production unserved for a day waits
  *    on a person fixing the deploy, so 720 reads a day buy nothing). Each says
  *    so once on the PR, `state.waitNote` holds it, and the memo's `waitsFor`
- *    carries it to `steward finding list`. A returned write whose fast retries
- *    are used up on a retryable failure, or that met a rejected credential, is
- *    run again every {@link SLOW_INTERVAL} with no attempt limit: Temporal's
- *    Fast/Slow Retries. The verify child does the same for its own activities
- *    (`slowRetry`, in `verify-finding.ts`).
+ *    carries it to `steward finding list`. A returned write retries until
+ *    GitHub answers ("The writes retry until GitHub answers" below). One that
+ *    met a rejected credential, or ran out that bound, is run again every
+ *    {@link SLOW_INTERVAL} with no attempt limit. The verify child takes the
+ *    same slow phase once its own fast retries are used up (`slowRetry`, in
+ *    `verify-finding.ts`).
  * 2. **A failure that needs a person parks the run** at step `parked`, with
  *    `state.parked` saying what happened, at which stage, since when, and the
  *    messages that move it: Temporal's Resumable Activity pattern. A check
@@ -480,6 +481,37 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * `tests/workflows/replay.test.ts`. Rollback: remove the key from the site's
  * config, and each watching run ends at its next attempt; a run that is
  * watching cannot replay on code from before this change.
+ *
+ * **The writes retry until GitHub answers** (STW-680, 2026-11-25). On that day
+ * a GitHub outage of about an hour failed one run at its verdict write and sent
+ * another back to `waiting-fix` at its fix issue, because both gave up after
+ * five attempts in about 30 seconds. The durable policy ({@link DURABLE_RETRY})
+ * has no attempt limit, backs off to 15 minutes and is bounded by a 7-day
+ * schedule-to-close. It covers `writing` (the verdict, returned, fix and
+ * measurement writes, the fix issue, the slot request, the conflicting PR's
+ * close and the `auto_fix` read) and `readingAtVerdict`, the measurement's two
+ * reads. The permanent failure types are what they were. `commentOnFixPr` has
+ * its own bounded proxy, `commenting`: a park awaits its comment before it
+ * takes a message. The preview test's reads and waits are unchanged.
+ *
+ * At the 7-day bound the failure reaches the catch of its call site, as an
+ * exhausted retry did. A returned write then takes `slowWriting`, as it does
+ * on a rejected credential. Any other permanent failure of it parks.
+ *
+ * A rejection at a park or a watch is in flight for as long as its write
+ * retries. A second rejection is accepted in that window and overwrites the
+ * first, so the window is now as long as the outage.
+ *
+ * `state.prUrl` is set before `writeFindingFix` is awaited, so a run never
+ * holds an open PR it does not know.
+ *
+ * **No `patched` marker.** Retry policies and timeouts are attributes of a
+ * command: replay matches an activity on its type and ID, not its options. The
+ * proxy split adds, removes and moves no call, a recorded failure keeps its
+ * recorded `retryState`, and `state.prUrl` issues no command (determinism rule
+ * 5). The fixture is `finding-writes-exhausted-pre.bin` in
+ * `tests/workflows/replay.test.ts`. An activity scheduled before the deploy
+ * keeps its old policy on every attempt.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -842,9 +874,9 @@ export const findingStateQuery = wf.defineQuery<FindingState>('state');
 /**
  * GitHub's permanent answers, as `gh` names them. A 401 or 403 is permanent
  * for a wrong token and transient during a rotation, and the two cases look
- * the same from here, so where it goes depends on how long the activity runs.
- * A write is five quick attempts, and five against a dead token is enough:
- * `AuthError` is permanent there. A wait runs for hours or days at a fixed
+ * the same from here, so where it goes depends on the activity.
+ * `AuthError` is permanent on a write: a retry does not mend a dead token, and
+ * a person has to. A wait runs for hours or days at a fixed
  * interval, which is where a rotation window lands, so a wait retries it at
  * that interval and its schedule-to-close bound is the give-up. The wait
  * activities throw the failure retryable themselves (`authRetryable` in
@@ -855,12 +887,26 @@ export const findingStateQuery = wf.defineQuery<FindingState>('state');
 const GITHUB_PERMANENT_FOR_WAITS = ['NotFound', 'UnprocessableRequest'];
 const GITHUB_PERMANENT = ['AuthError', ...GITHUB_PERMANENT_FOR_WAITS];
 
+/** What a retry does not mend on a write: GitHub's permanent answers and the findings activities' refusals. */
+const WRITE_PERMANENT = [
+  ...GITHUB_PERMANENT,
+  'FindingMissing',
+  'FindingMalformed',
+  'FindingMoved',
+  'FindingNotFixable',
+  'UnknownSite',
+];
+
 /**
- * Five attempts with backoff, because the retryable failure here is a real one:
- * Argus pushing to the same repository between the read and the write, which
- * GitHub answers with 409 and the next attempt resolves from a fresh read. The
- * rest are permanent and named so they fail on the first attempt.
+ * An outage of an outside service is not a reason to stop (STW-680): no attempt
+ * limit, backoff from 2 seconds to a quarter of an hour. The 2-second start
+ * keeps a write's real quick failure cheap: Argus pushing between the read and
+ * the write, which GitHub answers with 409 and the next attempt resolves from a
+ * fresh read. {@link DURABLE_BOUND} is the schedule-to-close.
  */
+const DURABLE_RETRY = { initialInterval: '2 seconds', backoffCoefficient: 2, maximumInterval: '15 minutes' } as const;
+const DURABLE_BOUND = '7 days';
+
 const writing = wf.proxyActivities<
   Pick<
     typeof activities,
@@ -872,23 +918,25 @@ const writing = wf.proxyActivities<
     | 'requestFixSlot'
     | 'closeConflictingFixPr'
     | 'writeFindingVerdictMeasure'
-    | 'commentOnFixPr'
   >
 >({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  scheduleToCloseTimeout: DURABLE_BOUND,
+  retry: { ...DURABLE_RETRY, nonRetryableErrorTypes: WRITE_PERMANENT },
+});
+
+// The park's comment keeps a bounded policy: a park awaits it before it takes a
+// message, so it must not sit in an outage. A comment that failed is tried
+// again at the next park of its kind.
+const commenting = wf.proxyActivities<Pick<typeof activities, 'commentOnFixPr'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
   retry: {
     maximumAttempts: 5,
     initialInterval: '2 seconds',
     backoffCoefficient: 2,
-    nonRetryableErrorTypes: [
-      ...GITHUB_PERMANENT,
-      'FindingMissing',
-      'FindingMalformed',
-      'FindingMoved',
-      'FindingNotFixable',
-      'UnknownSite',
-    ],
+    nonRetryableErrorTypes: WRITE_PERMANENT,
   },
 });
 
@@ -906,15 +954,24 @@ const awaitingPr = wf.proxyActivities<Pick<typeof activities, 'awaitFixPr'>>({
   },
 });
 
-// The preview test's reads: the finding and its block. A block that does not
-// validate and a finding that moved are not mended by a retry.
+// The reads of a finding and its block. A block that does not validate and a
+// finding that moved are not mended by a retry.
+const CHECKS_READ_PERMANENT = [...GITHUB_PERMANENT, 'FindingMissing', 'FindingMalformed', 'VerifyBlockInvalid'];
+
+// The preview test's reads: a failure is an unmeasured preview, so they give up quickly.
 const readingChecks = wf.proxyActivities<Pick<typeof activities, 'readFinding' | 'readVerifyBlock'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
-  retry: {
-    maximumAttempts: 3,
-    nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMissing', 'FindingMalformed', 'VerifyBlockInvalid'],
-  },
+  retry: { maximumAttempts: 3, nonRetryableErrorTypes: CHECKS_READ_PERMANENT },
+});
+
+// The same reads at the verdict, durable (STW-680): a fix must not start on a
+// finding that went unmeasured only because GitHub was down.
+const readingAtVerdict = wf.proxyActivities<Pick<typeof activities, 'readFinding' | 'readVerifyBlock'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  scheduleToCloseTimeout: DURABLE_BOUND,
+  retry: { ...DURABLE_RETRY, nonRetryableErrorTypes: CHECKS_READ_PERMANENT },
 });
 
 // The preview wait: every 30 seconds for up to half an hour. A failed build
@@ -1022,9 +1079,9 @@ const deployingOn = wf.proxyActivities<Pick<typeof activities, 'awaitProductionD
   },
 });
 
-// The returned write's slow phase (STW-653): Fast/Slow Retries. `writing` is
-// the fast phase; this runs once its five attempts are used up on a retryable
-// failure, or on a rejected credential, which the call passes `retryAuth` for.
+// The returned write's slow phase (STW-653). It runs when `writing` ends on a
+// rejected credential, which the call passes `retryAuth` for, or on its 7-day
+// bound. A write scheduled before STW-680 still ends it after five attempts.
 const slowWriting = wf.proxyActivities<Pick<typeof activities, 'writeFindingReturned'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
@@ -1852,9 +1909,9 @@ async function lifecycle(
     let measure: VerdictMeasure | null = null;
     let checks;
     try {
-      const finding = await readingChecks.readFinding(input.repo, input.findingPath);
+      const finding = await readingAtVerdict.readFinding(input.repo, input.findingPath);
       checks = (
-        await readingChecks.readVerifyBlock({
+        await readingAtVerdict.readVerifyBlock({
           repo: input.repo,
           findingPath: input.findingPath,
           findingText: finding.text,
@@ -2011,7 +2068,7 @@ async function lifecycle(
     const marker = parkCommentMarker(input.site, input.key, fixAttempts, what);
     if (told.has(marker) || !state.prUrl) return null;
     try {
-      await writing.commentOnFixPr({ prUrl: state.prUrl, marker, body });
+      await commenting.commentOnFixPr({ prUrl: state.prUrl, marker, body });
       // Told only once posted: a comment that failed is tried again at the next park of its kind.
       told.add(marker);
       return null;
@@ -2134,8 +2191,8 @@ async function lifecycle(
   };
 
   /**
-   * After a write's fast phase failed: Temporal's Fast/Slow Retries when the
-   * failure passes by itself, else a park. `done` when the slow phase wrote;
+   * After a write failed: the slow phase for a rejected credential or a bound
+   * that ran out ({@link slowPhaseFor}), else a park. `done` when the slow phase wrote;
    * the run's result when the file was decided elsewhere; else the message
    * that moved the park.
    */
@@ -2252,6 +2309,8 @@ async function lifecycle(
             if (isTimeout(err)) throw new Error(`No PR from ${issue.url} within 60 minutes.`);
             throw err;
           }
+          // Known before the write, which can retry for days: the PR is open from here.
+          state.prUrl = prUrl;
           // The custom fixer wrote this from inside its child; the Action cannot.
           await writing.writeFindingFix({
             repo: input.repo,

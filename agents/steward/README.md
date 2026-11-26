@@ -68,8 +68,9 @@ that's the property being dogfooded here, on a low-stakes, real target.
   closed unmerged writes `status: approved` back with a note, and the run waits for the next `fix`.
   After its fix PR a run does not end with the finding undecided (STW-653). A merge or deploy wait
   that runs out its bound says so once on the PR and keeps waiting (the deploy wait every 15 minutes).
-  A write or a verify that cannot reach GitHub or production retries every 15 minutes once its
-  fast retries are used up, and tells nobody. A check that fails on production (the file says
+  A write that cannot reach GitHub retries with backoff up to every 15 minutes for up to 7 days
+  (STW-680), and so does the verdict measurement's read; a verify retries every 15 minutes once its
+  fast retries are used up. None posts a comment; the long-retry alarm below reports one. A check that fails on production (the file says
   `reopened`), a broken check, or any other failure a retry does not mend parks the run at step
   `parked`, releases its slot and comments once on the PR; `steward finding resume <key>` runs the
   stage again, and `steward finding fix <key>` starts a new attempt in the same run, recorded under

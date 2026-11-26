@@ -4,7 +4,7 @@ import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
 import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import { ApplicationFailureCategory } from '@temporalio/common';
+import { ApplicationFailureCategory, type Duration } from '@temporalio/common';
 import proto from '@temporalio/proto';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
@@ -1088,31 +1088,61 @@ test('a returned write refused because the file was decided elsewhere ends the r
   assert.match(result.note ?? '', /the finding file says resolved\.$/);
 });
 
-test('a returned write that uses up its fast retries goes on in the slow phase and tells nobody', async () => {
+/** A run whose PR closes at once, and each `writeFindingReturned` call's `retryAuth`; `fail` throws or returns. */
+function returnedWrite(fail: (input: WriteFindingReturnedInput, call: number) => void) {
   const mocks = lifecycle({
     prPolls: [0],
     merge: { [PR_1]: { openPolls: 0, outcome: { prUrl: PR_1, state: 'closed', mergeSha: null, at: '2026-10-13T19:00:00Z' } } },
   });
-  const attempts: { retryAuth?: boolean }[] = [];
+  const attempts: (boolean | undefined)[] = [];
+  let wrote = false;
   mocks.findings.writeFindingReturned = async (input: WriteFindingReturnedInput) => {
-    attempts.push({ retryAuth: input.retryAuth });
-    // GitHub answers 502 for the five fast attempts and the first slow one.
-    if (attempts.length <= 6) throw notYet('GitHub answered 502.', 'GitHubUnavailable');
+    attempts.push(input.retryAuth);
+    fail(input, attempts.length);
+    wrote = true;
     return { findingCommitSha: 'c-r1', indexCommitSha: 'c-r2', commitSha: 'c-r2' };
   };
+  return { mocks, attempts, wrote: () => wrote };
+}
+
+/** Starts the run, skips `skip`, and asserts it wrote the finding back and waits for the next fix. */
+async function writtenBack({ mocks, wrote }: ReturnType<typeof returnedWrite>, id: string, skip: Duration): Promise<void> {
   await withWorkers(mocks, async () => {
-    const handle = await startApproved('returned-slow');
-    await untilState(handle, (s) => s.step === 'waiting-merge', 'waiting-merge');
-    // The one time-skipping await: the fast backoff and two slow intervals.
-    await env.sleep('40 minutes');
-    const state = await handle.query(findingStateQuery);
-    assert.equal(state.step, 'waiting-fix', 'written back, so the run waits for the next fix as before');
+    const handle = await startApproved(id);
+    // The one time-skipping await.
+    await env.sleep(skip);
+    const state = await untilState(handle, (s) => wrote() && s.step === 'waiting-fix', 'waiting-fix');
+    assert.equal(state.parked ?? null, null);
     await handle.terminate('test over');
   });
-  assert.equal(attempts.length, 7);
-  assert.deepEqual(attempts.slice(0, 5).map((a) => a.retryAuth), [undefined, undefined, undefined, undefined, undefined]);
-  assert.deepEqual(attempts.slice(5).map((a) => a.retryAuth), [true, true], 'the slow phase retries a rejected credential too');
   assert.equal(mocks.seen.comments.length, 0, 'nobody is told');
+}
+
+test('a returned write through an outage goes on retrying in the write itself and tells nobody', async () => {
+  // GitHub answers 502 six times, more than the five attempts the write once had (STW-680).
+  const run = returnedWrite((_input, call) => {
+    if (call <= 6) throw notYet('GitHub answered 502.', 'GitHubUnavailable');
+  });
+  await writtenBack(run, 'returned-outage', '40 minutes');
+  assert.deepEqual(run.attempts, [undefined, undefined, undefined, undefined, undefined, undefined, undefined]);
+});
+
+test('a returned write that meets a rejected credential goes on in the slow phase and tells nobody', async () => {
+  const run = returnedWrite((input) => {
+    if (!input.retryAuth) throw ApplicationFailure.nonRetryable('GitHub rejected the credential (401).', 'AuthError');
+  });
+  await writtenBack(run, 'returned-slow', '1 minute');
+  assert.deepEqual(run.attempts, [undefined, true], 'the slow phase retries a rejected credential too');
+});
+
+test('a returned write still failing at its 7-day bound goes on in the slow phase', async () => {
+  const run = returnedWrite((input) => {
+    if (!input.retryAuth) throw notYet('GitHub answered 502.', 'GitHubUnavailable');
+  });
+  await writtenBack(run, 'returned-bound', '8 days');
+  assert.equal(run.attempts.at(-1), true);
+  assert.equal(run.attempts.filter((retryAuth) => retryAuth).length, 1);
+  assert.ok(run.attempts.length > 600, `every quarter hour for 7 days, not ${run.attempts.length} attempts`);
 });
 
 test('a merge wait that fails for good parks at merge: a fix is refused with the reason, and resume waits on the merge again', async () => {
