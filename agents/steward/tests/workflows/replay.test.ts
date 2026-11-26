@@ -1640,3 +1640,35 @@ test('a run whose writes ran out of retries replays to its next fix wait', { tim
   );
   await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'finding/mattpyle-com/writes-exhausted-fixture');
 });
+
+/**
+ * ## A verdict write that failed the run (STW-689)
+ *
+ * `finding-verdict-write-failed-pre.bin`: a closed run whose gate verdict
+ * write failed on a permanent type. An approved `record-verdict` Update was
+ * accepted, `writeFindingVerdict` failed `AuthError` (retry state
+ * `NON_RETRYABLE_FAILURE`), the Update was answered `VerdictWriteFailed`, and
+ * the run FAILED. 16 events. `steward finding status` queries such a run, which
+ * replays it, so the code must reach the same failure.
+ *
+ * Recorded from origin/master at c754f66, before the park at `verdict`, on a
+ * dev server with mocked activities, so it holds no real finding text. The
+ * failures' stack traces were emptied, and the worker identity's machine name
+ * replaced, before it was written.
+ *
+ * Probe (2026-11-25, on c754f66): `await wf.sleep('1 second')` before the
+ * gate's `writing.writeFindingVerdict` made it fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Timer machine does not handle this event:
+ * HistoryEvent(id: 9, ActivityTaskScheduled)
+ * ```
+ *
+ * The sleep was removed and it re-ran green.
+ */
+test('a run whose gate verdict write failed replays to its failure', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(
+    await fs.readFile(fileURLToPath(new URL('../fixtures/histories/finding-verdict-write-failed-pre.bin', import.meta.url))),
+  );
+  await Worker.runReplayHistory({ workflowBundle: await workflowBundle() }, history, 'finding/mattpyle-com/gate-park-fixture-pre');
+});
