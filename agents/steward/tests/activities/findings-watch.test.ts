@@ -1,4 +1,4 @@
-import { test, afterEach } from 'node:test';
+import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApplicationFailure } from '@temporalio/activity';
 import { MockActivityEnvironment } from '@temporalio/testing';
@@ -122,7 +122,10 @@ test('every check passes: the file, its Verification and its index line are reso
   assert.equal(f.history('main').length, 2, 'nothing written twice');
 });
 
-test('a check fails: live_on is written by a commit that names the run, and the attempt fails StillPresent, benign, until the window', async () => {
+test('a check fails: live_on is written by a commit that names the run, and the attempt fails StillPresent, benign, until the window', async (t) => {
+  // The day is the one `runFindingChecks` stamps from the process clock, and it takes none as a dependency.
+  mock.timers.enable({ apis: ['Date'], now: NOW });
+  t.after(() => mock.timers.reset());
   const f = seed();
   const err = await failure(run({ runner: production('<a>Contact sales</a>') }));
   assert.equal(err.type, 'StillPresent');
