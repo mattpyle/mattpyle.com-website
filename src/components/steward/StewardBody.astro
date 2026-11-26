@@ -284,8 +284,8 @@ const GUARANTEES = [
           Two renderings ship in one response: the canonical JSON in <code>structuredContent</code>,
           one entry per check with its evidence, and the same report as a markdown summary in the
           text content. A <code>GET</code> on <a href={endpoint}>the endpoint itself</a> answers <code>405</code> with
-          a worked example rather than a bare status. The unit audited is a site, not a page: any
-          path in the URL is ignored, only <code>http</code> and <code>https</code> are accepted, and
+          a worked example rather than a bare status. The unit audited is a site, not a page: a
+          path in the URL names one extra page, whose first 8,000 characters are measured for content share in the <code>reading-budget-page</code> row. Only <code>http</code> and <code>https</code> are accepted, and
           addresses on private networks are refused before a connection is opened. The site's own
           discovery document is at <a href="/.well-known/mcp-server">/.well-known/mcp-server</a>; it
           describes the fast tier, and <code>tools/list</code> enumerates the rest.

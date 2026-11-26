@@ -85,7 +85,7 @@ export const UrlInput = z.object({
     .string()
     .min(1)
     .max(300)
-    .describe('The site to audit, such as https://example.com or example.com. The path is ignored.'),
+    .describe('The site to audit, such as https://example.com or example.com. A path names one extra page, measured in the reading-budget-page row.'),
 });
 export type UrlInput = z.infer<typeof UrlInput>;
 

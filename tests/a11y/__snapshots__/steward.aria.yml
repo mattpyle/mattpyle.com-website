@@ -118,7 +118,9 @@
         - /url: https://www.mattpyle.com/mcp
       - text: answers
       - code: "405"
-      - text: "with a worked example rather than a bare status. The unit audited is a site, not a page: any path in the URL is ignored, only"
+      - text: "with a worked example rather than a bare status. The unit audited is a site, not a page: a path in the URL names one extra page, whose first 8,000 characters are measured for content share in the"
+      - code: reading-budget-page
+      - text: row. Only
       - code: http
       - text: and
       - code: https
