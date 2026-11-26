@@ -154,7 +154,7 @@ Both workers log through pino. A Temporal Runtime logger passes the SDK's workfl
 
 ### The long-retry alarm
 
-In its default role the hosted worker pings the `steward-long-retry` check at healthchecks.io: `/fail` when an activity has been failing for two hours, and success when it recovers. For a polling wait the two hours are a streak of failures, kept in the process, so its "not yet" answers do not count. It does not see an attempt that hangs to its timeout, or a dead worker. `src/lib/long-retry.ts` holds the rules; the ready line's `longRetryAlarm` field names the queues that carry it.
+In its default role the hosted worker pings the `steward-long-retry` check at healthchecks.io: `/fail` when an activity has been failing for two hours, and success when it recovers. For a polling wait the two hours are a streak of failures, kept in the process, so its "not yet" answers do not count. It does not see an attempt that hangs to its timeout, or a dead worker. `src/lib/long-retry.ts` holds the rules; the ready line's `longRetryAlarm` field names the queues that carry it. With SDK metrics configured, each counted failure also sets the gauge `steward_activity_last_failure_timestamp_seconds` (labels `activity_type` and `kind`) to its time.
 
 ### The public-audit role
 

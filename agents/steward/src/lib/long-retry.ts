@@ -1,5 +1,5 @@
 import { ApplicationFailure, CancelledFailure, type Context, type Info } from '@temporalio/activity';
-import { ApplicationFailureCategory } from '@temporalio/common';
+import { ApplicationFailureCategory, type MetricGauge } from '@temporalio/common';
 import type {
   ActivityExecuteInput,
   ActivityInboundCallsInterceptor,
@@ -43,6 +43,19 @@ import type { RunShape } from './run-health.js';
  * due; the time-skipping test server stamps the time it was decided, so an alarm
  * there comes one attempt later.
  *
+ * ## The last-failure gauge
+ *
+ * Every counted failure, of a wait or not, from the first attempt, also sets the
+ * gauge `createLastFailureGauge` (`lib/temporal-logger.ts`) makes: this
+ * process's clock in whole Unix seconds, labelled `activity_type` and `kind`
+ * (`wait` or `call`). The state an alert needs then lives where the metrics go,
+ * not in this process. A reader asks whether the value changed, so two failures
+ * a second or more apart differ. The gauge write and the pings do not depend on
+ * each other.
+ *
+ * The export runs every 60 seconds and nothing flushes it at exit, so a failure
+ * in a process's last minute can go unrecorded.
+ *
  * ## What it does not see
  *
  * An attempt that hangs to its timeout (a cancellation, or no return at all),
@@ -84,6 +97,8 @@ export const WAIT_ACTIVITY_TYPES: ReadonlySet<string> = new Set([
 const MAX_ERROR_CHARS = 500;
 
 export type LongRetryPing = (signal: 'long-retry', shape: RunShape) => Promise<unknown>;
+
+export type LastFailureGauge = Pick<MetricGauge, 'set'>;
 
 type Outcome =
   | { kind: 'ok' | 'not-yet' | 'benign' | 'cancelled' }
@@ -143,8 +158,13 @@ function recovered(info: Info, afterMs: number): RunShape {
  * It never changes what the activity returns or throws, and it never waits for
  * the ping: a send can take half a minute, more than some activities'
  * start-to-close has left.
+ *
+ * With no `lastFailure` gauge (no metrics export) nothing is recorded.
  */
-export function longRetryAlarm(ping: LongRetryPing = sendHealthPing): ActivityInterceptorsFactory {
+export function longRetryAlarm(
+  ping: LongRetryPing = sendHealthPing,
+  lastFailure?: LastFailureGauge,
+): ActivityInterceptorsFactory {
   const streaks = new Map<string, Streak>();
 
   const send = (shape: RunShape): void => {
@@ -185,7 +205,20 @@ export function longRetryAlarm(ping: LongRetryPing = sendHealthPing): ActivityIn
     else streaks.set(key, current);
   };
 
+  const recordFailure = (ctx: Context): void => {
+    try {
+      const { activityType } = ctx.info;
+      lastFailure?.set(Math.floor(Date.now() / 1000), {
+        activity_type: activityType,
+        kind: WAIT_ACTIVITY_TYPES.has(activityType) ? 'wait' : 'call',
+      });
+    } catch (err) {
+      log.warn({ err }, 'last-failure gauge write failed — the activity is unaffected');
+    }
+  };
+
   const observe = (ctx: Context, outcome: Outcome): void => {
+    if (outcome.kind === 'failed') recordFailure(ctx);
     try {
       const info = ctx.info;
       if (WAIT_ACTIVITY_TYPES.has(info.activityType)) {

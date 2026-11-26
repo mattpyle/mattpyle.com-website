@@ -274,6 +274,34 @@ export function startProcessMetrics(
 }
 
 /**
+ * The time of each activity type's last counted failure (STW-691), written by
+ * the interceptor in `lib/long-retry.ts`. Grafana shows it as
+ * `steward_activity_last_failure_timestamp_seconds`.
+ *
+ * Make one per process, from `Runtime.metricMeter`. It carries no tags of its
+ * own: the writer passes `activity_type` and `kind` at every write, and those
+ * are its only labels. An activity context's meter would add more.
+ *
+ * A throw while creating it logs at WARN and returns `undefined`.
+ */
+export function createLastFailureGauge(
+  meter: Pick<ProcessMeter, 'createGauge'>,
+  sink: Pick<Logger, 'warn'> = log,
+): ReturnType<ProcessMeter['createGauge']> | undefined {
+  try {
+    return meter.createGauge(
+      'steward_activity_last_failure_timestamp',
+      'int',
+      'seconds',
+      'Unix time of the last counted failure of an activity type in this process',
+    );
+  } catch (err) {
+    sink.warn({ err }, 'last-failure gauge setup failed; it is off for this run');
+    return undefined;
+  }
+}
+
+/**
  * Installs the Runtime once for this process: SDK, workflow and activity logs go
  * to pino, Core logs are forwarded at WARN, and SDK metrics go to Grafana Cloud
  * when `sdkMetricsOptions` says so. The same condition starts the process
