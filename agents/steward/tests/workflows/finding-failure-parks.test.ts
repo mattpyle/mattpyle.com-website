@@ -155,6 +155,7 @@ test('a verdict write refused for good parks at verdict, held and unwritten; req
   assert.equal(out.status, 'RUNNING', 'the run did not fail');
   assert.equal(out.parked.parked?.stage, 'verdict');
   assert.equal(out.parked.status, 'held');
+  assert.equal(out.parked.parked?.reason, 'The approved verdict was not written: GitHub refused the credential (401).');
   assert.equal(out.parked.commitSha, null);
   assert.equal(out.parked.verdict?.status, 'approved');
   assert.match(out.parked.parked?.moves ?? '', /resume .* writes the verdict again/);
@@ -248,11 +249,42 @@ test('a settings read refused for good at the gate parks at settings, refuses a 
   assert.equal(out.parked.parked?.stage, 'settings');
   assert.equal(out.parked.status, 'done');
   assert.match(out.parked.parked?.reason ?? '', /settings could not be read: GitHub answered 404/);
+  assert.equal(out.parked.parked?.reason, "The site's settings could not be read: GitHub answered 404 for config.yaml.");
   assert.match(out.reject, /send resume first/);
   assert.match(out.fix, /cannot read its site's settings yet/);
   assert.equal(out.resumed.stage, 'settings');
   assert.equal(reads, 2);
   assert.equal(out.result.commitSha, 'c-2');
+});
+
+test("a park's reason ends in one full stop when the activity's message brings its own", async () => {
+  let writes = 0;
+  let reads = 0;
+  const out = await withWorker(
+    {
+      writeFindingVerdict: async () => {
+        if (++writes === 1) throw ApplicationFailure.nonRetryable('x.md has no index line.', 'FindingMissing');
+        return commit;
+      },
+      readFindingSettings: async () => {
+        if (++reads === 1) throw ApplicationFailure.nonRetryable('config.yaml is not there.', 'NotFound');
+        return STOPS_AT_VERDICT;
+      },
+    },
+    async () => {
+      const handle = await start('one-full-stop');
+      const update = await handle.startUpdate(verdictUpdate, { args: [APPROVE], waitForStage: WorkflowUpdateStage.ACCEPTED });
+      await refusal(update.result());
+      const verdict = await until(handle, (s) => s.parked?.stage === 'verdict', 'the park at verdict');
+      await handle.executeUpdate(resumeUpdate, { args: [RESUME] });
+      const atSettings = await until(handle, (s) => s.parked?.stage === 'settings', 'the park at settings');
+      await handle.executeUpdate(resumeUpdate, { args: [RESUME] });
+      await skipResult(handle);
+      return { verdict: verdict.parked?.reason, settings: atSettings.parked?.reason };
+    },
+  );
+  assert.equal(out.verdict, 'The approved verdict was not written: x.md has no index line.');
+  assert.equal(out.settings, "The site's settings could not be read: config.yaml is not there.");
 });
 
 test("a settings read refused for good in the fix wait parks at settings and posts nothing on the attempt's closed PR", async () => {
@@ -297,6 +329,7 @@ test("a settings read refused for good in the fix wait parks at settings and pos
   );
   assert.equal(out.parked.parked?.stage, 'settings');
   assert.equal(out.parked.prUrl, PR, 'the earlier, closed PR is still in the state');
+  assert.equal(out.parked.parked?.reason, "The site's settings could not be read: GitHub answered 404 for config.yaml.");
   assert.equal(out.parked.parked?.commentError ?? null, null);
   // Probe (2026-11-25): a `park()` that posted at every stage failed this line; reverted.
   assert.deepEqual(comments, [], 'no comment on the closed PR');

@@ -1824,6 +1824,13 @@ test('a run whose gate verdict write failed replays to its failure', { timeout: 
  * Probe (2026-11-25): reading `wf.patched(FAILURE_PARKS_PATCH)` as `false` at
  * every site failed both with `TMPRL1100`, and left
  * `finding-verdict-write-failed-pre.bin` green. Reverted, green.
+ *
+ * Probe (2026-11-26, STW-693): the park reasons' text changed at the three
+ * sites that build one at `verdict` or `settings`, and both fixtures replayed
+ * green, so replay does not compare the `waitsFor` memo's value. Control: with
+ * the gate's memo upsert removed instead, both failed as nondeterministic.
+ * Reverted, green. No fixture holds a park at `settings` in the lifecycle,
+ * which upserts the same memo.
  */
 test('a run parked at its verdict write replays through its resume', { timeout: 120_000 }, async () => {
   const history = proto.temporal.api.history.v1.History.decode(

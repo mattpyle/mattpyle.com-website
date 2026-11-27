@@ -8,20 +8,16 @@ import { ApplicationFailureCategory } from '@temporalio/common';
 
 import { hostedRegistry } from '../../src/hosted-registry.js';
 import {
-  LONG_RETRY_MS,
   NOT_YET_FAILURE_TYPES,
   WAIT_ACTIVITY_TYPES,
   longRetryAlarm,
   type LastFailureGauge,
-  type LongRetryPing,
 } from '../../src/lib/long-retry.js';
-import { healthCheckSlug, type RunShape } from '../../src/lib/run-health.js';
 import { createLastFailureGauge } from '../../src/lib/temporal-logger.js';
 
 /**
- * The long-retry alarm, driven through its interceptor with a fake context and a
- * fake ping transport. `tests/workflows/long-retry.test.ts` runs it on a test
- * server.
+ * The last-failure gauge, driven through its interceptor with a fake context and
+ * a fake gauge. `tests/workflows/long-retry.test.ts` runs it on a test server.
  */
 
 const HOUR = 60 * 60 * 1000;
@@ -32,105 +28,45 @@ interface Attempt {
   attempt?: number;
   /** When this attempt was scheduled, after the activity was first scheduled. */
   at: number;
-  activityId?: string;
-  workflowId?: string;
-  runId?: string;
   throws?: unknown;
   /** The activity's cancellation signal had fired. */
   aborted?: boolean;
-  cancellationDetails?: { cancelRequested?: boolean; timedOut?: boolean };
   retryPolicy?: { maximumAttempts?: number; nonRetryableErrorTypes?: string[] };
 }
 
-function harness(ping?: LongRetryPing, gauge?: LastFailureGauge) {
-  const pings: RunShape[] = [];
-  const factory = longRetryAlarm(
-    ping ??
-      (async (signal, shape) => {
-        assert.equal(signal, 'long-retry');
-        pings.push(shape);
-      }),
-    gauge,
-  );
+function harness(gauge?: LastFailureGauge) {
+  const factory = longRetryAlarm(gauge);
   /** Runs one attempt. Returns what the interceptor returned or threw. */
   const run = async (a: Attempt): Promise<{ result?: unknown; error?: unknown }> => {
     const ctx = {
       info: {
         activityType: a.type ?? 'writeFindingVerdict',
         attempt: a.attempt ?? 5,
-        activityId: a.activityId ?? '1',
-        workflowExecution: { workflowId: a.workflowId ?? 'finding/s/k', runId: a.runId ?? 'run-1' },
+        activityId: '1',
+        workflowExecution: { workflowId: 'finding/s/k', runId: 'run-1' },
         scheduledTimestampMs: T0,
         currentAttemptScheduledTimestampMs: T0 + a.at,
         retryPolicy: a.retryPolicy,
       },
       cancellationSignal: { aborted: a.aborted ?? false },
-      cancellationDetails: a.cancellationDetails,
     };
     const inbound = factory(ctx as never).inbound!;
     const next = async () => {
       if ('throws' in a) throw a.throws;
       return 'result';
     };
-    let outcome: { result?: unknown; error?: unknown };
     try {
-      outcome = { result: await inbound.execute!({ args: [], headers: {} }, next) };
+      return { result: await inbound.execute!({ args: [], headers: {} }, next) };
     } catch (error) {
-      outcome = { error };
+      return { error };
     }
-    // The ping is not awaited by the interceptor.
-    await new Promise((resolve) => setImmediate(resolve));
-    return outcome;
   };
-  return { run, pings, kinds: () => pings.map((p) => (p.ok ? 'ok' : 'fail')) };
+  return { run };
 }
 
 const down = () => new Error('GitHub answered 502');
 const benign = () => ApplicationFailure.create({ type: 'StillPresent', category: ApplicationFailureCategory.BENIGN });
 const notYet = (type = 'PrStillOpen') => ApplicationFailure.retryable('not yet', type);
-
-test('the threshold is two hours and the check is steward-long-retry', () => {
-  assert.equal(LONG_RETRY_MS, 2 * HOUR);
-  assert.equal(healthCheckSlug('long-retry'), 'steward-long-retry');
-});
-
-test('every failing attempt past two hours pings fail, and none before', async () => {
-  const h = harness();
-  await h.run({ at: LONG_RETRY_MS - 1, throws: down() });
-  assert.deepEqual(h.kinds(), []);
-  await h.run({ at: LONG_RETRY_MS, attempt: 9, throws: down() });
-  await h.run({ at: 3 * HOUR, attempt: 10, throws: ApplicationFailure.retryable('limit', 'RateLimited') });
-  assert.deepEqual(h.kinds(), ['fail', 'fail']);
-  assert.equal(
-    h.pings[0].summary,
-    'An activity has been failing for 2 h 0 min and is still being retried. ' +
-      'Activity writeFindingVerdict, workflow finding/s/k, attempt 9. Last error: Error: GitHub answered 502',
-  );
-  assert.match(h.pings[1].summary, /3 h 0 min.*attempt 10\. Last error: RateLimited: limit/);
-});
-
-test('a success pings only on a later attempt of an old activity', async () => {
-  const h = harness();
-  await h.run({ at: HOUR, attempt: 4 });
-  await h.run({ at: 3 * HOUR, attempt: 1 });
-  assert.deepEqual(h.kinds(), []);
-  await h.run({ at: 3 * HOUR, attempt: 2 });
-  assert.deepEqual(h.kinds(), ['ok']);
-  assert.equal(h.pings[0].summary, 'An activity recovered after 3 h 0 min. Activity writeFindingVerdict, workflow finding/s/k, attempt 2.');
-});
-
-test('a cancellation, a benign failure and a "not yet" are not counted', async () => {
-  const h = harness();
-  const uncounted: Attempt[] = [
-    { at: 3 * HOUR, throws: new CancelledFailure('CANCELLED') },
-    { at: 3 * HOUR, throws: new Error('fetch aborted'), aborted: true },
-    { at: 3 * HOUR, throws: benign() },
-    ...[...NOT_YET_FAILURE_TYPES].map((type) => ({ at: 3 * HOUR, throws: notYet(type) })),
-  ];
-  for (const attempt of uncounted) await h.run(attempt);
-  for (const attempt of uncounted) await h.run({ ...attempt, type: 'watchFinding' });
-  assert.deepEqual(h.kinds(), []);
-});
 
 test('the activity result and its failure pass through unchanged', async () => {
   const h = harness();
@@ -139,90 +75,7 @@ test('the activity result and its failure pass through unchanged', async () => {
   assert.equal((await h.run({ at: 3 * HOUR })).result, 'result');
 });
 
-test('a ping that throws, rejects or never answers is dropped', async () => {
-  const transports: LongRetryPing[] = [
-    () => {
-      throw new Error('threw');
-    },
-    () => Promise.reject(new Error('rejected')),
-    () => new Promise(() => {}),
-  ];
-  for (const transport of transports) {
-    const h = harness(transport);
-    const error = down();
-    assert.equal((await h.run({ at: 3 * HOUR, throws: error })).error, error);
-    assert.equal((await h.run({ at: 3 * HOUR })).result, 'result');
-  }
-});
-
-// --- the waits --------------------------------------------------------------
-
 const wait = (a: Attempt): Attempt => ({ type: 'awaitFixPrMerge', ...a });
-
-test('one failure on day three of a wait raises nothing, and neither does its end', async () => {
-  const h = harness();
-  await h.run(wait({ at: 72 * HOUR, throws: notYet() }));
-  await h.run(wait({ at: 72 * HOUR + 1, throws: down() }));
-  await h.run(wait({ at: 72 * HOUR + 2, throws: notYet() }));
-  await h.run(wait({ at: 96 * HOUR }));
-  assert.deepEqual(h.kinds(), []);
-});
-
-test('a wait alarms on a two-hour streak, and a "not yet" then pings the recovery once', async () => {
-  const h = harness();
-  const day3 = 72 * HOUR;
-  await h.run(wait({ at: day3, throws: down() }));
-  await h.run(wait({ at: day3 + HOUR, throws: down() }));
-  assert.deepEqual(h.kinds(), []);
-  await h.run(wait({ at: day3 + 2 * HOUR, throws: down() }));
-  assert.match(h.pings[0].summary, /failing for 2 h 0 min.*awaitFixPrMerge/);
-  await h.run(wait({ at: day3 + 3 * HOUR, throws: notYet() }));
-  await h.run(wait({ at: day3 + 4 * HOUR, throws: notYet() }));
-  assert.deepEqual(h.kinds(), ['fail', 'ok']);
-  assert.match(h.pings[1].summary, /recovered after 3 h 0 min/);
-});
-
-test('a "not yet", a benign failure or a success ends a streak', async () => {
-  for (const end of [{ throws: notYet() }, { throws: benign() }, {}]) {
-    const h = harness();
-    await h.run(wait({ at: 0, throws: down() }));
-    await h.run(wait({ at: HOUR, ...end }));
-    await h.run(wait({ at: 2 * HOUR, throws: down() }));
-    await h.run(wait({ at: 3 * HOUR, throws: down() }));
-    assert.deepEqual(h.kinds(), []);
-  }
-});
-
-test('a streak belongs to one activity of one run', async () => {
-  const h = harness();
-  await h.run(wait({ at: 0, throws: down() }));
-  for (const other of [{ workflowId: 'finding/s/other' }, { runId: 'run-2' }, { activityId: '2' }]) {
-    await h.run(wait({ at: 2 * HOUR, throws: down(), ...other }));
-  }
-  assert.deepEqual(h.kinds(), []);
-});
-
-test('a cancel request or a last attempt drops the streak; a timeout keeps it', async () => {
-  const cancelled = new CancelledFailure('CANCELLED');
-  const dropped: Attempt[] = [
-    wait({ at: HOUR, throws: cancelled, cancellationDetails: { cancelRequested: true } }),
-    wait({ at: HOUR, throws: ApplicationFailure.nonRetryable('gone', 'NotFound') }),
-    wait({ at: HOUR, throws: ApplicationFailure.retryable('gone', 'NotFound'), retryPolicy: { nonRetryableErrorTypes: ['NotFound'] } }),
-    wait({ at: HOUR, attempt: 3, throws: down(), retryPolicy: { maximumAttempts: 3 } }),
-  ];
-  for (const end of dropped) {
-    const h = harness();
-    await h.run(wait({ at: 0, throws: down() }));
-    await h.run(end);
-    await h.run(wait({ at: 2 * HOUR, throws: down() }));
-    assert.deepEqual(h.kinds(), []);
-  }
-  const h = harness();
-  await h.run(wait({ at: 0, throws: down() }));
-  await h.run(wait({ at: HOUR, throws: cancelled, cancellationDetails: { timedOut: true } }));
-  await h.run(wait({ at: 2 * HOUR, throws: down() }));
-  assert.deepEqual(h.kinds(), ['fail']);
-});
 
 // --- the last-failure gauge -------------------------------------------------
 
@@ -232,11 +85,11 @@ function fakeGauge() {
   return { gauge, writes };
 }
 
-test('a counted failure writes the time and the two labels, whether or not it pings', async (t) => {
+test('a counted failure writes the time and the two labels', async (t) => {
   mock.timers.enable({ apis: ['Date'], now: T0 + 999 });
   t.after(() => mock.timers.reset());
   const g = fakeGauge();
-  const h = harness(undefined, g.gauge);
+  const h = harness(g.gauge);
   await h.run({ at: 0, attempt: 1, throws: down() });
   await h.run({ at: 3 * HOUR, throws: down() });
   await h.run(wait({ at: 0, attempt: 1, throws: down() }));
@@ -244,12 +97,11 @@ test('a counted failure writes the time and the two labels, whether or not it pi
   const call = { value: T0 / 1000, labels: { activity_type: 'writeFindingVerdict', kind: 'call' } };
   const merge = { value: T0 / 1000, labels: { activity_type: 'awaitFixPrMerge', kind: 'wait' } };
   assert.deepEqual(g.writes, [call, call, merge, merge]);
-  assert.deepEqual(h.kinds(), ['fail', 'fail']);
 });
 
 test('a success, a cancellation, a benign failure and a "not yet" write nothing', async () => {
   const g = fakeGauge();
-  const h = harness(undefined, g.gauge);
+  const h = harness(g.gauge);
   const unwritten: Attempt[] = [
     { at: 3 * HOUR },
     { at: 3 * HOUR, throws: new CancelledFailure('CANCELLED') },
@@ -268,7 +120,7 @@ test('two failures a second apart write different values', async (t) => {
   mock.timers.enable({ apis: ['Date'], now: T0 });
   t.after(() => mock.timers.reset());
   const g = fakeGauge();
-  const h = harness(undefined, g.gauge);
+  const h = harness(g.gauge);
   await h.run({ at: 0, throws: down() });
   mock.timers.tick(1000);
   await h.run({ at: 0, throws: down() });
@@ -278,21 +130,18 @@ test('two failures a second apart write different values', async (t) => {
   );
 });
 
-test('a gauge or a ping that throws leaves the other and the activity alone', async () => {
+test('a gauge that throws leaves the activity alone, and one that works is written once', async () => {
   const broken: LastFailureGauge = {
     set: () => {
       throw new Error('meter gone');
     },
   };
-  const h = harness(undefined, broken);
+  const h = harness(broken);
   const error = down();
   assert.equal((await h.run({ at: 3 * HOUR, throws: error })).error, error);
-  assert.deepEqual(h.kinds(), ['fail']);
 
   const g = fakeGauge();
-  const silent = harness(() => {
-    throw new Error('threw');
-  }, g.gauge);
+  const silent = harness(g.gauge);
   assert.equal((await silent.run({ at: 3 * HOUR, throws: error })).error, error);
   assert.equal(g.writes.length, 1);
 });

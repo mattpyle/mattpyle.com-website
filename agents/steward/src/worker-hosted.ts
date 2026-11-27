@@ -15,7 +15,6 @@ import { assertPublicRoleEnvironment, parseWorkerRole } from './worker-role.js';
 import { assertLighthouseMatchesLock } from './lib/install-state.js';
 import { APP_ID_ENV, APP_KEY_ENV, describeGitHubBoot, resolveGitHubAppForBoot } from './lib/github.js';
 import { log } from './lib/logger.js';
-import { sendHealthPing } from './lib/health-ping.js';
 import { longRetryAlarm } from './lib/long-retry.js';
 import {
   createLastFailureGauge,
@@ -259,12 +258,12 @@ async function main() {
   const connection = await NativeConnection.connect(temporalConnectionOptions());
 
   const tracker = new ActivityTracker();
-  // One for the process, so all its workers share the waits' streaks. The public
-  // role has none: it renders strangers' pages and has no use for the ping key.
-  // It also writes the last-failure gauge, when metrics are exported.
+  // The last-failure gauge, when metrics are exported. The public role gets no
+  // interceptor: it renders strangers' pages, and the Grafana rule reads the
+  // credentialed worker.
   const lastFailure =
     !isPublic && sdkMetricsOptions(process.env, 'hosted') ? createLastFailureGauge(runtime.metricMeter) : undefined;
-  const longRetry = isPublic ? undefined : longRetryAlarm(sendHealthPing, lastFailure);
+  const longRetry = isPublic ? undefined : longRetryAlarm(lastFailure);
   // The queues whose worker got it, for the ready line.
   const alarmedQueues: string[] = [];
 
@@ -296,9 +295,8 @@ async function main() {
    * platform's own kill deadline, and the restart reads as a crash rather than
    * a deploy.
    *
-   * Two interceptors. The long-retry alarm (`lib/long-retry.ts`, default role
-   * only) pings when an activity has been failing for two hours, and records the
-   * time of each counted failure. The tracker is
+   * Two interceptors. `longRetryAlarm` (`lib/long-retry.ts`, default role
+   * only) records the time of each counted failure. The tracker is
    * there because the recycle policy needs to know when a browser activity ran
    * and when the last activity finished, and the activities themselves are
    * shared with the local worker, which must never recycle. Observing from out here keeps them ignorant of
@@ -350,7 +348,7 @@ async function main() {
     activities: Object.keys(audit.activities),
     fastActivities: Object.keys(fast.activities),
     hosted: true,
-    // Which queues' workers carry the long-retry alarm.
+    // Which queues' workers carry the `longRetryAlarm` interceptor.
     longRetryAlarm: alarmedQueues,
     // Which app and installation the credential resolved to: the line a
     // deploy is checked against after the app's values change. The bot login
