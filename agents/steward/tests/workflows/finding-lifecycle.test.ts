@@ -31,6 +31,7 @@ import type {
   FixPr,
   FixPrOutcome,
   OpenFixIssueInput,
+  RequestFixSlotInput,
   PrPreview,
   ProductionDeploy,
   ProductionRead,
@@ -42,6 +43,7 @@ import type {
   WriteFindingReturnedInput,
   WriteFindingVerificationInput,
 } from '../../src/activities/findings.js';
+import { runningWorkflowIds, sendSlotRequest } from '../../src/activities/findings.js';
 import type { RunFindingChecksInput } from '../../src/activities/verify-finding.js';
 import {
   compareContains,
@@ -56,6 +58,8 @@ import { parseFrontmatter } from '../../src/lib/frontmatter.js';
 import type { VerifyCheck } from '../../src/lib/verify-checks.js';
 import { DEFECT_FINDING, DEFECT_KEY, FIXING_FINDING, FIX_PR, ORIGIN } from '../helpers/finding-fixtures.js';
 import { ResumeRefused, parkedRun, requestResume } from '../../src/lib/finding-resume.js';
+import { dispatchStateQuery } from '../../src/workflows/fix-dispatch.js';
+import { dispatchWorkflowId } from '../../src/lib/fix-dispatch.js';
 
 /**
  * `findingWorkflow` started with `stopAfter: 'resolved'`, end to end on the
@@ -141,6 +145,12 @@ interface Script {
   prPolls?: number[];
   /** Per attempt: a non-retryable failure type the PR wait throws instead, or null. */
   prFail?: (string | null)[];
+  /** Per attempt: whether the look at the PR wait's bound finds that attempt's PR (STW-704). Default: it finds none. */
+  look?: boolean[];
+  /** A PR from issue 101 that the wait of a later issue sees after this many of its polls (STW-704). */
+  latePr?: { afterPolls: number };
+  /** Slot requests go to the real dispatcher with these paths, so every grant and release is in the history. */
+  slotPaths?: string[];
   /** Per PR: how many polls answer "still open", then the outcome. */
   merge: Record<string, { openPolls: number; outcome: FixPrOutcome }>;
   /** What production's deployments list holds at each deploy poll, newest first. The last entry repeats. */
@@ -185,6 +195,9 @@ function lifecycle(script: Script) {
     verification?: WriteFindingVerificationInput;
     comments: CommentOnFixPrInput[];
     fixes: WriteFindingFixInput[];
+    waits: AwaitFixPrInput[];
+    looks: AwaitFixPrInput[];
+    slots: number[];
   } = {
     issues: [],
     returned: [],
@@ -194,6 +207,9 @@ function lifecycle(script: Script) {
     reports: [],
     comments: [],
     fixes: [],
+    waits: [],
+    looks: [],
+    slots: [],
   };
   const previewPolls: Record<string, number> = {};
 
@@ -203,7 +219,20 @@ function lifecycle(script: Script) {
       return { findingCommitSha: 'c-v1', indexCommitSha: 'c-v2', commitSha: 'c-v2' };
     },
     // A cause with no path: the activity grants, and no dispatcher runs.
-    requestFixSlot: async () => ({ paths: [], dispatched: false }),
+    requestFixSlot: async (input: RequestFixSlotInput) => {
+      seen.slots.push(input.ticket);
+      const paths = script.slotPaths ?? [];
+      if (paths.length === 0) return { paths, dispatched: false };
+      await sendSlotRequest(Context.current().client, input.site, {
+        workflowId: input.workflowId,
+        key: input.key,
+        paths,
+        ticket: input.ticket,
+        at: input.at,
+      });
+      return { paths, dispatched: true };
+    },
+    runningWorkflowIds,
     readSiteAutoFix: async () => {
       calls.push('readSiteAutoFix');
       return script.autoFix ?? false;
@@ -225,15 +254,28 @@ function lifecycle(script: Script) {
       return issue;
     },
     awaitFixPr: async (input: AwaitFixPrInput): Promise<FixPr> => {
+      seen.waits.push(input);
       const attempt = input.issueNumber - 101;
       const n = (prPolls[input.issueNumber] = (prPolls[input.issueNumber] ?? 0) + 1);
       const fail = script.prFail?.[attempt];
       if (fail) throw ApplicationFailure.nonRetryable('GitHub rejected the credential (403).', fail);
+      if (script.latePr && attempt > 0 && input.earlierIssueNumbers?.includes(101) && n > script.latePr.afterPolls) {
+        calls.push('awaitFixPr');
+        return { prUrl: PR_1, branch: 'claude/issue-101-20261126-0410' };
+      }
       if (n <= (script.prPolls?.[attempt] ?? 2)) {
         throw notYet(`No open PR from claude/issue-${input.issueNumber}- yet.`, 'FixPrNotOpen');
       }
       calls.push('awaitFixPr');
       return { prUrl: attempt === 0 ? PR_1 : PR_2, branch: `claude/issue-${input.issueNumber}-20261016-0338` };
+    },
+    // The look at the bound (STW-704): issue 101's PR or 102's, as the script says, else none.
+    findFixPr: async (input: AwaitFixPrInput): Promise<FixPr | null> => {
+      calls.push('findFixPr');
+      seen.looks.push(input);
+      const attempt = input.issueNumber - 101;
+      if (!script.look?.[attempt]) return null;
+      return { prUrl: attempt === 0 ? PR_1 : PR_2, branch: `claude/issue-${input.issueNumber}-20261126-0338` };
     },
     writeFindingFix: async (input: WriteFindingFixInput) => {
       calls.push('writeFindingFix');
@@ -745,30 +787,142 @@ test('a PR closed unmerged writes approved back, and the next fix closes the fir
   );
 });
 
-test('no PR within 60 minutes: the reason lands in lastFixError and the run goes back to waiting-fix', async () => {
-  const mocks = lifecycle({ prPolls: [Number.POSITIVE_INFINITY], merge: {} });
+// ---- The fixer does not answer (STW-704) -----------------------------------
+
+const NO_PR = (issue: string) => `No PR from ${issue} within 60 minutes.`;
+
+test('a fixer that never answers: at the bound the run looks once, then opens a second issue by itself that closes the first with the reason', async () => {
+  const mocks = lifecycle({ prPolls: [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY], merge: {} });
   await withWorkers(mocks, async () => {
-    const handle = await startApproved('pr-timeout');
-    // A pending result() lets the server skip the hour of polls. Once the run
-    // idles at waiting-fix it skips on to the test server's own execution
-    // timeout, so the state is read on the way and the run is left there.
-    const done = skipResult(handle).catch(() => undefined);
-    let waiting: FindingState;
-    const deadline = Date.now() + 60_000;
-    for (;;) {
-      waiting = await handle.query(findingStateQuery);
-      if (waiting.step === 'waiting-fix' && waiting.lastFixError) break;
-      if (Date.now() > deadline) assert.fail(`the PR wait never gave up; the run is at ${waiting.step}`);
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    assert.equal(waiting.lastFixError, `No PR from ${ISSUE_1} within 60 minutes.`);
-    assert.equal(waiting.issueUrl, ISSUE_1);
-    assert.equal(waiting.prUrl, null);
-    // Every minute for an hour.
+    const handle = await startApproved('never-answers');
+    // The test's one time-skipping await: past the first bound, inside the second wait.
+    await env.sleep('70 minutes');
+    const state = await handle.query(findingStateQuery);
+    assert.equal(state.step, 'fixing');
+    assert.equal(state.fixAttempts, 2, 'no fix signal started the second attempt');
+    assert.equal(state.issueUrl, ISSUE_2);
+    assert.equal(state.lastFixError, `${NO_PR(ISSUE_1)} The run opens the issue again now.`);
+    // One look, at the bound, with the same match as the wait.
+    assert.deepEqual(mocks.seen.looks, [{ repo: SITE_REPO, issueNumber: 101, earlierIssueNumbers: [] }]);
+    assert.deepEqual(mocks.seen.issues[1].supersedes, { url: ISSUE_1, reason: NO_PR(ISSUE_1) });
+    // The second wait also takes a late PR from the first issue.
+    assert.deepEqual(mocks.seen.waits.at(-1), { repo: SITE_REPO, issueNumber: 102, earlierIssueNumbers: [101] });
     const polls = mocks.prPolls()[101];
     assert.ok(polls >= 55 && polls <= 61, `polled ${polls} times`);
     assert.ok(!mocks.calls.includes('writeFindingFix'), 'the finding is marked fixing only when a PR exists');
-    // Settle the pending result, or time skipping stays unlocked for the next test.
+    await handle.terminate('test over');
+  });
+});
+
+test('a PR that appears only at the look is taken: one issue, and the run goes on to resolved', async () => {
+  const mocks = lifecycle({
+    prPolls: [Number.POSITIVE_INFINITY],
+    look: [true],
+    merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
+    deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
+  });
+  const result = (await withWorkers(mocks, async () => skipResult(await startApproved('look-finds')))) as FindingWorkflowResult;
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(result.prUrl, PR_1);
+  assert.equal(result.fixAttempts, 1);
+  assert.equal(mocks.seen.issues.length, 1, 'no second issue');
+  assert.equal(mocks.calls.filter((c) => c === 'findFixPr').length, 1);
+  assert.equal(mocks.seen.fixes[0].prUrl, PR_1);
+});
+
+test('a PR from the first issue that opens during the second wait is the fix', async () => {
+  const mocks = lifecycle({
+    prPolls: [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY],
+    latePr: { afterPolls: 3 },
+    merge: { [PR_1]: { openPolls: 0, outcome: merged(PR_1, 'm1') } },
+    deploys: [[{ id: 2, sha: 'm1', state: 'success' }]],
+  });
+  const result = (await withWorkers(mocks, async () => skipResult(await startApproved('late-pr')))) as FindingWorkflowResult;
+  assert.equal(result.outcome, 'resolved');
+  assert.equal(result.prUrl, PR_1);
+  assert.equal(result.fixAttempts, 2);
+  assert.equal(mocks.seen.issues.length, 2);
+  assert.deepEqual(mocks.seen.fixes.map((f) => f.prUrl), [PR_1]);
+  assert.equal(mocks.calls.filter((c) => c === 'findFixPr').length, 1, 'the second wait took it; no look');
+});
+
+test('three bounds, the rest: after the second the run holds no slot and says when the third issue opens', async () => {
+  const mocks = lifecycle({ prPolls: Array(3).fill(Number.POSITIVE_INFINITY), slotPaths: ['src/pages/scorecard.astro'], merge: {} });
+  await withWorkers(mocks, async () => {
+    const handle = await startApproved('three-bounds-rest');
+    // Two bounds and their looks, then three hours into the one-day rest.
+    await env.sleep('5 hours');
+    const state = await handle.query(findingStateQuery);
+    assert.equal(state.step, 'waiting-fix');
+    assert.equal(state.fixAttempts, 2);
+    assert.equal(state.issueUrl, ISSUE_2);
+    assert.match(
+      state.lastFixError ?? '',
+      new RegExp(`^${NO_PR(ISSUE_2).replace(/[.\/]/g, '\\$&')} 2 fix issues in a row got no PR, so a third opens at \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC\\.$`),
+    );
+    assert.equal(mocks.seen.issues.length, 2, 'the third issue waits for the rest');
+    // The slot went back to the dispatcher before the rest: it holds nobody.
+    assert.deepEqual(mocks.seen.slots, [1, 2]);
+    const dispatch = await client.workflow.getHandle(dispatchWorkflowId('mattpyle-com')).query(dispatchStateQuery);
+    assert.deepEqual(dispatch.holders, []);
+    assert.deepEqual(dispatch.waiters, []);
+    await handle.terminate('test over');
+  });
+});
+
+test('three bounds: the third issue opens a day after the second bound, and after its bound the run waits for a person with the reason', async () => {
+  const mocks = lifecycle({ prPolls: Array(3).fill(Number.POSITIVE_INFINITY), merge: {} });
+  await withWorkers(mocks, async () => {
+    const handle = await startApproved('three-bounds');
+    // About 1 + 1 + 24 + 1 hours of waits and rest, and then some.
+    await env.sleep('30 hours');
+    const state = await handle.query(findingStateQuery);
+    const issue3 = `https://github.com/${SITE_REPO}/issues/103`;
+    assert.equal(state.step, 'waiting-fix');
+    assert.equal(state.fixAttempts, 3);
+    assert.equal(state.issueUrl, issue3);
+    assert.equal(state.lastFixError, `${NO_PR(issue3)} 3 fix issues in a row got no PR, so the run waits for a person's fix.`);
+    assert.equal(mocks.seen.issues.length, 3, 'no fourth issue without a person');
+    assert.equal(mocks.calls.filter((c) => c === 'findFixPr').length, 3);
+    assert.deepEqual(mocks.seen.issues[2].supersedes, { url: ISSUE_2, reason: NO_PR(ISSUE_2) });
+    // The rest is one day long, between the second issue's bound and the third issue.
+    const events = (await handle.fetchHistory()).events ?? [];
+    const kind = proto.temporal.api.enums.v1.EventType;
+    const opens = events.filter(
+      (e) => e.eventType === kind.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED && e.activityTaskScheduledEventAttributes?.activityType?.name === 'openFixIssue',
+    );
+    const rest = events.find((e) => e.eventType === kind.EVENT_TYPE_TIMER_STARTED && Number(e.timerStartedEventAttributes?.startToFireTimeout?.seconds) === 86_400);
+    assert.ok(rest, 'a one-day timer');
+    assert.ok(Number(opens[1].eventId) < Number(rest.eventId) && Number(rest.eventId) < Number(opens[2].eventId), 'the rest sits between the second and third issues');
+    await handle.terminate('test over');
+  });
+});
+
+test('a person\'s fix in the rest starts the third attempt at once and the count again, so its bound opens a fourth issue by itself', async () => {
+  // The fourth issue's look finds its PR, so the run settles in the merge wait.
+  const mocks = lifecycle({
+    prPolls: Array(4).fill(Number.POSITIVE_INFINITY),
+    look: [false, false, false, true],
+    merge: { [PR_2]: { openPolls: Number.POSITIVE_INFINITY, outcome: merged(PR_2, 'm2') } },
+  });
+  const issue = (n: number) => `https://github.com/${SITE_REPO}/issues/${n}`;
+  await withWorkers(mocks, async () => {
+    const handle = await startApproved('fix-in-rest');
+    await env.sleep('3 hours');
+    assert.match((await handle.query(findingStateQuery)).lastFixError ?? '', /so a third opens at/);
+    await handle.signal(fixSignal, { ...FIX, at: '2026-11-26T20:00:00Z' });
+    // The third attempt starts without the rest's day: in real time, with the clock locked.
+    await untilState(handle, (s) => s.fixAttempts === 3 && s.issueUrl === issue(103), 'the third attempt');
+    // The one result() of the test: the clock runs on to the third bound. A
+    // count that did not start again would park there for a person; it opens
+    // a fourth issue at once instead.
+    const done = skipResult(handle).catch(() => undefined);
+    const merging = await untilState(handle, (s) => s.step === 'waiting-merge', 'the fourth attempt\'s merge wait');
+    assert.equal(merging.fixAttempts, 4);
+    assert.equal(merging.issueUrl, issue(104));
+    assert.equal(merging.prUrl, PR_2);
+    assert.equal(mocks.seen.issues.length, 4);
+    assert.deepEqual(mocks.seen.issues[3].supersedes, { url: issue(103), reason: NO_PR(issue(103)) });
     await handle.terminate('test over').catch(() => undefined);
     await done;
   });

@@ -57,6 +57,7 @@ export {
   readFindingSettings,
   openFixIssue,
   awaitFixPr,
+  findFixPr,
   awaitFixPrMerge,
   awaitProductionDeploy,
   readProductionDeploy,

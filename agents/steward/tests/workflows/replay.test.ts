@@ -92,7 +92,7 @@ import { workflowBundle } from '../helpers/workflow-bundle.js';
  * | `reviewPost` | `phase1b-smoke-test.json`, `phase1c-build-audit.json`, `review-post-publish-verify.bin` | Audit mode. A reject. A refused approve (blocking findings, stale hash). A publish failure parked at `awaiting_verdict`. A red PR check, and ten exhausted verifications, both parked at `publishing`. The repeat approve that resumes. The optional fan-out additions (`tellCitations`, `eprimeAlternativesPass`, the ai-tells pass). |
  * | `auditSiteWorkflow` | `stage3-audit-site-fanout.json` | The fast tier (`auditSiteFast`). A deep audit with a skipped page (robots, the shared budget, a blocked target) or a browser failure. |
  * | `scorecardAuditWorkflow` | `scorecard-dry-run.json`, `scorecard-performance-recheck-pre.bin`, `scorecard-mixed-lighthouse-pre.bin`, `scorecard-publish-pre-merge.bin`, `scorecard-nightly-merged-pre.bin`, `scorecard-nightly-noop-pre.bin`, `scorecard-unhealthy-merged-pre.bin` | A merge refusal and the second, failing ping. The Performance re-check's extra `auditLiveUrl` calls and the mixed-Lighthouse refusal on current code (both fixtures predate their markers). A run that throws, and the audit-set guard. |
- * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin`, `finding-parked-with-issue-pre.bin`, `finding-parked-issue-reread.bin`, `finding-reopened-pre.bin`, `finding-verify-failed-pre.bin`, `finding-merge-timeout-pre.bin`, `finding-deploy-timeout-pre.bin`, `finding-park-resume-resolved.bin`, `finding-park-request-fix.bin`, `finding-merge-rewait.bin`, `finding-watch-stop-pre.bin`, `finding-watching.bin`, `finding-watch-resolved.bin`, `finding-watch-measure-now.bin`, `finding-watch-rejected.bin`, `finding-watch-reject-loses.bin`, `finding-watch-decided.bin`, `finding-watch-bound.bin`, `finding-watch-look.bin`, `finding-writes-exhausted-pre.bin`, `finding-verdict-write-failed-pre.bin`, `finding-verdict-parked.bin`, `finding-settings-parked.bin` | On the settings-at-use path: the `closed` ending of a run with no issue, the one-day rest after an attempt that failed before any issue, run to its end, a held run. The measurement at the verdict itself (a measured result, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. On the STW-653 paths: the deploy re-wait, a park at `merge`, `returned` or `deploy`, and a `closed` ending after the PR. Stage 4: the `stopped` ending of a watch, and a rejection written when the watch answers `stopped`. STW-689: a park at `settings` in the lifecycle, a replacing verdict at `verdict`, the `closed` ending of a moved verdict write, and a call issued again at its bound (`finding-failure-parks.test.ts`). |
+ * | `findingWorkflow` | `finding-verdict-cli.json`, `finding-verdict-file.json`, `finding-child-fix-returned.bin`, `finding-opportunity-auto-fix-attempt.bin`, `finding-pr-closed-before-dispatch.bin`, `finding-pr-closed-before-preview-test.bin`, `finding-preview-passed-before-retest.bin`, `finding-verify-child-heavy.bin`, `finding-verify-unverifiable.bin`, `finding-approved-before-verdict-measure.bin`, `finding-parked-before-verdict-update.bin`, `finding-waits-for-person-parked-pre.bin`, `finding-settings-at-use.bin`, `finding-parked-with-issue-pre.bin`, `finding-parked-issue-reread.bin`, `finding-reopened-pre.bin`, `finding-verify-failed-pre.bin`, `finding-merge-timeout-pre.bin`, `finding-deploy-timeout-pre.bin`, `finding-park-resume-resolved.bin`, `finding-park-request-fix.bin`, `finding-merge-rewait.bin`, `finding-watch-stop-pre.bin`, `finding-watching.bin`, `finding-watch-resolved.bin`, `finding-watch-measure-now.bin`, `finding-watch-rejected.bin`, `finding-watch-reject-loses.bin`, `finding-watch-decided.bin`, `finding-watch-bound.bin`, `finding-watch-look.bin`, `finding-writes-exhausted-pre.bin`, `finding-verdict-write-failed-pre.bin`, `finding-verdict-parked.bin`, `finding-settings-parked.bin`, `finding-pr-bound-parked-pre.bin`, `finding-pr-bound-reopen.bin` | On the settings-at-use path: the `closed` ending of a run with no issue, the one-day rest after an attempt that failed before any issue, run to its end, a held run. The measurement at the verdict itself (a measured result, the resolve without a fix, the moved finding held at `waiting-fix`). A fix attempt the dispatcher holds: the `slot-grant` wait, the re-request after `SLOT_RESEND`, the release signal. A preview test that fails or goes unmeasured, and the retest itself (a `pushed` merge wait, the `retest` Update). A verdict by the `record-verdict` Update: `finding-verdict-update.test.ts` compares its history with a Signal's, and no fixture replays one. The conflict close and re-cut. On the STW-653 paths: the deploy re-wait, a park at `merge`, `returned` or `deploy`, and a `closed` ending after the PR. Stage 4: the `stopped` ending of a watch, and a rejection written when the watch answers `stopped`. STW-689: a park at `settings` in the lifecycle, a replacing verdict at `verdict`, the `closed` ending of a moved verdict write, and a call issued again at its bound (`finding-failure-parks.test.ts`). |
  * | `fixFindingWorkflow` (frozen) | `fix-finding-pr.bin`, `fix-finding-preview.bin` | The diff review (`reviewFixDiff`) on current code. A refusal (`FindingNotFixable`). A finding with no checks. |
  * | `verifyFindingWorkflow` | `verify-finding-blockless.bin`, `verify-finding-checks-pre-heartbeat.bin`, `verify-finding-slow-phase.bin` | The checks path ending reopened. The slow phase of the blockless read and of the write. The blockless confirm by deploy (`readProductionDeploy`). The refusals (`FindingNotVerifiable`, `FixNotMerged`, `FixNotLive`). |
  * | `fixDispatchWorkflow` | `fix-dispatch-grant-after-release.bin` | The hourly sweep (`runningWorkflowIds`). A grant whose signal fails. A re-sent request for a held ticket. The idle close. The continue-as-new rollover is a test in `fix-dispatch.test.ts`, not a replay. |
@@ -965,7 +965,13 @@ test('a lifecycle run that read its settings at use replays its park, its daily 
  * with an issue, before such a run read its file again: a file approval, the
  * settings and the measurement, an attempt whose issue 101 got no PR, the park,
  * a `fix` signal, a second attempt whose issue 102 got no PR, and the park
- * again. 87 events. Between the first park and the `fix` signal the history
+ * again. 87 events.
+ *
+ * "Got no PR" here is the mocked `awaitFixPr` failing at once with a
+ * non-retryable `NoPr` (`RETRY_STATE_NON_RETRYABLE_FAILURE`), not the wait
+ * running out its 60 minutes. So this history never reaches the
+ * `fixer-reopen` marker (STW-704), which is read only after a bound, and it
+ * does not guard that path: `finding-pr-bound-parked-pre.bin` below does. Between the first park and the `fix` signal the history
  * holds no timer and no read. New code waits there behind a one-day timer and
  * reads the file, so this replays only because the `parked-issue-reread` patch
  * sends a history without the marker down the plain wait for `fix`.
@@ -1013,7 +1019,9 @@ test('a lifecycle run parked with an issue before the daily read replays its pla
  * its file there: the first attempt's issue got no PR, the park records the
  * `parked-issue-reread` marker and a one-day timer, the read finds the file
  * still approved, a second timer, a read that finds it `resolved`, and the run
- * ends `closed`. 87 events.
+ * ends `closed`. 87 events. Its first attempt's "no PR" is a non-retryable
+ * `NoPr`, as in the fixture above, not a bound, so it does not reach the
+ * `fixer-reopen` marker either (STW-704).
  *
  * No history from before this change can hold these commands, so this is not a
  * pre-change fixture: it was recorded from the changed code (the worktree on
@@ -1052,6 +1060,93 @@ test('a lifecycle run parked with an issue replays its daily read and its close'
     { workflowBundle: await workflowBundle() },
     history,
     'finding/mattpyle-com/defect-parked-issue-reread-fixture--steward',
+  );
+});
+
+/**
+ * A lifecycle run whose PR wait ran out its 60 minutes before the look at the
+ * bound existed (STW-704): an approval and a `fix`, the settings and the
+ * measurement, issue 101, 60 minutes of `FixPrNotOpen` ending in
+ * `ActivityTaskFailed` with `RETRY_STATE_TIMEOUT` (event 66), the park at
+ * `waiting-fix` with the `parked-issue-reread` marker and its one-day timer, a
+ * `fix`, issue 102 and its PR, and the rest of the lifecycle to the verify
+ * child, and its `done`. 160 events. It is the first fixture to hold a real bound of the PR
+ * wait: `finding-parked-with-issue-pre.bin` and
+ * `finding-parked-issue-reread.bin` record a non-retryable `NoPr` there.
+ *
+ * New code looks for a PR at the bound (`findFixPr`) and opens the issue again
+ * by itself. This replays only because the `fixer-reopen` patch sends a
+ * history without the marker down the old catch to the park.
+ *
+ * Recorded from the pre-change `finding.ts` (origin/master at d68ba19, the
+ * worktree before its first edit) against the time-skipping server with the
+ * mocked activities of `finding-lifecycle.test.ts`: one `env.sleep('61
+ * minutes')`, then a `fix`. It holds no real finding text.
+ *
+ * Probe (2026-11-26), reverted and re-run green: deleting the
+ * `wf.patched(FIXER_REOPEN_PATCH)` guard, so every bound takes the look, made
+ * this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ * for change parked-issue-reread, but there is no corresponding change command!
+ * ```
+ *
+ * The code scheduled `findFixPr` where the history holds the park's marker.
+ * `finding-pr-bound-reopen.bin` below failed too, for its own marker; the other
+ * 56 replays passed.
+ */
+const findingPrBoundParkedPath = fileURLToPath(new URL('../fixtures/histories/finding-pr-bound-parked-pre.bin', import.meta.url));
+
+test('a lifecycle run whose PR wait ran out before the look replays its park and a person\'s fix', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingPrBoundParkedPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/defect-pr-bound-parked-fixture--steward',
+  );
+});
+
+/**
+ * A lifecycle run past the `fixer-reopen` marker (STW-704): issue 101's PR
+ * wait runs out, the marker and the look (`findFixPr`) find nothing, the
+ * second attempt opens issue 102 with no `fix`, closing 101 with its reason,
+ * and a PR from issue 101 opens during 102's wait and is taken. The rest of
+ * the lifecycle runs to the verify child.
+ *
+ * No history from before this change can hold these commands, so this is not a
+ * pre-change fixture: it was recorded from the changed code and guards the next
+ * change to the path. The steps are the lifecycle test "a PR from the first
+ * issue that opens during the second wait is the fix". 157 events.
+ *
+ * Probes (2026-11-26), each reverted and re-run green:
+ *
+ * 1. Deleting the `wf.patched(FIXER_REOPEN_PATCH)` guard made this replay fail
+ *    with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Non-deprecated patch marker encountered
+ *    for change fixer-reopen, but there is no corresponding change command!
+ *    ```
+ *
+ * 2. A `wf.sleep('1 second')` injected before the look made this replay alone
+ *    fail with
+ *
+ *    ```
+ *    [TMPRL1100] Nondeterminism error: Timer machine does not handle this
+ *    event: HistoryEvent(id: 72, ActivityTaskScheduled)
+ *    ```
+ *
+ *    The other 57 replays passed.
+ */
+const findingPrBoundReopenPath = fileURLToPath(new URL('../fixtures/histories/finding-pr-bound-reopen.bin', import.meta.url));
+
+test('a lifecycle run replays its look at the PR bound, the issue opened again and a late PR from the first issue', { timeout: 120_000 }, async () => {
+  const history = proto.temporal.api.history.v1.History.decode(await fs.readFile(findingPrBoundReopenPath));
+  await Worker.runReplayHistory(
+    { workflowBundle: await workflowBundle() },
+    history,
+    'finding/mattpyle-com/defect-pr-bound-reopen-fixture--steward',
   );
 });
 

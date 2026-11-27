@@ -911,6 +911,12 @@ export interface AwaitFixPrInput {
   /** `owner/name` of the site repository, the issue's. */
   repo: string;
   issueNumber: number;
+  /**
+   * Earlier issues of the same run that got no PR (STW-704). A late PR from
+   * one of them is this attempt's fix. Absent on an attempt scheduled before
+   * the field existed, which matched its own issue alone.
+   */
+  earlierIssueNumbers?: number[];
 }
 
 export interface FixPr {
@@ -930,19 +936,42 @@ export interface FixPr {
  * 60-minute give-up, which reaches the workflow as a timeout. Each attempt is
  * one short read, so it needs no heartbeat. A rejected credential is retried
  * at the same interval, as in the merge wait.
+ *
+ * Since STW-704 a PR from an earlier issue of the same run matches too
+ * (`earlierIssueNumbers`): an Action run that an outage held up can open its
+ * PR after the run opened the next issue.
  */
 export async function awaitFixPr(input: AwaitFixPrInput): Promise<FixPr> {
-  const prefix = fixPrBranchPrefix(input.issueNumber);
+  const found = await matchFixPr(input);
+  if (!found) {
+    const prefix = fixPrBranchPrefix(input.issueNumber);
+    throw ApplicationFailure.retryable(`No open PR in ${input.repo} from a ${prefix} branch yet.`, 'FixPrNotOpen');
+  }
+  log.info({ activity: 'awaitFixPr', issue: input.issueNumber, pr: found.prUrl }, 'the fix PR is open');
+  return found;
+}
+
+/**
+ * The look at the PR wait's bound (STW-704): the same read once, with the same
+ * match, and null in place of "not yet". The workflow runs it under the
+ * durable policy, so an outage is waited out, and opens the issue again only
+ * on a null. A rejected credential is retried, as in the wait.
+ */
+export async function findFixPr(input: AwaitFixPrInput): Promise<FixPr | null> {
+  const found = await matchFixPr(input);
+  log.info({ activity: 'findFixPr', issue: input.issueNumber, pr: found?.prUrl ?? null }, found ? 'the fix PR is open' : 'no fix PR');
+  return found;
+}
+
+/** One read of the open PRs: the first whose head branch is the Action's for this issue or an earlier one. */
+async function matchFixPr(input: AwaitFixPrInput): Promise<FixPr | null> {
+  const prefixes = [input.issueNumber, ...(input.earlierIssueNumbers ?? [])].map(fixPrBranchPrefix);
   const pulls = (await authRetryable(() => gh(`/repos/${input.repo}/pulls?state=open&per_page=100`))) as {
     html_url: string;
     head?: { ref?: string };
   }[];
-  const match = pulls.find((pr) => pr.head?.ref?.startsWith(prefix));
-  if (!match) {
-    throw ApplicationFailure.retryable(`No open PR in ${input.repo} from a ${prefix} branch yet.`, 'FixPrNotOpen');
-  }
-  log.info({ activity: 'awaitFixPr', issue: input.issueNumber, pr: match.html_url }, 'the fix PR is open');
-  return { prUrl: match.html_url, branch: match.head?.ref as string };
+  const match = pulls.find((pr) => prefixes.some((prefix) => pr.head?.ref?.startsWith(prefix)));
+  return match ? { prUrl: match.html_url, branch: match.head?.ref as string } : null;
 }
 
 export interface AwaitProductionDeployInput {
