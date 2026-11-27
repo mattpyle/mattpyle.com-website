@@ -55,6 +55,8 @@ export const AuditView = z.object({
       errors: count,
     }),
   ),
+  /** Counts over `checks`, for the model to quote. Optional: a result recorded before it existed still parses. */
+  totals: z.object({ checks: count, passed: count, failed: count, notApplicable: count, errors: count }).optional(),
   decisionClasses: z.partialRecord(z.enum(DECISION_CLASSES), count).optional(),
   checks: z.array(CheckView),
   /** Checks left out because a field failed the allow-list. Normally 0. */
