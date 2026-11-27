@@ -187,6 +187,14 @@ export const METRICS_ENDPOINT = 'https://metrics.temporal.io/v1/metrics';
 
 export const MODEL = process.env.STEWARD_MODEL ?? 'claude-sonnet-4-6';
 
+/**
+ * The model that drafts a fix log entry (`lib/fix-log-draft.ts`). Its own setting, not
+ * `MODEL`: the writing is the main risk of the fix log writer and the volume is a few
+ * entries a week, so it takes the strongest model. `acceptsTemperature` in `lib/llm.ts`
+ * still gates the temperature, so none is sent to it.
+ */
+export const FIX_LOG_MODEL = process.env.STEWARD_FIX_LOG_MODEL || 'claude-opus-5-5';
+
 export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
 export const NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
 

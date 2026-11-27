@@ -248,7 +248,7 @@ test('the dependency-free reader agrees with the js-yaml reader on every real en
   const expected = new Map();
   const day = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });
   for (const e of readEntries(ENTRIES_DIR)) {
-    const dates = [day(new Date(e.data.verified)), ...(e.data.updated ? [new Date(e.data.updated).toISOString().slice(0, 10)] : [])];
+    const dates = [day(new Date(e.data.verified ?? e.data.changes[0].opened)), ...(e.data.updated ? [new Date(e.data.updated).toISOString().slice(0, 10)] : [])];
     expected.set(e.data.slug, { draft: false, lastmod: dates.sort().at(-1), key: String(e.key) });
   }
   assert.ok(expected.size > 0, 'the collection has entries');
@@ -268,3 +268,21 @@ test('the dependency-free reader ignores indented keys, accepts CRLF, and keeps 
   withFindings({ 'mp-1.md': entry('updated: later\r\n') }, (dir) => assert.throws(() => readFixMetadata(dir), /"updated" is not a date/));
   withFindings({ 'mp-1.md': entry(), 'mp-2.md': entry() }, (dir) => assert.throws(() => readFixMetadata(dir), /used twice/));
 });
+
+test('an entry written before production confirms its fix is dated by its first change', () => {
+  const entry = (dates) => `---\nkey: MP-1\nslug: "early"\n${dates}---\nBody.\n`;
+  const changes = (opened) => `changes:\n  - number: 900\n    title: "x"\n    opened: ${opened}\n  - number: 901\n    title: "y"\n    opened: "2026-12-30T10:00:00Z"\n`;
+  // 03:00Z on the 12th is the 11th in Vancouver, the zone the pages show.
+  withFindings({ 'mp-1.md': entry(changes('"2026-11-12T03:00:00Z"')) }, (dir) => assert.equal(readFixMetadata(dir).get('early').lastmod, '2026-11-11'));
+  withFindings({ 'mp-1.md': entry('verified: ""\n' + changes('2026-11-12T20:00:00Z')) }, (dir) => assert.equal(readFixMetadata(dir).get('early').lastmod, '2026-11-12'));
+  withFindings({ 'mp-1.md': entry(changes('soon')) }, (dir) => assert.throws(() => readFixMetadata(dir), /"opened" is not a date/));
+  withFindings({ 'mp-1.md': entry('') }, (dir) => assert.throws(() => readFixMetadata(dir), /needs "verified" or the "opened" time/));
+});
+
+test('an unconfirmed, unmerged fix is extracted without verified or merged', () => {
+  const text = entryText({ key: 'MP-902', type: 'content', kind: 'defect', status: 'fixed', confirmedBy: 'check', where: '/about/', found: '2026-10-01', approved: '2026-10-02T03:04:05.678Z', verified: null, checks: [] }, { number: 900, title: 't', opened: '2026-10-02T04:00:00Z', merged: null });
+  assert.doesNotMatch(text, /verified:/);
+  assert.doesNotMatch(text, /merged:/);
+  assert.match(text, /opened: "2026-10-02T04:00:00Z"/);
+});
+

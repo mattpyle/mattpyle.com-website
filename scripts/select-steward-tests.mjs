@@ -130,7 +130,16 @@ export const SITE_READERS = {
   'tests/activities/cspell-published.test.ts': ['src/content/'],
   'tests/activities/dictionary.test.ts': ['src/content/'],
   'tests/lib/agent-audit-checks.test.ts': ['src/data/'],
+  'tests/lib/fix-log-rules.test.ts': ['src/content/'],
   'tests/lib/scorecard-aggregate.test.ts': ['src/data/'],
+};
+
+// Tests that hold a Steward copy of a site file equal to the site's, and the site files
+// (repository-relative) each compares. A change to one selects its test, as a change
+// under `SITE_FOLDERS` does. `scripts/route-changes.sh` sends the same files to the
+// Steward job.
+export const RULE_COPY_READERS = {
+  'tests/lib/fix-log-rules.test.ts': ['src/content.config.ts', 'scripts/fix-log-entries.mjs', 'scripts/lib/fix-metadata.mjs'],
 };
 
 const posix = (p) => p.split(path.sep).join('/');
@@ -288,6 +297,12 @@ function selectByGraph(input) {
       reasons.push(`${test} reads ${folder} (changed: ${hit})`);
     }
     if (readers.length === 0) reasons.push(`no test reads ${folder} (changed: ${hit})`);
+  }
+  for (const [test, sources] of Object.entries(RULE_COPY_READERS)) {
+    const hit = paths.find((p) => sources.includes(p));
+    if (!hit) continue;
+    files.add(test);
+    reasons.push(`${test} compares Steward's copy with ${hit}`);
   }
   if (files.size === 0) return { mode: 'none', files: [], reasons: [...graph.reasons, ...reasons] };
   return { mode: 'list', files: [...files].sort(), reasons };

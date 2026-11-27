@@ -185,8 +185,9 @@ export function entryText(f, pr) {
     visual: false,
     found: f.found,
     approved: f.approved,
-    verified: f.verified,
-    changes: [pr],
+    // Absent until production confirms the fix: a null would coerce to 1970 in the schema.
+    ...(f.verified ? { verified: f.verified } : {}),
+    changes: [pr.merged ? pr : { number: pr.number, title: pr.title, opened: pr.opened }],
     checks: f.checks,
   };
   const head = yaml.dump(facts, { lineWidth: -1, quotingType: '"', noRefs: true });

@@ -2836,6 +2836,37 @@ finding
     }
   });
 
+const fixLog = program.command('fix-log').description('The public fix log at /fix-log/');
+
+fixLog
+  .command('backfill')
+  .description(
+    'Draft a fix log entry for every merged fix that has none, commit each to one branch and open one pull request against master. Never merges.',
+  )
+  .option('--site <site>', 'site slug in the findings store', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .option('--dry-run', 'list what it would draft; write nothing and open nothing', false)
+  .option('--only <keys>', 'limit it to these finding keys, comma-separated (MP-1,MP-2)')
+  .action(async (opts: { site: string; dryRun: boolean; only?: string }) => {
+    const only = opts.only
+      ? new Set(opts.only.split(',').map((k) => k.trim().toUpperCase()).filter(Boolean))
+      : undefined;
+    if (only && [...only].some((k) => !/^MP-\d+$/.test(k))) fail(`--only takes keys such as MP-1,MP-2; got "${opts.only}".`);
+    const { backfillCredentialRefusal, backfillGitHub } = await import('./lib/fix-log-backfill-github.js');
+    const refusal = backfillCredentialRefusal(process.env, opts.dryRun);
+    if (refusal) fail(refusal);
+    const { runFixLogBackfill } = await import('./lib/fix-log-backfill.js');
+    const { fixLogSend } = await import('./lib/llm.js');
+    const { GITHUB_REPO } = await import('./config.js');
+    const report = await runFixLogBackfill(
+      { siteRepo: GITHUB_REPO, findingsRepo: ARGUS_REPO, site: opts.site, dryRun: opts.dryRun, only },
+      { github: backfillGitHub(), send: opts.dryRun ? undefined : fixLogSend(), print: (line) => console.log(`  ${line}`) },
+    );
+    if (report.failed.length > 0) {
+      console.log(`\n  ${report.failed.length} draft${report.failed.length === 1 ? '' : 's'} failed: ${report.failed.map((f) => f.key).join(', ')}. A second run retries them.\n`);
+      process.exit(1);
+    }
+  });
+
 program.parseAsync(process.argv).catch((err) => {
   console.error(`\n  ${describeCliError(err)}\n`);
   process.exit(1);

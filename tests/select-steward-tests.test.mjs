@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { DIRECTORY_READERS, FULL_GLOB, SITE_FOLDERS, SITE_READERS, UNREAD_FOLDERS, selectTests } from '../scripts/select-steward-tests.mjs';
+import { DIRECTORY_READERS, FULL_GLOB, RULE_COPY_READERS, SITE_FOLDERS, SITE_READERS, UNREAD_FOLDERS, selectTests } from '../scripts/select-steward-tests.mjs';
 
 /**
  * `scripts/select-steward-tests.mjs` on a small Steward tree built in a temp
@@ -126,6 +126,20 @@ test('a content or data change selects the tests that read that folder, and says
   assert.ok(!data.files.some((f) => readersOf('src/content/').includes(f) && !readersOf('src/data/').includes(f)));
 });
 
+test('a site file Steward keeps a copy of selects the test that compares them', () => {
+  const real = fileURLToPath(new URL('..', import.meta.url));
+  for (const [test, sources] of Object.entries(RULE_COPY_READERS)) {
+    assert.ok(fs.existsSync(path.join(real, S, test)), `${test} exists`);
+    for (const source of sources) {
+      assert.ok(fs.existsSync(path.join(real, source)), `${source} exists`);
+      const picked = pick(source);
+      assert.equal(picked.mode, 'list', source);
+      assert.ok(picked.files.includes(test), `${source} selects ${test}`);
+    }
+  }
+  assert.equal(pick('src/pages/index.astro').mode, 'none', 'a page alone selects nothing');
+});
+
 test('content beside a Steward file adds its readers to what the graph selects', () => {
   const both = files('src/content/writing/post.md', `${S}/src/lib/b.ts`);
   assert.deepEqual(both, [...new Set([...files(`${S}/src/lib/b.ts`), ...readersOf('src/content/')])].sort());
@@ -187,7 +201,7 @@ test('the real tree: a test that reads a source directory is named in DIRECTORY_
   // A test that lists a directory depends on every file in it, which no import
   // shows. When this fails, add the test to DIRECTORY_READERS in the script, or add
   // it here when the directory it reads sits outside agents/steward/src.
-  const outsideSrc = new Set(['tests/activities/cspell-published.test.ts']);
+  const outsideSrc = new Set(['tests/activities/cspell-published.test.ts', 'tests/lib/fix-log-rules.test.ts']);
   const found = [];
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -233,7 +247,7 @@ test('the real tree: SITE_READERS names the tests that read the real src/content
 });
 
 test('the real tree: a content change and a data change each run their readers', () => {
-  assert.deepEqual(real('src/content/changelog/agent-reading-budget.md'), ['tests/activities/cspell-published.test.ts', 'tests/activities/dictionary.test.ts']);
+  assert.deepEqual(real('src/content/changelog/agent-reading-budget.md'), ['tests/activities/cspell-published.test.ts', 'tests/activities/dictionary.test.ts', 'tests/lib/fix-log-rules.test.ts']);
   assert.deepEqual(real('src/data/scorecard-runs.json'), ['tests/lib/agent-audit-checks.test.ts', 'tests/lib/scorecard-aggregate.test.ts']);
 });
 

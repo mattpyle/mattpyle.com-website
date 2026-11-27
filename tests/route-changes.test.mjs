@@ -70,6 +70,14 @@ test('content and data run Steward on the tests the selection script lists, not 
   }
 });
 
+test('a site file Steward keeps a copy of runs Steward on the selection script', () => {
+  for (const file of ['src/content.config.ts', 'scripts/fix-log-entries.mjs', 'scripts/lib/fix-metadata.mjs']) {
+    const out = route(file);
+    assert.equal(out.steward, 'true', file);
+    assert.equal(out.steward_tests, 'select', file);
+  }
+});
+
 test('content beside a Steward file, a console file or a page still goes to the selection script', () => {
   assert.equal(route('src/content/writing/post.md', 'agents/steward/src/lib/findings.ts').steward_tests, 'select');
   assert.equal(route('src/content/writing/post.md', 'agents/steward/src/console/server.ts').steward_tests, 'select');

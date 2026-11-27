@@ -5,6 +5,8 @@
  * It returns each fix keyed by its `slug`, the segment of its URL, with the date its sitemap
  * entry carries: the later of `verified` (the day the fix was confirmed on production) and the
  * optional `updated`, as calendar dates: `verified` in America/Vancouver, the zone the pages show times in, `updated` as written.
+ * An entry written before production confirms its fix has no `verified`; it takes the `opened`
+ * time of its first change instead, as `fixTime` in src/lib/fix-log.ts does for the pages.
  *
  * WHY NOT js-yaml: CI generates the page paths on the pull request's base commit in a worktree
  * with no `npm ci`, so every file the generators import may reach only `node:` builtins and
@@ -31,6 +33,16 @@ function frontmatterValue(block, name) {
   return quoted ? quoted[1] : raw;
 }
 
+/** The first `opened:` inside the column-0 `changes:` list, unquoted; undefined when absent. */
+function firstOpened(block) {
+  const list = block.match(/^changes:[ \t]*\n((?:[ \t]+.*(?:\n|$))*)/m)?.[1] ?? '';
+  const match = list.match(/^[ \t]+(?:- )?opened:[ \t]*(.*)$/m);
+  if (!match) return undefined;
+  const raw = match[1].trim();
+  const quoted = raw.match(/^"(.*)"$/) ?? raw.match(/^'(.*)'$/);
+  return quoted ? quoted[1] : raw;
+}
+
 /**
  * @param {string} [directory]
  * @returns {Map<string, { draft: boolean, lastmod: string, key: string }>}
@@ -47,9 +59,12 @@ export function readFixMetadata(directory = ENTRIES_DIR) {
     if (slug === undefined || slug === '') {
       throw new Error(`${file}: a fix needs a slug before its page can be listed`);
     }
-    const verified = new Date(frontmatterValue(block, 'verified'));
+    const verifiedRaw = frontmatterValue(block, 'verified');
+    const dated = verifiedRaw === undefined || verifiedRaw === '' ? firstOpened(block) : verifiedRaw;
+    if (dated === undefined) throw new Error(`${file}: a fix needs "verified" or the "opened" time of its first change`);
+    const verified = new Date(dated);
     if (Number.isNaN(verified.getTime())) {
-      throw new Error(`${file}: "verified" is not a date`);
+      throw new Error(`${file}: ${verifiedRaw ? '"verified"' : '"opened"'} is not a date`);
     }
     if (metadata.has(slug)) throw new Error(`${file}: slug "${slug}" is used twice`);
     const day = (date) => date.toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });

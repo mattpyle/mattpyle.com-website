@@ -43,7 +43,8 @@
 #      that are not console-only.
 #   3. `select`, for any other change under `agents/steward/`, and for a change
 #      under `src/content/` or `src/data/`, which `steward_site` marks: the
-#      script's `SITE_READERS` names the few tests that read those folders. The Steward
+#      script's `SITE_READERS` names the few tests that read those folders, and its
+#      `RULE_COPY_READERS` the site files Steward keeps a copy of. The Steward
 #      job then runs `scripts/select-steward-tests.mjs` on `steward_changed`, the
 #      changed files written here, after its `npm ci`, because the script needs
 #      the installed `typescript`. This script stays free of node so that
@@ -113,6 +114,8 @@ else
         site=true
         case "$file" in
           src/content/*|src/data/*) steward=true; steward_site=true ;;
+          # Steward holds a copy of the fix log's rules; RULE_COPY_READERS in select-steward-tests.mjs.
+          src/content.config.ts|scripts/fix-log-entries.mjs|scripts/lib/fix-metadata.mjs) steward=true; steward_site=true ;;
           package.json|package-lock.json|.github/workflows/ci.yml|scripts/route-changes.sh|scripts/select-steward-tests.mjs|scripts/vercel-ignore.sh) steward=true; steward_wide=true ;;
         esac
         case "$file" in

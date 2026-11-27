@@ -120,8 +120,8 @@ const fixes = defineCollection({
     /** The day the problem was first seen. */
     found:       z.coerce.date(),
     approved:    z.coerce.date(),
-    /** When the fix was confirmed on production. */
-    verified:    z.coerce.date(),
+    /** When the fix was confirmed on production. Absent until production confirms it; until then the pages date and order the entry by `changes[0].opened`. */
+    verified:    z.coerce.date().optional(),
     /** The calendar day of a substantive edit (UTC, like `found`). The sitemap date is the later of this and `verified`. */
     updated:     z.coerce.date().optional(),
     /** The fix pull request first, then any later one that finished or repaired it. */
@@ -129,7 +129,8 @@ const fixes = defineCollection({
       number: z.number().int().positive(),
       title:  z.string(),
       opened: z.coerce.date(),
-      merged: z.coerce.date(),
+      /** Absent on an entry written into its own fix pull request, before the merge. */
+      merged: z.coerce.date().optional(),
     })).min(1),
     /** The before and after, as named pairs. An entry shows its before and after once: one measure or one changed text, never both. */
     measures:    z.array(z.object({
@@ -143,7 +144,7 @@ const fixes = defineCollection({
     })).length(1).optional(),
     /** The before and after as changed lines, or words spoken, or a gap. Used when measures are not the best form. */
     text:        z.object({ before: specimen, after: specimen }).optional(),
-    /** The checks run on production when the fix was confirmed. `before` is set only where a check also ran before the fix. */
+    /** The checks run on production when the fix was confirmed; empty until then. `before` is set only where a check also ran before the fix. */
     checks:      z.array(z.object({
       passed:   z.boolean(),
       method:   z.enum(['text', 'js', 'selector', 'markdown', 'header']),

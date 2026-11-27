@@ -22,11 +22,17 @@ export const TYPE_LABEL: Record<Fix['data']['type'], string> = {
 };
 
 /**
- * Newest first by `verified`, the date a page shows, so the order and the date a reader
+ * The time a page shows for a fix: `verified`, when production confirmed it, and until then
+ * the opening of its fix pull request. An entry can exist before its fix is confirmed.
+ */
+export const fixTime = (fix: Fix): Date => fix.data.verified ?? fix.data.changes[0].opened;
+
+/**
+ * Newest first by {@link fixTime}, the date a page shows, so the order and the date a reader
  * sees are the same field. The finding's key number breaks a tie.
  */
 export function compareFixes(a: Fix, b: Fix): number {
-  const byTime = b.data.verified.getTime() - a.data.verified.getTime();
+  const byTime = fixTime(b).getTime() - fixTime(a).getTime();
   if (byTime !== 0) return byTime;
   return Number(b.data.key.slice(3)) - Number(a.data.key.slice(3));
 }

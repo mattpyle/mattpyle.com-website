@@ -2,8 +2,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
+import { ApplicationFailure } from '@temporalio/activity';
 import type { z } from 'zod';
-import { MODEL, RUBRICS_DIR } from '../config.js';
+import { FIX_LOG_MODEL, MODEL, RUBRICS_DIR } from '../config.js';
 import { log } from './logger.js';
 
 /** Spec §13: one place controls model, temperature, and max_tokens. */
@@ -204,6 +205,90 @@ export async function callRubric<T>(options: CallRubricOptions<T>): Promise<Call
   throw new Error(
     `The ${options.rubric.name} rubric returned an invalid response twice. Last validation error: ${lastError}`,
   );
+}
+
+// ── The fix log's model call ─────────────────────────────────────────────────
+
+/** One attempt's ceiling: under the 5 minutes a slice 3 activity attempt allows. */
+export const FIX_LOG_TIMEOUT_MS = 240_000;
+/** An entry is a few hundred words; this is a backstop against a runaway answer. */
+export const FIX_LOG_MAX_TOKENS = 8000;
+
+export interface FixLogReply {
+  text: string;
+  usage: { inputTokens: number; outputTokens: number };
+}
+
+/** The injectable transport of `draftFixLogEntry`. */
+export type FixLogSend = (
+  system: string,
+  messages: Anthropic.MessageParam[],
+  options?: { signal?: AbortSignal },
+) => Promise<FixLogReply>;
+
+/**
+ * The fix log's model call, shaped for a Temporal activity (Temporal skill,
+ * `core/ai-patterns.md`): the SDK's own retries are off, so Temporal's retry
+ * policy is the only one; one call has a timeout under the activity's 5
+ * minutes; the caller's `signal` (an activity's cancellation) aborts it. The
+ * failures that a retry cannot mend are non-retryable `ApplicationFailure`s:
+ * a missing key, a refused or malformed request (400, 401, 403, 404) and a
+ * truncated answer. A rate limit, an overload, a 5xx and a timeout stay
+ * retryable.
+ */
+export function fixLogSend(model: string = FIX_LOG_MODEL): FixLogSend {
+  return async (system, messages, options = {}) => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw ApplicationFailure.nonRetryable(
+        'ANTHROPIC_API_KEY is not set. Drafting a fix log entry needs it.',
+        'ModelKeyMissing',
+      );
+    }
+    const client = new Anthropic({ maxRetries: 0, timeout: FIX_LOG_TIMEOUT_MS });
+    let response: Anthropic.Message;
+    try {
+      response = await client.messages.create(
+        {
+          model,
+          max_tokens: FIX_LOG_MAX_TOKENS,
+          ...(acceptsTemperature(model) ? { temperature: LLM_SETTINGS.temperature } : {}),
+          system,
+          messages,
+        },
+        { signal: options.signal },
+      );
+    } catch (err) {
+      throw classifyModelError(err);
+    }
+    const usage = { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
+    log.info({ model: response.model, ...usage, stopReason: response.stop_reason }, 'fix log model call complete');
+    if (response.stop_reason === 'max_tokens') {
+      throw ApplicationFailure.nonRetryable(
+        `The model hit max_tokens (${FIX_LOG_MAX_TOKENS}) while drafting a fix log entry.`,
+        'ModelTruncated',
+      );
+    }
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+    return { text, usage };
+  };
+}
+
+/** The status codes a retry cannot mend: a malformed request, a refused key, a model that does not exist. */
+const PERMANENT_MODEL_STATUSES = new Set([400, 401, 403, 404, 413, 422]);
+
+/** A model client error as Temporal should treat it. Exported for the tests. */
+export function classifyModelError(err: unknown): unknown {
+  if (err instanceof Anthropic.APIUserAbortError) return err;
+  if (err instanceof Anthropic.APIError && typeof err.status === 'number' && PERMANENT_MODEL_STATUSES.has(err.status)) {
+    return ApplicationFailure.nonRetryable(`The model refused the request (${err.status}): ${err.message}`, 'ModelRequestRefused');
+  }
+  if (err instanceof Anthropic.APIError) {
+    return ApplicationFailure.retryable(`The model call failed (${err.status ?? 'no status'}): ${err.message}`, 'ModelUnavailable');
+  }
+  return err;
 }
 
 /**

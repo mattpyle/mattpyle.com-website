@@ -4,22 +4,22 @@
  *
  * Taken from what /changelog has: its hero and its year-grouped rows. Each row is a date,
  * a title with its one-sentence lead, and the fix's kind at the end. The date is the day
- * the fix was confirmed on production, in America/Vancouver, and it is the field the
- * order runs on. Each row opens the fix's own page.
+ * the fix was confirmed on production (until then, the day its fix pull request opened), in
+ * America/Vancouver, and it is the field the order runs on: `fixTime` in src/lib/fix-log.ts. Each row opens the fix's own page.
  */
 import Layout from '../../layouts/Layout.astro';
-import { FIX_LOG, TYPE_LABEL, fixDate, fixUrl, fixYear, getFixesNewest, type Fix } from '../../lib/fix-log';
+import { FIX_LOG, TYPE_LABEL, fixDate, fixUrl, fixTime, fixYear, getFixesNewest, type Fix } from '../../lib/fix-log';
 
 const fixes = await getFixesNewest();
 
 const groups: { year: string; items: Fix[] }[] = [];
 for (const fix of fixes) {
-  const year = fixYear(fix.data.verified);
+  const year = fixYear(fixTime(fix));
   const group = groups.at(-1);
   if (group && group.year === year) group.items.push(fix);
   else groups.push({ year, items: [fix] });
 }
-const latest = fixes[0]?.data.verified;
+const latest = fixes[0] && fixTime(fixes[0]);
 ---
 
 <Layout
@@ -50,7 +50,7 @@ const latest = fixes[0]?.data.verified;
         <div class="year">{g.year}</div>
         {g.items.map((fix) => (
           <a href={fixUrl(fix)} class="row">
-            <time datetime={fix.data.verified.toISOString()} class="row-date">{fixDate(fix.data.verified)}</time>
+            <time datetime={fixTime(fix).toISOString()} class="row-date">{fixDate(fixTime(fix))}</time>
             <span class="row-body">
               <span class="row-title">{fix.data.title}</span>
               <span class="row-summary">{fix.data.lead}</span>
