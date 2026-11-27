@@ -129,6 +129,23 @@ export async function resetBranch(branch: string, sha: string, repo: string = GI
   });
 }
 
+/**
+ * The file names directly inside one folder at one ref, or `undefined` when the folder
+ * (or the ref) is not there. The Contents API lists up to 1,000 entries, far above any
+ * folder a caller here lists.
+ */
+export async function listRepoDir(dir: string, ref: string, repo: string = GITHUB_REPO): Promise<string[] | undefined> {
+  let listing: unknown;
+  try {
+    listing = await gh(`/repos/${repo}/contents/${encodeURI(dir)}?ref=${encodeURIComponent(ref)}`);
+  } catch (err) {
+    if (err instanceof ApplicationFailure && err.type === 'NotFound') return undefined;
+    throw err;
+  }
+  if (!Array.isArray(listing)) return undefined;
+  return listing.filter((item) => item?.type === 'file').map((item) => String(item.name));
+}
+
 /** Creates the branch only if absent, and leaves an existing one where it is. */
 export async function ensureBranch(
   branch: string,
