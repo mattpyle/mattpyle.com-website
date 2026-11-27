@@ -90,3 +90,4 @@ export { watchFinding } from './findings-watch.js';
 export { writeFindingLook } from './findings-look.js';
 // The fix log entry (STW-710), on `steward-findings`: the model draft and one commit to the fix PR.
 export { draftFixLogEntry, commitFixLogEntry } from './fix-log.js';
+export { openFixLogConfirmation, readFixLogConfirmationChecks, mergeFixLogConfirmation } from './fix-log-confirm.js';

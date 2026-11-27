@@ -36,6 +36,7 @@ import { writeFindingVerdictMeasure } from './activities/findings-verdict-measur
 import { watchFinding } from './activities/findings-watch.js';
 import { writeFindingLook } from './activities/findings-look.js';
 import { commitFixLogEntry, draftFixLogEntry } from './activities/fix-log.js';
+import { mergeFixLogConfirmation, openFixLogConfirmation, readFixLogConfirmationChecks } from './activities/fix-log-confirm.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -181,6 +182,9 @@ const findingsActivities = {
   // The fix log entry (STW-710): the model draft, and one commit to the fix PR's branch.
   draftFixLogEntry,
   commitFixLogEntry,
+  openFixLogConfirmation,
+  readFixLogConfirmationChecks,
+  mergeFixLogConfirmation,
 };
 
 /**

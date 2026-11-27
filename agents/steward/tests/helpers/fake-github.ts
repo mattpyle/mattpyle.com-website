@@ -66,6 +66,12 @@ export interface FakeGitHub {
     mergeSha?: string;
     /** When set, the merge route refuses with this status and message. */
     refuseMerge?: { status: number; message: string };
+    /**
+     * Set on a PR opened through `POST /pulls` from a branch the fake made. With
+     * no `sha` and no `files`, its head is its branch's head, its files are the
+     * branch's changes since it was cut, and a merge applies them to the base.
+     */
+    followsBranch?: boolean;
   }>;
   /** Check runs per commit, as `GET /commits/{sha}/check-runs` lists them. */
   checkRuns: Map<string, Array<{ name: string; status: string; conclusion: string | null }>>;
@@ -173,6 +179,22 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const trees = new Map<string, Map<string, FakeRepoFile>>();
   const blobs = new Map<string, string>();
   const history = new Map<string, string[]>();
+  // The tree each branch was cut from, so a PR that follows its branch lists its own diff.
+  const cutFrom = new Map<string, Map<string, FakeRepoFile>>();
+  const headOf = (pull: FakeGitHub['pulls'][number]): string =>
+    pull.sha ?? (pull.followsBranch ? heads.get(pull.head) ?? `head-${pull.number}` : `head-${pull.number}`);
+  function branchDiff(branch: string): Array<{ filename: string; status: string }> {
+    const from = cutFrom.get(branch) ?? new Map<string, FakeRepoFile>();
+    const now = branches.get(branch) ?? new Map<string, FakeRepoFile>();
+    const out: Array<{ filename: string; status: string }> = [];
+    for (const [path, file] of now) {
+      const was = from.get(path);
+      if (!was) out.push({ filename: path, status: 'added' });
+      else if (was.text !== file.text) out.push({ filename: path, status: 'modified' });
+    }
+    for (const path of from.keys()) if (!now.has(path)) out.push({ filename: path, status: 'removed' });
+    return out;
+  }
   function advance(branch: string, message: string): string {
     const sha = `commit-${++seq}`;
     snapshots.set(sha, { files: new Map(branches.get(branch)), parent: heads.get(branch), message });
@@ -222,6 +244,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       // Branching copies the tree, so a write to the branch cannot mutate base.
       branches.set(branch, new Map(branches.get(DEFAULT_BRANCH)));
       heads.set(branch, heads.get(DEFAULT_BRANCH)!);
+      cutFrom.set(branch, new Map(branches.get(DEFAULT_BRANCH)));
       return response(201, { ref: body.ref });
     }
 
@@ -234,6 +257,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       if (body.force === true) {
         branches.set(branch, new Map(branches.get(DEFAULT_BRANCH)));
         heads.set(branch, heads.get(DEFAULT_BRANCH)!);
+        cutFrom.set(branch, new Map(branches.get(DEFAULT_BRANCH)));
         return response(200, { ref: `refs/heads/${branch}` });
       }
       const target = snapshots.get(String(body.sha));
@@ -441,6 +465,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         title: String(body.title),
         body: String(body.body),
         draft: body.draft === true,
+        ...(cutFrom.has(String(body.head)) ? { followsBranch: true } : {}),
       });
       return response(201, { number, html_url: prUrl(number) });
     }
@@ -467,6 +492,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     if (method === 'GET' && filesRoute) {
       const pull = pulls.find((p) => p.number === Number(filesRoute[1]));
       if (!pull) return response(404, { message: 'Not Found' });
+      if (!pull.files && pull.followsBranch && pull.sha === undefined) return response(200, branchDiff(pull.head));
       return response(200, (pull.files ?? []).map((f) => (typeof f === 'string' ? { filename: f } : f)));
     }
 
@@ -478,8 +504,17 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       const pull = pulls.find((p) => p.number === number);
       if (!pull) return response(404, { message: 'Not Found' });
       if (pull.refuseMerge) return response(pull.refuseMerge.status, { message: pull.refuseMerge.message });
-      if (body.sha && body.sha !== (pull.sha ?? `head-${number}`)) {
+      if (body.sha && body.sha !== headOf(pull)) {
         return response(409, { message: 'Head branch was modified. Review and try the merge again.' });
+      }
+      if (pull.followsBranch && pull.sha === undefined && !pull.files) {
+        // The branch's own changes land on the base, so two merges of different files both stand.
+        const tree = branches.get(pull.base)!;
+        for (const change of branchDiff(pull.head)) {
+          if (change.status === 'removed') tree.delete(change.filename);
+          else tree.set(change.filename, branches.get(pull.head)!.get(change.filename)!);
+        }
+        advance(pull.base, `Merge pull request #${number}`);
       }
       pull.merged = true;
       pull.state = 'closed';
@@ -505,7 +540,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         merge_commit_sha: pull.mergeSha ?? null,
         head: {
           ref: pull.head,
-          sha: pull.sha ?? `head-${number}`,
+          sha: headOf(pull),
           repo: { full_name: pull.headRepo ?? 'mattpyle/mattpyle.com-website' },
         },
         base: { ref: pull.base },
