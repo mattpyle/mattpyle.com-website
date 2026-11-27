@@ -74,7 +74,7 @@ that's the property being dogfooded here, on a low-stakes, real target.
   (STW-689). A verdict write or settings read that fails in a way no retry mends parks the run at
   `verdict` or `settings` instead of failing it, and `steward finding resume <key>` tries again; a
   new verdict replaces one parked at `verdict`. A verify retries every 15 minutes once its
-  fast retries are used up. None posts a comment; the long-retry alarm below reports one. A check that fails on production (the file says
+  fast retries are used up. None posts a comment; the Grafana rule on the last-failure gauge below reports one that goes on. A check that fails on production (the file says
   `reopened`), a broken check, or any other failure a retry does not mend parks the run at step
   `parked`, releases its slot and comments once on the PR; `steward finding resume <key>` runs the
   stage again, and `steward finding fix <key>` starts a new attempt in the same run, recorded under
@@ -153,9 +153,9 @@ local worker.
 
 Both workers log through pino. A Temporal Runtime logger passes the SDK's workflow, activity and worker entries to pino, one JSON line each. Core logs at WARN.
 
-### The long-retry alarm
+### The last-failure gauge
 
-In its default role the hosted worker pings the `steward-long-retry` check at healthchecks.io: `/fail` when an activity has been failing for two hours, and success when it recovers. For a polling wait the two hours are a streak of failures, kept in the process, so its "not yet" answers do not count. It does not see an attempt that hangs to its timeout, or a dead worker. `src/lib/long-retry.ts` holds the rules; the ready line's `longRetryAlarm` field names the queues that carry it. With SDK metrics configured, each counted failure also sets the gauge `steward_activity_last_failure_timestamp_seconds` (labels `activity_type` and `kind`) to its time.
+In its default role the hosted worker records the time of each activity type's last counted failure in the gauge `steward_activity_last_failure_timestamp_seconds` (labels `activity_type` and `kind`), when SDK metrics are configured. A Grafana rule on that series is the alarm for an activity that keeps failing. A success, a cancellation, a benign failure and a polling wait's "not yet" write nothing. `src/lib/long-retry.ts` holds the rules; the ready line's `longRetryAlarm` field names the queues that carry the interceptor.
 
 ### The public-audit role
 
