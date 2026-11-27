@@ -94,6 +94,7 @@ export function projectReport(report: unknown, tier: 'fast' | 'deep', origin: st
           {
             category: c.category,
             passed: c.passed,
+            failed: checks.filter((check) => check.category === c.category && check.status === 'fail').length,
             applicable: c.applicable,
             notApplicable: c.notApplicable,
             errors: c.errors,
@@ -102,6 +103,9 @@ export function projectReport(report: unknown, tier: 'fast' | 'deep', origin: st
       : [],
   );
 
+  // Counted from the kept checks, not from `categories`, so each figure matches the list beside it.
+  const withStatus = (status: CheckView['status']) => checks.filter((c) => c.status === status).length;
+
   const view: AuditView = {
     status: 'complete',
     tier,
@@ -109,6 +113,13 @@ export function projectReport(report: unknown, tier: 'fast' | 'deep', origin: st
     durationMs: isCount(doc.durationMs) ? doc.durationMs : 0,
     requests: isCount(doc.requests) ? doc.requests : 0,
     categories,
+    totals: {
+      checks: checks.length,
+      passed: withStatus('pass'),
+      failed: withStatus('fail'),
+      notApplicable: withStatus('not-applicable'),
+      errors: withStatus('error'),
+    },
     checks,
     dropped: rawChecks.length - checks.length,
   };
