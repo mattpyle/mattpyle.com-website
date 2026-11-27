@@ -50,6 +50,8 @@ export const AuditView = z.object({
     z.object({
       category: z.enum(CATEGORIES),
       passed: count,
+      /** Counted over `checks`. Optional for the same reason as `totals`. */
+      failed: count.optional(),
       applicable: count,
       notApplicable: count,
       errors: count,

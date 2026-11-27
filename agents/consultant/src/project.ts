@@ -94,6 +94,7 @@ export function projectReport(report: unknown, tier: 'fast' | 'deep', origin: st
           {
             category: c.category,
             passed: c.passed,
+            failed: checks.filter((check) => check.category === c.category && check.status === 'fail').length,
             applicable: c.applicable,
             notApplicable: c.notApplicable,
             errors: c.errors,

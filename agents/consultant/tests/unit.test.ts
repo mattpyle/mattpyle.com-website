@@ -7,6 +7,8 @@ import { normaliseOrigin, projectReport, projectSiteFacts } from '../src/project
 import { CLIENT_NAME, SITE_FACTS_PATH, USER_AGENT, mcpSiteClient } from '../src/site.js';
 import { MARKER, cleanIndex, cleanReport, hostileReport } from './helpers/reports.js';
 
+const failedByCategory = (view: ReturnType<typeof projectReport>) => view.categories.map((c) => [c.category, c.failed]);
+
 test('the projection keeps ids, enums and counts', () => {
   const view = projectReport(cleanReport(), 'fast', 'https://example.com');
   assert.equal(view.origin, 'https://example.com');
@@ -21,6 +23,7 @@ test('the projection keeps ids, enums and counts', () => {
   assert.equal(view.dropped, 0);
   assert.equal(view.categories.length, 2);
   assert.deepEqual(view.totals, { checks: 3, passed: 1, failed: 2, notApplicable: 0, errors: 0 });
+  assert.deepEqual(failedByCategory(view), [['crawlability', 0], ['discovery', 1]]);
 });
 
 test('the projection carries no string from a hostile report', () => {
@@ -31,13 +34,16 @@ test('the projection carries no string from a hostile report', () => {
   assert.equal(view.categories.length, 2);
   assert.equal(view.integrity, 'degraded');
   assert.deepEqual(view.totals, { checks: 3, passed: 1, failed: 2, notApplicable: 0, errors: 0 }, 'dropped checks are not counted');
+  assert.deepEqual(failedByCategory(view), [['crawlability', 0], ['discovery', 1]], 'nor in a category');
 });
 
 test('the projection totals each status on its own', () => {
   const statuses = ['pass', 'fail', 'fail', 'not-applicable', 'not-applicable', 'not-applicable', 'error'];
   const checks = statuses.map((status, i) => ({ id: `check-${i}`, category: 'discovery', severity: 'low', status }));
-  const view = projectReport({ checks }, 'fast', 'https://example.com');
+  const categories = [{ category: 'discovery', passed: 1, applicable: 4, notApplicable: 3, errors: 1 }];
+  const view = projectReport({ checks, categories }, 'fast', 'https://example.com');
   assert.deepEqual(view.totals, { checks: 7, passed: 1, failed: 2, notApplicable: 3, errors: 1 });
+  assert.deepEqual(failedByCategory(view), [['discovery', 2]]);
 });
 
 test('the projection survives a report that is not a report', () => {
