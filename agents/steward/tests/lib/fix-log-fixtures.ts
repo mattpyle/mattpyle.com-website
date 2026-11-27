@@ -38,3 +38,18 @@ export function scriptedModel(replies: Array<{ text: string; usage: { inputToken
   };
   return { send, calls };
 }
+
+/** A reviewer that accepts every draft, and records what it was sent. */
+export function acceptingReviewer(usage = { inputTokens: 50, outputTokens: 5 }) {
+  const calls: Array<{ system: string; messages: Anthropic.MessageParam[] }> = [];
+  const send: FixLogSend = async (system, messages) => {
+    calls.push({ system, messages: [...messages] });
+    return { text: JSON.stringify({ verdict: 'accept' }), usage };
+  };
+  return { send, calls };
+}
+
+/** A reviewer's reply with these problems. */
+export function problems(list: Array<{ quote: string; rule: string; reason: string }>, usage = { inputTokens: 50, outputTokens: 5 }) {
+  return { text: JSON.stringify({ verdict: 'problems', problems: list }), usage };
+}

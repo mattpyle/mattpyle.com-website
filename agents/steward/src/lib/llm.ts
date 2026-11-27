@@ -279,14 +279,18 @@ export function fixLogSend(model: string = FIX_LOG_MODEL): FixLogSend {
 /** The status codes a retry cannot mend: a malformed request, a refused key, a model that does not exist. */
 const PERMANENT_MODEL_STATUSES = new Set([400, 401, 403, 404, 413, 422]);
 
-/** A model client error as Temporal should treat it. Exported for the tests. */
+/** A model client error as Temporal should treat it, with the HTTP status as its details. Exported for the tests. */
 export function classifyModelError(err: unknown): unknown {
   if (err instanceof Anthropic.APIUserAbortError) return err;
   if (err instanceof Anthropic.APIError && typeof err.status === 'number' && PERMANENT_MODEL_STATUSES.has(err.status)) {
-    return ApplicationFailure.nonRetryable(`The model refused the request (${err.status}): ${err.message}`, 'ModelRequestRefused');
+    return ApplicationFailure.nonRetryable(`The model refused the request (${err.status}): ${err.message}`, 'ModelRequestRefused', {
+      status: err.status,
+    });
   }
   if (err instanceof Anthropic.APIError) {
-    return ApplicationFailure.retryable(`The model call failed (${err.status ?? 'no status'}): ${err.message}`, 'ModelUnavailable');
+    return ApplicationFailure.retryable(`The model call failed (${err.status ?? 'no status'}): ${err.message}`, 'ModelUnavailable', {
+      status: err.status ?? null,
+    });
   }
   return err;
 }
