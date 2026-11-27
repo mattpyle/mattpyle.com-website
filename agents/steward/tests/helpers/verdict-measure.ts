@@ -33,6 +33,16 @@ export const STOPS_AT_VERDICT: FindingSettings = settings({ stopAfter: 'verdict'
  * read existed, after the measurement, and a test's call list reads as it did.
  * `tests/workflows/finding-settings-at-use.test.ts` covers the read itself.
  */
+/**
+ * A stand-in for the fix log entry step (STW-710) in a lifecycle test that is
+ * about something else: the entry is already on the PR branch, so the run
+ * schedules the draft once, commits nothing, and goes on to the merge wait.
+ * `tests/workflows/finding-fix-log.test.ts` runs the real activities.
+ */
+export const FIX_LOG_ENTRY_PRESENT = {
+  draftFixLogEntry: async () => ({ state: 'exists' as const, key: 'MP-0', path: 'src/content/fixes/mp-0.md' }),
+};
+
 export function skipVerdictMeasure<T extends object>(activities: T): T {
   const own = activities as Record<string, unknown>;
   const checks = own.runFindingChecks as ((input: { previewOrigin?: string }) => Promise<unknown>) | undefined;
@@ -40,6 +50,7 @@ export function skipVerdictMeasure<T extends object>(activities: T): T {
   const reads = new Map<string, number>();
   return {
     writeFindingVerdictMeasure: async () => ({ commitSha: null }),
+    ...FIX_LOG_ENTRY_PRESENT,
     readFindingSettings: async (input: { repo: string; site: string }) => {
       const info = Context.current().info.workflowExecution;
       const run = `${info?.workflowId}/${info?.runId}`;

@@ -7,7 +7,7 @@ import { ApplicationFailure } from '@temporalio/activity';
 import { ApplicationFailureCategory } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
-import { STOPS_AT_VERDICT, settings } from '../helpers/verdict-measure.js';
+import { FIX_LOG_ENTRY_PRESENT, STOPS_AT_VERDICT, settings } from '../helpers/verdict-measure.js';
 import {
   PARKED_ISSUE_REREAD_PATCH,
   SETTINGS_AT_USE_PATCH,
@@ -73,6 +73,7 @@ function mocks(scene: Scene) {
   const note = (name: string) => called.push(name);
   let opens = 0;
   const activities = {
+    ...FIX_LOG_ENTRY_PRESENT,
     writeFindingVerdict: async () => (note('writeFindingVerdict'), { findingCommitSha: null, indexCommitSha: null, commitSha: 'c1' }),
     readFindingSettings: async () => {
       note('readFindingSettings');
