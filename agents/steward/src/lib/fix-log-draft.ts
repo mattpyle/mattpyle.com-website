@@ -168,6 +168,7 @@ The user turn gives you the finding, the fix pull request (title, body, diff), t
 2. Judge only the writer's fields: "title", "lead", "measure" or "text", "visual", "screen" and "story".
 3. Your main question: does the finding, the pull request or the facts hold every claim the writer's fields make? A claim no source holds is a problem, however plausible.
 4. Then check each field against the brief's rules.
+5. Code has already checked the rules a program can test, such as a path outside backticks in the story. Do not report those.
 
 The first run of this writer failed most often in two ways. Look hardest for both.
 
