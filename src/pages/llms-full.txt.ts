@@ -3,7 +3,7 @@ import { getCollection } from 'astro:content';
 import { SCORECARD } from '../data/scorecard';
 import { compareChangelogEntries } from '../lib/changelog-order';
 import { withPublicImages } from '../lib/content-image-urls';
-import { FIX_LOG, fixDate, fixUrl, getFixesNewest, prUrl } from '../lib/fix-log';
+import { FIX_LOG, fixDate, fixTime, fixUrl, getFixesNewest, prUrl } from '../lib/fix-log';
 import { rewriteVideoTags } from '../lib/video-embed.mjs';
 
 function formatDate(date: Date): string {
@@ -178,7 +178,7 @@ export const GET: APIRoute = async ({ site }) => {
     lines.push(`### ${fix.data.title}`);
     lines.push('');
     lines.push(`URL: ${base}${fixUrl(fix)}`);
-    lines.push(`Date: ${fixDate(fix.data.verified)}`);
+    lines.push(`Date: ${fixDate(fixTime(fix))}`);
     lines.push(`Type: ${fix.data.type}`);
     lines.push(`Status: ${fix.data.status}`);
     lines.push('');

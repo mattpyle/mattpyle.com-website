@@ -11,20 +11,21 @@
 import { FIX_TYPE_LABEL, FIX_DATE_LABEL, TYPE_LABEL, fixDate, prUrl, type Fix } from '../../lib/fix-log';
 
 interface Props {
-  verified: Date;
+  /** `fixTime`: when production confirmed the fix, or until then when its pull request opened. */
+  date: Date;
   type: Fix['data']['type'];
   changes: Fix['data']['changes'];
   markdownUrl: string;
 }
 
-const { verified, type, changes, markdownUrl } = Astro.props;
+const { date, type, changes, markdownUrl } = Astro.props;
 ---
 
 <aside class="post-rail fix-rail" aria-labelledby="fix-rail-title">
   <h2 id="fix-rail-title" class="sr-only">About this fix</h2>
 
   <dl class="rail-block rail-meta">
-    <div class="fact"><dt>{FIX_DATE_LABEL}</dt><dd><time datetime={verified.toISOString()}>{fixDate(verified)}</time></dd></div>
+    <div class="fact"><dt>{FIX_DATE_LABEL}</dt><dd><time datetime={date.toISOString()}>{fixDate(date)}</time></dd></div>
     <div class="fact"><dt>{FIX_TYPE_LABEL}</dt><dd class="fact-type">{TYPE_LABEL[type]}</dd></div>
   </dl>
 

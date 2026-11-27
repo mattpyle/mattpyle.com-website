@@ -17,7 +17,7 @@ import Layout from '../../layouts/Layout.astro';
 import FixRail from '../../components/fix-log/FixRail.astro';
 import FixBeforeAfter from '../../components/fix-log/FixBeforeAfter.astro';
 import EntryNav from '../../components/EntryNav.astro';
-import { FIX_LOG, compareFixes, fixDate, fixUrl } from '../../lib/fix-log';
+import { FIX_LOG, compareFixes, fixDate, fixTime, fixUrl } from '../../lib/fix-log';
 
 export async function getStaticPaths() {
   const fixes = (await getCollection('fixes')).sort(compareFixes);
@@ -30,7 +30,8 @@ export async function getStaticPaths() {
 
 const { fix, newer, older } = Astro.props;
 const { Content } = await render(fix);
-const { title, lead, type, verified, measures, changes, text } = fix.data;
+const { title, lead, type, measures, changes, text } = fix.data;
+const date = fixTime(fix);
 const path = fixUrl(fix);
 const markdownUrl = `${path.slice(0, -1)}.md`;
 ---
@@ -39,7 +40,7 @@ const markdownUrl = `${path.slice(0, -1)}.md`;
   title={title}
   description={lead}
   type="article"
-  publishedTime={verified}
+  publishedTime={date}
   markdownAlternate={markdownUrl}
   breadcrumbs={[
     { name: 'Home', url: '/' },
@@ -56,7 +57,7 @@ const markdownUrl = `${path.slice(0, -1)}.md`;
 
     <div class="rd-section">
       <div class="post-body fix-body">
-        <FixRail verified={verified} type={type} changes={changes} markdownUrl={markdownUrl} />
+        <FixRail date={date} type={type} changes={changes} markdownUrl={markdownUrl} />
 
         <div class="fix-main">
           <section aria-labelledby="fix-what-title">
@@ -71,8 +72,8 @@ const markdownUrl = `${path.slice(0, -1)}.md`;
 
     <EntryNav
       label="Fix log entry navigation"
-      newer={newer && { href: fixUrl(newer), date: fixDate(newer.data.verified), title: newer.data.title }}
-      older={older && { href: fixUrl(older), date: fixDate(older.data.verified), title: older.data.title }}
+      newer={newer && { href: fixUrl(newer), date: fixDate(fixTime(newer)), title: newer.data.title }}
+      older={older && { href: fixUrl(older), date: fixDate(fixTime(older)), title: older.data.title }}
     />
   </article>
 </Layout>
