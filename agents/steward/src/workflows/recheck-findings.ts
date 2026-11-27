@@ -79,6 +79,21 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * The check for a site is created by hand at the service under the slug
  * `steward-findings-recheck-<site>`.
  *
+ * **An outage is waited out (STW-680).** The reads (`readSiteHosts`,
+ * `readFindingsIndex`, `listOpenFindingWorkflows`, `readRecheckBlock`,
+ * `readWatchRun`) and `writeFindingRecheck` have no attempt limit: 2 seconds,
+ * doubling to 15 minutes, bounded by a schedule-to-close of 6 hours
+ * ({@link DURABLE}). A permanent type ends a call at once. At the bound the
+ * failure takes the path it always took: a read fails the run after the `/fail`
+ * ping, and a write is a `write failed` row. The bound is one activity's, so
+ * writes that each wait it out add up. `runFindingChecks` and the ping keep
+ * their own policies.
+ *
+ * No `patched` marker: a retry policy and a schedule-to-close timeout are
+ * attributes of the same schedule command, and replay does not compare them
+ * (determinism rule 5). An activity scheduled before the deploy keeps its old
+ * policy on every attempt.
+ *
  * **Quiet completion log.** The run ends with its one-line summary at info
  * level and nothing else. The rows stay in the workflow result, which the CLI
  * prints, so the log carries no result object.
@@ -107,12 +122,19 @@ const QUEUE_FINDINGS = 'steward-findings';
 /** How long a watch site's run with no pending `watchFinding` gets before its second read. */
 const WATCH_SECOND_READ_DELAY = '30 seconds';
 
+/** The policy of a call that waits out an outage of the service it calls. */
+const DURABLE = {
+  scheduleToCloseTimeout: '6 hours',
+  retry: { initialInterval: '2 seconds', backoffCoefficient: 2, maximumInterval: '15 minutes' },
+} as const;
+
 const reading = wf.proxyActivities<
   Pick<typeof activities, 'readSiteHosts' | 'readFindingsIndex' | 'listOpenFindingWorkflows' | 'readRecheckBlock' | 'readWatchRun'>
 >({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
-  retry: { maximumAttempts: 3, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'StoreLayout', 'SiteConfigInvalid', 'FindingMissing'] },
+  scheduleToCloseTimeout: DURABLE.scheduleToCloseTimeout,
+  retry: { ...DURABLE.retry, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'StoreLayout', 'SiteConfigInvalid', 'FindingMissing'] },
 });
 
 // Twelve browser checks at a 30-second load and a 10-second settle each is
@@ -131,7 +153,8 @@ const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>
 const writing = wf.proxyActivities<Pick<typeof activities, 'writeFindingRecheck'>>({
   taskQueue: QUEUE_FINDINGS,
   startToCloseTimeout: '1 minute',
-  retry: { maximumAttempts: 5, nonRetryableErrorTypes: ['AuthError', 'FindingMoved', 'FindingMissing', 'FindingMalformed', 'BadInput'] },
+  scheduleToCloseTimeout: DURABLE.scheduleToCloseTimeout,
+  retry: { ...DURABLE.retry, nonRetryableErrorTypes: ['AuthError', 'FindingMoved', 'FindingMissing', 'FindingMalformed', 'BadInput'] },
 });
 
 // Same shape as the scorecard's alerting proxy: the activity retries the HTTP

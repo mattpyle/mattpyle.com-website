@@ -1692,6 +1692,19 @@ test("a look accepted while it watches replays to resolved", { timeout: 120_000 
  * ```
  *
  * Reverted, and both re-ran green.
+ *
+ * ## The durable policy of both scheduled workflows (STW-680)
+ *
+ * The reads and writes of `recheckFindingsWorkflow` and the reads and merge leg
+ * of `scorecardAuditWorkflow` got a longer retry policy and a schedule-to-close
+ * timeout, with no `patched` marker. All three recheck fixtures and all seven
+ * scorecard fixtures replay unedited.
+ *
+ * Probe (2026-11-26): `await wf.sleep('1 second')` before
+ * `reading.readFindingsIndex` and before `light.reading.readPublishedScorecard`
+ * made those ten, and no other replay, fail with `[TMPRL1100] Nondeterminism
+ * error: Timer machine does not handle this event`. The sleeps were removed and
+ * every replay re-ran green.
  */
 const recheckWatchPrePath = fileURLToPath(new URL('../fixtures/histories/recheck-findings-watch-pre.bin', import.meta.url));
 

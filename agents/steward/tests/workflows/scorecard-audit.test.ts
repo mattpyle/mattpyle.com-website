@@ -1,4 +1,5 @@
 import { test, before, after } from 'node:test';
+import { ApplicationFailure } from '@temporalio/activity';
 import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
@@ -983,6 +984,32 @@ test('a run that throws still signals, and still fails', async () => {
 
   assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', false]]);
   assert.match(signals[0].summary, /shrank: 3 URL\(s\) vs 18/);
+});
+
+test('a permanent failure of a read ends it at once and fails the run', async () => {
+  let reads = 0;
+  const { activities, signals } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(3),
+    readPublishedScorecard: async () => {
+      reads += 1;
+      throw ApplicationFailure.nonRetryable('the run-log does not parse', 'ScorecardRunsMalformed');
+    },
+  });
+  await assertWorkflowFails(
+    () =>
+      withWorker(activities, () =>
+        env.client.workflow.execute(scorecardAuditWorkflow, {
+          workflowId: 'sc-permanent-read',
+          taskQueue: QUEUE,
+          args: [baseInput({ triggeredBy: 'schedule' })],
+        }),
+      ),
+    /Activity task failed/,
+  );
+
+  assert.equal(reads, 1);
+  assert.match(signals[0]!.summary, /does not parse/);
+  assert.deepEqual(signals.map((x) => [x.signal, x.ok]), [['nightly-scorecard', false]]);
 });
 
 test('a monitoring service that cannot be reached does not fail the run', async () => {

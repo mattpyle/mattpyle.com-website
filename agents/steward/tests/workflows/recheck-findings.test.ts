@@ -457,3 +457,18 @@ test('a watch is aged by its last attempt, and a stale one is stale whatever it 
   assert.equal(judge({ lastCompletedAt: at(WATCH_STALE_AFTER_MS), failureType: 'ChecksUnreadable' }), 'watch stale');
 });
 
+
+test('a permanent failure of the first read ends it at once and fails the run', async () => {
+  github = installFakeGitHub({ seed: seed(), defaultBranch: 'main' });
+  let reads = 0;
+  const { activities: acts, pings } = activities([], {
+    readSiteHosts: async () => {
+      reads += 1;
+      throw ApplicationFailure.nonRetryable('GitHub rejected the credential (401).', 'AuthError');
+    },
+  });
+  await assert.rejects(run(acts), (err: Error) => err.name === 'WorkflowFailedError');
+
+  assert.equal(reads, 1);
+  assert.equal(pings[0]!.shape.ok, false);
+});
