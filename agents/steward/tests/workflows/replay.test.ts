@@ -1543,6 +1543,20 @@ for (const { ending, path } of preOpenUntilVerified) {
  *    `finding-returned-failed-pre.bin` added: those five failed, the three
  *    `findingWorkflow` histories above failed too (they hold the marker, which
  *    the probe no longer records), and the other 38 passed.
+ *
+ * These two histories and four others also guard the fix log confirmation
+ * (STW-712, `FIX_LOG_CONFIRM_PATCH` in `finding.ts`): each reaches a verify
+ * answer on the issue path with no confirmation after it. Probe (2026-11-27),
+ * reverted and re-run green (59 of 59): dropping `wf.patched(FIX_LOG_CONFIRM_PATCH)`
+ * from the step's condition made six fail with `[TMPRL1100]`:
+ * `finding-verify-child-heavy.bin`, `finding-pr-bound-parked-pre.bin`,
+ * `finding-pr-bound-reopen.bin`, `finding-reopened-pre.bin` and the two above.
+ * Five read "Activity machine does not handle this event:
+ * HistoryEvent(..., WorkflowExecutionCompleted)", where the new code scheduled
+ * `openFixLogConfirmation`; the sixth, whose history records
+ * `open-until-verified` right after the verify answer, read "Non-deprecated
+ * patch marker encountered for change open-until-verified". The other 53
+ * stayed green.
  */
 const openUntilVerified = [
   { file: 'finding-park-resume-resolved.bin', id: 'finding/mattpyle-com/lifecycle-reopened', what: 'a run parked at verify, resumed twice and resolved' },

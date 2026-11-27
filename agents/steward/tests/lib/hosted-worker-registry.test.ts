@@ -88,6 +88,9 @@ const FINDINGS_ACTIVITIES = [
   'writeFindingLook',
   'draftFixLogEntry',
   'commitFixLogEntry',
+  'openFixLogConfirmation',
+  'readFixLogConfirmationChecks',
+  'mergeFixLogConfirmation',
 ];
 
 /** The registry entry for a queue, found by name so a test names the queue it is about. */

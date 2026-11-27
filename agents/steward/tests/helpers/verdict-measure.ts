@@ -43,6 +43,16 @@ export const FIX_LOG_ENTRY_PRESENT = {
   draftFixLogEntry: async () => ({ state: 'exists' as const, key: 'MP-0', path: 'src/content/fixes/mp-0.md' }),
 };
 
+/**
+ * A stand-in for the fix log confirmation (STW-712) in a lifecycle test that is
+ * about something else: no entry on master, so the step does nothing and the run
+ * ends or parks as before. `tests/workflows/finding-fix-log-confirm.test.ts`
+ * runs the real activities.
+ */
+export const FIX_LOG_CONFIRM_SKIPPED = {
+  openFixLogConfirmation: async () => ({ state: 'skipped' as const, reason: 'no entry on master in this test' }),
+};
+
 export function skipVerdictMeasure<T extends object>(activities: T): T {
   const own = activities as Record<string, unknown>;
   const checks = own.runFindingChecks as ((input: { previewOrigin?: string }) => Promise<unknown>) | undefined;
@@ -51,6 +61,7 @@ export function skipVerdictMeasure<T extends object>(activities: T): T {
   return {
     writeFindingVerdictMeasure: async () => ({ commitSha: null }),
     ...FIX_LOG_ENTRY_PRESENT,
+    ...FIX_LOG_CONFIRM_SKIPPED,
     readFindingSettings: async (input: { repo: string; site: string }) => {
       const info = Context.current().info.workflowExecution;
       const run = `${info?.workflowId}/${info?.runId}`;

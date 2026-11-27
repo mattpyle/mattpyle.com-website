@@ -419,6 +419,32 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * 5. Review notes go on the PR as one comment. When the comment fails, the
  *    notes stay in `fixLogNotes`.
  *
+ * **The fix log confirmation** (STW-712, slice 4). On the issue path, when the
+ * verify child answers `resolved`, `confirmed` or `reopened`, the run completes
+ * the entry on `master` before it ends or parks: `openFixLogConfirmation`
+ * writes `status`, `confirmedBy`, `verified`, `checks` and the merge times in
+ * `changes` from the finding after the verify, adds the attempt's PR to
+ * `changes` when a later attempt fixed a reopened finding, and opens a PR that
+ * touches the entry's file only. `readFixLogConfirmationChecks` polls once a
+ * minute, and `mergeFixLogConfirmation` merges when the checks pass twice in a
+ * row and the diff is that file and those fields alone. The step is
+ * `confirming-fix-log`, and `fixLogConfirm` holds how it came out. The rules:
+ *
+ * 1. It never changes the finding's outcome. The fix slot is released before
+ *    the verify, so the run holds nothing a later fix needs. Whatever stops the
+ *    step is caught; only cancellation is rethrown.
+ * 2. 30 minutes in all, by the workflow clock (`FIX_LOG_CONFIRM_BOUND_MS`): no
+ *    checks poll starts after it, and the PR is left open with the reason.
+ * 3. An entry not on `master`, a finding with no verification, and an entry
+ *    already confirmed for this PR by this verify make the step do nothing.
+ * 4. Any other diff, failing checks, or a moved head leave the PR open for a
+ *    person.
+ * 5. Behind {@link FIX_LOG_CONFIRM_PATCH}, read only after such an answer. A run
+ *    whose verify answered before this change ends or parks without it; a run
+ *    parked after a `reopened` verify confirms on its next verify.
+ *    `steward fix-log confirm <key>` runs the same three activities for an entry
+ *    whose run was past its verify when this shipped.
+ *
  * **Versioned with `patched`.** {@link FIX_LOG_ENTRY_PATCH} is read only when a
  * test has just passed and the attempt has no entry, after the first test and
  * after each retest, so a run that never passes records no marker. A run past
@@ -796,6 +822,15 @@ export const FIXER_REOPEN_PATCH = 'fixer-reopen';
  */
 export const FIX_LOG_ENTRY_PATCH = 'fix-log-entry';
 
+/**
+ * The `patched` marker of the fix log confirmation after the verify (STW-712).
+ * Read only on the issue path, when the verify child answered `resolved`,
+ * `confirmed` or `reopened`; see "The fix log confirmation" in the module
+ * docblock. A history whose verify answered before this change has no marker
+ * there and ends or parks as it did.
+ */
+export const FIX_LOG_CONFIRM_PATCH = 'fix-log-confirm';
+
 /** How many fix issues in a row may get no PR before the run waits for a person (STW-704). */
 const REOPEN_LIMIT = 3;
 
@@ -940,6 +975,7 @@ export type FindingStep =
   | 'waiting-merge'
   | 'waiting-deploy'
   | 'verifying'
+  | 'confirming-fix-log'
   | 'parked'
   | 'watching'
   | 'recording-look'
@@ -1017,6 +1053,12 @@ export interface FindingState {
   fixLogEntry?: string | null;
   /** The reviewer's notes on the entry when their PR comment failed, so a person still reads them. */
   fixLogNotes?: string[] | null;
+  /**
+   * How the fix log confirmation after the last verify came out, in one line
+   * (STW-712): merged, skipped and why, left open and why, or failed. Absent
+   * before the step ran.
+   */
+  fixLogConfirm?: string | null;
 }
 
 /**
@@ -1251,6 +1293,30 @@ const committingEntry = wf.proxyActivities<Pick<typeof activities, 'commitFixLog
   startToCloseTimeout: '1 minute',
   retry: { maximumAttempts: 3, initialInterval: '5 seconds', backoffCoefficient: 2, nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMalformed'] },
 });
+
+// The fix log confirmation (STW-712). The open builds one commit and one PR and
+// finds its own on a retry; the checks read is a plain GET; the merge is
+// idempotent, as `mergeScorecardPr` is. The step's 30-minute bound is kept by
+// the workflow clock in `confirmFixLogEntry`, and whatever stops it is caught.
+const confirmingEntry = wf.proxyActivities<Pick<typeof activities, 'openFixLogConfirmation'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '2 minutes',
+  retry: { maximumAttempts: 3, initialInterval: '10 seconds', backoffCoefficient: 2, nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMissing', 'FindingMalformed', 'FixLogEntryInvalid'] },
+});
+const checkingConfirmation = wf.proxyActivities<Pick<typeof activities, 'readFixLogConfirmationChecks'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: { maximumAttempts: 3, initialInterval: '10 seconds', backoffCoefficient: 2, nonRetryableErrorTypes: GITHUB_PERMANENT },
+});
+const mergingConfirmation = wf.proxyActivities<Pick<typeof activities, 'mergeFixLogConfirmation'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '2 minutes',
+  retry: { maximumAttempts: 3, initialInterval: '10 seconds', backoffCoefficient: 2, nonRetryableErrorTypes: GITHUB_PERMANENT },
+});
+/** The confirmation's bound: no checks poll starts after it. */
+export const FIX_LOG_CONFIRM_BOUND_MS = 30 * 60_000;
+/** One checks poll a minute; the checks pass on two reads in a row, as the Scorecard merge leg's do. */
+const FIX_LOG_CONFIRM_POLL_MS = 60_000;
 
 // The PR wait: every minute for up to 60. The Action took minutes in the
 // spike, so an hour with no PR is a run that is not coming. A rejected
@@ -2311,6 +2377,8 @@ function requestFixRefusal(state: FindingState, asks: ParkAsks, request: FixUpda
       return `${pr} is merged, and the run waits for production to serve it.`;
     case 'verifying':
       return `The run is verifying ${pr} on production now.`;
+    case 'confirming-fix-log':
+      return `${pr} is verified, and the run is completing its fix log entry: ask again once it parks.`;
     case 'waiting-slot':
     case 'fixing':
       return `A fix is in flight: the run is at ${state.step}${state.issueUrl ? ` with ${state.issueUrl}` : ''}.`;
@@ -2600,6 +2668,60 @@ async function lifecycle(
       state.fixLogEntry = `not written: ${describeError(err)}`;
       wf.log.warn('the fix log entry was not written; the merge wait goes on', { key: input.key, error: state.fixLogEntry });
       return { done: false, testedSha: null };
+    }
+  };
+
+  /**
+   * The fix log confirmation (STW-712): after the verify answered, the entry on
+   * `master` gets the facts production confirmed, in a PR Steward merges when its
+   * checks pass. Never throws except for cancellation, and never changes how the
+   * run ends: whatever happens is one line in `fixLogConfirm`. Bounded at 30
+   * minutes by the workflow clock, not a timeout scope, because a scope's expiry
+   * is a cancellation and this catch rethrows every cancellation so that a real
+   * cancel of the run still ends it.
+   */
+  const confirmFixLogEntry = async (prUrl: string): Promise<void> => {
+    state.step = 'confirming-fix-log';
+    state.fixLogConfirm = null;
+    const deadline = Date.now() + FIX_LOG_CONFIRM_BOUND_MS;
+    try {
+      const opened = await confirmingEntry.openFixLogConfirmation({ repo: input.repo, findingPath: input.findingPath, key: input.key, prUrl });
+      if (opened.state === 'skipped') {
+        state.fixLogConfirm = `skipped: ${opened.reason}`;
+        return;
+      }
+      if (opened.state === 'merged') {
+        state.fixLogConfirm = `${opened.path} confirmed in ${opened.prUrl}, merged as ${opened.mergeSha.slice(0, 7)}`;
+        return;
+      }
+      const left = (why: string): void => {
+        state.fixLogConfirm = `left open: ${opened.prUrl}: ${why}`;
+        wf.log.warn('the fix log confirmation is left open for a person', { key: input.key, pr: opened.prUrl, why });
+      };
+      let passing = 0;
+      for (;;) {
+        const checks = await checkingConfirmation.readFixLogConfirmationChecks({ repo: opened.repo, headSha: opened.headSha });
+        if (checks.state === 'failing') return left(`checks failed: ${checks.failing.join(', ')}`);
+        passing = checks.state === 'passing' ? passing + 1 : 0;
+        if (passing >= 2) break;
+        if (Date.now() + FIX_LOG_CONFIRM_POLL_MS > deadline) {
+          return left(`the checks did not pass twice in a row within ${FIX_LOG_CONFIRM_BOUND_MS / 60_000} minutes`);
+        }
+        await wf.sleep(FIX_LOG_CONFIRM_POLL_MS);
+      }
+      const merged = await mergingConfirmation.mergeFixLogConfirmation({
+        repo: opened.repo,
+        prNumber: opened.prNumber,
+        branch: opened.branch,
+        expectedHeadSha: opened.headSha,
+        path: opened.path,
+      });
+      if (!merged.merged) return left(`${merged.condition}: ${merged.detail}`);
+      state.fixLogConfirm = `${opened.path} confirmed in ${opened.prUrl}, merged as ${merged.mergeSha.slice(0, 7)}`;
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      state.fixLogConfirm = `failed: ${describeError(err)}`;
+      wf.log.warn('the fix log confirmation failed; the run goes on', { key: input.key, error: state.fixLogConfirm });
     }
   };
 
@@ -3365,6 +3487,10 @@ async function lifecycle(
             ],
           });
           const live = { mergeSha, liveSha: deploy.liveSha, verifyWorkflowId: verifyId };
+          // The fix log confirmation (STW-712): before the end or the park, and
+          // after the slot's release above. The marker is read only here.
+          const answered = verified.outcome === 'resolved' || verified.outcome === 'confirmed' || verified.outcome === 'reopened';
+          if (viaIssue && answered && wf.patched(FIX_LOG_CONFIRM_PATCH)) await confirmFixLogEntry(prUrl);
           if (verified.outcome === 'confirmed') {
             return end(
               'confirmed',

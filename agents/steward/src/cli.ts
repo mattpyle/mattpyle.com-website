@@ -2088,6 +2088,7 @@ finding
         console.log(`${at}preview: ${state.previewResult}${sha}${n}`);
       }
       if (state.fixLogEntry) console.log(`${at}fix log entry: ${state.fixLogEntry}`);
+      if (state.fixLogConfirm) console.log(`${at}fix log confirmation: ${state.fixLogConfirm}`);
       for (const note of state.fixLogNotes ?? []) console.log(`${at}  review note: ${note}`);
       if (state.retestRequested) console.log(`${at}retest: asked for; the next preview test starts now`);
       if (state.verdictMeasure) console.log(`${at}measured at verdict: ${state.verdictMeasure}`);
@@ -2871,6 +2872,26 @@ fixLog
       console.log(`\n  ${report.failed.length} draft${report.failed.length === 1 ? '' : 's'} failed: ${report.failed.map((f) => f.key).join(', ')}. A second run retries them.\n`);
       process.exit(1);
     }
+  });
+
+fixLog
+  .command('confirm <key>')
+  .description(
+    "Complete one entry on master with the facts production confirmed, as findingWorkflow does after a verify: open a pull request that touches that entry's confirmed fields only, and merge it when its checks pass. For an entry whose run was past its verify when the step shipped.",
+  )
+  .option('--site <site>', 'site slug in the findings store', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
+  .action(async (key: string, opts: { site: string }) => {
+    const short = key.trim().toUpperCase();
+    if (!/^MP-\d+$/.test(short)) fail(`confirm takes a key such as MP-187; got "${key}".`);
+    const { confirmFixLogEntryNow, findFindingByShortKey } = await import('./activities/fix-log-confirm.js');
+    const found = await findFindingByShortKey(ARGUS_REPO, opts.site, short);
+    if (!found) fail(`No finding with key ${short} and a fix pull request in ${opts.site}.`);
+    const line = await confirmFixLogEntryNow(
+      { repo: ARGUS_REPO, findingPath: found!.findingPath, key: short, prUrl: found!.prUrl },
+      { print: (l) => console.log(`  ${l}`) },
+    );
+    console.log(`\n  fix log confirmation: ${line}\n`);
+    if (line.startsWith('left open')) process.exit(1);
   });
 
 program.parseAsync(process.argv).catch((err) => {
