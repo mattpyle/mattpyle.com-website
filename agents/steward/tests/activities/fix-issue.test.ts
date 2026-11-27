@@ -5,6 +5,7 @@ import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { DEFECT_FINDING, DEFECT_KEY, OPPORTUNITY_FINDING, OPPORTUNITY_KEY } from '../helpers/finding-fixtures.js';
 import {
   awaitFixPr,
+  findFixPr,
   SUPERSEDED_MARKER,
   openFixIssue,
   readFindingSettings,
@@ -312,6 +313,25 @@ test('awaitFixPr matches the head branch prefix claude/issue-<n>- exactly, and s
     prUrl: `https://github.com/${SITE_REPO}/pull/3`,
     branch: 'claude/issue-101-20261016-0338',
   });
+});
+
+test('awaitFixPr and findFixPr take a PR from an earlier issue of the run, and findFixPr answers null in place of "not yet"', async () => {
+  const gh = seed();
+  // Issue 102 is the current one; 101 got no PR in its own wait.
+  const wait = { repo: SITE_REPO, issueNumber: 102, earlierIssueNumbers: [101] };
+  assert.equal(await findFixPr(wait), null);
+  await assert.rejects(awaitFixPr(wait), (err: unknown) => err instanceof ApplicationFailure && err.type === 'FixPrNotOpen');
+  // Not issue 101's, nor 102's.
+  gh.pulls.push({ number: 1, head: 'claude/issue-1010-20261126-0338', base: 'master', title: 'a', body: '', draft: false });
+  assert.equal(await findFixPr(wait), null);
+
+  // The first Action run's late PR.
+  gh.pulls.push({ number: 4, head: 'claude/issue-101-20261126-0410', base: 'master', title: 'd', body: '', draft: false });
+  const late = { prUrl: `https://github.com/${SITE_REPO}/pull/4`, branch: 'claude/issue-101-20261126-0410' };
+  assert.deepEqual(await findFixPr(wait), late);
+  assert.deepEqual(await awaitFixPr(wait), late);
+  // Without the earlier issue, the same read matches nothing: the field is the whole widening.
+  assert.equal(await findFixPr({ repo: SITE_REPO, issueNumber: 102 }), null);
 });
 
 test('auto_fix is the literal true at the top of the site config, and a site with no config has none', async () => {

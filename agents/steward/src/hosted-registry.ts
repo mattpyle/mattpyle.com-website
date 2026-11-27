@@ -7,6 +7,7 @@ import {
 import { checkActionUsage, reportRunHealth } from './activities/health.js';
 import {
   awaitFixPr,
+  findFixPr,
   awaitFixPrMerge,
   awaitPrPreview,
   awaitProductionDeploy,
@@ -147,6 +148,7 @@ const findingsActivities = {
   readFindingSettings,
   openFixIssue,
   awaitFixPr,
+  findFixPr,
   writeFindingFix,
   awaitFixPrMerge,
   awaitPrPreview,

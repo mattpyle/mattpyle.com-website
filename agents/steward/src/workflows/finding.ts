@@ -227,7 +227,8 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *   callers. The attempt's issue supersedes the last one, its gate reads the
  *   earlier PR's `reopened` or `fixing` file as approved (`afterPr`), and
  *   `writeFindingFix` records the earlier PR under `## Fix attempts`
- *   (`earlier`). The run never opens a second fix by itself.
+ *   (`earlier`). The run never opens a second fix by itself, except after
+ *   a PR wait that found nothing ("The fixer does not answer", below).
  * - A `rejected` verdict by `record-verdict`, in place of the approval: the
  *   park writes it with `writeFindingVerdict` and the run ends `rejected`, as
  *   at the gate, so a person can drop a finding whose fix failed. Only a park
@@ -253,7 +254,8 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *
  * **A PR closed unmerged** writes `status: approved` back with a note, and the
  * run waits for the next `fix`. So does a fix that fails, and an issue with no
- * PR after 60 minutes: the finding is still approved, and a second `fix` is the
+ * PR after 60 minutes on a history without {@link FIXER_REOPEN_PATCH} or
+ * after three such issues: the finding is still approved, and a second `fix` is the
  * retry. The retry closes the last attempt's issue with a comment saying why,
  * and opens a new one. `auto_fix` covers the first attempt only. What follows
  * is the wait of a history without the settings marker. A run started
@@ -637,6 +639,55 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * The validators change without a marker: a validator does not run on replay.
  * Rollback: a run that parked, or issued a call again, cannot replay on code
  * without the marker.
+ *
+ * **The fixer does not answer** (STW-704, 2026-11-26). Until this change a PR
+ * wait that ran out its 60 minutes sent the run to `waiting-fix` for a
+ * person's `fix`. Every fix issue from 13 to 26 November got its PR within 15
+ * minutes, so what reaches the bound is an outage, not a slow fixer. Now:
+ *
+ * 1. **The look.** At the bound the run reads once more for a PR
+ *    (`findFixPr`, on the {@link looking} proxy under the durable policy and
+ *    {@link durable}). A PR the Action opened during an outage is found there
+ *    and taken as the wait's own, and no second issue opens. The run holds its
+ *    slot through the look: while GitHub is down no other fix on those paths
+ *    could go on either.
+ * 2. **The issue again.** When the look finds none, the catch releases the
+ *    slot and the next attempt starts with no `fix`, as after a conflict's
+ *    re-cut: a slot, `openFixIssue` closing the old issue with its reason,
+ *    and a new issue, which triggers the Action again.
+ * 3. **Either issue's PR.** Each PR wait, and the look, match a PR from this
+ *    attempt's issue or from any earlier issue of this run whose wait ran out
+ *    (`earlierIssueNumbers`). A late PR from the first Action run is then the
+ *    fix, not a stray.
+ * 4. **Three issues, then a person.** The second issue opens at once. The
+ *    third opens one day ({@link REOPEN_REST}) after the second bound: the run
+ *    rests at `waiting-fix` with no slot, and `lastFixError` names the time.
+ *    After the third bound it waits for a person as before, and
+ *    `lastFixError` says three issues in a row got no PR. A person's `fix`,
+ *    in the rest or after, starts the count again, and so does an attempt that
+ *    got a PR.
+ * 5. **A permanent failure** of the look, the gate or the issue parks the run
+ *    at once with its reason, as before: only a look that found nothing opens
+ *    the issue again.
+ *
+ * The run cannot tell an Action that never started from one that failed. It
+ * opens the issue again in both cases. A run whose job started finished
+ * within the job's 30-minute limit, so at the 60-minute bound it is over.
+ *
+ * **Versioned with `patched`.** {@link FIXER_REOPEN_PATCH} is read in the PR
+ * wait's catch, once the wait ended on its bound (`isTimeout`) and before the
+ * look. On a fast-failing poll like this one the bound arrives as the last
+ * attempt's `FixPrNotOpen` with `retryState` `TIMEOUT`, not a `TimeoutFailure`;
+ * `isTimeout` takes both. A history without the marker takes the old catch:
+ * every run that parked at `waiting-fix` after a bound before this shipped
+ * stays a person's, and its next bound, on this code, records the marker. The
+ * rest's timer and the automatic attempt follow the marker only. The wider
+ * match and the list of earlier issues are activity input and workflow state,
+ * which replay does not compare, so they carry no marker. The fixtures are
+ * `finding-pr-bound-parked-pre.bin` (a bound, the park and a `fix` before the
+ * marker) and `finding-pr-bound-reopen.bin` (the look, the issue again, and a
+ * PR from the first issue) in `tests/workflows/replay.test.ts`. Rollback: a
+ * run with the marker cannot replay on code without it.
  */
 
 // Duplicated from config.ts rather than imported, for the reason
@@ -691,6 +742,21 @@ export const OPEN_UNTIL_VERIFIED_PATCH = 'open-until-verified';
  * parks" in the module docblock.
  */
 export const FAILURE_PARKS_PATCH = 'failure-parks';
+
+/**
+ * The `patched` marker of the look at the PR wait's bound and the issue the run
+ * opens again by itself (STW-704). Read in the PR wait's catch, and only once
+ * the wait ended on its bound; see "The fixer does not answer" in the module
+ * docblock.
+ */
+export const FIXER_REOPEN_PATCH = 'fixer-reopen';
+
+/** How many fix issues in a row may get no PR before the run waits for a person (STW-704). */
+const REOPEN_LIMIT = 3;
+
+/** The rest before the last of those issues opens (STW-704). */
+const REOPEN_REST = '1 day';
+const REOPEN_REST_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The deploy wait's interval once its first 24 hours ran out (STW-653). The
@@ -1126,6 +1192,16 @@ const awaitingPr = wf.proxyActivities<Pick<typeof activities, 'awaitFixPr'>>({
   },
 });
 
+// The look at that wait's bound (STW-704): one read under the durable policy,
+// so an outage is waited out before the run opens the issue again. A rejected
+// credential is retried, as in the wait.
+const looking = wf.proxyActivities<Pick<typeof activities, 'findFixPr'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  scheduleToCloseTimeout: DURABLE_BOUND,
+  retry: { ...DURABLE_RETRY, nonRetryableErrorTypes: GITHUB_PERMANENT_FOR_WAITS },
+});
+
 // The reads of a finding and its block. A block that does not validate and a
 // finding that moved are not mended by a retry.
 const CHECKS_READ_PERMANENT = [...GITHUB_PERMANENT, 'FindingMissing', 'FindingMalformed', 'VerifyBlockInvalid'];
@@ -1378,6 +1454,20 @@ function fullStop(text: string): string {
 
 function nowIso(): string {
   return new Date(Date.now()).toISOString();
+}
+
+/**
+ * What a run whose PR wait found nothing does next, for `lastFixError` after
+ * the wait's own sentence (STW-704). `bounds` counts the issues in a row that
+ * got no PR; the time is the workflow clock's, so a replay writes the same.
+ */
+function reopenLine(bounds: number, now: number = Date.now()): string {
+  if (bounds >= REOPEN_LIMIT) return `${REOPEN_LIMIT} fix issues in a row got no PR, so the run waits for a person's fix.`;
+  if (bounds === REOPEN_LIMIT - 1) {
+    const at = new Date(now + REOPEN_REST_MS).toISOString().slice(0, 16).replace('T', ' ');
+    return `${bounds} fix issues in a row got no PR, so a third opens at ${at} UTC.`;
+  }
+  return 'The run opens the issue again now.';
 }
 
 export async function findingWorkflow(input: FindingWorkflowInput): Promise<FindingWorkflowResult> {
@@ -2498,8 +2588,9 @@ async function lifecycle(
    * A person's `fix` starts an attempt at once, and the gate in `openFixIssue`
    * decides, as it always did.
    *
-   * **A run that has opened an issue** attempts nothing on its own: its issue
-   * is a person's to retry, so no second issue is opened behind the first. It
+   * **A run that has opened an issue** attempts nothing on its own here: the
+   * issues it opens again by itself (STW-704) start in the attempt loop and
+   * skip this wait, so a run that reaches it is a person's to retry. It
    * waits for that `fix`, and with the {@link PARKED_ISSUE_REREAD_PATCH} marker
    * it also reads the settings every {@link PARKED_REREAD}, for one purpose: to
    * end `closed` when the file says `resolved` or `rejected`. The first read
@@ -2802,15 +2893,27 @@ async function lifecycle(
     };
     // Set when a conflicting PR was closed: the next attempt starts without a `fix`.
     let recut = false;
+    // The fixer does not answer (STW-704). Every issue of this run whose PR
+    // wait ran out with nothing found, for the wider match; how many did so in
+    // a row since a person's `fix` or a PR; and whether the next attempt opens
+    // the issue again by itself. None of them issues a command.
+    const unanswered: number[] = [];
+    let bounds = 0;
+    let reopen = false;
 
     attempts: for (;;) {
       state.step = 'waiting-fix';
       // Into a new attempt, no wait note or park line survives (STW-653); no command when there was none.
       if (state.waitNote) endWaitNote();
-      if (!recut && atUse) {
+      // The rest before the last issue (STW-704). The slot was released in the
+      // catch. A person's `fix` in the rest starts the attempt at once, and the
+      // count again.
+      if (reopen && bounds === REOPEN_LIMIT - 1 && (await wf.condition(() => fix.requested, REOPEN_REST))) reopen = false;
+      if (!reopen) bounds = 0;
+      if (!recut && !reopen && atUse) {
         const closed = await waitAtUse(heldAtVerdict && fixAttempts === 0);
         if (closed) return closed;
-      } else if (!recut) {
+      } else if (!recut && !reopen) {
         const parked = input.waitsForPerson === true && fixAttempts === 0;
         if (parked) state.waitsForPerson = true;
         // A finding held at the verdict waits for a person.
@@ -2818,6 +2921,7 @@ async function lifecycle(
         if (parked || held || !(autoFix && fixAttempts === 0)) await wf.condition(() => fix.requested);
       }
       recut = false;
+      reopen = false;
       state.waitsForPerson = false;
       fix.requested = false;
       fixAttempts++;
@@ -2850,12 +2954,27 @@ async function lifecycle(
           );
           state.issueUrl = issue.url;
           lastIssue = { url: issue.url, reason: '' };
+          // A late PR from an earlier issue of this run is this attempt's fix (STW-704).
+          const wait = { repo: issue.repo, issueNumber: issue.number, earlierIssueNumbers: unanswered.filter((n) => n !== issue.number) };
+          let found: string | null;
           try {
-            prUrl = (await awaitingPr.awaitFixPr({ repo: issue.repo, issueNumber: issue.number })).prUrl;
+            found = (await awaitingPr.awaitFixPr(wait)).prUrl;
           } catch (err) {
-            if (isTimeout(err)) throw new Error(`No PR from ${issue.url} within 60 minutes.`);
-            throw err;
+            if (!isTimeout(err)) throw err;
+            const noPr = `No PR from ${issue.url} within 60 minutes.`;
+            // Data for a later wait's match only, so it issues no command and sits before the marker.
+            if (!unanswered.includes(issue.number)) unanswered.push(issue.number);
+            if (!wf.patched(FIXER_REOPEN_PATCH)) throw new Error(noPr);
+            // Look once more, however long GitHub takes, before a second issue.
+            found = (await durable(() => looking.findFixPr(wait)))?.prUrl ?? null;
+            if (found === null) {
+              lastIssue.reason = noPr;
+              bounds++;
+              reopen = bounds < REOPEN_LIMIT;
+              throw new Error(`${noPr} ${reopenLine(bounds)}`);
+            }
           }
+          prUrl = found;
           // Known before the write, which can retry for days: the PR is open from here.
           state.prUrl = prUrl;
           // The custom fixer wrote this from inside its child; the Action cannot.

@@ -63,6 +63,7 @@ const FINDINGS_ACTIVITIES = [
   'readFindingSettings',
   'openFixIssue',
   'awaitFixPr',
+  'findFixPr',
   'writeFindingFix',
   'awaitFixPrMerge',
   'awaitPrPreview',
@@ -174,7 +175,7 @@ test('each queue registers exactly its own activities, by name', () => {
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
   assert.equal(names(QUEUE_AUDIT).length, 14);
-  assert.equal(names(QUEUE_FINDINGS).length, 30);
+  assert.equal(names(QUEUE_FINDINGS).length, 31);
 });
 
 test('every registered activity is a function', () => {
