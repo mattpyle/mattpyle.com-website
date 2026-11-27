@@ -168,8 +168,8 @@ export function isCredentialFailure(err: unknown): boolean {
   return err.type === 'ModelRequestRefused' && (err.details?.[0] as { status?: number } | undefined)?.status === 401;
 }
 
-/** A table cell holds no pipe and no line break. */
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+/** Note text on one line, with its backslashes escaped first and then its pipes, so markdown shows it as written. */
+export const noteText = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 
 /** The reviewer's objections a person reads before merging, per entry. */
 function reviewNotesSection(drafted: BackfillDrafted[]): string[] {
@@ -178,7 +178,7 @@ function reviewNotesSection(drafted: BackfillDrafted[]): string[] {
   const lines = ['## Review notes', '', 'The reviewer still objected to these after its last round. Read and mend each before merging.', ''];
   for (const d of noted) {
     lines.push(`### \`${entryFile(d.key)}\``, '');
-    for (const n of d.reviewNotes) lines.push(`1. "${cell(n.quote)}" (${cell(n.rule)}): ${cell(n.reason)}`);
+    for (const n of d.reviewNotes) lines.push(`1. "${noteText(n.quote)}" (${noteText(n.rule)}): ${noteText(n.reason)}`);
     lines.push('');
   }
   return lines;

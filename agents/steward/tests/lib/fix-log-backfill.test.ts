@@ -253,3 +253,21 @@ test('a credential failure stops the run at once and lists the entries not tried
   assert.equal(report.stopped, undefined);
   assert.deepEqual(report.drafted.map((d) => d.key), ['MP-11', 'MP-15']);
 });
+
+test('a review note escapes its backslashes before its pipes, and keeps to one line', async () => {
+  const { noteText } = await import('../../src/lib/fix-log-backfill.js');
+  const bs = String.fromCharCode(92);
+  assert.equal(noteText(`a${bs}|b`), `a${bs}${bs}${bs}|b`, 'the backslash is escaped, then the pipe');
+  assert.equal(noteText(`x${bs}`), `x${bs}${bs}`, 'a trailing backslash cannot escape what follows');
+  assert.equal(noteText('one\r\ntwo\nthree'), 'one two three');
+
+  const w = world(THREE);
+  const note = { quote: `C:${bs}path | piped`, rule: 'unsupported', reason: `no source holds ${bs}| here` };
+  const review = scriptedModel([problems([note]), problems([note]), { text: JSON.stringify({ verdict: 'accept' }), usage: { inputTokens: 1, outputTokens: 1 } }]);
+  const model = scriptedModel([reply(GOOD), reply(GOOD), reply({ ...GOOD, title: 'The second finding left a stale line on its page' })]);
+  await runFixLogBackfill(options(), { github: github(w), send: model.send, review: review.send, print: () => {} });
+  assert.ok(
+    w.opened[0].body.includes(`1. "C:${bs}${bs}path ${bs}| piped" (unsupported): no source holds ${bs}${bs}${bs}| here`),
+    w.opened[0].body,
+  );
+});
