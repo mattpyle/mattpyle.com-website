@@ -114,6 +114,11 @@ test('the header widens the fix to every place that states the fact and nothing 
   assert.equal(FIX_ISSUE_HEADER.split('\n').length - 1, 6, 'still six lines');
 });
 
+test('the header tells the fixer to leave the fix log entry to Steward (STW-710)', () => {
+  const rules = FIX_ISSUE_HEADER.split('\n')[2];
+  assert.match(rules, /Leave `src\/content\/fixes\/` alone: Steward writes the fix log entry for this fix into the PR once the preview test passes\./);
+});
+
 test('openFixIssue opens an issue for an approved one-page opportunity, with its verdict reason as the scope', async () => {
   const key = 'content-reading-budget-study-uncited--changelog-agent-reading-budget';
   const finding = [

@@ -756,6 +756,24 @@ test('a lifecycle run that passed its preview test before the retest replays its
  * The worker and client identity is `fixture`, and every failure's stack trace
  * was cleared before the history was written: replay compares neither, and a
  * trace names the recording machine's paths.
+ *
+ * New code writes the fix log entry after a test that passed, behind
+ * `fix-log-entry` (`FIX_LOG_ENTRY_PATCH` in `src/workflows/finding.ts`). This
+ * history has no marker there, so its passing retest goes straight to the
+ * second merge wait, as recorded.
+ *
+ * Probe (2026-11-27): deleting the `wf.patched(FIX_LOG_ENTRY_PATCH)` guard made
+ * this replay fail with
+ *
+ * ```
+ * [TMPRL1100] Nondeterminism error: Activity type of scheduled event
+ * 'awaitFixPrMerge' does not match activity type of activity command
+ * 'draftFixLogEntry'
+ * ```
+ *
+ * 13 of the 59 replays failed the same way: every fixture with a preview test
+ * that passed, or a finding with no checks on the issue path. The guard was put
+ * back and all 59 re-ran green.
  */
 const findingPushedRetestPrePath = fileURLToPath(
   new URL('../fixtures/histories/finding-pushed-retest-pre.bin', import.meta.url),

@@ -20,7 +20,7 @@ export function backfillCredentialRefusal(env: Record<string, string | undefined
 }
 
 /** A pull request's files, as one unified diff. */
-async function diffOf(repo: string, number: number): Promise<string> {
+export async function diffOf(repo: string, number: number): Promise<string> {
   const parts: string[] = [];
   for (let page = 1; page <= 10; page++) {
     const files = (await gh(`/repos/${repo}/pulls/${number}/files?per_page=100&page=${page}`)) as Array<{
