@@ -1081,7 +1081,9 @@ test('a lifecycle run parked with an issue replays its daily read and its close'
  * Recorded from the pre-change `finding.ts` (origin/master at d68ba19, the
  * worktree before its first edit) against the time-skipping server with the
  * mocked activities of `finding-lifecycle.test.ts`: one `env.sleep('61
- * minutes')`, then a `fix`. It holds no real finding text.
+ * minutes')`, then a `fix`. It holds no real finding text. Every identity field
+ * reads `steward-fixture` and the two stack traces are emptied, as they held
+ * the recording machine's name and local paths.
  *
  * Probe (2026-11-26), reverted and re-run green: deleting the
  * `wf.patched(FIXER_REOPEN_PATCH)` guard, so every bound takes the look, made
@@ -1117,7 +1119,9 @@ test('a lifecycle run whose PR wait ran out before the look replays its park and
  * No history from before this change can hold these commands, so this is not a
  * pre-change fixture: it was recorded from the changed code and guards the next
  * change to the path. The steps are the lifecycle test "a PR from the first
- * issue that opens during the second wait is the fix". 157 events.
+ * issue that opens during the second wait is the fix". 157 events. Every
+ * identity field reads `steward-fixture` and the two stack traces are emptied,
+ * as they held the recording machine's name and local paths.
  *
  * Probes (2026-11-26), each reverted and re-run green:
  *
