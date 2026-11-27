@@ -180,7 +180,7 @@ test('each queue registers exactly its own activities, by name', () => {
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
   assert.equal(names(QUEUE_AUDIT).length, 14);
-  assert.equal(names(QUEUE_FINDINGS).length, 33);
+  assert.equal(names(QUEUE_FINDINGS).length, 36);
 });
 
 test('every registered activity is a function', () => {
