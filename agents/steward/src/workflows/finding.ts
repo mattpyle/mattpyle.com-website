@@ -607,6 +607,13 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *    later policy reaches a long outage. This covers `writing` but the
  *    returned write, `readingAtVerdict` and `settling`.
  *
+ * A park's reason at `verdict` and at `settings` ends in one full stop
+ * (STW-693). No marker: the reason reaches the `state` query and the
+ * `waitsFor` memo, no workflow code reads it, and replay does not compare a
+ * memo's value, so the change adds, removes and reorders no command
+ * (determinism rule 5). The probe is on the park fixtures in
+ * `tests/workflows/replay.test.ts`.
+ *
  * **Versioned with `patched`.** {@link FAILURE_PARKS_PATCH} is read only in a
  * catch, and only once the failure is one the new branch handles: a permanent
  * type or the attempt limit at the verdict write or a settings read
@@ -1364,6 +1371,11 @@ function describeError(err: unknown): string {
   return best || (err instanceof Error ? err.message : String(err));
 }
 
+/** `text` ending in one full stop: an activity's message may bring its own. */
+function fullStop(text: string): string {
+  return text.endsWith('.') ? text : `${text}.`;
+}
+
 function nowIso(): string {
   return new Date(Date.now()).toISOString();
 }
@@ -1660,7 +1672,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
         );
       } catch (err) {
         if (!gaveUp(err) || !wf.patched(FAILURE_PARKS_PATCH)) throw err;
-        await holdAtGate('settings', `The site's settings could not be read: ${describeError(err)}.`);
+        await holdAtGate('settings', fullStop(`The site's settings could not be read: ${describeError(err)}`));
       }
     }
   };
@@ -1716,7 +1728,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
             };
           }
         }
-        await holdAtGate('verdict', `The ${verdict.status} verdict was not written: ${describeError(err)}.`);
+        await holdAtGate('verdict', fullStop(`The ${verdict.status} verdict was not written: ${describeError(err)}`));
         verdict = state.verdict as FindingVerdict;
         // A replacing verdict from the file is already written there.
         if (!verdictSourceWrites(verdict.source)) break;
@@ -2704,7 +2716,7 @@ async function lifecycle(
         if (!gaveUp(err) || !wf.patched(FAILURE_PARKS_PATCH)) throw err;
         // The step the read ran at, for the run to go back to: `park()` leaves `parked`.
         const back = state.step;
-        const moved = await park({ kind: 'error', stage: 'settings', reason: `The site's settings could not be read: ${describeError(err)}.` });
+        const moved = await park({ kind: 'error', stage: 'settings', reason: fullStop(`The site's settings could not be read: ${describeError(err)}`) });
         if (typeof moved === 'object') return { ended: moved };
         state.step = back;
         if (moved === 'fix') return { ended: null };
