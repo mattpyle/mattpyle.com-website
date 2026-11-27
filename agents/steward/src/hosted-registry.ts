@@ -35,6 +35,7 @@ import { readRecheckBlock, readSiteHosts, readWatchRun, writeFindingRecheck } fr
 import { writeFindingVerdictMeasure } from './activities/findings-verdict-measure.js';
 import { watchFinding } from './activities/findings-watch.js';
 import { writeFindingLook } from './activities/findings-look.js';
+import { commitFixLogEntry, draftFixLogEntry } from './activities/fix-log.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -128,7 +129,7 @@ const fastActivities = { auditSiteFast };
  * The findings queue's registry (findings-loop design, decisions 18, 26, 29
  * and 30, fix-dispatch-by-surface and fix-pr-runs-the-verify-block): the
  * twenty-three findings activities, the recheck's three, the verdict
- * measurement's one and the look's one (stage 5), plus `reportRunHealth` because the recheck pings its check
+ * measurement's one, the look's one (stage 5) and the fix log entry's two, plus `reportRunHealth` because the recheck pings its check
  * from this queue. GitHub API calls against the findings repository, the fix issue, the
  * fix PR, the lifecycle's three waits, the conflicting PR's close, the fix
  * PR's preview wait and its comment and draft write, and the blockless
@@ -136,8 +137,10 @@ const fastActivities = { auditSiteFast };
  * visibility list, a dispatcher signal-with-start and a status sweep
  * through the worker's own client; and the verifier's checks: fetch against
  * production and this image's Chromium for `selector` and `js`, as the deep
- * audit uses it. None opens a local file in the repository, so the "nothing
- * local" rule above holds for this map too.
+ * audit uses it; and the fix log draft's model call (STW-710), which needs
+ * `ANTHROPIC_API_KEY` on this worker and fails non-retryably without it. None
+ * opens a local file in the repository, so the "nothing local" rule above
+ * holds for this map too.
  */
 const findingsActivities = {
   readFindingsIndex,
@@ -175,6 +178,9 @@ const findingsActivities = {
   writeFindingVerdictMeasure,
   // The look (stage 5): one commit that resolves a finding Argus saw fixed.
   writeFindingLook,
+  // The fix log entry (STW-710): the model draft, and one commit to the fix PR's branch.
+  draftFixLogEntry,
+  commitFixLogEntry,
 };
 
 /**

@@ -120,7 +120,7 @@ interface Candidate {
 }
 
 /** The titles and slugs of every entry on `master` and on the branch, and the file names on each. */
-async function readEntries(github: BackfillGitHub, repo: string, refs: string[]) {
+export async function readEntries(github: BackfillGitHub, repo: string, refs: string[]) {
   const titles: string[] = [];
   const slugs: string[] = [];
   const files = new Map<string, Set<string>>();

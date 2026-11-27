@@ -2087,6 +2087,8 @@ finding
         const n = state.previewTests ? ` (test ${state.previewTests})` : '';
         console.log(`${at}preview: ${state.previewResult}${sha}${n}`);
       }
+      if (state.fixLogEntry) console.log(`${at}fix log entry: ${state.fixLogEntry}`);
+      for (const note of state.fixLogNotes ?? []) console.log(`${at}  review note: ${note}`);
       if (state.retestRequested) console.log(`${at}retest: asked for; the next preview test starts now`);
       if (state.verdictMeasure) console.log(`${at}measured at verdict: ${state.verdictMeasure}`);
       const waiting = waitingReasonLine(state);

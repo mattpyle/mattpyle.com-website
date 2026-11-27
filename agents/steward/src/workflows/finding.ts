@@ -394,6 +394,43 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * scheduled without `retestAfter`, so a push does not retest it; the Update
  * does, once the worker runs this code.
  *
+ * **The fix log entry** (STW-710, slice 3 of the fix log writer). On the issue
+ * path, after a preview test that passed (every check measured and passing, or
+ * a finding with no checks, at once), the run writes the PR's fix log entry
+ * into the PR: `draftFixLogEntry` drafts it with the model, and
+ * `commitFixLogEntry` commits `src/content/fixes/<key>.md` to the PR's branch.
+ * The step is `writing-fix-log`, and `fixLogEntry` holds how it came out in one
+ * line. The rules:
+ *
+ * 1. Once per attempt. A later pass writes no second entry, and the commit
+ *    activity does nothing when the file is already on the branch. A failed
+ *    or unmeasured test writes none; a later test that passes writes it.
+ * 2. Steward's commit is not tested again. When the commit sits right on the
+ *    commit the test measured, the merge wait takes it as the commit last
+ *    tested (`retestAfter`), so its push is not a `pushed` result. When the
+ *    fixer pushed in between, the commit activity's fast-forward is refused
+ *    (`moved`) or the parent differs, the test's commit stays, and the push is
+ *    tested as before. CI still runs on Steward's commit.
+ * 3. It never blocks the fix. The draft is bounded at 15 minutes; a missing
+ *    key, a refused request and an entry that still fails its checks end it
+ *    at once. Whatever stops it is caught, and the run goes on to the merge
+ *    wait.
+ * 4. The brief is read from `master`, never from the PR's head.
+ * 5. Review notes go on the PR as one comment. When the comment fails, the
+ *    notes stay in `fixLogNotes`.
+ *
+ * **Versioned with `patched`.** {@link FIX_LOG_ENTRY_PATCH} is read only when a
+ * test has just passed and the attempt has no entry, after the first test and
+ * after each retest, so a run that never passes records no marker. A run past
+ * that point when this shipped has no marker there: `patched` answers false on
+ * replay and the run goes straight to its merge wait, with no entry (the
+ * backfill covers it). A run parked in its merge wait whose later retest
+ * passes is no longer replaying there, so it takes the marker and writes its
+ * entry then. Taking Steward's commit as tested changes an activity input
+ * and workflow state, which replay does not compare. The fixtures are
+ * `finding-pushed-retest-pre.bin` and `finding-preview-passed-before-retest.bin`
+ * in `tests/workflows/replay.test.ts`.
+ *
  * **The measurement at the verdict** (STW-589, 2026-11-11). Right after an
  * approved verdict, before `readSiteAutoFix` and so before any slot or issue,
  * the run reads the finding's `verify:` block and runs its checks on
@@ -751,6 +788,14 @@ export const FAILURE_PARKS_PATCH = 'failure-parks';
  */
 export const FIXER_REOPEN_PATCH = 'fixer-reopen';
 
+/**
+ * The `patched` marker of the fix log entry written into a fix PR after its
+ * first passing preview test (STW-710). Read only when a test has just passed
+ * and the attempt has no entry yet; see "The fix log entry" in the module
+ * docblock.
+ */
+export const FIX_LOG_ENTRY_PATCH = 'fix-log-entry';
+
 /** How many fix issues in a row may get no PR before the run waits for a person (STW-704). */
 const REOPEN_LIMIT = 3;
 
@@ -891,6 +936,7 @@ export type FindingStep =
   | 'waiting-slot'
   | 'fixing'
   | 'testing-preview'
+  | 'writing-fix-log'
   | 'waiting-merge'
   | 'waiting-deploy'
   | 'verifying'
@@ -964,6 +1010,13 @@ export interface FindingState {
   watchIssues?: number;
   /** At step `recording-look` (stage 5): the Argus run whose look is being written. */
   lookRun?: string | null;
+  /**
+   * How the current attempt's fix log entry came out, in one line (STW-710):
+   * written, already on the branch, or why not. Absent before the step ran.
+   */
+  fixLogEntry?: string | null;
+  /** The reviewer's notes on the entry when their PR comment failed, so a person still reads them. */
+  fixLogNotes?: string[] | null;
 }
 
 /**
@@ -1176,6 +1229,27 @@ const commenting = wf.proxyActivities<Pick<typeof activities, 'commentOnFixPr'>>
     backoffCoefficient: 2,
     nonRetryableErrorTypes: WRITE_PERMANENT,
   },
+});
+
+// The fix log entry (STW-710). The draft is bounded at 15 minutes in all: 5 for
+// one attempt, 3 attempts, a heartbeat. The model client's own retries are off
+// (`fixLogSend`), and the activity passes its cancellation to each call. A
+// missing key, a refused request, an entry that still fails its checks and a
+// finding with no PR end it at once. Whatever stops it is caught: the step never
+// blocks the fix.
+const FIX_LOG_PERMANENT = [...GITHUB_PERMANENT, 'ModelKeyMissing', 'ModelRequestRefused', 'FixLogEntryInvalid', 'FindingNotInLog', 'FindingMissing', 'FindingMalformed', 'FixLogBriefMissing'];
+const drafting = wf.proxyActivities<Pick<typeof activities, 'draftFixLogEntry'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '5 minutes',
+  scheduleToCloseTimeout: '15 minutes',
+  heartbeatTimeout: '2 minutes',
+  retry: { maximumAttempts: 3, initialInterval: '10 seconds', backoffCoefficient: 2, nonRetryableErrorTypes: FIX_LOG_PERMANENT },
+});
+// The commit beside it: one read, one commit, one comment.
+const committingEntry = wf.proxyActivities<Pick<typeof activities, 'commitFixLogEntry'>>({
+  taskQueue: QUEUE_FINDINGS,
+  startToCloseTimeout: '1 minute',
+  retry: { maximumAttempts: 3, initialInterval: '5 seconds', backoffCoefficient: 2, nonRetryableErrorTypes: [...GITHUB_PERMANENT, 'FindingMalformed'] },
 });
 
 // The PR wait: every minute for up to 60. The Action took minutes in the
@@ -2230,6 +2304,7 @@ function requestFixRefusal(state: FindingState, asks: ParkAsks, request: FixUpda
     case 'measuring':
       return 'The run is measuring the checks at its verdict: ask again once it waits for a fix.';
     case 'testing-preview':
+    case 'writing-fix-log':
     case 'waiting-merge':
       return `${pr} is open: close it, and the run goes back to waiting for a fix.`;
     case 'waiting-deploy':
@@ -2314,8 +2389,15 @@ interface PreviewOutcome {
   hasChecks: boolean;
   /** True when the checks ran and at least one failed. */
   failed: boolean;
+  /** True when the checks ran on the preview, pass or fail. */
+  measured: boolean;
   /** The result line, as `previewResult` holds it before any comment error. */
   line: string;
+}
+
+/** A test that lets the fix log entry be written: every check passed on the preview, or the finding has none. */
+function previewPassed(tested: PreviewOutcome): boolean {
+  return !tested.hasChecks || (tested.measured && !tested.failed);
 }
 
 /**
@@ -2425,7 +2507,7 @@ async function lifecycle(
         state.previewResult = `${line} (the PR comment failed: ${describeError(err)})`;
       }
       const failed = result.results !== null && result.results.some((row) => !row.pass);
-      return { sha: result.sha, hasChecks: true, failed, line };
+      return { sha: result.sha, hasChecks: true, failed, measured: result.results !== null, line };
     };
     const unmeasured = (note: string, sha: string | null = null): Promise<PreviewOutcome> =>
       report({ prUrl, sha, results: null, note });
@@ -2448,7 +2530,7 @@ async function lifecycle(
     if (checks.length === 0) {
       state.previewResult = PREVIEW_SKIPPED_LINE;
       state.previewSha = null;
-      return { sha: null, hasChecks: false, failed: false, line: PREVIEW_SKIPPED_LINE };
+      return { sha: null, hasChecks: false, failed: false, measured: false, line: PREVIEW_SKIPPED_LINE };
     }
 
     let preview;
@@ -2470,6 +2552,55 @@ async function lifecycle(
     }
 
     return await report({ prUrl, sha: preview.sha, results, note: null });
+  };
+
+  /**
+   * The fix log entry (STW-710): drafted by the model and committed to the PR's
+   * branch. Never throws except for cancellation: whatever stops it is one line
+   * in `fixLogEntry`, and the merge wait goes on. `done` is true once the entry
+   * is on the branch, so a later pass writes no second one. `testedSha` is
+   * Steward's commit when it sits right on the commit the test measured, so the
+   * merge wait takes it as tested and the push starts no second test; null
+   * otherwise, and a fixer push in between is tested as before.
+   */
+  const writeFixLogEntry = async (prUrl: string, measuredSha: string | null): Promise<{ done: boolean; testedSha: string | null }> => {
+    state.step = 'writing-fix-log';
+    state.fixLogEntry = null;
+    state.fixLogNotes = null;
+    try {
+      const draft = await drafting.draftFixLogEntry({ repo: input.repo, findingPath: input.findingPath, key: input.key, prUrl });
+      if (draft.state === 'exists') {
+        state.fixLogEntry = `${draft.path} is already on the PR branch`;
+        return { done: true, testedSha: null };
+      }
+      const commit = await committingEntry.commitFixLogEntry({
+        prUrl,
+        key: draft.key,
+        path: draft.path,
+        text: draft.text,
+        notes: draft.reviewNotes,
+      });
+      const notes = draft.reviewNotes.length;
+      const noteLine = notes === 0 ? '' : `; ${notes} review note${notes === 1 ? '' : 's'} ${commit.notes === 'posted' || commit.notes === 'none' ? 'on the PR' : `not posted (${commit.notes})`}`;
+      if (notes > 0 && commit.notes !== 'posted' && commit.notes !== 'none') {
+        state.fixLogNotes = draft.reviewNotes.map((n) => `"${n.quote}" (${n.rule}): ${n.reason}`);
+      }
+      if (commit.state === 'moved') {
+        state.fixLogEntry = `${draft.path} not written: the PR branch moved while it was committed`;
+        return { done: false, testedSha: null };
+      }
+      if (commit.state === 'exists') {
+        state.fixLogEntry = `${draft.path} is already on the PR branch${noteLine}`;
+        return { done: true, testedSha: null };
+      }
+      state.fixLogEntry = `${draft.path} written as ${(commit.sha ?? '').slice(0, 7)}${noteLine}`;
+      return { done: true, testedSha: measuredSha !== null && commit.parent === measuredSha ? commit.sha : null };
+    } catch (err) {
+      if (wf.isCancellation(err)) throw err;
+      state.fixLogEntry = `not written: ${describeError(err)}`;
+      wf.log.warn('the fix log entry was not written; the merge wait goes on', { key: input.key, error: state.fixLogEntry });
+      return { done: false, testedSha: null };
+    }
   };
 
   /**
@@ -3030,6 +3161,19 @@ async function lifecycle(
       state.previewTests = 0;
       let tested: PreviewOutcome | null = null;
       if (viaIssue && wf.patched(PREVIEW_TEST_PATCH)) tested = await testOnPreview(prUrl, earlier);
+      // The commit the merge wait takes as tested: the test's, or Steward's entry
+      // commit right on top of it (STW-710).
+      let testedSha: string | null = tested?.sha ?? null;
+      // The fix log entry (STW-710), once per attempt, after a test that passed.
+      // The marker is read only then; "The fix log entry" in the docblock says why.
+      let entryDone = false;
+      const entryAfterTest = async (): Promise<void> => {
+        if (!tested || entryDone || !previewPassed(tested) || !wf.patched(FIX_LOG_ENTRY_PATCH)) return;
+        const written = await writeFixLogEntry(prUrl, tested.sha);
+        entryDone = written.done;
+        if (written.testedSha) testedSha = written.testedSha;
+      };
+      await entryAfterTest();
 
       state.step = 'waiting-merge';
       let merge!: FixPrOutcome;
@@ -3044,19 +3188,21 @@ async function lifecycle(
             // marker; the docblock's "The retest" says why.
             if (tested?.hasChecks) {
               retest.prUrl = prUrl;
-              retest.testedSha = tested.sha;
+              retest.testedSha = testedSha;
               retest.requested = false;
               const waited = await mergeOrRetest(
                 prUrl,
                 {
                   ...(reportConflict ? { reportConflict: true } : {}),
-                  ...(tested.sha ? { retestAfter: tested.sha } : {}),
+                  ...(testedSha ? { retestAfter: testedSha } : {}),
                 },
                 mergeExpired,
               );
               if (waited === 'retest' || waited.state === 'pushed') {
                 earlier.push({ sha: tested.sha, line: tested.line });
                 tested = await testOnPreview(prUrl, earlier);
+                testedSha = tested.sha;
+                await entryAfterTest();
                 state.step = 'waiting-merge';
                 continue;
               }

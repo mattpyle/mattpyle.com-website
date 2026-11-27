@@ -495,6 +495,10 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       return response(200, {
         number,
         html_url: prUrl(number),
+        title: pull.title,
+        body: pull.body,
+        created_at: '2026-11-27T17:00:00Z',
+        merged_at: pull.merged === true ? '2026-11-27T20:00:00Z' : null,
         draft: pull.draft,
         state: pull.state ?? 'open',
         merged: pull.merged === true,

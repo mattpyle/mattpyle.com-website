@@ -329,6 +329,30 @@ function writtenStrings(data: Record<string, any>, story: string): string[] {
  * passes. `taken` holds the titles and slugs of every other entry; `newEntry` adds the
  * checks that hold only for an entry Steward writes, such as the slug it derives.
  */
+/** A site path in prose: a slash, then a name, such as `/about/` or `/rss.xml`. */
+const SITE_PATH = /(^|[\s(“"'‘])(\/[A-Za-z0-9_.-][^\s,;:)”"'’]*)/g;
+/** A repository path with a folder and a file, such as `src/pages/about.astro`. The first part has no dot, so a host is not one. */
+const REPO_PATH = /(^|[\s(“"'‘])([A-Za-z0-9_-]+\/(?:[\w.-]+\/)*[\w-]+\.[A-Za-z]{1,6})\b/g;
+
+/**
+ * The paths a story holds outside backticks (STW-710): site paths and
+ * repository paths with a folder. A plain file name such as `llms.txt` is the
+ * name of a thing, and a URL is a link, so neither counts. Code spans, fenced
+ * blocks and link targets are left out first. The story only: the title and the
+ * lead print a backtick as it is, so the title names a page and never its path.
+ */
+export function bareStoryPaths(story: string): string[] {
+  const prose = story
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`\n]*`/g, '')
+    .replace(/\]\([^)]*\)/g, ']')
+    .replace(/\bhttps?:\/\/\S+/g, '');
+  const found = new Set<string>();
+  for (const m of prose.matchAll(SITE_PATH)) found.add(m[2].replace(/[.!?]+$/, ''));
+  for (const m of prose.matchAll(REPO_PATH)) found.add(m[2]);
+  return [...found];
+}
+
 export function checkEntry(fileText: string, taken: Taken, options: { newEntry?: boolean } = {}): RuleFailure[] {
   const failures: RuleFailure[] = [];
   const fail = (rule: string, reason: string): void => {
@@ -372,6 +396,11 @@ export function checkEntry(fileText: string, taken: Taken, options: { newEntry?:
   const prose = story.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
   const tag = prose.match(/<[A-Za-z/!][^>\n]*>?/);
   if (tag) fail('story-tag', `the story holds ${tag[0]} outside backticks; put paths, tags and placeholders in backticks`);
+  // For a draft only: 44 of the 100 entries published before this rule hold a bare path.
+  if (options.newEntry) {
+    const paths = bareStoryPaths(story);
+    if (paths.length > 0) fail('story-path', `the story holds ${paths.join(', ')} outside backticks; put each path in backticks`);
+  }
 
   const measures = Array.isArray(data.measures) ? data.measures : [];
   if (measures.length > 1) fail('one-measure', 'the entry holds more than one measure; choose the one a reader cares about most');

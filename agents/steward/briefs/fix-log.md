@@ -21,7 +21,8 @@ Use only facts from those sources. When a source does not say something, leave i
 3. Aim for 40 to 65 characters.
 4. No wordplay, no question, no "the fix that…", no colon-joined halves.
 5. It must stand alone as one row of an index, with no lead beside it.
-6. Open with the page's name, not its path: "The About page", not "/about".
+6. Open with the page's name, not its path: "The About page", not "/about". The title prints a backtick as it is, so never put a path in it.
+7. Call a page by the name earlier titles gave it.
 
 Good: "The WebMCP post sent readers to its tools through a redirect".
 
@@ -52,6 +53,7 @@ Rules for the form:
 5. Add no fact the finding and the pull request do not hold.
 6. Set `visual: true` and `screen` when something visible on a page changed.
 7. In "N of M", M counts things that exist on the site. It never counts the items the fix added or the pages a check sampled.
+8. Never give a count of a string as the before or the effect. Say what the page says.
 
 ## The story
 
@@ -59,7 +61,7 @@ Two to five short paragraphs of plain prose, in this order:
 
 1. What was wrong. Name the page and give the observed number or quote.
 2. Whom it let down. Use the person or agent from the finding, in plain words.
-3. What changed. Describe the change in the pull request in plain words; name a file only when it helps.
+3. What changed. Describe the change in the pull request in plain words; name a file only when it helps. Leave out the tests, snapshots and fixtures the pull request updated.
 4. The effect. State the after. For a reopened entry, say plainly what still fails.
 
 Write more detail than the title and lead carry. A reader who wants only the story should understand it without the measures.
@@ -68,7 +70,7 @@ Do not say how the fault looked, sounded or reflected on the site. State what th
 
 Where the finding concerns how an agent reads the site, say what the agent got wrong or could not do. That is the effect that matters most. Use the finding's own account, and add nothing to it.
 
-State no intent and no future work. For a fix from the last week, the story says what is true on production now. For a fix older than a week, write the state at the time in the past tense, and claim nothing about production today.
+State no intent and no future work. Write the effect in the past tense in every entry: an entry outlives its first week. Claim nothing about production today.
 
 ## Rules for every field
 
@@ -78,6 +80,6 @@ State no intent and no future work. For a fix from the last week, the story says
 4. Never name the system that found, measured or fixed the problem.
 5. Leave out the verdict reason, any workflow identifier, any preview hostname and any private path. The strings `verify/`, `finding/`, `vercel.app`, `docs/` and `.claude/` fail the check.
 6. Times stay as the script wrote them.
-7. Put a path, a tag or a placeholder in backticks, such as `/writing/<slug>.md`. A bare angle-bracket tag in the story breaks the page.
+7. In the story, put a path, a tag or a placeholder in backticks, such as `/writing/<slug>.md`. A bare angle-bracket tag in the story breaks the page, and the check refuses a bare path. The title and the lead print a backtick as it is: there, name the page in words.
 8. Set `updated` to the day of any substantive edit, so the sitemap date moves. A new entry needs none.
 9. Before you write a title, read the existing titles. Two entries must not open with the same thing.

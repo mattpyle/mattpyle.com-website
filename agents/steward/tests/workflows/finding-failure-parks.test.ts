@@ -7,7 +7,7 @@ import { ApplicationFailure, Context } from '@temporalio/activity';
 import { ApplicationFailureCategory } from '@temporalio/common';
 import { bounded, createTestEnv, untilBetweenAttempts } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
-import { STOPS_AT_VERDICT, settings } from '../helpers/verdict-measure.js';
+import { FIX_LOG_ENTRY_PRESENT, STOPS_AT_VERDICT, settings } from '../helpers/verdict-measure.js';
 import {
   FAILURE_PARKS_PATCH,
   findingStateQuery,
@@ -74,7 +74,7 @@ function input(id: string, over: Partial<FindingWorkflowInput> = {}): FindingWor
 }
 
 async function withWorker<T>(activities: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
-  const worker = await Worker.create({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities, taskQueue: FINDINGS });
+  const worker = await Worker.create({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities: { ...FIX_LOG_ENTRY_PRESENT, ...activities }, taskQueue: FINDINGS });
   return await worker.runUntil(bounded(fn()));
 }
 

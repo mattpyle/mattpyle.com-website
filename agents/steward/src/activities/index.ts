@@ -88,3 +88,5 @@ export { writeFindingVerdictMeasure } from './findings-verdict-measure.js';
 export { watchFinding } from './findings-watch.js';
 // The look (stage 5), on `steward-findings`: one commit that resolves a finding Argus saw fixed.
 export { writeFindingLook } from './findings-look.js';
+// The fix log entry (STW-710), on `steward-findings`: the model draft and one commit to the fix PR.
+export { draftFixLogEntry, commitFixLogEntry } from './fix-log.js';

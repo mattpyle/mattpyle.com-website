@@ -8,7 +8,7 @@ import test from 'node:test';
 import Anthropic from '@anthropic-ai/sdk';
 import { ApplicationFailure } from '@temporalio/activity';
 import { FIX_LOG_MAX_ATTEMPTS, draftFixLogEntry, type DraftFixLogEntryInput } from '../../src/lib/fix-log-draft.js';
-import { checkEntry, entryData, entryFileText, findingFacts } from '../../src/lib/fix-log-rules.js';
+import { bareStoryPaths, checkEntry, entryData, entryFileText, findingFacts } from '../../src/lib/fix-log-rules.js';
 import { classifyModelError, fixLogSend } from '../../src/lib/llm.js';
 import { GOOD, acceptingReviewer, findingText, problems, reply, scriptedModel } from './fix-log-fixtures.js';
 
@@ -147,6 +147,7 @@ test('each rule fails alone', () => {
     ['em-dash', goodEntry({ story: 'The page named three sections — one was gone.' })],
     ['story', goodEntry({ story: ' ' })],
     ['story-tag', goodEntry({ story: 'The page had a <main> without a heading.' })],
+    ['story-path', goodEntry({ story: 'The page at /about named three sections.' })],
     ['one-measure', goodEntry({ measures: [GOOD.measure, GOOD.measure].map((m) => ({ ...m, quoted: false })) })],
     ['one-form', goodEntry({ measure: undefined, text: { before: lines, after: lines } , measures: [{ ...GOOD.measure, quoted: false }] })],
     ['measure-label', goodEntry({ measure: { ...GOOD.measure, label: 'Copies of the old line' } })],
@@ -316,4 +317,46 @@ test('a refused request carries its HTTP status as details', () => {
   const failure = classifyModelError(new Anthropic.APIError(401, undefined, 'invalid x-api-key', new Headers()));
   assert.ok(failure instanceof ApplicationFailure);
   assert.deepEqual(failure.details, [{ status: 401 }]);
+});
+
+// ── A path outside backticks (STW-710) ────────────────────────────────────────
+
+test('a bare path is a site path or a repository path with a folder, and nothing in code, a link or a URL', () => {
+  assert.deepEqual(
+    bareStoryPaths('The page at /about/ and its twin /about.md, and src/pages/about.astro, changed.'),
+    ['/about/', '/about.md', 'src/pages/about.astro'],
+  );
+  assert.deepEqual(bareStoryPaths('It ends a sentence at /rss.xml.'), ['/rss.xml']);
+  assert.deepEqual(
+    bareStoryPaths(
+      [
+        'Both `/about` and `src/pages/about.astro` are code. llms.txt and agents.md are names.',
+        'See [the page](/about/) and https://www.mattpyle.com/about/ and github.com/mattpyle/x.md, which is a host.',
+        '',
+        '```',
+        '/about',
+        '```',
+      ].join('\n'),
+    ),
+    [],
+  );
+});
+
+test('the path check is for a draft only, so a published entry with a bare path still passes', () => {
+  const text = goodEntry({ story: 'The page at /about named three sections.' });
+  assert.deepEqual(checkEntry(text, { titles: [], slugs: [] }), []);
+  assert.deepEqual(
+    checkEntry(text, { titles: [], slugs: [] }, { newEntry: true }).map((f) => f.reason),
+    ['the story holds /about outside backticks; put each path in backticks'],
+  );
+});
+
+test('a draft with a bare path gets a correction turn, not a review note', async () => {
+  const model = scriptedModel([reply({ ...GOOD, story: ['The page at /about named three sections.', '', 'One had been removed.'].join('\n') }), reply(GOOD)]);
+  const reviewer = acceptingReviewer();
+  const out = await draftFixLogEntry(input(), { send: model.send, review: reviewer.send });
+  assert.equal(out.attempts, 2);
+  assert.match(lastUserTurn(model.calls[1].messages), /story-path: the story holds \/about outside backticks/);
+  assert.equal(reviewer.calls.length, 1, 'the reviewer saw only the corrected draft');
+  assert.deepEqual(out.reviewNotes, []);
 });
