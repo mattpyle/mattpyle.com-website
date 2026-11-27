@@ -105,6 +105,8 @@ export interface FakeGitHub {
   push(branch: string, path: string, text: string, message?: string): void;
   /** Every request, as `METHOD /path`, for asserting call shape and count. */
   calls: string[];
+  /** Scripts the GraphQL folder query: refuse it with a message, or truncate these paths' text. */
+  tree: { refuse?: string; truncated: Set<string> };
   /** The `owner/name` each request in `calls` addressed, index for index. */
   repos: string[];
   file(branch: string, path: string): FakeRepoFile | undefined;
@@ -169,6 +171,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const issues: FakeGitHub['issues'] = [];
   const calls: string[] = [];
   const repos: string[] = [];
+  const tree: FakeGitHub['tree'] = { truncated: new Set() };
   const refUpdates: FakeGitHub['refUpdates'] = [];
 
   // Git Data model: a head per branch, and a snapshot of the tree behind every
@@ -548,6 +551,26 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       });
     }
 
+    // POST /graphql, the folder query: one branch folder's entries, each file
+    // with its text. `tree` scripts a refusal or a truncated blob.
+    if (method === 'POST' && url.pathname === '/graphql' && String(body.query).includes('... on Tree')) {
+      if (tree.refuse) return response(200, { errors: [{ message: tree.refuse }] });
+      const expression = String(body.variables?.expression);
+      const colon = expression.indexOf(':');
+      const dir = `${expression.slice(colon + 1)}/`;
+      const files = branches.get(expression.slice(0, colon));
+      const entries = new Map<string, unknown>();
+      for (const [filePath, file] of files ?? []) {
+        if (!filePath.startsWith(dir)) continue;
+        const [name, ...rest] = filePath.slice(dir.length).split('/');
+        const truncated = tree.truncated.has(filePath);
+        const text = truncated ? file.text.slice(0, 10) : file.text;
+        entries.set(name, { name, object: rest.length > 0 ? {} : { text, isTruncated: truncated } });
+      }
+      const object = entries.size > 0 ? { entries: [...entries.values()] } : null;
+      return response(200, { data: { repository: { object } } });
+    }
+
     // POST /graphql: the two draft mutations this codebase sends, each recorded
     // on the timeline as the app's bot.
     if (method === 'POST' && url.pathname === '/graphql') {
@@ -573,6 +596,7 @@ export function installFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   return {
     branches,
     pulls,
+    tree,
     checkRuns,
     merges,
     deployments,

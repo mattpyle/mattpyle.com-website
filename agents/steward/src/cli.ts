@@ -127,6 +127,7 @@ import {
   type FindingVerdict,
   type RunEnd,
 } from './lib/findings.js';
+import { parseFindingKey, resolveFinding, resolveFindingKey } from './lib/finding-key.js';
 import {
   readFinding,
   readFindingsIndex,
@@ -1903,6 +1904,25 @@ function parseFindingSlug(label: string) {
   };
 }
 
+const KEY_HELP = 'finding key, short (MP-187) or full';
+
+/**
+ * Commander coercion for every `<key>`: refuses what is neither form, so a key
+ * that could traverse never reaches a read. {@link fullKey} resolves the rest.
+ */
+function parseKeyArgument(value: string): string {
+  const parsed = parseFindingKey(value);
+  if (!parsed) {
+    fail(`Invalid key "${value}". Give a short key (MP-187) or a full one: lower case letters, digits and hyphens only.`);
+  }
+  return parsed!.form === 'short' ? parsed!.keyShort : parsed!.key;
+}
+
+/** The full key a verb acts on, from either form typed (src/lib/finding-key.ts). */
+async function fullKey(site: string, key: string): Promise<string> {
+  return (await resolveFindingKey({ repo: ARGUS_REPO, site, key })).key;
+}
+
 /**
  * The verbs' side of {@link sendVerdict}: the same Update the console sends,
  * printed as the verbs always printed it.
@@ -2026,10 +2046,11 @@ finding
 
 finding
   .command('status')
-  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .description("A finding workflow's state: whether the run is open or how it ended, then the gate, the step and the verdict")
-  .action(async (key: string, opts: { site: string }) => {
+  .action(async (typed: string, opts: { site: string }) => {
+    const key = await fullKey(opts.site, typed);
     const c = await client();
     try {
       const id = findingWorkflowId(opts.site, key);
@@ -2174,23 +2195,23 @@ finding
 
 finding
   .command('approve')
-  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .option('--reason <text>', 'optional note recorded as the verdict reason', CLI_APPROVE_REASON)
   .description('Approve a finding: signal the workflow, which writes the verdict into the file')
   .action(async (key: string, opts: { site: string; reason: string }) => {
-    await sendFindingVerdict(opts.site, key, 'approved', opts.reason);
+    await sendFindingVerdict(opts.site, await fullKey(opts.site, key), 'approved', opts.reason);
   });
 
 finding
   .command('reject')
-  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .requiredOption('--reason <text>', 'why the finding was rejected')
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .description('Reject a finding: signal the workflow, which writes the verdict into the file')
   .action(async (key: string, opts: { site: string; reason: string }) => {
     if (!opts.reason.trim()) fail('--reason must say why.');
-    await sendFindingVerdict(opts.site, key, 'rejected', opts.reason);
+    await sendFindingVerdict(opts.site, await fullKey(opts.site, key), 'rejected', opts.reason);
   });
 
 finding
@@ -2264,12 +2285,13 @@ finding
 
 finding
   .command('fix')
-  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .description(
     'Fix an approved defect under its lifecycle workflow: it opens a GitHub issue, and claude-code-action answers with one PR. For sites without auto_fix, and for a retry',
   )
-  .action(async (key: string, opts: { site: string }) => {
+  .action(async (typed: string, opts: { site: string }) => {
+    const key = await fullKey(opts.site, typed);
     const c = await client();
     const started = Date.now();
     console.log('');
@@ -2319,12 +2341,13 @@ finding
 
 finding
   .command('retest')
-  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .description(
     "Test the open fix PR's head on its preview again, after the check or Steward was corrected. A new commit on the PR is tested without this",
   )
-  .action(async (key: string, opts: { site: string }) => {
+  .action(async (typed: string, opts: { site: string }) => {
+    const key = await fullKey(opts.site, typed);
     const c = await client();
     try {
       let accepted;
@@ -2349,12 +2372,13 @@ finding
 
 finding
   .command('resume')
-  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .description(
     'Run a parked finding run\'s stage again: the verify after a failed or broken check, or the wait or write that failed. `steward finding status` says where it is parked',
   )
-  .action(async (key: string, opts: { site: string }) => {
+  .action(async (typed: string, opts: { site: string }) => {
+    const key = await fullKey(opts.site, typed);
     const c = await client();
     try {
       let accepted;
@@ -2377,12 +2401,13 @@ finding
 
 finding
   .command('measure-now')
-  .argument('<key>', 'finding key', parseFindingSlug('key'))
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .option('--site <site>', 'site slug', parseFindingSlug('site'), 'temporal-io')
   .description(
     'Measure a watching finding run on production now, instead of at its next daily window. Only a site with no fixer watches, so --site defaults to temporal-io. `steward finding status` shows the result',
   )
-  .action(async (key: string, opts: { site: string }) => {
+  .action(async (typed: string, opts: { site: string }) => {
+    const key = await fullKey(opts.site, typed);
     const c = await client();
     try {
       let accepted;
@@ -2763,7 +2788,7 @@ async function verifyOneFinding(
 
 finding
   .command('verify')
-  .argument('[key]', 'finding key', parseFindingSlug('key'))
+  .argument('[key]', KEY_HELP, parseKeyArgument)
   .option('--site <site>', 'site slug', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .option('--all-fixing', "every `fixing` finding of the site, one at a time")
   .option('--pr <url>', 'an approved finding fixed outside its run: record this merged PR as its fix, then verify', parsePrOption)
@@ -2772,8 +2797,8 @@ finding
   .description(
     "Verify a fixed finding on production, fixing or reopened with its PR merged: run the finding's own checks and write resolved or reopened, or, with no checks, confirm the fix by its deploy. Runs on the hosted worker",
   )
-  .action(async (key: string | undefined, opts: { site: string; allFixing?: boolean; pr?: string; reason?: string; root?: string }) => {
-    if (Boolean(key) === Boolean(opts.allFixing)) fail('Give one finding key, or --all-fixing.');
+  .action(async (typed: string | undefined, opts: { site: string; allFixing?: boolean; pr?: string; reason?: string; root?: string }) => {
+    if (Boolean(typed) === Boolean(opts.allFixing)) fail('Give one finding key, or --all-fixing.');
     if (opts.pr && opts.allFixing) fail('--pr names the fix of one finding; give its key, not --all-fixing.');
     if (opts.root && (opts.allFixing || opts.pr)) {
       fail('--root verifies one scratch copy as it stands; give its key, without --all-fixing or --pr.');
@@ -2783,6 +2808,7 @@ finding
     if (opts.site !== FINDINGS_DEFAULT_SITE) {
       fail(`verify knows the production origin of ${FINDINGS_DEFAULT_SITE} only, not ${opts.site}.`);
     }
+    const key = typed ? await fullKey(opts.site, typed) : undefined;
     if (key && opts.pr) {
       try {
         const written = await recordHandFix(
@@ -2848,12 +2874,12 @@ fixLog
   )
   .option('--site <site>', 'site slug in the findings store', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .option('--dry-run', 'list what it would draft; write nothing and open nothing', false)
-  .option('--only <keys>', 'limit it to these finding keys, comma-separated (MP-1,MP-2)')
+  .option('--only <keys>', 'limit it to these finding keys, comma-separated, short or full (MP-1,MP-2)')
   .action(async (opts: { site: string; dryRun: boolean; only?: string }) => {
+    // The run reads every finding, so it matches either form itself.
     const only = opts.only
-      ? new Set(opts.only.split(',').map((k) => k.trim().toUpperCase()).filter(Boolean))
+      ? new Set(opts.only.split(',').map((k) => k.trim()).filter(Boolean).map(parseKeyArgument))
       : undefined;
-    if (only && [...only].some((k) => !/^MP-\d+$/.test(k))) fail(`--only takes keys such as MP-1,MP-2; got "${opts.only}".`);
     const { backfillCredentialRefusal, backfillGitHub } = await import('./lib/fix-log-backfill-github.js');
     const refusal = backfillCredentialRefusal(process.env, opts.dryRun);
     if (refusal) fail(refusal);
@@ -2875,19 +2901,22 @@ fixLog
   });
 
 fixLog
-  .command('confirm <key>')
+  .command('confirm')
+  .argument('<key>', KEY_HELP, parseKeyArgument)
   .description(
     "Complete one entry on master with the facts production confirmed, as findingWorkflow does after a verify: open a pull request that touches that entry's confirmed fields only, and merge it when its checks pass. For an entry whose run was past its verify when the step shipped.",
   )
   .option('--site <site>', 'site slug in the findings store', parseFindingSlug('site'), FINDINGS_DEFAULT_SITE)
   .action(async (key: string, opts: { site: string }) => {
-    const short = key.trim().toUpperCase();
-    if (!/^MP-\d+$/.test(short)) fail(`confirm takes a key such as MP-187; got "${key}".`);
-    const { confirmFixLogEntryNow, findFindingByShortKey } = await import('./activities/fix-log-confirm.js');
-    const found = await findFindingByShortKey(ARGUS_REPO, opts.site, short);
-    if (!found) fail(`No finding with key ${short} and a fix pull request in ${opts.site}.`);
+    const { confirmFixLogEntryNow } = await import('./activities/fix-log-confirm.js');
+    const found = await resolveFinding({ repo: ARGUS_REPO, site: opts.site, key });
+    const prUrl = (found.data.links as { pr?: unknown } | undefined)?.pr;
+    // Before its fix a finding has no entry to confirm, whatever its links say.
+    if (typeof prUrl !== 'string' || ['proposed', 'rejected', 'approved'].includes(String(found.data.status))) {
+      fail(`${found.keyShort} (${found.key}) in ${opts.site} has no fix pull request to confirm.`);
+    }
     const line = await confirmFixLogEntryNow(
-      { repo: ARGUS_REPO, findingPath: found!.findingPath, key: short, prUrl: found!.prUrl },
+      { repo: ARGUS_REPO, findingPath: found.findingPath, key: found.keyShort, prUrl: prUrl as string },
       { print: (l) => console.log(`  ${l}`) },
     );
     console.log(`\n  fix log confirmation: ${line}\n`);

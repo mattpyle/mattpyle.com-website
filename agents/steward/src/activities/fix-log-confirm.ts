@@ -281,24 +281,3 @@ export async function confirmFixLogEntryNow(input: FixLogConfirmInput, options: 
   if (!merged.merged) return `left open: ${opened.prUrl}: ${merged.condition}: ${merged.detail}`;
   return `${opened.path} confirmed in ${opened.prUrl}, merged as ${merged.mergeSha.slice(0, 7)}`;
 }
-
-/** The finding file whose `key_short` is `key`, and its fix pull request, from the site's findings index. */
-export async function findFindingByShortKey(
-  repo: string,
-  site: string,
-  key: string,
-): Promise<{ findingPath: string; prUrl: string } | undefined> {
-  const { readFindingsIndex } = await import('./findings.js');
-  const { findingPath } = await import('../lib/findings.js');
-  for (const line of await readFindingsIndex(repo, site)) {
-    if (['proposed', 'rejected', 'approved'].includes(line.status)) continue;
-    const path = findingPath(site, line.key);
-    const file = await readRepoFile(path, 'main', repo);
-    if (!file) continue;
-    const data = parseFrontmatter(file.text).data as Record<string, any>;
-    if (String(data.key_short ?? '').toUpperCase() !== key.toUpperCase()) continue;
-    const prUrl = data.links?.pr;
-    return typeof prUrl === 'string' ? { findingPath: path, prUrl } : undefined;
-  }
-  return undefined;
-}
