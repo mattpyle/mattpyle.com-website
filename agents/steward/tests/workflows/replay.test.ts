@@ -1510,6 +1510,11 @@ test('a run started with its verdict on a site that stops at the verdict replays
  * from before stage 4 can hold these commands, so they guard the next change
  * to the path.
  *
+ * On 2026-11-26 (STW-696) the seven `identity` fields of
+ * `finding-watching.bin` were rewritten to `steward-fixture`, in place of the
+ * recording machine's name. Nothing else in the history changed, and the test
+ * passed before and after.
+ *
  * Probes (2026-11-25), each reverted and re-run green:
  *
  * 1. A `wf.sleep('1 second')` injected before the `watchFinding` call made
