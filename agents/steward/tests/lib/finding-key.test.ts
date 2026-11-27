@@ -26,7 +26,32 @@ test('a full key is returned as typed, with no read', async () => {
   assert.deepEqual(gh.calls, []);
 });
 
-test('a short key resolves to its finding through the site index, in either case', async () => {
+test('a short key is found in one read of the findings folder', async () => {
+  const gh = install();
+  assert.deepEqual(await resolveFindingKey(query(SHORT)), { site: SITE, key: FULL });
+  assert.deepEqual(gh.calls, ['POST /graphql']);
+});
+
+test('a refused folder query falls back to the index and each file it lists', async () => {
+  const gh = install();
+  gh.tree.refuse = 'Resource not accessible by integration';
+  assert.deepEqual(await resolveFindingKey(query(SHORT)), { site: SITE, key: FULL });
+  assert.deepEqual(
+    [...gh.calls].sort(),
+    ['POST /graphql', ...['INDEX', FULL, ...TWINS].map((name) => `GET /contents/sites/${SITE}/findings/${name}.md`)].sort(),
+  );
+  await assert.rejects(resolveFindingKey(query('MP-902')), /MP-902 matches 2 findings/);
+});
+
+test('a truncated file is read on its own, and no other', async () => {
+  const gh = install();
+  const path = `sites/${SITE}/findings/${FULL}.md`;
+  gh.tree.truncated.add(path);
+  assert.deepEqual(await resolveFindingKey(query(SHORT)), { site: SITE, key: FULL });
+  assert.deepEqual(gh.calls, ['POST /graphql', `GET /contents/${path}`]);
+});
+
+test('a short key resolves to its finding, in either case', async () => {
   install();
   assert.deepEqual(await resolveFindingKey(query(SHORT)), { site: SITE, key: FULL });
   assert.deepEqual(await resolveFindingKey(query(SHORT.toLowerCase())), { site: SITE, key: FULL });

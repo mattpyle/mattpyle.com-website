@@ -282,7 +282,7 @@ steward credential rotate temporal-metrics   # issue, store in 1Password, set on
 steward update                   # after a merge: pull master in the main checkout, restart the worker
 ```
 
-A command's `<key>` takes either form of a finding's key: the short one (`MP-187`, any case) or the full one (`ux-more-menu-never-closes--sitewide`). So does `fix-log backfill --only`. A short key is looked up in the `--site` findings, one read per finding, so a full key answers sooner.
+A command's `<key>` takes either form of a finding's key: the short one (`MP-187`, any case) or the full one (`ux-more-menu-never-closes--sitewide`). So does `fix-log backfill --only`. A short key is looked up in the `--site` findings folder, which one GraphQL query reads; a full key needs no lookup.
 
 `steward <verb> --help` prints the real options for each. `agents/steward/console.cmd` starts the console if it is not running and opens the findings page; when a console is running on an older commit than `master`, it replaces that console first. A desktop shortcut to it gives one click.
 
