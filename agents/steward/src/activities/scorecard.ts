@@ -72,28 +72,37 @@ function extractLocs(xml: string): string[] {
   return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].trim());
 }
 
+/** A sitemap that is not there is permanent; every other refusal may pass. */
+function sitemapFailure(message: string, status: number): Error {
+  return status === 404 ? ApplicationFailure.nonRetryable(message, 'SitemapNotFound') : new Error(message);
+}
+
 /**
  * Fetches the live sitemap index and every sitemap it references, returning
  * the full set of indexed HTML URLs (spec §5.4). **Not a hardcoded list** —
  * `@astrojs/sitemap` already excludes drafts, numeric changelog pagination
  * pages, and `.md` variants at build time (astro.config.mjs's `filter`), so
  * whatever this returns is exactly "what's live" by the site's own rules.
+ *
+ * A 404 and an index that names no sitemap are non-retryable: the workflow
+ * retries this read for hours, and neither mends by waiting. Any other answer,
+ * and a network failure, stays retryable.
  */
 export async function resolveAuditUrls(sitemapUrl: string): Promise<string[]> {
   const idxRes = await fetch(sitemapUrl);
   if (!idxRes.ok) {
-    throw new Error(`sitemap index fetch failed: ${sitemapUrl} -> ${idxRes.status}`);
+    throw sitemapFailure(`sitemap index fetch failed: ${sitemapUrl} -> ${idxRes.status}`, idxRes.status);
   }
   const idx = await idxRes.text();
   const subSitemaps = extractLocs(idx);
   if (subSitemaps.length === 0) {
-    throw new Error(`sitemap index ${sitemapUrl} referenced no sitemaps`);
+    throw ApplicationFailure.nonRetryable(`sitemap index ${sitemapUrl} referenced no sitemaps`, 'SitemapEmpty');
   }
 
   const urls = new Set<string>();
   for (const loc of subSitemaps) {
     const res = await fetch(loc);
-    if (!res.ok) throw new Error(`sitemap fetch failed: ${loc} -> ${res.status}`);
+    if (!res.ok) throw sitemapFailure(`sitemap fetch failed: ${loc} -> ${res.status}`, res.status);
     for (const url of extractLocs(await res.text())) urls.add(url);
   }
 
@@ -133,16 +142,24 @@ export interface RunStamp {
  */
 export async function resolveRunStamp(timeZone: string): Promise<RunStamp> {
   const now = new Date();
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  let dtf: Intl.DateTimeFormat;
+  try {
+    dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch (err) {
+    throw ApplicationFailure.nonRetryable(
+      `"${timeZone}" is not a time zone: ${err instanceof Error ? err.message : String(err)}`,
+      'BadTimeZone',
+    );
+  }
   const map: Record<string, string> = {};
   for (const part of dtf.formatToParts(now)) {
     if (part.type !== 'literal') map[part.type] = part.value;
@@ -298,7 +315,15 @@ export async function readPublishedScorecard(): Promise<PublishedScorecard | und
   const base = await defaultBranch();
   const file = await readRepoFile(SCORECARD_RUNS_PATH, base);
   if (!file) return undefined;
-  const runs = JSON.parse(file.text) as ScorecardRunRecord[];
+  let runs: ScorecardRunRecord[];
+  try {
+    runs = JSON.parse(file.text) as ScorecardRunRecord[];
+  } catch (err) {
+    throw ApplicationFailure.nonRetryable(
+      `${SCORECARD_RUNS_PATH} on ${base} does not parse: ${err instanceof Error ? err.message : String(err)}`,
+      'ScorecardRunsMalformed',
+    );
+  }
   if (runs.length === 0) return undefined;
   // `scope` and `tools` come back too: they are half the publish gate (§6's
   // third trigger), not just display fields.

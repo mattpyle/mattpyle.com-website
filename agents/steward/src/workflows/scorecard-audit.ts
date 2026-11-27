@@ -73,6 +73,27 @@ import { scorecardRunShape, type RunShape, type ScorecardMergeShape, type Scorec
  * their archive call. A history recorded after the change holds a marker only
  * where its run took that path.
  *
+ * ## An outage is waited out (STW-680)
+ *
+ * `resolveAuditUrls`, `resolveRunStamp`, `readPublishedScorecard`,
+ * `readScorecardPrChecks` and `mergeScorecardPr` have no attempt limit: 2
+ * seconds, doubling to 15 minutes, bounded by a schedule-to-close of 6 hours
+ * ({@link DURABLE}). A failure no retry mends is non-retryable where it is
+ * thrown and ends the call at once. At the bound the failure takes the path it
+ * always took: a read before the merge leg fails the run after the `/fail`
+ * ping, and the merge leg reports an `error` refusal. A scheduled run's
+ * execution timeout, 12 hours (`SCORECARD_EXECUTION_TIMEOUT` in
+ * `lib/scorecard-schedule.ts`), caps the whole, and the server ends a run there
+ * with no ping.
+ *
+ * Two writes keep their old policies, because a second run of either is not
+ * safe: `publishScorecardRun` (one attempt) and `archiveScorecardRun` (three).
+ *
+ * No `patched` marker: a retry policy and a schedule-to-close timeout are
+ * attributes of the same schedule command, and replay does not compare them
+ * (determinism rule 5). An activity scheduled before the deploy keeps its old
+ * policy on every attempt.
+ *
  * **Replay.** The leg runs only after the publish activity returned a pull
  * request number, a head commit and `committed: true`. A result recorded before
  * the merge leg existed carries none of them, so an old history reads
@@ -251,21 +272,27 @@ export interface ScorecardAuditResult {
   }>;
 }
 
+/** The policy of a call that waits out an outage of the service it calls. */
+const DURABLE = {
+  scheduleToCloseTimeout: '6 hours',
+  retry: { initialInterval: '2 seconds', backoffCoefficient: 2, maximumInterval: '15 minutes' },
+} as const;
+
 const light = {
   // A minute rather than thirty seconds: this fetches the live sitemap index and
   // every sitemap under it, which is a handful of round trips rather than one.
   resolving: wf.proxyActivities<Pick<typeof activities, 'resolveAuditUrls' | 'resolveRunStamp'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '1 minute',
-    retry: { maximumAttempts: 3 },
+    ...DURABLE,
   }),
   // Was 30 seconds when this read a local file. It is two GitHub calls now, so
-  // it gets a network-shaped deadline and keeps its three attempts — a 5xx from
+  // it gets a network-shaped deadline, and it waits out an outage: a 5xx from
   // the API here would otherwise fail the run before it measured anything.
   reading: wf.proxyActivities<Pick<typeof activities, 'readPublishedScorecard'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '2 minutes',
-    retry: { maximumAttempts: 3 },
+    ...DURABLE,
   }),
   // **Two minutes, down from twenty.** The old figure was not about how long
   // publishing takes; it was about how long publishing might have to *wait*.
@@ -278,9 +305,10 @@ const light = {
   // minutes would mean a wedged publish sat undetected for twenty minutes of a
   // run whose whole point is to be finished overnight.
   //
-  // One attempt still, and the same non-retryable set: a rejected credential or
-  // a 422 fails identically on a second try, and the retry that matters here is
-  // the operator re-running the scorecard.
+  // One attempt still, because a second publish of a run is not safe: it takes
+  // its id from the base, so one made after the first PR merged publishes the
+  // run twice, and it force-resets the run's branch under an open PR. The retry
+  // that matters here is the operator re-running the scorecard.
   publishing: wf.proxyActivities<Pick<typeof activities, 'publishScorecardRun'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '2 minutes',
@@ -289,28 +317,28 @@ const light = {
       nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'],
     },
   }),
-  // Three attempts, and that is safe to keep now for a reason worth stating: the
-  // archive write is a *create* with no `sha`, so a retry that follows a commit
-  // the workflow never saw succeed collides, is caught, and takes the next
-  // filename rather than overwriting the record it just wrote.
+  // Three attempts and no more. A retry that follows a commit the activity never
+  // finished reporting overwrites nothing, but it commits a second record under
+  // the next filename, so a long retry would pile them up.
   archiving: wf.proxyActivities<Pick<typeof activities, 'archiveScorecardRun'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '2 minutes',
     retry: { maximumAttempts: 3 },
   }),
-  // The merge leg. The check read is a plain GET, so it keeps three attempts. The
-  // merge keeps three too, and that is safe only because `mergeScorecardPr` is
-  // idempotent: a retry after a lost reply finds the pull request merged from the
-  // run's own commit and returns it as merged.
+  // The merge leg. The check read is a plain GET. The merge may retry as long,
+  // and that is safe only because `mergeScorecardPr` is idempotent: a retry after
+  // a lost reply finds the pull request merged from the run's own commit and
+  // returns it as merged.
   checking: wf.proxyActivities<Pick<typeof activities, 'readScorecardPrChecks'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '1 minute',
-    retry: { maximumAttempts: 3 },
+    ...DURABLE,
   }),
   merging: wf.proxyActivities<Pick<typeof activities, 'mergeScorecardPr'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '2 minutes',
-    retry: { maximumAttempts: 3, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'] },
+    scheduleToCloseTimeout: DURABLE.scheduleToCloseTimeout,
+    retry: { ...DURABLE.retry, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'] },
   }),
   // Alerting. One attempt and a short deadline, because the activity retries the
   // HTTP call itself and never throws — a second *activity* attempt would only

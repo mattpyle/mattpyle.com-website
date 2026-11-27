@@ -151,7 +151,8 @@ test('a firing carries an execution timeout, so a wedged run cannot suppress eve
   // With overlap SKIP and pauseOnFailure off, an execution that never completes
   // (server up, worker dead) would suppress every subsequent firing forever and
   // nothing would report a failure. The timeout is what bounds that.
-  assert.equal(options().action.workflowExecutionTimeout, '2 hours');
+  // Above the 6-hour activity bound, below the 24-hour interval.
+  assert.equal(options().action.workflowExecutionTimeout, '12 hours');
 });
 
 test('the default firing hour is a quiet one, and off the top of the hour', () => {

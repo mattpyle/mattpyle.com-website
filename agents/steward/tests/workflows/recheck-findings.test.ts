@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { Client } from '@temporalio/client';
-import { ApplicationFailure } from '@temporalio/common';
+import { ApplicationFailure, ApplicationFailureCategory } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
@@ -11,6 +11,7 @@ import { recheckFindingsWorkflow } from '../../src/workflows/recheck-findings.js
 import { readFindingsIndex } from '../../src/activities/findings.js';
 import { readRecheckBlock, readSiteHosts, writeFindingRecheck } from '../../src/activities/findings-recheck.js';
 import type { RunFindingChecksInput, RunFindingChecksResult } from '../../src/activities/verify-finding.js';
+import { buildRecheckScheduleOptions } from '../../src/lib/recheck-schedule.js';
 import { findingWorkflowId, parseFindingsIndex, type OpenFindingWorkflow } from '../../src/lib/findings.js';
 import { checkUrls } from '../../src/lib/verify-checks.js';
 import { judgeWatch, summariseRecheck, WATCH_STALE_AFTER_MS, type PendingWatch, type WatchRun } from '../../src/lib/findings-recheck.js';
@@ -23,8 +24,8 @@ import { judgeWatch, summariseRecheck, WATCH_STALE_AFTER_MS, type PendingWatch, 
  * and fails to measure when it has `/down`.
  *
  * One test server per test, and one result awaited per test, as
- * `agents/steward/CLAUDE.md` asks. A plain client: nothing here needs time to
- * move past a retry.
+ * `agents/steward/CLAUDE.md` asks. A plain client, except where a test has to
+ * skip time past a retry.
  */
 
 const QUEUE = 'steward-findings';
@@ -457,3 +458,59 @@ test('a watch is aged by its last attempt, and a stale one is stale whatever it 
   assert.equal(judge({ lastCompletedAt: at(WATCH_STALE_AFTER_MS), failureType: 'ChecksUnreadable' }), 'watch stale');
 });
 
+
+test('a permanent failure of the first read ends it at once and fails the run', async () => {
+  github = installFakeGitHub({ seed: seed(), defaultBranch: 'main' });
+  let reads = 0;
+  const { activities: acts, pings } = activities([], {
+    readSiteHosts: async () => {
+      reads += 1;
+      throw ApplicationFailure.nonRetryable('GitHub rejected the credential (401).', 'AuthError');
+    },
+  });
+  await assert.rejects(run(acts), (err: Error) => err.name === 'WorkflowFailedError');
+
+  assert.equal(reads, 1);
+  assert.equal(pings[0]!.shape.ok, false);
+});
+
+/** The first attempt that runs more than an hour after the first: the waits before it add up to 3722 seconds. */
+const AFTER_AN_HOUR = 13;
+
+/** The execution timeout the Schedule gives a firing. */
+const SCHEDULED_TIMEOUT = buildRecheckScheduleOptions({ taskQueue: QUEUE, input: { repo: REPO, site: SITE } }).action.workflowExecutionTimeout;
+
+test('a first read that GitHub fails for an hour is waited out, and the scheduled run completes', async () => {
+  github = installFakeGitHub({ seed: seed(['no-block']), defaultBranch: 'main' });
+  let reads = 0;
+  const { activities: acts, pings } = activities([], {
+    readSiteHosts: async (input: Parameters<typeof readSiteHosts>[0]) => {
+      reads += 1;
+      if (reads < AFTER_AN_HOUR) {
+        throw ApplicationFailure.create({ message: 'GitHub answered 500.', category: ApplicationFailureCategory.BENIGN });
+      }
+      return readSiteHosts(input);
+    },
+  });
+  const worker = await Worker.create({
+    connection: env.nativeConnection,
+    workflowBundle: await workflowBundle(),
+    activities: acts,
+    taskQueue: QUEUE,
+  });
+  // The environment's client, so the waits between attempts are skipped.
+  const result = await worker.runUntil(
+    bounded(
+      env.client.workflow.execute(recheckFindingsWorkflow, {
+        workflowId: `recheck/${SITE}/outage`,
+        taskQueue: QUEUE,
+        args: [{ repo: REPO, site: SITE }],
+        workflowExecutionTimeout: SCHEDULED_TIMEOUT,
+      }),
+    ),
+  );
+
+  assert.equal(reads, AFTER_AN_HOUR);
+  assert.deepEqual(result.rows.map((row) => row.outcome), ['no checks']);
+  assert.deepEqual(pings.map((ping) => ping.shape.ok), [true]);
+});

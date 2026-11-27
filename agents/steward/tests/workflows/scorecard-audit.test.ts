@@ -1,4 +1,7 @@
 import { test, before, after } from 'node:test';
+import { ApplicationFailure, Context } from '@temporalio/activity';
+import { ApplicationFailureCategory } from '@temporalio/common';
+import { buildScorecardScheduleOptions } from '../../src/lib/scorecard-schedule.js';
 import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
@@ -983,6 +986,69 @@ test('a run that throws still signals, and still fails', async () => {
 
   assert.deepEqual(signals.map((s) => [s.signal, s.ok]), [['nightly-scorecard', false]]);
   assert.match(signals[0].summary, /shrank: 3 URL\(s\) vs 18/);
+});
+
+test('a permanent failure of a read ends it at once and fails the run', async () => {
+  let reads = 0;
+  const { activities, signals } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(3),
+    readPublishedScorecard: async () => {
+      reads += 1;
+      throw ApplicationFailure.nonRetryable('the run-log does not parse', 'ScorecardRunsMalformed');
+    },
+  });
+  await assertWorkflowFails(
+    () =>
+      withWorker(activities, () =>
+        env.client.workflow.execute(scorecardAuditWorkflow, {
+          workflowId: 'sc-permanent-read',
+          taskQueue: QUEUE,
+          args: [baseInput({ triggeredBy: 'schedule' })],
+        }),
+      ),
+    /Activity task failed/,
+  );
+
+  assert.equal(reads, 1);
+  assert.match(signals[0]!.summary, /does not parse/);
+  assert.deepEqual(signals.map((x) => [x.signal, x.ok]), [['nightly-scorecard', false]]);
+});
+
+test('a read that GitHub fails for two hours is waited out, and the scheduled run completes', async () => {
+  // The first attempt that runs more than two hours after the first: the waits before it add up to 7322
+  // seconds. Past two hours so that the old 2-hour execution timeout would end the run first.
+  const afterTwoHours = 17;
+  let reads = 0;
+  const { activities, signals } = mockActivities({
+    resolveAuditUrls: async () => urlsOfLength(18),
+    readPublishedScorecard: async () => {
+      reads = Context.current().info.attempt;
+      if (reads < afterTwoHours) {
+        throw ApplicationFailure.create({ message: 'GitHub answered 500.', category: ApplicationFailureCategory.BENIGN });
+      }
+      return PUBLISHED_18;
+    },
+  });
+  const input = baseInput({ maxAgeDays: 100_000, triggeredBy: 'schedule' });
+  // The execution timeout the Schedule gives a firing.
+  const { workflowExecutionTimeout } = buildScorecardScheduleOptions({
+    at: { hour: 3, minute: 30 },
+    timeZone: input.timeZone,
+    taskQueue: QUEUE,
+    input,
+  }).action;
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-outage-read',
+      taskQueue: QUEUE,
+      args: [input],
+      workflowExecutionTimeout,
+    }),
+  );
+
+  assert.equal(reads, afterTwoHours);
+  assert.ok(result.record.id);
+  assert.equal(signals[0]!.ok, true);
 });
 
 test('a monitoring service that cannot be reached does not fail the run', async () => {
