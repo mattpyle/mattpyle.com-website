@@ -242,3 +242,13 @@ test('a definition list that runs to prose is left to the converter', () => {
   assert.equal(/^-\s+Queued means queued:/m.test(markdown), false);
   assert.ok(markdown.includes(prose));
 });
+
+test('a link to the page own markdown file is dropped', () => {
+  const head = '<link rel="alternate" type="text/markdown" href="https://www.mattpyle.com/page.md">';
+  const markdown = pageToMarkdown(
+    page('<h1>Page</h1><p>Body. <a href="/page.md">view markdown</a> <a href="/other.md">other</a></p>', head)
+  );
+  assert.equal(markdown.includes('](/page.md)'), false);
+  assert.equal(markdown.includes('view markdown'), false);
+  assert.match(markdown, /\[other\]\(\/other\.md\)/);
+});

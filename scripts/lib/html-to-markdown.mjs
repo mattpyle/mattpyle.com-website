@@ -284,6 +284,35 @@ function listFactLists(root) {
   }
 }
 
+// The page's own markdown file, read from its `<link rel="alternate" type="text/markdown">`.
+// A link to it inside the twin leads nowhere, so `dropSelfLinks` removes it.
+function ownMarkdownPath(html) {
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    if (!/\btype="text\/markdown"/i.test(tag)) continue;
+    const href = tag.match(/\bhref="([^"]*)"/i)?.[1];
+    if (!href) continue;
+    try {
+      return new URL(decodeEntities(href), 'https://placeholder.invalid').pathname;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function dropSelfLinks(root, path) {
+  if (!path) return;
+  for (const anchor of asArray(root.getElementsByTagName('a'))) {
+    const href = anchor.getAttribute('href');
+    if (!href) continue;
+    try {
+      if (new URL(href, 'https://placeholder.invalid').pathname === path) anchor.remove();
+    } catch {
+      // not a URL: keep it
+    }
+  }
+}
+
 function prune(node) {
   for (const child of asArray(node.children)) {
     if (isDroppable(child)) child.remove();
@@ -319,6 +348,7 @@ export function pageToMarkdown(html) {
   const document = domino.createDocument(`<div id="main-content">${main}</div>`, true);
   const root = document.getElementById('main-content');
   prune(root);
+  dropSelfLinks(root, ownMarkdownPath(html));
   hoistBlockLinks(root);
   listRowHeaderTables(root);
   captionsAheadOfTables(root);
