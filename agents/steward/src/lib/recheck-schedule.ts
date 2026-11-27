@@ -15,6 +15,12 @@ import type { ScorecardScheduleClientLike } from './scorecard-schedule.js';
  * A sibling of `scorecard-schedule.ts`, with the same shape: a calendar spec,
  * `overlap: SKIP`, frozen arguments and a `trigger` that cannot bypass SKIP.
  * Client-side only: nothing here runs in a workflow.
+ *
+ * **Why a run may last 12 hours** ({@link RECHECK_EXECUTION_TIMEOUT}). The
+ * run waits out an outage, and one activity may retry for 6 hours, so the
+ * execution timeout has to be above that: the server ends a run at it with no
+ * workflow code run, so no `/fail` ping. It is below the 24 hours between
+ * firings, so `SKIP` cannot swallow the next one.
  */
 
 export function recheckScheduleId(site: string): string {
@@ -33,6 +39,9 @@ export const RECHECK_SCHEDULE_TIMEZONE = 'America/Vancouver';
 
 /** A firing missed during an outage is taken late within six hours, or dropped for the next day's. */
 export const RECHECK_SCHEDULE_CATCHUP_WINDOW = '6 hours';
+
+/** The longest a recheck may stay open, scheduled or started by hand. The module docblock says why. */
+export const RECHECK_EXECUTION_TIMEOUT = '12 hours';
 
 export const RECHECK_SCHEDULE_ACTIONS = ['create', 'describe', 'pause', 'unpause', 'trigger'] as const;
 export type RecheckScheduleAction = (typeof RECHECK_SCHEDULE_ACTIONS)[number];
@@ -64,7 +73,7 @@ export function buildRecheckScheduleOptions(params: RecheckScheduleParams): Sche
       // each. The timeout turns a run no worker picks up into a failed action
       // instead of a Running execution that SKIP would let suppress every
       // later firing.
-      workflowExecutionTimeout: '1 hour',
+      workflowExecutionTimeout: RECHECK_EXECUTION_TIMEOUT,
     },
     policies: {
       overlap: ScheduleOverlapPolicy.SKIP,

@@ -81,7 +81,10 @@ import { scorecardRunShape, type RunShape, type ScorecardMergeShape, type Scorec
  * ({@link DURABLE}). A failure no retry mends is non-retryable where it is
  * thrown and ends the call at once. At the bound the failure takes the path it
  * always took: a read before the merge leg fails the run after the `/fail`
- * ping, and the merge leg reports an `error` refusal.
+ * ping, and the merge leg reports an `error` refusal. A scheduled run's
+ * execution timeout, 12 hours (`SCORECARD_EXECUTION_TIMEOUT` in
+ * `lib/scorecard-schedule.ts`), caps the whole, and the server ends a run there
+ * with no ping.
  *
  * Two writes keep their old policies, because a second run of either is not
  * safe: `publishScorecardRun` (one attempt) and `archiveScorecardRun` (three).

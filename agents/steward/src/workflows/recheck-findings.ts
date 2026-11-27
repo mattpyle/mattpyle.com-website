@@ -86,8 +86,10 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * ({@link DURABLE}). A permanent type ends a call at once. At the bound the
  * failure takes the path it always took: a read fails the run after the `/fail`
  * ping, and a write is a `write failed` row. The bound is one activity's, so
- * writes that each wait it out add up. `runFindingChecks` and the ping keep
- * their own policies.
+ * writes that each wait it out add up. The run's execution timeout, 12 hours
+ * (`RECHECK_EXECUTION_TIMEOUT` in `lib/recheck-schedule.ts`), caps the whole,
+ * and the server ends a run there with no ping. `runFindingChecks` and the ping
+ * keep their own policies.
  *
  * No `patched` marker: a retry policy and a schedule-to-close timeout are
  * attributes of the same schedule command, and replay does not compare them

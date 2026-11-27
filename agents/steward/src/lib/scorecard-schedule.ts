@@ -33,6 +33,13 @@ import { scorecardAuditWorkflow, type ScorecardAuditInput } from '../workflows/s
  * (audit-stack-alerting-and-monitoring card): the run pings a dead-man's-switch
  * check on success and fails it on a bad result, so a silently dead container
  * is an email rather than a gap somebody notices in the run-log's dates.
+ *
+ * **Why a firing may last 12 hours** ({@link SCORECARD_EXECUTION_TIMEOUT}). The
+ * run waits out an outage, and one activity may retry for 6 hours, so the
+ * execution timeout has to be above that: the server ends a run at it with no
+ * workflow code run, so no `/fail` ping. It is below the 24 hours between
+ * firings, so `SKIP` cannot swallow the next one. A healthy run is about 15
+ * minutes. `steward scorecard`, started by hand, sets no execution timeout.
  */
 
 /** The one Schedule this system owns. Singular by design — one site, one audit. */
@@ -48,6 +55,9 @@ export const SCORECARD_SCHEDULE_ID = 'steward-scorecard-daily';
  * `steward-scorecard-scheduled-2026-08-09T...`.
  */
 export const SCORECARD_SCHEDULE_WORKFLOW_ID = 'steward-scorecard-scheduled';
+
+/** The longest a scheduled run may stay open. The module docblock says why. */
+export const SCORECARD_EXECUTION_TIMEOUT = '12 hours';
 
 /**
  * Default firing time, local to {@link ScorecardScheduleParams.timeZone}.
@@ -179,15 +189,8 @@ export function buildScorecardScheduleOptions(params: ScorecardScheduleParams): 
       // nothing fails. The timeout turns the wedge into a failed action the
       // next firing recovers from.
       //
-      // **Kept at 2 hours even though the publish leg's own deadline fell from
-      // 20 minutes to 2.** A healthy run is ~15 minutes, so 2 hours looks
-      // generous, but the figure that has to fit here is the pathological one:
-      // ~18 pages each allowed two attempts at a 5-minute `auditLiveUrl`. That
-      // worst case already exceeded the old 2 hours and tightening toward the
-      // healthy run would start killing real, slow runs to detect a wedge a few
-      // minutes sooner. Detection is the alerting card's job, not this
-      // constant's.
-      workflowExecutionTimeout: '2 hours',
+      // Why 12 hours: see SCORECARD_EXECUTION_TIMEOUT.
+      workflowExecutionTimeout: SCORECARD_EXECUTION_TIMEOUT,
     },
     policies: {
       // Never stack a second audit behind a slow one. The audit takes ~12

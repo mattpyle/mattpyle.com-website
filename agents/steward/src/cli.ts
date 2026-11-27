@@ -138,6 +138,7 @@ import {
 } from './workflows/verify-finding.js';
 import {
   RECHECK_SCHEDULE_ACTIONS,
+  RECHECK_EXECUTION_TIMEOUT,
   buildRecheckScheduleOptions,
   isRecheckScheduleAction,
   runRecheckScheduleAction,
@@ -2207,7 +2208,7 @@ finding
         workflowId,
         taskQueue: QUEUE_FINDINGS,
         args: [{ repo: ARGUS_REPO, site: opts.site }],
-        workflowExecutionTimeout: '1 hour',
+        workflowExecutionTimeout: RECHECK_EXECUTION_TIMEOUT,
       });
       for (const row of result.rows) {
         const name = row.keyShort ? `${row.keyShort} ${row.key}` : row.key;
