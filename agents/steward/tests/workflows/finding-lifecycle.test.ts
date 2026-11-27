@@ -856,10 +856,10 @@ test('three bounds, the rest: after the second the run holds no slot and says wh
     assert.equal(state.step, 'waiting-fix');
     assert.equal(state.fixAttempts, 2);
     assert.equal(state.issueUrl, ISSUE_2);
-    assert.match(
-      state.lastFixError ?? '',
-      new RegExp(`^${NO_PR(ISSUE_2).replace(/[.\/]/g, '\\$&')} 2 fix issues in a row got no PR, so a third opens at \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC\\.$`),
-    );
+    const rest = state.lastFixError ?? '';
+    const said = `${NO_PR(ISSUE_2)} 2 fix issues in a row got no PR, so a third opens at `;
+    assert.ok(rest.startsWith(said), rest);
+    assert.match(rest.slice(said.length), /^\d{4}-\d\d-\d\d \d\d:\d\d UTC\.$/);
     assert.equal(mocks.seen.issues.length, 2, 'the third issue waits for the rest');
     // The slot went back to the dispatcher before the rest: it holds nobody.
     assert.deepEqual(mocks.seen.slots, [1, 2]);
