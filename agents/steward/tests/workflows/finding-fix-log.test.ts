@@ -20,7 +20,7 @@ import {
   type FixIssue,
   type FixPrOutcome,
 } from '../../src/activities/findings.js';
-import { commitFixLogEntry, draftFixLogEntryWith, type DraftFixLogEntryActivityInput } from '../../src/activities/fix-log.js';
+import { PR_HEAD_SETTLE, commitFixLogEntry, draftFixLogEntryWith, type DraftFixLogEntryActivityInput } from '../../src/activities/fix-log.js';
 import { BYPASS_SECRET_ENV, runFindingChecks } from '../../src/activities/verify-finding.js';
 import { BRIEF_PATH } from '../../src/lib/fix-log-backfill.js';
 import { findingWorkflowId, type FindingVerdict } from '../../src/lib/findings.js';
@@ -78,6 +78,9 @@ let client: Client;
 let github: FakeGitHub | undefined;
 const page = { text: FAILING };
 const previous = { fetch: globalThis.fetch, secret: process.env[BYPASS_SECRET_ENV] };
+
+// The fake PR head follows the branch only through `follow`, so the commit's wait for it is one read here.
+Object.assign(PR_HEAD_SETTLE, { tries: 1, intervalMs: 0 });
 
 beforeEach(async () => {
   env = await createLocalEnv();

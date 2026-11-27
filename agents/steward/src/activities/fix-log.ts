@@ -204,6 +204,8 @@ export interface CommitFixLogEntryResult {
   parent: string | null;
   /** `posted`, `none` (no notes, or already on the PR), or why the comment failed. */
   notes: string;
+  /** When committed: whether the PR showed the commit as its head before this returned. */
+  headSeen?: boolean;
 }
 
 /** The notes comment's text. */
@@ -249,5 +251,31 @@ export async function commitFixLogEntry(input: CommitFixLogEntryInput): Promise<
     return { state: 'moved', sha: null, parent: null, notes: 'none' };
   }
   log.info({ activity: 'commitFixLogEntry', pr: input.prUrl, sha, file: entryFile(input.key) }, 'fix log entry committed');
-  return { state: 'committed', sha, parent, notes: await postNotes(input) };
+  const headSeen = await awaitPrHead(pull, sha);
+  if (!headSeen) {
+    log.warn({ activity: 'commitFixLogEntry', pr: input.prUrl, sha }, 'the PR head did not show the entry commit; the merge wait may test it once');
+  }
+  return { state: 'committed', sha, parent, notes: await postNotes(input), headSeen };
+}
+
+/**
+ * How long `commitFixLogEntry` waits for the PR to show its commit as head. Mutable
+ * so a test can shorten it.
+ *
+ * Why: GitHub's pull request object lags a ref update made through the Git Data API.
+ * On 2026-11-27 (finding MP-187, PR 822) the pulls API still returned the old head
+ * 0.65 seconds after the ref moved, so the merge wait's first poll read it as a push
+ * and tested Steward's own commit. Waiting here keeps the merge wait's `head !==
+ * retestAfter` test as it is, for the fixer's pushes too.
+ */
+export const PR_HEAD_SETTLE = { tries: 10, intervalMs: 1000 };
+
+/** Reads the PR until its head is `sha`, a few short tries. False when it never is; the merge wait then tests the commit once. */
+async function awaitPrHead(pull: PullFacts, sha: string): Promise<boolean> {
+  for (let i = 0; i < PR_HEAD_SETTLE.tries; i++) {
+    const now = await gh(`/repos/${pull.repo}/pulls/${pull.number}`);
+    if (String(now.head?.sha ?? '') === sha) return true;
+    if (i < PR_HEAD_SETTLE.tries - 1) await new Promise((resolve) => setTimeout(resolve, PR_HEAD_SETTLE.intervalMs));
+  }
+  return false;
 }
