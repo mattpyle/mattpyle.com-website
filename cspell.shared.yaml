@@ -54,6 +54,10 @@ version: "0.2"
 language: en-GB
 
 words:
+  - auditspends
+  - claudebot
+  - searchbot
+  - stewardholds
   # --- Standards, protocols, acronyms ---
   - a11y
   - AEO

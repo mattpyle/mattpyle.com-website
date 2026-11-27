@@ -2861,6 +2861,10 @@ fixLog
       { siteRepo: GITHUB_REPO, findingsRepo: ARGUS_REPO, site: opts.site, dryRun: opts.dryRun, only },
       { github: backfillGitHub(), send: opts.dryRun ? undefined : fixLogSend(), print: (line) => console.log(`  ${line}`) },
     );
+    if (report.stopped) {
+      console.log(`\n  The run stopped at ${report.stopped}\n  Mend the credential and run it again; it resumes from the branch.\n`);
+      process.exit(1);
+    }
     if (report.failed.length > 0) {
       console.log(`\n  ${report.failed.length} draft${report.failed.length === 1 ? '' : 's'} failed: ${report.failed.map((f) => f.key).join(', ')}. A second run retries them.\n`);
       process.exit(1);

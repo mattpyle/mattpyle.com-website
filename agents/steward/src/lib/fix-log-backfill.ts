@@ -1,5 +1,11 @@
 import { ApplicationFailure } from '@temporalio/activity';
-import { draftFixLogEntry, type DraftFixLogEntryResult } from './fix-log-draft.js';
+import {
+  draftFixLogEntry,
+  type DraftFixLogEntryResult,
+  type DraftUsage,
+  type ReviewProblem,
+  type TokenUsage,
+} from './fix-log-draft.js';
 import { findingPath, findingsIndexPath, parseFindingsIndex } from './findings.js';
 import { ENTRIES_PATH, entryFile, entryPath, findingFacts } from './fix-log-rules.js';
 import { parseFrontmatter } from './frontmatter.js';
@@ -19,6 +25,13 @@ import type { FixLogSend } from './llm.js';
  * or `reopened` and has a merged fix pull request. A merged fix whose finding is not yet
  * decided is listed and skipped; the step in `findingWorkflow` covers it later. The facts
  * are as they are after the merge, so a confirmed fix carries `verified` and its checks.
+ *
+ * THE REVIEW. Each draft is reviewed by a second model pass (`fix-log-draft.ts`). A
+ * draft the reviewer still objects to is committed with its notes, and the pull request
+ * body lists them per entry, so a person reads only those.
+ *
+ * A CREDENTIAL FAILURE STOPS THE RUN. A missing model key or a 401 fails every entry the
+ * same way, so the run stops at the first, says so, and lists the entries not tried.
  *
  * Every GitHub call goes through {@link BackfillGitHub}, so the tests run it in memory.
  */
@@ -63,6 +76,8 @@ export interface BackfillDeps {
   github: BackfillGitHub;
   /** The model, or undefined for a dry run. */
   send?: FixLogSend;
+  /** The reviewer's model. Defaults to `send`. */
+  review?: FixLogSend;
   print: (line: string) => void;
 }
 
@@ -70,7 +85,9 @@ export interface BackfillDrafted {
   key: string;
   slug: string;
   attempts: number;
-  usage: { inputTokens: number; outputTokens: number };
+  reviewRounds: number;
+  reviewNotes: ReviewProblem[];
+  usage: DraftUsage;
   commit?: string;
 }
 
@@ -78,14 +95,19 @@ export interface BackfillReport {
   /** Keys that would be drafted (a dry run) or were attempted. */
   wanted: string[];
   drafted: BackfillDrafted[];
-  failed: Array<{ key: string; reason: string; usage?: { inputTokens: number; outputTokens: number } }>;
+  failed: Array<{ key: string; reason: string; usage?: DraftUsage }>;
   /** Merged fixes whose finding is not yet `resolved` or `reopened`. */
   undecided: string[];
   /** Fixes that already have an entry on `master` or the branch. */
   existing: string[];
   prUrl?: string;
-  usage: { inputTokens: number; outputTokens: number };
+  /** The writer's and the reviewer's tokens, counted apart. */
+  usage: DraftUsage;
   correctionTurns: number;
+  /** Why the run stopped early: a credential failure. */
+  stopped?: string;
+  /** The keys a stopped run did not try. */
+  notTried: string[];
 }
 
 const LAUNCH_SET = ['resolved', 'reopened'];
@@ -129,19 +151,54 @@ async function findingKeys(github: BackfillGitHub, repo: string, site: string): 
   return parseFindingsIndex(index).filter((line) => !BEFORE_A_FIX.includes(line.status)).map((line) => line.key);
 }
 
-const tokens = (u: { inputTokens: number; outputTokens: number }): string =>
-  `${u.inputTokens} in, ${u.outputTokens} out`;
+const tokens = (u: TokenUsage): string => `${u.inputTokens} in, ${u.outputTokens} out`;
+const splitTokens = (u: DraftUsage): string => `writer ${tokens(u.writer)}; reviewer ${tokens(u.reviewer)}`;
+
+function addUsage(into: DraftUsage, u: DraftUsage): void {
+  for (const side of ['writer', 'reviewer'] as const) {
+    into[side].inputTokens += u[side].inputTokens;
+    into[side].outputTokens += u[side].outputTokens;
+  }
+}
+
+/** A failure no other entry would escape: no model key, or a key the model refused as unauthorised. */
+export function isCredentialFailure(err: unknown): boolean {
+  if (!(err instanceof ApplicationFailure)) return false;
+  if (err.type === 'ModelKeyMissing') return true;
+  return err.type === 'ModelRequestRefused' && (err.details?.[0] as { status?: number } | undefined)?.status === 401;
+}
+
+/** A table cell holds no pipe and no line break. */
+const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+
+/** The reviewer's objections a person reads before merging, per entry. */
+function reviewNotesSection(drafted: BackfillDrafted[]): string[] {
+  const noted = drafted.filter((d) => d.reviewNotes.length > 0);
+  if (noted.length === 0) return [];
+  const lines = ['## Review notes', '', 'The reviewer still objected to these after its last round. Read and mend each before merging.', ''];
+  for (const d of noted) {
+    lines.push(`### \`${entryFile(d.key)}\``, '');
+    for (const n of d.reviewNotes) lines.push(`1. "${cell(n.quote)}" (${cell(n.rule)}): ${cell(n.reason)}`);
+    lines.push('');
+  }
+  return lines;
+}
 
 function prBody(report: BackfillReport): string {
   return [
     'The fix log entries for merged fixes that had none, drafted by Steward from each finding and its fix pull request, under `agents/steward/briefs/fix-log.md`.',
     '',
-    '| Entry | Model turns | Tokens |',
-    '| --- | --- | --- |',
-    ...report.drafted.map((d) => `| \`${entryFile(d.key)}\` | ${d.attempts} | ${tokens(d.usage)} |`),
+    '| Entry | Writer turns | Reviews | Review notes | Writer tokens | Reviewer tokens |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...report.drafted.map(
+      (d) => `| \`${entryFile(d.key)}\` | ${d.attempts} | ${d.reviewRounds} | ${d.reviewNotes.length} | ${tokens(d.usage.writer)} | ${tokens(d.usage.reviewer)} |`,
+    ),
     '',
+    ...reviewNotesSection(report.drafted),
     ...(report.undecided.length ? [`Not drafted, the finding not yet resolved: ${report.undecided.join(', ')}.`, ''] : []),
-    ...(report.failed.length ? [`Not drafted, the draft failed its checks: ${report.failed.map((f) => f.key).join(', ')}.`, ''] : []),
+    ...(report.failed.length ? [`Not drafted, the draft failed: ${report.failed.map((f) => f.key).join(', ')}.`, ''] : []),
+    ...(report.stopped ? [`The run stopped early: ${report.stopped}`, ''] : []),
+    ...(report.notTried.length ? [`Not tried: ${report.notTried.join(', ')}.`, ''] : []),
     'Read each entry before merging. A correction belongs in the brief as well as the entry.',
   ].join('\n');
 }
@@ -156,8 +213,9 @@ export async function runFixLogBackfill(options: BackfillOptions, deps: Backfill
     failed: [],
     undecided: [],
     existing: [],
-    usage: { inputTokens: 0, outputTokens: 0 },
+    usage: { writer: { inputTokens: 0, outputTokens: 0 }, reviewer: { inputTokens: 0, outputTokens: 0 } },
     correctionTurns: 0,
+    notTried: [],
   };
 
   // The brief from master only, never from a pull request's head.
@@ -213,24 +271,29 @@ export async function runFixLogBackfill(options: BackfillOptions, deps: Backfill
   }
 
   const taken = { titles: [...entries.titles], slugs: [...entries.slugs] };
-  for (const c of candidates) {
+  for (const [i, c] of candidates.entries()) {
     let draft: DraftFixLogEntryResult;
     try {
       const diff = await github.pullRequestDiff(options.siteRepo, c.pr.number);
       draft = await draftFixLogEntry(
         { finding: { key: c.key, text: c.text }, pr: { ...c.pr, diff }, brief, taken },
-        { send: deps.send! },
+        { send: deps.send!, ...(deps.review ? { review: deps.review } : {}) },
       );
     } catch (err) {
-      const usage = err instanceof ApplicationFailure ? (err.details?.[0] as { usage?: BackfillDrafted['usage'] } | undefined)?.usage : undefined;
-      if (usage) {
-        report.usage.inputTokens += usage.inputTokens;
-        report.usage.outputTokens += usage.outputTokens;
-        report.correctionTurns += 2;
+      const details = err instanceof ApplicationFailure ? (err.details?.[0] as { usage?: DraftUsage; attempts?: number } | undefined) : undefined;
+      if (details?.usage) {
+        addUsage(report.usage, details.usage);
+        report.correctionTurns += (details.attempts ?? 1) - 1;
       }
       const reason = err instanceof Error ? err.message : String(err);
-      report.failed.push({ key: c.key, reason, ...(usage ? { usage } : {}) });
+      report.failed.push({ key: c.key, reason, ...(details?.usage ? { usage: details.usage } : {}) });
       print(`  ${c.key}: failed. ${reason}`);
+      if (isCredentialFailure(err)) {
+        report.stopped = `a credential failure on ${c.key}: ${reason}`;
+        report.notTried = candidates.slice(i + 1).map((n) => n.key);
+        print(`Stopped: a credential failure. Not tried: ${report.notTried.join(', ') || 'none'}.`);
+        break;
+      }
       continue;
     }
     // A second writer may have put the file there since the listing: never overwrite.
@@ -247,14 +310,24 @@ export async function runFixLogBackfill(options: BackfillOptions, deps: Backfill
     });
     taken.titles.push(draft.title);
     taken.slugs.push(draft.slug);
-    report.drafted.push({ key: c.key, slug: draft.slug, attempts: draft.attempts, usage: draft.usage, commit });
-    report.usage.inputTokens += draft.usage.inputTokens;
-    report.usage.outputTokens += draft.usage.outputTokens;
+    report.drafted.push({
+      key: c.key,
+      slug: draft.slug,
+      attempts: draft.attempts,
+      reviewRounds: draft.reviewRounds,
+      reviewNotes: draft.reviewNotes,
+      usage: draft.usage,
+      commit,
+    });
+    addUsage(report.usage, draft.usage);
     report.correctionTurns += draft.attempts - 1;
-    print(`  ${c.key}: ${draft.path}, ${draft.attempts} model turn${draft.attempts === 1 ? '' : 's'}, ${tokens(draft.usage)} tokens.`);
+    const notes = draft.reviewNotes.length ? `, ${draft.reviewNotes.length} review note${draft.reviewNotes.length === 1 ? '' : 's'}` : '';
+    print(
+      `  ${c.key}: ${draft.path}, ${draft.attempts} writer turn${draft.attempts === 1 ? '' : 's'}, ${draft.reviewRounds} review${draft.reviewRounds === 1 ? '' : 's'}${notes}, ${splitTokens(draft.usage)} tokens.`,
+    );
   }
 
-  print(`Tokens in total: ${tokens(report.usage)}. Correction turns: ${report.correctionTurns}.`);
+  print(`Tokens in total: ${splitTokens(report.usage)}. Correction turns: ${report.correctionTurns}.`);
   if (report.drafted.length > 0 || branchHead) {
     report.prUrl = await github.openOrUpdatePr(options.siteRepo, {
       branch: BACKFILL_BRANCH,

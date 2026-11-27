@@ -21,6 +21,7 @@ Use only facts from those sources. When a source does not say something, leave i
 3. Aim for 40 to 65 characters.
 4. No wordplay, no question, no "the fix that…", no colon-joined halves.
 5. It must stand alone as one row of an index, with no lead beside it.
+6. Open with the page's name, not its path: "The About page", not "/about".
 
 Good: "The WebMCP post sent readers to its tools through a redirect".
 
@@ -50,6 +51,7 @@ Rules for the form:
 4. The before is what was observed when the problem was found, unless a measured value exists. The after is the value on production after the fix. For a fix confirmed by its deploy, it is what the merged change does.
 5. Add no fact the finding and the pull request do not hold.
 6. Set `visual: true` and `screen` when something visible on a page changed.
+7. In "N of M", M counts things that exist on the site. It never counts the items the fix added or the pages a check sampled.
 
 ## The story
 
@@ -62,9 +64,11 @@ Two to five short paragraphs of plain prose, in this order:
 
 Write more detail than the title and lead carry. A reader who wants only the story should understand it without the measures.
 
+Do not say how the fault looked, sounded or reflected on the site. State what the reader could not do.
+
 Where the finding concerns how an agent reads the site, say what the agent got wrong or could not do. That is the effect that matters most. Use the finding's own account, and add nothing to it.
 
-State no intent and no future work. The story says what is true on production now.
+State no intent and no future work. For a fix from the last week, the story says what is true on production now. For a fix older than a week, write the state at the time in the past tense, and claim nothing about production today.
 
 ## Rules for every field
 
