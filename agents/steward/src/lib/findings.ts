@@ -1329,11 +1329,15 @@ export function pendingActivityLine(info: PendingActivitySummary): string | null
  * The step line of `steward finding status`. A watching run (stage 4) ends at
  * no verdict, so it says what it watches rather than "stop after verdict".
  */
-export function stepLine(state: { step?: string; stopAfter?: string; watchingSince?: string | null }): string | null {
+export function stepLine(state: { step?: string; stopAfter?: string; watchingSince?: string | null; lookRun?: string | null }): string | null {
   if (!state.step) return null;
   if (state.step === 'watching') {
     const since = state.watchingSince ? `, since ${state.watchingSince}` : '';
     return `step: watching  (measures production daily until the fix is live${since})`;
+  }
+  // Stage 5: Argus saw it fixed, and the run writes it resolved.
+  if (state.step === 'recording-look') {
+    return `step: recording-look  (writes Argus's look${state.lookRun ? ` ${state.lookRun}` : ''} as resolved, then ends)`;
   }
   return `step: ${state.step}  (stop after ${state.stopAfter ?? 'verdict'})`;
 }

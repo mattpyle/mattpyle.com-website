@@ -5,13 +5,15 @@ import { parseFrontmatter } from '../lib/frontmatter.js';
 import { readRepoFile } from '../lib/github-contents.js';
 import { authRetryable } from '../lib/github.js';
 import { log } from '../lib/logger.js';
-import { siteConfigPath, type Verification } from '../lib/findings.js';
+import { findingsIndexPath, siteConfigPath, type Verification } from '../lib/findings.js';
 import { vancouverDay } from '../lib/findings-recheck.js';
 import { validateVerifyBlock, type CheckRunner, type VerifyCheckResult } from '../lib/verify-checks.js';
 import { siteHosts, writeFindingRecheck, type WriteFindingRecheckInput } from './findings-recheck.js';
 import { watchesAfterVerdict } from './findings.js';
 import { withHeartbeat } from './heartbeat.js';
 import { runFindingChecks } from './verify-finding.js';
+import { writeFindingLook, type WriteFindingLookInput } from './findings-look.js';
+import { hasRecheckSection, isArgusRunId, resolvedByLook } from '../lib/finding-look.js';
 
 /**
  * `watchFinding` (stage 4): one measurement of an approved finding on a site
@@ -27,7 +29,13 @@ import { runFindingChecks } from './verify-finding.js';
  * 2. The finding file. Any status but `approved`, a `resolved_run`, or a
  *    missing file: `decided`. A file this run itself resolved (its Verification
  *    names the run) is `resolved` again, so a result lost after the commit is
- *    not misread.
+ *    not misread. So is a file a look resolved from its own `looked_fixed`.
+ * 2a. Argus's look by the file (stage 5): `looked_fixed: <run>`, an Argus run
+ *    identifier, on an approved file with its `## Re-check <run>` section.
+ *    The look's own write (`writeFindingLook`) resolves it, no check runs, and
+ *    the attempt returns `resolved` with `look`. This is the durable carrier
+ *    of a `record-look` Update that was lost. A value of any other shape, or
+ *    one with no section, is ignored, and the attempt measures as before.
  * 3. The `verify` block, validated against the origin and hosts of that config.
  * 4. Every check passes: the recheck's write resolves the file, its
  *    Verification section and its index line in one commit that names the run,
@@ -78,7 +86,14 @@ export interface WatchFindingInput {
 }
 
 export type WatchFindingResult =
-  | { outcome: 'resolved'; commitSha: string | null; rows: VerifyCheckResult[]; at: string | null }
+  | {
+      outcome: 'resolved';
+      commitSha: string | null;
+      rows: VerifyCheckResult[];
+      at: string | null;
+      /** Stage 5: the Argus run whose `looked_fixed` resolved it, when the file did. Absent from a measured result. */
+      look?: string;
+    }
   | { outcome: 'decided'; status: string | null }
   | { outcome: 'stopped' };
 
@@ -150,7 +165,28 @@ async function attempt(input: WatchFindingInput, runner: Partial<CheckRunner>, n
     // This run resolved it on an earlier attempt whose result was lost.
     return { outcome: 'resolved', commitSha: null, rows: [], at: null };
   }
+  // Stage 5: the same rule as the Update's validator; any other value is ignored.
+  const looked = isArgusRunId(data.looked_fixed) ? data.looked_fixed : null;
+  if (looked && resolvedByLook(data, looked)) {
+    // A look by the file resolved it on an earlier attempt whose result was lost.
+    return { outcome: 'resolved', commitSha: null, rows: [], at: null, look: looked };
+  }
   if (status !== 'approved' || data.resolved_run) return { outcome: 'decided', status };
+  if (looked && hasRecheckSection(file.text, looked)) {
+    const written = await lookWrite({
+      repo: input.repo,
+      site: input.site,
+      key: input.key,
+      findingPath: input.findingPath,
+      indexPath: findingsIndexPath(input.site),
+      run: looked,
+      by: workflowId,
+      via: 'file',
+    });
+    log.info({ activity: 'watchFinding', key: input.key, look: looked, commit: written.commitSha, by: written.by }, 'resolved by looked_fixed');
+    if (written.by === 'elsewhere') return { outcome: 'decided', status: 'resolved' };
+    return { outcome: 'resolved', commitSha: written.commitSha, rows: [], at: null, look: looked };
+  }
 
   const raw = data.verify;
   if (raw === undefined || (Array.isArray(raw) && raw.length === 0)) {
@@ -181,6 +217,18 @@ async function attempt(input: WatchFindingInput, runner: Partial<CheckRunner>, n
   await write({ repo: input.repo, site: input.site, key: input.key, liveOn: day, by: workflowId });
   const failed = run.results.filter((row) => !row.pass).map((row) => `check ${row.n}: ${row.measured}`);
   throw untilWindow('StillPresent', `Still present on ${day}: ${failed.join('; ')}`, input.key, true, now());
+}
+
+/** The look's write, with a moved branch retried inside the attempt. */
+async function lookWrite(input: WriteFindingLookInput) {
+  for (let tries = 1; ; tries++) {
+    try {
+      return await writeFindingLook(input);
+    } catch (err) {
+      if (tries < BRANCH_MOVED_TRIES && err instanceof ApplicationFailure && err.type === 'BranchMoved') continue;
+      throw err;
+    }
+  }
 }
 
 /** The recheck's write, with a moved branch retried inside the attempt. */
