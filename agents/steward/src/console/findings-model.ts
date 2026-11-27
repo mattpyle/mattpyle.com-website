@@ -191,8 +191,14 @@ export const HOLD_MEASURING = 'Steward is measuring its checks on production, be
 /** What an approved row says while its run watches production (stage 4). */
 export const HOLD_WATCHING = 'Steward measures it on production once a day until the fix is live.';
 
+/** What an approved row says while its run writes Argus's look (stage 5). */
+export const HOLD_RECORDING_LOOK = "Argus saw it fixed; Steward is writing it resolved.";
+
 /** What a `resolved` row says while its run, which resolved it by its watch, ends (stage 4). */
 export const QUIET_RESOLVED_BY_WATCH = 'Resolved by its own watch; the run is ending.';
+
+/** What a `resolved` row says while its run, which wrote Argus's look, ends (stage 5). */
+export const QUIET_RESOLVED_BY_LOOK = "Resolved by Argus's look; the run is ending.";
 
 /** What a `resolved` row says while its run, which resolved it at the verdict, ends. */
 export const QUIET_RESOLVED_AT_VERDICT = 'Resolved at the verdict; the run is ending.';
@@ -208,6 +214,7 @@ export function holdLineFor(input: { status: string; run: FindingRunView; refusa
   if (input.status !== 'approved') return null;
   if (run.open && run.step === 'measuring') return HOLD_MEASURING;
   if (run.open && run.step === 'watching') return HOLD_WATCHING;
+  if (run.open && run.step === 'recording-look') return HOLD_RECORDING_LOOK;
   if (run.open && run.step !== 'waiting-fix') return null;
   if (input.refusal) return `The fixer's gate refuses it: ${input.refusal}.`;
   if (!run.open) return input.autoFix ? 'Waits for you: Fix starts it.' : 'Waits for you: the site has no auto_fix, so Fix starts it.';
@@ -268,6 +275,8 @@ export function assessRow(
         else if (status === 'resolved' && run.step === 'measuring') quietReason = QUIET_RESOLVED_AT_VERDICT;
         // So does the watch's (stage 4).
         else if (status === 'resolved' && run.step === 'watching') quietReason = QUIET_RESOLVED_BY_WATCH;
+        // And the look's (stage 5).
+        else if (status === 'resolved' && run.step === 'recording-look') quietReason = QUIET_RESOLVED_BY_LOOK;
         else drift.push(`${status} with an open run`);
       }
       break;

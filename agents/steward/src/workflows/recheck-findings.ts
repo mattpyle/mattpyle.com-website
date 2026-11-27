@@ -53,7 +53,9 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  * - **watch broken**: the last failure is any other type;
  * - **not watching**: the run is open with no pending `watchFinding`, still so
  *   when read again after {@link WATCH_SECOND_READ_DELAY}. The row names the
- *   run's step. One wait covers every such run;
+ *   run's step. One wait covers every such run. A run at `recording-look`
+ *   (stage 5) is writing Argus's look, and its row says so: the write can
+ *   retry through an outage for days, and the alarm is fair;
  * - **no run**: no open run, and the file still reads approved and unresolved;
  * - **skipped**: no open run, and it does not. A run that resolved its finding
  *   after the index was read is not a missing one.
@@ -264,7 +266,14 @@ async function readWatches(
       rows.push(
         run.pending
           ? { key, ...judgeWatch(run.pending, Date.now()) }
-          : { key, outcome: 'not watching', detail: `the run is open at ${run.step ?? 'an unknown step'} with no pending watchFinding` },
+          : {
+              key,
+              outcome: 'not watching',
+              detail:
+                run.step === 'recording-look'
+                  ? "the run is open at recording-look: Argus's look is being written, and writeFindingLook is pending or retrying"
+                  : `the run is open at ${run.step ?? 'an unknown step'} with no pending watchFinding`,
+            },
       );
       continue;
     }

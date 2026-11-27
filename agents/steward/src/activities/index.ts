@@ -85,3 +85,5 @@ export { readSiteHosts, readRecheckBlock, readWatchRun, writeFindingRecheck } fr
 export { writeFindingVerdictMeasure } from './findings-verdict-measure.js';
 // Stage 4: a finding run on a site with no fixer watches production, on its own queue.
 export { watchFinding } from './findings-watch.js';
+// The look (stage 5), on `steward-findings`: one commit that resolves a finding Argus saw fixed.
+export { writeFindingLook } from './findings-look.js';

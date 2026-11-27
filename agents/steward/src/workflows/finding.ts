@@ -33,6 +33,7 @@ import {
   type VerifyOutcome,
 } from '../lib/findings.js';
 import { dispatchWorkflowId } from '../lib/fix-dispatch.js';
+import { isArgusRunId, type LookResolvedBy } from '../lib/finding-look.js';
 import { SLOW_INTERVAL, slowPhaseFor } from '../lib/retry-phases.js';
 import { fixFindingWorkflow } from './fix-finding.js';
 import { releaseSlotSignal, slotGrantSignal } from './fix-dispatch.js';
@@ -467,8 +468,12 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  *
  * The cancellation type is the default, `TRY_CANCEL`. It is safe because every
  * write the activity makes is a compare-and-swap on the branch head, and the
- * next attempt reads the file again. A running attempt hears the cancel at its
- * next heartbeat.
+ * next attempt reads the file again. An attempt waiting out its retry delay is
+ * cancelled by the server at once. Inside a running attempt only the checks
+ * hear the cancel (`runFindingChecks` takes the activity's signal): the GitHub
+ * reads and the commit run to the end, so a cancelled attempt can still commit.
+ * The run has moved on by then, and the commit's compare-and-swap is what keeps
+ * it from overwriting a newer write.
  *
  * **No `patched` marker.** The branch reads `settings.watch` from the
  * recorded result of `readFindingSettings`, which every run on the
@@ -481,6 +486,68 @@ import { verifyFindingWorkflow } from './verify-finding.js';
  * `tests/workflows/replay.test.ts`. Rollback: remove the key from the site's
  * config, and each watching run ends at its next attempt; a run that is
  * watching cannot replay on code from before this change.
+ *
+ * **Argus's look** (stage 5, slice A, 2026-11-26). Argus looks at an approved
+ * finding on a site that watches, finds it gone, and commits its
+ * `## Re-check <run>` section with `looked_fixed: <run>` in the frontmatter.
+ * Then it sends the `record-look` Update, the fast path: `{ result: 'fixed',
+ * run, at, source: 'argus' }`, with `run` an Argus run identifier
+ * (`ARGUS_RUN_ID` in `src/lib/finding-look.ts`). The file is the durable
+ * carrier: when the message is lost, `watchFinding` reads `looked_fixed` at its
+ * next attempt and resolves the finding by the same write.
+ *
+ * The validator accepts a look at `watching` only, and refuses a malformed
+ * payload, a result other than `fixed`, a run that is not an Argus run
+ * identifier, a rejection being written and a second look. While a look is
+ * asked for or written, `record-verdict` refuses a rejection and `measure-now`
+ * refuses, each with {@link LOOK_BUSY}; without that, a rejection accepted
+ * during the look's write would wait on flags only the rejection branch sets,
+ * and `finish` would wait on it for ever.
+ *
+ * The look is the race's third arm, tested after the two that exist, so no
+ * recorded tie changes its winner, and it is taken at the top of the loop:
+ * its flag is not reset there, so a look that ties with `measure-now` or the
+ * 30-day bound is taken on the next pass, before any `watchFinding` is issued.
+ * The handler starts no activity. The main body moves the run to the step
+ * `recording-look` and issues `writeFindingLook` on `steward-findings` (the
+ * `writing` proxy and {@link durable}), not on the watch queue, whose cap of one
+ * could hold the write behind a cancelled attempt still running. Its answer:
+ *
+ * 1. Written, or the file already resolved: the Update is answered with who
+ *    resolved it (`by`), and the run ends `resolved` with a note naming the run.
+ * 2. `FindingMoved` or `FindingMissing`: the Update fails, and the run ends
+ *    `closed`, as a `decided` watch does.
+ * 3. Any other permanent failure, `LookBodyMissing` first: the Update fails,
+ *    the run goes back to `watching` and issues `watchFinding` again, because
+ *    the look cancelled the pending one. A resend needs a new Update ID: the
+ *    server keeps the failure for the old one. Argus checks that its commit is
+ *    on `origin/main` before it sends, so this is a bug, not a normal path, and
+ *    `looked_fixed` still closes it at the next attempt.
+ *
+ * Every exit of the loop settles an accepted look. A result in the same task
+ * wins, as it does against a rejection: `resolved` answers the look `by:
+ * 'watch'` (or `'look'` when the watch read this look's `looked_fixed`), a
+ * `decided` file that says `resolved` answers `by: 'elsewhere'`, any other
+ * `decided` fails it, and `stopped` writes the look all the same, as a
+ * rejection is written. A cancelled run waits for its handlers before it
+ * rethrows, as the gate does, and the look's handler turns its cancelled wait
+ * into {@link LOOK_WRITE_FAILED}: the docs say a run that closes with a handler
+ * still running answers its caller `NOT_FOUND`
+ * (https://docs.temporal.io/develop/typescript/workflows/message-passing#message-handler-troubleshooting).
+ * A write in flight may still commit: Argus reads the file before it reports.
+ *
+ * **No `patched` marker.** The handler and the validator issue no command; a
+ * condition with no timeout issues none either. The third arm, the loop's top
+ * and the new refusals read the look's flag, which is null on every recorded
+ * history, because no history holds a `record-look` Update. The cancellation
+ * path's wait for handlers is a condition. `watchFinding`'s `looked_fixed` read
+ * is activity code, and its result's new `look` field is read for the note's
+ * text only. So no command is added, removed or moved on a recorded path. The
+ * fixtures that prove it are the eight `finding-watch*.bin`, unedited; the
+ * look's own path is `finding-watch-look.bin`. A durable bound on the look's
+ * write would record {@link FAILURE_PARKS_PATCH}, on a path after a look only.
+ * Rollback: a run whose history holds a `record-look` Update needs a worker
+ * that has this handler.
  *
  * **The writes retry until GitHub answers** (STW-680, 2026-11-25). On that day
  * a GitHub outage of about an hour failed one run at its verdict write and sent
@@ -756,6 +823,7 @@ export type FindingStep =
   | 'verifying'
   | 'parked'
   | 'watching'
+  | 'recording-look'
   | 'done';
 
 export interface FindingState {
@@ -821,6 +889,8 @@ export interface FindingState {
   watchingSince?: string | null;
   /** How many times the run has issued `watchFinding`: once, then once per `measure-now` and per 30-day bound. */
   watchIssues?: number;
+  /** At step `recording-look` (stage 5): the Argus run whose look is being written. */
+  lookRun?: string | null;
 }
 
 /**
@@ -902,6 +972,31 @@ export interface MeasureNowRequest {
 }
 
 /**
+ * Argus's look at a watching finding (stage 5): it found the finding gone. Its
+ * body, the `## Re-check <run>` section, is on `main` before it sends.
+ */
+export interface LookRequest {
+  /** The only result this stage takes. */
+  result: 'fixed';
+  /** Argus's run identifier, `2026-11-26T0830Z`: it becomes `resolved_run`. */
+  run: string;
+  /** ISO 8601, the sender's clock. */
+  at: string;
+  source: 'argus';
+}
+
+/** What an accepted look answers once the file reads resolved. */
+export interface LookRecorded {
+  workflowId: string;
+  /** This look, the run's own watch, or another writer. */
+  by: LookResolvedBy;
+  /** The `resolved_run` the file holds. */
+  resolvedRun: string | null;
+  /** The commit that resolved it, when this answer wrote one or the watch reported it. */
+  commitSha: string | null;
+}
+
+/**
  * What an accepted `measure-now` returns. The workflow does not know when the
  * last attempt ran (the server does), so it answers with the run and the fact
  * that the activity is issued again.
@@ -914,6 +1009,11 @@ export interface MeasureNowAccepted {
 /** The failure type of a `record-verdict` Update whose write failed or was cancelled. */
 export const VERDICT_WRITE_FAILED = 'VerdictWriteFailed';
 const VERDICT_CANCELLED = 'The run was cancelled before the verdict was written.';
+/** The failure type of a `record-look` Update that was cancelled, or failed with no type of its own (stage 5). */
+export const LOOK_WRITE_FAILED = 'LookWriteFailed';
+const LOOK_CANCELLED = 'The run was cancelled before the look was recorded; read the finding file on main.';
+/** The refusal of a message that would compete with a look (stage 5). */
+export const LOOK_BUSY = "Argus's look is being recorded: the run ends with it.";
 
 export const verdictSignal = wf.defineSignal<[FindingVerdict]>('verdict');
 /**
@@ -931,6 +1031,8 @@ export const resumeUpdate = wf.defineUpdate<ResumeAccepted, [ResumeRequest]>('re
 export const requestFixUpdate = wf.defineUpdate<FixAccepted, [FixUpdateRequest]>('request-fix');
 /** A watching run measures at once (stage 4). */
 export const measureNowUpdate = wf.defineUpdate<MeasureNowAccepted, [MeasureNowRequest]>('measure-now');
+/** Argus saw a watching finding fixed (stage 5). The run writes it resolved and ends. */
+export const lookUpdate = wf.defineUpdate<LookRecorded, [LookRequest]>('record-look');
 export const findingStateQuery = wf.defineQuery<FindingState>('state');
 
 /**
@@ -980,6 +1082,7 @@ const writing = wf.proxyActivities<
     | 'requestFixSlot'
     | 'closeConflictingFixPr'
     | 'writeFindingVerdictMeasure'
+    | 'writeFindingLook'
   >
 >({
   taskQueue: QUEUE_FINDINGS,
@@ -1370,7 +1473,9 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
   const rejection: ParkRejection = { verdict: null, done: false, failed: null };
   // A park before the lifecycle (STW-689): at the verdict write or the settings read after it.
   const gate: GatePark = { open: false, replaced: false };
-  const asks: ParkAsks = { resume, fix, rejection, gate };
+  // Argus's look at a watching run (stage 5): asked for, then answered or failed by the watch loop.
+  const look: ArgusLook = { request: null, answer: null, failed: null };
+  const asks: ParkAsks = { resume, fix, rejection, gate, look };
   wf.setHandler(
     resumeUpdate,
     (): ResumeAccepted => {
@@ -1409,7 +1514,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     },
     {
       validator: (request: MeasureNowRequest): void => {
-        const refusal = measureNowRefusal(state, measure, rejection, request);
+        const refusal = measureNowRefusal(state, measure, rejection, look, request);
         if (refusal) throw new Error(refusal);
       },
     },
@@ -1477,6 +1582,36 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     {
       validator: (verdict: FindingVerdict): void => {
         const refusal = verdictRefusal(state, verdict, asks);
+        if (refusal) throw new Error(refusal);
+      },
+    },
+  );
+
+  // Argus's look (stage 5). The handler starts no activity: it sets the flag
+  // the watch loop reads, and returns once the loop answers it. Neither wait
+  // issues a command. See "Argus's look" in the module docblock.
+  wf.setHandler(
+    lookUpdate,
+    async (request): Promise<LookRecorded> => {
+      look.request = request;
+      look.answer = null;
+      look.failed = null;
+      try {
+        await wf.condition(() => look.answer !== null || look.failed !== null);
+      } catch (err) {
+        // The handler runs in the run's own scope, so a cancelled run ends this wait too.
+        if (!wf.isCancellation(err)) throw err;
+        throw wf.ApplicationFailure.nonRetryable(LOOK_CANCELLED, LOOK_WRITE_FAILED);
+      }
+      // The watch loop set one of the two; TypeScript keeps the reset's narrowing across the wait.
+      const settled = look as ArgusLook;
+      if (settled.answer) return settled.answer;
+      const failed = settled.failed as LookFailure;
+      throw wf.ApplicationFailure.nonRetryable(failed.message, failed.type);
+    },
+    {
+      validator: (request: LookRequest): void => {
+        const refusal = lookRefusal(state, asks, request);
         if (refusal) throw new Error(refusal);
       },
     },
@@ -1609,7 +1744,7 @@ export async function findingWorkflow(input: FindingWorkflowInput): Promise<Find
     if (settings.stopAfter !== 'resolved' || !settings.origin) {
       // Stage 4: a site with no fixer that watches. Absent from a result
       // recorded before it, which then ends here as it did.
-      if (settings.watch === true) return await watchProduction(input, state, base, rejection, measure);
+      if (settings.watch === true) return await watchProduction(input, state, base, rejection, measure, look);
       state.step = 'done';
       return base;
     }
@@ -1658,12 +1793,29 @@ interface GatePark {
   replaced: boolean;
 }
 
+/** Why an accepted look failed: the sentence and the failure type its Update carries. */
+interface LookFailure {
+  message: string;
+  type: string;
+}
+
+/**
+ * Argus's look (stage 5). `request` from acceptance until the watch loop
+ * settles it; then `answer` or `failed` for the handler to return.
+ */
+interface ArgusLook {
+  request: LookRequest | null;
+  answer: LookRecorded | null;
+  failed: LookFailure | null;
+}
+
 /** The flags of the messages a park takes, for the validators to see each other's. */
 interface ParkAsks {
   resume: { requested: boolean };
   fix: { requested: boolean };
   rejection: ParkRejection;
   gate: GatePark;
+  look: ArgusLook;
 }
 
 /**
@@ -1684,11 +1836,14 @@ function measureNowRefusal(
   state: FindingState,
   measure: { requested: boolean },
   rejection: ParkRejection,
+  look: ArgusLook,
   request: MeasureNowRequest,
 ): string | null {
   if (!request || (request.source !== 'cli' && request.source !== 'console') || typeof request.at !== 'string') {
     return 'The measure-now request is malformed.';
   }
+  // Stage 5: a look asked for or being written ends the run.
+  if (look.request) return LOOK_BUSY;
   if (state.step !== 'watching') return `The run is not watching production: it is at ${state.step ?? 'an unknown step'}.`;
   if (rejection.verdict) return 'A rejection is being written: the run ends with it.';
   if (measure.requested) return 'A measurement is already asked for.';
@@ -1697,8 +1852,9 @@ function measureNowRefusal(
 
 /**
  * Step `watching` (stage 4): `watchFinding` until production shows the fix,
- * the file is decided elsewhere, or the site stops watching. See "Watching
- * after the verdict" in the module docblock.
+ * the file is decided elsewhere, the site stops watching, or Argus's look
+ * resolves it (stage 5). See "Watching after the verdict" and "Argus's look"
+ * in the module docblock.
  */
 async function watchProduction(
   input: FindingWorkflowInput,
@@ -1706,6 +1862,7 @@ async function watchProduction(
   base: Pick<FindingWorkflowResult, 'site' | 'key' | 'verdict' | 'commitSha'>,
   rejection: ParkRejection,
   measure: { requested: boolean },
+  look: ArgusLook,
 ): Promise<FindingWorkflowResult> {
   state.step = 'watching';
   state.watchingSince = nowIso();
@@ -1718,82 +1875,176 @@ async function watchProduction(
     return result;
   };
 
-  for (;;) {
-    measure.requested = false;
-    state.watchIssues = (state.watchIssues ?? 0) + 1;
-    const settled = await wf.CancellationScope.cancellable(async (): Promise<WatchFindingResult | 'measure' | 'reject' | 'timeout'> => {
-      const watch = watching.watchFinding(identity);
-      const asked = wf
-        .condition(() => measure.requested || rejection.verdict !== null)
-        .then(() => (rejection.verdict ? ('reject' as const) : ('measure' as const)));
-      try {
-        return await Promise.race([watch, asked]);
-      } catch (err) {
-        // The 30-day bound ran out: issue the activity again.
-        if (isTimeout(err)) return 'timeout';
-        throw err;
-      } finally {
-        watch.catch(() => undefined);
-        asked.catch(() => undefined);
-        wf.CancellationScope.current().cancel();
-      }
-    });
+  // Stage 5: a look that a watch result beat in the same task is settled by that result.
+  const settleLook = (settled: WatchFindingResult): void => {
+    const request = look.request;
+    if (!request) return;
+    look.request = null;
+    const workflowId = wf.workflowInfo().workflowId;
+    if (settled.outcome === 'resolved') {
+      const by: LookResolvedBy = settled.look === undefined ? 'watch' : settled.look === request.run ? 'look' : 'elsewhere';
+      look.answer = { workflowId, by, resolvedRun: settled.look ?? null, commitSha: settled.commitSha };
+    } else if (settled.outcome === 'decided' && settled.status === 'resolved') {
+      look.answer = { workflowId, by: 'elsewhere', resolvedRun: null, commitSha: null };
+    } else if (settled.outcome === 'decided') {
+      look.failed = {
+        message: `The finding file ${settled.status ? `says ${settled.status}` : 'is missing'}, so the look is not written.`,
+        type: 'FindingMoved',
+      };
+    }
+  };
 
-    if (settled === 'timeout' || settled === 'measure') continue;
-    if (settled === 'reject' || (settled.outcome === 'stopped' && rejection.verdict)) {
-      const verdict = rejection.verdict as FindingVerdict;
-      let commitSha: string | null = null;
-      try {
-        if (verdictSourceWrites(verdict.source)) {
-          commitSha = (
-            await durable(() =>
-              writing.writeFindingVerdict({
-                repo: input.repo,
-                site: input.site,
-                key: input.key,
-                findingPath: input.findingPath,
-                indexPath: input.indexPath,
-                status: verdict.status,
-                reason: verdict.reason,
-                at: verdict.at,
-                source: verdict.source,
-              }),
-            )
-          ).commitSha;
-        }
-      } catch (err) {
-        if (wf.isCancellation(err)) throw err;
-        rejection.failed = `The rejection was not written: ${describeError(err)}`;
-        rejection.verdict = null;
-        if (settled !== 'reject') return await finish(base);
+  // Stage 5: the look's write. Null sends the run back to `watching`.
+  const recordLook = async (request: LookRequest): Promise<FindingWorkflowResult | null> => {
+    state.step = 'recording-look';
+    state.lookRun = request.run;
+    const workflowId = wf.workflowInfo().workflowId;
+    let written: { by: LookResolvedBy; resolvedRun: string | null; commitSha: string | null };
+    try {
+      written = await durable(() =>
+        writing.writeFindingLook({
+          repo: input.repo,
+          site: input.site,
+          key: input.key,
+          findingPath: input.findingPath,
+          indexPath: input.indexPath,
+          run: request.run,
+          by: workflowId,
+        }),
+      );
+    } catch (err) {
+      look.request = null;
+      if (wf.isCancellation(err)) {
+        look.failed = { message: LOOK_CANCELLED, type: LOOK_WRITE_FAILED };
+        throw err;
+      }
+      const type = failureType(err) ?? LOOK_WRITE_FAILED;
+      const why = describeError(err);
+      if (type === 'FindingMoved' || type === 'FindingMissing') {
+        look.failed = { message: why, type };
+        return await finish({ ...base, outcome: 'closed', note: `Closed while it recorded Argus's look ${request.run}: ${why}` });
+      }
+      // The look cancelled the pending watch: the loop issues it again.
+      look.failed = { message: `The look was not recorded: ${why}`, type };
+      state.step = 'watching';
+      state.lookRun = null;
+      return null;
+    }
+    look.request = null;
+    look.answer = { workflowId, ...written };
+    const commit = written.commitSha ? ` (commit ${written.commitSha.slice(0, 7)})` : '';
+    const note =
+      written.by === 'look'
+        ? `Resolved by Argus's look ${request.run}${commit}.`
+        : written.by === 'watch'
+          ? `Resolved by its own watch before Argus's look ${request.run} was written.`
+          : `Resolved elsewhere${written.resolvedRun ? ` (run ${written.resolvedRun})` : ''} before Argus's look ${request.run} was written.`;
+    return await finish({ ...base, outcome: 'resolved', note });
+  };
+
+  const watchLoop = async (): Promise<FindingWorkflowResult> => {
+    for (;;) {
+      measure.requested = false;
+      // Stage 5: a look accepted on an earlier pass, or with a re-issue, is taken before any watch.
+      if (look.request) {
+        const ended = await recordLook(look.request);
+        if (ended) return ended;
         continue;
       }
-      state.verdict = verdict;
-      state.commitSha = commitSha;
-      rejection.done = true;
-      rejection.verdict = null;
-      return await finish({ ...base, verdict, commitSha, outcome: 'rejected', note: 'Rejected while it watched production.' });
-    }
+      state.watchIssues = (state.watchIssues ?? 0) + 1;
+      const settled = await wf.CancellationScope.cancellable(
+        async (): Promise<WatchFindingResult | 'measure' | 'reject' | 'look' | 'timeout'> => {
+          const watch = watching.watchFinding(identity);
+          // The look is tested after the two older arms, so no recorded tie changes its winner.
+          const asked = wf
+            .condition(() => measure.requested || rejection.verdict !== null || look.request !== null)
+            .then(() => (rejection.verdict ? ('reject' as const) : measure.requested ? ('measure' as const) : ('look' as const)));
+          try {
+            return await Promise.race([watch, asked]);
+          } catch (err) {
+            // The 30-day bound ran out: issue the activity again.
+            if (isTimeout(err)) return 'timeout';
+            throw err;
+          } finally {
+            watch.catch(() => undefined);
+            asked.catch(() => undefined);
+            wf.CancellationScope.current().cancel();
+          }
+        },
+      );
 
-    // The result won a race with a rejection accepted in the same task: the run
-    // ends with the result, and the Update is answered with a failure.
-    if (rejection.verdict) {
-      rejection.failed = `The finding was ${settled.outcome === 'resolved' ? 'resolved' : 'decided'} before the rejection was written.`;
-      rejection.verdict = null;
+      if (settled === 'timeout' || settled === 'measure' || settled === 'look') continue;
+      if (settled === 'reject' || (settled.outcome === 'stopped' && rejection.verdict)) {
+        const verdict = rejection.verdict as FindingVerdict;
+        let commitSha: string | null = null;
+        try {
+          if (verdictSourceWrites(verdict.source)) {
+            commitSha = (
+              await durable(() =>
+                writing.writeFindingVerdict({
+                  repo: input.repo,
+                  site: input.site,
+                  key: input.key,
+                  findingPath: input.findingPath,
+                  indexPath: input.indexPath,
+                  status: verdict.status,
+                  reason: verdict.reason,
+                  at: verdict.at,
+                  source: verdict.source,
+                }),
+              )
+            ).commitSha;
+          }
+        } catch (err) {
+          if (wf.isCancellation(err)) throw err;
+          rejection.failed = `The rejection was not written: ${describeError(err)}`;
+          rejection.verdict = null;
+          if (settled !== 'reject') return await finish(base);
+          continue;
+        }
+        state.verdict = verdict;
+        state.commitSha = commitSha;
+        rejection.done = true;
+        rejection.verdict = null;
+        return await finish({ ...base, verdict, commitSha, outcome: 'rejected', note: 'Rejected while it watched production.' });
+      }
+
+      // The result won a race with a rejection accepted in the same task: the run
+      // ends with the result, and the Update is answered with a failure.
+      if (rejection.verdict) {
+        rejection.failed = `The finding was ${settled.outcome === 'resolved' ? 'resolved' : 'decided'} before the rejection was written.`;
+        rejection.verdict = null;
+      }
+      // Stage 5: a site that no longer watches writes an accepted look all the same, as it does a rejection.
+      if (settled.outcome === 'stopped' && look.request) continue;
+      settleLook(settled);
+      if (settled.outcome === 'resolved') {
+        const commit = settled.commitSha ? ` (commit ${settled.commitSha.slice(0, 7)})` : '';
+        if (settled.look !== undefined) {
+          return await finish({ ...base, outcome: 'resolved', note: `Resolved by Argus's look ${settled.look}, read from the finding file${commit}.` });
+        }
+        return await finish({ ...base, outcome: 'resolved', note: `Resolved by its own watch: every check passed on production${commit}.` });
+      }
+      if (settled.outcome === 'decided') {
+        return await finish({
+          ...base,
+          outcome: 'closed',
+          note: `Closed while it watched production: the finding file ${settled.status ? `says ${settled.status}` : 'is missing or decided'}.`,
+        });
+      }
+      // The site no longer watches: the end a run that stops at the verdict has.
+      return await finish(base);
     }
-    if (settled.outcome === 'resolved') {
-      const commit = settled.commitSha ? ` (commit ${settled.commitSha.slice(0, 7)})` : '';
-      return await finish({ ...base, outcome: 'resolved', note: `Resolved by its own watch: every check passed on production${commit}.` });
-    }
-    if (settled.outcome === 'decided') {
-      return await finish({
-        ...base,
-        outcome: 'closed',
-        note: `Closed while it watched production: the finding file ${settled.status ? `says ${settled.status}` : 'is missing or decided'}.`,
-      });
-    }
-    // The site no longer watches: the end a run that stops at the verdict has.
-    return await finish(base);
+  };
+
+  try {
+    return await watchLoop();
+  } catch (err) {
+    // A cancelled run answers its handlers before it closes, as the gate does (stage 5):
+    // the look's handler and the rejection's turn their cancelled waits into failures.
+    if (!wf.isCancellation(err)) throw err;
+    await wf.CancellationScope.nonCancellable(() => wf.condition(wf.allHandlersFinished));
+    throw err;
   }
 }
 
@@ -1803,6 +2054,27 @@ function otherAsk(asks: ParkAsks, mine: 'resume' | 'fix' | 'reject' | 'verdict')
   if (asks.gate.replaced) return 'A new verdict is already asked for: the run writes it first.';
   if (mine !== 'fix' && asks.fix.requested) return 'A new fix attempt is already asked for.';
   if (mine !== 'reject' && asks.rejection.verdict) return 'A rejection is already being written: the run ends with it.';
+  if (asks.look.request) return LOOK_BUSY;
+  return null;
+}
+
+/**
+ * Why a `record-look` Update is refused, in a sentence Argus's script prints,
+ * or null to accept it (stage 5). Read-only.
+ */
+function lookRefusal(state: FindingState, asks: ParkAsks, request: LookRequest): string | null {
+  if (!request || typeof request !== 'object') return 'The look is malformed.';
+  if (request.result !== 'fixed') {
+    return `The look's result ${JSON.stringify(String(request.result).slice(0, 40))} is not one this run takes: only fixed.`;
+  }
+  if (request.source !== 'argus' || typeof request.at !== 'string') return 'The look is malformed.';
+  // It goes into the frontmatter and the commit message: the strict shape only.
+  if (!isArgusRunId(request.run)) {
+    return `The look's run ${JSON.stringify(String(request.run).slice(0, 40))} is not an Argus run identifier such as 2026-11-26T0830Z.`;
+  }
+  if (asks.look.request) return "A look is already being recorded: the run ends with it.";
+  if (state.step !== 'watching') return `The run is not watching production: it is at ${state.step ?? 'an unknown step'}.`;
+  if (asks.rejection.verdict) return 'A rejection is being written: the run ends with it.';
   return null;
 }
 
@@ -1901,6 +2173,8 @@ function verdictRefusal(state: FindingState, verdict: FindingVerdict, asks: Park
     }
     return null;
   }
+  // Stage 5: while a look is asked for or written, a rejection would wait on a branch that never runs.
+  if (asks.look.request && verdict.status === 'rejected') return LOOK_BUSY;
   // A run parked after its fix PR takes a rejection in place of its approval (STW-653).
   if (rejectsAtPark(state, verdict)) {
     // One rejection at a time (STW-689): a second would overwrite the one being written.

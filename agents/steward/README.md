@@ -59,7 +59,8 @@ that's the property being dogfooded here, on a low-stakes, real target.
   `watchFinding`, on `steward-findings-watch`, measures the finding on production once a day at
   13:20 UTC plus a per-finding offset, writing `live_on` while it is still present and resolving it
   when every check passes; `steward finding measure-now <key>` measures at once, and a `rejected`
-  verdict ends it. The input's `stopAfter` decides only
+  verdict ends it. Argus's `record-look` Update, or the `looked_fixed` field it commits with its
+  `## Re-check` section, resolves the finding through `writeFindingLook` on `steward-findings`. The input's `stopAfter` decides only
   for a run approved before that read existed. Any other site carries an approved finding the rest
   of the way in the same execution: it waits for a `fix` signal, runs `fixFindingWorkflow` as a child, polls the PR until
   it merges or closes (every 5 minutes, up to 30 days), polls GitHub's `Production` deployments until

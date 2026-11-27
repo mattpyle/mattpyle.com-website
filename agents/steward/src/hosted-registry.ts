@@ -33,6 +33,7 @@ import { runFindingChecks } from './activities/verify-finding.js';
 import { readRecheckBlock, readSiteHosts, readWatchRun, writeFindingRecheck } from './activities/findings-recheck.js';
 import { writeFindingVerdictMeasure } from './activities/findings-verdict-measure.js';
 import { watchFinding } from './activities/findings-watch.js';
+import { writeFindingLook } from './activities/findings-look.js';
 import {
   archiveScorecardRun,
   auditLiveUrl,
@@ -125,8 +126,8 @@ const fastActivities = { auditSiteFast };
 /**
  * The findings queue's registry (findings-loop design, decisions 18, 26, 29
  * and 30, fix-dispatch-by-surface and fix-pr-runs-the-verify-block): the
- * twenty-three findings activities, the recheck's three and the verdict
- * measurement's one, plus `reportRunHealth` because the recheck pings its check
+ * twenty-three findings activities, the recheck's three, the verdict
+ * measurement's one and the look's one (stage 5), plus `reportRunHealth` because the recheck pings its check
  * from this queue. GitHub API calls against the findings repository, the fix issue, the
  * fix PR, the lifecycle's three waits, the conflicting PR's close, the fix
  * PR's preview wait and its comment and draft write, and the blockless
@@ -170,6 +171,8 @@ const findingsActivities = {
   readWatchRun,
   // The measurement at an approved verdict (STW-589): one commit.
   writeFindingVerdictMeasure,
+  // The look (stage 5): one commit that resolves a finding Argus saw fixed.
+  writeFindingLook,
 };
 
 /**

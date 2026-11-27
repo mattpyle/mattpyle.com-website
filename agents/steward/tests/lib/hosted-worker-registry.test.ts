@@ -84,6 +84,7 @@ const FINDINGS_ACTIVITIES = [
   'writeFindingRecheck',
   'readWatchRun',
   'writeFindingVerdictMeasure',
+  'writeFindingLook',
 ];
 
 /** The registry entry for a queue, found by name so a test names the queue it is about. */
@@ -173,7 +174,7 @@ test('each queue registers exactly its own activities, by name', () => {
     `${QUEUE_FINDINGS}: the findings activities, plus reportRunHealth`,
   );
   assert.equal(names(QUEUE_AUDIT).length, 14);
-  assert.equal(names(QUEUE_FINDINGS).length, 29);
+  assert.equal(names(QUEUE_FINDINGS).length, 30);
 });
 
 test('every registered activity is a function', () => {
