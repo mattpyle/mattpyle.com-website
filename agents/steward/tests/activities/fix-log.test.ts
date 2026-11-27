@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { GOOD, acceptingReviewer, findingText, reply, scriptedModel } from '../lib/fix-log-fixtures.js';
-import { commitFixLogEntry, draftFixLogEntryWith, fixLogNotesMarker } from '../../src/activities/fix-log.js';
+import { PR_HEAD_SETTLE, commitFixLogEntry, draftFixLogEntryWith, fixLogNotesMarker } from '../../src/activities/fix-log.js';
 import { BRIEF_PATH } from '../../src/lib/fix-log-backfill.js';
 import { branchSha, ensureBranch } from '../../src/lib/github-contents.js';
 
@@ -25,6 +25,7 @@ const entry = (key: string, title: string) => `---\nkey: ${key}\ntitle: ${title}
 let gh: FakeGitHub;
 
 beforeEach(async () => {
+  PR_HEAD_SETTLE.intervalMs = 0;
   gh = installFakeGitHub({
     seed: {
       [BRIEF_PATH]: '# Writing a fix log entry\n\nThe brief on master.',
@@ -42,7 +43,33 @@ beforeEach(async () => {
   gh.pulls.push({ number: 901, head: OTHER, base: 'master', title: 'fix: other', body: '', draft: false });
 });
 
-afterEach(() => gh.restore());
+const settle = { ...PR_HEAD_SETTLE };
+
+afterEach(() => {
+  gh.restore();
+  Object.assign(PR_HEAD_SETTLE, settle);
+});
+
+/**
+ * The pulls API as GitHub served it on 2026-11-27: the fake's PR head follows the
+ * branch's last ref update, except for the first `stale` reads after it, which still
+ * show the head before. Returns the reads of the PR made after the ref moved.
+ */
+function lagPrHead(stale: number): { reads: number } {
+  const seen = { reads: 0 };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: any, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const res = await realFetch(input, init);
+    const moved = gh.refUpdates.filter((u) => u.branch === BRANCH).at(-1);
+    if ((init?.method ?? 'GET') !== 'GET' || !/\/pulls\/900$/.test(new URL(url).pathname) || !moved) return res;
+    seen.reads += 1;
+    const body = (await res.json()) as { head: { sha: string } };
+    if (seen.reads > stale) body.head.sha = moved.sha;
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+  return seen;
+}
 
 // The finding key is joined at run time: as one literal beside `key:`, the gitleaks job reads it as an API key.
 const draftInput = { repo: 'mattpyle/argus', findingPath: FINDING_PATH, key: ['synthetic', 'mp', '950'].join('-'), prUrl: PR };
@@ -74,6 +101,7 @@ test('the draft makes no model call when the entry is already on the PR branch',
 const commitInput = (notes = [NOTE]) => ({ prUrl: PR, key: 'MP-950', path: ENTRY_PATH, text: entry('MP-950', 'The entry'), notes });
 
 test('the commit lands on the branch head it read, and the notes become one PR comment', async () => {
+  lagPrHead(0);
   const before = await branchSha(BRANCH, SITE_REPO);
   const out = await commitFixLogEntry(commitInput());
   assert.equal(out.state, 'committed');
@@ -116,6 +144,7 @@ test('a branch that moves while the commit is built is left alone', async () => 
 });
 
 test('a notes comment that fails is reported, not thrown, so the commit is not repeated', async () => {
+  lagPrHead(0);
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: any, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -129,4 +158,25 @@ test('a notes comment that fails is reported, not thrown, so the commit is not r
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+// ── The PR head after the commit (STW-710 follow-up) ─────────────────────────
+
+test('the commit waits until the PR shows it as head, so the merge wait does not read a stale head as a push', async () => {
+  PR_HEAD_SETTLE.intervalMs = 0;
+  const seen = lagPrHead(1);
+  const out = await commitFixLogEntry(commitInput([]));
+  assert.equal(out.state, 'committed');
+  assert.equal(out.headSeen, true);
+  assert.equal(seen.reads, 2, 'one stale read, then the new head');
+});
+
+test('a PR head that never shows the commit ends the wait after its tries, and the commit stands', async () => {
+  Object.assign(PR_HEAD_SETTLE, { tries: 3, intervalMs: 0 });
+  const seen = lagPrHead(Number.POSITIVE_INFINITY);
+  const out = await commitFixLogEntry(commitInput([]));
+  assert.equal(out.state, 'committed');
+  assert.equal(out.headSeen, false);
+  assert.equal(seen.reads, 3);
+  assert.equal(gh.file(BRANCH, ENTRY_PATH)?.text, entry('MP-950', 'The entry'));
 });
