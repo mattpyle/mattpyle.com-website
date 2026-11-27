@@ -1,0 +1,452 @@
+{
+  "$description": "Primitive design tokens for mattpyle.com in W3C Design Tokens Community Group (DTCG) format. Raw palette, typography, spacing, layout, radius, breakpoint, and motion scales.",
+  "color": {
+    "neutral": {
+      "bg": {
+        "$type": "color",
+        "$value": "oklch(0.965 0.004 265)",
+        "$description": "Cool light grey page ground; never warm cream.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--bg", "brandHex": "#f2f3f7", "group": "Neutrals" }
+        }
+      },
+      "surface": {
+        "$type": "color",
+        "$value": "oklch(1 0 0)",
+        "$description": "Cards, panels, and blockquotes.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--surface", "group": "Neutrals" }
+        }
+      },
+      "footer-bg": {
+        "$type": "color",
+        "$value": "oklch(0.955 0.004 265)",
+        "$description": "Footer ground, one step darker than page ground.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--footer-bg", "group": "Neutrals" }
+        }
+      },
+      "paper": {
+        "$type": "color",
+        "$value": "oklch(0.99 0.002 265)",
+        "$description": "Reversed light text on filled hero marks and status badges.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--paper", "group": "Neutrals" }
+        }
+      },
+      "ink": {
+        "$type": "color",
+        "$value": "oklch(0.21 0.012 265)",
+        "$description": "Primary text, headings, focus ring, and /about section colour.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--ink", "group": "Neutrals" }
+        }
+      },
+      "ink-2": {
+        "$type": "color",
+        "$value": "oklch(0.24 0.012 265)",
+        "$description": "Body prose and hero statements.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--ink-2", "group": "Neutrals" }
+        }
+      },
+      "ink-3": {
+        "$type": "color",
+        "$value": "oklch(0.28 0.012 265)",
+        "$description": "Emphasised secondary copy.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--ink-3", "group": "Neutrals" }
+        }
+      },
+      "ink-4": {
+        "$type": "color",
+        "$value": "oklch(0.36 0.012 265)",
+        "$description": "Secondary body text and footer blurb.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--ink-4", "group": "Neutrals" }
+        }
+      },
+      "ink-5": {
+        "$type": "color",
+        "$value": "oklch(0.38 0.012 265)",
+        "$description": "Summaries, list excerpts, and aside copy.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--ink-5", "group": "Neutrals" }
+        }
+      },
+      "ink-6": {
+        "$type": "color",
+        "$value": "oklch(0.41 0.012 265)",
+        "$description": "Muted labels, dates, table headers, captions, and control borders (7:1 on white).",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--ink-6", "group": "Neutrals" }
+        }
+      },
+      "rule": {
+        "$type": "color",
+        "$value": "oklch(0.9 0.006 265)",
+        "$description": "Standard 1px borders and section hairlines.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--rule", "group": "Neutrals" }
+        }
+      },
+      "rule-2": {
+        "$type": "color",
+        "$value": "oklch(0.92 0.006 265)",
+        "$description": "Subtle inner dividers.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--rule-2", "group": "Neutrals" }
+        }
+      },
+      "track": {
+        "$type": "color",
+        "$value": "oklch(0.93 0.006 265)",
+        "$description": "Progress bar and chart tracks.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--track", "group": "Neutrals" }
+        }
+      },
+      "header-glass": {
+        "$type": "color",
+        "$value": "oklch(0.965 0.004 265 / .92)",
+        "$description": "Translucent sticky header backdrop.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--header-bg", "group": "Chrome" }
+        }
+      },
+      "header-panel": {
+        "$type": "color",
+        "$value": "oklch(0.982 0.003 265 / .97)",
+        "$description": "Mobile overflow navigation panel ground (high opacity preserves link AA contrast).",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--header-panel-bg", "group": "Chrome" }
+        }
+      }
+    },
+    "section": {
+      "writing": {
+        "$type": "color",
+        "$value": "oklch(0.47 0.13 255)",
+        "$description": "Writing section colour. Carries section meaning; never decorative.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--writing", "group": "Section semantics" }
+        }
+      },
+      "writing-hover": {
+        "$type": "color",
+        "$value": "oklch(0.32 0.14 255)",
+        "$description": "Writing section hover colour.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--writing-hover", "group": "Section semantics" }
+        }
+      },
+      "projects": {
+        "$type": "color",
+        "$value": "oklch(0.44 0.11 155)",
+        "$description": "Projects section colour. Carries section meaning; never decorative.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--projects", "group": "Section semantics" }
+        }
+      },
+      "projects-hover": {
+        "$type": "color",
+        "$value": "oklch(0.31 0.1 155)",
+        "$description": "Projects section hover colour.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--projects-hover", "group": "Section semantics" }
+        }
+      },
+      "agents": {
+        "$type": "color",
+        "$value": "oklch(0.47 0.16 330)",
+        "$description": "Agent surfaces colour (/scorecard, /activity, /steward, /webmcp, /audit, homepage name fill).",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--agents", "group": "Section semantics" }
+        }
+      },
+      "agents-hover": {
+        "$type": "color",
+        "$value": "oklch(0.33 0.16 330)",
+        "$description": "Agent surfaces hover colour.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--agents-hover", "group": "Section semantics" }
+        }
+      },
+      "agents-pressed": {
+        "$type": "color",
+        "$value": "oklch(0.432 0.14 337)",
+        "$description": "Submit button pressed or in-flight state, darker than hover.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--agents-pressed", "group": "Status and controls" }
+        }
+      },
+      "changelog": {
+        "$type": "color",
+        "$value": "oklch(0.45 0.11 65)",
+        "$description": "Changelog and fix-log section colour. Carries section meaning; never decorative.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--changelog", "group": "Section semantics" }
+        }
+      },
+      "changelog-hover": {
+        "$type": "color",
+        "$value": "oklch(0.32 0.1 65)",
+        "$description": "Changelog section hover colour.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--changelog-hover", "group": "Section semantics" }
+        }
+      }
+    },
+    "status": {
+      "pass": {
+        "$type": "color",
+        "$value": "oklch(0.471 0.125 140)",
+        "$description": "Pass status fill on /audit beside the Pass word (6.4:1 with --paper). Distinct leaf green from --projects.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--status-pass", "group": "Status and controls" }
+        }
+      },
+      "fail": {
+        "$type": "color",
+        "$value": "oklch(0.475 0.162 24)",
+        "$description": "Fail status fill on /audit beside the Fail word (7.1:1 with --paper).",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--status-fail", "group": "Status and controls" }
+        }
+      }
+    },
+    "tint": {
+      "writing": {
+        "$type": "color",
+        "$value": "oklch(0.955 0.012 255)",
+        "$description": "Hover ground for ledger and navigation rows.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--tint-writing", "group": "Tints and hatching" }
+        }
+      },
+      "agents": {
+        "$type": "color",
+        "$value": "oklch(0.975 0.012 330)",
+        "$description": "Hover ground for agent surface rows.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--tint-agents", "group": "Tints and hatching" }
+        }
+      },
+      "hatch-projects-a": {
+        "$type": "color",
+        "$value": "oklch(0.93 0.014 155)",
+        "$description": "Placeholder diagonal hatch stripe A on project cards without screenshots.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--hatch-projects-a", "group": "Tints and hatching" }
+        }
+      },
+      "hatch-projects-b": {
+        "$type": "color",
+        "$value": "oklch(0.965 0.008 155)",
+        "$description": "Placeholder diagonal hatch stripe B on project cards without screenshots.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--hatch-projects-b", "group": "Tints and hatching" }
+        }
+      }
+    }
+  },
+  "font": {
+    "family": {
+      "display": {
+        "$type": "fontFamily",
+        "$value": "'Bricolage Grotesque', 'Bricolage Grotesque Fallback', Arial, sans-serif",
+        "$description": "Display face (optical size 96, weights 400 to 800) for headings, statements, and big numbers.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--font-display" }
+        }
+      },
+      "body": {
+        "$type": "fontFamily",
+        "$value": "'IBM Plex Sans', 'IBM Plex Sans Fallback', Arial, sans-serif",
+        "$description": "Body face (weights 400 to 600) for prose, descriptions, and card copy.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--font-body" }
+        }
+      },
+      "mono": {
+        "$type": "fontFamily",
+        "$value": "'IBM Plex Mono', 'IBM Plex Mono Fallback', 'Courier New', monospace",
+        "$description": "Monospace face (weight 400) for navigation, dates, paths, code, and table data.",
+        "$extensions": {
+          "com.mattpyle": { "cssVar": "--font-mono-plex" }
+        }
+      }
+    },
+    "size": {
+      "caption": {
+        "$type": "dimension",
+        "$value": "15px",
+        "$description": "Sitewide minimum type floor: captions, table headers, fine metadata."
+      },
+      "ui-mobile": {
+        "$type": "dimension",
+        "$value": "16px",
+        "$description": "Mobile mono UI labels, footer links, and compact metadata."
+      },
+      "ui": {
+        "$type": "dimension",
+        "$value": "17px",
+        "$description": "Desktop navigation, dates, filter controls, and mono labels."
+      },
+      "body": {
+        "$type": "dimension",
+        "$value": "17.5px",
+        "$description": "Summaries, card blurbs, and footer bio."
+      },
+      "body-lg": {
+        "$type": "dimension",
+        "$value": "20px",
+        "$description": "Long-form article prose at desktop (18px under 720px)."
+      },
+      "heading-3": {
+        "$type": "dimension",
+        "$value": "23px",
+        "$description": "Prose h3 and subsection titles (21px under 720px)."
+      },
+      "heading-2": {
+        "$type": "dimension",
+        "$value": "28px",
+        "$description": "Band and section headings (26px under 720px)."
+      },
+      "prose-h2": {
+        "$type": "dimension",
+        "$value": "30px",
+        "$description": "Article prose h2, hero lead statements, and ledger step titles."
+      },
+      "row-title": {
+        "$type": "dimension",
+        "$value": "34px",
+        "$description": "Primary writing archive row titles (27px under 720px)."
+      },
+      "entry-h1": {
+        "$type": "dimension",
+        "$value": "clamp(48px, 5.6vw, 82px)",
+        "$description": "Entry page H1 (writing posts, changelog entries, fix-log entries)."
+      },
+      "stat": {
+        "$type": "dimension",
+        "$value": "84px",
+        "$description": "Large instrument figures on /scorecard and /fix-log (64px under 720px)."
+      },
+      "hero-h1": {
+        "$type": "dimension",
+        "$value": "clamp(74px, 12vw, 176px)",
+        "$description": "Section page hero H1 (68px under 720px)."
+      }
+    }
+  },
+  "space": {
+    "1": { "$type": "dimension", "$value": "4px", "$description": "Tight inline separation." },
+    "2": { "$type": "dimension", "$value": "8px", "$description": "Compact element gap." },
+    "3": { "$type": "dimension", "$value": "12px", "$description": "List item and card inner gap." },
+    "4": { "$type": "dimension", "$value": "16px", "$description": "Standard component spacing." },
+    "5": { "$type": "dimension", "$value": "20px", "$description": "Mobile shell gutter and row bleed." },
+    "6": { "$type": "dimension", "$value": "24px", "$description": "Card padding and medium vertical rhythm." },
+    "7": { "$type": "dimension", "$value": "28px", "$description": "Grid gutter and prose block gap." },
+    "8": { "$type": "dimension", "$value": "32px", "$description": "Row vertical padding." },
+    "9": { "$type": "dimension", "$value": "36px", "$description": "Ledger column gap." },
+    "10": { "$type": "dimension", "$value": "40px", "$description": "Desktop shell gutter and hero row gap." },
+    "12": { "$type": "dimension", "$value": "48px", "$description": "Mobile section spacing." },
+    "14": { "$type": "dimension", "$value": "56px", "$description": "Rail-to-prose column gap and year-group separation." },
+    "18": { "$type": "dimension", "$value": "72px", "$description": "Archive top padding." },
+    "21": { "$type": "dimension", "$value": "84px", "$description": "Standard section rhythm." },
+    "24": { "$type": "dimension", "$value": "96px", "$description": "Footer separation and end-of-page breathing room." }
+  },
+  "layout": {
+    "shell": {
+      "$type": "dimension",
+      "$value": "1180px",
+      "$description": "Maximum width of the structural layout shell.",
+      "$extensions": { "com.mattpyle": { "cssVar": "--shell" } }
+    },
+    "shell-gutter": {
+      "$type": "dimension",
+      "$value": "40px",
+      "$description": "Desktop horizontal shell gutter.",
+      "$extensions": { "com.mattpyle": { "cssVar": "--shell-gutter" } }
+    },
+    "shell-gutter-mobile": {
+      "$type": "dimension",
+      "$value": "20px",
+      "$description": "Mobile horizontal shell gutter below 720px.",
+      "$extensions": { "com.mattpyle": { "cssVar": "--shell-gutter-mobile" } }
+    },
+    "prose-measure": {
+      "$type": "dimension",
+      "$value": "68ch",
+      "$description": "Maximum reading column width for prose."
+    },
+    "lead-measure": {
+      "$type": "dimension",
+      "$value": "32ch",
+      "$description": "Hero lead statement width."
+    }
+  },
+  "radius": {
+    "sm": {
+      "$type": "dimension",
+      "$value": "3px",
+      "$description": "Inline code chip radius."
+    },
+    "md": {
+      "$type": "dimension",
+      "$value": "6px",
+      "$description": "Default card, panel, and code block radius.",
+      "$extensions": { "com.mattpyle": { "cssVar": "--radius" } }
+    },
+    "lg": {
+      "$type": "dimension",
+      "$value": "12px",
+      "$description": "Mobile navigation overflow panel corner."
+    },
+    "pill": {
+      "$type": "dimension",
+      "$value": "999px",
+      "$description": "Full pill radius (retro controls)."
+    }
+  },
+  "breakpoint": {
+    "narrow": {
+      "$type": "dimension",
+      "$value": "374px",
+      "$description": "Narrowest mobile nav collapse (320px-class phones)."
+    },
+    "mobile": {
+      "$type": "dimension",
+      "$value": "720px",
+      "$description": "Primary mobile collapse across the site."
+    },
+    "tablet": {
+      "$type": "dimension",
+      "$value": "900px",
+      "$description": "Multi-column grid and entry rail collapse."
+    }
+  },
+  "duration": {
+    "fast": {
+      "$type": "duration",
+      "$value": "150ms",
+      "$description": "Quick utility feedback (skip link, legacy controls)."
+    },
+    "base": {
+      "$type": "duration",
+      "$value": "240ms",
+      "$description": "Standard hover tint, colour, and lift transition."
+    },
+    "slow": {
+      "$type": "duration",
+      "$value": "420ms",
+      "$description": "Hero H1 underline-to-fill sweep."
+    },
+    "bar": {
+      "$type": "duration",
+      "$value": "900ms",
+      "$description": "One-shot scorecard bar growth."
+    }
+  }
+}

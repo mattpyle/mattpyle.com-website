@@ -1,0 +1,216 @@
+{
+  "$description": "Retro appearance tokens for mattpyle.com (html[data-appearance='retro']). Authored strictly in hex and system fonts so scripts/retro-sweep.mjs can mechanically detect any surviving modern oklch() or webfont.",
+  "retro": {
+    "color": {
+      "parchment": {
+        "$type": "color",
+        "$value": "#e8dcc0",
+        "$description": "Primary parchment page ground.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-parchment" } }
+      },
+      "parchment-light": {
+        "$type": "color",
+        "$value": "#efe6d0",
+        "$description": "Parchment gradient highlight.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-parchment-light" } }
+      },
+      "parchment-dark": {
+        "$type": "color",
+        "$value": "#e0d2b0",
+        "$description": "Parchment gradient shadow.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-parchment-dark" } }
+      },
+      "frame-bg": {
+        "$type": "color",
+        "$value": "#fffdf5",
+        "$description": "Framed card and panel interior ground.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-frame-bg" } }
+      },
+      "frame-border": {
+        "$type": "color",
+        "$value": "#8a5a2b",
+        "$description": "Warm brown ridge and inset frame border.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-frame-border" } }
+      },
+      "ink": {
+        "$type": "color",
+        "$value": "#33291a",
+        "$description": "Primary warm sepia text.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-ink" } }
+      },
+      "ink-muted": {
+        "$type": "color",
+        "$value": "#5a4a30",
+        "$description": "Muted labels and metadata (6.3:1 on parchment, 6.0:1 on sidebar).",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-ink-muted" } }
+      },
+      "forest": {
+        "$type": "color",
+        "$value": "#234327",
+        "$description": "Header, footer, and marquee forest green ground.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-forest" } }
+      },
+      "forest-hover": {
+        "$type": "color",
+        "$value": "#2f5a34",
+        "$description": "Forest green interactive hover.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-forest-hover" } }
+      },
+      "maroon": {
+        "$type": "color",
+        "$value": "#7a1f1f",
+        "$description": "Retro heading, border, and fail status maroon.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-maroon" } }
+      },
+      "status-pass": {
+        "$type": "color",
+        "$value": "#2f5a1f",
+        "$description": "Retro Pass fill on /audit (7.9:1 with --retro-frame-bg).",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-status-pass" } }
+      },
+      "cream": {
+        "$type": "color",
+        "$value": "#fff8e6",
+        "$description": "Light text on forest ground and code backgrounds.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-cream" } }
+      },
+      "cream-soft": {
+        "$type": "color",
+        "$value": "#dcecd0",
+        "$description": "Soft sage-cream navigation links on forest ground.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-cream-soft" } }
+      },
+      "gold": {
+        "$type": "color",
+        "$value": "#ffd27f",
+        "$description": "Masthead, active nav, and highlight gold on dark grounds.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-gold" } }
+      },
+      "link": {
+        "$type": "color",
+        "$value": "#1f5aa8",
+        "$description": "Classic 1997 link blue and retro focus ring.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-link" } }
+      },
+      "link-visited": {
+        "$type": "color",
+        "$value": "#6b3fa0",
+        "$description": "Visited link purple.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-link-visited" } }
+      },
+      "sidebar-bg": {
+        "$type": "color",
+        "$value": "#f3ead2",
+        "$description": "Sidebar and row hover ground.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-sidebar-bg" } }
+      },
+      "navbar-bg": {
+        "$type": "color",
+        "$value": "#efe2c4",
+        "$description": "Beveled parchment menu ground.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-navbar-bg" } }
+      },
+      "construction-bg": {
+        "$type": "color",
+        "$value": "#3a2c10",
+        "$description": "Under-construction strip background.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-construction-bg" } }
+      },
+      "construction-stripe": {
+        "$type": "color",
+        "$value": "#e8c34a",
+        "$description": "Under-construction hazard stripe.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-construction-stripe" } }
+      },
+      "divider": {
+        "$type": "color",
+        "$value": "#b8860b",
+        "$description": "Animated text-art divider base gold.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-divider" } }
+      },
+      "lcd-ground": {
+        "$type": "color",
+        "$value": "#0a0a0a",
+        "$description": "LCD console background (/webmcp output panel).",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-lcd-ground" } }
+      },
+      "lcd-digit": {
+        "$type": "color",
+        "$value": "#39ff14",
+        "$description": "LCD bright green output text (14.6:1 on ground).",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-lcd-digit" } }
+      },
+      "lcd-dim": {
+        "$type": "color",
+        "$value": "#63c25a",
+        "$description": "LCD idle/secondary green text (8.9:1 on ground).",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-lcd-dim" } }
+      },
+      "lcd-danger": {
+        "$type": "color",
+        "$value": "#ff6b5e",
+        "$description": "LCD error text (7.1:1 on ground).",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-lcd-danger" } }
+      }
+    },
+    "font": {
+      "body": {
+        "$type": "fontFamily",
+        "$value": "Georgia, 'Times New Roman', serif",
+        "$description": "Retro body serif.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-font-body" } }
+      },
+      "display": {
+        "$type": "fontFamily",
+        "$value": "'Comic Sans MS', cursive, sans-serif",
+        "$description": "Retro display headings and masthead.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-font-display" } }
+      },
+      "ui": {
+        "$type": "fontFamily",
+        "$value": "Verdana, sans-serif",
+        "$description": "Retro UI controls and navigation.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-font-ui" } }
+      },
+      "mono": {
+        "$type": "fontFamily",
+        "$value": "'Courier New', monospace",
+        "$description": "Retro monospace code, dates, and counters.",
+        "$extensions": { "com.mattpyle": { "cssVar": "--retro-font-mono" } }
+      }
+    }
+  },
+  "ds": {
+    "surface": {
+      "page": { "$type": "color", "$value": "{retro.color.parchment}" },
+      "card": { "$type": "color", "$value": "{retro.color.frame-bg}" },
+      "footer": { "$type": "color", "$value": "{retro.color.forest}" },
+      "inverse": { "$type": "color", "$value": "{retro.color.forest}" }
+    },
+    "text": {
+      "primary": { "$type": "color", "$value": "{retro.color.ink}" },
+      "prose": { "$type": "color", "$value": "{retro.color.ink}" },
+      "secondary": { "$type": "color", "$value": "{retro.color.ink}" },
+      "summary": { "$type": "color", "$value": "{retro.color.ink-muted}" },
+      "muted": { "$type": "color", "$value": "{retro.color.ink-muted}" },
+      "on-fill": { "$type": "color", "$value": "{retro.color.frame-bg}" }
+    },
+    "border": {
+      "subtle": { "$type": "color", "$value": "{retro.color.frame-border}" },
+      "faint": { "$type": "color", "$value": "{retro.color.frame-border}" },
+      "control": { "$type": "color", "$value": "{retro.color.frame-border}" }
+    },
+    "focus": {
+      "ring": { "$type": "color", "$value": "{retro.color.link}" }
+    },
+    "radius": {
+      "card": { "$type": "dimension", "$value": "0px" },
+      "code": { "$type": "dimension", "$value": "0px" }
+    },
+    "font": {
+      "heading": { "$type": "fontFamily", "$value": "{retro.font.display}" },
+      "body": { "$type": "fontFamily", "$value": "{retro.font.body}" },
+      "mono": { "$type": "fontFamily", "$value": "{retro.font.mono}" }
+    }
+  }
+}

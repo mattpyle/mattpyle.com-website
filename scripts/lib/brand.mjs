@@ -22,59 +22,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { create as createFont } from 'fontkit';
 import wawoff2 from 'wawoff2';
+import { oklchToHex } from '../build-tokens.mjs';
+import { ACCENTS, COLORS } from './brand-tokens.mjs';
 
 const root = dirname(fileURLToPath(new URL('../../package.json', import.meta.url)));
 
-/** oklch(L C H) → sRGB hex, via Oklab and the linear-sRGB matrix, then gamma. */
-export function oklchToHex(lightness, chroma, hueDegrees) {
-  const hue = (hueDegrees * Math.PI) / 180;
-  const a = chroma * Math.cos(hue);
-  const b = chroma * Math.sin(hue);
-
-  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
-
-  const linear = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
-
-  return `#${linear.map((channel) => {
-    const encoded = channel <= 0.0031308
-      ? 12.92 * channel
-      : 1.055 * channel ** (1 / 2.4) - 0.055;
-    return Math.max(0, Math.min(255, Math.round(encoded * 255)))
-      .toString(16)
-      .padStart(2, '0');
-  }).join('')}`;
-}
-
-/**
- * `--bg` resolves to #f2f3f6, one unit of blue off the `#f2f3f7` that
- * `Layout.astro` has always sent as its theme-color. The three brand surfaces
- * agreeing exactly is worth more than the last bit of the round trip, so the
- * head's value wins and the manifest and these cards follow it.
- */
-export const COLORS = {
-  bg: '#f2f3f7',
-  ink: oklchToHex(0.21, 0.012, 265),      // --ink, titles and the mark ground
-  text: oklchToHex(0.36, 0.012, 265),     // --ink-4, the author name
-  muted: oklchToHex(0.41, 0.012, 265),    // --ink-6, domain and date
-  rule: oklchToHex(0.9, 0.006, 265),      // --rule, the hairline divider
-};
-
-/**
- * The semantic colours. `writing` and `changelog` are the two content
- * collections that get per-entry cards; `agents` is here because the homepage
- * H1 fills "Pyle" with it and the fallback card repeats that headline.
- */
-export const ACCENTS = {
-  writing: oklchToHex(0.47, 0.13, 255),   // --writing
-  changelog: oklchToHex(0.45, 0.11, 65),  // --changelog
-  agents: oklchToHex(0.47, 0.16, 330),    // --agents
-};
+export { ACCENTS, COLORS, oklchToHex };
 
 /** The site's own wordmark, re-cut as a chip. `SiteHeader.astro` sets the same string. */
 export const MARK_TEXT = 'mp/';

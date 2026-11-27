@@ -198,7 +198,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
     position: sticky;
     top: 0;
     z-index: 20;
-    background: oklch(0.965 0.004 265 / .92);
+    background: var(--header-bg);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
@@ -387,7 +387,7 @@ const panelItems = mobileOrder.slice(2).map((link, i) => ({ ...link, collapsible
       display: flex;
       flex-direction: column;
       padding: 6px 0;
-      background: oklch(0.982 0.003 265 / .97);
+      background: var(--header-panel-bg);
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
       border: 1px solid var(--rule);

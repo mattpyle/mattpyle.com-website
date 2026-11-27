@@ -1,6 +1,8 @@
 ---
+import '../styles/tokens.css';
 import '../styles/global.css';
 import '../styles/retro.css';
+import designTokens from '../data/design-tokens.generated.json';
 import { ClientRouter } from 'astro:transitions';
 import SiteHeader from '../components/SiteHeader.astro';
 import SiteFooter from '../components/SiteFooter.astro';
@@ -209,8 +211,8 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': jsonLdGraph };
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    {/* The browser-chrome tint matches the page's own background. */}
-    <meta name="theme-color" content="#f2f3f7" />
+    {/* The browser-chrome tint matches the page's own background (derived from tokens/primitives.tokens.json). */}
+    <meta name="theme-color" content={designTokens.themeColor} />
     <title>{pageTitle}</title>
 
     <!-- Open Graph -->

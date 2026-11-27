@@ -5,51 +5,9 @@
    backgrounds, and reveals decorative furniture that already exists in the
    DOM in both modes (see src/components/RetroHomeFurniture.astro).
 
-   Tokens lifted verbatim from docs/webmcp-retro/design-brief.md so modern
-   and retro share nothing by accident. */
-
-html[data-appearance='retro'] {
-  --retro-parchment: #e8dcc0;
-  /* LCD console tokens (the /webmcp output panel). Contrast measured against the ground:
-     digit 14.6:1, dim 8.9:1, danger 7.1:1 — the dim green carries real content (idle and
-     no-JS copy), so it has to read as text, not as decoration. The design brief's #1f8f0f
-     glow appears only in box-shadow/text-shadow, never as a text colour. */
-  --retro-lcd-ground: #0a0a0a;
-  --retro-lcd-digit: #39ff14;
-  --retro-lcd-dim: #63c25a;
-  --retro-lcd-danger: #ff6b5e;
-  --retro-parchment-light: #efe6d0;
-  --retro-parchment-dark: #e0d2b0;
-  --retro-frame-bg: #fffdf5;
-  --retro-frame-border: #8a5a2b;
-  --retro-ink: #33291a;
-  /* Formalised in Phase 3 after eleven bare copies of this hex accumulated in the file (hints,
-     disabled page links, output status, and the tag pills the one-DOM phases have since
-     deleted). 6.3:1 on parchment, 6.0:1 on the sidebar ground — it carries real content, so
-     it has to read as text, not as a grey. */
-  --retro-ink-muted: #5a4a30;
-  --retro-forest: #234327;
-  --retro-forest-hover: #2f5a34;
-  --retro-maroon: #7a1f1f;
-  /* A leaf green one step darker than modern's `--status-pass`, so `--retro-frame-bg` reads on
-     it at 7.9:1, measured. The pass half of /audit's status marks; retro's fail reuses maroon,
-     which carries gold. */
-  --retro-status-pass: #2f5a1f;
-  --retro-cream: #fff8e6;
-  --retro-cream-soft: #dcecd0;
-  --retro-gold: #ffd27f;
-  --retro-link: #1f5aa8;
-  --retro-link-visited: #6b3fa0;
-  --retro-sidebar-bg: #f3ead2;
-  --retro-navbar-bg: #efe2c4;
-  --retro-construction-bg: #3a2c10;
-  --retro-construction-stripe: #e8c34a;
-  --retro-divider: #b8860b;
-  --retro-font-body: Georgia, 'Times New Roman', serif;
-  --retro-font-display: 'Comic Sans MS', cursive, sans-serif;
-  --retro-font-ui: Verdana, sans-serif;
-  --retro-font-mono: 'Courier New', monospace;
-}
+   Retro tokens (`--retro-*` and retro overrides of `--ds-*`) are generated from
+   tokens/retro.tokens.json into src/styles/tokens.css (`npm run tokens:build`),
+   imported ahead of this file by Layout.astro inside `@layer tokens`. */
 
 /* ── Base surface + type ─────────────────────────────────────────────── */
 
@@ -4482,3 +4440,4 @@ html[data-appearance='retro'] [data-module='article'] .spec-side {
     font-size: 40px;
   }
 }
+
