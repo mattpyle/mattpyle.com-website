@@ -44,6 +44,8 @@ Every representation is also fetchable directly, at the page's own path with `.m
 - `/robots.txt` — crawl rules; all crawlers, including AI/LLM crawlers, are explicitly allowed.
 - `/llms.txt` — concise Markdown index of key pages, per the llms.txt convention.
 - `/llms-full.txt` — full plain-text dump of all published writing and projects content plus the current scorecard snapshot, generated at build time from the same content that backs the site.
+- `/rss.xml` — RSS 2.0 feed of the writing, for following new posts.
+- `/changelog/rss.xml` — RSS 2.0 feed of the changelog, for following what ships on this site.
 - `/webmcp/index.json` — the JSON index backing the WebMCP tools below. A plain static file; any agent can fetch it directly, no tool call required.
 - `/webmcp/tools.json` — the tool manifest: name, description, input schema, return summary, and an example call for every tool below. Generated at build time from the live tool objects, so it cannot drift from what an agent actually receives.
 - `/.well-known/agent-card.json`: the A2A Agent Card (`application/a2a+json`). See below.
