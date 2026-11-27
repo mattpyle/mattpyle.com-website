@@ -180,6 +180,11 @@ test('--only limits the run, and a failed draft is listed while the run goes on'
   const w2 = world(THREE);
   const only = await runFixLogBackfill(options({ dryRun: true, only: new Set(['MP-11']) }), { github: github(w2), print: () => {} });
   assert.deepEqual(only.wanted, ['MP-11']);
+
+  // `--only` with a full key picks the same finding.
+  const slug = THREE.find((f) => f.key === 'MP-11')!.slug;
+  const byFull = await runFixLogBackfill(options({ dryRun: true, only: new Set([slug]) }), { github: github(world(THREE)), print: () => {} });
+  assert.deepEqual(byFull.wanted, ['MP-11']);
 });
 
 test('a run that writes needs the model, and the credential check names what is missing', async () => {

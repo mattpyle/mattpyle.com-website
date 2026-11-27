@@ -69,6 +69,7 @@ export interface BackfillOptions {
   /** The findings store's site folder: `mattpyle-com`. */
   site: string;
   dryRun: boolean;
+  /** Short keys in capitals, full keys as they are (`parseFindingKey`); either picks a finding. */
   only?: ReadonlySet<string>;
 }
 
@@ -234,7 +235,7 @@ export async function runFixLogBackfill(options: BackfillOptions, deps: Backfill
     if (!text) continue;
     const facts = findingFacts(text);
     if (!facts) continue;
-    if (options.only && !options.only.has(facts.key)) continue;
+    if (options.only && !options.only.has(facts.key) && !options.only.has(slug)) continue;
     if (hasEntry(facts.key)) {
       report.existing.push(facts.key);
       continue;
