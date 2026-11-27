@@ -26,7 +26,7 @@
         },
         "workflowTaskTimeout": "10s",
         "originalExecutionRunId": "01a09e16-fbf1-7c83-b65a-7dbcb8ad879b",
-        "identity": "25@76b16b928ec6",
+        "identity": "steward-fixture",
         "firstExecutionRunId": "01a09e16-fbf1-7c83-b65a-7dbcb8ad879b",
         "attempt": 1,
         "firstWorkflowTaskBackoff": "0s",
@@ -59,7 +59,7 @@
       "taskId": "28462557",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "2",
-        "identity": "25@76b16b928ec6",
+        "identity": "steward-fixture",
         "requestId": "d128565b-58b7-45ad-9941-842b1a25f91a",
         "historySizeBytes": "570",
         "workerVersion": {
@@ -76,7 +76,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "2",
         "startedEventId": "3",
-        "identity": "25@76b16b928ec6",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+fdde4653fde50e9de9da03827f29ca4c32f68c9ad15f230acdf1de7472db33cd"
         },
@@ -110,7 +110,7 @@
             }
           ]
         },
-        "identity": "history-service",
+        "identity": "steward-fixture",
         "externalWorkflowExecution": {
           "workflowId": "steward-findings-reconcile-scheduled-2026-09-27T05:05:00Z",
           "runId": "01a0e140-90a6-7633-87ad-fd9ba647be18"
@@ -142,7 +142,7 @@
       "taskId": "52331728",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "6",
-        "identity": "26@0519deeda5f5",
+        "identity": "steward-fixture",
         "requestId": "694a3750-f54c-4476-8de2-865cdb0c7501",
         "historySizeBytes": "1436",
         "workerVersion": {
@@ -159,7 +159,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "6",
         "startedEventId": "7",
-        "identity": "26@0519deeda5f5",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+fdde4653fde50e9de9da03827f29ca4c32f68c9ad15f230acdf1de7472db33cd"
         },

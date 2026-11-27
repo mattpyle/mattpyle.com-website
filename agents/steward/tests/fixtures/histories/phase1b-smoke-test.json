@@ -25,7 +25,7 @@
         },
         "workflowTaskTimeout": "10s",
         "originalExecutionRunId": "019f786f-5bc2-7b4b-b26f-f08bd7d324f9",
-        "identity": "37476@Matt-PC",
+        "identity": "steward-fixture",
         "firstExecutionRunId": "019f786f-5bc2-7b4b-b26f-f08bd7d324f9",
         "attempt": 1,
         "firstWorkflowTaskBackoff": "0s",
@@ -54,7 +54,7 @@
       "taskId": "3146341",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "2",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "da48f196-f220-4704-92d7-6fa99a4779aa",
         "historySizeBytes": "726",
         "workerVersion": {
@@ -70,7 +70,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "2",
         "startedEventId": "3",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -132,7 +132,7 @@
       "taskId": "3146352",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "5",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "b9e89e1f-69cc-4e33-8af0-0b7a5fed3687",
         "attempt": 1,
         "workerVersion": {
@@ -158,7 +158,7 @@
         },
         "scheduledEventId": "5",
         "startedEventId": "6",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -168,7 +168,7 @@
       "taskId": "3146354",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -183,7 +183,7 @@
       "taskId": "3146358",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "8",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "5871ede5-187e-4d74-8540-ebe85a604a03",
         "historySizeBytes": "2986",
         "workerVersion": {
@@ -199,7 +199,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "8",
         "startedEventId": "9",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -376,7 +376,7 @@
       "taskId": "3146379",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "13",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "15ef8910-4536-41f2-8145-6cd87c6a3b9c",
         "attempt": 1,
         "workerVersion": {
@@ -402,7 +402,7 @@
         },
         "scheduledEventId": "13",
         "startedEventId": "15",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -412,7 +412,7 @@
       "taskId": "3146381",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -427,7 +427,7 @@
       "taskId": "3146385",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "17",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "fd34b2fa-e515-4fed-aa0f-2cbc70c0e8b5",
         "historySizeBytes": "4554",
         "workerVersion": {
@@ -443,7 +443,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "17",
         "startedEventId": "18",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -458,7 +458,7 @@
       "taskId": "3146391",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "11",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "4012df9f-1d04-4ce1-b641-96c9868b8c08",
         "attempt": 1,
         "workerVersion": {
@@ -484,7 +484,7 @@
         },
         "scheduledEventId": "11",
         "startedEventId": "20",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -494,7 +494,7 @@
       "taskId": "3146393",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -509,7 +509,7 @@
       "taskId": "3146397",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "12",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "931d64e9-c170-4008-a018-4c1b8640d277",
         "attempt": 1,
         "workerVersion": {
@@ -535,7 +535,7 @@
         },
         "scheduledEventId": "12",
         "startedEventId": "23",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -545,7 +545,7 @@
       "taskId": "3146400",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "22",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "e0c54568-6144-44c3-883a-5bee1721ef69",
         "historySizeBytes": "10106",
         "workerVersion": {
@@ -561,7 +561,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "22",
         "startedEventId": "25",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -576,7 +576,7 @@
       "taskId": "3146406",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "14",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "f53c6675-0e37-499c-b3e4-cd1501bb803d",
         "attempt": 1,
         "workerVersion": {
@@ -602,7 +602,7 @@
         },
         "scheduledEventId": "14",
         "startedEventId": "27",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -612,7 +612,7 @@
       "taskId": "3146408",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -627,7 +627,7 @@
       "taskId": "3146412",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "29",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "1fc4e48b-f80f-432a-a5dc-4e30c8626354",
         "historySizeBytes": "13345",
         "workerVersion": {
@@ -643,7 +643,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "29",
         "startedEventId": "30",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -697,7 +697,7 @@
       "taskId": "3146422",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "32",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "fbd4aebf-1aca-4659-bf5a-3e74c21874f1",
         "attempt": 1,
         "workerVersion": {
@@ -723,7 +723,7 @@
         },
         "scheduledEventId": "32",
         "startedEventId": "33",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -733,7 +733,7 @@
       "taskId": "3146424",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -748,7 +748,7 @@
       "taskId": "3146428",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "35",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "e5e0c103-b6b2-46f0-a227-383bd09199d6",
         "historySizeBytes": "30787",
         "workerVersion": {
@@ -764,7 +764,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "35",
         "startedEventId": "36",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -818,7 +818,7 @@
       "taskId": "3146438",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "38",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "dee62708-b918-433c-a36b-1d51a09bd67a",
         "attempt": 1,
         "workerVersion": {
@@ -844,7 +844,7 @@
         },
         "scheduledEventId": "38",
         "startedEventId": "39",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -854,7 +854,7 @@
       "taskId": "3146440",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -869,7 +869,7 @@
       "taskId": "3146444",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "41",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "b44edd66-eb81-4b68-8343-ab15e92ba03a",
         "historySizeBytes": "39597",
         "workerVersion": {
@@ -885,7 +885,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "41",
         "startedEventId": "42",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -910,7 +910,7 @@
             }
           ]
         },
-        "identity": "35552@Matt-PC",
+        "identity": "steward-fixture",
         "header": {}
       }
     },
@@ -921,7 +921,7 @@
       "taskId": "3146451",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -936,7 +936,7 @@
       "taskId": "3146455",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "45",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "c01f2cf4-358b-4f8e-add7-5cfd7790e1d6",
         "historySizeBytes": "40124",
         "workerVersion": {
@@ -952,7 +952,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "45",
         "startedEventId": "46",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1010,7 +1010,7 @@
       "taskId": "3146465",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "48",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "f3a5161d-e112-4c59-9d49-80e83db5ef72",
         "attempt": 1,
         "workerVersion": {
@@ -1036,7 +1036,7 @@
         },
         "scheduledEventId": "48",
         "startedEventId": "49",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1046,7 +1046,7 @@
       "taskId": "3146467",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1061,7 +1061,7 @@
       "taskId": "3146471",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "51",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "9de4e2ba-ddfb-414e-9e3d-dc9d7154fe97",
         "historySizeBytes": "48988",
         "workerVersion": {
@@ -1077,7 +1077,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "51",
         "startedEventId": "52",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1093,7 +1093,7 @@
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "rereview",
         "input": {},
-        "identity": "37548@Matt-PC",
+        "identity": "steward-fixture",
         "header": {}
       }
     },
@@ -1104,7 +1104,7 @@
       "taskId": "3146478",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1119,7 +1119,7 @@
       "taskId": "3146482",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "55",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "bce1759d-ac8a-46f5-baf3-906e03fd43ca",
         "historySizeBytes": "49470",
         "workerVersion": {
@@ -1135,7 +1135,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "55",
         "startedEventId": "56",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1189,7 +1189,7 @@
       "taskId": "3146492",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "58",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "ebdd50b2-49d4-44b1-bace-5f9e5f0bb8f4",
         "attempt": 1,
         "workerVersion": {
@@ -1215,7 +1215,7 @@
         },
         "scheduledEventId": "58",
         "startedEventId": "59",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1225,7 +1225,7 @@
       "taskId": "3146494",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1240,7 +1240,7 @@
       "taskId": "3146498",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "61",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "d5096b5a-bd5a-4eb7-b898-139b8b4c45be",
         "historySizeBytes": "51696",
         "workerVersion": {
@@ -1256,7 +1256,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "61",
         "startedEventId": "62",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1433,7 +1433,7 @@
       "taskId": "3146519",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "64",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "4f129dfc-ad7a-4b16-8610-1edc01255a8e",
         "attempt": 1,
         "workerVersion": {
@@ -1459,7 +1459,7 @@
         },
         "scheduledEventId": "64",
         "startedEventId": "68",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1469,7 +1469,7 @@
       "taskId": "3146521",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1484,7 +1484,7 @@
       "taskId": "3146525",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "66",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "906c9a63-7b28-4e7a-aefe-3b9b21951e4f",
         "attempt": 1,
         "workerVersion": {
@@ -1510,7 +1510,7 @@
         },
         "scheduledEventId": "66",
         "startedEventId": "71",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1520,7 +1520,7 @@
       "taskId": "3146529",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "70",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "ab948e42-edf5-4e6e-9206-06270f7291d7",
         "historySizeBytes": "54096",
         "workerVersion": {
@@ -1536,7 +1536,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "70",
         "startedEventId": "73",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1551,7 +1551,7 @@
       "taskId": "3146535",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "65",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "278d4822-675d-462d-8e09-ab43c7b70dc7",
         "attempt": 1,
         "workerVersion": {
@@ -1577,7 +1577,7 @@
         },
         "scheduledEventId": "65",
         "startedEventId": "75",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1587,7 +1587,7 @@
       "taskId": "3146537",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1602,7 +1602,7 @@
       "taskId": "3146541",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "77",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "6f2cf8b0-eb1b-49a7-9ec0-a74475678063",
         "historySizeBytes": "58264",
         "workerVersion": {
@@ -1618,7 +1618,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "77",
         "startedEventId": "78",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1633,7 +1633,7 @@
       "taskId": "3146547",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "67",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "28a63b6e-31e6-4c01-85c4-bd2702d06cfc",
         "attempt": 1,
         "workerVersion": {
@@ -1659,7 +1659,7 @@
         },
         "scheduledEventId": "67",
         "startedEventId": "80",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1669,7 +1669,7 @@
       "taskId": "3146549",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1684,7 +1684,7 @@
       "taskId": "3146553",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "82",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "15d3fa26-666f-4581-b235-68b25129b53d",
         "historySizeBytes": "62263",
         "workerVersion": {
@@ -1700,7 +1700,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "82",
         "startedEventId": "83",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1754,7 +1754,7 @@
       "taskId": "3146563",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "85",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "16a9288b-3238-499b-9e10-5eb60ee0ea3c",
         "attempt": 1,
         "workerVersion": {
@@ -1780,7 +1780,7 @@
         },
         "scheduledEventId": "85",
         "startedEventId": "86",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1790,7 +1790,7 @@
       "taskId": "3146565",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1805,7 +1805,7 @@
       "taskId": "3146569",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "88",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "b8c7abc9-76f7-441c-8ac5-0dafd8e28a2f",
         "historySizeBytes": "80104",
         "workerVersion": {
@@ -1821,7 +1821,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "88",
         "startedEventId": "89",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1875,7 +1875,7 @@
       "taskId": "3146579",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "91",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "ff482366-cf40-4d35-8c2a-baac040e3771",
         "attempt": 1,
         "workerVersion": {
@@ -1901,7 +1901,7 @@
         },
         "scheduledEventId": "91",
         "startedEventId": "92",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -1911,7 +1911,7 @@
       "taskId": "3146581",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1926,7 +1926,7 @@
       "taskId": "3146585",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "94",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "23389bac-4475-442e-8ada-19fdd554d8ad",
         "historySizeBytes": "89143",
         "workerVersion": {
@@ -1942,7 +1942,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "94",
         "startedEventId": "95",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -1967,7 +1967,7 @@
             }
           ]
         },
-        "identity": "3028@Matt-PC",
+        "identity": "steward-fixture",
         "header": {}
       }
     },
@@ -1978,7 +1978,7 @@
       "taskId": "3146592",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -1993,7 +1993,7 @@
       "taskId": "3146596",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "98",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "f44f465d-81f5-46bc-9280-e879e101a6a9",
         "historySizeBytes": "89657",
         "workerVersion": {
@@ -2009,7 +2009,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "98",
         "startedEventId": "99",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -2063,7 +2063,7 @@
       "taskId": "3146606",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "101",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "dfe0fab8-758e-41aa-a127-3ba4a120b99f",
         "attempt": 1,
         "workerVersion": {
@@ -2089,7 +2089,7 @@
         },
         "scheduledEventId": "101",
         "startedEventId": "102",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -2099,7 +2099,7 @@
       "taskId": "3146608",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -2114,7 +2114,7 @@
       "taskId": "3146612",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "104",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "28a49986-7b90-46cf-9d33-9a02e7755f57",
         "historySizeBytes": "90572",
         "workerVersion": {
@@ -2130,7 +2130,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "104",
         "startedEventId": "105",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
@@ -2184,7 +2184,7 @@
       "taskId": "3146622",
       "activityTaskStartedEventAttributes": {
         "scheduledEventId": "107",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "58d96b72-c173-4ef1-919b-de3b80ffc989",
         "attempt": 1,
         "workerVersion": {
@@ -2210,7 +2210,7 @@
         },
         "scheduledEventId": "107",
         "startedEventId": "108",
-        "identity": "31984@Matt-PC"
+        "identity": "steward-fixture"
       }
     },
     {
@@ -2220,7 +2220,7 @@
       "taskId": "3146624",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
-          "name": "31984@Matt-PC-2e982395e4a14cfcaaf7edfbdfa61831",
+          "name": "steward-fixture-2e982395e4a14cfcaaf7edfbdfa61831",
           "kind": "TASK_QUEUE_KIND_STICKY",
           "normalName": "steward-light"
         },
@@ -2235,7 +2235,7 @@
       "taskId": "3146628",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "110",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "requestId": "871cefbd-fd10-4210-9a85-2eb425cbb510",
         "historySizeBytes": "99676",
         "workerVersion": {
@@ -2251,7 +2251,7 @@
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "110",
         "startedEventId": "111",
-        "identity": "31984@Matt-PC",
+        "identity": "steward-fixture",
         "workerVersion": {
           "buildId": "@temporalio/worker@1.20.3+3d2e32eb27c5251b6e726e8162961903f7aab0726788900eb102fb5beed01fa9"
         },
