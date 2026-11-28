@@ -759,6 +759,12 @@ const QUEUE_FINDINGS = 'steward-findings';
 const QUEUE_HEAVY = 'steward-heavy';
 /** `watchFinding`'s own queue (stage 4), capped at one, so a verdict write never waits behind a page render. */
 const QUEUE_FINDINGS_WATCH = 'steward-findings-watch';
+/**
+ * `runFindingChecks`' own queue (STW-716), capped at two, so a browser check
+ * never holds a slot a verdict write needs. Moving it issues no new command:
+ * replay does not compare an activity's task queue (determinism rule 12).
+ */
+const QUEUE_FINDINGS_CHECKS = 'steward-findings-checks';
 
 /** The `patched` marker of the issue path in place of the fix child (decision 26). */
 export const ACTION_ADAPTER_PATCH = 'fixer-action-adapter';
@@ -1380,7 +1386,7 @@ const previewing = wf.proxyActivities<Pick<typeof activities, 'awaitPrPreview'>>
 // answering 5xx while it warms. A broken check and a worker with no bypass
 // secret are not mended by a retry.
 const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
-  taskQueue: QUEUE_FINDINGS,
+  taskQueue: QUEUE_FINDINGS_CHECKS,
   startToCloseTimeout: '5 minutes',
   heartbeatTimeout: '30 seconds',
   retry: {
@@ -1396,7 +1402,7 @@ const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>
 // Chrome's launch. A check whose own expression does not run is not mended by
 // a retry; production answering 5xx is retried once.
 const measuring = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
-  taskQueue: QUEUE_FINDINGS,
+  taskQueue: QUEUE_FINDINGS_CHECKS,
   startToCloseTimeout: '15 minutes',
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 2, initialInterval: '30 seconds', nonRetryableErrorTypes: ['VerifyCheckBroken'] },

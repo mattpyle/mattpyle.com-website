@@ -2,11 +2,11 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
-import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { ApplicationFailureCategory, type Duration } from '@temporalio/common';
 import proto from '@temporalio/proto';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { settings, skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import {
@@ -411,7 +411,7 @@ function lifecycle(script: Script) {
 
 /** One worker, as on the hosted container: no `steward-heavy` poller, so a child sent there would never run. */
 async function withWorkers<T>(mocks: ReturnType<typeof lifecycle>, fn: () => Promise<T>, boundMs?: number): Promise<T> {
-  const findingsWorker = await Worker.create({
+  const findingsWorker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: skipVerdictMeasure(mocks.findings),
@@ -1544,7 +1544,7 @@ test('request-fix is refused while the run measures at its verdict, and accepted
   const mocks = lifecycle({ merge: {} });
   let release!: () => void;
   const measured = new Promise<void>((resolve) => (release = resolve));
-  const worker = await Worker.create({
+  const worker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: {
@@ -1642,7 +1642,7 @@ test('resume and request-fix sent to one park in the same workflow task: one is 
   const bundle = await workflowBundle();
   // No cache, so no sticky queue: a new worker takes the run's next task from the normal queue at once.
   const worker = () =>
-    Worker.create({ connection: env.nativeConnection, workflowBundle: bundle, activities: skipVerdictMeasure(mocks.findings), taskQueue: FINDINGS, maxCachedWorkflows: 0 });
+    createFindingsWorkers({ connection: env.nativeConnection, workflowBundle: bundle, activities: skipVerdictMeasure(mocks.findings), taskQueue: FINDINGS, maxCachedWorkflows: 0 });
   const id = 'finding/mattpyle-com/lifecycle-two-updates';
   const handle = client.workflow.getHandle(id);
   await (await worker()).runUntil(

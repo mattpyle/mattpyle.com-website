@@ -7,6 +7,7 @@ import { Worker } from '@temporalio/worker';
 import proto from '@temporalio/proto';
 import { tsToMs } from '@temporalio/common/time';
 import { bounded, createLocalEnv } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
@@ -437,7 +438,7 @@ const merging = (n: number) => (s: FindingState) => s.step === 'waiting-merge' &
 /** Runs `body` against a started, approved and fixed run, then terminates it. */
 async function scenario(body: (handle: WorkflowHandle) => Promise<void>, start = true): Promise<void> {
   mergeCalls.length = 0;
-  const worker = await Worker.create({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities: skipVerdictMeasure(activities), taskQueue: FINDINGS });
+  const worker = await createFindingsWorkers({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities: skipVerdictMeasure(activities), taskQueue: FINDINGS });
   await worker.runUntil(
     bounded(
       (async () => {
@@ -577,7 +578,7 @@ test('a merge and a retest in the same workflow task: the merge wins', async () 
   // A worker for the activities alone, so the workflow worker can stop while
   // the merge poll and the Update both land, and its successor reads them in
   // one workflow task.
-  const activityWorker = await Worker.create({ connection: env.nativeConnection, activities: skipVerdictMeasure(activities), taskQueue: FINDINGS });
+  const activityWorker = await createFindingsWorkers({ connection: env.nativeConnection, activities: skipVerdictMeasure(activities), taskQueue: FINDINGS });
   const bundle = await workflowBundle();
   // No cache, so no sticky queue: the successor gets the task from the normal queue at once.
   const workflowWorker = () =>

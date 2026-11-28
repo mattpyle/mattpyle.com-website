@@ -10,7 +10,7 @@ Steward is the editorial agent and audit runner for mattpyle.com, a TypeScript a
 
 ## Where the authoritative docs are
 
-1. `agents/steward/README.md`: the workflows, the five task queues, the two workers, the publish leg, the CLI verbs, the Temporal connection switch and the exports entries. Read it first and restate nothing from it here.
+1. `agents/steward/README.md`: the workflows, the task queues, the two workers, the publish leg, the CLI verbs, the Temporal connection switch and the exports entries. Read it first and restate nothing from it here.
 2. The docblocks at the top of each file in `src/workflows/`. They hold the versioning history and the reason each input field and signal exists. Read the whole docblock of a workflow before changing it.
 3. The docblocks in `tests/workflows/replay.test.ts`. Each fixture's comment says which history it is, which `patched` marker it guards, and the probe that proved it can fail.
 4. The operator's docs, the design and the build log are kept outside this repository. Ask Matt when a decision here needs them.
@@ -18,9 +18,9 @@ Steward is the editorial agent and audit runner for mattpyle.com, a TypeScript a
 ## Where things run
 
 1. Temporal Cloud when `TEMPORAL_API_KEY` is set, the local dev server when it is empty. `resolveTemporalConnection` in `src/config.ts` decides for both the CLI and the workers.
-2. The hosted worker is `src/worker-hosted.ts`, built by `agents/steward/Dockerfile` and run as a Railway container. It serves `steward-audit`, `steward-audit-fast`, `steward-findings` and `steward-findings-watch`. `src/hosted-registry.ts` holds each queue's activity map, workflow-bundle flag and concurrency cap, and the entry point builds its workers from it.
+2. The hosted worker is `src/worker-hosted.ts`, built by `agents/steward/Dockerfile` and run as a Railway container. It serves `steward-audit`, `steward-audit-fast`, `steward-findings`, `steward-findings-watch` and `steward-findings-checks`. `src/hosted-registry.ts` holds each queue's activity map, workflow-bundle flag and concurrency cap, and the entry point builds its workers from it.
 3. The local worker is `src/worker.ts`, started by `steward up` beside the working copy. It serves `steward-light` and `steward-heavy`, and `steward-audit` and `steward-audit-fast` only against the local dev server, where no hosted worker exists.
-4. `steward-findings` and `steward-findings-watch` have the hosted worker alone. `tests/lib/hosted-worker-registry.test.ts` builds the real registry and pins the hosted queue list and each queue's activities; its local-worker test pins the local list.
+4. `steward-findings`, `steward-findings-watch` and `steward-findings-checks` have the hosted worker alone. `tests/lib/hosted-worker-registry.test.ts` builds the real registry and pins the hosted queue list and each queue's activities; its local-worker test pins the local list.
 5. The fixer is `claude-code-action`, run by `.github/workflows/claude.yml` on an issue that `openFixIssue` opens. The custom fixer (`fixFindingWorkflow`, `src/activities/fixer.ts`, `src/lib/fixer.ts`) is frozen: it exists so that older lifecycle runs replay.
 
 ## Determinism rules

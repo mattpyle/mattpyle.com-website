@@ -120,6 +120,12 @@ export type { RecheckFindingsInput, RecheckFindingsResult } from '../lib/finding
  */
 
 const QUEUE_FINDINGS = 'steward-findings';
+/**
+ * `runFindingChecks`' own queue (STW-716), capped at two, so a browser check
+ * never holds a slot a verdict write needs. Moving it issues no new command:
+ * replay does not compare an activity's task queue (determinism rule 12).
+ */
+const QUEUE_FINDINGS_CHECKS = 'steward-findings-checks';
 
 /** How long a watch site's run with no pending `watchFinding` gets before its second read. */
 const WATCH_SECOND_READ_DELAY = '30 seconds';
@@ -146,7 +152,7 @@ const reading = wf.proxyActivities<
 // attribute of the same schedule command, and the history recorded before it
 // (`recheck-findings-pre-heartbeat.bin`) replays unchanged (determinism rule 5).
 const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
-  taskQueue: QUEUE_FINDINGS,
+  taskQueue: QUEUE_FINDINGS_CHECKS,
   startToCloseTimeout: '15 minutes',
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 2, initialInterval: '30 seconds', nonRetryableErrorTypes: ['VerifyCheckBroken'] },

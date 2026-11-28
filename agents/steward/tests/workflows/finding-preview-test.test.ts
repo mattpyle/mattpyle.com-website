@@ -2,8 +2,8 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
-import { Worker } from '@temporalio/worker';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
@@ -183,7 +183,7 @@ async function untilParked(handle: WorkflowHandle): Promise<FindingState> {
 
 /** Runs one attempt to the point where its PR has closed and the preview test has finished. */
 async function runAttempt(id: string): Promise<FindingState> {
-  const worker = await Worker.create({
+  const worker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: skipVerdictMeasure(activities),

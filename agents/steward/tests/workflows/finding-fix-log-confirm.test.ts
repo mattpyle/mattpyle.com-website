@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, WorkflowUpdateFailedError, type WorkflowHandle } from '@temporalio/client';
 import { ApplicationFailure } from '@temporalio/common';
-import { Worker } from '@temporalio/worker';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
@@ -156,7 +156,7 @@ const input: FindingWorkflowInput = {
 const APPROVE: FindingVerdict = { status: 'approved', reason: 'Real.', source: 'file', at: '2026-11-27T18:00:00Z' };
 
 async function run<T>(acts: Record<string, unknown>, body: (handle: WorkflowHandle<typeof findingWorkflow>) => Promise<T>): Promise<T> {
-  const worker = await Worker.create({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities: skipVerdictMeasure(acts), taskQueue: FINDINGS });
+  const worker = await createFindingsWorkers({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities: skipVerdictMeasure(acts), taskQueue: FINDINGS });
   return worker.runUntil(
     bounded(
       (async () => {

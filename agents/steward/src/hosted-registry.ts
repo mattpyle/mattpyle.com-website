@@ -51,19 +51,21 @@ import {
   HOSTED_ACTIVITY_CONCURRENCY,
   HOSTED_FAST_ACTIVITY_CONCURRENCY,
   HOSTED_FINDINGS_ACTIVITY_CONCURRENCY,
+  HOSTED_FINDINGS_CHECKS_ACTIVITY_CONCURRENCY,
   HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY,
   QUEUE_AUDIT,
   QUEUE_AUDIT_FAST,
   QUEUE_FINDINGS,
+  QUEUE_FINDINGS_CHECKS,
   QUEUE_FINDINGS_WATCH,
 } from './config.js';
 
 /**
- * The hosted worker's registry: for each of its three queues, the task queue,
+ * The hosted worker's registry: for each of its five queues, the task queue,
  * the activities it registers, whether it carries the workflow bundle, and its
  * concurrency cap. Data only.
  *
- * `worker-hosted.ts` builds its three `Worker.create` calls from this list and
+ * `worker-hosted.ts` builds one `Worker.create` call per entry of this list and
  * declares no map of its own, and `tests/lib/hosted-worker-registry.test.ts`
  * builds the same list. That is the point of the module: the entry point calls
  * `main()` at module scope, so a test cannot import it without connecting to
@@ -136,9 +138,7 @@ const fastActivities = { auditSiteFast };
  * PR's preview wait and its comment and draft write, and the blockless
  * verify's one production read against the site repository; a
  * visibility list, a dispatcher signal-with-start and a status sweep
- * through the worker's own client; and the verifier's checks: fetch against
- * production and this image's Chromium for `selector` and `js`, as the deep
- * audit uses it; and the fix log draft's model call (STW-710), which needs
+ * through the worker's own client; and the fix log draft's model call (STW-710), which needs
  * `ANTHROPIC_API_KEY` on this worker and fails non-retryably without it. None
  * opens a local file in the repository, so the "nothing local" rule above
  * holds for this map too.
@@ -161,6 +161,8 @@ const findingsActivities = {
   listOpenFindingWorkflows,
   readFixPr,
   readVerifyBlock,
+  // Moved to the checks queue (STW-716). Kept here so a check scheduled on
+  // this queue before the move, or retrying across the deploy, completes.
   runFindingChecks,
   writeFindingVerification,
   reportPreviewChecks,
@@ -196,8 +198,18 @@ const findingsActivities = {
 const watchActivities = { watchFinding };
 
 /**
- * The four queues, in the order the ready line lists them: audit, fast,
- * findings, watch. A fresh object each call, so a caller cannot mutate the shared one.
+ * The checks queue's whole registry (STW-716): one activity,
+ * `runFindingChecks`, which `findingWorkflow`, `verifyFindingWorkflow` and
+ * `recheckFindingsWorkflow` schedule here. Fetch against production or a
+ * preview, and this image's Chromium for `selector` and `js` checks, so the
+ * "nothing local" rule holds. The findings map above still names it, for a
+ * check scheduled on `steward-findings` before the move.
+ */
+const checksActivities = { runFindingChecks };
+
+/**
+ * The five queues, in the order the ready line lists them: audit, fast,
+ * findings, watch, checks. A fresh object each call, so a caller cannot mutate the shared one.
  *
  * The audit queue's cap of one is a correctness rule about Lighthouse
  * (`config.ts`'s `HOSTED_ACTIVITY_CONCURRENCY`); the fast queue's four is a
@@ -207,9 +219,11 @@ const watchActivities = { watchFinding };
  * render on the audit queue. The fast queue carries none, so it can never be
  * given a deep audit. The watch queue carries none either: its one activity
  * can launch Chromium, so its cap of one keeps a burst of watchers off the
- * findings queue's two slots.
+ * findings queue's slots. The checks queue carries none: its one activity
+ * launches Chromium, and its cap of two keeps browser checks off the findings
+ * queue, so a verdict write never waits behind one.
  */
-export function hostedRegistry(): readonly [HostedQueue, HostedQueue, HostedQueue, HostedQueue] {
+export function hostedRegistry(): readonly [HostedQueue, HostedQueue, HostedQueue, HostedQueue, HostedQueue] {
   return [
     {
       taskQueue: QUEUE_AUDIT,
@@ -234,6 +248,12 @@ export function hostedRegistry(): readonly [HostedQueue, HostedQueue, HostedQueu
       activities: watchActivities,
       carriesWorkflows: false,
       maxConcurrentActivityTaskExecutions: HOSTED_FINDINGS_WATCH_ACTIVITY_CONCURRENCY,
+    },
+    {
+      taskQueue: QUEUE_FINDINGS_CHECKS,
+      activities: checksActivities,
+      carriesWorkflows: false,
+      maxConcurrentActivityTaskExecutions: HOSTED_FINDINGS_CHECKS_ACTIVITY_CONCURRENCY,
     },
   ];
 }

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
 import { ApplicationFailure } from '@temporalio/common';
-import { Worker } from '@temporalio/worker';
 import { bounded, createLocalEnv } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
@@ -244,7 +244,7 @@ const entryCommits = (gh: FakeGitHub) => gh.history(BRANCH).filter((m) => m === 
 
 async function scenario(acts: Record<string, unknown>, body: (handle: WorkflowHandle) => Promise<void>): Promise<void> {
   mergeCalls.length = 0;
-  const worker = await Worker.create({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities: skipVerdictMeasure(acts), taskQueue: FINDINGS });
+  const worker = await createFindingsWorkers({ connection: env.nativeConnection, workflowBundle: await workflowBundle(), activities: skipVerdictMeasure(acts), taskQueue: FINDINGS });
   await worker.runUntil(
     bounded(
       (async () => {

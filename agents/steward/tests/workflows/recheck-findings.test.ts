@@ -1,10 +1,10 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
-import { Worker } from '@temporalio/worker';
 import { Client } from '@temporalio/client';
 import { ApplicationFailure, ApplicationFailureCategory } from '@temporalio/common';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { installFakeGitHub, type FakeGitHub } from '../helpers/fake-github.js';
 import { recheckFindingsWorkflow } from '../../src/workflows/recheck-findings.js';
@@ -142,7 +142,7 @@ function activities(open: string[] = [], overrides: Record<string, unknown> = {}
 }
 
 async function run(acts: Record<string, unknown>) {
-  const worker = await Worker.create({
+  const worker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: acts,
@@ -389,7 +389,7 @@ test('a run with no pending watch is read again after a wait, and named by its s
   });
   const { activities: acts, pings } = activities([], { readWatchRun: watch.readWatchRun });
   // The time-skipping client, so the second read's wait passes at once.
-  const worker = await Worker.create({
+  const worker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: acts,
@@ -492,7 +492,7 @@ test('a first read that GitHub fails for an hour is waited out, and the schedule
       return readSiteHosts(input);
     },
   });
-  const worker = await Worker.create({
+  const worker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: acts,

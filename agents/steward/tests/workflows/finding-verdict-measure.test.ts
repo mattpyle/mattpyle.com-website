@@ -2,9 +2,9 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
-import { Worker } from '@temporalio/worker';
 import { ApplicationFailure } from '@temporalio/activity';
 import { bounded, createTestEnv } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import {
   findingStateQuery,
@@ -121,7 +121,7 @@ async function until(handle: WorkflowHandle, done: (state: FindingState) => bool
 
 async function run<T>(scene: Scene, key: string, body: (handle: WorkflowHandle) => Promise<T>) {
   const m = mocks(scene);
-  const worker = await Worker.create({
+  const worker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: m.activities,
