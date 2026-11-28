@@ -26,6 +26,8 @@ import { sitePages, siteSections } from '../src/data/site-sections.mjs';
 const EXEMPT = {
   // The error page is served for URLs that do not exist. It is not a destination to list.
   '/404': 'the error page, not a destination',
+  // Unlisted design-system workbench, noindex and kept out of indexes until promoted.
+  '/design-system': 'unlisted design-system workbench, kept out of navigation and indexes until promoted',
 };
 
 /** @param {string} source the text of src/pages/llms.txt.ts */

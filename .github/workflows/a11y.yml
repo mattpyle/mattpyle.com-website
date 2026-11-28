@@ -119,7 +119,9 @@ jobs:
             http://localhost:4321/audit \
             'http://localhost:4321/audit?url=https://example.com' \
             'http://localhost:4321/audit?url=file:///etc/hosts' \
-            http://localhost:4321/writing/accessibility-and-ai/             http://localhost:4321/404
+            http://localhost:4321/writing/accessibility-and-ai/ \
+            http://localhost:4321/design-system \
+            http://localhost:4321/404
 
       # Steward's `audit-url` HTML report is a page this repo ships too, and an
       # agent-readiness report that fails an accessibility scan argues against

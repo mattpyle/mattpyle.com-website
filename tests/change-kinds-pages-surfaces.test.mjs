@@ -25,10 +25,12 @@ import { ROOT, builtPages, canon, read } from './helpers/built-pages.mjs';
 /** @type {Record<string, string>} */
 const LINK_EXEMPT = {
   '/404': 'the error page; it has no markdown alternate and is not negotiable',
+  '/design-system': 'unlisted design-system workbench; static /design-system.md resolves 200, no edge Link header or Accept negotiation until promoted',
 };
 /** @type {Record<string, string>} */
 const LASTMOD_EXEMPT = {
   '/404': 'the error page; the sitemap integration leaves it out',
+  '/design-system': 'unlisted design-system workbench; filtered out of sitemap while noindex',
 };
 /**
  * A page off the scan list names the listed page that shares its template. Empty today: every
@@ -45,6 +47,7 @@ const CARD_EXEMPT = {
   '/changelog': 'uses the sitewide fallback card',
   '/fix-log': 'uses the sitewide fallback card',
   '/404': 'the error page; it uses the fallback',
+  '/design-system': 'unlisted design-system workbench; uses the sitewide fallback card',
 };
 
 const A11Y_WORKFLOW = '.github/workflows/a11y.yml';

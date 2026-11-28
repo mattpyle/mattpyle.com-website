@@ -1,0 +1,869 @@
+---
+/**
+ * Unlisted Design System Workbench (noindex).
+ *
+ * Renders the live token catalogue, contrast matrix, typography and spacing
+ * scales, and real shared components in both Modern and Retro appearances from
+ * `src/data/design-tokens.generated.json` (compiled by Style Dictionary from
+ * `tokens/*.tokens.json`).
+ *
+ * Strict CSP compliance: zero inline `style="..."` attributes and zero
+ * `define:vars`. Catalogue properties, swatches, spacing bars, and retro
+ * flourishes come from `src/styles/workbench-swatches.css` and
+ * `src/styles/workbench-retro.css`, imported only by this route so normal
+ * pages pay zero CSS overhead.
+ */
+import Layout from '../layouts/Layout.astro';
+import EntryNav from '../components/EntryNav.astro';
+import FilterPills from '../components/FilterPills.astro';
+import designTokens from '../data/design-tokens.generated.json';
+import '../styles/workbench-swatches.css';
+import '../styles/workbench-retro.css';
+
+const colorGroups = [
+  'Neutrals',
+  'Section semantics',
+  'Status and controls',
+  'Tints and hatching',
+  'Chrome',
+];
+
+const modernByGroup = colorGroups.map((group) => ({
+  group,
+  tokens: designTokens.modernColors.filter((t) => t.group === group),
+}));
+
+const demoPills = [
+  { value: 'all', label: 'all' },
+  { value: 'token', label: 'tokens' },
+  { value: 'component', label: 'components' },
+];
+
+const demoItems = [
+  { id: '1', kind: 'token', title: 'W3C DTCG source files', detail: 'tokens/primitives, semantic, and retro compiled by Style Dictionary.' },
+  { id: '2', kind: 'component', title: 'EntryNav shared primitive', detail: 'Single newer/older navigation shared by writing, changelog, and fix-log.' },
+  { id: '3', kind: 'component', title: 'FilterPills radiogroup', detail: 'Accessible keyboard-navigable filter with roving tabindex and live status.' },
+];
+
+// Hand-kept summary of the ten editorial and design constraints. The design
+// reference kept outside this repository holds the same ten as the source of truth.
+const constraints = [
+  'No job title in any headline.',
+  'No eyebrows, kickers, caveats, or parenthetical asides.',
+  'Minimum type floor is 15px (exceptions explicitly documented below).',
+  'No pills, tag chips, or stack labels under titles in Modern mode.',
+  'No pulsing dots or live-looking counters.',
+  'Dates read DD MMM YYYY.',
+  'The four section colours carry meaning; never use them decoratively.',
+  'Banned fonts: Inter, Space Grotesk, Instrument Serif, Geist, and serif italics.',
+  'No warm cream or beige backgrounds in Modern mode; base is cool light grey.',
+  'Leave honest placeholders rather than inventing numbers or labels.',
+];
+
+const exceptions = [
+  { where: 'SiteHeader.astro (<= 720px and <= 374px)', rule: '15px type floor', reason: 'Mobile priority-plus nav steps down to 13px/12px so two or three links plus "more" fit at 320px without horizontal overflow.' },
+  { where: 'SiteHeader.astro (<= 720px)', rule: 'No shadows anywhere', reason: 'Subtle sticky-header and overflow-panel drop shadows replace scroll-linked elevation without JavaScript.' },
+  { where: 'ActivityBody.astro (.tick) & FixBeforeAfter.astro (.spec-frame)', rule: '15px type floor', reason: 'Existing 14px chart ticks and 14.5px mobile code frames; candidates for alignment in Phase 3.' },
+];
+---
+
+<Layout
+  title="Design System"
+  description="Unlisted living workbench for mattpyle.com design tokens, typography, spacing, and shared components in Modern and Retro appearances."
+  noindex={true}
+  markdownAlternate="/design-system.md"
+>
+  <div class="rd-section rd-hero ds-hero" data-module="design-system-hero">
+    <h1>Design <span class="rd-fill rd-fill--ink">System</span></h1>
+
+    <div class="hero-row">
+      <p class="hero-statement">
+        Live baseline of tokens, scales, contrast pairs, and shared components across Modern and Retro appearances.
+      </p>
+      <div class="hero-aside ds-controls">
+        <span class="ds-controls-copy">
+          Unlisted workbench &middot; {designTokens.modernColors.length} modern colours &middot; {designTokens.retroColors.length} retro colours
+        </span>
+        <span class="ds-controls-actions">
+          <button
+            type="button"
+            class="ds-appearance-btn"
+            data-appearance-toggle
+            aria-label="Switch to retro mode"
+          >
+            Switch appearance
+          </button>
+        </span>
+      </div>
+    </div>
+
+    <nav class="ds-toc" aria-label="Design system sections">
+      <a href="#colours">Colours</a>
+      <a href="#semantic-tokens">Semantic roles</a>
+      <a href="#contrast">Contrast</a>
+      <a href="#retro-palette">Retro palette</a>
+      <a href="#typography">Typography</a>
+      <a href="#spacing-layout">Spacing &amp; layout</a>
+      <a href="#components">Components</a>
+      <a href="#constraints">Constraints</a>
+    </nav>
+  </div>
+
+  <div class="ds-body" data-module="design-system">
+    <section class="rd-section ds-band" id="colours" aria-labelledby="ds-colours-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-colours-heading">Modern colour palette</h2>
+      </div>
+      <p class="ds-lead">
+        Authored in <code>oklch()</code> inside <code>tokens/primitives.tokens.json</code> and compiled into <code>src/styles/tokens.css</code> and <code>scripts/lib/brand-tokens.mjs</code>.
+      </p>
+
+      {modernByGroup.map(({ group, tokens }) => (
+        <div class="ds-subgroup">
+          <h3>{group}</h3>
+          <div class="ds-swatch-grid">
+            {tokens.map((t) => (
+              <div class="ds-swatch-card">
+                <div class:list={['ds-swatch-chip', t.swatchClass]} aria-hidden="true"></div>
+                <div class="ds-swatch-meta">
+                  <code class="ds-token-name">{t.cssVar}</code>
+                  <span class="ds-token-val">{t.value}</span>
+                  {t.hex && <span class="ds-token-hex">approx {t.hex}</span>}
+                  {t.contrastOnBg !== null && (
+                    <span class="ds-token-contrast">
+                      {t.contrastOnBg}:1 on bg &middot; {t.contrastOnSurface}:1 on surface
+                    </span>
+                  )}
+                  <p class="ds-token-desc">{t.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+
+    <section class="rd-section ds-band" id="semantic-tokens" aria-labelledby="ds-semantic-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-semantic-heading">Semantic role tokens</h2>
+      </div>
+      <p class="ds-lead">
+        Components consume these <code>--ds-*</code> role tokens instead of raw primitives so Modern, Retro, and a future Dark appearance swap values cleanly inside <code>@layer tokens</code>.
+      </p>
+      <div class="ds-table-scroll" role="region" tabindex="0" aria-label="Semantic role tokens table">
+        <table class="ds-table">
+          <caption class="sr-only">Semantic tokens mapping Modern and Retro appearances</caption>
+          <thead>
+            <tr>
+              <th scope="col">Token</th>
+              <th scope="col">Modern</th>
+              <th scope="col">Retro</th>
+              <th scope="col">Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            {designTokens.semanticTokens.map((t) => (
+              <tr>
+                <td>
+                  <span class="ds-inline-swatch-row">
+                    {t.swatchClass && <span class:list={['ds-mini-swatch', t.swatchClass]} aria-hidden="true"></span>}
+                    <code>{t.cssVar}</code>
+                  </span>
+                </td>
+                <td><code>{t.modernRef}</code></td>
+                <td><code>{t.retroRef ?? t.retroValue}</code></td>
+                <td>{t.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rd-section ds-band" id="contrast" aria-labelledby="ds-contrast-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-contrast-heading">WCAG AA contrast matrix</h2>
+      </div>
+      <p class="ds-lead">
+        Verified automatically by <code>tests/design-tokens.test.mjs</code> on every test run.
+      </p>
+      <div class="ds-table-scroll" role="region" tabindex="0" aria-label="WCAG AA contrast matrix table">
+        <table class="ds-table">
+          <caption class="sr-only">Measured WCAG AA contrast ratios for Modern and Retro colour pairings</caption>
+          <thead>
+            <tr>
+              <th scope="col">Appearance</th>
+              <th scope="col">Pairing</th>
+              <th scope="col">Role</th>
+              <th scope="col">Ratio</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {designTokens.contrastPairs.map((pair) => (
+              <tr>
+                <td>{pair.appearance}</td>
+                <td><code>{pair.fgVar}</code> on <code>{pair.bgVar}</code></td>
+                <td>{pair.role}</td>
+                <td class="ds-num">{pair.ratio}:1 (min {pair.min}:1)</td>
+                <td>
+                  <span class:list={['ds-status-mark', pair.passes ? 'ds-status-mark--pass' : 'ds-status-mark--fail']}>
+                    {pair.passes ? 'Pass' : 'Fail'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rd-section ds-band" id="retro-palette" aria-labelledby="ds-retro-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-retro-heading">Retro palette</h2>
+      </div>
+      <p class="ds-lead">
+        Authored strictly in hex and system fonts in <code>tokens/retro.tokens.json</code> so <code>npm run sweep:retro</code> can mechanically flag any surviving modern <code>oklch()</code> colour or webfont.
+      </p>
+      <div class="ds-swatch-grid">
+        {designTokens.retroColors.map((t) => (
+          <div class="ds-swatch-card">
+            <div class:list={['ds-swatch-chip', t.swatchClass]} aria-hidden="true"></div>
+            <div class="ds-swatch-meta">
+              <code class="ds-token-name">{t.cssVar}</code>
+              <span class="ds-token-val">{t.value}</span>
+              {t.contrastOnParchment !== null && (
+                <span class="ds-token-contrast">
+                  {t.contrastOnParchment}:1 on parchment &middot; {t.contrastOnFrame}:1 on frame
+                </span>
+              )}
+              <p class="ds-token-desc">{t.description}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section class="rd-section ds-band" id="typography" aria-labelledby="ds-type-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-type-heading">Typography</h2>
+      </div>
+      <div class="ds-families-grid">
+        {designTokens.fontFamilies.map((f) => (
+          <div class="ds-info-card">
+            <code>{f.cssVar}</code>
+            <p class:list={['ds-family-sample', `ds-family-sample--${f.name}`]}>
+              The quick brown fox reads 0123456789
+            </p>
+            <p class="ds-token-desc">{f.description}</p>
+          </div>
+        ))}
+      </div>
+
+      <div class="ds-subgroup">
+        <h3>Consolidated type scale</h3>
+        <div class="ds-type-list">
+          {designTokens.fontSizes.map((s) => (
+            <div class="ds-type-row">
+              <div class="ds-type-meta">
+                <code>{s.cssVar}</code>
+                <span class="ds-token-val">{s.value}</span>
+              </div>
+              <div class="ds-type-specimen-wrap">
+                <p class:list={['ds-type-specimen', `ds-specimen--${s.name}`]}>
+                  Built in the open for humans and agents
+                </p>
+                <p class="ds-token-desc">{s.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="rd-section ds-band" id="spacing-layout" aria-labelledby="ds-space-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-space-heading">Spacing, layout, radii &amp; motion</h2>
+      </div>
+
+      <div class="ds-subgroup">
+        <h3>Spacing scale (4px / 8px steps)</h3>
+        <div class="ds-space-list">
+          {designTokens.spacing.map((s) => (
+            <div class="ds-space-row">
+              <code>{s.cssVar}</code>
+              <span class="ds-token-val">{s.value}</span>
+              <span class:list={['ds-space-bar', `ds-space-bar--${s.name}`]} aria-hidden="true"></span>
+              <span class="ds-token-desc">{s.description}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div class="ds-metrics-grid">
+        <div class="ds-info-card">
+          <h3>Layout</h3>
+          <dl class="ds-dl">
+            {designTokens.layout.map((l) => (
+              <div class="ds-dl-row">
+                <dt><code>{l.cssVar}</code></dt>
+                <dd>{l.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div class="ds-info-card">
+          <h3>Radii</h3>
+          <dl class="ds-dl">
+            {designTokens.radii.map((r) => (
+              <div class="ds-dl-row">
+                <dt><code>{r.cssVar}</code></dt>
+                <dd>{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div class="ds-info-card">
+          <h3>Canonical breakpoints</h3>
+          <dl class="ds-dl">
+            {designTokens.breakpoints.map((b) => (
+              <div class="ds-dl-row">
+                <dt><code>{b.cssVar}</code></dt>
+                <dd>{b.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div class="ds-info-card">
+          <h3>Motion durations</h3>
+          <dl class="ds-dl">
+            {designTokens.durations.map((d) => (
+              <div class="ds-dl-row">
+                <dt><code>{d.cssVar}</code></dt>
+                <dd>{d.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="rd-section ds-band" id="components" aria-labelledby="ds-components-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-components-heading">Shared components &amp; global idioms</h2>
+      </div>
+
+      <div class="ds-subgroup">
+        <h3>Hero fill modifiers (<code>.rd-fill</code>)</h3>
+        <div class="ds-fill-showcase">
+          <span class="ds-fill-demo"><span class="rd-fill rd-fill--writing">Writing</span></span>
+          <span class="ds-fill-demo"><span class="rd-fill rd-fill--projects">Projects</span></span>
+          <span class="ds-fill-demo"><span class="rd-fill">Agents</span></span>
+          <span class="ds-fill-demo"><span class="rd-fill rd-fill--changelog">Changelog</span></span>
+          <span class="ds-fill-demo"><span class="rd-fill rd-fill--ink">About</span></span>
+        </div>
+      </div>
+
+      <div class="ds-subgroup">
+        <h3>Filter radiogroup (<code>FilterPills.astro</code>)</h3>
+        <div class="ds-component-stage">
+          <FilterPills
+            pills={demoPills}
+            groupLabel="Filter design system examples"
+            itemSelector=".ds-demo-item"
+            itemDataAttr="kind"
+            matchMode="exact"
+            noun="example"
+            nounPlural="examples"
+            filterVerb="in category"
+          />
+          <ul class="ds-demo-list">
+            {demoItems.map((item) => (
+              <li class="ds-demo-item" data-kind={item.kind}>
+                <strong>{item.title}</strong> &middot; {item.detail}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div class="ds-subgroup">
+        <h3>Entry step navigation (<code>EntryNav.astro</code>)</h3>
+        <div class="ds-component-stage ds-component-stage--flush">
+          <EntryNav
+            label="Example entry navigation"
+            newer={{ href: '#components', date: '25 Nov 2026', title: 'Single-source W3C DTCG design tokens compiled with Style Dictionary' }}
+            older={{ href: '#components', date: '20 Nov 2026', title: 'One EntryNav component holds the newer and older steps on entry pages' }}
+          />
+        </div>
+      </div>
+
+      <div class="ds-subgroup">
+        <h3>Prose system (<code>.prose</code>)</h3>
+        <div class="ds-component-stage">
+          <div class="prose">
+            <h2>Section heading inside prose</h2>
+            <p>
+              Body prose reads at <code>20px</code> on desktop in IBM Plex Sans over a <code>68ch</code> measure, with underlined <a href="#colours">writing-blue links</a> that never rely on colour alone.
+            </p>
+            <blockquote>
+              A blockquote carries a 3px section accent border on a white card surface, never italicised in Modern mode.
+            </blockquote>
+            <pre role="region" tabindex="0" aria-label="Example CSS token block"><code>{`:root {\n  --ds-surface-page: var(--bg);\n  --ds-text-primary: var(--ink);\n}`}</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="rd-section ds-band" id="constraints" aria-labelledby="ds-constraints-heading">
+      <div class="rd-heading-row ds-band-head">
+        <h2 id="ds-constraints-heading">Constraints &amp; documented exceptions</h2>
+      </div>
+      <ol class="ds-constraints-list">
+        {constraints.map((rule) => (
+          <li>{rule}</li>
+        ))}
+      </ol>
+
+      <div class="ds-subgroup">
+        <h3>Explicit exceptions</h3>
+        <div class="ds-table-scroll" role="region" tabindex="0" aria-label="Documented design system exceptions">
+          <table class="ds-table">
+            <caption class="sr-only">Explicitly documented exceptions to the design system rules</caption>
+            <thead>
+              <tr>
+                <th scope="col">Where</th>
+                <th scope="col">Rule</th>
+                <th scope="col">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exceptions.map((ex) => (
+                <tr>
+                  <td><code>{ex.where}</code></td>
+                  <td>{ex.rule}</td>
+                  <td>{ex.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>
+
+<style>
+  .ds-hero { padding-top: 78px; }
+
+  .ds-controls { gap: 12px; }
+
+  .ds-controls-copy {
+    font-size: 16px;
+    color: var(--ds-text-summary);
+  }
+
+  .ds-appearance-btn {
+    font-family: var(--ds-font-mono);
+    font-size: 16px;
+    color: var(--ds-text-on-fill);
+    background: var(--ds-surface-inverse);
+    border: 1px solid var(--ds-surface-inverse);
+    border-radius: var(--ds-radius-card);
+    padding: 10px 16px;
+    min-height: 44px;
+    cursor: pointer;
+    transition: opacity var(--duration-base) ease;
+  }
+
+  @media (hover: hover) {
+    .ds-appearance-btn:hover { opacity: .86; }
+  }
+
+  .ds-toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid var(--ds-border-subtle);
+    font-family: var(--ds-font-mono);
+    font-size: 16px;
+  }
+
+  .ds-toc a {
+    color: var(--ds-text-muted);
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  @media (hover: hover) {
+    .ds-toc a:hover { color: var(--ds-text-primary); }
+  }
+
+  .ds-band { padding-top: 72px; }
+
+  .ds-band-head {
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--ds-border-subtle);
+  }
+
+  .ds-lead {
+    margin: 18px 0 0;
+    max-width: 68ch;
+    font-size: 17.5px;
+    line-height: 1.6;
+    color: var(--ds-text-secondary);
+  }
+
+  .ds-body code {
+    font-family: var(--ds-font-mono);
+    font-size: .92em;
+    overflow-wrap: anywhere;
+  }
+
+  .ds-subgroup { margin-top: 36px; }
+
+  .ds-subgroup h3 {
+    margin: 0 0 18px;
+    font-family: var(--ds-font-heading);
+    font-weight: 700;
+    font-size: 21px;
+    letter-spacing: -.015em;
+    color: var(--ds-text-primary);
+  }
+
+  .ds-swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+    gap: 18px;
+  }
+
+  .ds-swatch-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--ds-surface-card);
+    border: 1px solid var(--ds-border-subtle);
+    border-radius: var(--ds-radius-card);
+    overflow: hidden;
+  }
+
+  .ds-swatch-chip {
+    height: 76px;
+    border-bottom: 1px solid var(--ds-border-subtle);
+  }
+
+  .ds-swatch-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px 16px;
+  }
+
+  .ds-token-name {
+    font-family: var(--ds-font-mono);
+    font-size: 16px;
+    color: var(--ds-text-primary);
+  }
+
+  .ds-token-val,
+  .ds-token-hex,
+  .ds-token-contrast {
+    font-family: var(--ds-font-mono);
+    font-size: 15px;
+    color: var(--ds-text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-token-desc {
+    margin: 6px 0 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ds-text-summary);
+  }
+
+  .ds-table-scroll {
+    margin-top: 22px;
+    overflow-x: auto;
+    background: var(--ds-surface-card);
+    border: 1px solid var(--ds-border-subtle);
+    border-radius: var(--ds-radius-card);
+  }
+
+  .ds-table {
+    width: 100%;
+    min-width: 600px;
+    border-collapse: collapse;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .ds-table th,
+  .ds-table td {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--ds-border-faint);
+    vertical-align: top;
+  }
+
+  .ds-table thead th {
+    font-family: var(--ds-font-mono);
+    font-weight: 400;
+    color: var(--ds-text-muted);
+    border-bottom-color: var(--ds-border-subtle);
+  }
+
+  .ds-table tbody tr:last-child td { border-bottom: 0; }
+
+  .ds-inline-swatch-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ds-mini-swatch {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 1px solid var(--ds-border-control);
+    flex: none;
+  }
+
+  .ds-num {
+    font-family: var(--ds-font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ds-status-mark {
+    display: inline-block;
+    font-family: var(--ds-font-mono);
+    font-size: 15px;
+    padding: 2px 8px;
+    border-radius: var(--ds-radius-code);
+    color: var(--paper);
+  }
+
+  .ds-status-mark--pass { background: var(--status-pass); }
+  .ds-status-mark--fail { background: var(--status-fail); }
+
+  .ds-families-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: 24px;
+  }
+
+  .ds-info-card {
+    background: var(--ds-surface-card);
+    border: 1px solid var(--ds-border-subtle);
+    border-radius: var(--ds-radius-card);
+    padding: 20px 22px;
+  }
+
+  .ds-info-card h3 {
+    margin: 0 0 14px;
+    font-family: var(--ds-font-heading);
+    font-size: 20px;
+    color: var(--ds-text-primary);
+  }
+
+  .ds-family-sample {
+    margin: 12px 0 8px;
+    font-size: 22px;
+    line-height: 1.3;
+    color: var(--ds-text-primary);
+  }
+
+  .ds-family-sample--display { font-family: var(--ds-font-heading); font-weight: 700; }
+  .ds-family-sample--body    { font-family: var(--ds-font-body); }
+  .ds-family-sample--mono    { font-family: var(--ds-font-mono); font-size: 18px; }
+
+  .ds-type-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--ds-border-subtle);
+  }
+
+  .ds-type-row {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 28px;
+    align-items: baseline;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--ds-border-subtle);
+  }
+
+  .ds-type-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ds-type-specimen {
+    margin: 0;
+    color: var(--ds-text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .ds-specimen--caption   { font-family: var(--ds-font-mono); font-size: var(--font-size-caption); }
+  .ds-specimen--ui-mobile { font-family: var(--ds-font-mono); font-size: var(--font-size-ui-mobile); }
+  .ds-specimen--ui        { font-family: var(--ds-font-mono); font-size: var(--font-size-ui); }
+  .ds-specimen--body      { font-family: var(--ds-font-body); font-size: var(--font-size-body); line-height: 1.55; }
+  .ds-specimen--body-lg   { font-family: var(--ds-font-body); font-size: var(--font-size-body-lg); line-height: 1.65; }
+  .ds-specimen--heading-3 { font-family: var(--ds-font-heading); font-size: var(--font-size-heading-3); font-weight: 700; line-height: 1.25; }
+  .ds-specimen--heading-2 { font-family: var(--ds-font-heading); font-size: var(--font-size-heading-2); font-weight: 700; line-height: 1.2; letter-spacing: -.02em; }
+  .ds-specimen--prose-h2  { font-family: var(--ds-font-heading); font-size: var(--font-size-prose-h2); font-weight: 700; line-height: 1.2; letter-spacing: -.025em; }
+  .ds-specimen--row-title { font-family: var(--ds-font-heading); font-size: var(--font-size-row-title); font-weight: 500; line-height: 1.14; letter-spacing: -.025em; }
+  .ds-specimen--entry-h1  { font-family: var(--ds-font-heading); font-size: var(--font-size-entry-h1); font-weight: 700; line-height: 1.04; letter-spacing: -.035em; }
+  .ds-specimen--stat      { font-family: var(--ds-font-heading); font-size: var(--font-size-stat); font-weight: 800; line-height: .9; font-variant-numeric: tabular-nums; }
+  .ds-specimen--hero-h1   { font-family: var(--ds-font-heading); font-size: clamp(48px, 8vw, 110px); font-weight: 700; line-height: .95; letter-spacing: -.04em; }
+
+  .ds-space-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ds-space-row {
+    display: grid;
+    grid-template-columns: 140px 64px 120px minmax(0, 1fr);
+    gap: 16px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--ds-border-faint);
+  }
+
+  .ds-space-bar {
+    display: block;
+    height: 16px;
+    background: var(--writing);
+    border-radius: 3px;
+  }
+
+  .ds-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: 32px;
+  }
+
+  .ds-dl {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ds-dl-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px 16px;
+    border-bottom: 1px solid var(--ds-border-faint);
+    padding-bottom: 8px;
+    font-family: var(--ds-font-mono);
+    font-size: 15px;
+  }
+
+  .ds-dl-row dt,
+  .ds-dl-row dd { margin: 0; }
+  .ds-dl-row dd { color: var(--ds-text-muted); }
+
+  .ds-fill-showcase {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px 36px;
+    padding: 24px;
+    background: var(--ds-surface-card);
+    border: 1px solid var(--ds-border-subtle);
+    border-radius: var(--ds-radius-card);
+  }
+
+  .ds-fill-demo {
+    font-family: var(--ds-font-heading);
+    font-weight: 700;
+    font-size: 40px;
+    line-height: 1.05;
+    letter-spacing: -.03em;
+    color: var(--ds-text-primary);
+  }
+
+  .ds-component-stage {
+    padding: 24px;
+    background: var(--ds-surface-card);
+    border: 1px solid var(--ds-border-subtle);
+    border-radius: var(--ds-radius-card);
+  }
+
+  .ds-component-stage--flush {
+    padding: 0 24px 24px;
+  }
+
+  .ds-component-stage--flush :global(.entry-nav) {
+    margin-top: 24px;
+    padding-inline: 0;
+  }
+
+  .ds-demo-list {
+    margin: 20px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ds-demo-item {
+    padding: 12px 14px;
+    border: 1px solid var(--ds-border-faint);
+    border-radius: var(--ds-radius-code);
+    font-size: 16px;
+    color: var(--ds-text-prose);
+  }
+
+  .ds-demo-item[hidden] { display: none; }
+
+  .ds-constraints-list {
+    margin: 20px 0 0;
+    padding-left: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 68ch;
+    font-size: 17.5px;
+    line-height: 1.55;
+    color: var(--ds-text-prose);
+  }
+
+  @media (max-width: 900px) {
+    .ds-families-grid { grid-template-columns: minmax(0, 1fr); }
+    .ds-type-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .ds-metrics-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (max-width: 720px) {
+    .ds-hero { padding-top: 40px; }
+    .ds-band { padding-top: 48px; }
+    .ds-space-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px 12px;
+    }
+    .ds-space-row .ds-space-bar {
+      grid-column: 1 / -1;
+      max-width: 100%;
+    }
+    .ds-space-row .ds-token-desc {
+      grid-column: 1 / -1;
+    }
+    .ds-component-stage { padding: 16px; }
+    .ds-component-stage--flush { padding: 0 16px 16px; }
+    .ds-specimen--stat { font-size: 64px; }
+    .ds-fill-demo { font-size: 32px; }
+  }
+</style>

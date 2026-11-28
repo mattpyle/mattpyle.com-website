@@ -64,10 +64,14 @@ test('every custom property declared in src/styles/tokens.css is read under src/
   }
   assert.ok(declared.size > 0, 'tokens.css must declare custom properties');
 
-  // Scan src/ independently of build-tokens.mjs for real var(--name) consumers.
+  // Scan src/ independently of build-tokens.mjs for real var(--name) consumers,
+  // excluding the /design-system workbench files so workbench-only tokens never enter tokens.css.
   const excluded = new Set([
     tokensCssPath,
     resolve(ROOT, 'src/data/design-tokens.generated.json'),
+    resolve(ROOT, 'src/pages/design-system.astro'),
+    resolve(ROOT, 'src/styles/workbench-swatches.css'),
+    resolve(ROOT, 'src/styles/workbench-retro.css'),
   ]);
   const readInSrc = new Set();
   for (const fullPath of walkFiles(join(ROOT, 'src'))) {
