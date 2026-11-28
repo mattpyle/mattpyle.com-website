@@ -554,6 +554,7 @@ html[data-appearance='retro'] [data-module='home-hero'] h1 {
   line-height: 1.08;
   letter-spacing: normal;
   color: var(--retro-ink);
+  animation: none;
 }
 
 /* The redesign's magenta fill under "Pyle" is a gradient background on an
@@ -912,6 +913,7 @@ html[data-appearance='retro'] [data-module='writing-hero'] h1 {
   line-height: 1.1;
   letter-spacing: normal;
   color: var(--retro-maroon);
+  animation: none;
 }
 
 html[data-appearance='retro'] [data-module='writing-hero'] .rd-fill {
@@ -1257,6 +1259,7 @@ html[data-appearance='retro'] [data-module='projects-board'] .card {
 @media (hover: hover) {
   html[data-appearance='retro'] [data-module='projects-board'] a.card:hover {
     border-color: var(--retro-maroon);
+    transform: none;
   }
 }
 
