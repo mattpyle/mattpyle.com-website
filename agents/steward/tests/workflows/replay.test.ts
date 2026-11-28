@@ -259,6 +259,11 @@ test(
  * ```
  *
  * The guard was restored and the replay re-run green.
+ *
+ * **The archive call (STW-717, 2026-11-27).** Its retry policy changed with no
+ * marker, because replay does not compare a policy. This fixture records the
+ * call. Probe: with `wf.sleep('1 second')` before `archiveScorecardRun`, this
+ * replay and the six other scorecard replays failed with `TMPRL1100`.
  */
 test(
   'the scorecard dry-run history replays against current workflow code',

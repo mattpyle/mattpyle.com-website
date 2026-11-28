@@ -830,12 +830,34 @@ export interface ArchiveScorecardRunResult {
   archivePath: string;
   /** The filename stem actually used — `id`, or `<id>-n` if that was taken. */
   archiveId: string;
-  /** False on a dry run. True whenever a commit was actually made. */
+  /** False on a dry run. True when this call, or an earlier attempt of it, committed the record. */
   committed: boolean;
 }
 
 /** Rebuilds after the archive branch moved, before the activity gives up. */
 const ARCHIVE_MOVED_RETRIES = 3;
+
+/** The text of a record's file under the name `archiveId`. */
+function archiveJson(record: ScorecardArchiveRecord, archiveId: string): string {
+  return JSON.stringify({ ...record, archiveId }, null, 2) + '\n';
+}
+
+/**
+ * Walks `<id>`, `<id>-2`, … on `ref`. Stops at the first name that is free, or
+ * that already holds exactly this record (`written`).
+ */
+async function findArchiveName(
+  record: ScorecardArchiveRecord,
+  ref: string,
+): Promise<{ archiveId: string; archivePath: string; written: boolean }> {
+  for (let n = 1; ; n++) {
+    const archiveId = n === 1 ? record.id : `${record.id}-${n}`;
+    const archivePath = `${SCORECARD_ARCHIVE_REL}/${archiveId}.json`;
+    const file = await readRepoFile(archivePath, ref);
+    if (!file) return { archiveId, archivePath, written: false };
+    if (file.text === archiveJson(record, archiveId)) return { archiveId, archivePath, written: true };
+  }
+}
 
 /**
  * Writes the full run — public metrics plus per-page raw detail — to the
@@ -905,6 +927,22 @@ const ARCHIVE_MOVED_RETRIES = 3;
  *
  * The workflow issues the same commands as before, so this change carries no
  * `patched` marker.
+ *
+ * ## A retry writes no second record (STW-717, 2026-11-27)
+ *
+ * An attempt can commit and then fail: a lost reply, or a failure while it opens
+ * the pull request. A retry gets the same input from history, so the file it
+ * wrote is, byte for byte, the one this attempt would write under that name.
+ * {@link findArchiveName} reads each taken name and compares. A different run
+ * differs at least in its `timestamp`.
+ *
+ * The default branch is read first. The archive pull request may have merged
+ * between two attempts, which deletes the branch, and a branch cut again would
+ * hold nothing to open a pull request from. On the archive branch a match makes
+ * no commit and still opens the pull request, which may be the step that failed.
+ *
+ * A record edited by hand, or a deploy between two attempts that changes how the
+ * record is serialised, no longer matches, and the retry writes it again.
  */
 export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promise<ArchiveScorecardRunResult> {
   if (record.dryRun) {
@@ -916,6 +954,14 @@ export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promi
   }
 
   const base = await defaultBranch();
+  const merged = await findArchiveName(record, base);
+  if (merged.written) {
+    log.info(
+      { activity: 'archiveScorecardRun', id: record.id, archiveId: merged.archiveId, branch: base },
+      "an earlier attempt's record is already on the default branch; nothing to write",
+    );
+    return { archivePath: merged.archivePath, archiveId: merged.archiveId, committed: true };
+  }
   await ensureBranch(SCORECARD_ARCHIVE_BRANCH, await branchSha(base));
 
   const latestPath = `${SCORECARD_ARCHIVE_REL}/latest.json`;
@@ -927,12 +973,11 @@ export async function archiveScorecardRun(record: ScorecardArchiveRecord): Promi
     // Create-only, checked here because a tree write replaces whatever is at
     // the path. A name taken between this read and the ref update is caught by
     // the ref update below: the branch moved, so the whole pass reruns.
-    for (let n = 1; ; n++) {
-      archiveId = n === 1 ? record.id : `${record.id}-${n}`;
-      archivePath = `${SCORECARD_ARCHIVE_REL}/${archiveId}.json`;
-      if (!(await readRepoFile(archivePath, SCORECARD_ARCHIVE_BRANCH))) break;
-    }
-    const json = JSON.stringify({ ...record, archiveId }, null, 2) + '\n';
+    const name = await findArchiveName(record, SCORECARD_ARCHIVE_BRANCH);
+    ({ archiveId, archivePath } = name);
+    // An earlier attempt committed it. `latest.json` went in that commit.
+    if (name.written) break;
+    const json = archiveJson(record, archiveId);
     const commit = await commitFiles({
       parent: head,
       message: `chore(scorecard): archive ${archiveId}`,
