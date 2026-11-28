@@ -111,6 +111,8 @@ Edit the source in `tokens/primitives.tokens.json`, `tokens/semantic.tokens.json
 | Web app manifest colours | `public/site.webmanifest` | `tests/design-tokens.test.mjs` fails when `background_color` or `theme_color` differs from `THEME_COLOR` |
 | Raster favicons and share cards | `public/`, `public/og/` | Regenerate favicons with `npm run brand:assets` when a brand colour changes; `prebuild` regenerates OG cards |
 
+First use of a catalogue token under `src/` (for example, `var(--space-4)`), and removal of the last use of a token under `src/`, also require `npm run tokens:build` because `src/styles/tokens.css` emits only properties read under `src/`. `tests/design-tokens.test.mjs` fails when a rebuild is missed.
+
 ## Other kinds
 
 | Kind | Held by |

@@ -30,7 +30,11 @@ export { contrastRatio, oklchToHex, oklchToLinearRgb, parseOpaqueColor };
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const SRC_CODE_EXT = /\.(astro|css|html|svg|js|mjs|ts|tsx|jsx)$/i;
 
-/** Scan `src/` (excluding generated token outputs) for `var(--name)` custom-property reads. */
+/**
+ * Scan `src/` (excluding generated token outputs) for `var(--name)` custom-property reads.
+ * Only `var(--name)` occurrences in code and style files under `src/` are seen; a token
+ * read from outside `src/` or dynamically by name (such as `getPropertyValue`) would be dropped.
+ */
 function scanUsedCssVars(rootDir) {
   const srcDir = join(rootDir, 'src');
   const excluded = new Set([
