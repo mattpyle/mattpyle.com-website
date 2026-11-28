@@ -530,88 +530,13 @@ textarea:focus-visible,
 }
 
 /* ── Redesign tokens ─────────────────────────────────────────────────────────
-   Names are the spec own names, unprefixed, so the README tables map one-to-one
-   onto this block. Colours are authored in oklch exactly as the spec authored
-   them; the hex equivalents in the README are approximations and are not used.
+   Generated from tokens/primitives.tokens.json and tokens/semantic.tokens.json
+   into src/styles/tokens.css (`npm run tokens:build`), imported ahead of this
+   file by Layout.astro inside `@layer tokens`.
 
    The four semantic colours CARRY MEANING — writing, projects, agents, changelog
    — and nothing decorative may take one. A heading is coloured because of the
    section it names, not because colour looked good there. */
-:root {
-  /* Layout */
-  --shell: 1180px;
-  --shell-gutter: 40px;
-  --shell-gutter-mobile: 20px;
-  --radius: 6px;
-
-  /* Neutrals */
-  --bg:        oklch(0.965 0.004 265);
-  --surface:   oklch(1 0 0);
-  --footer-bg: oklch(0.955 0.004 265);
-  --paper:     oklch(0.99 0.002 265);
-  --ink:       oklch(0.21 0.012 265);
-  --ink-2:     oklch(0.24 0.012 265);
-  --ink-3:     oklch(0.28 0.012 265);
-  --ink-4:     oklch(0.36 0.012 265);
-  --ink-5:     oklch(0.38 0.012 265);
-  --ink-6:     oklch(0.41 0.012 265);
-  --rule:      oklch(0.9 0.006 265);
-  --rule-2:    oklch(0.92 0.006 265);
-  --track:     oklch(0.93 0.006 265);
-
-  /* Semantic */
-  --writing:         oklch(0.47 0.13 255);
-  --writing-hover:   oklch(0.32 0.14 255);
-  --projects:        oklch(0.44 0.11 155);
-  --projects-hover:  oklch(0.31 0.1 155);
-  --agents:          oklch(0.47 0.16 330);
-  --agents-hover:    oklch(0.33 0.16 330);
-  --changelog:       oklch(0.45 0.11 65);
-  --changelog-hover: oklch(0.32 0.1 65);
-
-  /* Status and control, added for /audit (design_handoff_audit).
-     ─────────────────────────────────────────────────────────────────────────
-     NOT SEMANTIC COLOURS. The four above name a section of this site; these
-     name a verdict about somebody else's, and they are deliberately none of
-     the four so a status can never read as a section — the leaf green is
-     chosen against the projects green for exactly that reason. On /audit the
-     WORD is always the status and a fill only repeats it (card decision 5),
-     which is the one place this site relaxes /scorecard's stricter rule that
-     no colour carries state at all.
-
-     Authored in oklch like the rest of the block; the design bundle's hex
-     values (#2f6b1f, #a4262c, #7d2a6c) are what these resolve to. Authoring
-     them as hex would also make them invisible to `npm run sweep:retro`,
-     which finds a modern token leaking into retro by looking for an oklch()
-     in the computed value. --paper on both status fills clears AA (6.4:1 and
-     7.1:1), measured. */
-  --status-pass:     oklch(0.471 0.125 140);
-  --status-fail:     oklch(0.475 0.162 24);
-  /* The submit button while a request is in flight: the agents colour one
-     step darker, and darker than --agents-hover so pressed and hovered are
-     not the same state wearing one paint. */
-  --agents-pressed:  oklch(0.432 0.14 337);
-  /* The 1px boundary of a text input. An alias rather than a fifth colour:
-     --rule on white is under 3:1 and fails non-text contrast for a control
-     boundary, and --ink-6 clears it at 7:1. The name exists because the ROLE
-     is new — this site had no modern text input before /audit — and a rule
-     that reads `border: 1px solid var(--ink-6)` is a rule the next component
-     will copy without the contrast argument attached. */
-  --control-border:  var(--ink-6);
-
-  /* Tints — hover grounds and placeholder hatching */
-  --tint-writing:  oklch(0.955 0.012 255);
-  --tint-agents:   oklch(0.975 0.012 330);
-  --hatch-projects-a:  oklch(0.93 0.014 155);
-  --hatch-projects-b:  oklch(0.965 0.008 155);
-
-  /* Type. --font-mono-plex rather than --font-mono because the legacy token is
-     still JetBrains Mono on 20-odd unconverted pages; it takes the plain name
-     when the last of them converts. */
-  --font-display:    'Bricolage Grotesque', 'Bricolage Grotesque Fallback', Arial, sans-serif;
-  --font-body:       'IBM Plex Sans', 'IBM Plex Sans Fallback', Arial, sans-serif;
-  --font-mono-plex:  'IBM Plex Mono', 'IBM Plex Mono Fallback', 'Courier New', monospace;
-}
 
 /* ── Redesign base ───────────────────────────────────────────────────────────
    Applies only where Layout.astro set the flag, and only in modern: retro is a

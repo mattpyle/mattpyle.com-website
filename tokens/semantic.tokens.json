@@ -1,0 +1,115 @@
+{
+  "$description": "Semantic design tokens for mattpyle.com (modern default appearance). Components should consume these role tokens rather than raw primitives so Modern, Retro, and future Dark themes swap cleanly.",
+  "ds": {
+    "surface": {
+      "page": {
+        "$type": "color",
+        "$value": "{color.neutral.bg}",
+        "$description": "Primary page background."
+      },
+      "card": {
+        "$type": "color",
+        "$value": "{color.neutral.surface}",
+        "$description": "Elevated cards, panels, blockquotes, and code blocks."
+      },
+      "footer": {
+        "$type": "color",
+        "$value": "{color.neutral.footer-bg}",
+        "$description": "Site footer background."
+      },
+      "inverse": {
+        "$type": "color",
+        "$value": "{color.neutral.ink}",
+        "$description": "High-contrast dark surface (skip link, mark plate)."
+      }
+    },
+    "text": {
+      "primary": {
+        "$type": "color",
+        "$value": "{color.neutral.ink}",
+        "$description": "Headings and primary body text."
+      },
+      "prose": {
+        "$type": "color",
+        "$value": "{color.neutral.ink-2}",
+        "$description": "Long-form reading copy and hero leads."
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{color.neutral.ink-4}",
+        "$description": "Secondary descriptions and blurbs."
+      },
+      "summary": {
+        "$type": "color",
+        "$value": "{color.neutral.ink-5}",
+        "$description": "Row excerpts and aside copy."
+      },
+      "muted": {
+        "$type": "color",
+        "$value": "{color.neutral.ink-6}",
+        "$description": "Dates, captions, and table column headers."
+      },
+      "on-fill": {
+        "$type": "color",
+        "$value": "{color.neutral.paper}",
+        "$description": "Text rendered on top of dark or status fills."
+      }
+    },
+    "border": {
+      "subtle": {
+        "$type": "color",
+        "$value": "{color.neutral.rule}",
+        "$description": "Standard 1px structural borders and section hairlines."
+      },
+      "faint": {
+        "$type": "color",
+        "$value": "{color.neutral.rule-2}",
+        "$description": "Lighter internal table and cell dividers."
+      },
+      "control": {
+        "$type": "color",
+        "$value": "{color.neutral.ink-6}",
+        "$description": "1px boundary of a form input (clears WCAG 1.4.11 non-text contrast at 7:1 on white; --rule fails under 3:1).",
+        "$extensions": {
+          "com.mattpyle": { "legacyAlias": "--control-border" }
+        }
+      }
+    },
+    "focus": {
+      "ring": {
+        "$type": "color",
+        "$value": "{color.neutral.ink}",
+        "$description": "Keyboard focus-visible outline colour."
+      }
+    },
+    "radius": {
+      "card": {
+        "$type": "dimension",
+        "$value": "{radius.md}",
+        "$description": "Default corner radius for cards and panels (0px in retro)."
+      },
+      "code": {
+        "$type": "dimension",
+        "$value": "{radius.sm}",
+        "$description": "Corner radius for inline code chips (0px in retro)."
+      }
+    },
+    "font": {
+      "heading": {
+        "$type": "fontFamily",
+        "$value": "{font.family.display}",
+        "$description": "Display and heading font stack."
+      },
+      "body": {
+        "$type": "fontFamily",
+        "$value": "{font.family.body}",
+        "$description": "Reading and description font stack."
+      },
+      "mono": {
+        "$type": "fontFamily",
+        "$value": "{font.family.mono}",
+        "$description": "UI metadata, dates, navigation, and code font stack."
+      }
+    }
+  }
+}
