@@ -1,0 +1,140 @@
+/* Retro appearance rules for the unlisted /design-system workbench.
+   Imported ONLY by src/pages/design-system.astro so every other page pays
+   zero CSS cost for workbench rules. Semantic `--ds-*` tokens swap via
+   workbench-swatches.css; only period flourishes and the embedded EntryNav
+   stage live here. */
+
+html[data-appearance='retro'] [data-module='design-system-hero'] h1 {
+  font-family: var(--retro-font-display);
+  font-size: 52px;
+  line-height: 1.08;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+  animation: none;
+}
+
+html[data-appearance='retro'] [data-module='design-system-hero'] .rd-fill,
+html[data-appearance='retro'] [data-module='design-system'] .rd-fill {
+  background-image: none;
+  padding: 0;
+  margin: 0;
+  color: var(--retro-maroon);
+}
+
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='design-system-hero'] .rd-fill:hover,
+  html[data-appearance='retro'] [data-module='design-system'] .rd-fill:hover {
+    background-size: 0 0;
+    color: var(--retro-maroon);
+  }
+}
+
+html[data-appearance='retro'] [data-module='design-system-hero'] .rd-fill:active,
+html[data-appearance='retro'] [data-module='design-system'] .rd-fill:active {
+  background-size: 0 0;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='design-system-hero'] .hero-statement {
+  font-family: var(--retro-font-body);
+  font-style: italic;
+  font-size: 21px;
+  letter-spacing: normal;
+  color: var(--retro-ink);
+}
+
+html[data-appearance='retro'] [data-module='design-system-hero'] .ds-controls {
+  background: var(--retro-frame-bg);
+  border: 3px ridge var(--retro-frame-border);
+  padding: 14px 18px;
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .25);
+}
+
+html[data-appearance='retro'] [data-module='design-system-hero'] .ds-appearance-btn {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  background: var(--retro-forest);
+  color: var(--retro-gold);
+  border: 2px outset var(--retro-frame-border);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='design-system-hero'] .ds-toc a {
+  font-family: var(--retro-font-ui);
+  font-weight: bold;
+  color: var(--retro-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='design-system-hero'] .ds-toc a:hover {
+    color: var(--retro-maroon);
+  }
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .ds-band-head {
+  border-bottom: 2px dotted var(--retro-frame-border);
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .ds-band-head h2 {
+  font-family: var(--retro-font-display);
+  font-size: 24px;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .ds-swatch-card,
+html[data-appearance='retro'] [data-module='design-system'] .ds-info-card,
+html[data-appearance='retro'] [data-module='design-system'] .ds-component-stage,
+html[data-appearance='retro'] [data-module='design-system'] .ds-fill-showcase,
+html[data-appearance='retro'] [data-module='design-system'] .ds-table-scroll {
+  border: 3px ridge var(--retro-frame-border);
+  box-shadow: 4px 4px 0 rgba(90, 60, 20, .2);
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .ds-status-mark--pass {
+  background: var(--retro-status-pass);
+  color: var(--retro-frame-bg);
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .ds-status-mark--fail {
+  background: var(--retro-maroon);
+  color: var(--retro-gold);
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .ds-space-bar {
+  background: var(--retro-maroon);
+  border-radius: 0;
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .entry-step {
+  border-top: 2px dashed var(--retro-frame-border);
+  color: var(--retro-ink);
+}
+
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='design-system'] .entry-step:hover {
+    background: var(--retro-sidebar-bg);
+  }
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .entry-step-label {
+  font-family: var(--retro-font-mono);
+  font-size: 12px;
+  color: var(--retro-ink-muted);
+}
+
+html[data-appearance='retro'] [data-module='design-system'] .entry-step-title {
+  font-family: var(--retro-font-display);
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--retro-maroon);
+}
+
+@media (hover: hover) {
+  html[data-appearance='retro'] [data-module='design-system'] .entry-step:hover .entry-step-title {
+    color: var(--retro-link);
+  }
+}

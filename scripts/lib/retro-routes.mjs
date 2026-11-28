@@ -40,6 +40,7 @@ export const RETRO_ROUTES = [
   '/audit?url=https://example.com',
   '/audit?url=file:///etc/hosts',
   '/writing/accessibility-and-ai/',
+  '/design-system',
   '/404',
 ];
 

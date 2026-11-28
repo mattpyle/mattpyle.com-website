@@ -1,13 +1,14 @@
 /**
  * Compile W3C DTCG design tokens (`tokens/*.tokens.json`) using Style Dictionary into:
- *   1. `src/styles/tokens.css`                 - `@layer tokens` CSS custom properties read under `src/`
- *   2. `scripts/lib/brand-tokens.mjs`          - sRGB hex constants for OG cards, favicons, and theme-color
- *   3. `src/data/design-tokens.generated.json` - machine-readable catalogue (swatches, scales, contrast)
+ *   1. `src/styles/tokens.css`                 - `@layer tokens` CSS custom properties read outside the workbench
+ *   2. `src/styles/workbench-swatches.css`     - workbench-only catalogue custom properties, swatches, and spacing bars
+ *   3. `scripts/lib/brand-tokens.mjs`          - sRGB hex constants for OG cards, favicons, and theme-color
+ *   4. `src/data/design-tokens.generated.json` - machine-readable catalogue (swatches, scales, contrast)
  *
  * `src/styles/tokens.css` emits only properties referenced by `var(--name)` under `src/`
- * (plus any transitive `var(--dep)` referenced by an emitted declaration), so every page
- * loads only active tokens while `tokens/*.tokens.json` and the generated catalogue retain
- * the full scales and `--ds-*` roles.
+ * outside the `/design-system` workbench (plus any transitive `var(--dep)` referenced by an
+ * emitted declaration), so every normal page loads only active tokens while the workbench
+ * gets the remaining catalogue tokens from `src/styles/workbench-swatches.css`.
  *
  * Usage:
  *   node scripts/build-tokens.mjs          # write generated files
@@ -20,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import StyleDictionary from 'style-dictionary';
 import {
   contrastRatio,
+  linearChannelToSrgb,
   oklchToHex,
   oklchToLinearRgb,
   parseOpaqueColor,
@@ -31,7 +33,8 @@ const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 const SRC_CODE_EXT = /\.(astro|css|html|svg|js|mjs|ts|tsx|jsx)$/i;
 
 /**
- * Scan `src/` (excluding generated token outputs) for `var(--name)` custom-property reads.
+ * Scan `src/` (excluding generated token outputs and `/design-system` workbench files)
+ * for `var(--name)` custom-property reads.
  * Only `var(--name)` occurrences in code and style files under `src/` are seen; a token
  * read from outside `src/` or dynamically by name (such as `getPropertyValue`) would be dropped.
  */
@@ -40,6 +43,9 @@ function scanUsedCssVars(rootDir) {
   const excluded = new Set([
     resolve(rootDir, 'src/styles/tokens.css'),
     resolve(rootDir, 'src/data/design-tokens.generated.json'),
+    resolve(rootDir, 'src/pages/design-system.astro'),
+    resolve(rootDir, 'src/styles/workbench-swatches.css'),
+    resolve(rootDir, 'src/styles/workbench-retro.css'),
   ]);
   const used = new Set();
 
@@ -163,17 +169,53 @@ export async function compileTokens() {
     return String(resolvedValue(token));
   }
 
-  // ── 1. src/styles/tokens.css ───────────────────────────────────────────────
+  // ── 1. src/styles/tokens.css & src/styles/workbench-swatches.css ───────────
   const rootCandidates = [];
+  const swatchRules = [];
+  const retroSwatchOverrides = [];
+
   for (const token of modernAll) {
     const varName = cssVarName(token);
     const val = cssValueFor(token, modernByPath);
-    rootCandidates.push({ varName, val });
+    rootCandidates.push({ varName, val, top: token.path[0] });
 
     // Emit backward-compatible legacy alias when declared (e.g. --control-border -> var(--ink-6)).
     const legacyAlias = token.$extensions?.['com.mattpyle']?.legacyAlias;
     if (legacyAlias) {
-      rootCandidates.push({ varName: legacyAlias, val });
+      rootCandidates.push({ varName: legacyAlias, val, top: token.path[0] });
+    }
+
+    if ((token.$type ?? token.type) === 'color') {
+      const slug = swatchSlug(varName);
+      swatchRules.push(`.ds-swatch--${slug} { background: var(${varName}); }`);
+      // In retro appearance, paint Modern palette preview swatches using their compiled sRGB hex
+      // (or translucent rgba fallback) so the swatch stays visually accurate while keeping
+      // `scripts/retro-sweep.mjs` free of computed oklch() findings.
+      const resolved = String(resolvedValue(token));
+      const parsed = parseOpaqueColor(resolved);
+      if (parsed) {
+        const hex = token.$extensions?.['com.mattpyle']?.brandHex ?? parsed.hex;
+        retroSwatchOverrides.push(`html[data-appearance='retro'] .ds-swatch--${slug} { background: ${hex}; }`);
+      } else {
+        const alphaMatch = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\/\s*([\d.]+)\s*\)$/i.exec(resolved);
+        if (alphaMatch) {
+          const [r, g, b] = oklchToLinearRgb(Number(alphaMatch[1]), Number(alphaMatch[2]), Number(alphaMatch[3]));
+          const sr = linearChannelToSrgb(r);
+          const sg = linearChannelToSrgb(g);
+          const sb = linearChannelToSrgb(b);
+          retroSwatchOverrides.push(
+            `html[data-appearance='retro'] .ds-swatch--${slug} { background: rgba(${sr}, ${sg}, ${sb}, ${alphaMatch[4]}); }`,
+          );
+        }
+      }
+    }
+  }
+
+  const spaceBarRules = [];
+  for (const token of modernAll) {
+    if (token.path[0] === 'space') {
+      const varName = cssVarName(token);
+      spaceBarRules.push(`.ds-space-bar--${token.path[1]} { width: var(${varName}); }`);
     }
   }
 
@@ -183,7 +225,10 @@ export async function compileTokens() {
     if (top !== 'retro' && top !== 'ds') continue;
     const varName = cssVarName(token);
     const val = cssValueFor(token, retroByPath);
-    retroCandidates.push({ varName, val });
+    retroCandidates.push({ varName, val, top });
+    if (top === 'retro' && (token.$type ?? token.type) === 'color') {
+      swatchRules.push(`.ds-swatch--${swatchSlug(varName)} { background: ${resolvedValue(token)}; }`);
+    }
   }
 
   const usedVars = scanUsedCssVars(root);
@@ -195,6 +240,16 @@ export async function compileTokens() {
 
   const retroDecls = retroCandidates
     .filter(({ varName }) => emittedVars.has(varName))
+    .map(({ varName, val }) => `    ${varName}: ${val};`);
+
+  // Catalogue custom properties not emitted into sitewide tokens.css live only in
+  // workbench-swatches.css (excluding breakpoints, which cannot be read in CSS media queries).
+  const workbenchRootDecls = rootCandidates
+    .filter(({ varName, top }) => !emittedVars.has(varName) && top !== 'breakpoint')
+    .map(({ varName, val }) => `    ${varName}: ${val};`);
+
+  const workbenchRetroDecls = retroCandidates
+    .filter(({ varName }) => !emittedVars.has(varName))
     .map(({ varName, val }) => `    ${varName}: ${val};`);
 
   const tokensCss = [
@@ -213,6 +268,30 @@ export async function compileTokens() {
     ...retroDecls,
     '  }',
     '}',
+    '',
+  ].join('\n');
+
+  const workbenchSwatchesCss = [
+    '/* Generated by scripts/build-tokens.mjs - imported ONLY by src/pages/design-system.astro.',
+    '   Provides catalogue custom properties not yet emitted sitewide, plus swatches and spacing',
+    '   bars with zero inline style attributes (`style-src \'self\'`). */',
+    '@layer tokens {',
+    '  :root {',
+    ...workbenchRootDecls,
+    '  }',
+    '',
+    "  html[data-appearance='retro'] {",
+    ...workbenchRetroDecls,
+    '  }',
+    '}',
+    '',
+    ...swatchRules,
+    '',
+    '/* Retro hex equivalents for Modern preview swatches so retro-sweep.mjs sees zero oklch(). */',
+    ...retroSwatchOverrides,
+    '',
+    '/* Spacing bar widths for the workbench spacing scale. */',
+    ...spaceBarRules,
     '',
   ].join('\n');
 
@@ -405,6 +484,7 @@ export async function compileTokens() {
 
   return {
     'src/styles/tokens.css': tokensCss,
+    'src/styles/workbench-swatches.css': workbenchSwatchesCss,
     'scripts/lib/brand-tokens.mjs': brandTokensMjs,
     'src/data/design-tokens.generated.json': designTokensJson,
   };

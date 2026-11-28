@@ -169,6 +169,9 @@ export default defineConfig({
       // `serialize`, so they get the same lastmod policy as everything else.
       customPages: ON_DEMAND_PAGES.map((pathname) => `${SITE_ORIGIN}${pathname}`),
       filter: (url) => {
+        const pathname = new URL(url).pathname;
+        // Unlisted design-system workbench stays out of the sitemap while noindex.
+        if (pathname === '/design-system/' || pathname === '/design-system') return false;
         const writingId = collectionSlug(url, 'writing');
         if (writingId) return !writingMetadata.get(writingId)?.draft;
         const changelogId = collectionSlug(url, 'changelog');
