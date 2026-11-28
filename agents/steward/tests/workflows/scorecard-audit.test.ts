@@ -1051,6 +1051,72 @@ test('a read that GitHub fails for two hours is waited out, and the scheduled ru
   assert.equal(signals[0]!.ok, true);
 });
 
+test('an archive step that GitHub fails for an hour is waited out, and the run completes', async () => {
+  // The first attempt more than an hour after the first: the waits before it add up to 3722 seconds.
+  const afterAnHour = 13;
+  let attempts = 0;
+  const { activities } = mockActivities({
+    resolveAuditUrls: async () => THREE_URLS,
+    // A scheduled run reaches the archive step when it has nothing to publish: here no page was read.
+    auditLiveUrl: async (url: string) => ({ url, ok: false, error: 'session not created' }),
+    readPublishedScorecard: async () => undefined,
+    archiveScorecardRun: async () => {
+      attempts = Context.current().info.attempt;
+      if (attempts < afterAnHour) {
+        throw ApplicationFailure.create({ message: 'GitHub answered 500.', category: ApplicationFailureCategory.BENIGN });
+      }
+      return { archivePath: 'agents/steward/reviews/_scorecard/2026-07-22.json' };
+    },
+  });
+  const input = baseInput({ triggeredBy: 'schedule' });
+  // The execution timeout the Schedule gives a firing.
+  const { workflowExecutionTimeout } = buildScorecardScheduleOptions({
+    at: { hour: 3, minute: 30 },
+    timeZone: input.timeZone,
+    taskQueue: QUEUE,
+    input,
+  }).action;
+  const result = await withWorker(activities, () =>
+    env.client.workflow.execute(scorecardAuditWorkflow, {
+      workflowId: 'sc-outage-archive',
+      taskQueue: QUEUE,
+      args: [input],
+      workflowExecutionTimeout,
+    }),
+  );
+
+  assert.equal(attempts, afterAnHour);
+  assert.equal(result.decision, 'no-op');
+});
+
+// Thrown retryable here on purpose, so only the proxy's list can end the call.
+for (const type of ['AuthError', 'NotFound', 'UnprocessableRequest']) {
+  test(`the archive step ends at once on ${type}`, async () => {
+    let attempts = 0;
+    const { activities } = mockActivities({
+      resolveAuditUrls: async () => THREE_URLS,
+      auditLiveUrl: async (url: string) => ({ url, ok: false, error: 'session not created' }),
+      readPublishedScorecard: async () => undefined,
+      archiveScorecardRun: async () => {
+        attempts += 1;
+        throw ApplicationFailure.create({ message: 'GitHub refused.', type });
+      },
+    });
+    await assertWorkflowFails(
+      () =>
+        withWorker(activities, () =>
+          env.client.workflow.execute(scorecardAuditWorkflow, {
+            workflowId: `sc-archive-${type}`,
+            taskQueue: QUEUE,
+            args: [baseInput({ triggeredBy: 'schedule' })],
+          }),
+        ),
+      /Activity task failed/,
+    );
+    assert.equal(attempts, 1);
+  });
+}
+
 test('a monitoring service that cannot be reached does not fail the run', async () => {
   const { activities } = mockActivities();
   const withDeadAlerting = {

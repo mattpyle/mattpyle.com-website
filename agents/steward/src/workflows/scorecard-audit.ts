@@ -86,8 +86,9 @@ import { scorecardRunShape, type RunShape, type ScorecardMergeShape, type Scorec
  * `lib/scorecard-schedule.ts`), caps the whole, and the server ends a run there
  * with no ping.
  *
- * Two writes keep their old policies, because a second run of either is not
- * safe: `publishScorecardRun` (one attempt) and `archiveScorecardRun` (three).
+ * `archiveScorecardRun` joined them under STW-717: a retry finds the record an
+ * earlier attempt committed and writes no second one. `publishScorecardRun`
+ * keeps one attempt, because a second run of it is not safe.
  *
  * No `patched` marker: a retry policy and a schedule-to-close timeout are
  * attributes of the same schedule command, and replay does not compare them
@@ -317,13 +318,14 @@ const light = {
       nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'],
     },
   }),
-  // Three attempts and no more. A retry that follows a commit the activity never
-  // finished reporting overwrites nothing, but it commits a second record under
-  // the next filename, so a long retry would pile them up.
+  // Waits out an outage, which is safe only because `archiveScorecardRun` is
+  // idempotent: a retry finds the record an earlier attempt committed. A
+  // rejected credential, a 404 and a 422 end at once, as on the merge.
   archiving: wf.proxyActivities<Pick<typeof activities, 'archiveScorecardRun'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '2 minutes',
-    retry: { maximumAttempts: 3 },
+    scheduleToCloseTimeout: DURABLE.scheduleToCloseTimeout,
+    retry: { ...DURABLE.retry, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'] },
   }),
   // The merge leg. The check read is a plain GET. The merge may retry as long,
   // and that is safe only because `mergeScorecardPr` is idempotent: a retry after

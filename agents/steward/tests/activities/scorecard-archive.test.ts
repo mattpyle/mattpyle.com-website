@@ -261,3 +261,75 @@ test('an archive record without check results still writes', async () => {
   assert.equal(result.committed, true);
   assert.equal(readArchive('old-shape').perPage[0].agenticChecks, undefined);
 });
+
+// ---------------------------------------------------------------------------
+// A retry commits no second record (STW-717)
+// ---------------------------------------------------------------------------
+
+const fileAt = (branch: string, name: string) => hub.file(branch, `${SCORECARD_ARCHIVE_REL}/${name}.json`);
+
+/** Lets the first request that `matches` reach GitHub, then loses its answer to a 500. */
+function loseOneReply(matches: (method: string, url: string) => boolean): void {
+  const realFetch = globalThis.fetch;
+  let lost = false;
+  globalThis.fetch = (async (input: any, init?: RequestInit) => {
+    const response = await realFetch(input, init);
+    if (!lost && matches((init?.method ?? 'GET').toUpperCase(), String(input))) {
+      lost = true;
+      return new Response(JSON.stringify({ message: 'Server Error' }), { status: 500 });
+    }
+    return response;
+  }) as typeof fetch;
+}
+
+test('a retry after the commit landed and its reply was lost writes no second record', async () => {
+  loseOneReply((method, url) => method === 'PATCH' && url.includes('/git/refs/heads/'));
+  const input = record({ id: 'lost-reply' });
+
+  await assert.rejects(archiveScorecardRun(input), /GitHub 500/);
+  assert.ok(fileAt(SCORECARD_ARCHIVE_BRANCH, 'lost-reply'), 'the first attempt did not commit');
+  assert.equal(hub.pulls.length, 0);
+
+  const retry = await archiveScorecardRun(input);
+
+  assert.deepEqual(retry, {
+    archivePath: `${SCORECARD_ARCHIVE_REL}/lost-reply.json`,
+    archiveId: 'lost-reply',
+    committed: true,
+  });
+  assert.equal(fileAt(SCORECARD_ARCHIVE_BRANCH, 'lost-reply-2'), undefined);
+  assert.deepEqual(hub.history(SCORECARD_ARCHIVE_BRANCH), ['chore(scorecard): archive lost-reply']);
+  assert.equal(hub.pulls.length, 1, 'the retry did not open the pull request the first attempt missed');
+});
+
+test('a retry after the pull request opened finds its record under a suffixed name', async () => {
+  await archiveScorecardRun(record({ id: 'taken', reason: 'another run' }));
+  const input = record({ id: 'taken', reason: 'this run' });
+  await archiveScorecardRun(input);
+  const commits = hub.history(SCORECARD_ARCHIVE_BRANCH).length;
+
+  const retry = await archiveScorecardRun(input);
+
+  assert.equal(retry.archiveId, 'taken-2');
+  assert.equal(fileAt(SCORECARD_ARCHIVE_BRANCH, 'taken-3'), undefined);
+  assert.equal(hub.history(SCORECARD_ARCHIVE_BRANCH).length, commits);
+  assert.equal(hub.pulls.length, 1);
+});
+
+test('a retry after the archive pull request merged writes nothing', async () => {
+  const input = record({ id: 'merged' });
+  await archiveScorecardRun(input);
+  // The merge: the record reaches the default branch and the archive branch is deleted.
+  hub.push('master', `${SCORECARD_ARCHIVE_REL}/merged.json`, fileAt(SCORECARD_ARCHIVE_BRANCH, 'merged')!.text);
+  hub.branches.delete(SCORECARD_ARCHIVE_BRANCH);
+  hub.pulls[0].state = 'closed';
+  const refUpdates = hub.refUpdates.length;
+
+  const retry = await archiveScorecardRun(input);
+
+  assert.equal(retry.archiveId, 'merged');
+  assert.equal(retry.committed, true);
+  assert.equal(hub.branches.has(SCORECARD_ARCHIVE_BRANCH), false, 'the retry cut the branch again');
+  assert.equal(hub.refUpdates.length, refUpdates);
+  assert.equal(hub.pulls.length, 1);
+});
