@@ -1089,6 +1089,34 @@ test('an archive step that GitHub fails for an hour is waited out, and the run c
   assert.equal(result.decision, 'no-op');
 });
 
+// Thrown retryable here on purpose, so only the proxy's list can end the call.
+for (const type of ['AuthError', 'NotFound', 'UnprocessableRequest']) {
+  test(`the archive step ends at once on ${type}`, async () => {
+    let attempts = 0;
+    const { activities } = mockActivities({
+      resolveAuditUrls: async () => THREE_URLS,
+      auditLiveUrl: async (url: string) => ({ url, ok: false, error: 'session not created' }),
+      readPublishedScorecard: async () => undefined,
+      archiveScorecardRun: async () => {
+        attempts += 1;
+        throw ApplicationFailure.create({ message: 'GitHub refused.', type });
+      },
+    });
+    await assertWorkflowFails(
+      () =>
+        withWorker(activities, () =>
+          env.client.workflow.execute(scorecardAuditWorkflow, {
+            workflowId: `sc-archive-${type}`,
+            taskQueue: QUEUE,
+            args: [baseInput({ triggeredBy: 'schedule' })],
+          }),
+        ),
+      /Activity task failed/,
+    );
+    assert.equal(attempts, 1);
+  });
+}
+
 test('a monitoring service that cannot be reached does not fail the run', async () => {
   const { activities } = mockActivities();
   const withDeadAlerting = {

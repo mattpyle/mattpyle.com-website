@@ -319,11 +319,13 @@ const light = {
     },
   }),
   // Waits out an outage, which is safe only because `archiveScorecardRun` is
-  // idempotent: a retry finds the record an earlier attempt committed.
+  // idempotent: a retry finds the record an earlier attempt committed. A
+  // rejected credential, a 404 and a 422 end at once, as on the merge.
   archiving: wf.proxyActivities<Pick<typeof activities, 'archiveScorecardRun'>>({
     taskQueue: QUEUE_AUDIT,
     startToCloseTimeout: '2 minutes',
-    ...DURABLE,
+    scheduleToCloseTimeout: DURABLE.scheduleToCloseTimeout,
+    retry: { ...DURABLE.retry, nonRetryableErrorTypes: ['AuthError', 'NotFound', 'UnprocessableRequest'] },
   }),
   // The merge leg. The check read is a plain GET. The merge may retry as long,
   // and that is safe only because `mergeScorecardPr` is idempotent: a retry after
