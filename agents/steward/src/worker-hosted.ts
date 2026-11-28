@@ -30,7 +30,7 @@ import {
 } from './lib/recycle-policy.js';
 
 /**
- * The **hosted** worker: one process, four queues, no checkout.
+ * The **hosted** worker: one process, five queues, no checkout.
  *
  * `STEWARD_WORKER_ROLE=public` starts the same image as the uncredentialed public-audit
  * worker instead: two queues, one workflow, no GitHub credential (`worker-role.ts`, STW-610).
@@ -39,12 +39,15 @@ import {
  * and is described where it is created in `main()`.
  * The fourth, `steward-findings-watch` (stage 4, 2026-11-25), runs `watchFinding`
  * alone with a cap of one and no workflow bundle.
+ * The fifth, `steward-findings-checks` (STW-716), runs `runFindingChecks` alone
+ * with a cap of two and no workflow bundle, so a browser check never holds a
+ * slot on `steward-findings`.
  *
  * This is the entry the Railway container runs (always-on-audit-worker card,
  * leg 2b). `worker.ts` is unchanged in shape and is still what `steward up`
  * starts on Matt's machine — that one registers `steward-light` and
  * `steward-heavy`, plus the two audit queues only against the local dev server,
- * and never `steward-findings`. The two processes do not compete because they
+ * and never a findings queue. The two processes do not compete because they
  * claim different queues.
  *
  * ## Why two `Worker`s in one process
@@ -268,7 +271,7 @@ async function main() {
   const alarmedQueues: string[] = [];
 
   const entries: HostedQueue[] = isPublic ? [...publicRegistry()] : [...hostedRegistry()];
-  const [audit, fast, findings, watch] = entries;
+  const [audit, fast, findings, watch, checks] = entries;
   const queues = () => entries.map((entry) => entry.taskQueue);
 
   /**
@@ -300,7 +303,7 @@ async function main() {
    * there because the recycle policy needs to know when a browser activity ran
    * and when the last activity finished, and the activities themselves are
    * shared with the local worker, which must never recycle. Observing from out here keeps them ignorant of
-   * hosting. All four share one tracker because one process exits once, and the
+   * hosting. All of them share one tracker because one process exits once, and the
    * in-flight count has to see every queue or it would exit mid-activity.
    */
   const createWorker = (entry: HostedQueue) => {
@@ -336,6 +339,10 @@ async function main() {
   // The watch queue (stage 4): `watchFinding` alone, capped at one, with no
   // workflow bundle. The public role has none.
   const watchWorker = watch ? await createWorker(watch) : undefined;
+  // The checks queue (STW-716): `runFindingChecks` alone, capped at two, with
+  // no workflow bundle, so a browser check never holds a findings slot. The
+  // public role has none.
+  const checksWorker = checks ? await createWorker(checks) : undefined;
 
   const common = {
     // Both roles say which they are, so a log reader never infers it from the queue list.
@@ -366,6 +373,7 @@ async function main() {
           findingsActivities: Object.keys(findings.activities),
           findingsActivityConcurrency: findings.maxConcurrentActivityTaskExecutions,
           ...(watch ? { watchActivityConcurrency: watch.maxConcurrentActivityTaskExecutions } : {}),
+          ...(checks ? { checksActivityConcurrency: checks.maxConcurrentActivityTaskExecutions } : {}),
           // In the ready line because the operator reads this line after every
           // deploy, and "alerting is off" is precisely the fact a deploy can change
           // by accident (a variable dropped from the Variables tab) and that nothing
@@ -381,7 +389,7 @@ async function main() {
   // rather than a race: a worker that stops on its own (a SIGTERM from a deploy,
   // a fatal error) has to take the other one down with it, or the container
   // would sit half-serving a queue with nobody watching.
-  const workers = [worker, fastWorker, findingsWorker, watchWorker].filter((each): each is Worker => each !== undefined);
+  const workers = [worker, fastWorker, findingsWorker, watchWorker, checksWorker].filter((each): each is Worker => each !== undefined);
   const running = Promise.all(workers.map((each) => each.run()));
   const stopAll = () => {
     for (const each of workers) if (each.getState() === 'RUNNING') each.shutdown();

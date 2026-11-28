@@ -300,6 +300,24 @@ export const QUEUE_FINDINGS = 'steward-findings';
 export const QUEUE_FINDINGS_WATCH = 'steward-findings-watch';
 
 /**
+ * `runFindingChecks`' own queue (STW-716): the findings workflows schedule
+ * their browser checks here, the preview test and the verdict measurement in
+ * `findingWorkflow`, the verify in `verifyFindingWorkflow` and the daily
+ * recheck in `recheckFindingsWorkflow`. A check can run Chromium for up to 15
+ * minutes, so a queue of its own, capped at
+ * {@link HOSTED_FINDINGS_CHECKS_ACTIVITY_CONCURRENCY}, keeps checks off the
+ * findings queue's slots, which a verdict write needs. Not the watch queue:
+ * a burst of daily watchers must not delay a fix's verify. No workflow bundle.
+ *
+ * `steward-findings` still registers `runFindingChecks`: an activity keeps the
+ * queue it was scheduled on for every retry, so a check scheduled before the
+ * deploy completes there. The task queue is an option of the schedule command,
+ * which replay does not compare (determinism rule 12), so the move needs no
+ * `patched` marker.
+ */
+export const QUEUE_FINDINGS_CHECKS = 'steward-findings-checks';
+
+/**
  * The agent-readiness audit's own queue (always-on-audit-worker card).
  *
  * The split is by **locality**, which is what task queues are for. `reviewPost`
@@ -396,15 +414,27 @@ export const HOSTED_ACTIVITY_CONCURRENCY = 1;
 export const HOSTED_FAST_ACTIVITY_CONCURRENCY = 4;
 
 /**
- * How many activities the hosted worker's **findings** queue runs at once. Two.
+ * How many activities the hosted worker's **findings** queue runs at once. Ten.
  *
- * Every findings activity is a GitHub or Temporal API call, so nothing here is
- * unsafe to run concurrently. The number is kept low because the work is low:
- * a verdict when Matt gives one, a run's daily settings read and the daily recheck. Bounded rather than
- * the SDK's 100 for the same reason the fast queue is: this container also holds
- * a Lighthouse run's memory.
+ * What runs here launches no browser: GitHub API calls against the findings
+ * repository, the fix issue and the fix PR, including the lifecycle's merge,
+ * preview and deploy waits; Temporal calls through the worker's own client;
+ * and the fix log entry's model draft (`draftFixLogEntry`, up to 5 minutes an
+ * attempt, little memory). The browser checks run on
+ * {@link QUEUE_FINDINGS_CHECKS} with a cap of their own, so ten slots let a
+ * verdict write through while drafts and waits hold others. The only
+ * `runFindingChecks` left here is one scheduled before that queue existed.
+ * Bounded rather than the SDK's 100 for the same reason the fast queue is:
+ * this container also holds a Lighthouse run's memory.
  */
-export const HOSTED_FINDINGS_ACTIVITY_CONCURRENCY = 2;
+export const HOSTED_FINDINGS_ACTIVITY_CONCURRENCY = 10;
+
+/**
+ * How many browser checks the hosted worker's checks queue runs at once. Two:
+ * the number the findings queue allowed before the checks left it, so the
+ * container's worst case for Chromium does not grow.
+ */
+export const HOSTED_FINDINGS_CHECKS_ACTIVITY_CONCURRENCY = 2;
 
 /**
  * How many `watchFinding` attempts the hosted worker runs at once. One: each

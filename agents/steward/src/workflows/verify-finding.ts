@@ -92,9 +92,16 @@ import { SLOW_INTERVAL, slowPhaseFor } from '../lib/retry-phases.js';
  */
 
 // Duplicated rather than imported from config.ts, as in the sibling workflows.
-// Every activity runs on the findings queue: GitHub API calls, fetch against
-// production, and the hosted image's Chromium for `selector` and `js`.
+// The GitHub API calls run on the findings queue; the checks, fetch against
+// production and the hosted image's Chromium for `selector` and `js`, on the
+// checks queue below.
 const QUEUE_FINDINGS = 'steward-findings';
+/**
+ * `runFindingChecks`' own queue (STW-716), capped at two, so a browser check
+ * never holds a slot a verdict write needs. Moving it issues no new command:
+ * replay does not compare an activity's task queue (determinism rule 12).
+ */
+const QUEUE_FINDINGS_CHECKS = 'steward-findings-checks';
 
 /** The `patched` marker of the blockless verify's production read in place of `unverifiable` (decision 30). */
 export const BLOCKLESS_CONFIRM_PATCH = 'verify-blockless-confirm';
@@ -196,7 +203,7 @@ const reading = wf.proxyActivities<
 // attribute of the same schedule command, and the history recorded before it
 // (`verify-finding-checks-pre-heartbeat.bin`) replays unchanged (determinism rule 5).
 const checking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
-  taskQueue: QUEUE_FINDINGS,
+  taskQueue: QUEUE_FINDINGS_CHECKS,
   startToCloseTimeout: '5 minutes',
   heartbeatTimeout: '30 seconds',
   retry: { maximumAttempts: 3, initialInterval: '15 seconds', backoffCoefficient: 4, nonRetryableErrorTypes: ['VerifyCheckBroken'] },
@@ -230,7 +237,7 @@ const slowReading = wf.proxyActivities<
   },
 });
 const slowChecking = wf.proxyActivities<Pick<typeof activities, 'runFindingChecks'>>({
-  taskQueue: QUEUE_FINDINGS,
+  taskQueue: QUEUE_FINDINGS_CHECKS,
   startToCloseTimeout: '5 minutes',
   heartbeatTimeout: '30 seconds',
   retry: { ...slowRetry, nonRetryableErrorTypes: ['VerifyCheckBroken'] },

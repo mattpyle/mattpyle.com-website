@@ -2,9 +2,9 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Client, type WorkflowHandle } from '@temporalio/client';
-import { Worker } from '@temporalio/worker';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { bounded, createTestEnv, untilBetweenAttempts } from '../helpers/test-env.js';
+import { createFindingsWorkers } from '../helpers/findings-workers.js';
 import { workflowBundle } from '../helpers/workflow-bundle.js';
 import { skipVerdictMeasure } from '../helpers/verdict-measure.js';
 import {
@@ -182,7 +182,7 @@ function mocks(script: Script) {
 }
 
 async function withWorker<T>(activities: object, fn: () => Promise<T>): Promise<T> {
-  const worker = await Worker.create({
+  const worker = await createFindingsWorkers({
     connection: env.nativeConnection,
     workflowBundle: await workflowBundle(),
     activities: skipVerdictMeasure(activities),
