@@ -1,0 +1,53 @@
+{
+  "iso": "2026-11-27",
+  "timestamp": "2026-11-27T20:48:11-07:00",
+  "scope": "1 live page",
+  "tools": [
+    "Lighthouse 13.5",
+    "axe-core 4.12"
+  ],
+  "entry": "Manual · intentional",
+  "commentary": "1 of 1 page(s) could not be audited (https://scorecard-proof.invalid/), which blocks a green Scorecard by design.",
+  "metrics": [
+    {
+      "name": "Accessibility",
+      "value": "0",
+      "maximum": "100",
+      "status": "Fail",
+      "description": "1 axe violation across 1 tested page."
+    },
+    {
+      "name": "Performance",
+      "value": "0",
+      "maximum": "100",
+      "status": "Fail",
+      "description": "The lowest Lighthouse performance score across 1 tested page."
+    },
+    {
+      "name": "SEO",
+      "value": "0",
+      "maximum": "100",
+      "status": "Fail",
+      "description": "The lowest Lighthouse SEO score across 1 tested page."
+    },
+    {
+      "name": "Agentic Browsing",
+      "value": "0",
+      "maximum": "0",
+      "status": "Fail",
+      "description": "No Agentic Browsing checks were applicable on any successfully audited page."
+    }
+  ],
+  "id": "2026-11-27",
+  "perPage": [
+    {
+      "url": "https://scorecard-proof.invalid/",
+      "scores": {},
+      "axeViolations": 0
+    }
+  ],
+  "decision": "no-op",
+  "reason": "the auditor read 0 of 1 pages, so the run measured the worker, not the site; no run-log PR",
+  "dryRun": false,
+  "archiveId": "2026-11-27-2"
+}
