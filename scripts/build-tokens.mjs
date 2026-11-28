@@ -1,91 +1,92 @@
 /**
  * Compile W3C DTCG design tokens (`tokens/*.tokens.json`) using Style Dictionary into:
- *   1. `src/styles/tokens.css`                 — `@layer tokens` CSS custom properties (Modern + Retro)
- *   2. `scripts/lib/brand-tokens.mjs`          — sRGB hex constants for OG cards, favicons, and theme-color
- *   3. `src/data/design-tokens.generated.json` — machine-readable catalogue (swatches, scales, contrast)
+ *   1. `src/styles/tokens.css`                 - `@layer tokens` CSS custom properties read under `src/`
+ *   2. `scripts/lib/brand-tokens.mjs`          - sRGB hex constants for OG cards, favicons, and theme-color
+ *   3. `src/data/design-tokens.generated.json` - machine-readable catalogue (swatches, scales, contrast)
+ *
+ * `src/styles/tokens.css` emits only properties referenced by `var(--name)` under `src/`
+ * (plus any transitive `var(--dep)` referenced by an emitted declaration), so every page
+ * loads only active tokens while `tokens/*.tokens.json` and the generated catalogue retain
+ * the full scales and `--ds-*` roles.
  *
  * Usage:
  *   node scripts/build-tokens.mjs          # write generated files
  *   node scripts/build-tokens.mjs --check  # exit 1 if any generated file differs from disk
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import StyleDictionary from 'style-dictionary';
+import {
+  contrastRatio,
+  oklchToHex,
+  oklchToLinearRgb,
+  parseOpaqueColor,
+} from './lib/oklch.mjs';
+
+export { contrastRatio, oklchToHex, oklchToLinearRgb, parseOpaqueColor };
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
+const SRC_CODE_EXT = /\.(astro|css|html|svg|js|mjs|ts|tsx|jsx)$/i;
 
-/** Convert `oklch(L C H)` to linear sRGB channels [r, g, b] in [0, 1]. */
-export function oklchToLinearRgb(lightness, chroma, hueDegrees) {
-  const hue = (hueDegrees * Math.PI) / 180;
-  const a = chroma * Math.cos(hue);
-  const b = chroma * Math.sin(hue);
+/** Scan `src/` (excluding generated token outputs) for `var(--name)` custom-property reads. */
+function scanUsedCssVars(rootDir) {
+  const srcDir = join(rootDir, 'src');
+  const excluded = new Set([
+    resolve(rootDir, 'src/styles/tokens.css'),
+    resolve(rootDir, 'src/data/design-tokens.generated.json'),
+  ]);
+  const used = new Set();
 
-  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
-
-  return [
-    Math.max(0, Math.min(1, 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)),
-    Math.max(0, Math.min(1, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)),
-    Math.max(0, Math.min(1, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)),
-  ];
-}
-
-function linearChannelToSrgb(channel) {
-  const encoded = channel <= 0.0031308
-    ? 12.92 * channel
-    : 1.055 * channel ** (1 / 2.4) - 0.055;
-  return Math.max(0, Math.min(255, Math.round(encoded * 255)));
-}
-
-function srgbChannelToLinear(byte) {
-  const c = byte / 255;
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
-
-/** Convert `oklch(L C H)` to `#rrggbb`. */
-export function oklchToHex(lightness, chroma, hueDegrees) {
-  const linear = oklchToLinearRgb(lightness, chroma, hueDegrees);
-  return `#${linear.map((c) => linearChannelToSrgb(c).toString(16).padStart(2, '0')).join('')}`;
-}
-
-/** Parse `#rrggbb` or `oklch(L C H)` (opaque) into `{ hex, luminance }` or `null` if translucent. */
-export function parseOpaqueColor(cssValue) {
-  if (typeof cssValue !== 'string') return null;
-  const trimmed = cssValue.trim();
-
-  const hexMatch = /^#([0-9a-f]{6})$/i.exec(trimmed);
-  if (hexMatch) {
-    const hex = `#${hexMatch[1].toLowerCase()}`;
-    const r = srgbChannelToLinear(parseInt(hex.slice(1, 3), 16));
-    const g = srgbChannelToLinear(parseInt(hex.slice(3, 5), 16));
-    const b = srgbChannelToLinear(parseInt(hex.slice(5, 7), 16));
-    return { hex, luminance: 0.2126 * r + 0.7152 * g + 0.0722 * b };
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (excluded.has(resolve(fullPath)) || !SRC_CODE_EXT.test(entry.name)) {
+        continue;
+      }
+      const text = readFileSync(fullPath, 'utf8');
+      for (const match of text.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+        used.add(match[1]);
+      }
+    }
   }
 
-  const oklchMatch = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/i.exec(trimmed);
-  if (oklchMatch) {
-    const l = Number(oklchMatch[1]);
-    const c = Number(oklchMatch[2]);
-    const h = Number(oklchMatch[3]);
-    const hex = oklchToHex(l, c, h);
-    const [r, g, b] = oklchToLinearRgb(l, c, h);
-    return { hex, luminance: 0.2126 * r + 0.7152 * g + 0.0722 * b };
-  }
-
-  return null;
+  walk(srcDir);
+  return used;
 }
 
-/** WCAG 2.1 contrast ratio between two opaque CSS colours (`#rrggbb` or `oklch(L C H)`). */
-export function contrastRatio(colorA, colorB) {
-  const a = parseOpaqueColor(colorA);
-  const b = parseOpaqueColor(colorB);
-  if (!a || !b) return null;
-  const lighter = Math.max(a.luminance, b.luminance);
-  const darker = Math.min(a.luminance, b.luminance);
-  return Number(((lighter + 0.05) / (darker + 0.05)).toFixed(2));
+/** Expand a seed set of custom property names with any `var(--dep)` they reference in `candidates`. */
+function closeOverTransitiveRefs(seedVars, candidates) {
+  const byName = new Map();
+  for (const { varName, val } of candidates) {
+    const list = byName.get(varName) ?? [];
+    list.push(val);
+    byName.set(varName, list);
+  }
+
+  const emitted = new Set(seedVars);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const varName of [...emitted]) {
+      const values = byName.get(varName);
+      if (!values) continue;
+      for (const val of values) {
+        for (const match of val.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+          if (!emitted.has(match[1])) {
+            emitted.add(match[1]);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  return emitted;
 }
 
 /** Canonical CSS custom-property name for a Style Dictionary token. */
@@ -159,66 +160,38 @@ export async function compileTokens() {
   }
 
   // ── 1. src/styles/tokens.css ───────────────────────────────────────────────
-  const rootDecls = [];
-  const swatchRules = [];
-  const retroSwatchOverrides = [];
-
+  const rootCandidates = [];
   for (const token of modernAll) {
     const varName = cssVarName(token);
     const val = cssValueFor(token, modernByPath);
-    rootDecls.push(`    ${varName}: ${val};`);
+    rootCandidates.push({ varName, val });
 
     // Emit backward-compatible legacy alias when declared (e.g. --control-border -> var(--ink-6)).
     const legacyAlias = token.$extensions?.['com.mattpyle']?.legacyAlias;
     if (legacyAlias) {
-      rootDecls.push(`    ${legacyAlias}: ${val};`);
-    }
-
-    if ((token.$type ?? token.type) === 'color') {
-      const slug = swatchSlug(varName);
-      swatchRules.push(`.ds-swatch--${slug} { background: var(${varName}); }`);
-      // In retro appearance, paint Modern palette preview swatches using their compiled sRGB hex
-      // (or translucent rgba fallback) so the swatch stays visually accurate while keeping
-      // `scripts/retro-sweep.mjs` free of computed oklch() findings.
-      const resolved = String(resolvedValue(token));
-      const parsed = parseOpaqueColor(resolved);
-      if (parsed) {
-        const hex = token.$extensions?.['com.mattpyle']?.brandHex ?? parsed.hex;
-        retroSwatchOverrides.push(`html[data-appearance='retro'] .ds-swatch--${slug} { background: ${hex}; }`);
-      } else {
-        const alphaMatch = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\/\s*([\d.]+)\s*\)$/i.exec(resolved);
-        if (alphaMatch) {
-          const [r, g, b] = oklchToLinearRgb(Number(alphaMatch[1]), Number(alphaMatch[2]), Number(alphaMatch[3]));
-          const sr = linearChannelToSrgb(r);
-          const sg = linearChannelToSrgb(g);
-          const sb = linearChannelToSrgb(b);
-          retroSwatchOverrides.push(
-            `html[data-appearance='retro'] .ds-swatch--${slug} { background: rgba(${sr}, ${sg}, ${sb}, ${alphaMatch[4]}); }`,
-          );
-        }
-      }
+      rootCandidates.push({ varName: legacyAlias, val });
     }
   }
 
-  const spaceBarRules = [];
-  for (const token of modernAll) {
-    if (token.path[0] === 'space') {
-      const varName = cssVarName(token);
-      spaceBarRules.push(`.ds-space-bar--${token.path[1]} { width: var(${varName}); }`);
-    }
-  }
-
-  const retroDecls = [];
+  const retroCandidates = [];
   for (const token of retroAll) {
     const top = token.path[0];
     if (top !== 'retro' && top !== 'ds') continue;
     const varName = cssVarName(token);
     const val = cssValueFor(token, retroByPath);
-    retroDecls.push(`    ${varName}: ${val};`);
-    if (top === 'retro' && (token.$type ?? token.type) === 'color') {
-      swatchRules.push(`.ds-swatch--${swatchSlug(varName)} { background: ${resolvedValue(token)}; }`);
-    }
+    retroCandidates.push({ varName, val });
   }
+
+  const usedVars = scanUsedCssVars(root);
+  const emittedVars = closeOverTransitiveRefs(usedVars, [...rootCandidates, ...retroCandidates]);
+
+  const rootDecls = rootCandidates
+    .filter(({ varName }) => emittedVars.has(varName))
+    .map(({ varName, val }) => `    ${varName}: ${val};`);
+
+  const retroDecls = retroCandidates
+    .filter(({ varName }) => emittedVars.has(varName))
+    .map(({ varName, val }) => `    ${varName}: ${val};`);
 
   const tokensCss = [
     '/* ── Generated by scripts/build-tokens.mjs from tokens/*.tokens.json ─────────',
@@ -239,21 +212,7 @@ export async function compileTokens() {
     '',
   ].join('\n');
 
-  // ── 2. src/styles/workbench-swatches.css ───────────────────────────────────
-  const workbenchSwatchesCss = [
-    '/* Generated by scripts/build-tokens.mjs — imported ONLY by src/pages/design-system.astro.',
-    '   Keeps the workbench 100% compliant with `style-src \'self\'` (zero inline style attributes). */',
-    ...swatchRules,
-    '',
-    '/* Retro hex equivalents for Modern preview swatches so retro-sweep.mjs sees zero oklch(). */',
-    ...retroSwatchOverrides,
-    '',
-    '/* Spacing bar widths for the workbench spacing scale. */',
-    ...spaceBarRules,
-    '',
-  ].join('\n');
-
-  // ── 3. scripts/lib/brand-tokens.mjs ────────────────────────────────────────
+  // ── 2. scripts/lib/brand-tokens.mjs ────────────────────────────────────────
   function brandHex(pathKey) {
     const token = modernByPath.get(pathKey);
     if (!token) throw new Error(`build-tokens: missing brand token ${pathKey}`);
@@ -294,7 +253,7 @@ export async function compileTokens() {
     '',
   ].join('\n');
 
-  // ── 4. src/data/design-tokens.generated.json ───────────────────────────────
+  // ── 3. src/data/design-tokens.generated.json ───────────────────────────────
   const modernColors = modernAll
     .filter((t) => t.path[0] === 'color')
     .map((t) => {

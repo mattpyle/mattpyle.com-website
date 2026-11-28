@@ -5,7 +5,7 @@
    backgrounds, and reveals decorative furniture that already exists in the
    DOM in both modes (see src/components/RetroHomeFurniture.astro).
 
-   Retro tokens (`--retro-*` and retro overrides of `--ds-*`) are generated from
+   Retro tokens (`--retro-*`) are generated from
    tokens/retro.tokens.json into src/styles/tokens.css (`npm run tokens:build`),
    imported ahead of this file by Layout.astro inside `@layer tokens`. */
 
@@ -4440,4 +4440,3 @@ html[data-appearance='retro'] [data-module='article'] .spec-side {
     font-size: 40px;
   }
 }
-

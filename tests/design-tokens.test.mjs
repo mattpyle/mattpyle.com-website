@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { compileTokens, contrastRatio, parseOpaqueColor } from '../scripts/build-tokens.mjs';
+import { compileTokens } from '../scripts/build-tokens.mjs';
 import { ACCENTS, COLORS, THEME_COLOR } from '../scripts/lib/brand-tokens.mjs';
+import { contrastRatio, oklchToHex, parseOpaqueColor } from '../scripts/lib/oklch.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
+const SRC_CODE_EXT = /\.(astro|css|html|svg|js|mjs|ts|tsx|jsx)$/i;
 const readJson = (rel) => JSON.parse(readFileSync(`${ROOT}${rel}`, 'utf8'));
 
 /** Parse lightness L from `oklch(L C H ...)` */
@@ -13,6 +16,15 @@ function oklchLightness(value) {
   const m = /^oklch\(\s*([\d.]+)\s+/.exec(String(value).trim());
   assert.ok(m, `Expected oklch() colour, got ${value}`);
   return Number(m[1]);
+}
+
+function walkFiles(dir, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) walkFiles(fullPath, out);
+    else out.push(fullPath);
+  }
+  return out;
 }
 
 test('generated design-token artifacts are in sync with tokens/*.tokens.json', async () => {
@@ -29,6 +41,89 @@ test('generated design-token artifacts are in sync with tokens/*.tokens.json', a
     [],
     `Generated token files are out of date. Run \`npm run tokens:build\`:\n  ${stale.join('\n  ')}`,
   );
+});
+
+test('every custom property declared in src/styles/tokens.css is read under src/', () => {
+  const tokensCssPath = resolve(ROOT, 'src/styles/tokens.css');
+  const tokensCss = readFileSync(tokensCssPath, 'utf8');
+
+  assert.match(
+    tokensCss,
+    /@layer\s+reset,\s*tokens,\s*base,\s*components,\s*themes;/,
+    'tokens.css must declare the cascade layer order',
+  );
+  assert.match(tokensCss, /@layer\s+tokens\s*\{/, 'tokens.css must wrap tokens in @layer tokens');
+
+  // Parse all custom-property declarations directly from tokens.css on disk.
+  const declared = new Map();
+  for (const match of tokensCss.matchAll(/(?<![\w-])(--[a-z0-9-]+)\s*:\s*([^;]+);/gi)) {
+    const name = match[1];
+    const refs = [...match[2].matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map((m) => m[1]);
+    const existing = declared.get(name) ?? [];
+    declared.set(name, [...existing, ...refs]);
+  }
+  assert.ok(declared.size > 0, 'tokens.css must declare custom properties');
+
+  // Scan src/ independently of build-tokens.mjs for real var(--name) consumers.
+  const excluded = new Set([
+    tokensCssPath,
+    resolve(ROOT, 'src/data/design-tokens.generated.json'),
+  ]);
+  const readInSrc = new Set();
+  for (const fullPath of walkFiles(join(ROOT, 'src'))) {
+    if (excluded.has(resolve(fullPath)) || !SRC_CODE_EXT.test(fullPath)) continue;
+    const text = readFileSync(fullPath, 'utf8');
+    for (const match of text.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+      readInSrc.add(match[1]);
+    }
+  }
+
+  // A property in tokens.css is reachable if src/ reads it directly or via another emitted property.
+  const reachable = new Set(readInSrc);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const name of [...reachable]) {
+      const deps = declared.get(name);
+      if (!deps) continue;
+      for (const dep of deps) {
+        if (!reachable.has(dep)) {
+          reachable.add(dep);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  const unused = [...declared.keys()].filter((name) => !reachable.has(name)).sort();
+  assert.deepEqual(
+    unused,
+    [],
+    `src/styles/tokens.css declares custom properties that nothing under src/ reads:\n  ${unused.join('\n  ')}`,
+  );
+});
+
+test('no file under scripts/lib/ imports scripts/build-tokens.mjs or style-dictionary', () => {
+  const libDir = join(ROOT, 'scripts/lib');
+  const offenders = [];
+
+  for (const fullPath of walkFiles(libDir)) {
+    if (!/\.(mjs|js|ts)$/i.test(fullPath)) continue;
+    const text = readFileSync(fullPath, 'utf8');
+    for (const match of text.matchAll(/\b(?:import|export)\b[^;]*?\bfrom\s+['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+      const specifier = match[1] ?? match[2];
+      if (specifier.includes('build-tokens') || specifier.includes('style-dictionary')) {
+        offenders.push(`${fullPath.slice(ROOT.length)}: ${specifier}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `scripts/lib/ must not import build-tokens.mjs or style-dictionary:\n  ${offenders.join('\n  ')}`,
+  );
+  assert.equal(oklchToHex(0.21, 0.012, 265), COLORS.ink);
 });
 
 test('every declared contrast pair in Modern and Retro clears WCAG AA', async () => {

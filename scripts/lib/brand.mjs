@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { create as createFont } from 'fontkit';
 import wawoff2 from 'wawoff2';
-import { oklchToHex } from '../build-tokens.mjs';
+import { oklchToHex } from './oklch.mjs';
 import { ACCENTS, COLORS } from './brand-tokens.mjs';
 
 const root = dirname(fileURLToPath(new URL('../../package.json', import.meta.url)));
